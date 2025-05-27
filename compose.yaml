@@ -1,0 +1,7 @@
+﻿services:
+  bloogbot.ai:
+    image: bloogbot.ai
+    build:
+      context: .
+      dockerfile: BloogBot.AI/Dockerfile
+

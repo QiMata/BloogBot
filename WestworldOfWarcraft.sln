@@ -55,6 +55,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WWoW.Systems.ServiceDefault
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameData.Core", "GameData.Core\GameData.Core.csproj", "{0CD771AA-583C-4037-93A4-1F5F472934A9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BloogBot.AI", "BloogBot.AI\BloogBot.AI.csproj", "{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8F44A7A8-F869-4525-9936-8DD7B3C57E22}"
+	ProjectSection(SolutionItems) = preProject
+		compose.yaml = compose.yaml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -403,6 +410,22 @@ Global
 		{0CD771AA-583C-4037-93A4-1F5F472934A9}.Release|x64.Build.0 = Release|Any CPU
 		{0CD771AA-583C-4037-93A4-1F5F472934A9}.Release|x86.ActiveCfg = Release|Any CPU
 		{0CD771AA-583C-4037-93A4-1F5F472934A9}.Release|x86.Build.0 = Release|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Debug|Win32.Build.0 = Debug|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Debug|x64.Build.0 = Debug|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Debug|x86.Build.0 = Debug|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Release|Win32.ActiveCfg = Release|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Release|Win32.Build.0 = Release|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Release|x64.ActiveCfg = Release|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Release|x64.Build.0 = Release|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Release|x86.ActiveCfg = Release|Any CPU
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -425,6 +448,7 @@ Global
 		{90BF97BD-7BF3-47D3-A575-E9AD85FBE336} = {C359E65D-9D40-44E4-A256-4C75A6438CCA}
 		{7731A959-10DE-4F06-CBE3-2A9C0CE8B9C3} = {C359E65D-9D40-44E4-A256-4C75A6438CCA}
 		{0CD771AA-583C-4037-93A4-1F5F472934A9} = {2B5ADD00-9FA5-4839-A06C-21FA6C02FE8E}
+		{5ABDDAA6-3C6C-440D-B82D-DAC1E8E6A010} = {2B5ADD00-9FA5-4839-A06C-21FA6C02FE8E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1D542335-5812-4666-9874-ACFCC515267C}

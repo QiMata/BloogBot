@@ -11,11 +11,13 @@
   <ItemGroup>
     <PackageReference Include="BehaviourTree" Version="1.0.73" />
     <PackageReference Include="BehaviourTree.FluentBuilder" Version="1.0.70" />
-    <PackageReference Include="Stateless" Version="5.16.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.5" />
+    <PackageReference Include="Stateless" Version="5.17.0" />
     <PackageReference Include="Xas.FluentBehaviourTree" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\BloogBot.AI\BloogBot.AI.csproj" />
     <ProjectReference Include="..\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\GameData.Core\GameData.Core.csproj" />
   </ItemGroup>
