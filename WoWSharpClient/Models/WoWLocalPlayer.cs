@@ -4,7 +4,9 @@ using GameData.Core.Models;
 
 namespace WoWSharpClient.Models
 {
-    public class WoWLocalPlayer(HighGuid highGuid, WoWObjectType objectType = WoWObjectType.Player) : WoWUnit(highGuid, objectType), IWoWLocalPlayer
+    public class WoWLocalPlayer(HighGuid highGuid, WoWObjectType objectType = WoWObjectType.Player)
+        : WoWUnit(highGuid, objectType),
+            IWoWLocalPlayer
     {
         public Position CorpsePosition => throw new NotImplementedException();
         public bool InGhostForm => throw new NotImplementedException();
@@ -20,6 +22,10 @@ namespace WoWSharpClient.Models
         public uint Copper => throw new NotImplementedException();
         public bool IsAutoAttacking => throw new NotImplementedException();
         public bool CanResurrect => throw new NotImplementedException();
+        public bool InBattleground => throw new NotImplementedException();
+        public bool HasQuestTargets => throw new NotImplementedException();
+        public bool IsInWorld => throw new NotImplementedException();
+        public bool HealthRestored => throw new NotImplementedException();
         public Race Race => throw new NotImplementedException();
         public Class Class => throw new NotImplementedException();
         public Gender Gender => throw new NotImplementedException();
@@ -78,6 +84,7 @@ namespace WoWSharpClient.Models
         public uint LifetimeDishonorableKills => throw new NotImplementedException();
         public uint WatchedFactionIndex => throw new NotImplementedException();
         public uint[] CombatRating => throw new NotImplementedException();
+
         public void AcceptResurrect()
         {
             throw new NotImplementedException();
@@ -218,7 +225,13 @@ namespace WoWSharpClient.Models
             throw new NotImplementedException();
         }
 
-        public void SplitStack(int bag, int slot, int quantity, int destinationBag, int destinationSlot)
+        public void SplitStack(
+            int bag,
+            int slot,
+            int quantity,
+            int destinationBag,
+            int destinationSlot
+        )
         {
             throw new NotImplementedException();
         }

@@ -1,11 +1,11 @@
-﻿using Communication;
+﻿using System.Runtime.InteropServices;
+using Communication;
 using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using System.Runtime.InteropServices;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -19,7 +19,12 @@ namespace ForegroundBotRunner.Statics
         public HighGuid PlayerGuid { get; internal set; } = new HighGuid(new byte[4], new byte[4]);
         private volatile bool _ingame1 = true;
         private readonly bool _ingame2 = true;
-        public LoginStates LoginState => (LoginStates)Enum.Parse(typeof(LoginStates), MemoryManager.ReadString(Offsets.CharacterScreen.LoginState));
+        public LoginStates LoginState =>
+            (LoginStates)
+                Enum.Parse(
+                    typeof(LoginStates),
+                    MemoryManager.ReadString(Offsets.CharacterScreen.LoginState)
+                );
         private EnumerateVisibleObjectsCallbackVanilla CallbackDelegate;
         private nint callbackPtr;
         private ActivitySnapshot _characterState;
@@ -48,17 +53,22 @@ namespace ForegroundBotRunner.Statics
         public IEnumerable<IWoWItem> Items { get; }
         public IEnumerable<IWoWContainer> Containers { get; }
         public ulong StarTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Star, true);
-        public ulong CircleTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Circle, true);
-        public ulong DiamondTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Diamond, true);
-        public ulong TriangleTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Triangle, true);
+        public ulong CircleTargetGuid =>
+            MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Circle, true);
+        public ulong DiamondTargetGuid =>
+            MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Diamond, true);
+        public ulong TriangleTargetGuid =>
+            MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Triangle, true);
         public ulong MoonTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Moon, true);
-        public ulong SquareTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Square, true);
+        public ulong SquareTargetGuid =>
+            MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Square, true);
         public ulong CrossTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Cross, true);
         public ulong SkullTargetGuid => MemoryManager.ReadUlong((nint)Offsets.RaidIcon.Skull, true);
 
         public bool IsLoggedIn => _ingame1 && _ingame2 && MemoryManager.ReadByte(0xB4B424) == 1;
 
-        public void AntiAfk() => MemoryManager.WriteInt(MemoryAddresses.LastHardwareAction, Environment.TickCount);
+        public void AntiAfk() =>
+            MemoryManager.WriteInt(MemoryAddresses.LastHardwareAction, Environment.TickCount);
 
         public string ZoneText
         {
@@ -104,7 +114,9 @@ namespace ForegroundBotRunner.Statics
             {
                 try
                 {
-                    var objectManagerPtr = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase);
+                    var objectManagerPtr = MemoryManager.ReadIntPtr(
+                        Offsets.ObjectManager.ManagerBase
+                    );
                     return MemoryManager.ReadUint(nint.Add(objectManagerPtr, 0xCC));
                 }
                 catch (Exception)
@@ -167,37 +179,35 @@ namespace ForegroundBotRunner.Statics
         public ulong Party3Guid => MemoryManager.ReadUlong(MemoryAddresses.Party3Guid);
         public ulong Party4Guid => MemoryManager.ReadUlong(MemoryAddresses.Party4Guid);
 
-        public IEnumerable<IWoWUnit> CasterAggressors =>
-            Aggressors
-                .Where(u => u.ManaPercent > 0);
+        public IEnumerable<IWoWUnit> CasterAggressors => Aggressors.Where(u => u.ManaPercent > 0);
 
-        public IEnumerable<IWoWUnit> MeleeAggressors =>
-            Aggressors
-                .Where(u => u.ManaPercent <= 0);
+        public IEnumerable<IWoWUnit> MeleeAggressors => Aggressors.Where(u => u.ManaPercent <= 0);
 
-        public IEnumerable<IWoWUnit> Aggressors =>
-            Hostiles
-                .Where(u => u.IsInCombat || u.IsFleeing);
+        public IEnumerable<IWoWUnit> Aggressors => Hostiles.Where(u => u.IsInCombat || u.IsFleeing);
+
         //.Where(u =>
-        //    u.TargetGuid == Pet?.Guid || 
+        //    u.TargetGuid == Pet?.Guid ||
         //    u.IsFleeing ||
-        //    PartyMembers.Any(x => u.TargetGuid == x.Guid));            
+        //    PartyMembers.Any(x => u.TargetGuid == x.Guid));
 
         public IEnumerable<IWoWUnit> Hostiles =>
             Units
                 .Where(u => u.Health > 0)
                 .Where(u =>
-                    u.UnitReaction == UnitReaction.Hated ||
-                    u.UnitReaction == UnitReaction.Hostile ||
-                    u.UnitReaction == UnitReaction.Unfriendly ||
-                    u.UnitReaction == UnitReaction.Neutral);
+                    u.UnitReaction == UnitReaction.Hated
+                    || u.UnitReaction == UnitReaction.Hostile
+                    || u.UnitReaction == UnitReaction.Unfriendly
+                    || u.UnitReaction == UnitReaction.Neutral
+                );
 
         // https://vanilla-wow.fandom.com/wiki/API_GetTalentInfo
         // tab index is 1, 2 or 3
         // talentIndex is counter left to right, top to bottom, starting at 1
         public sbyte GetTalentRank(int tabIndex, int talentIndex)
         {
-            var results = Functions.LuaCallWithResult($"{{0}}, {{1}}, {{2}}, {{3}}, {{4}} = GetTalentInfo({tabIndex},{talentIndex})");
+            var results = Functions.LuaCallWithResult(
+                $"{{0}}, {{1}}, {{2}}, {{3}}, {{4}} = GetTalentInfo({tabIndex},{talentIndex})"
+            );
 
             if (results.Length == 5)
                 return Convert.ToSByte(results[4]);
@@ -245,35 +255,46 @@ namespace ForegroundBotRunner.Statics
             Functions.LuaCall($"AutoEquipCursorItem()");
             Functions.LuaCall($"StaticPopup1Button1:Click()");
         }
+
         public void EnterWorld()
         {
-            const string str = "if CharSelectEnterWorldButton ~= nil then CharSelectEnterWorldButton:Click()  end";
+            const string str =
+                "if CharSelectEnterWorldButton ~= nil then CharSelectEnterWorldButton:Click()  end";
             Functions.LuaCall(str);
         }
+
         public void DefaultServerLogin(string accountName, string password)
         {
-            if (LoginState != LoginStates.login) return;
+            if (LoginState != LoginStates.login)
+                return;
             Functions.LuaCall($"DefaultServerLogin('{accountName}', '{password}');");
         }
 
-        public string GlueDialogText => Functions.LuaCallWithResult("{0} = GlueDialogText:GetText()")[0];
+        public string GlueDialogText =>
+            Functions.LuaCallWithResult("{0} = GlueDialogText:GetText()")[0];
 
         public int MaxCharacterCount => MemoryManager.ReadInt(0x00B42140);
+
         public void ResetLogin()
         {
             Functions.LuaCall("arg1 = 'ESCAPE' GlueDialog_OnKeyDown()");
-            Functions.LuaCall("if RealmListCancelButton ~= nil then if RealmListCancelButton:IsVisible() then RealmListCancelButton:Click(); end end ");
+            Functions.LuaCall(
+                "if RealmListCancelButton ~= nil then if RealmListCancelButton:IsVisible() then RealmListCancelButton:Click(); end end "
+            );
         }
 
         public void JoinBattleGroundQueue()
         {
-            string enabled = Functions.LuaCallWithResult("{0} = BattlefieldFrameGroupJoinButton:IsEnabled()")[0];
+            string enabled = Functions.LuaCallWithResult(
+                "{0} = BattlefieldFrameGroupJoinButton:IsEnabled()"
+            )[0];
 
             if (enabled == "1")
                 Functions.LuaCall("BattlefieldFrameGroupJoinButton:Click()");
             else
                 Functions.LuaCall("BattlefieldFrameJoinButton:Click()");
         }
+
         public int GetItemCount(string parItemName)
         {
             var totalCount = 0;
@@ -288,14 +309,16 @@ namespace ForegroundBotRunner.Statics
                 {
                     var iAdjusted = i - 1;
                     var bag = GetExtraBag(iAdjusted);
-                    if (bag == null) continue;
+                    if (bag == null)
+                        continue;
                     slots = bag.NumOfSlots;
                 }
 
                 for (var k = 0; k <= slots; k++)
                 {
                     var item = GetItem(i, k);
-                    if (item?.Info.Name == parItemName) totalCount += (int)item.StackCount;
+                    if (item?.Info.Name == parItemName)
+                        totalCount += (int)item.StackCount;
                 }
             }
             return totalCount;
@@ -315,14 +338,16 @@ namespace ForegroundBotRunner.Statics
                 {
                     var iAdjusted = i - 1;
                     var bag = GetExtraBag(iAdjusted);
-                    if (bag == null) continue;
+                    if (bag == null)
+                        continue;
                     slots = bag.NumOfSlots;
                 }
 
                 for (var k = 0; k <= slots; k++)
                 {
                     var item = GetItem(i, k);
-                    if (item?.ItemId == itemId) totalCount += (int)item.StackCount;
+                    if (item?.ItemId == itemId)
+                        totalCount += (int)item.StackCount;
                 }
             }
             return totalCount;
@@ -360,24 +385,39 @@ namespace ForegroundBotRunner.Statics
             for (var i = 0; i < 16; i++)
             {
                 var tmpSlotGuid = Player.GetBackpackItemGuid(i);
-                if (tmpSlotGuid == 0) freeSlots++;
+                if (tmpSlotGuid == 0)
+                    freeSlots++;
             }
             var bagGuids = new List<ulong>();
             for (var i = 0; i < 4; i++)
-                bagGuids.Add(MemoryManager.ReadUlong(nint.Add(MemoryAddresses.LocalPlayerFirstExtraBag, i * 8)));
+                bagGuids.Add(
+                    MemoryManager.ReadUlong(
+                        nint.Add(MemoryAddresses.LocalPlayerFirstExtraBag, i * 8)
+                    )
+                );
 
             var tmpItems = Containers
-                .Where(i => i.NumOfSlots != 0 && bagGuids.Contains(i.Guid)).ToList();
+                .Where(i => i.NumOfSlots != 0 && bagGuids.Contains(i.Guid))
+                .ToList();
 
             foreach (var bag in tmpItems)
             {
-                if ((bag.Info.Name.Contains("Quiver") || bag.Info.Name.Contains("Ammo") || bag.Info.Name.Contains("Shot") ||
-                     bag.Info.Name.Contains("Herb") || bag.Info.Name.Contains("Soul")) && !parCountSpecialSlots) continue;
+                if (
+                    (
+                        bag.Info.Name.Contains("Quiver")
+                        || bag.Info.Name.Contains("Ammo")
+                        || bag.Info.Name.Contains("Shot")
+                        || bag.Info.Name.Contains("Herb")
+                        || bag.Info.Name.Contains("Soul")
+                    ) && !parCountSpecialSlots
+                )
+                    continue;
 
                 for (var i = 1; i < bag.NumOfSlots; i++)
                 {
                     var tmpSlotGuid = bag.GetItemGuid(i);
-                    if (tmpSlotGuid == 0) freeSlots++;
+                    if (tmpSlotGuid == 0)
+                        freeSlots++;
                 }
             }
             return freeSlots;
@@ -389,7 +429,11 @@ namespace ForegroundBotRunner.Statics
             {
                 var bagGuids = new List<ulong>();
                 for (var i = 0; i < 4; i++)
-                    bagGuids.Add(MemoryManager.ReadUlong(nint.Add(MemoryAddresses.LocalPlayerFirstExtraBag, i * 8)));
+                    bagGuids.Add(
+                        MemoryManager.ReadUlong(
+                            nint.Add(MemoryAddresses.LocalPlayerFirstExtraBag, i * 8)
+                        )
+                    );
 
                 return bagGuids.Count(b => b == 0);
             }
@@ -399,7 +443,8 @@ namespace ForegroundBotRunner.Statics
 
         IRealmSelectScreen IObjectManager.RealmSelectScreen => throw new NotImplementedException();
 
-        ICharacterSelectScreen IObjectManager.CharacterSelectScreen => throw new NotImplementedException();
+        ICharacterSelectScreen IObjectManager.CharacterSelectScreen =>
+            throw new NotImplementedException();
 
         IGossipFrame IObjectManager.GossipFrame => throw new NotImplementedException();
 
@@ -411,7 +456,8 @@ namespace ForegroundBotRunner.Statics
 
         IQuestFrame IObjectManager.QuestFrame => throw new NotImplementedException();
 
-        IQuestGreetingFrame IObjectManager.QuestGreetingFrame => throw new NotImplementedException();
+        IQuestGreetingFrame IObjectManager.QuestGreetingFrame =>
+            throw new NotImplementedException();
 
         ITaxiFrame IObjectManager.TaxiFrame => throw new NotImplementedException();
 
@@ -441,14 +487,16 @@ namespace ForegroundBotRunner.Statics
                 {
                     var iAdjusted = i - 1;
                     var bag = GetExtraBag(iAdjusted);
-                    if (bag == null) continue;
+                    if (bag == null)
+                        continue;
                     slots = bag.NumOfSlots;
                 }
 
                 for (var k = 0; k < slots; k++)
                 {
                     var item = GetItem(i, k);
-                    if (item?.Guid == itemGuid) return (uint)i;
+                    if (item?.Guid == itemGuid)
+                        return (uint)i;
                 }
             }
             return (uint)totalCount;
@@ -468,14 +516,16 @@ namespace ForegroundBotRunner.Statics
                 {
                     var iAdjusted = i - 1;
                     var bag = GetExtraBag(iAdjusted);
-                    if (bag == null) continue;
+                    if (bag == null)
+                        continue;
                     slots = bag.NumOfSlots;
                 }
 
                 for (var k = 0; k < slots; k++)
                 {
                     var item = GetItem(i, k);
-                    if (item?.Guid == itemGuid) return (uint)k + 1;
+                    if (item?.Guid == itemGuid)
+                        return (uint)k + 1;
                 }
             }
             return (uint)totalCount;
@@ -484,9 +534,11 @@ namespace ForegroundBotRunner.Statics
         public IWoWItem GetEquippedItem(EquipSlot slot)
         {
             var guid = Player.GetEquippedItemGuid(slot);
-            if (guid == 0) return null;
+            if (guid == 0)
+                return null;
             return Items.FirstOrDefault(i => i.Guid == guid);
         }
+
         public IEnumerable<IWoWItem> GetEquippedItems()
         {
             IWoWItem headItem = GetEquippedItem(EquipSlot.Head);
@@ -536,8 +588,11 @@ namespace ForegroundBotRunner.Statics
 
         private IWoWContainer GetExtraBag(int parSlot)
         {
-            if (parSlot > 3 || parSlot < 0) return null;
-            var bagGuid = MemoryManager.ReadUlong(nint.Add(MemoryAddresses.LocalPlayerFirstExtraBag, parSlot * 8));
+            if (parSlot > 3 || parSlot < 0)
+                return null;
+            var bagGuid = MemoryManager.ReadUlong(
+                nint.Add(MemoryAddresses.LocalPlayerFirstExtraBag, parSlot * 8)
+            );
             return bagGuid == 0 ? null : Containers.FirstOrDefault(i => i.Guid == bagGuid);
         }
 
@@ -557,9 +612,11 @@ namespace ForegroundBotRunner.Statics
                 case 4:
                 case 5:
                     var tmpBag = GetExtraBag(parBag - 2);
-                    if (tmpBag == null) return null;
+                    if (tmpBag == null)
+                        return null;
                     var tmpItemGuid = tmpBag.GetItemGuid(parSlot);
-                    if (tmpItemGuid == 0) return null;
+                    if (tmpItemGuid == 0)
+                        return null;
                     return Items.FirstOrDefault(i => i.Guid == tmpItemGuid);
 
                 default:
@@ -572,13 +629,17 @@ namespace ForegroundBotRunner.Statics
             if (args.EventName == "CURSOR_UPDATE")
             {
                 var online = MemoryManager.ReadByte(Offsets.Player.IsIngame) == 1;
-                if (!online) _ingame1 = false;
+                if (!online)
+                    _ingame1 = false;
                 return;
             }
-            if (args.EventName != "UNIT_MODEL_CHANGED" &&
-                args.EventName != "UPDATE_SELECTED_CHARACTER" &&
-                args.EventName != "DISCONNECTED_FROM_SERVER" &&
-                args.EventName != "VARIABLES_LOADED") return;
+            if (
+                args.EventName != "UNIT_MODEL_CHANGED"
+                && args.EventName != "UPDATE_SELECTED_CHARACTER"
+                && args.EventName != "DISCONNECTED_FROM_SERVER"
+                && args.EventName != "VARIABLES_LOADED"
+            )
+                return;
             _ingame1 = true;
         }
 
@@ -602,7 +663,8 @@ namespace ForegroundBotRunner.Statics
         {
             ThreadSynchronizer.RunOnMainThread(() =>
             {
-                if (!IsLoggedIn) return;
+                if (!IsLoggedIn)
+                    return;
                 ulong playerGuid = Functions.GetPlayerGuid();
                 byte[] playerGuidParts = BitConverter.GetBytes(playerGuid);
                 PlayerGuid = new HighGuid(playerGuidParts[0..4], playerGuidParts[4..8]);
@@ -631,7 +693,11 @@ namespace ForegroundBotRunner.Statics
                     {
                         if (unit.SummonedByGuid == Player?.Guid)
                         {
-                            Pet = new LocalPet(((WoWObject)unit).Pointer, unit.HighGuid, unit.ObjectType);
+                            Pet = new LocalPet(
+                                ((WoWObject)unit).Pointer,
+                                unit.HighGuid,
+                                unit.ObjectType
+                            );
                             petFound = true;
                         }
                     }
@@ -655,9 +721,11 @@ namespace ForegroundBotRunner.Statics
 
         private int CallbackInternal(ulong guid, int filter)
         {
-            if (guid == 0) return 0;
+            if (guid == 0)
+                return 0;
             var pointer = Functions.GetObjectPtr(guid);
-            var objectType = (WoWObjectType)MemoryManager.ReadInt(nint.Add(pointer, OBJECT_TYPE_OFFSET));
+            var objectType = (WoWObjectType)
+                MemoryManager.ReadInt(nint.Add(pointer, OBJECT_TYPE_OFFSET));
             byte[] guidParts = BitConverter.GetBytes(guid);
             HighGuid highGuid = new(guidParts[0..3], guidParts[4..8]);
             try

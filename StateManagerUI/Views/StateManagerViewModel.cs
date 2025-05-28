@@ -1,9 +1,9 @@
-﻿using Communication;
-using StateManagerUI.Handlers;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using Communication;
+using StateManagerUI.Handlers;
 
 namespace StateManagerUI.Views
 {
@@ -14,36 +14,26 @@ namespace StateManagerUI.Views
 
         private Dictionary<CharacterDefinition, CharacterDefinition> _characterStates = [];
 
-        public ICommand LocalStateManagerLoadCommand { get; } = new CommandHandler(
-            () =>
-            {
+        public ICommand LocalStateManagerLoadCommand { get; } = new CommandHandler(() => { }, true);
 
-            }, true
-        );
+        public ICommand StateManagerConnectCommand { get; } = new CommandHandler(() => { }, true);
 
-        public ICommand StateManagerConnectCommand { get; } = new CommandHandler(
-            () =>
-            {
-
-            }, true
-        );
-
-        public ICommand StateManagerDisconnectCommand { get; } = new CommandHandler(
-            () =>
-            {
-
-            }, true
-        );
+        public ICommand StateManagerDisconnectCommand { get; } =
+            new CommandHandler(() => { }, true);
 
         public StateManagerViewModel()
         {
-
             OnPropertyChanged(nameof(SelectCharacterIndex));
         }
 
         private void StartStatusTimer()
         {
-            _statusPollTimer ??= new Timer(async _ => await PollServerStatusAsync(), null, TimeSpan.Zero, _pollInterval);
+            _statusPollTimer ??= new Timer(
+                async _ => await PollServerStatusAsync(),
+                null,
+                TimeSpan.Zero,
+                _pollInterval
+            );
         }
 
         private async Task PollServerStatusAsync()
@@ -81,7 +71,10 @@ namespace StateManagerUI.Views
                 var completed = await Task.WhenAny(task, Task.Delay(timeoutMs));
                 return task.IsCompleted && client.Connected;
             }
-            catch { return false; }
+            catch
+            {
+                return false;
+            }
         }
 
         public async Task CheckServerStatusAsync()
@@ -103,6 +96,7 @@ namespace StateManagerUI.Views
         public string AdminPassword { get; set; } = "PASSWORD";
 
         public event PropertyChangedEventHandler? PropertyChanged;
+
         public void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
@@ -130,46 +124,81 @@ namespace StateManagerUI.Views
 
         public float OpennessValue
         {
-            get => _characterStates.Count == 0 ? 0.0f : _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Openness;
+            get =>
+                _characterStates.Count == 0
+                    ? 0.0f
+                    : _characterStates
+                        .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                        .Openness;
             set
             {
-                _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Openness = value;
+                _characterStates
+                    .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                    .Openness = value;
                 OnPropertyChanged();
             }
         }
         public float ConscientiousnessValue
         {
-            get => _characterStates.Count == 0 ? 0.0f : _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Conscientiousness;
+            get =>
+                _characterStates.Count == 0
+                    ? 0.0f
+                    : _characterStates
+                        .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                        .Conscientiousness;
             set
             {
-                _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Conscientiousness = value;
+                _characterStates
+                    .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                    .Conscientiousness = value;
                 OnPropertyChanged();
             }
         }
         public float ExtraversionValue
         {
-            get => _characterStates.Count == 0 ? 0.0f : _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Extraversion;
+            get =>
+                _characterStates.Count == 0
+                    ? 0.0f
+                    : _characterStates
+                        .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                        .Extraversion;
             set
             {
-                _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Extraversion = value;
+                _characterStates
+                    .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                    .Extraversion = value;
                 OnPropertyChanged();
             }
         }
         public float AgreeablenessValue
         {
-            get => _characterStates.Count == 0 ? 0.0f : _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Agreeableness;
+            get =>
+                _characterStates.Count == 0
+                    ? 0.0f
+                    : _characterStates
+                        .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                        .Agreeableness;
             set
             {
-                _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Agreeableness = value;
+                _characterStates
+                    .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                    .Agreeableness = value;
                 OnPropertyChanged();
             }
         }
         public float NeuroticismValue
         {
-            get => _characterStates.Count == 0 ? 0.0f : _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Neuroticism;
+            get =>
+                _characterStates.Count == 0
+                    ? 0.0f
+                    : _characterStates
+                        .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                        .Neuroticism;
             set
             {
-                _characterStates.Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex].Neuroticism = value;
+                _characterStates
+                    .Keys.ToArray()[20 * _currentPageIndex + _selectedCharacterIndex]
+                    .Neuroticism = value;
                 OnPropertyChanged();
             }
         }

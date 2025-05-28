@@ -1,9 +1,9 @@
-﻿using Binarysharp.Assemblers.Fasm;
-using GameData.Core.Models;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using Binarysharp.Assemblers.Fasm;
+using GameData.Core.Models;
 
 namespace ForegroundBotRunner.Mem
 {
@@ -29,14 +29,23 @@ namespace ForegroundBotRunner.Mem
             PROCESS_TERMINATE = 0x0001,
             PROCESS_VM_OPERATION = 0x0008,
             PROCESS_VM_READ = 0x0010,
-            PROCESS_VM_WRITE = 0x0020
+            PROCESS_VM_WRITE = 0x0020,
         }
 
         [DllImport("kernel32.dll")]
-        private static extern bool VirtualProtect(nint address, int size, uint newProtect, out uint oldProtect);
+        private static extern bool VirtualProtect(
+            nint address,
+            int size,
+            uint newProtect,
+            out uint oldProtect
+        );
 
         [DllImport("kernel32.dll")]
-        private static extern nint OpenProcess(ProcessAccessFlags desiredAccess, bool inheritHandle, int processId);
+        private static extern nint OpenProcess(
+            ProcessAccessFlags desiredAccess,
+            bool inheritHandle,
+            int processId
+        );
 
         [DllImport("kernel32.dll")]
         private static extern bool WriteProcessMemory(
@@ -44,7 +53,8 @@ namespace ForegroundBotRunner.Mem
             nint lpBaseAddress,
             byte[] lpBuffer,
             int dwSize,
-            ref int lpNumberOfBytesWritten);
+            ref int lpNumberOfBytesWritten
+        );
 
         [Flags]
         public enum Protection
@@ -59,18 +69,23 @@ namespace ForegroundBotRunner.Mem
             PAGE_EXECUTE_WRITECOPY = 0x80,
             PAGE_GUARD = 0x100,
             PAGE_NOCACHE = 0x200,
-            PAGE_WRITECOMBINE = 0x400
+            PAGE_WRITECOMBINE = 0x400,
         }
 
         [DllImport("kernel32.dll")]
-        private static extern bool VirtualProtect(nint lpAddress, nuint dwSize, uint flNewProtect, out uint lpflOldProtect);
+        private static extern bool VirtualProtect(
+            nint lpAddress,
+            nuint dwSize,
+            uint flNewProtect,
+            out uint lpflOldProtect
+        );
 
         private static readonly nint wowProcessHandle = Process.GetCurrentProcess().Handle;
         public static readonly nint imageBase = Process.GetCurrentProcess().MainModule.BaseAddress;
         private static readonly FasmNet fasm = new();
 
         [HandleProcessCorruptedStateExceptions]
-        static internal byte ReadByte(nint address, bool isRelative = false)
+        internal static byte ReadByte(nint address, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return 0;
@@ -84,7 +99,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Byte");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type Byte"
+                );
                 return default;
             }
             catch (Exception e)
@@ -95,7 +112,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public short ReadShort(nint address, bool isRelative = false)
+        public static short ReadShort(nint address, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return 0;
@@ -109,7 +126,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Short");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type Short"
+                );
                 return default;
             }
             catch (Exception e)
@@ -120,7 +139,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public int ReadInt(nint address, bool isRelative = false)
+        public static int ReadInt(nint address, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return 0;
@@ -134,7 +153,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Int");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type Int"
+                );
                 return default;
             }
             catch (Exception e)
@@ -145,7 +166,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public uint ReadUint(nint address, bool isRelative = false)
+        public static uint ReadUint(nint address, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return 0;
@@ -159,7 +180,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Uint");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type Uint"
+                );
                 return default;
             }
             catch (Exception e)
@@ -170,7 +193,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public ulong ReadUlong(nint address, bool isRelative = false)
+        public static ulong ReadUlong(nint address, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return 0;
@@ -184,7 +207,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Ulong");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type Ulong"
+                );
                 return default;
             }
             catch (Exception e)
@@ -195,7 +220,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public nint ReadIntPtr(nint address, bool isRelative = false)
+        public static nint ReadIntPtr(nint address, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return nint.Zero;
@@ -209,7 +234,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type IntPtr");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type IntPtr"
+                );
                 return default;
             }
             catch (Exception e)
@@ -220,7 +247,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public float ReadFloat(nint address, bool isRelative = false)
+        public static float ReadFloat(nint address, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return 0;
@@ -234,7 +261,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Float");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type Float"
+                );
                 return default;
             }
             catch (Exception e)
@@ -245,7 +274,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public string ReadString(nint address, int size = 512, bool isRelative = false)
+        public static string ReadString(nint address, int size = 512, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return null;
@@ -268,7 +297,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type string");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type string"
+                );
                 return default;
             }
             catch (Exception e)
@@ -279,7 +310,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public byte[] ReadBytes(nint address, int count, bool isRelative = false)
+        public static byte[] ReadBytes(nint address, int count, bool isRelative = false)
         {
             if (address == nint.Zero)
                 return null;
@@ -313,7 +344,7 @@ namespace ForegroundBotRunner.Mem
         }
 
         [HandleProcessCorruptedStateExceptions]
-        static public ItemCacheEntry ReadItemCacheEntry(nint address)
+        public static ItemCacheEntry ReadItemCacheEntry(nint address)
         {
             if (address == nint.Zero)
                 return null;
@@ -324,7 +355,9 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type ItemCacheEntry");
+                Console.WriteLine(
+                    "Access Violation on " + address.ToString("X") + " with type ItemCacheEntry"
+                );
                 return default;
             }
             catch (Exception e)
@@ -334,9 +367,11 @@ namespace ForegroundBotRunner.Mem
             }
         }
 
-        static internal void WriteByte(nint address, byte value) => Marshal.StructureToPtr(value, address, false);
+        internal static void WriteByte(nint address, byte value) =>
+            Marshal.StructureToPtr(value, address, false);
 
-        static internal void WriteInt(nint address, int value) => Marshal.StructureToPtr(value, address, false);
+        internal static void WriteInt(nint address, int value) =>
+            Marshal.StructureToPtr(value, address, false);
 
         // certain memory locations (Warden for example) are protected from modification.
         // we use OpenAccess with ProcessAccessFlags to remove the protection.
@@ -348,14 +383,15 @@ namespace ForegroundBotRunner.Mem
             if (address == nint.Zero)
                 return;
 
-            var access = ProcessAccessFlags.PROCESS_CREATE_THREAD |
-                         ProcessAccessFlags.PROCESS_QUERY_INFORMATION |
-                         ProcessAccessFlags.PROCESS_SET_INFORMATION |
-                         ProcessAccessFlags.PROCESS_TERMINATE |
-                         ProcessAccessFlags.PROCESS_VM_OPERATION |
-                         ProcessAccessFlags.PROCESS_VM_READ |
-                         ProcessAccessFlags.PROCESS_VM_WRITE |
-                         ProcessAccessFlags.SYNCHRONIZE;
+            var access =
+                ProcessAccessFlags.PROCESS_CREATE_THREAD
+                | ProcessAccessFlags.PROCESS_QUERY_INFORMATION
+                | ProcessAccessFlags.PROCESS_SET_INFORMATION
+                | ProcessAccessFlags.PROCESS_TERMINATE
+                | ProcessAccessFlags.PROCESS_VM_OPERATION
+                | ProcessAccessFlags.PROCESS_VM_READ
+                | ProcessAccessFlags.PROCESS_VM_WRITE
+                | ProcessAccessFlags.SYNCHRONIZE;
 
             var process = OpenProcess(access, false, Environment.ProcessId);
 
@@ -367,7 +403,7 @@ namespace ForegroundBotRunner.Mem
             VirtualProtect(address, bytes.Length, (uint)protection, out uint _);
         }
 
-        static internal nint InjectAssembly(string hackName, string[] instructions)
+        internal static nint InjectAssembly(string hackName, string[] instructions)
         {
             // first get the assembly as bytes for the allocated area before overwriting the memory
             fasm.Clear();
@@ -398,7 +434,7 @@ namespace ForegroundBotRunner.Mem
             return start;
         }
 
-        static internal void InjectAssembly(string hackName, uint ptr, string instructions)
+        internal static void InjectAssembly(string hackName, uint ptr, string instructions)
         {
             fasm.Clear();
             fasm.AddLine("use32");

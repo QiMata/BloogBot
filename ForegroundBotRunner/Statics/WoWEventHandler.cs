@@ -1,8 +1,8 @@
-﻿using ForegroundBotRunner.Mem.Hooks;
+﻿using System.Text.RegularExpressions;
+using ForegroundBotRunner.Mem.Hooks;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using Newtonsoft.Json;
-using System.Text.RegularExpressions;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -23,7 +23,6 @@ namespace ForegroundBotRunner.Statics
         ///     The instance.
         /// </value>
         public static WoWEventHandler Instance { get; } = new WoWEventHandler();
-
 
         /// <summary>
         ///     Occurs on level up
@@ -221,7 +220,6 @@ namespace ForegroundBotRunner.Statics
             Task.Run(() => OnPlayerInit?.Invoke(this, new EventArgs()));
         }
 
-
         /// <summary>
         ///     Occurs on a click to move action
         /// </summary>
@@ -340,7 +338,9 @@ namespace ForegroundBotRunner.Statics
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"EVENT HANDLER: {parEvent} {JsonConvert.SerializeObject(parArgs)} {ex.Message}");
+                    Console.WriteLine(
+                        $"EVENT HANDLER: {parEvent} {JsonConvert.SerializeObject(parArgs)} {ex.Message}"
+                    );
                 }
             });
         }
@@ -357,23 +357,17 @@ namespace ForegroundBotRunner.Statics
             {
                 OnTargetChange?.Invoke(this, new EventArgs());
             }
-            else if (parEvent == "QUEST_FINISHED")
-            {
-
-            }
-            else if (parEvent == "QUEST_PROGRESS" ||
-                     parEvent == "QUEST_COMPLETE" ||
-                     parEvent == "QUEST_DETAIL")
-            {
-
-            }
-            else if (parEvent == "QUEST_GREETING")
-            {
-
-            }
+            else if (parEvent == "QUEST_FINISHED") { }
+            else if (
+                parEvent == "QUEST_PROGRESS"
+                || parEvent == "QUEST_COMPLETE"
+                || parEvent == "QUEST_DETAIL"
+            ) { }
+            else if (parEvent == "QUEST_GREETING") { }
             else if (parEvent == "UNIT_LEVEL")
             {
-                if ((string)parArgs[0] != "player") return;
+                if ((string)parArgs[0] != "player")
+                    return;
                 LevelUp?.Invoke(this, new EventArgs());
             }
             else if (parEvent == "PLAYER_MONEY")
@@ -396,8 +390,10 @@ namespace ForegroundBotRunner.Statics
             }
             else if (parEvent == "OPEN_STATUS_DIALOG")
             {
-                if (OnWrongLogin == null) return;
-                if (parArgs.Length != 2) return;
+                if (OnWrongLogin == null)
+                    return;
+                if (parArgs.Length != 2)
+                    return;
                 if (((string)parArgs[1]).Contains("The information you have entered is not valid."))
                 {
                     OnWrongLogin.Invoke(this, new EventArgs());
@@ -415,10 +411,14 @@ namespace ForegroundBotRunner.Statics
             }
             else if (parEvent == "UPDATE_STATUS_DIALOG")
             {
-                if (InServerQueue == null) return;
-                if (parArgs.Length != 2) return;
-                if (!((string)parArgs[0]).Contains("Position in queue:")) return;
-                if ((string)parArgs[1] != "Change Realm") return;
+                if (InServerQueue == null)
+                    return;
+                if (parArgs.Length != 2)
+                    return;
+                if (!((string)parArgs[0]).Contains("Position in queue:"))
+                    return;
+                if ((string)parArgs[1] != "Change Realm")
+                    return;
                 InServerQueue.Invoke(this, new EventArgs());
             }
             else if (parEvent == "GET_PREFERRED_REALM_INFO")
@@ -452,13 +452,23 @@ namespace ForegroundBotRunner.Statics
             else if (parEvent == "UNIT_COMBAT")
             {
                 // "NONE" represents a partial block (damage reduction). "BLOCK" represents a full block (damage avoidance).
-                if ((string)parArgs[0] == "player" && ((string)parArgs[1] == "DODGE" || (string)parArgs[1] == "PARRY" || (string)parArgs[1] == "NONE" || (string)parArgs[1] == "BLOCK"))
+                if (
+                    (string)parArgs[0] == "player"
+                    && (
+                        (string)parArgs[1] == "DODGE"
+                        || (string)parArgs[1] == "PARRY"
+                        || (string)parArgs[1] == "NONE"
+                        || (string)parArgs[1] == "BLOCK"
+                    )
+                )
                     OnBlockParryDodge?.Invoke(null, new EventArgs());
                 if ((string)parArgs[0] == "player" && (string)parArgs[1] == "PARRY")
                     OnParry?.Invoke(null, new EventArgs());
-
             }
-            else if (parEvent == "CHAT_MSG_COMBAT_SELF_HITS" || parEvent == "CHAT_MSG_COMBAT_SELF_MISSES")
+            else if (
+                parEvent == "CHAT_MSG_COMBAT_SELF_HITS"
+                || parEvent == "CHAT_MSG_COMBAT_SELF_MISSES"
+            )
             {
                 OnSlamReady?.Invoke(null, new EventArgs());
             }
@@ -470,13 +480,16 @@ namespace ForegroundBotRunner.Statics
             }
             else if (parEvent == "CHAT_MSG_COMBAT_HOSTILE_DEATH")
             {
-                if (OnUnitKilled == null) return;
-                if (!((string)parArgs[0]).Contains("You have")) return;
+                if (OnUnitKilled == null)
+                    return;
+                if (!((string)parArgs[0]).Contains("You have"))
+                    return;
                 OnUnitKilled.Invoke(this, new EventArgs());
             }
             else if (parEvent == "CHAT_MSG_SAY")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
@@ -484,49 +497,93 @@ namespace ForegroundBotRunner.Statics
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
 
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_SAY, language, senderGuid, targetGuid, unitName, string.Empty, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_SAY,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    string.Empty,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
 
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "CHAT_MSG_MONSTER_SAY")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
                 string unitName = (string)parArgs[1];
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_MONSTER_SAY, language, senderGuid, targetGuid, unitName, string.Empty, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_MONSTER_SAY,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    string.Empty,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "CHAT_MSG_MONSTER_YELL")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
                 string unitName = (string)parArgs[1];
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_MONSTER_YELL, language, senderGuid, targetGuid, unitName, string.Empty, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_MONSTER_YELL,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    string.Empty,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "CHAT_MSG_YELL")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
                 string unitName = (string)parArgs[1];
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_YELL, language, senderGuid, targetGuid, unitName, string.Empty, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_YELL,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    string.Empty,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "CHAT_MSG_CHANNEL")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
@@ -534,55 +591,109 @@ namespace ForegroundBotRunner.Statics
                 string chatType = "Channel " + (int)parArgs[7];
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_CHANNEL, language, senderGuid, targetGuid, unitName, chatType, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_CHANNEL,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    chatType,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "CHAT_MSG_RAID")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
                 string unitName = (string)parArgs[1];
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_RAID, language, senderGuid, targetGuid, unitName, string.Empty, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_RAID,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    string.Empty,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "CHAT_MSG_GUILD")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
                 string unitName = (string)parArgs[1];
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_GUILD, language, senderGuid, targetGuid, unitName, string.Empty, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_GUILD,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    string.Empty,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "CHAT_MSG_PARTY")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
                 string unitName = (string)parArgs[1];
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_PARTY, language, senderGuid, targetGuid, unitName, string.Empty, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_PARTY,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    string.Empty,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "CHAT_MSG_WHISPER")
             {
-                if (OnChatMessage == null) return;
+                if (OnChatMessage == null)
+                    return;
                 Language language = (Language)parArgs[2];
                 ulong senderGuid = (ulong)parArgs[3];
                 ulong targetGuid = (ulong)parArgs[4];
                 string unitName = (string)parArgs[1];
                 string chatTag = (string)parArgs[5];
                 string chatMessage = (string)parArgs[0];
-                ChatMessageArgs args = new(ChatMsg.CHAT_MSG_WHISPER, language, senderGuid, targetGuid, unitName, string.Empty, 0, chatMessage, PlayerChatTag.CHAT_TAG_NONE);
+                ChatMessageArgs args = new(
+                    ChatMsg.CHAT_MSG_WHISPER,
+                    language,
+                    senderGuid,
+                    targetGuid,
+                    unitName,
+                    string.Empty,
+                    0,
+                    chatMessage,
+                    PlayerChatTag.CHAT_TAG_NONE
+                );
                 OnChatMessage.Invoke(this, args);
             }
             else if (parEvent == "DUEL_REQUESTED")
@@ -591,7 +702,8 @@ namespace ForegroundBotRunner.Statics
             }
             else if (parEvent == "GUILD_INVITE_REQUEST")
             {
-                if (OnGuildInvite == null) return;
+                if (OnGuildInvite == null)
+                    return;
                 string player = (string)parArgs[0];
                 string guild = (string)parArgs[1];
                 OnGuildInvite.Invoke(this, new GuildInviteArgs(player, guild));
@@ -638,7 +750,8 @@ namespace ForegroundBotRunner.Statics
             }
             else if (parEvent == "CHAT_MSG_COMBAT_XP_GAIN")
             {
-                if (OnXpGain == null) return;
+                if (OnXpGain == null)
+                    return;
                 string str = (string)parArgs[0];
                 Regex regex = new("(?i)you gain [0-9]+");
                 Match match = regex.Match(str);
@@ -646,9 +759,7 @@ namespace ForegroundBotRunner.Statics
                 str = regex.Match(match.Value).Value;
                 OnXpGain?.Invoke(this, new OnXpGainArgs(Convert.ToInt32(str)));
             }
-            else if (parEvent == "UNIT_MODEL_CHANGED")
-            {
-            }
+            else if (parEvent == "UNIT_MODEL_CHANGED") { }
             else if (parEvent == "GOSSIP_SHOW")
             {
                 GOSSIP_SHOW();
@@ -719,24 +830,12 @@ namespace ForegroundBotRunner.Statics
             OnTrainerShow?.Invoke(this, new EventArgs());
         }
 
-        private void LOOT_HANDLE(LootState parState)
-        {
+        private void LOOT_HANDLE(LootState parState) { }
 
-        }
+        private void TAXIMAP_OPENED() { }
 
-        private void TAXIMAP_OPENED()
-        {
+        private void GOSSIP_SHOW() { }
 
-        }
-
-        private void GOSSIP_SHOW()
-        {
-
-        }
-
-        private void MERCHANT_HANDLE(MerchantState parState)
-        {
-
-        }
+        private void MERCHANT_HANDLE(MerchantState parState) { }
     }
 }

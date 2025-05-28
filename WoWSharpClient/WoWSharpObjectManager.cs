@@ -1,9 +1,9 @@
-﻿using GameData.Core.Enums;
+﻿using System.Text;
+using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
-using System.Text;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Screens;
@@ -24,6 +24,7 @@ namespace WoWSharpClient
         private readonly LoginScreen _loginScreen;
         private readonly RealmSelectScreen _realmScreen;
         private readonly CharacterSelectScreen _characterSelectScreen;
+
         public WoWSharpObjectManager(string ipAddress, ILogger<WoWSharpObjectManager> logger)
         {
             _logger = logger;
@@ -79,6 +80,7 @@ namespace WoWSharpClient
             ////Console.WriteLine($"Created GameObject with guid {e.Guid}");
             _woWClient.SendNameQuery(e.Guid);
         }
+
         private void EventEmitter_OnChatMessage(object? sender, ChatMessageArgs e)
         {
             Console.ResetColor();
@@ -160,10 +162,12 @@ namespace WoWSharpClient
             ////Console.WriteLine("[Main]Failed to login to WoW server");
             _woWClient.Dispose();
         }
+
         private void EventEmitter_OnWorldSessionEnd(object? sender, EventArgs e)
         {
             HasEnteredWorld = false;
         }
+
         public ILoginScreen LoginScreen => _loginScreen;
         public IRealmSelectScreen RealmSelectScreen => _realmScreen;
         public ICharacterSelectScreen CharacterSelectScreen => _characterSelectScreen;
@@ -261,10 +265,7 @@ namespace WoWSharpClient
 
         public LoginStates LoginState => throw new NotImplementedException();
 
-        public void AntiAfk()
-        {
-
-        }
+        public void AntiAfk() { }
 
         public IWoWUnit GetTarget(IWoWUnit woWUnit)
         {
@@ -276,90 +277,39 @@ namespace WoWSharpClient
             return 0;
         }
 
-        public void PickupInventoryItem(uint inventorySlot)
-        {
+        public void PickupInventoryItem(uint inventorySlot) { }
 
-        }
+        public void DeleteCursorItem() { }
 
-        public void DeleteCursorItem()
-        {
+        public void EquipCursorItem() { }
 
-        }
+        public void ConfirmItemEquip() { }
 
-        public void EquipCursorItem()
-        {
+        public void SendChatMessage(string chatMessage) { }
 
-        }
+        public void SetRaidTarget(IWoWUnit target, TargetMarker v) { }
 
-        public void ConfirmItemEquip()
-        {
+        public void JoinBattleGroundQueue() { }
 
-        }
+        public void ResetInstances() { }
 
-        public void SendChatMessage(string chatMessage)
-        {
+        public void PickupMacro(uint v) { }
 
-        }
+        public void PlaceAction(uint v) { }
 
-        public void SetRaidTarget(IWoWUnit target, TargetMarker v)
-        {
+        public void InviteToGroup(ulong guid) { }
 
-        }
+        public void KickPlayer(ulong guid) { }
 
-        public void JoinBattleGroundQueue()
-        {
+        public void AcceptGroupInvite() { }
 
-        }
+        public void DeclineGroupInvite() { }
 
-        public void ResetInstances()
-        {
+        public void LeaveGroup() { }
 
-        }
+        public void DisbandGroup() { }
 
-        public void PickupMacro(uint v)
-        {
-
-        }
-
-        public void PlaceAction(uint v)
-        {
-
-        }
-
-        public void InviteToGroup(ulong guid)
-        {
-
-        }
-
-        public void KickPlayer(ulong guid)
-        {
-
-        }
-
-        public void AcceptGroupInvite()
-        {
-
-        }
-
-        public void DeclineGroupInvite()
-        {
-
-        }
-
-        public void LeaveGroup()
-        {
-
-        }
-
-        public void DisbandGroup()
-        {
-
-        }
-
-        public void ConvertToRaid()
-        {
-
-        }
+        public void ConvertToRaid() { }
 
         public bool HasPendingGroupInvite()
         {
@@ -371,44 +321,20 @@ namespace WoWSharpClient
             return false;
         }
 
-        public void LootPass(int itemId)
-        {
+        public void LootPass(int itemId) { }
 
-        }
+        public void LootRollGreed(int itemId) { }
 
-        public void LootRollGreed(int itemId)
-        {
+        public void LootRollNeed(int itemId) { }
 
-        }
+        public void AssignLoot(int itemId, ulong playerGuid) { }
 
-        public void LootRollNeed(int itemId)
-        {
+        public void SetGroupLoot(GroupLootSetting setting) { }
 
-        }
+        public void PromoteLootManager(ulong playerGuid) { }
 
-        public void AssignLoot(int itemId, ulong playerGuid)
-        {
+        public void PromoteAssistant(ulong playerGuid) { }
 
-        }
-
-        public void SetGroupLoot(GroupLootSetting setting)
-        {
-
-        }
-
-        public void PromoteLootManager(ulong playerGuid)
-        {
-
-        }
-
-        public void PromoteAssistant(ulong playerGuid)
-        {
-
-        }
-
-        public void PromoteLeader(ulong playerGuid)
-        {
-
-        }
+        public void PromoteLeader(ulong playerGuid) { }
     }
 }

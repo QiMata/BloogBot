@@ -1,5 +1,5 @@
-﻿using StateManagerUI.Views;
-using System.Windows;
+﻿using System.Windows;
+using StateManagerUI.Views;
 
 namespace StateManagerUI
 {
@@ -9,6 +9,7 @@ namespace StateManagerUI
     public partial class MainWindow : Window
     {
         private readonly StateManagerViewModel _stateManagerViewModel;
+
         public MainWindow()
         {
             _stateManagerViewModel = new StateManagerViewModel();

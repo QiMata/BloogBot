@@ -1,5 +1,7 @@
+using BloogBot.AI.StateMachine;
 using BotRunner;
 using BotRunner.Clients;
+using GameData.Core.Interfaces;
 using PromptHandlingService;
 using WoWSharpClient;
 
@@ -11,7 +13,9 @@ namespace BackgroundBotRunner
         private readonly IPromptRunner _promptRunner;
         private readonly PathfindingClient _pathfindingClient;
         private readonly CharacterStateUpdateClient _characterStateUpdateClient;
+        private readonly BotActivityStateMachine _botActivityStateMachine;
         private BotRunnerService _botRunner;
+        private KernelCoordinator _kernelCoordinator;
         private CancellationToken _stoppingToken;
 
         public BackgroundBotWorker(ILoggerFactory loggerFactory, IConfiguration configuration)
@@ -37,7 +41,9 @@ namespace BackgroundBotRunner
                     loggerFactory.CreateLogger<WoWSharpObjectManager>()
                 ),
                 _characterStateUpdateClient,
-                _pathfindingClient
+                _pathfindingClient,
+                _botActivityStateMachine,
+                _kernelCoordinator
             );
         }
 

@@ -1,7 +1,7 @@
-﻿using Google.Protobuf;
-using Microsoft.Extensions.Logging;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
+using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 
 namespace BotCommLayer
 {
@@ -60,14 +60,16 @@ namespace BotCommLayer
                     // Read the length of the incoming message
                     byte[] lengthBuffer = new byte[4];
                     int bytesRead = stream.Read(lengthBuffer, 0, lengthBuffer.Length);
-                    if (bytesRead == 0) break;
+                    if (bytesRead == 0)
+                        break;
 
                     int length = BitConverter.ToInt32(lengthBuffer, 0);
 
                     // Read the message itself
                     byte[] buffer = new byte[length];
                     bytesRead = stream.Read(buffer, 0, buffer.Length);
-                    if (bytesRead == 0) break;
+                    if (bytesRead == 0)
+                        break;
 
                     // Deserialize the request
                     TRequest request = new();

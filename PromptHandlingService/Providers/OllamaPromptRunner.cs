@@ -1,7 +1,7 @@
-﻿using OllamaSharp;
+﻿using System.Text;
+using OllamaSharp;
 using OllamaSharp.Models.Chat;
 using OllamaSharp.Models.Exceptions;
-using System.Text;
 
 namespace PromptHandlingService.Providers
 {
@@ -10,31 +10,38 @@ namespace PromptHandlingService.Providers
         private readonly OllamaApiClient _ollamaClient = new(uri);
         private readonly string _model = model;
 
-        public async Task<string?> RunChatAsync(IEnumerable<KeyValuePair<string, string?>> chatHistory, CancellationToken cancellationToken)
+        public async Task<string?> RunChatAsync(
+            IEnumerable<KeyValuePair<string, string?>> chatHistory,
+            CancellationToken cancellationToken
+        )
         {
-            var chatMessages = chatHistory.Select(message => new OllamaSharp.Models.Chat.Message
-            {
-                Role = message.Key switch
+            var chatMessages = chatHistory
+                .Select(message => new OllamaSharp.Models.Chat.Message
                 {
-                    "User" => ChatRole.User,
-                    "Assistant" => ChatRole.Assistant,
-                    "System" => ChatRole.System,
-                    _ => throw new ArgumentException($"Invalid chat role {message.Key}")
-                },
-                Content = message.Value
-            }).ToList();
+                    Role = message.Key switch
+                    {
+                        "User" => ChatRole.User,
+                        "Assistant" => ChatRole.Assistant,
+                        "System" => ChatRole.System,
+                        _ => throw new ArgumentException($"Invalid chat role {message.Key}"),
+                    },
+                    Content = message.Value,
+                })
+                .ToList();
 
             var chatRequest = new ChatRequest
             {
                 Model = _model,
                 Messages = chatMessages,
-                Stream = true // Enable streaming
+                Stream = true, // Enable streaming
             };
 
             try
             {
                 StringBuilder stringBuilder = new();
-                await foreach (var chatResponseStream in _ollamaClient.Chat(chatRequest, cancellationToken))
+                await foreach (
+                    var chatResponseStream in _ollamaClient.Chat(chatRequest, cancellationToken)
+                )
                 {
                     if (chatResponseStream != null && chatResponseStream.Message != null)
                     {
@@ -56,12 +63,8 @@ namespace PromptHandlingService.Providers
             }
         }
 
-
         public int MaxConcurrent => 1;
 
-        public void Dispose()
-        {
-
-        }
+        public void Dispose() { }
     }
 }

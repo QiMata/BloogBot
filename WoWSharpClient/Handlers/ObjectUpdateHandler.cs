@@ -1,7 +1,7 @@
-﻿using GameData.Core.Enums;
+﻿using System.Collections;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using System.Collections;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Parsers;
@@ -14,6 +14,7 @@ namespace WoWSharpClient.Handlers
     {
         private readonly WoWSharpEventEmitter _eventEmitter = objectManager.EventEmitter;
         private readonly WoWSharpObjectManager _objectManager = objectManager;
+
         public void HandleUpdateObject(Opcode opcode, byte[] data)
         {
             if (opcode == Opcode.SMSG_COMPRESSED_UPDATE_OBJECT)
@@ -73,7 +74,9 @@ namespace WoWSharpClient.Handlers
             ReadValuesUpdateBlock(reader, woWObject);
 
             if (woWObject.ObjectType != WoWObjectType.Player)
-                _eventEmitter.FireOnGameObjectCreated(new GameObjectCreatedArgs(guid, woWObject.ObjectType));
+                _eventEmitter.FireOnGameObjectCreated(
+                    new GameObjectCreatedArgs(guid, woWObject.ObjectType)
+                );
         }
 
         private static void ReadMovementUpdateBlock(BinaryReader reader, WoWObject woWObject)
@@ -108,8 +111,14 @@ namespace WoWSharpClient.Handlers
             {
                 ulong victimGuid = ReaderUtils.ReadPackedGuid(reader);
                 byte[] targetGuidByteArray = BitConverter.GetBytes(victimGuid);
-                ((WoWUnit)woWObject).TargetHighGuid.HighGuidValue = [.. targetGuidByteArray.Take(4)];
-                ((WoWUnit)woWObject).TargetHighGuid.LowGuidValue = [.. targetGuidByteArray.Skip(4).Take(4)];
+                ((WoWUnit)woWObject).TargetHighGuid.HighGuidValue =
+                [
+                    .. targetGuidByteArray.Take(4),
+                ];
+                ((WoWUnit)woWObject).TargetHighGuid.LowGuidValue =
+                [
+                    .. targetGuidByteArray.Skip(4).Take(4),
+                ];
                 //Console.WriteLine($"[ReadMovementUpdateBlock] ObjectUpdateFlags.UPDATEFLAG_FULLGUID {victimGuid}");
             }
 
@@ -137,17 +146,24 @@ namespace WoWSharpClient.Handlers
         {
             var guid = ReaderUtils.ReadPackedGuid(reader);
             //Console.WriteLine($"[ParseMovementUpdate] ReadPackedGuid {guid}");
-            MovementParser.ParseMovementInfo(reader, (WoWUnit)_objectManager.Objects.First(x => x.Guid == guid));
+            MovementParser.ParseMovementInfo(
+                reader,
+                (WoWUnit)_objectManager.Objects.First(x => x.Guid == guid)
+            );
         }
+
         private void ParsePartialUpdate(BinaryReader reader)
         {
-
             // Now safely read the GUID
             ulong guid = ReaderUtils.ReadPackedGuid(reader);
             //Console.WriteLine($"[ParsePartialUpdate] ReadPackedGuid: {guid:X}");
 
-            ReadValuesUpdateBlock(reader, _objectManager.Objects.First(x => x.Guid == guid) as WoWObject);
+            ReadValuesUpdateBlock(
+                reader,
+                _objectManager.Objects.First(x => x.Guid == guid) as WoWObject
+            );
         }
+
         private void ParseOutOfRangeObjects(BinaryReader reader)
         {
             uint count = reader.ReadUInt32();
@@ -178,7 +194,10 @@ namespace WoWSharpClient.Handlers
                     if (updateMaskBits[i])
                         ReadObjectField(reader, @object, (EObjectFields)i);
                 }
-                else if (@object.ObjectType == WoWObjectType.Unit || @object.ObjectType == WoWObjectType.Player)
+                else if (
+                    @object.ObjectType == WoWObjectType.Unit
+                    || @object.ObjectType == WoWObjectType.Player
+                )
                 {
                     if (i < (int)EUnitFields.UNIT_END)
                     {
@@ -188,7 +207,10 @@ namespace WoWSharpClient.Handlers
                     else if (@object.ObjectType == WoWObjectType.Player && updateMaskBits[i])
                         ReadPlayerField(reader, (WoWPlayer)@object, (EUnitFields)i);
                 }
-                else if (@object.ObjectType == WoWObjectType.Item || @object.ObjectType == WoWObjectType.Container)
+                else if (
+                    @object.ObjectType == WoWObjectType.Item
+                    || @object.ObjectType == WoWObjectType.Container
+                )
                 {
                     if (i < (int)EItemFields.ITEM_END)
                     {
@@ -206,7 +228,11 @@ namespace WoWSharpClient.Handlers
                 else if (@object.ObjectType == WoWObjectType.DynamicObj)
                 {
                     if (updateMaskBits[i])
-                        ReadDynamicObjectField(reader, (WoWDynamicObject)@object, (EDynamicObjectFields)i);
+                        ReadDynamicObjectField(
+                            reader,
+                            (WoWDynamicObject)@object,
+                            (EDynamicObjectFields)i
+                        );
                 }
                 else if (@object.ObjectType == WoWObjectType.Corpse)
                 {
@@ -216,7 +242,11 @@ namespace WoWSharpClient.Handlers
             }
         }
 
-        private static void ReadObjectField(BinaryReader reader, WoWObject @object, EObjectFields field)
+        private static void ReadObjectField(
+            BinaryReader reader,
+            WoWObject @object,
+            EObjectFields field
+        )
         {
             if (field <= EObjectFields.OBJECT_FIELD_GUID + 0x01)
             {
@@ -252,7 +282,12 @@ namespace WoWSharpClient.Handlers
                 //Console.WriteLine($"[ReadObjectField] OBJECT_FIELD_PADDING {padding}");
             }
         }
-        private static void ReadGameObjectField(BinaryReader reader, WoWGameObject @object, EGameObjectFields field)
+
+        private static void ReadGameObjectField(
+            BinaryReader reader,
+            WoWGameObject @object,
+            EGameObjectFields field
+        )
         {
             if (field <= EGameObjectFields.OBJECT_FIELD_CREATED_BY + 0x01)
             {
@@ -279,7 +314,8 @@ namespace WoWSharpClient.Handlers
             }
             else if (field < EGameObjectFields.GAMEOBJECT_STATE)
             {
-                @object.Rotation[field - EGameObjectFields.GAMEOBJECT_ROTATION] = reader.ReadSingle();
+                @object.Rotation[field - EGameObjectFields.GAMEOBJECT_ROTATION] =
+                    reader.ReadSingle();
                 //Console.WriteLine($"[ReadGameObjectField] GAMEOBJECT_ROTATION {field - EGameObjectFields.GAMEOBJECT_ROTATION} {@object.Rotation[field - EGameObjectFields.GAMEOBJECT_ROTATION]}");
             }
             else if (field == EGameObjectFields.GAMEOBJECT_STATE)
@@ -328,7 +364,12 @@ namespace WoWSharpClient.Handlers
             else if (field == EGameObjectFields.GAMEOBJECT_PADDING)
                 reader.ReadUInt32();
         }
-        private static void ReadDynamicObjectField(BinaryReader reader, WoWDynamicObject @object, EDynamicObjectFields field)
+
+        private static void ReadDynamicObjectField(
+            BinaryReader reader,
+            WoWDynamicObject @object,
+            EDynamicObjectFields field
+        )
         {
             if (field <= EDynamicObjectFields.DYNAMICOBJECT_CASTER + 0x01)
             {
@@ -354,7 +395,12 @@ namespace WoWSharpClient.Handlers
             else if (field == EDynamicObjectFields.DYNAMICOBJECT_PAD)
                 reader.ReadUInt32();
         }
-        private static void ReadCorpseField(BinaryReader reader, WoWCorpse @object, ECorpseFields field)
+
+        private static void ReadCorpseField(
+            BinaryReader reader,
+            WoWCorpse @object,
+            ECorpseFields field
+        )
         {
             if (field <= ECorpseFields.CORPSE_FIELD_OWNER + 0x01)
             {
@@ -388,6 +434,7 @@ namespace WoWSharpClient.Handlers
             else if (field == ECorpseFields.CORPSE_FIELD_PAD)
                 reader.ReadUInt32();
         }
+
         private static void ReadUnitField(BinaryReader reader, WoWUnit @object, EUnitFields field)
         {
             if (field <= EUnitFields.UNIT_FIELD_CHARM + 0x01)
@@ -482,9 +529,11 @@ namespace WoWSharpClient.Handlers
                 @object.Bytes0[3] = reader.ReadByte();
             }
             else if (field <= EUnitFields.UNIT_VIRTUAL_ITEM_SLOT_DISPLAY_02)
-                @object.VirtualItemSlotDisplay[field - EUnitFields.UNIT_VIRTUAL_ITEM_SLOT_DISPLAY] = reader.ReadUInt32();
+                @object.VirtualItemSlotDisplay[field - EUnitFields.UNIT_VIRTUAL_ITEM_SLOT_DISPLAY] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.UNIT_VIRTUAL_ITEM_INFO_05)
-                @object.VirtualItemInfo[field - EUnitFields.UNIT_VIRTUAL_ITEM_INFO] = reader.ReadUInt32();
+                @object.VirtualItemInfo[field - EUnitFields.UNIT_VIRTUAL_ITEM_INFO] =
+                    reader.ReadUInt32();
             else if (field == EUnitFields.UNIT_FIELD_FLAGS)
                 @object.UnitFlags = (UnitFlags)reader.ReadUInt32();
             else if (field <= EUnitFields.UNIT_FIELD_AURA_LAST)
@@ -494,7 +543,8 @@ namespace WoWSharpClient.Handlers
             else if (field <= EUnitFields.UNIT_FIELD_AURALEVELS_LAST)
                 @object.AuraLevels[field - EUnitFields.UNIT_FIELD_AURALEVELS] = reader.ReadUInt32();
             else if (field <= EUnitFields.UNIT_FIELD_AURAAPPLICATIONS_LAST)
-                @object.AuraApplications[field - EUnitFields.UNIT_FIELD_AURAAPPLICATIONS] = reader.ReadUInt32();
+                @object.AuraApplications[field - EUnitFields.UNIT_FIELD_AURAAPPLICATIONS] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.UNIT_FIELD_AURASTATE)
                 @object.AuraState = reader.ReadUInt32();
             else if (field <= EUnitFields.UNIT_FIELD_BASEATTACKTIME + 0x01)
@@ -569,7 +619,8 @@ namespace WoWSharpClient.Handlers
             else if (field == EUnitFields.UNIT_FIELD_STAT4)
                 @object.Spirit = reader.ReadUInt32();
             else if (field <= EUnitFields.UNIT_FIELD_RESISTANCES_06)
-                @object.Resistances[field - EUnitFields.UNIT_FIELD_RESISTANCES] = reader.ReadUInt32();
+                @object.Resistances[field - EUnitFields.UNIT_FIELD_RESISTANCES] =
+                    reader.ReadUInt32();
             else if (field == EUnitFields.UNIT_FIELD_BASE_MANA)
                 @object.BaseMana = reader.ReadUInt32();
             else if (field == EUnitFields.UNIT_FIELD_BASE_HEALTH)
@@ -598,13 +649,20 @@ namespace WoWSharpClient.Handlers
             else if (field == EUnitFields.UNIT_FIELD_MAXRANGEDDAMAGE)
                 @object.MaxRangedDamage = reader.ReadUInt32();
             else if (field <= EUnitFields.UNIT_FIELD_POWER_COST_MODIFIER_06)
-                @object.PowerCostModifers[field - EUnitFields.UNIT_FIELD_POWER_COST_MODIFIER] = reader.ReadUInt32();
+                @object.PowerCostModifers[field - EUnitFields.UNIT_FIELD_POWER_COST_MODIFIER] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.UNIT_FIELD_POWER_COST_MULTIPLIER_06)
-                @object.PowerCostMultipliers[field - EUnitFields.UNIT_FIELD_POWER_COST_MULTIPLIER] = reader.ReadUInt32();
+                @object.PowerCostMultipliers[field - EUnitFields.UNIT_FIELD_POWER_COST_MULTIPLIER] =
+                    reader.ReadUInt32();
             else if (field == EUnitFields.UNIT_FIELD_PADDING)
                 reader.ReadUInt32();
         }
-        private static void ReadPlayerField(BinaryReader reader, WoWPlayer @object, EUnitFields field)
+
+        private static void ReadPlayerField(
+            BinaryReader reader,
+            WoWPlayer @object,
+            EUnitFields field
+        )
         {
             if (field <= EUnitFields.PLAYER_DUEL_ARBITER + 0x01)
             {
@@ -649,57 +707,107 @@ namespace WoWSharpClient.Handlers
                 switch (questField)
                 {
                     case 0:
-                        @object.QuestLog[(field - EUnitFields.PLAYER_QUEST_LOG_1_1) / 3].QuestId = reader.ReadUInt32();
+                        @object.QuestLog[(field - EUnitFields.PLAYER_QUEST_LOG_1_1) / 3].QuestId =
+                            reader.ReadUInt32();
                         break;
                     case 1:
-                        @object.QuestLog[(field - EUnitFields.PLAYER_QUEST_LOG_1_1) / 3].QuestCounters = reader.ReadBytes(4);
+                        @object
+                            .QuestLog[(field - EUnitFields.PLAYER_QUEST_LOG_1_1) / 3]
+                            .QuestCounters = reader.ReadBytes(4);
                         break;
                     case 2:
-                        @object.QuestLog[(field - EUnitFields.PLAYER_QUEST_LOG_1_1) / 3].QuestState = reader.ReadUInt32();
+                        @object
+                            .QuestLog[(field - EUnitFields.PLAYER_QUEST_LOG_1_1) / 3]
+                            .QuestState = reader.ReadUInt32();
                         break;
                 }
             }
             else if (field <= EUnitFields.PLAYER_VISIBLE_ITEM_LAST_PAD)
             {
-                uint visibleItemField = (uint)(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) % 12;
+                uint visibleItemField =
+                    (uint)(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) % 12;
 
                 switch (visibleItemField)
                 {
                     case 0:
-                        @object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12].CreatedBy.LowGuidValue = reader.ReadBytes(4);
+                        @object
+                            .VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]
+                            .CreatedBy
+                            .LowGuidValue = reader.ReadBytes(4);
                         break;
                     case 1:
-                        @object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12].CreatedBy.HighGuidValue = reader.ReadBytes(4);
+                        @object
+                            .VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]
+                            .CreatedBy
+                            .HighGuidValue = reader.ReadBytes(4);
                         break;
                     case 2:
-                        ((WoWItem)@object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]).ItemId = reader.ReadUInt32();
+                        (
+                            (WoWItem)
+                                @object.VisibleItems[
+                                    (field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12
+                                ]
+                        ).ItemId = reader.ReadUInt32();
                         break;
                     case 3:
-                        @object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12].Owner.LowGuidValue = reader.ReadBytes(4);
+                        @object
+                            .VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]
+                            .Owner
+                            .LowGuidValue = reader.ReadBytes(4);
                         break;
                     case 4:
-                        @object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12].Owner.HighGuidValue = reader.ReadBytes(4);
+                        @object
+                            .VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]
+                            .Owner
+                            .HighGuidValue = reader.ReadBytes(4);
                         break;
                     case 5:
-                        @object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12].Contained.LowGuidValue = reader.ReadBytes(4);
+                        @object
+                            .VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]
+                            .Contained
+                            .LowGuidValue = reader.ReadBytes(4);
                         break;
                     case 6:
-                        @object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12].Contained.HighGuidValue = reader.ReadBytes(4);
+                        @object
+                            .VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]
+                            .Contained
+                            .HighGuidValue = reader.ReadBytes(4);
                         break;
                     case 7:
-                        @object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12].GiftCreator.LowGuidValue = reader.ReadBytes(4);
+                        @object
+                            .VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]
+                            .GiftCreator
+                            .LowGuidValue = reader.ReadBytes(4);
                         break;
                     case 8:
-                        @object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12].GiftCreator.HighGuidValue = reader.ReadBytes(4);
+                        @object
+                            .VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]
+                            .GiftCreator
+                            .HighGuidValue = reader.ReadBytes(4);
                         break;
                     case 9:
-                        ((WoWItem)@object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]).StackCount = reader.ReadUInt32();
+                        (
+                            (WoWItem)
+                                @object.VisibleItems[
+                                    (field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12
+                                ]
+                        ).StackCount = reader.ReadUInt32();
                         break;
                     case 10:
-                        ((WoWItem)@object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]).Durability = reader.ReadUInt32();
+                        (
+                            (WoWItem)
+                                @object.VisibleItems[
+                                    (field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12
+                                ]
+                        ).Durability = reader.ReadUInt32();
                         break;
                     case 11:
-                        ((WoWItem)@object.VisibleItems[(field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12]).PropertySeed = reader.ReadUInt32();
+                        (
+                            (WoWItem)
+                                @object.VisibleItems[
+                                    (field - EUnitFields.PLAYER_VISIBLE_ITEM_1_CREATOR) / 12
+                                ]
+                        ).PropertySeed = reader.ReadUInt32();
                         break;
                     case 12:
                         reader.ReadUInt32();
@@ -707,17 +815,23 @@ namespace WoWSharpClient.Handlers
                 }
             }
             else if (field < EUnitFields.PLAYER_FIELD_PACK_SLOT_1)
-                @object.Inventory[field - EUnitFields.PLAYER_FIELD_INV_SLOT_HEAD] = reader.ReadUInt32();
+                @object.Inventory[field - EUnitFields.PLAYER_FIELD_INV_SLOT_HEAD] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_PACK_SLOT_LAST)
-                @object.PackSlots[field - EUnitFields.PLAYER_FIELD_PACK_SLOT_1] = reader.ReadUInt32();
+                @object.PackSlots[field - EUnitFields.PLAYER_FIELD_PACK_SLOT_1] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_BANK_SLOT_LAST)
-                @object.BankSlots[field - EUnitFields.PLAYER_FIELD_BANK_SLOT_1] = reader.ReadUInt32();
+                @object.BankSlots[field - EUnitFields.PLAYER_FIELD_BANK_SLOT_1] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_BANKBAG_SLOT_LAST)
-                @object.BankBagSlots[field - EUnitFields.PLAYER_FIELD_BANKBAG_SLOT_1] = reader.ReadUInt32();
+                @object.BankBagSlots[field - EUnitFields.PLAYER_FIELD_BANKBAG_SLOT_1] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_VENDORBUYBACK_SLOT_LAST)
-                @object.VendorBuybackSlots[field - EUnitFields.PLAYER_FIELD_VENDORBUYBACK_SLOT_1] = reader.ReadUInt32();
+                @object.VendorBuybackSlots[field - EUnitFields.PLAYER_FIELD_VENDORBUYBACK_SLOT_1] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_KEYRING_SLOT_LAST)
-                @object.KeyringSlots[field - EUnitFields.PLAYER_FIELD_KEYRING_SLOT_1] = reader.ReadUInt32();
+                @object.KeyringSlots[field - EUnitFields.PLAYER_FIELD_KEYRING_SLOT_1] =
+                    reader.ReadUInt32();
             else if (field == EUnitFields.PLAYER_FARSIGHT)
                 @object.Farsight = reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_COMBO_TARGET)
@@ -738,16 +852,24 @@ namespace WoWSharpClient.Handlers
                 switch (questField)
                 {
                     case 0:
-                        @object.SkillInfo[(field - EUnitFields.PLAYER_SKILL_INFO_1_1) / 4].SkillInt1 = reader.ReadUInt32();
+                        @object
+                            .SkillInfo[(field - EUnitFields.PLAYER_SKILL_INFO_1_1) / 4]
+                            .SkillInt1 = reader.ReadUInt32();
                         break;
                     case 1:
-                        @object.SkillInfo[(field - EUnitFields.PLAYER_SKILL_INFO_1_1) / 4].SkillInt2 = reader.ReadUInt32();
+                        @object
+                            .SkillInfo[(field - EUnitFields.PLAYER_SKILL_INFO_1_1) / 4]
+                            .SkillInt2 = reader.ReadUInt32();
                         break;
                     case 2:
-                        @object.SkillInfo[(field - EUnitFields.PLAYER_SKILL_INFO_1_1) / 4].SkillInt3 = reader.ReadUInt32();
+                        @object
+                            .SkillInfo[(field - EUnitFields.PLAYER_SKILL_INFO_1_1) / 4]
+                            .SkillInt3 = reader.ReadUInt32();
                         break;
                     case 3:
-                        @object.SkillInfo[(field - EUnitFields.PLAYER_SKILL_INFO_1_1) / 4].SkillInt4 = reader.ReadUInt32();
+                        @object
+                            .SkillInfo[(field - EUnitFields.PLAYER_SKILL_INFO_1_1) / 4]
+                            .SkillInt4 = reader.ReadUInt32();
                         break;
                 }
             }
@@ -770,25 +892,35 @@ namespace WoWSharpClient.Handlers
             else if (field == EUnitFields.PLAYER_RANGED_CRIT_PERCENTAGE)
                 @object.RangedCritPercentage = reader.ReadUInt32();
             else if (field < EUnitFields.PLAYER_REST_STATE_EXPERIENCE)
-                @object.ExploredZones[field - EUnitFields.PLAYER_EXPLORED_ZONES_1] = reader.ReadUInt32();
+                @object.ExploredZones[field - EUnitFields.PLAYER_EXPLORED_ZONES_1] =
+                    reader.ReadUInt32();
             else if (field == EUnitFields.PLAYER_REST_STATE_EXPERIENCE)
                 @object.RestStateExperience = reader.ReadUInt32();
             else if (field == EUnitFields.PLAYER_FIELD_COINAGE)
                 @object.Coinage = reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_POSSTAT4)
-                @object.StatBonusesPos[field - EUnitFields.PLAYER_FIELD_POSSTAT0] = reader.ReadUInt32();
+                @object.StatBonusesPos[field - EUnitFields.PLAYER_FIELD_POSSTAT0] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_NEGSTAT4)
-                @object.StatBonusesNeg[field - EUnitFields.PLAYER_FIELD_NEGSTAT0] = reader.ReadUInt32();
+                @object.StatBonusesNeg[field - EUnitFields.PLAYER_FIELD_NEGSTAT0] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_RESISTANCEBUFFMODSNEGATIVE + 6)
-                @object.ResistBonusesPos[field - EUnitFields.PLAYER_FIELD_RESISTANCEBUFFMODSPOSITIVE] = reader.ReadUInt32();
+                @object.ResistBonusesPos[
+                    field - EUnitFields.PLAYER_FIELD_RESISTANCEBUFFMODSPOSITIVE
+                ] = reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_POS + 6)
-                @object.ResistBonusesNeg[field - EUnitFields.PLAYER_FIELD_RESISTANCEBUFFMODSNEGATIVE] = reader.ReadUInt32();
+                @object.ResistBonusesNeg[
+                    field - EUnitFields.PLAYER_FIELD_RESISTANCEBUFFMODSNEGATIVE
+                ] = reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_POS + 6)
-                @object.ModDamageDonePos[field - EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_POS] = reader.ReadUInt32();
+                @object.ModDamageDonePos[field - EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_POS] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_NEG + 6)
-                @object.ModDamageDoneNeg[field - EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_NEG] = reader.ReadUInt32();
+                @object.ModDamageDoneNeg[field - EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_NEG] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_PCT + 6)
-                @object.ModDamageDonePct[field - EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_PCT] = reader.ReadSingle();
+                @object.ModDamageDonePct[field - EUnitFields.PLAYER_FIELD_MOD_DAMAGE_DONE_PCT] =
+                    reader.ReadSingle();
             else if (field == EUnitFields.PLAYER_FIELD_BYTES)
             {
                 @object.Bytes[0] = reader.ReadByte();
@@ -803,9 +935,11 @@ namespace WoWSharpClient.Handlers
             else if (field == EUnitFields.PLAYER_FIELD_PVP_MEDALS)
                 @object.PvpMedals = reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_BUYBACK_PRICE_LAST)
-                @object.BuybackPrices[field - EUnitFields.PLAYER_FIELD_BUYBACK_PRICE_1] = reader.ReadUInt32();
+                @object.BuybackPrices[field - EUnitFields.PLAYER_FIELD_BUYBACK_PRICE_1] =
+                    reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_BUYBACK_TIMESTAMP_LAST)
-                @object.BuybackTimestamps[field - EUnitFields.PLAYER_FIELD_BUYBACK_TIMESTAMP_1] = reader.ReadUInt32();
+                @object.BuybackTimestamps[field - EUnitFields.PLAYER_FIELD_BUYBACK_TIMESTAMP_1] =
+                    reader.ReadUInt32();
             else if (field == EUnitFields.PLAYER_FIELD_SESSION_KILLS)
                 @object.SessionKills = reader.ReadUInt32();
             else if (field == EUnitFields.PLAYER_FIELD_YESTERDAY_KILLS)
@@ -830,8 +964,10 @@ namespace WoWSharpClient.Handlers
             else if (field == EUnitFields.PLAYER_FIELD_WATCHED_FACTION_INDEX)
                 @object.WatchedFactionIndex = reader.ReadUInt32();
             else if (field <= EUnitFields.PLAYER_FIELD_COMBAT_RATING_1 + 20)
-                @object.CombatRating[field - EUnitFields.PLAYER_FIELD_COMBAT_RATING_1] = reader.ReadUInt32();
+                @object.CombatRating[field - EUnitFields.PLAYER_FIELD_COMBAT_RATING_1] =
+                    reader.ReadUInt32();
         }
+
         private static void ReadItemField(BinaryReader reader, WoWItem item, EItemFields field)
         {
             if (field <= EItemFields.ITEM_FIELD_OWNER + 0x01)
@@ -867,7 +1003,8 @@ namespace WoWSharpClient.Handlers
             else if (field == EItemFields.ITEM_FIELD_DURATION)
                 item.Duration = reader.ReadUInt32();
             else if (field <= EItemFields.ITEM_FIELD_SPELL_CHARGES_04)
-                item.SpellCharges[field - EItemFields.ITEM_FIELD_SPELL_CHARGES] = reader.ReadUInt32();
+                item.SpellCharges[field - EItemFields.ITEM_FIELD_SPELL_CHARGES] =
+                    reader.ReadUInt32();
             else if (field == EItemFields.ITEM_FIELD_FLAGS)
                 item.ItemDynamicFlags = (ItemDynFlags)reader.ReadUInt32();
             else if (field == EItemFields.ITEM_FIELD_ENCHANTMENT)
@@ -883,15 +1020,22 @@ namespace WoWSharpClient.Handlers
             else if (field == EItemFields.ITEM_FIELD_MAXDURABILITY)
                 item.MaxDurability = reader.ReadUInt32();
         }
-        private static void ReadContainerField(BinaryReader reader, WoWContainer @object, EContainerFields field)
+
+        private static void ReadContainerField(
+            BinaryReader reader,
+            WoWContainer @object,
+            EContainerFields field
+        )
         {
             if (field == EContainerFields.CONTAINER_FIELD_NUM_SLOTS)
                 @object.NumOfSlots = (int)reader.ReadUInt32();
             else if (field == EContainerFields.CONTAINER_ALIGN_PAD)
                 reader.ReadUInt32();
             else if (field <= EContainerFields.CONTAINER_FIELD_SLOT_LAST)
-                @object.Slots[field - EContainerFields.CONTAINER_FIELD_SLOT_1] = reader.ReadUInt32();
+                @object.Slots[field - EContainerFields.CONTAINER_FIELD_SLOT_1] =
+                    reader.ReadUInt32();
         }
+
         private WoWObject CreateWoWObject(WoWObjectType objectType, ulong guid)
         {
             WoWObject wowObject;
@@ -905,15 +1049,31 @@ namespace WoWSharpClient.Handlers
                 byte[] guidBytes = BitConverter.GetBytes(guid);
                 wowObject = objectType switch
                 {
-                    WoWObjectType.None => new WoWObject(new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])),
-                    WoWObjectType.Item => new WoWItem(new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])),
-                    WoWObjectType.Container => new WoWContainer(new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])),
-                    WoWObjectType.Unit => new WoWUnit(new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])),
-                    WoWObjectType.Player => new WoWPlayer(new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])),
-                    WoWObjectType.GameObj => new WoWGameObject(new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])),
-                    WoWObjectType.DynamicObj => new WoWDynamicObject(new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])),
-                    WoWObjectType.Corpse => new WoWCorpse(new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])),
-                    _ => throw new NotImplementedException()
+                    WoWObjectType.None => new WoWObject(
+                        new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])
+                    ),
+                    WoWObjectType.Item => new WoWItem(
+                        new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])
+                    ),
+                    WoWObjectType.Container => new WoWContainer(
+                        new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])
+                    ),
+                    WoWObjectType.Unit => new WoWUnit(
+                        new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])
+                    ),
+                    WoWObjectType.Player => new WoWPlayer(
+                        new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])
+                    ),
+                    WoWObjectType.GameObj => new WoWGameObject(
+                        new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])
+                    ),
+                    WoWObjectType.DynamicObj => new WoWDynamicObject(
+                        new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])
+                    ),
+                    WoWObjectType.Corpse => new WoWCorpse(
+                        new HighGuid([.. guidBytes.Take(4)], [.. guidBytes.Skip(4)])
+                    ),
+                    _ => throw new NotImplementedException(),
                 };
                 _objectManager.Objects.Add(wowObject);
                 //Console.WriteLine($"[CreateWoWObject] Object {objectType}:{guid} created new");

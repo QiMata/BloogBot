@@ -1,6 +1,6 @@
+using System.Numerics;
 using GameData.Core.Models;
 using PathfindingService.Repository;
-using System.Numerics;
 
 namespace PathfindingService.Tests
 {

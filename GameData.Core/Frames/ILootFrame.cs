@@ -1,5 +1,5 @@
-﻿using GameData.Core.Models;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
+using GameData.Core.Models;
 
 namespace GameData.Core.Frames
 {

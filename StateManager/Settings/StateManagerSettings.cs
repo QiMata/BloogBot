@@ -1,6 +1,6 @@
-﻿using Communication;
+﻿using System.Reflection;
+using Communication;
 using Newtonsoft.Json;
-using System.Reflection;
 
 namespace StateManager.Settings
 {
@@ -23,17 +23,27 @@ namespace StateManager.Settings
         private void LoadConfig()
         {
             string currentFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            string WorldStateManagerSettingsFilePath = Path.Combine(currentFolder, "Settings\\StateManagerSettings.json");
+            string WorldStateManagerSettingsFilePath = Path.Combine(
+                currentFolder,
+                "Settings\\StateManagerSettings.json"
+            );
 
-            CharacterDefinitions = JsonConvert.DeserializeObject<List<CharacterDefinition>>(File.ReadAllText(WorldStateManagerSettingsFilePath));
+            CharacterDefinitions = JsonConvert.DeserializeObject<List<CharacterDefinition>>(
+                File.ReadAllText(WorldStateManagerSettingsFilePath)
+            );
         }
 
         public void SaveConfig()
         {
             try
             {
-                string currentFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                string botSettingsFilePath = Path.Combine(currentFolder, "Settings\\StateManagerSettings.json");
+                string currentFolder = Path.GetDirectoryName(
+                    Assembly.GetExecutingAssembly().Location
+                );
+                string botSettingsFilePath = Path.Combine(
+                    currentFolder,
+                    "Settings\\StateManagerSettings.json"
+                );
                 string json = JsonConvert.SerializeObject(_instance, Formatting.Indented);
 
                 File.WriteAllText(botSettingsFilePath, json);
@@ -43,7 +53,9 @@ namespace StateManager.Settings
                 Console.WriteLine(ex);
             }
         }
+
         private StateManagerSettings() { }
+
         public List<CharacterDefinition> CharacterDefinitions { get; private set; } = [];
     }
 }

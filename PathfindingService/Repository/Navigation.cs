@@ -1,6 +1,6 @@
-﻿using GameData.Core.Models;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.InteropServices;
+using GameData.Core.Models;
 
 namespace PathfindingService.Repository
 {
@@ -12,7 +12,8 @@ namespace PathfindingService.Repository
             XYZ start,
             XYZ end,
             bool straightPath,
-            out int length);
+            out int length
+        );
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         delegate void FreePathArr(XYZ* pathArr);
@@ -28,14 +29,22 @@ namespace PathfindingService.Repository
             var navProcPtr = WinProcessImports.WinProcessImports.LoadLibrary(mapsPath);
             int v = Marshal.GetLastWin32Error();
 
-            var calculatePathPtr = WinProcessImports.WinProcessImports.GetProcAddress(navProcPtr, "CalculatePath");
-            calculatePath = Marshal.GetDelegateForFunctionPointer<CalculatePathDelegate>(calculatePathPtr);
+            var calculatePathPtr = WinProcessImports.WinProcessImports.GetProcAddress(
+                navProcPtr,
+                "CalculatePath"
+            );
+            calculatePath = Marshal.GetDelegateForFunctionPointer<CalculatePathDelegate>(
+                calculatePathPtr
+            );
 
-            var freePathPtr = WinProcessImports.WinProcessImports.GetProcAddress(navProcPtr, "FreePathArr");
+            var freePathPtr = WinProcessImports.WinProcessImports.GetProcAddress(
+                navProcPtr,
+                "FreePathArr"
+            );
             freePathArr = Marshal.GetDelegateForFunctionPointer<FreePathArr>(freePathPtr);
         }
 
-        static public float DistanceViaPath(uint mapId, Position start, Position end)
+        public static float DistanceViaPath(uint mapId, Position start, Position end)
         {
             var distance = 0f;
             var path = CalculatePath(mapId, start, end, false);
@@ -44,9 +53,20 @@ namespace PathfindingService.Repository
             return distance;
         }
 
-        static public Position[] CalculatePath(uint mapId, Position start, Position end, bool straightPath)
+        public static Position[] CalculatePath(
+            uint mapId,
+            Position start,
+            Position end,
+            bool straightPath
+        )
         {
-            var ret = calculatePath(mapId, start.ToXYZ(), end.ToXYZ(), straightPath, out int length);
+            var ret = calculatePath(
+                mapId,
+                start.ToXYZ(),
+                end.ToXYZ(),
+                straightPath,
+                out int length
+            );
             var list = new Position[length];
             for (var i = 0; i < length; i++)
             {
@@ -56,12 +76,19 @@ namespace PathfindingService.Repository
             return list;
         }
 
-        static public Position GetNextWaypoint(uint mapId, Position start, Position end, bool straightPath)
+        public static Position GetNextWaypoint(
+            uint mapId,
+            Position start,
+            Position end,
+            bool straightPath
+        )
         {
             var path = CalculatePath(mapId, start, end, straightPath);
             if (path.Length <= 1)
             {
-                Console.WriteLine($"Problem building path for mapId \"{mapId}\". Make sure the \"mmaps\" directory contains the required mmap and tile-files. Returning destination as next waypoint...");
+                Console.WriteLine(
+                    $"Problem building path for mapId \"{mapId}\". Make sure the \"mmaps\" directory contains the required mmap and tile-files. Returning destination as next waypoint..."
+                );
                 return end;
             }
 
@@ -81,13 +108,16 @@ namespace PathfindingService.Repository
                 return PointComparisonResult.OnLine;
         }
 
-        static public bool IsPositionInsidePolygon(Position point, Position[] polygon)
+        public static bool IsPositionInsidePolygon(Position point, Position[] polygon)
         {
             var cn = 0;
 
             for (var i = 0; i < polygon.Length - 1; i++)
             {
-                if (((polygon[i].Y <= point.Y) && (polygon[i + 1].Y > point.Y)) || ((polygon[i].Y > point.Y) && (polygon[i + 1].Y <= point.Y)))
+                if (
+                    ((polygon[i].Y <= point.Y) && (polygon[i + 1].Y > point.Y))
+                    || ((polygon[i].Y > point.Y) && (polygon[i + 1].Y <= point.Y))
+                )
                 {
                     var vt = (float)(point.Y - polygon[i].Y) / (polygon[i + 1].Y - polygon[i].Y);
                     if (point.X < polygon[i].X + vt * (polygon[i + 1].X - polygon[i].X))

@@ -1,13 +1,14 @@
-﻿using Communication;
-using Google.Protobuf;
-using Microsoft.Extensions.Logging;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Reactive.Subjects;
+using Communication;
+using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 
 namespace BotCommLayer
 {
-    public class ProtobufAsyncSocketServer<T> where T : IMessage<T>
+    public class ProtobufAsyncSocketServer<T>
+        where T : IMessage<T>
     {
         private readonly TcpListener _server;
         private bool _isRunning;
@@ -74,14 +75,16 @@ namespace BotCommLayer
                     // Read the length of the incoming message
                     byte[] lengthBuffer = new byte[4];
                     int bytesRead = stream.Read(lengthBuffer, 0, lengthBuffer.Length);
-                    if (bytesRead == 0) break;
+                    if (bytesRead == 0)
+                        break;
 
                     int length = BitConverter.ToInt32(lengthBuffer, 0);
 
                     // Read the message itself
                     byte[] buffer = new byte[length];
                     bytesRead = stream.Read(buffer, 0, buffer.Length);
-                    if (bytesRead == 0) break;
+                    if (bytesRead == 0)
+                        break;
 
                     // Deserialize the request
                     AsyncRequest request = new();

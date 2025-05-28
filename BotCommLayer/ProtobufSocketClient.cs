@@ -1,6 +1,6 @@
-﻿using Google.Protobuf;
+﻿using System.Net.Sockets;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
-using System.Net.Sockets;
 
 namespace BotCommLayer
 {
@@ -33,14 +33,16 @@ namespace BotCommLayer
             // Receive the length of the response
             byte[] lengthBuffer = new byte[4];
             int bytesRead = _stream.Read(lengthBuffer, 0, lengthBuffer.Length);
-            if (bytesRead == 0) throw new Exception("Connection closed");
+            if (bytesRead == 0)
+                throw new Exception("Connection closed");
 
             int responseLength = BitConverter.ToInt32(lengthBuffer, 0);
 
             // Receive the response
             byte[] buffer = new byte[responseLength];
             bytesRead = _stream.Read(buffer, 0, buffer.Length);
-            if (bytesRead == 0) throw new Exception("Connection closed");
+            if (bytesRead == 0)
+                throw new Exception("Connection closed");
 
             // Deserialize the response
             TResponse response = new();

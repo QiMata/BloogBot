@@ -20,6 +20,10 @@ namespace GameData.Core.Interfaces
         bool IsAutoAttacking { get; }
         bool CanResurrect { get; }
         float Facing { get; }
+        bool InBattleground { get; }
+        bool HasQuestTargets { get; }
+        bool IsInWorld { get; }
+        bool HealthRestored { get; }
 
         void DoEmote(Emote emote);
         void DoEmote(TextEmote emote);

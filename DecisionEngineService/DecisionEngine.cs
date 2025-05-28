@@ -1,5 +1,5 @@
-﻿using Communication;
-using System.Data.SQLite;
+﻿using System.Data.SQLite;
+using Communication;
 
 namespace DecisionEngineService
 {
@@ -22,7 +22,7 @@ namespace DecisionEngineService
         {
             _fileWatcher = new FileSystemWatcher(_binFileDirectory, "*.bin")
             {
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
             };
             _fileWatcher.Created += OnBinFileCreated;
             _fileWatcher.EnableRaisingEvents = true;
@@ -118,56 +118,81 @@ namespace DecisionEngineService
         {
             List<ActionMap> actionMaps = [];
 
-            // Example decision-making logic: 
+            // Example decision-making logic:
             // If player's health is below 50%, add a heal action
             if (snapshot.Player.Unit.Health < snapshot.Player.Unit.MaxHealth * 0.5)
             {
-                actionMaps.Add(new ActionMap
-                {
-                    Actions = {
-                        new ActionMessage
+                actionMaps.Add(
+                    new ActionMap
+                    {
+                        Actions =
                         {
-                            ActionType = ActionType.CastSpell,
-                            Parameters = {
-                                new RequestParameter { IntParam = 12345 } // Healing Spell ID
-                            }
-                        }
+                            new ActionMessage
+                            {
+                                ActionType = ActionType.CastSpell,
+                                Parameters =
+                                {
+                                    new RequestParameter { IntParam = 12345 }, // Healing Spell ID
+                                },
+                            },
+                        },
                     }
-                });
+                );
             }
 
             // If there are more than 2 nearby hostile units, suggest AoE attack
-            if (snapshot.NearbyUnits.Count(unit => unit.UnitFlags == 16 /* Hostile flag */) > 2)
+            if (
+                snapshot.NearbyUnits.Count(unit =>
+                    unit.UnitFlags == 16 /* Hostile flag */
+                ) > 2
+            )
             {
-                actionMaps.Add(new ActionMap
-                {
-                    Actions = {
-                        new ActionMessage
+                actionMaps.Add(
+                    new ActionMap
+                    {
+                        Actions =
                         {
-                            ActionType = ActionType.CastSpell,
-                            Parameters = {
-                                new RequestParameter { IntParam = 6789 } // AoE Spell ID
-                            }
-                        }
+                            new ActionMessage
+                            {
+                                ActionType = ActionType.CastSpell,
+                                Parameters =
+                                {
+                                    new RequestParameter { IntParam = 6789 }, // AoE Spell ID
+                                },
+                            },
+                        },
                     }
-                });
+                );
             }
 
             // Example logic for moving to a different location
-            actionMaps.Add(new ActionMap
-            {
-                Actions = {
-                    new ActionMessage
+            actionMaps.Add(
+                new ActionMap
+                {
+                    Actions =
                     {
-                        ActionType = ActionType.Goto,
-                        Parameters = {
-                            new RequestParameter { FloatParam = snapshot.Player.Unit.GameObject.Base.Position.X },
-                            new RequestParameter { FloatParam = snapshot.Player.Unit.GameObject.Base.Position.Y },
-                            new RequestParameter { FloatParam = snapshot.Player.Unit.GameObject.Base.Position.Z }
-                        }
-                    }
+                        new ActionMessage
+                        {
+                            ActionType = ActionType.Goto,
+                            Parameters =
+                            {
+                                new RequestParameter
+                                {
+                                    FloatParam = snapshot.Player.Unit.GameObject.Base.Position.X,
+                                },
+                                new RequestParameter
+                                {
+                                    FloatParam = snapshot.Player.Unit.GameObject.Base.Position.Y,
+                                },
+                                new RequestParameter
+                                {
+                                    FloatParam = snapshot.Player.Unit.GameObject.Base.Position.Z,
+                                },
+                            },
+                        },
+                    },
                 }
-            });
+            );
 
             return actionMaps;
         }
@@ -181,7 +206,10 @@ namespace DecisionEngineService
         {
             using var connection = new SQLiteConnection(_connectionString);
             connection.Open();
-            using var cmd = new SQLiteCommand("INSERT INTO ModelWeights (weights) VALUES (@weights)", connection);
+            using var cmd = new SQLiteCommand(
+                "INSERT INTO ModelWeights (weights) VALUES (@weights)",
+                connection
+            );
             cmd.Parameters.AddWithValue("@weights", string.Join(",", weights));
             cmd.ExecuteNonQuery();
         }
@@ -192,7 +220,10 @@ namespace DecisionEngineService
             using (var connection = new SQLiteConnection(_connectionString))
             {
                 connection.Open();
-                using var cmd = new SQLiteCommand("SELECT weights FROM ModelWeights ORDER BY id DESC LIMIT 1", connection);
+                using var cmd = new SQLiteCommand(
+                    "SELECT weights FROM ModelWeights ORDER BY id DESC LIMIT 1",
+                    connection
+                );
                 var reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {

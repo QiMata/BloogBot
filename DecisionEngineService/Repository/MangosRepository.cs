@@ -1,14 +1,16 @@
-﻿using Database;
+﻿using System.Data;
+using Database;
 using Google.Protobuf.WellKnownTypes;
 using MySql.Data.MySqlClient;
 using MySql.Data.Types;
-using System.Data;
 
 namespace DecisionEngineService.Repository
 {
     public class MangosRepository
     {
-        private static readonly string ConnectionString = "server=localhost;user=app;database=mangos;port=3306;password=app";
+        private static readonly string ConnectionString =
+            "server=localhost;user=app;database=mangos;port=3306;password=app";
+
         public static int GetRowCountForTable(string tableName)
         {
             int count = 0;
@@ -59,14 +61,16 @@ namespace DecisionEngineService.Repository
                         AreaTriggerBgEntrance areaTrigger = new()
                         {
                             Id = reader.GetUInt32("id"),
-                            Name = reader.IsDBNull("name") ? string.Empty : reader.GetString("name"),
+                            Name = reader.IsDBNull("name")
+                                ? string.Empty
+                                : reader.GetString("name"),
                             Team = reader.GetUInt32("team"),
                             BgTemplate = reader.GetUInt32("bg_template"),
                             ExitMap = reader.GetFloat("exit_map"),
                             ExitPositionX = reader.GetFloat("exit_position_x"),
                             ExitPositionY = reader.GetFloat("exit_position_y"),
                             ExitPositionZ = reader.GetFloat("exit_position_z"),
-                            ExitOrientation = reader.GetFloat("exit_orientation")
+                            ExitOrientation = reader.GetFloat("exit_orientation"),
                         };
                         areaTriggers.Add(areaTrigger);
                     }
@@ -79,6 +83,7 @@ namespace DecisionEngineService.Repository
 
             return areaTriggers;
         }
+
         public static List<AreaTriggerInvolvedRelation> GetAreaTriggerInvolvedRelations()
         {
             List<AreaTriggerInvolvedRelation> areaTriggers = [];
@@ -98,7 +103,7 @@ namespace DecisionEngineService.Repository
                         AreaTriggerInvolvedRelation areaTrigger = new()
                         {
                             Id = reader.GetUInt32("id"),
-                            Quest = reader.GetUInt32("quest")
+                            Quest = reader.GetUInt32("quest"),
                         };
                         areaTriggers.Add(areaTrigger);
                     }
@@ -111,6 +116,7 @@ namespace DecisionEngineService.Repository
 
             return areaTriggers;
         }
+
         public static List<AreaTriggerTavern> GetAreaTriggerTaverns()
         {
             List<AreaTriggerTavern> areaTriggerTaverns = [];
@@ -130,7 +136,9 @@ namespace DecisionEngineService.Repository
                         AreaTriggerTavern areaTriggerTavern = new()
                         {
                             Id = reader.GetUInt32("id"),
-                            Name = reader.IsDBNull("name") ? string.Empty : reader.GetString("name")
+                            Name = reader.IsDBNull("name")
+                                ? string.Empty
+                                : reader.GetString("name"),
                         };
                         areaTriggerTaverns.Add(areaTriggerTavern);
                     }
@@ -143,6 +151,7 @@ namespace DecisionEngineService.Repository
 
             return areaTriggerTaverns;
         }
+
         public static List<AreaTriggerTeleport> GetAreaTriggerTeleports()
         {
             List<AreaTriggerTeleport> areaTriggerTeleports = [];
@@ -163,7 +172,9 @@ namespace DecisionEngineService.Repository
                         {
                             Id = reader.GetUInt32("id"),
                             Patch = reader.GetUInt32("patch"),
-                            Name = reader.IsDBNull("name") ? string.Empty : reader.GetString("name"),
+                            Name = reader.IsDBNull("name")
+                                ? string.Empty
+                                : reader.GetString("name"),
                             RequiredLevel = reader.GetUInt32("required_level"),
                             RequiredItem = reader.GetUInt32("required_item"),
                             RequiredItem2 = reader.GetUInt32("required_item2"),
@@ -171,12 +182,14 @@ namespace DecisionEngineService.Repository
                             RequiredEvent = reader.GetInt32("required_event"),
                             RequiredPvpRank = reader.GetUInt32("required_pvp_rank"),
                             RequiredTeam = reader.GetUInt32("required_team"),
-                            RequiredFailedText = reader.IsDBNull("required_failed_text") ? string.Empty : reader.GetString("required_failed_text"),
+                            RequiredFailedText = reader.IsDBNull("required_failed_text")
+                                ? string.Empty
+                                : reader.GetString("required_failed_text"),
                             TargetMap = reader.GetUInt32("target_map"),
                             TargetPositionX = reader.GetFloat("target_position_x"),
                             TargetPositionY = reader.GetFloat("target_position_y"),
                             TargetPositionZ = reader.GetFloat("target_position_z"),
-                            TargetOrientation = reader.GetFloat("target_orientation")
+                            TargetOrientation = reader.GetFloat("target_orientation"),
                         };
                         areaTriggerTeleports.Add(areaTriggerTeleport);
                     }
@@ -189,6 +202,7 @@ namespace DecisionEngineService.Repository
 
             return areaTriggerTeleports;
         }
+
         public static List<AreaTemplate> GetAreaTemplates()
         {
             List<AreaTemplate> areaTemplates = [];
@@ -213,9 +227,11 @@ namespace DecisionEngineService.Repository
                             ExploreFlag = reader.GetUInt32("ExploreFlag"),
                             Flags = reader.GetUInt32("Flags"),
                             AreaLevel = reader.GetInt32("AreaLevel"),
-                            Name = reader.IsDBNull("Name") ? string.Empty : reader.GetString("Name"),
+                            Name = reader.IsDBNull("Name")
+                                ? string.Empty
+                                : reader.GetString("Name"),
                             Team = reader.GetUInt32("Team"),
-                            LiquidTypeId = reader.GetUInt32("LiquidTypeId")
+                            LiquidTypeId = reader.GetUInt32("LiquidTypeId"),
                         };
                         areaTemplates.Add(areaTemplate);
                     }
@@ -228,6 +244,7 @@ namespace DecisionEngineService.Repository
 
             return areaTemplates;
         }
+
         public static List<AuctionHouseBot> GetAuctionHouseBots()
         {
             List<AuctionHouseBot> auctionHouseBots = [];
@@ -249,7 +266,7 @@ namespace DecisionEngineService.Repository
                             Item = reader.GetInt32("item"),
                             Stack = reader.IsDBNull("stack") ? 0 : reader.GetInt32("stack"),
                             Bid = reader.IsDBNull("bid") ? 0 : reader.GetInt32("bid"),
-                            Buyout = reader.IsDBNull("buyout") ? 0 : reader.GetInt32("buyout")
+                            Buyout = reader.IsDBNull("buyout") ? 0 : reader.GetInt32("buyout"),
                         };
                         auctionHouseBots.Add(auctionHouseBot);
                     }
@@ -262,6 +279,7 @@ namespace DecisionEngineService.Repository
 
             return auctionHouseBots;
         }
+
         public static List<AutoBroadcast> GetAutoBroadcasts()
         {
             List<AutoBroadcast> autoBroadcasts = [];
@@ -281,8 +299,12 @@ namespace DecisionEngineService.Repository
                         AutoBroadcast autoBroadcast = new()
                         {
                             Delay = reader.IsDBNull("delay") ? 0 : reader.GetInt32("delay"),
-                            StringId = reader.IsDBNull("stringId") ? 0 : reader.GetInt32("stringId"),
-                            Comments = reader.IsDBNull("comments") ? string.Empty : reader.GetString("comments")
+                            StringId = reader.IsDBNull("stringId")
+                                ? 0
+                                : reader.GetInt32("stringId"),
+                            Comments = reader.IsDBNull("comments")
+                                ? string.Empty
+                                : reader.GetString("comments"),
                         };
                         autoBroadcasts.Add(autoBroadcast);
                     }
@@ -295,6 +317,7 @@ namespace DecisionEngineService.Repository
 
             return autoBroadcasts;
         }
+
         public static List<BattlegroundEvent> GetBattlegroundEvents()
         {
             List<BattlegroundEvent> battlegroundEvents = [];
@@ -316,7 +339,7 @@ namespace DecisionEngineService.Repository
                             Map = reader.GetInt32("map"),
                             Event1 = reader.GetUInt32("event1"),
                             Event2 = reader.GetUInt32("event2"),
-                            Description = reader.GetString("description")
+                            Description = reader.GetString("description"),
                         };
                         battlegroundEvents.Add(battlegroundEvent);
                     }
@@ -329,6 +352,7 @@ namespace DecisionEngineService.Repository
 
             return battlegroundEvents;
         }
+
         public static List<BattlegroundTemplate> GetBattlegroundTemplates()
         {
             List<BattlegroundTemplate> battlegroundTemplates = [];
@@ -340,7 +364,8 @@ namespace DecisionEngineService.Repository
                     connection.Open();
 
                     MySqlCommand command = connection.CreateCommand();
-                    command.CommandText = @"
+                    command.CommandText =
+                        @"
                         SELECT * FROM battleground_template";
 
                     using MySqlDataReader reader = command.ExecuteReader();
@@ -361,7 +386,7 @@ namespace DecisionEngineService.Repository
                             AllianceStartLoc = reader.GetUInt32("AllianceStartLoc"),
                             AllianceStartO = reader.GetFloat("AllianceStartO"),
                             HordeStartLoc = reader.GetUInt32("HordeStartLoc"),
-                            HordeStartO = reader.GetFloat("HordeStartO")
+                            HordeStartO = reader.GetFloat("HordeStartO"),
                         };
                         battlegroundTemplates.Add(battlegroundTemplate);
                     }
@@ -374,6 +399,7 @@ namespace DecisionEngineService.Repository
 
             return battlegroundTemplates;
         }
+
         public static List<BattlemasterEntry> GetBattlemasterEntries()
         {
             List<BattlemasterEntry> battlemasterEntries = [];
@@ -393,7 +419,7 @@ namespace DecisionEngineService.Repository
                         BattlemasterEntry battlemasterEntry = new()
                         {
                             Entry = reader.GetUInt32("entry"),
-                            BgTemplate = reader.GetUInt32("bg_template")
+                            BgTemplate = reader.GetUInt32("bg_template"),
                         };
                         battlemasterEntries.Add(battlemasterEntry);
                     }
@@ -406,6 +432,7 @@ namespace DecisionEngineService.Repository
 
             return battlemasterEntries;
         }
+
         public static List<BroadcastText> GetBroadcastTexts()
         {
             List<BroadcastText> broadcastTexts = [];
@@ -425,8 +452,12 @@ namespace DecisionEngineService.Repository
                         BroadcastText broadcastText = new()
                         {
                             Id = reader.GetUInt32("ID"),
-                            MaleText = reader.IsDBNull("MaleText") ? string.Empty : reader.GetString("MaleText"),
-                            FemaleText = reader.IsDBNull("FemaleText") ? string.Empty : reader.GetString("FemaleText"),
+                            MaleText = reader.IsDBNull("MaleText")
+                                ? string.Empty
+                                : reader.GetString("MaleText"),
+                            FemaleText = reader.IsDBNull("FemaleText")
+                                ? string.Empty
+                                : reader.GetString("FemaleText"),
                             Sound = reader.GetUInt32("Sound"),
                             Type = reader.GetUInt32("Type"),
                             Language = reader.GetUInt32("Language"),
@@ -435,7 +466,7 @@ namespace DecisionEngineService.Repository
                             EmoteId2 = reader.GetUInt32("EmoteId2"),
                             EmoteDelay0 = reader.GetUInt32("EmoteDelay0"),
                             EmoteDelay1 = reader.GetUInt32("EmoteDelay1"),
-                            EmoteDelay2 = reader.GetUInt32("EmoteDelay2")
+                            EmoteDelay2 = reader.GetUInt32("EmoteDelay2"),
                         };
                         broadcastTexts.Add(broadcastText);
                     }
@@ -448,6 +479,7 @@ namespace DecisionEngineService.Repository
 
             return broadcastTexts;
         }
+
         public static List<CinematicWaypoint> GetCinematicWaypoints()
         {
             List<CinematicWaypoint> waypoints = [];
@@ -471,7 +503,9 @@ namespace DecisionEngineService.Repository
                             Posx = reader.IsDBNull("posx") ? 0 : reader.GetFloat("posx"),
                             Posy = reader.IsDBNull("posy") ? 0 : reader.GetFloat("posy"),
                             Posz = reader.IsDBNull("posz") ? 0 : reader.GetFloat("posz"),
-                            Comment = reader.IsDBNull("comment") ? string.Empty : reader.GetString("comment")
+                            Comment = reader.IsDBNull("comment")
+                                ? string.Empty
+                                : reader.GetString("comment"),
                         };
                         waypoints.Add(waypoint);
                     }
@@ -484,6 +518,7 @@ namespace DecisionEngineService.Repository
 
             return waypoints;
         }
+
         public static List<Command> GetCommands()
         {
             List<Command> commandResults = [];
@@ -504,8 +539,10 @@ namespace DecisionEngineService.Repository
                         {
                             Name = reader.GetString("name"),
                             Security = reader.GetUInt32("security"),
-                            Help = reader.IsDBNull("help") ? string.Empty : reader.GetString("help"),
-                            Flags = reader.GetInt32("flags")
+                            Help = reader.IsDBNull("help")
+                                ? string.Empty
+                                : reader.GetString("help"),
+                            Flags = reader.GetInt32("flags"),
                         };
                         commandResults.Add(commandResult);
                     }
@@ -518,6 +555,7 @@ namespace DecisionEngineService.Repository
 
             return commandResults;
         }
+
         public static List<Condition> GetConditions()
         {
             List<Condition> conditionResults = [];
@@ -540,7 +578,7 @@ namespace DecisionEngineService.Repository
                             Type = reader.GetInt32("type"),
                             Value1 = reader.GetUInt32("value1"),
                             Value2 = reader.GetUInt32("value2"),
-                            Flags = reader.GetUInt32("flags")
+                            Flags = reader.GetUInt32("flags"),
                         };
                         conditionResults.Add(conditionResult);
                     }
@@ -553,6 +591,7 @@ namespace DecisionEngineService.Repository
 
             return conditionResults;
         }
+
         public static List<Creature> GetCreatures()
         {
             List<Creature> creatureResults = [];
@@ -591,7 +630,7 @@ namespace DecisionEngineService.Repository
                             SpawnFlags = reader.GetUInt32("spawnFlags"),
                             Visibilitymod = reader.GetFloat("visibilitymod"),
                             PatchMin = reader.GetUInt32("patch_min"),
-                            PatchMax = reader.GetUInt32("patch_max")
+                            PatchMax = reader.GetUInt32("patch_max"),
                         };
                         creatureResults.Add(creatureResult);
                     }
@@ -604,6 +643,7 @@ namespace DecisionEngineService.Repository
 
             return creatureResults;
         }
+
         public static List<CreatureAddon> GetCreatureAddons()
         {
             List<CreatureAddon> creatureAddons = [];
@@ -630,7 +670,9 @@ namespace DecisionEngineService.Repository
                             B21Flags = reader.GetUInt32("b2_1_flags"),
                             Emote = reader.GetUInt32("emote"),
                             Moveflags = reader.GetUInt32("moveflags"),
-                            Auras = reader.IsDBNull("auras") ? string.Empty : reader.GetString("auras")
+                            Auras = reader.IsDBNull("auras")
+                                ? string.Empty
+                                : reader.GetString("auras"),
                         };
                         creatureAddons.Add(creatureAddon);
                     }
@@ -643,6 +685,7 @@ namespace DecisionEngineService.Repository
 
             return creatureAddons;
         }
+
         public static List<CreatureAIEvent> GetCreatureAIEvents()
         {
             List<CreatureAIEvent> aiEvents = [];
@@ -675,7 +718,7 @@ namespace DecisionEngineService.Repository
                             Action1Script = reader.GetUInt32("action1_script"),
                             Action2Script = reader.GetUInt32("action2_script"),
                             Action3Script = reader.GetUInt32("action3_script"),
-                            Comment = reader.GetString("comment")
+                            Comment = reader.GetString("comment"),
                         };
                         aiEvents.Add(aiEvent);
                     }
@@ -688,6 +731,7 @@ namespace DecisionEngineService.Repository
 
             return aiEvents;
         }
+
         public static List<CreatureBattleground> GetCreatureBattlegrounds()
         {
             List<CreatureBattleground> creatureBattlegrounds = [];
@@ -708,7 +752,7 @@ namespace DecisionEngineService.Repository
                         {
                             Guid = reader.GetUInt32("guid"),
                             Event1 = reader.GetByte("event1"),
-                            Event2 = reader.GetByte("event2")
+                            Event2 = reader.GetByte("event2"),
                         };
                         creatureBattlegrounds.Add(creatureBattleground);
                     }
@@ -721,6 +765,7 @@ namespace DecisionEngineService.Repository
 
             return creatureBattlegrounds;
         }
+
         public static List<CreatureEquipTemplate> GetCreatureEquipTemplate()
         {
             List<CreatureEquipTemplate> equipTemplates = [];
@@ -743,7 +788,7 @@ namespace DecisionEngineService.Repository
                             Patch = reader.GetByte("patch"),
                             Equipentry1 = reader.GetUInt32("equipentry1"),
                             Equipentry2 = reader.GetUInt32("equipentry2"),
-                            Equipentry3 = reader.GetUInt32("equipentry3")
+                            Equipentry3 = reader.GetUInt32("equipentry3"),
                         };
                         equipTemplates.Add(equipTemplate);
                     }
@@ -756,6 +801,7 @@ namespace DecisionEngineService.Repository
 
             return equipTemplates;
         }
+
         public static List<CreatureEquipTemplateRaw> GetCreatureEquipTemplateRaws()
         {
             List<CreatureEquipTemplateRaw> equipTemplateRaws = [];
@@ -767,7 +813,8 @@ namespace DecisionEngineService.Repository
                     connection.Open();
 
                     MySqlCommand command = connection.CreateCommand();
-                    command.CommandText = @"
+                    command.CommandText =
+                        @"
                         SELECT *
                         FROM creature_equip_template_raw
                         ";
@@ -787,7 +834,7 @@ namespace DecisionEngineService.Repository
                             Equipinfo3 = reader.GetUInt32("equipinfo3"),
                             Equipslot1 = reader.GetInt32("equipslot1"),
                             Equipslot2 = reader.GetInt32("equipslot2"),
-                            Equipslot3 = reader.GetInt32("equipslot3")
+                            Equipslot3 = reader.GetInt32("equipslot3"),
                         };
                         equipTemplateRaws.Add(equipTemplateRaw);
                     }
@@ -800,6 +847,7 @@ namespace DecisionEngineService.Repository
 
             return equipTemplateRaws;
         }
+
         public static List<CreatureAIScript> GetCreatureAIScripts()
         {
             List<CreatureAIScript> aiScripts = [];
@@ -838,7 +886,7 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.GetString("comments")
+                            Comments = reader.GetString("comments"),
                         };
                         aiScripts.Add(aiScript);
                     }
@@ -851,6 +899,7 @@ namespace DecisionEngineService.Repository
 
             return aiScripts;
         }
+
         public static List<CreatureInvolvedRelation> GetCreatureInvolvedRelations()
         {
             List<CreatureInvolvedRelation> relations = [];
@@ -871,7 +920,7 @@ namespace DecisionEngineService.Repository
                         {
                             Id = reader.GetUInt32("id"),
                             Quest = reader.GetUInt32("quest"),
-                            Patch = reader.GetUInt32("patch")
+                            Patch = reader.GetUInt32("patch"),
                         };
                         relations.Add(relation);
                     }
@@ -884,6 +933,7 @@ namespace DecisionEngineService.Repository
 
             return relations;
         }
+
         public static List<CreatureLinking> GetCreatureLinkings()
         {
             List<CreatureLinking> linkings = [];
@@ -904,7 +954,7 @@ namespace DecisionEngineService.Repository
                         {
                             Guid = reader.GetUInt32("guid"),
                             MasterGuid = reader.GetUInt32("master_guid"),
-                            Flag = reader.GetUInt32("flag")
+                            Flag = reader.GetUInt32("flag"),
                         };
                         linkings.Add(linking);
                     }
@@ -917,6 +967,7 @@ namespace DecisionEngineService.Repository
 
             return linkings;
         }
+
         public static List<CreatureLinkingTemplate> GetCreatureLinkingTemplates()
         {
             List<CreatureLinkingTemplate> linkingTemplates = [];
@@ -939,7 +990,7 @@ namespace DecisionEngineService.Repository
                             Map = reader.GetUInt32("map"),
                             MasterEntry = reader.GetUInt32("master_entry"),
                             Flag = reader.GetUInt32("flag"),
-                            SearchRange = reader.GetUInt32("search_range")
+                            SearchRange = reader.GetUInt32("search_range"),
                         };
                         linkingTemplates.Add(linkingTemplate);
                     }
@@ -952,6 +1003,7 @@ namespace DecisionEngineService.Repository
 
             return linkingTemplates;
         }
+
         public static List<CreatureLootTemplate> GetCreatureLootTemplates()
         {
             List<CreatureLootTemplate> lootTemplates = [];
@@ -978,7 +1030,7 @@ namespace DecisionEngineService.Repository
                             Maxcount = reader.GetUInt32("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetUInt32("patch_min"),
-                            PatchMax = reader.GetUInt32("patch_max")
+                            PatchMax = reader.GetUInt32("patch_max"),
                         };
                         lootTemplates.Add(lootTemplate);
                     }
@@ -991,6 +1043,7 @@ namespace DecisionEngineService.Repository
 
             return lootTemplates;
         }
+
         public static List<CreatureModelInfo> GetCreatureModelInfos()
         {
             List<CreatureModelInfo> modelInfos = [];
@@ -1014,7 +1067,7 @@ namespace DecisionEngineService.Repository
                             CombatReach = reader.GetFloat("combat_reach"),
                             Gender = reader.GetByte("gender"),
                             ModelidOtherGender = reader.GetUInt32("modelid_other_gender"),
-                            ModelidOtherTeam = reader.GetUInt32("modelid_other_team")
+                            ModelidOtherTeam = reader.GetUInt32("modelid_other_team"),
                         };
                         modelInfos.Add(modelInfo);
                     }
@@ -1027,6 +1080,7 @@ namespace DecisionEngineService.Repository
 
             return modelInfos;
         }
+
         public static List<CreatureMovement> GetCreatureMovements()
         {
             List<CreatureMovement> movements = [];
@@ -1061,7 +1115,7 @@ namespace DecisionEngineService.Repository
                             Spell = reader.GetUInt32("spell"),
                             Orientation = reader.GetFloat("orientation"),
                             Model1 = reader.GetUInt32("model1"),
-                            Model2 = reader.GetUInt32("model2")
+                            Model2 = reader.GetUInt32("model2"),
                         };
                         movements.Add(movement);
                     }
@@ -1074,6 +1128,7 @@ namespace DecisionEngineService.Repository
 
             return movements;
         }
+
         public static List<CreatureMovementScript> GetCreatureMovementScripts()
         {
             List<CreatureMovementScript> movementScripts = [];
@@ -1112,7 +1167,7 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.GetString("comments")
+                            Comments = reader.GetString("comments"),
                         };
                         movementScripts.Add(movementScript);
                     }
@@ -1125,6 +1180,7 @@ namespace DecisionEngineService.Repository
 
             return movementScripts;
         }
+
         public static List<CreatureMovementSpecial> GetCreatureMovementSpecials()
         {
             List<CreatureMovementSpecial> movementSpecials = [];
@@ -1159,7 +1215,7 @@ namespace DecisionEngineService.Repository
                             Spell = reader.GetUInt32("spell"),
                             Orientation = reader.GetFloat("orientation"),
                             Model1 = reader.GetUInt32("model1"),
-                            Model2 = reader.GetUInt32("model2")
+                            Model2 = reader.GetUInt32("model2"),
                         };
                         movementSpecials.Add(movementSpecial);
                     }
@@ -1172,6 +1228,7 @@ namespace DecisionEngineService.Repository
 
             return movementSpecials;
         }
+
         public static List<CreatureMovementTemplate> GetCreatureMovementTemplates()
         {
             List<CreatureMovementTemplate> movementTemplates = [];
@@ -1206,7 +1263,7 @@ namespace DecisionEngineService.Repository
                             Spell = reader.GetUInt32("spell"),
                             Orientation = reader.GetFloat("orientation"),
                             Model1 = reader.GetUInt32("model1"),
-                            Model2 = reader.GetUInt32("model2")
+                            Model2 = reader.GetUInt32("model2"),
                         };
                         movementTemplates.Add(movementTemplate);
                     }
@@ -1219,6 +1276,7 @@ namespace DecisionEngineService.Repository
 
             return movementTemplates;
         }
+
         public static List<CreatureOnKillReputation> GetCreatureOnKillReputations()
         {
             List<CreatureOnKillReputation> reputations = [];
@@ -1246,7 +1304,7 @@ namespace DecisionEngineService.Repository
                             MaxStanding2 = reader.GetSByte("MaxStanding2"),
                             IsTeamAward2 = reader.GetBoolean("IsTeamAward2"),
                             RewOnKillRepValue2 = reader.GetInt32("RewOnKillRepValue2"),
-                            TeamDependent = reader.GetBoolean("TeamDependent")
+                            TeamDependent = reader.GetBoolean("TeamDependent"),
                         };
                         reputations.Add(reputation);
                     }
@@ -1259,6 +1317,7 @@ namespace DecisionEngineService.Repository
 
             return reputations;
         }
+
         public static List<CreatureQuestRelation> GetCreatureQuestRelations()
         {
             List<CreatureQuestRelation> creatureQuestRelations = [];
@@ -1279,7 +1338,7 @@ namespace DecisionEngineService.Repository
                         {
                             Id = reader.GetUInt32("id"),
                             Quest = reader.GetUInt32("quest"),
-                            Patch = reader.GetByte("patch")
+                            Patch = reader.GetByte("patch"),
                         };
                         creatureQuestRelations.Add(creatureQuestRelation);
                     }
@@ -1292,6 +1351,7 @@ namespace DecisionEngineService.Repository
 
             return creatureQuestRelations;
         }
+
         public static List<CreatureSpell> GetCreatureSpells()
         {
             List<CreatureSpell> creatureSpells = [];
@@ -1407,7 +1467,7 @@ namespace DecisionEngineService.Repository
                             DelayInitialMax8 = reader.GetUInt16("delayInitialMax_8"),
                             DelayRepeatMin8 = reader.GetUInt16("delayRepeatMin_8"),
                             DelayRepeatMax8 = reader.GetUInt16("delayRepeatMax_8"),
-                            ScriptId8 = reader.GetUInt32("scriptId_8")
+                            ScriptId8 = reader.GetUInt32("scriptId_8"),
                         };
                         creatureSpells.Add(creatureSpell);
                     }
@@ -1420,6 +1480,7 @@ namespace DecisionEngineService.Repository
 
             return creatureSpells;
         }
+
         public static List<CreatureSpellScript> GetCreatureSpellsScripts()
         {
             List<CreatureSpellScript> creatureSpellsScripts = [];
@@ -1458,7 +1519,7 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.GetString("comments")
+                            Comments = reader.GetString("comments"),
                         };
                         creatureSpellsScripts.Add(creatureSpellsScript);
                     }
@@ -1471,6 +1532,7 @@ namespace DecisionEngineService.Repository
 
             return creatureSpellsScripts;
         }
+
         public static List<CreatureTemplate> GetCreatureTemplates()
         {
             List<CreatureTemplate> creatureTemplates = [];
@@ -1498,7 +1560,9 @@ namespace DecisionEngineService.Repository
                             ModelId3 = reader.GetUInt32("modelid_3"),
                             ModelId4 = reader.GetUInt32("modelid_4"),
                             Name = reader.GetString("name"),
-                            Subname = reader.IsDBNull("subname") ? string.Empty : reader.GetString("subname"),
+                            Subname = reader.IsDBNull("subname")
+                                ? string.Empty
+                                : reader.GetString("subname"),
                             GossipMenuId = reader.GetUInt32("gossip_menu_id"),
                             MinLevel = reader.GetByte("minlevel"),
                             MaxLevel = reader.GetByte("maxlevel"),
@@ -1563,7 +1627,7 @@ namespace DecisionEngineService.Repository
                             MechanicImmuneMask = reader.GetUInt32("MechanicImmuneMask"),
                             SchoolImmuneMask = reader.GetUInt32("SchoolImmuneMask"),
                             FlagsExtra = reader.GetUInt32("flags_extra"),
-                            ScriptName = reader.GetString("ScriptName")
+                            ScriptName = reader.GetString("ScriptName"),
                         };
                         creatureTemplates.Add(creatureTemplate);
                     }
@@ -1576,6 +1640,7 @@ namespace DecisionEngineService.Repository
 
             return creatureTemplates;
         }
+
         public static List<CreatureTemplateAddon> GetCreatureTemplateAddons()
         {
             List<CreatureTemplateAddon> creatureTemplateAddons = [];
@@ -1602,7 +1667,9 @@ namespace DecisionEngineService.Repository
                             B21Flags = reader.GetByte("b2_1_flags"),
                             Emote = reader.GetUInt32("emote"),
                             Moveflags = reader.GetUInt32("moveflags"),
-                            Auras = reader.IsDBNull("auras") ? string.Empty : reader.GetString("auras")
+                            Auras = reader.IsDBNull("auras")
+                                ? string.Empty
+                                : reader.GetString("auras"),
                         };
                         creatureTemplateAddons.Add(creatureTemplateAddon);
                     }
@@ -1615,6 +1682,7 @@ namespace DecisionEngineService.Repository
 
             return creatureTemplateAddons;
         }
+
         public static List<CustomText> GetCustomTexts()
         {
             List<CustomText> customTexts = [];
@@ -1635,19 +1703,37 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             ContentDefault = reader.GetString("content_default"),
-                            ContentLoc1 = reader.IsDBNull("content_loc1") ? string.Empty : reader.GetString("content_loc1"),
-                            ContentLoc2 = reader.IsDBNull("content_loc2") ? string.Empty : reader.GetString("content_loc2"),
-                            ContentLoc3 = reader.IsDBNull("content_loc3") ? string.Empty : reader.GetString("content_loc3"),
-                            ContentLoc4 = reader.IsDBNull("content_loc4") ? string.Empty : reader.GetString("content_loc4"),
-                            ContentLoc5 = reader.IsDBNull("content_loc5") ? string.Empty : reader.GetString("content_loc5"),
-                            ContentLoc6 = reader.IsDBNull("content_loc6") ? string.Empty : reader.GetString("content_loc6"),
-                            ContentLoc7 = reader.IsDBNull("content_loc7") ? string.Empty : reader.GetString("content_loc7"),
-                            ContentLoc8 = reader.IsDBNull("content_loc8") ? string.Empty : reader.GetString("content_loc8"),
+                            ContentLoc1 = reader.IsDBNull("content_loc1")
+                                ? string.Empty
+                                : reader.GetString("content_loc1"),
+                            ContentLoc2 = reader.IsDBNull("content_loc2")
+                                ? string.Empty
+                                : reader.GetString("content_loc2"),
+                            ContentLoc3 = reader.IsDBNull("content_loc3")
+                                ? string.Empty
+                                : reader.GetString("content_loc3"),
+                            ContentLoc4 = reader.IsDBNull("content_loc4")
+                                ? string.Empty
+                                : reader.GetString("content_loc4"),
+                            ContentLoc5 = reader.IsDBNull("content_loc5")
+                                ? string.Empty
+                                : reader.GetString("content_loc5"),
+                            ContentLoc6 = reader.IsDBNull("content_loc6")
+                                ? string.Empty
+                                : reader.GetString("content_loc6"),
+                            ContentLoc7 = reader.IsDBNull("content_loc7")
+                                ? string.Empty
+                                : reader.GetString("content_loc7"),
+                            ContentLoc8 = reader.IsDBNull("content_loc8")
+                                ? string.Empty
+                                : reader.GetString("content_loc8"),
                             Sound = reader.GetUInt32("sound"),
                             Type = reader.GetByte("type"),
                             Language = reader.GetByte("language"),
                             Emote = reader.GetUInt16("emote"),
-                            Comment = reader.IsDBNull("comment") ? string.Empty : reader.GetString("comment")
+                            Comment = reader.IsDBNull("comment")
+                                ? string.Empty
+                                : reader.GetString("comment"),
                         };
                         customTexts.Add(customText);
                     }
@@ -1660,6 +1746,7 @@ namespace DecisionEngineService.Repository
 
             return customTexts;
         }
+
         public static List<DisenchantLootTemplate> GetDisenchantLootTemplates()
         {
             List<DisenchantLootTemplate> disenchantLootTemplates = [];
@@ -1686,7 +1773,7 @@ namespace DecisionEngineService.Repository
                             Maxcount = reader.GetByte("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
                         disenchantLootTemplates.Add(disenchantLootTemplate);
                     }
@@ -1699,6 +1786,7 @@ namespace DecisionEngineService.Repository
 
             return disenchantLootTemplates;
         }
+
         public static List<EventScript> GetEventScripts()
         {
             List<EventScript> eventScripts = [];
@@ -1737,7 +1825,7 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.GetString("comments")
+                            Comments = reader.GetString("comments"),
                         };
                         eventScripts.Add(eventScript);
                     }
@@ -1750,6 +1838,7 @@ namespace DecisionEngineService.Repository
 
             return eventScripts;
         }
+
         public static List<ExplorationBaseXP> GetExplorationBaseXPs()
         {
             List<ExplorationBaseXP> explorationBaseXPs = [];
@@ -1769,7 +1858,7 @@ namespace DecisionEngineService.Repository
                         ExplorationBaseXP explorationBaseXP = new()
                         {
                             Level = reader.GetByte("level"),
-                            Basexp = reader.GetUInt32("basexp")
+                            Basexp = reader.GetUInt32("basexp"),
                         };
                         explorationBaseXPs.Add(explorationBaseXP);
                     }
@@ -1782,6 +1871,7 @@ namespace DecisionEngineService.Repository
 
             return explorationBaseXPs;
         }
+
         public static List<Faction> GetFactions()
         {
             List<Faction> factions = [];
@@ -1834,7 +1924,7 @@ namespace DecisionEngineService.Repository
                             Description5 = reader.GetString("description5"),
                             Description6 = reader.GetString("description6"),
                             Description7 = reader.GetString("description7"),
-                            Description8 = reader.GetString("description8")
+                            Description8 = reader.GetString("description8"),
                         };
                         factions.Add(faction);
                     }
@@ -1847,6 +1937,7 @@ namespace DecisionEngineService.Repository
 
             return factions;
         }
+
         public static List<FactionTemplate> GetFactionTemplates()
         {
             List<FactionTemplate> factionTemplates = [];
@@ -1878,7 +1969,7 @@ namespace DecisionEngineService.Repository
                             FriendFaction1 = reader.GetUInt32("friendFaction1"),
                             FriendFaction2 = reader.GetUInt32("friendFaction2"),
                             FriendFaction3 = reader.GetUInt32("friendFaction3"),
-                            FriendFaction4 = reader.GetUInt32("friendFaction4")
+                            FriendFaction4 = reader.GetUInt32("friendFaction4"),
                         };
                         factionTemplates.Add(factionTemplate);
                     }
@@ -1891,6 +1982,7 @@ namespace DecisionEngineService.Repository
 
             return factionTemplates;
         }
+
         public static List<FishingLootTemplate> GetFishingLootTemplates()
         {
             List<FishingLootTemplate> fishingLootTemplates = [];
@@ -1917,7 +2009,7 @@ namespace DecisionEngineService.Repository
                             MaxCount = reader.GetByte("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         fishingLootTemplates.Add(fishingLootTemplate);
@@ -1931,6 +2023,7 @@ namespace DecisionEngineService.Repository
 
             return fishingLootTemplates;
         }
+
         public static List<ForbiddenItem> GetForbiddenItems()
         {
             List<ForbiddenItem> forbiddenItems = [];
@@ -1951,7 +2044,7 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             Patch = reader.GetByte("patch"),
-                            AfterOrBefore = reader.GetByte("AfterOrBefore")
+                            AfterOrBefore = reader.GetByte("AfterOrBefore"),
                         };
 
                         forbiddenItems.Add(forbiddenItem);
@@ -1965,6 +2058,7 @@ namespace DecisionEngineService.Repository
 
             return forbiddenItems;
         }
+
         public static List<GameObject> GetGameObjects()
         {
             List<GameObject> gameObjects = [];
@@ -2001,7 +2095,7 @@ namespace DecisionEngineService.Repository
                             SpawnFlags = reader.GetUInt32("spawnFlags"),
                             Visibilitymod = reader.GetFloat("visibilitymod"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         gameObjects.Add(gameObject);
@@ -2015,6 +2109,7 @@ namespace DecisionEngineService.Repository
 
             return gameObjects;
         }
+
         public static List<GameObjectBattleground> GetGameObjectBattlegrounds()
         {
             List<GameObjectBattleground> gameObjectBattlegrounds = [];
@@ -2035,7 +2130,7 @@ namespace DecisionEngineService.Repository
                         {
                             Guid = reader.GetUInt32("guid"),
                             Event1 = reader.GetByte("event1"),
-                            Event2 = reader.GetByte("event2")
+                            Event2 = reader.GetByte("event2"),
                         };
 
                         gameObjectBattlegrounds.Add(gameObjectBattleground);
@@ -2049,6 +2144,7 @@ namespace DecisionEngineService.Repository
 
             return gameObjectBattlegrounds;
         }
+
         public static List<GameObjectInvolvedRelation> GetGameObjectInvolvedRelations()
         {
             List<GameObjectInvolvedRelation> relations = [];
@@ -2069,7 +2165,7 @@ namespace DecisionEngineService.Repository
                         {
                             Id = reader.GetUInt32("id"),
                             Quest = reader.GetUInt32("quest"),
-                            Patch = reader.GetByte("patch")
+                            Patch = reader.GetByte("patch"),
                         };
                         relations.Add(relation);
                     }
@@ -2082,6 +2178,7 @@ namespace DecisionEngineService.Repository
 
             return relations;
         }
+
         public static List<GameObjectLootTemplate> GetGameObjectLootTemplates()
         {
             List<GameObjectLootTemplate> lootTemplates = [];
@@ -2108,7 +2205,7 @@ namespace DecisionEngineService.Repository
                             Maxcount = reader.GetByte("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         lootTemplates.Add(lootTemplate);
@@ -2122,6 +2219,7 @@ namespace DecisionEngineService.Repository
 
             return lootTemplates;
         }
+
         public static List<GameObjectQuestRelation> GetGameObjectQuestRelations()
         {
             List<GameObjectQuestRelation> questRelations = [];
@@ -2142,7 +2240,7 @@ namespace DecisionEngineService.Repository
                         {
                             Id = reader.GetUInt32("id"),
                             Quest = reader.GetUInt32("quest"),
-                            Patch = reader.GetByte("patch")
+                            Patch = reader.GetByte("patch"),
                         };
 
                         questRelations.Add(questRelation);
@@ -2156,6 +2254,7 @@ namespace DecisionEngineService.Repository
 
             return questRelations;
         }
+
         public static List<GameObjectRequirement> GetGameObjectRequirements()
         {
             List<GameObjectRequirement> requirements = [];
@@ -2176,7 +2275,7 @@ namespace DecisionEngineService.Repository
                         {
                             Guid = reader.GetUInt32("guid"),
                             ReqType = reader.GetUInt32("reqType"),
-                            ReqGuid = reader.GetUInt32("reqGuid")
+                            ReqGuid = reader.GetUInt32("reqGuid"),
                         };
 
                         requirements.Add(requirement);
@@ -2190,6 +2289,7 @@ namespace DecisionEngineService.Repository
 
             return requirements;
         }
+
         public static List<GameObjectScript> GetGameObjectScripts()
         {
             List<GameObjectScript> scripts = [];
@@ -2228,7 +2328,7 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.GetString("comments")
+                            Comments = reader.GetString("comments"),
                         };
 
                         scripts.Add(script);
@@ -2242,6 +2342,7 @@ namespace DecisionEngineService.Repository
 
             return scripts;
         }
+
         public static List<GameObjectTemplate> GetGameObjectTemplates()
         {
             List<GameObjectTemplate> gameObjectTemplates = [];
@@ -2270,7 +2371,7 @@ namespace DecisionEngineService.Repository
                             Size = reader.GetFloat("size"),
                             Mingold = reader.GetUInt32("mingold"),
                             Maxgold = reader.GetUInt32("maxgold"),
-                            ScriptName = reader.GetString("ScriptName")
+                            ScriptName = reader.GetString("ScriptName"),
                         };
 
                         template.Data.Add(reader.GetUInt32("data0"));
@@ -2309,6 +2410,7 @@ namespace DecisionEngineService.Repository
 
             return gameObjectTemplates;
         }
+
         public static List<GameEvent> GetGameEvents()
         {
             List<GameEvent> gameEvents = [];
@@ -2333,11 +2435,13 @@ namespace DecisionEngineService.Repository
                             Occurrence = reader.GetUInt64("occurence"),
                             Length = reader.GetUInt64("length"),
                             Holiday = reader.GetUInt32("holiday"),
-                            Description = reader.IsDBNull("description") ? string.Empty : reader.GetString("description"),
+                            Description = reader.IsDBNull("description")
+                                ? string.Empty
+                                : reader.GetString("description"),
                             Hardcoded = reader.GetBoolean("hardcoded"),
                             Disabled = reader.GetBoolean("disabled"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         gameEvents.Add(gameEvent);
@@ -2351,6 +2455,7 @@ namespace DecisionEngineService.Repository
 
             return gameEvents;
         }
+
         public static List<GameEventCreature> GetGameEventCreatures()
         {
             List<GameEventCreature> gameEventCreatures = [];
@@ -2370,7 +2475,7 @@ namespace DecisionEngineService.Repository
                         var gameEventCreature = new GameEventCreature
                         {
                             Guid = reader.GetUInt32("guid"),
-                            Event = reader.GetInt16("event")
+                            Event = reader.GetInt16("event"),
                         };
 
                         gameEventCreatures.Add(gameEventCreature);
@@ -2384,6 +2489,7 @@ namespace DecisionEngineService.Repository
 
             return gameEventCreatures;
         }
+
         public static List<GameEventCreatureData> GetGameEventCreatureDatas()
         {
             List<GameEventCreatureData> gameEventCreatureDataList = [];
@@ -2408,7 +2514,7 @@ namespace DecisionEngineService.Repository
                             EquipmentId = reader.GetUInt32("equipment_id"),
                             SpellStart = reader.GetUInt32("spell_start"),
                             SpellEnd = reader.GetUInt32("spell_end"),
-                            Event = reader.GetUInt16("event")
+                            Event = reader.GetUInt16("event"),
                         };
 
                         gameEventCreatureDataList.Add(gameEventCreatureData);
@@ -2422,6 +2528,7 @@ namespace DecisionEngineService.Repository
 
             return gameEventCreatureDataList;
         }
+
         public static List<GameEventGameObject> GetGameEventGameObjects()
         {
             List<GameEventGameObject> gameEventGameObjectList = [];
@@ -2441,7 +2548,7 @@ namespace DecisionEngineService.Repository
                         var gameEventGameObject = new GameEventGameObject
                         {
                             Guid = reader.GetUInt32("guid"),
-                            Event = reader.GetInt16("event")
+                            Event = reader.GetInt16("event"),
                         };
 
                         gameEventGameObjectList.Add(gameEventGameObject);
@@ -2455,6 +2562,7 @@ namespace DecisionEngineService.Repository
 
             return gameEventGameObjectList;
         }
+
         public static List<GameEventQuest> GetGameEventQuests()
         {
             List<GameEventQuest> gameEventQuestList = [];
@@ -2475,7 +2583,7 @@ namespace DecisionEngineService.Repository
                         {
                             Quest = reader.GetUInt32("quest"),
                             Event = reader.GetUInt16("event"),
-                            Patch = reader.GetByte("patch")
+                            Patch = reader.GetByte("patch"),
                         };
 
                         gameEventQuestList.Add(gameEventQuest);
@@ -2489,6 +2597,7 @@ namespace DecisionEngineService.Repository
 
             return gameEventQuestList;
         }
+
         public static List<GameGraveyardZone> GetGameGraveyardZones()
         {
             List<GameGraveyardZone> gameGraveyardZones = [];
@@ -2509,7 +2618,7 @@ namespace DecisionEngineService.Repository
                         {
                             Id = reader.GetUInt32("id"),
                             GhostZone = reader.GetUInt32("ghost_zone"),
-                            Faction = reader.GetUInt16("faction")
+                            Faction = reader.GetUInt16("faction"),
                         };
 
                         gameGraveyardZones.Add(gameGraveyardZone);
@@ -2523,6 +2632,7 @@ namespace DecisionEngineService.Repository
 
             return gameGraveyardZones;
         }
+
         public static List<GameTele> GetGameTeles()
         {
             List<GameTele> gameTeles = [];
@@ -2547,7 +2657,7 @@ namespace DecisionEngineService.Repository
                             PositionZ = reader.GetFloat("position_z"),
                             Orientation = reader.GetFloat("orientation"),
                             Map = reader.GetUInt16("map"),
-                            Name = reader.GetString("name")
+                            Name = reader.GetString("name"),
                         };
 
                         gameTeles.Add(gameTele);
@@ -2561,6 +2671,7 @@ namespace DecisionEngineService.Repository
 
             return gameTeles;
         }
+
         public static List<GameWeather> GetGameWeathers()
         {
             List<GameWeather> gameWeathers = [];
@@ -2591,7 +2702,7 @@ namespace DecisionEngineService.Repository
                             FallStormChance = reader.GetByte("fall_storm_chance"),
                             WinterRainChance = reader.GetByte("winter_rain_chance"),
                             WinterSnowChance = reader.GetByte("winter_snow_chance"),
-                            WinterStormChance = reader.GetByte("winter_storm_chance")
+                            WinterStormChance = reader.GetByte("winter_storm_chance"),
                         };
                         gameWeathers.Add(gameWeather);
                     }
@@ -2604,6 +2715,7 @@ namespace DecisionEngineService.Repository
 
             return gameWeathers;
         }
+
         public static List<GMSubSurvey> GetGMSubSurveys()
         {
             List<GMSubSurvey> gmSubSurveys = [];
@@ -2625,7 +2737,7 @@ namespace DecisionEngineService.Repository
                             SurveyId = reader.GetUInt32("surveyId"),
                             SubsurveyId = reader.GetUInt32("subsurveyId"),
                             Rank = reader.GetUInt32("rank"),
-                            Comment = reader.GetString("comment")
+                            Comment = reader.GetString("comment"),
                         };
 
                         gmSubSurveys.Add(gmSubSurvey);
@@ -2639,6 +2751,7 @@ namespace DecisionEngineService.Repository
 
             return gmSubSurveys;
         }
+
         public static List<GMSurvey> GetGmSurveys()
         {
             List<GMSurvey> gmSurveys = [];
@@ -2661,7 +2774,7 @@ namespace DecisionEngineService.Repository
                             Guid = reader.GetUInt32("guid"),
                             MainSurvey = reader.GetUInt32("mainSurvey"),
                             OverallComment = reader.GetString("overallComment"),
-                            CreateTime = reader.GetUInt32("createTime")
+                            CreateTime = reader.GetUInt32("createTime"),
                         };
 
                         gmSurveys.Add(gmSurvey);
@@ -2675,6 +2788,7 @@ namespace DecisionEngineService.Repository
 
             return gmSurveys;
         }
+
         public static List<GMTicket> GetGmTickets()
         {
             List<GMTicket> gmTickets = [];
@@ -2712,7 +2826,7 @@ namespace DecisionEngineService.Repository
                             Viewed = reader.GetByte("viewed"),
                             HaveTicket = reader.GetByte("haveTicket"),
                             TicketType = reader.GetByte("ticketType"),
-                            SecurityNeeded = reader.GetByte("securityNeeded")
+                            SecurityNeeded = reader.GetByte("securityNeeded"),
                         };
 
                         gmTickets.Add(gmTicket);
@@ -2726,6 +2840,7 @@ namespace DecisionEngineService.Repository
 
             return gmTickets;
         }
+
         public static List<GossipMenu> GetGossipMenus()
         {
             List<GossipMenu> gossipMenus = [];
@@ -2746,7 +2861,7 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt16("entry"),
                             TextId = reader.GetUInt32("text_id"),
-                            ConditionId = reader.GetUInt32("condition_id")
+                            ConditionId = reader.GetUInt32("condition_id"),
                         };
 
                         gossipMenus.Add(gossipMenu);
@@ -2760,6 +2875,7 @@ namespace DecisionEngineService.Repository
 
             return gossipMenus;
         }
+
         public static List<GossipMenuOption> GetGossipMenuOptions()
         {
             List<GossipMenuOption> gossipMenuOptions = [];
@@ -2781,7 +2897,9 @@ namespace DecisionEngineService.Repository
                             MenuId = reader.GetUInt16("menu_id"),
                             Id = reader.GetUInt16("id"),
                             OptionIcon = reader.GetUInt32("option_icon"),
-                            OptionText = reader.IsDBNull("option_text") ? string.Empty : reader.GetString("option_text"),
+                            OptionText = reader.IsDBNull("option_text")
+                                ? string.Empty
+                                : reader.GetString("option_text"),
                             OptionBroadcastTextId = reader.GetUInt32("OptionBroadcastTextID"),
                             OptionId = reader.GetByte("option_id"),
                             NpcOptionNpcflag = reader.GetUInt32("npc_option_npcflag"),
@@ -2790,9 +2908,11 @@ namespace DecisionEngineService.Repository
                             ActionScriptId = reader.GetUInt32("action_script_id"),
                             BoxCoded = reader.GetByte("box_coded"),
                             BoxMoney = reader.GetUInt32("box_money"),
-                            BoxText = reader.IsDBNull("box_text") ? string.Empty : reader.GetString("box_text"),
+                            BoxText = reader.IsDBNull("box_text")
+                                ? string.Empty
+                                : reader.GetString("box_text"),
                             BoxBroadcastTextId = reader.GetUInt32("BoxBroadcastTextID"),
-                            ConditionId = reader.GetUInt32("condition_id")
+                            ConditionId = reader.GetUInt32("condition_id"),
                         };
 
                         gossipMenuOptions.Add(gossipMenuOption);
@@ -2806,6 +2926,7 @@ namespace DecisionEngineService.Repository
 
             return gossipMenuOptions;
         }
+
         public static List<GossipScript> GetGossipScripts()
         {
             List<GossipScript> gossipScripts = [];
@@ -2844,7 +2965,9 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.IsDBNull("comments") ? string.Empty : reader.GetString("comments")
+                            Comments = reader.IsDBNull("comments")
+                                ? string.Empty
+                                : reader.GetString("comments"),
                         };
 
                         gossipScripts.Add(gossipScript);
@@ -2858,6 +2981,7 @@ namespace DecisionEngineService.Repository
 
             return gossipScripts;
         }
+
         public static List<InstanceBuffRemoval> GetInstanceBuffRemovals()
         {
             List<InstanceBuffRemoval> instanceBuffRemovals = [];
@@ -2880,7 +3004,9 @@ namespace DecisionEngineService.Repository
                             AuraId = reader.GetUInt32("auraId"),
                             Enabled = reader.GetBoolean("enabled"),
                             Flags = reader.GetUInt32("flags"),
-                            Comment = reader.IsDBNull("comment") ? string.Empty : reader.GetString("comment")
+                            Comment = reader.IsDBNull("comment")
+                                ? string.Empty
+                                : reader.GetString("comment"),
                         };
 
                         instanceBuffRemovals.Add(instanceBuffRemoval);
@@ -2894,6 +3020,7 @@ namespace DecisionEngineService.Repository
 
             return instanceBuffRemovals;
         }
+
         public static List<InstanceCreatureKills> GetInstanceCreatureKills()
         {
             List<InstanceCreatureKills> instanceCreatureKills = [];
@@ -2915,7 +3042,7 @@ namespace DecisionEngineService.Repository
                             MapId = reader.GetUInt32("mapId"),
                             CreatureEntry = reader.GetUInt32("creatureEntry"),
                             SpellEntry = reader.GetUInt32("spellEntry"),
-                            Count = reader.GetUInt32("count")
+                            Count = reader.GetUInt32("count"),
                         };
 
                         instanceCreatureKills.Add(instanceCreatureKill);
@@ -2929,6 +3056,7 @@ namespace DecisionEngineService.Repository
 
             return instanceCreatureKills;
         }
+
         public static List<InstanceCustomCounter> GetInstanceCustomCounters()
         {
             List<InstanceCustomCounter> instanceCustomCounters = [];
@@ -2948,7 +3076,7 @@ namespace DecisionEngineService.Repository
                         var instanceCustomCounter = new InstanceCustomCounter
                         {
                             Index = reader.GetUInt32("index"),
-                            Count = reader.GetUInt32("count")
+                            Count = reader.GetUInt32("count"),
                         };
 
                         instanceCustomCounters.Add(instanceCustomCounter);
@@ -2962,6 +3090,7 @@ namespace DecisionEngineService.Repository
 
             return instanceCustomCounters;
         }
+
         public static List<InstanceWipe> GetInstanceWipes()
         {
             List<InstanceWipe> instanceWipes = [];
@@ -2982,7 +3111,7 @@ namespace DecisionEngineService.Repository
                         {
                             MapId = reader.GetUInt32("mapId"),
                             CreatureEntry = reader.GetUInt32("creatureEntry"),
-                            Count = reader.GetUInt32("count")
+                            Count = reader.GetUInt32("count"),
                         };
 
                         instanceWipes.Add(instanceWipe);
@@ -2996,6 +3125,7 @@ namespace DecisionEngineService.Repository
 
             return instanceWipes;
         }
+
         public static List<ItemDisplayInfo> GetItemDisplayInfo()
         {
             List<ItemDisplayInfo> itemDisplayInfos = [];
@@ -3015,7 +3145,9 @@ namespace DecisionEngineService.Repository
                         var itemDisplayInfo = new ItemDisplayInfo
                         {
                             Field0 = reader.GetInt32("field0"),
-                            Field5 = reader.IsDBNull(reader.GetOrdinal("field5")) ? string.Empty : reader.GetString("field5")
+                            Field5 = reader.IsDBNull(reader.GetOrdinal("field5"))
+                                ? string.Empty
+                                : reader.GetString("field5"),
                         };
 
                         itemDisplayInfos.Add(itemDisplayInfo);
@@ -3029,6 +3161,7 @@ namespace DecisionEngineService.Repository
 
             return itemDisplayInfos;
         }
+
         public static List<ItemEnchantmentTemplate> GetItemEnchantmentTemplates()
         {
             List<ItemEnchantmentTemplate> enchantmentTemplates = [];
@@ -3049,7 +3182,7 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             Ench = reader.GetUInt32("ench"),
-                            Chance = reader.GetFloat("chance")
+                            Chance = reader.GetFloat("chance"),
                         };
 
                         enchantmentTemplates.Add(enchantmentTemplate);
@@ -3063,6 +3196,7 @@ namespace DecisionEngineService.Repository
 
             return enchantmentTemplates;
         }
+
         public static List<ItemLootTemplate> GetItemLootTemplates()
         {
             List<ItemLootTemplate> lootTemplates = [];
@@ -3089,7 +3223,7 @@ namespace DecisionEngineService.Repository
                             Maxcount = reader.GetByte("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         lootTemplates.Add(lootTemplate);
@@ -3103,6 +3237,7 @@ namespace DecisionEngineService.Repository
 
             return lootTemplates;
         }
+
         public static List<ItemRequiredTarget> GetItemRequiredTargets()
         {
             List<ItemRequiredTarget> requiredTargets = [];
@@ -3123,7 +3258,7 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             Type = reader.GetByte("type"),
-                            TargetEntry = reader.GetUInt32("targetEntry")
+                            TargetEntry = reader.GetUInt32("targetEntry"),
                         };
 
                         requiredTargets.Add(requiredTarget);
@@ -3137,6 +3272,7 @@ namespace DecisionEngineService.Repository
 
             return requiredTargets;
         }
+
         public static List<ItemTemplate> GetItemTemplates()
         {
             List<ItemTemplate> itemTemplates = [];
@@ -3176,7 +3312,9 @@ namespace DecisionEngineService.Repository
                             RequiredSpell = reader.GetUInt32("requiredspell"),
                             RequiredHonorRank = reader.GetUInt32("requiredhonorrank"),
                             RequiredCityRank = reader.GetUInt32("RequiredCityRank"),
-                            RequiredReputationFaction = reader.GetUInt16("RequiredReputationFaction"),
+                            RequiredReputationFaction = reader.GetUInt16(
+                                "RequiredReputationFaction"
+                            ),
                             RequiredReputationRank = reader.GetUInt16("RequiredReputationRank"),
                             MaxCount = reader.GetUInt16("maxcount"),
                             Stackable = reader.GetUInt16("stackable"),
@@ -3192,7 +3330,7 @@ namespace DecisionEngineService.Repository
                             PageMaterial = reader.GetByte("PageMaterial"),
                             StartQuest = reader.GetUInt32("startquest"),
                             LockID = reader.GetUInt32("lockid"),
-                            Material = reader.GetSByte("Material"),  // Note: Material is signed, so GetSByte is used here
+                            Material = reader.GetSByte("Material"), // Note: Material is signed, so GetSByte is used here
                             Sheath = reader.GetByte("sheath"),
                             RandomProperty = reader.GetUInt32("RandomProperty"),
                             Block = reader.GetUInt32("block"),
@@ -3208,26 +3346,120 @@ namespace DecisionEngineService.Repository
                             MaxMoneyLoot = reader.GetUInt32("maxMoneyLoot"),
                             Duration = reader.GetUInt32("Duration"),
                             ExtraFlags = reader.GetByte("ExtraFlags"),
-                            OtherTeamEntry = reader.GetUInt32("OtherTeamEntry")
-
+                            OtherTeamEntry = reader.GetUInt32("OtherTeamEntry"),
                         };
 
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type1"), Value = reader.GetInt32("stat_value1") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type2"), Value = reader.GetInt32("stat_value2") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type3"), Value = reader.GetInt32("stat_value3") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type4"), Value = reader.GetInt32("stat_value4") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type5"), Value = reader.GetInt32("stat_value5") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type6"), Value = reader.GetInt32("stat_value6") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type7"), Value = reader.GetInt32("stat_value7") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type8"), Value = reader.GetInt32("stat_value8") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type9"), Value = reader.GetInt32("stat_value9") });
-                        itemTemplate.Stats.Add(new Stat() { Type = reader.GetUInt32("stat_type10"), Value = reader.GetInt32("stat_value10") });
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type1"),
+                                Value = reader.GetInt32("stat_value1"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type2"),
+                                Value = reader.GetInt32("stat_value2"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type3"),
+                                Value = reader.GetInt32("stat_value3"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type4"),
+                                Value = reader.GetInt32("stat_value4"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type5"),
+                                Value = reader.GetInt32("stat_value5"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type6"),
+                                Value = reader.GetInt32("stat_value6"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type7"),
+                                Value = reader.GetInt32("stat_value7"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type8"),
+                                Value = reader.GetInt32("stat_value8"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type9"),
+                                Value = reader.GetInt32("stat_value9"),
+                            }
+                        );
+                        itemTemplate.Stats.Add(
+                            new Stat()
+                            {
+                                Type = reader.GetUInt32("stat_type10"),
+                                Value = reader.GetInt32("stat_value10"),
+                            }
+                        );
 
-                        itemTemplate.Damages.Add(new Damage() { Min = reader.GetFloat("dmg_min1"), Max = reader.GetFloat("dmg_max1"), Type = reader.GetByte("dmg_type1") });
-                        itemTemplate.Damages.Add(new Damage() { Min = reader.GetFloat("dmg_min2"), Max = reader.GetFloat("dmg_max2"), Type = reader.GetByte("dmg_type2") });
-                        itemTemplate.Damages.Add(new Damage() { Min = reader.GetFloat("dmg_min3"), Max = reader.GetFloat("dmg_max3"), Type = reader.GetByte("dmg_type3") });
-                        itemTemplate.Damages.Add(new Damage() { Min = reader.GetFloat("dmg_min4"), Max = reader.GetFloat("dmg_max4"), Type = reader.GetByte("dmg_type4") });
-                        itemTemplate.Damages.Add(new Damage() { Min = reader.GetFloat("dmg_min5"), Max = reader.GetFloat("dmg_max5"), Type = reader.GetByte("dmg_type5") });
+                        itemTemplate.Damages.Add(
+                            new Damage()
+                            {
+                                Min = reader.GetFloat("dmg_min1"),
+                                Max = reader.GetFloat("dmg_max1"),
+                                Type = reader.GetByte("dmg_type1"),
+                            }
+                        );
+                        itemTemplate.Damages.Add(
+                            new Damage()
+                            {
+                                Min = reader.GetFloat("dmg_min2"),
+                                Max = reader.GetFloat("dmg_max2"),
+                                Type = reader.GetByte("dmg_type2"),
+                            }
+                        );
+                        itemTemplate.Damages.Add(
+                            new Damage()
+                            {
+                                Min = reader.GetFloat("dmg_min3"),
+                                Max = reader.GetFloat("dmg_max3"),
+                                Type = reader.GetByte("dmg_type3"),
+                            }
+                        );
+                        itemTemplate.Damages.Add(
+                            new Damage()
+                            {
+                                Min = reader.GetFloat("dmg_min4"),
+                                Max = reader.GetFloat("dmg_max4"),
+                                Type = reader.GetByte("dmg_type4"),
+                            }
+                        );
+                        itemTemplate.Damages.Add(
+                            new Damage()
+                            {
+                                Min = reader.GetFloat("dmg_min5"),
+                                Max = reader.GetFloat("dmg_max5"),
+                                Type = reader.GetByte("dmg_type5"),
+                            }
+                        );
 
                         itemTemplate.Resistances = new Resistance
                         {
@@ -3236,59 +3468,69 @@ namespace DecisionEngineService.Repository
                             Nature = reader.GetUInt16("nature_res"),
                             Frost = reader.GetUInt16("frost_res"),
                             Shadow = reader.GetUInt16("shadow_res"),
-                            Arcane = reader.GetUInt16("arcane_res")
+                            Arcane = reader.GetUInt16("arcane_res"),
                         };
 
-                        itemTemplate.Spells.Add(new Spell()
-                        {
-                            SpellID = reader.GetUInt32("spellid_1"),
-                            Trigger = reader.GetByte("spelltrigger_1"),
-                            Charges = reader.GetInt16("spellcharges_1"),
-                            PpmRate = reader.GetFloat("spellppmRate_1"),
-                            Cooldown = reader.GetInt32("spellcooldown_1"),
-                            Category = reader.GetUInt16("spellcategory_1"),
-                            CategoryCooldown = reader.GetInt32("spellcategorycooldown_1")
-                        });
-                        itemTemplate.Spells.Add(new Spell()
-                        {
-                            SpellID = reader.GetUInt32("spellid_2"),
-                            Trigger = reader.GetByte("spelltrigger_2"),
-                            Charges = reader.GetInt16("spellcharges_2"),
-                            PpmRate = reader.GetFloat("spellppmRate_2"),
-                            Cooldown = reader.GetInt32("spellcooldown_2"),
-                            Category = reader.GetUInt16("spellcategory_2"),
-                            CategoryCooldown = reader.GetInt32("spellcategorycooldown_2")
-                        });
-                        itemTemplate.Spells.Add(new Spell()
-                        {
-                            SpellID = reader.GetUInt32("spellid_3"),
-                            Trigger = reader.GetByte("spelltrigger_3"),
-                            Charges = reader.GetInt16("spellcharges_3"),
-                            PpmRate = reader.GetFloat("spellppmRate_3"),
-                            Cooldown = reader.GetInt32("spellcooldown_3"),
-                            Category = reader.GetUInt16("spellcategory_3"),
-                            CategoryCooldown = reader.GetInt32("spellcategorycooldown_3")
-                        });
-                        itemTemplate.Spells.Add(new Spell()
-                        {
-                            SpellID = reader.GetUInt32("spellid_4"),
-                            Trigger = reader.GetByte("spelltrigger_4"),
-                            Charges = reader.GetInt16("spellcharges_4"),
-                            PpmRate = reader.GetFloat("spellppmRate_4"),
-                            Cooldown = reader.GetInt32("spellcooldown_4"),
-                            Category = reader.GetUInt16("spellcategory_4"),
-                            CategoryCooldown = reader.GetInt32("spellcategorycooldown_4")
-                        });
-                        itemTemplate.Spells.Add(new Spell()
-                        {
-                            SpellID = reader.GetUInt32("spellid_5"),
-                            Trigger = reader.GetByte("spelltrigger_5"),
-                            Charges = reader.GetInt16("spellcharges_5"),
-                            PpmRate = reader.GetFloat("spellppmRate_5"),
-                            Cooldown = reader.GetInt32("spellcooldown_5"),
-                            Category = reader.GetUInt16("spellcategory_5"),
-                            CategoryCooldown = reader.GetInt32("spellcategorycooldown_5")
-                        });
+                        itemTemplate.Spells.Add(
+                            new Spell()
+                            {
+                                SpellID = reader.GetUInt32("spellid_1"),
+                                Trigger = reader.GetByte("spelltrigger_1"),
+                                Charges = reader.GetInt16("spellcharges_1"),
+                                PpmRate = reader.GetFloat("spellppmRate_1"),
+                                Cooldown = reader.GetInt32("spellcooldown_1"),
+                                Category = reader.GetUInt16("spellcategory_1"),
+                                CategoryCooldown = reader.GetInt32("spellcategorycooldown_1"),
+                            }
+                        );
+                        itemTemplate.Spells.Add(
+                            new Spell()
+                            {
+                                SpellID = reader.GetUInt32("spellid_2"),
+                                Trigger = reader.GetByte("spelltrigger_2"),
+                                Charges = reader.GetInt16("spellcharges_2"),
+                                PpmRate = reader.GetFloat("spellppmRate_2"),
+                                Cooldown = reader.GetInt32("spellcooldown_2"),
+                                Category = reader.GetUInt16("spellcategory_2"),
+                                CategoryCooldown = reader.GetInt32("spellcategorycooldown_2"),
+                            }
+                        );
+                        itemTemplate.Spells.Add(
+                            new Spell()
+                            {
+                                SpellID = reader.GetUInt32("spellid_3"),
+                                Trigger = reader.GetByte("spelltrigger_3"),
+                                Charges = reader.GetInt16("spellcharges_3"),
+                                PpmRate = reader.GetFloat("spellppmRate_3"),
+                                Cooldown = reader.GetInt32("spellcooldown_3"),
+                                Category = reader.GetUInt16("spellcategory_3"),
+                                CategoryCooldown = reader.GetInt32("spellcategorycooldown_3"),
+                            }
+                        );
+                        itemTemplate.Spells.Add(
+                            new Spell()
+                            {
+                                SpellID = reader.GetUInt32("spellid_4"),
+                                Trigger = reader.GetByte("spelltrigger_4"),
+                                Charges = reader.GetInt16("spellcharges_4"),
+                                PpmRate = reader.GetFloat("spellppmRate_4"),
+                                Cooldown = reader.GetInt32("spellcooldown_4"),
+                                Category = reader.GetUInt16("spellcategory_4"),
+                                CategoryCooldown = reader.GetInt32("spellcategorycooldown_4"),
+                            }
+                        );
+                        itemTemplate.Spells.Add(
+                            new Spell()
+                            {
+                                SpellID = reader.GetUInt32("spellid_5"),
+                                Trigger = reader.GetByte("spelltrigger_5"),
+                                Charges = reader.GetInt16("spellcharges_5"),
+                                PpmRate = reader.GetFloat("spellppmRate_5"),
+                                Cooldown = reader.GetInt32("spellcooldown_5"),
+                                Category = reader.GetUInt16("spellcategory_5"),
+                                CategoryCooldown = reader.GetInt32("spellcategorycooldown_5"),
+                            }
+                        );
 
                         itemTemplates.Add(itemTemplate);
                     }
@@ -3301,6 +3543,7 @@ namespace DecisionEngineService.Repository
 
             return itemTemplates;
         }
+
         public static List<LocalesArea> GetLocalesArea()
         {
             List<LocalesArea> localesAreas = [];
@@ -3327,7 +3570,7 @@ namespace DecisionEngineService.Repository
                             NameLoc5 = reader.GetString("NameLoc5"),
                             NameLoc6 = reader.GetString("NameLoc6"),
                             NameLoc7 = reader.GetString("NameLoc7"),
-                            NameLoc8 = reader.GetString("NameLoc8")
+                            NameLoc8 = reader.GetString("NameLoc8"),
                         };
 
                         localesAreas.Add(localesArea);
@@ -3341,6 +3584,7 @@ namespace DecisionEngineService.Repository
 
             return localesAreas;
         }
+
         public static List<LocalesBroadcastText> GetLocalesBroadcastTexts()
         {
             List<LocalesBroadcastText> broadcastTexts = [];
@@ -3360,23 +3604,55 @@ namespace DecisionEngineService.Repository
                         var broadcastText = new LocalesBroadcastText
                         {
                             Id = reader.GetUInt32("ID"),
-                            MaleTextLoc1 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc1")) ? string.Empty : reader.GetString("MaleText_loc1"),
-                            MaleTextLoc2 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc2")) ? string.Empty : reader.GetString("MaleText_loc2"),
-                            MaleTextLoc3 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc3")) ? string.Empty : reader.GetString("MaleText_loc3"),
-                            MaleTextLoc4 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc4")) ? string.Empty : reader.GetString("MaleText_loc4"),
-                            MaleTextLoc5 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc5")) ? string.Empty : reader.GetString("MaleText_loc5"),
-                            MaleTextLoc6 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc6")) ? string.Empty : reader.GetString("MaleText_loc6"),
-                            MaleTextLoc7 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc7")) ? string.Empty : reader.GetString("MaleText_loc7"),
-                            MaleTextLoc8 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc8")) ? string.Empty : reader.GetString("MaleText_loc8"),
-                            FemaleTextLoc1 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc1")) ? string.Empty : reader.GetString("FemaleText_loc1"),
-                            FemaleTextLoc2 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc2")) ? string.Empty : reader.GetString("FemaleText_loc2"),
-                            FemaleTextLoc3 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc3")) ? string.Empty : reader.GetString("FemaleText_loc3"),
-                            FemaleTextLoc4 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc4")) ? string.Empty : reader.GetString("FemaleText_loc4"),
-                            FemaleTextLoc5 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc5")) ? string.Empty : reader.GetString("FemaleText_loc5"),
-                            FemaleTextLoc6 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc6")) ? string.Empty : reader.GetString("FemaleText_loc6"),
-                            FemaleTextLoc7 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc7")) ? string.Empty : reader.GetString("FemaleText_loc7"),
-                            FemaleTextLoc8 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc8")) ? string.Empty : reader.GetString("FemaleText_loc8"),
-                            VerifiedBuild = reader.GetInt16("VerifiedBuild")
+                            MaleTextLoc1 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc1"))
+                                ? string.Empty
+                                : reader.GetString("MaleText_loc1"),
+                            MaleTextLoc2 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc2"))
+                                ? string.Empty
+                                : reader.GetString("MaleText_loc2"),
+                            MaleTextLoc3 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc3"))
+                                ? string.Empty
+                                : reader.GetString("MaleText_loc3"),
+                            MaleTextLoc4 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc4"))
+                                ? string.Empty
+                                : reader.GetString("MaleText_loc4"),
+                            MaleTextLoc5 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc5"))
+                                ? string.Empty
+                                : reader.GetString("MaleText_loc5"),
+                            MaleTextLoc6 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc6"))
+                                ? string.Empty
+                                : reader.GetString("MaleText_loc6"),
+                            MaleTextLoc7 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc7"))
+                                ? string.Empty
+                                : reader.GetString("MaleText_loc7"),
+                            MaleTextLoc8 = reader.IsDBNull(reader.GetOrdinal("MaleText_loc8"))
+                                ? string.Empty
+                                : reader.GetString("MaleText_loc8"),
+                            FemaleTextLoc1 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc1"))
+                                ? string.Empty
+                                : reader.GetString("FemaleText_loc1"),
+                            FemaleTextLoc2 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc2"))
+                                ? string.Empty
+                                : reader.GetString("FemaleText_loc2"),
+                            FemaleTextLoc3 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc3"))
+                                ? string.Empty
+                                : reader.GetString("FemaleText_loc3"),
+                            FemaleTextLoc4 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc4"))
+                                ? string.Empty
+                                : reader.GetString("FemaleText_loc4"),
+                            FemaleTextLoc5 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc5"))
+                                ? string.Empty
+                                : reader.GetString("FemaleText_loc5"),
+                            FemaleTextLoc6 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc6"))
+                                ? string.Empty
+                                : reader.GetString("FemaleText_loc6"),
+                            FemaleTextLoc7 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc7"))
+                                ? string.Empty
+                                : reader.GetString("FemaleText_loc7"),
+                            FemaleTextLoc8 = reader.IsDBNull(reader.GetOrdinal("FemaleText_loc8"))
+                                ? string.Empty
+                                : reader.GetString("FemaleText_loc8"),
+                            VerifiedBuild = reader.GetInt16("VerifiedBuild"),
                         };
 
                         broadcastTexts.Add(broadcastText);
@@ -3390,6 +3666,7 @@ namespace DecisionEngineService.Repository
 
             return broadcastTexts;
         }
+
         public static List<LocalesCreature> GetLocalesCreatures()
         {
             List<LocalesCreature> creatures = [];
@@ -3417,14 +3694,30 @@ namespace DecisionEngineService.Repository
                             NameLoc6 = reader.GetString("name_loc6"),
                             NameLoc7 = reader.GetString("name_loc7"),
                             NameLoc8 = reader.GetString("name_loc8"),
-                            SubnameLoc1 = reader.IsDBNull(reader.GetOrdinal("subname_loc1")) ? string.Empty : reader.GetString("subname_loc1"),
-                            SubnameLoc2 = reader.IsDBNull(reader.GetOrdinal("subname_loc2")) ? string.Empty : reader.GetString("subname_loc2"),
-                            SubnameLoc3 = reader.IsDBNull(reader.GetOrdinal("subname_loc3")) ? string.Empty : reader.GetString("subname_loc3"),
-                            SubnameLoc4 = reader.IsDBNull(reader.GetOrdinal("subname_loc4")) ? string.Empty : reader.GetString("subname_loc4"),
-                            SubnameLoc5 = reader.IsDBNull(reader.GetOrdinal("subname_loc5")) ? string.Empty : reader.GetString("subname_loc5"),
-                            SubnameLoc6 = reader.IsDBNull(reader.GetOrdinal("subname_loc6")) ? string.Empty : reader.GetString("subname_loc6"),
-                            SubnameLoc7 = reader.IsDBNull(reader.GetOrdinal("subname_loc7")) ? string.Empty : reader.GetString("subname_loc7"),
-                            SubnameLoc8 = reader.IsDBNull(reader.GetOrdinal("subname_loc8")) ? string.Empty : reader.GetString("subname_loc8")
+                            SubnameLoc1 = reader.IsDBNull(reader.GetOrdinal("subname_loc1"))
+                                ? string.Empty
+                                : reader.GetString("subname_loc1"),
+                            SubnameLoc2 = reader.IsDBNull(reader.GetOrdinal("subname_loc2"))
+                                ? string.Empty
+                                : reader.GetString("subname_loc2"),
+                            SubnameLoc3 = reader.IsDBNull(reader.GetOrdinal("subname_loc3"))
+                                ? string.Empty
+                                : reader.GetString("subname_loc3"),
+                            SubnameLoc4 = reader.IsDBNull(reader.GetOrdinal("subname_loc4"))
+                                ? string.Empty
+                                : reader.GetString("subname_loc4"),
+                            SubnameLoc5 = reader.IsDBNull(reader.GetOrdinal("subname_loc5"))
+                                ? string.Empty
+                                : reader.GetString("subname_loc5"),
+                            SubnameLoc6 = reader.IsDBNull(reader.GetOrdinal("subname_loc6"))
+                                ? string.Empty
+                                : reader.GetString("subname_loc6"),
+                            SubnameLoc7 = reader.IsDBNull(reader.GetOrdinal("subname_loc7"))
+                                ? string.Empty
+                                : reader.GetString("subname_loc7"),
+                            SubnameLoc8 = reader.IsDBNull(reader.GetOrdinal("subname_loc8"))
+                                ? string.Empty
+                                : reader.GetString("subname_loc8"),
                         };
 
                         creatures.Add(creature);
@@ -3438,6 +3731,7 @@ namespace DecisionEngineService.Repository
 
             return creatures;
         }
+
         public static List<LocalesGameObject> GetLocalesGameObjects()
         {
             List<LocalesGameObject> gameObjects = [];
@@ -3464,7 +3758,7 @@ namespace DecisionEngineService.Repository
                             NameLoc5 = reader.GetString("name_loc5"),
                             NameLoc6 = reader.GetString("name_loc6"),
                             NameLoc7 = reader.GetString("name_loc7"),
-                            NameLoc8 = reader.GetString("name_loc8")
+                            NameLoc8 = reader.GetString("name_loc8"),
                         };
 
                         gameObjects.Add(gameObject);
@@ -3478,6 +3772,7 @@ namespace DecisionEngineService.Repository
 
             return gameObjects;
         }
+
         public static List<LocalesGossipMenuOption> GetLocalesGossipMenuOptions()
         {
             List<LocalesGossipMenuOption> gossipMenuOptions = [];
@@ -3498,22 +3793,54 @@ namespace DecisionEngineService.Repository
                         {
                             MenuId = reader.GetUInt16("menu_id"),
                             Id = reader.GetUInt16("id"),
-                            OptionTextLoc1 = reader.IsDBNull(reader.GetOrdinal("option_text_loc1")) ? string.Empty : reader.GetString("option_text_loc1"),
-                            OptionTextLoc2 = reader.IsDBNull(reader.GetOrdinal("option_text_loc2")) ? string.Empty : reader.GetString("option_text_loc2"),
-                            OptionTextLoc3 = reader.IsDBNull(reader.GetOrdinal("option_text_loc3")) ? string.Empty : reader.GetString("option_text_loc3"),
-                            OptionTextLoc4 = reader.IsDBNull(reader.GetOrdinal("option_text_loc4")) ? string.Empty : reader.GetString("option_text_loc4"),
-                            OptionTextLoc5 = reader.IsDBNull(reader.GetOrdinal("option_text_loc5")) ? string.Empty : reader.GetString("option_text_loc5"),
-                            OptionTextLoc6 = reader.IsDBNull(reader.GetOrdinal("option_text_loc6")) ? string.Empty : reader.GetString("option_text_loc6"),
-                            OptionTextLoc7 = reader.IsDBNull(reader.GetOrdinal("option_text_loc7")) ? string.Empty : reader.GetString("option_text_loc7"),
-                            OptionTextLoc8 = reader.IsDBNull(reader.GetOrdinal("option_text_loc8")) ? string.Empty : reader.GetString("option_text_loc8"),
-                            BoxTextLoc1 = reader.IsDBNull(reader.GetOrdinal("box_text_loc1")) ? string.Empty : reader.GetString("box_text_loc1"),
-                            BoxTextLoc2 = reader.IsDBNull(reader.GetOrdinal("box_text_loc2")) ? string.Empty : reader.GetString("box_text_loc2"),
-                            BoxTextLoc3 = reader.IsDBNull(reader.GetOrdinal("box_text_loc3")) ? string.Empty : reader.GetString("box_text_loc3"),
-                            BoxTextLoc4 = reader.IsDBNull(reader.GetOrdinal("box_text_loc4")) ? string.Empty : reader.GetString("box_text_loc4"),
-                            BoxTextLoc5 = reader.IsDBNull(reader.GetOrdinal("box_text_loc5")) ? string.Empty : reader.GetString("box_text_loc5"),
-                            BoxTextLoc6 = reader.IsDBNull(reader.GetOrdinal("box_text_loc6")) ? string.Empty : reader.GetString("box_text_loc6"),
-                            BoxTextLoc7 = reader.IsDBNull(reader.GetOrdinal("box_text_loc7")) ? string.Empty : reader.GetString("box_text_loc7"),
-                            BoxTextLoc8 = reader.IsDBNull(reader.GetOrdinal("box_text_loc8")) ? string.Empty : reader.GetString("box_text_loc8")
+                            OptionTextLoc1 = reader.IsDBNull(reader.GetOrdinal("option_text_loc1"))
+                                ? string.Empty
+                                : reader.GetString("option_text_loc1"),
+                            OptionTextLoc2 = reader.IsDBNull(reader.GetOrdinal("option_text_loc2"))
+                                ? string.Empty
+                                : reader.GetString("option_text_loc2"),
+                            OptionTextLoc3 = reader.IsDBNull(reader.GetOrdinal("option_text_loc3"))
+                                ? string.Empty
+                                : reader.GetString("option_text_loc3"),
+                            OptionTextLoc4 = reader.IsDBNull(reader.GetOrdinal("option_text_loc4"))
+                                ? string.Empty
+                                : reader.GetString("option_text_loc4"),
+                            OptionTextLoc5 = reader.IsDBNull(reader.GetOrdinal("option_text_loc5"))
+                                ? string.Empty
+                                : reader.GetString("option_text_loc5"),
+                            OptionTextLoc6 = reader.IsDBNull(reader.GetOrdinal("option_text_loc6"))
+                                ? string.Empty
+                                : reader.GetString("option_text_loc6"),
+                            OptionTextLoc7 = reader.IsDBNull(reader.GetOrdinal("option_text_loc7"))
+                                ? string.Empty
+                                : reader.GetString("option_text_loc7"),
+                            OptionTextLoc8 = reader.IsDBNull(reader.GetOrdinal("option_text_loc8"))
+                                ? string.Empty
+                                : reader.GetString("option_text_loc8"),
+                            BoxTextLoc1 = reader.IsDBNull(reader.GetOrdinal("box_text_loc1"))
+                                ? string.Empty
+                                : reader.GetString("box_text_loc1"),
+                            BoxTextLoc2 = reader.IsDBNull(reader.GetOrdinal("box_text_loc2"))
+                                ? string.Empty
+                                : reader.GetString("box_text_loc2"),
+                            BoxTextLoc3 = reader.IsDBNull(reader.GetOrdinal("box_text_loc3"))
+                                ? string.Empty
+                                : reader.GetString("box_text_loc3"),
+                            BoxTextLoc4 = reader.IsDBNull(reader.GetOrdinal("box_text_loc4"))
+                                ? string.Empty
+                                : reader.GetString("box_text_loc4"),
+                            BoxTextLoc5 = reader.IsDBNull(reader.GetOrdinal("box_text_loc5"))
+                                ? string.Empty
+                                : reader.GetString("box_text_loc5"),
+                            BoxTextLoc6 = reader.IsDBNull(reader.GetOrdinal("box_text_loc6"))
+                                ? string.Empty
+                                : reader.GetString("box_text_loc6"),
+                            BoxTextLoc7 = reader.IsDBNull(reader.GetOrdinal("box_text_loc7"))
+                                ? string.Empty
+                                : reader.GetString("box_text_loc7"),
+                            BoxTextLoc8 = reader.IsDBNull(reader.GetOrdinal("box_text_loc8"))
+                                ? string.Empty
+                                : reader.GetString("box_text_loc8"),
                         };
 
                         gossipMenuOptions.Add(gossipMenuOption);
@@ -3527,6 +3854,7 @@ namespace DecisionEngineService.Repository
 
             return gossipMenuOptions;
         }
+
         public static List<LocalesItem> GetLocalesItems()
         {
             List<LocalesItem> localesItems = [];
@@ -3554,14 +3882,30 @@ namespace DecisionEngineService.Repository
                             NameLoc6 = reader.GetString("name_loc6"),
                             NameLoc7 = reader.GetString("name_loc7"),
                             NameLoc8 = reader.GetString("name_loc8"),
-                            DescriptionLoc1 = reader.IsDBNull(reader.GetOrdinal("description_loc1")) ? string.Empty : reader.GetString("description_loc1"),
-                            DescriptionLoc2 = reader.IsDBNull(reader.GetOrdinal("description_loc2")) ? string.Empty : reader.GetString("description_loc2"),
-                            DescriptionLoc3 = reader.IsDBNull(reader.GetOrdinal("description_loc3")) ? string.Empty : reader.GetString("description_loc3"),
-                            DescriptionLoc4 = reader.IsDBNull(reader.GetOrdinal("description_loc4")) ? string.Empty : reader.GetString("description_loc4"),
-                            DescriptionLoc5 = reader.IsDBNull(reader.GetOrdinal("description_loc5")) ? string.Empty : reader.GetString("description_loc5"),
-                            DescriptionLoc6 = reader.IsDBNull(reader.GetOrdinal("description_loc6")) ? string.Empty : reader.GetString("description_loc6"),
-                            DescriptionLoc7 = reader.IsDBNull(reader.GetOrdinal("description_loc7")) ? string.Empty : reader.GetString("description_loc7"),
-                            DescriptionLoc8 = reader.IsDBNull(reader.GetOrdinal("description_loc8")) ? string.Empty : reader.GetString("description_loc8")
+                            DescriptionLoc1 = reader.IsDBNull(reader.GetOrdinal("description_loc1"))
+                                ? string.Empty
+                                : reader.GetString("description_loc1"),
+                            DescriptionLoc2 = reader.IsDBNull(reader.GetOrdinal("description_loc2"))
+                                ? string.Empty
+                                : reader.GetString("description_loc2"),
+                            DescriptionLoc3 = reader.IsDBNull(reader.GetOrdinal("description_loc3"))
+                                ? string.Empty
+                                : reader.GetString("description_loc3"),
+                            DescriptionLoc4 = reader.IsDBNull(reader.GetOrdinal("description_loc4"))
+                                ? string.Empty
+                                : reader.GetString("description_loc4"),
+                            DescriptionLoc5 = reader.IsDBNull(reader.GetOrdinal("description_loc5"))
+                                ? string.Empty
+                                : reader.GetString("description_loc5"),
+                            DescriptionLoc6 = reader.IsDBNull(reader.GetOrdinal("description_loc6"))
+                                ? string.Empty
+                                : reader.GetString("description_loc6"),
+                            DescriptionLoc7 = reader.IsDBNull(reader.GetOrdinal("description_loc7"))
+                                ? string.Empty
+                                : reader.GetString("description_loc7"),
+                            DescriptionLoc8 = reader.IsDBNull(reader.GetOrdinal("description_loc8"))
+                                ? string.Empty
+                                : reader.GetString("description_loc8"),
                         };
 
                         localesItems.Add(localesItem);
@@ -3575,6 +3919,7 @@ namespace DecisionEngineService.Repository
 
             return localesItems;
         }
+
         public static List<LocalesPageText> GetLocalesPageTexts()
         {
             List<LocalesPageText> localesPageTexts = [];
@@ -3594,14 +3939,30 @@ namespace DecisionEngineService.Repository
                         var localesPageText = new LocalesPageText
                         {
                             Entry = reader.GetUInt32("entry"),
-                            TextLoc1 = reader.IsDBNull(reader.GetOrdinal("Text_loc1")) ? string.Empty : reader.GetString("Text_loc1"),
-                            TextLoc2 = reader.IsDBNull(reader.GetOrdinal("Text_loc2")) ? string.Empty : reader.GetString("Text_loc2"),
-                            TextLoc3 = reader.IsDBNull(reader.GetOrdinal("Text_loc3")) ? string.Empty : reader.GetString("Text_loc3"),
-                            TextLoc4 = reader.IsDBNull(reader.GetOrdinal("Text_loc4")) ? string.Empty : reader.GetString("Text_loc4"),
-                            TextLoc5 = reader.IsDBNull(reader.GetOrdinal("Text_loc5")) ? string.Empty : reader.GetString("Text_loc5"),
-                            TextLoc6 = reader.IsDBNull(reader.GetOrdinal("Text_loc6")) ? string.Empty : reader.GetString("Text_loc6"),
-                            TextLoc7 = reader.IsDBNull(reader.GetOrdinal("Text_loc7")) ? string.Empty : reader.GetString("Text_loc7"),
-                            TextLoc8 = reader.IsDBNull(reader.GetOrdinal("Text_loc8")) ? string.Empty : reader.GetString("Text_loc8")
+                            TextLoc1 = reader.IsDBNull(reader.GetOrdinal("Text_loc1"))
+                                ? string.Empty
+                                : reader.GetString("Text_loc1"),
+                            TextLoc2 = reader.IsDBNull(reader.GetOrdinal("Text_loc2"))
+                                ? string.Empty
+                                : reader.GetString("Text_loc2"),
+                            TextLoc3 = reader.IsDBNull(reader.GetOrdinal("Text_loc3"))
+                                ? string.Empty
+                                : reader.GetString("Text_loc3"),
+                            TextLoc4 = reader.IsDBNull(reader.GetOrdinal("Text_loc4"))
+                                ? string.Empty
+                                : reader.GetString("Text_loc4"),
+                            TextLoc5 = reader.IsDBNull(reader.GetOrdinal("Text_loc5"))
+                                ? string.Empty
+                                : reader.GetString("Text_loc5"),
+                            TextLoc6 = reader.IsDBNull(reader.GetOrdinal("Text_loc6"))
+                                ? string.Empty
+                                : reader.GetString("Text_loc6"),
+                            TextLoc7 = reader.IsDBNull(reader.GetOrdinal("Text_loc7"))
+                                ? string.Empty
+                                : reader.GetString("Text_loc7"),
+                            TextLoc8 = reader.IsDBNull(reader.GetOrdinal("Text_loc8"))
+                                ? string.Empty
+                                : reader.GetString("Text_loc8"),
                         };
 
                         localesPageTexts.Add(localesPageText);
@@ -3615,6 +3976,7 @@ namespace DecisionEngineService.Repository
 
             return localesPageTexts;
         }
+
         public static List<LocalesPointsOfInterest> GetLocalesPointsOfInterest()
         {
             List<LocalesPointsOfInterest> pointsOfInterest = [];
@@ -3634,14 +3996,30 @@ namespace DecisionEngineService.Repository
                         var pointOfInterest = new LocalesPointsOfInterest
                         {
                             Entry = reader.GetUInt32("entry"),
-                            IconNameLoc1 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc1")) ? string.Empty : reader.GetString("icon_name_loc1"),
-                            IconNameLoc2 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc2")) ? string.Empty : reader.GetString("icon_name_loc2"),
-                            IconNameLoc3 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc3")) ? string.Empty : reader.GetString("icon_name_loc3"),
-                            IconNameLoc4 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc4")) ? string.Empty : reader.GetString("icon_name_loc4"),
-                            IconNameLoc5 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc5")) ? string.Empty : reader.GetString("icon_name_loc5"),
-                            IconNameLoc6 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc6")) ? string.Empty : reader.GetString("icon_name_loc6"),
-                            IconNameLoc7 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc7")) ? string.Empty : reader.GetString("icon_name_loc7"),
-                            IconNameLoc8 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc8")) ? string.Empty : reader.GetString("icon_name_loc8")
+                            IconNameLoc1 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc1"))
+                                ? string.Empty
+                                : reader.GetString("icon_name_loc1"),
+                            IconNameLoc2 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc2"))
+                                ? string.Empty
+                                : reader.GetString("icon_name_loc2"),
+                            IconNameLoc3 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc3"))
+                                ? string.Empty
+                                : reader.GetString("icon_name_loc3"),
+                            IconNameLoc4 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc4"))
+                                ? string.Empty
+                                : reader.GetString("icon_name_loc4"),
+                            IconNameLoc5 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc5"))
+                                ? string.Empty
+                                : reader.GetString("icon_name_loc5"),
+                            IconNameLoc6 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc6"))
+                                ? string.Empty
+                                : reader.GetString("icon_name_loc6"),
+                            IconNameLoc7 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc7"))
+                                ? string.Empty
+                                : reader.GetString("icon_name_loc7"),
+                            IconNameLoc8 = reader.IsDBNull(reader.GetOrdinal("icon_name_loc8"))
+                                ? string.Empty
+                                : reader.GetString("icon_name_loc8"),
                         };
 
                         pointsOfInterest.Add(pointOfInterest);
@@ -3655,6 +4033,7 @@ namespace DecisionEngineService.Repository
 
             return pointsOfInterest;
         }
+
         public static List<LocalesQuest> GetLocalesQuest()
         {
             List<LocalesQuest> quests = [];
@@ -3674,82 +4053,322 @@ namespace DecisionEngineService.Repository
                         var quest = new LocalesQuest
                         {
                             Entry = reader.GetUInt32("entry"),
-                            TitleLoc1 = reader.IsDBNull(reader.GetOrdinal("Title_loc1")) ? string.Empty : reader.GetString("Title_loc1"),
-                            TitleLoc2 = reader.IsDBNull(reader.GetOrdinal("Title_loc2")) ? string.Empty : reader.GetString("Title_loc2"),
-                            TitleLoc3 = reader.IsDBNull(reader.GetOrdinal("Title_loc3")) ? string.Empty : reader.GetString("Title_loc3"),
-                            TitleLoc4 = reader.IsDBNull(reader.GetOrdinal("Title_loc4")) ? string.Empty : reader.GetString("Title_loc4"),
-                            TitleLoc5 = reader.IsDBNull(reader.GetOrdinal("Title_loc5")) ? string.Empty : reader.GetString("Title_loc5"),
-                            TitleLoc6 = reader.IsDBNull(reader.GetOrdinal("Title_loc6")) ? string.Empty : reader.GetString("Title_loc6"),
-                            TitleLoc7 = reader.IsDBNull(reader.GetOrdinal("Title_loc7")) ? string.Empty : reader.GetString("Title_loc7"),
-                            TitleLoc8 = reader.IsDBNull(reader.GetOrdinal("Title_loc8")) ? string.Empty : reader.GetString("Title_loc8"),
-                            DetailsLoc1 = reader.IsDBNull(reader.GetOrdinal("Details_loc1")) ? string.Empty : reader.GetString("Details_loc1"),
-                            DetailsLoc2 = reader.IsDBNull(reader.GetOrdinal("Details_loc2")) ? string.Empty : reader.GetString("Details_loc2"),
-                            DetailsLoc3 = reader.IsDBNull(reader.GetOrdinal("Details_loc3")) ? string.Empty : reader.GetString("Details_loc3"),
-                            DetailsLoc4 = reader.IsDBNull(reader.GetOrdinal("Details_loc4")) ? string.Empty : reader.GetString("Details_loc4"),
-                            DetailsLoc5 = reader.IsDBNull(reader.GetOrdinal("Details_loc5")) ? string.Empty : reader.GetString("Details_loc5"),
-                            DetailsLoc6 = reader.IsDBNull(reader.GetOrdinal("Details_loc6")) ? string.Empty : reader.GetString("Details_loc6"),
-                            DetailsLoc7 = reader.IsDBNull(reader.GetOrdinal("Details_loc7")) ? string.Empty : reader.GetString("Details_loc7"),
-                            DetailsLoc8 = reader.IsDBNull(reader.GetOrdinal("Details_loc8")) ? string.Empty : reader.GetString("Details_loc8"),
-                            ObjectivesLoc1 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc1")) ? string.Empty : reader.GetString("Objectives_loc1"),
-                            ObjectivesLoc2 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc2")) ? string.Empty : reader.GetString("Objectives_loc2"),
-                            ObjectivesLoc3 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc3")) ? string.Empty : reader.GetString("Objectives_loc3"),
-                            ObjectivesLoc4 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc4")) ? string.Empty : reader.GetString("Objectives_loc4"),
-                            ObjectivesLoc5 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc5")) ? string.Empty : reader.GetString("Objectives_loc5"),
-                            ObjectivesLoc6 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc6")) ? string.Empty : reader.GetString("Objectives_loc6"),
-                            ObjectivesLoc7 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc7")) ? string.Empty : reader.GetString("Objectives_loc7"),
-                            ObjectivesLoc8 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc8")) ? string.Empty : reader.GetString("Objectives_loc8"),
-                            OfferRewardTextLoc1 = reader.IsDBNull(reader.GetOrdinal("OfferRewardText_loc1")) ? string.Empty : reader.GetString("OfferRewardText_loc1"),
-                            OfferRewardTextLoc2 = reader.IsDBNull(reader.GetOrdinal("OfferRewardText_loc2")) ? string.Empty : reader.GetString("OfferRewardText_loc2"),
-                            OfferRewardTextLoc3 = reader.IsDBNull(reader.GetOrdinal("OfferRewardText_loc3")) ? string.Empty : reader.GetString("OfferRewardText_loc3"),
-                            OfferRewardTextLoc4 = reader.IsDBNull(reader.GetOrdinal("OfferRewardText_loc4")) ? string.Empty : reader.GetString("OfferRewardText_loc4"),
-                            OfferRewardTextLoc5 = reader.IsDBNull(reader.GetOrdinal("OfferRewardText_loc5")) ? string.Empty : reader.GetString("OfferRewardText_loc5"),
-                            OfferRewardTextLoc6 = reader.IsDBNull(reader.GetOrdinal("OfferRewardText_loc6")) ? string.Empty : reader.GetString("OfferRewardText_loc6"),
-                            OfferRewardTextLoc7 = reader.IsDBNull(reader.GetOrdinal("OfferRewardText_loc7")) ? string.Empty : reader.GetString("OfferRewardText_loc7"),
-                            OfferRewardTextLoc8 = reader.IsDBNull(reader.GetOrdinal("OfferRewardText_loc8")) ? string.Empty : reader.GetString("OfferRewardText_loc8"),
-                            RequestItemsTextLoc1 = reader.IsDBNull(reader.GetOrdinal("RequestItemsText_loc1")) ? string.Empty : reader.GetString("RequestItemsText_loc1"),
-                            RequestItemsTextLoc2 = reader.IsDBNull(reader.GetOrdinal("RequestItemsText_loc2")) ? string.Empty : reader.GetString("RequestItemsText_loc2"),
-                            RequestItemsTextLoc3 = reader.IsDBNull(reader.GetOrdinal("RequestItemsText_loc3")) ? string.Empty : reader.GetString("RequestItemsText_loc3"),
-                            RequestItemsTextLoc4 = reader.IsDBNull(reader.GetOrdinal("RequestItemsText_loc4")) ? string.Empty : reader.GetString("RequestItemsText_loc4"),
-                            RequestItemsTextLoc5 = reader.IsDBNull(reader.GetOrdinal("RequestItemsText_loc5")) ? string.Empty : reader.GetString("RequestItemsText_loc5"),
-                            RequestItemsTextLoc6 = reader.IsDBNull(reader.GetOrdinal("RequestItemsText_loc6")) ? string.Empty : reader.GetString("RequestItemsText_loc6"),
-                            RequestItemsTextLoc7 = reader.IsDBNull(reader.GetOrdinal("RequestItemsText_loc7")) ? string.Empty : reader.GetString("RequestItemsText_loc7"),
-                            RequestItemsTextLoc8 = reader.IsDBNull(reader.GetOrdinal("RequestItemsText_loc8")) ? string.Empty : reader.GetString("RequestItemsText_loc8"),
-                            EndTextLoc1 = reader.IsDBNull(reader.GetOrdinal("EndText_loc1")) ? string.Empty : reader.GetString("EndText_loc1"),
-                            EndTextLoc2 = reader.IsDBNull(reader.GetOrdinal("EndText_loc2")) ? string.Empty : reader.GetString("EndText_loc2"),
-                            EndTextLoc3 = reader.IsDBNull(reader.GetOrdinal("EndText_loc3")) ? string.Empty : reader.GetString("EndText_loc3"),
-                            EndTextLoc4 = reader.IsDBNull(reader.GetOrdinal("EndText_loc4")) ? string.Empty : reader.GetString("EndText_loc4"),
-                            EndTextLoc5 = reader.IsDBNull(reader.GetOrdinal("EndText_loc5")) ? string.Empty : reader.GetString("EndText_loc5"),
-                            EndTextLoc6 = reader.IsDBNull(reader.GetOrdinal("EndText_loc6")) ? string.Empty : reader.GetString("EndText_loc6"),
-                            EndTextLoc7 = reader.IsDBNull(reader.GetOrdinal("EndText_loc7")) ? string.Empty : reader.GetString("EndText_loc7"),
-                            EndTextLoc8 = reader.IsDBNull(reader.GetOrdinal("EndText_loc8")) ? string.Empty : reader.GetString("EndText_loc8"),
-                            ObjectiveText1Loc1 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1_loc1")) ? string.Empty : reader.GetString("ObjectiveText1_loc1"),
-                            ObjectiveText1Loc2 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1_loc2")) ? string.Empty : reader.GetString("ObjectiveText1_loc2"),
-                            ObjectiveText1Loc3 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1_loc3")) ? string.Empty : reader.GetString("ObjectiveText1_loc3"),
-                            ObjectiveText1Loc4 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1_loc4")) ? string.Empty : reader.GetString("ObjectiveText1_loc4"),
-                            ObjectiveText1Loc5 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1_loc5")) ? string.Empty : reader.GetString("ObjectiveText1_loc5"),
-                            ObjectiveText1Loc6 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1_loc6")) ? string.Empty : reader.GetString("ObjectiveText1_loc6"),
-                            ObjectiveText1Loc7 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1_loc7")) ? string.Empty : reader.GetString("ObjectiveText1_loc7"),
-                            ObjectiveText1Loc8 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1_loc8")) ? string.Empty : reader.GetString("ObjectiveText1_loc8"),
-                            ObjectiveText2Loc1 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2_loc1")) ? string.Empty : reader.GetString("ObjectiveText2_loc1"),
-                            ObjectiveText2Loc2 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2_loc2")) ? string.Empty : reader.GetString("ObjectiveText2_loc2"),
-                            ObjectiveText2Loc3 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2_loc3")) ? string.Empty : reader.GetString("ObjectiveText2_loc3"),
-                            ObjectiveText2Loc4 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2_loc4")) ? string.Empty : reader.GetString("ObjectiveText2_loc4"),
-                            ObjectiveText2Loc5 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2_loc5")) ? string.Empty : reader.GetString("ObjectiveText2_loc5"),
-                            ObjectiveText2Loc6 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2_loc6")) ? string.Empty : reader.GetString("ObjectiveText2_loc6"),
-                            ObjectiveText2Loc7 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2_loc7")) ? string.Empty : reader.GetString("ObjectiveText2_loc7"),
-                            ObjectiveText2Loc8 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2_loc8")) ? string.Empty : reader.GetString("ObjectiveText2_loc8"),
-                            ObjectiveText3Loc1 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText3_loc1")) ? string.Empty : reader.GetString("ObjectiveText3_loc1"),
-                            ObjectiveText3Loc2 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText3_loc2")) ? string.Empty : reader.GetString("ObjectiveText3_loc2"),
-                            ObjectiveText3Loc3 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText3_loc3")) ? string.Empty : reader.GetString("ObjectiveText3_loc3"),
-                            ObjectiveText3Loc4 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText3_loc4")) ? string.Empty : reader.GetString("ObjectiveText3_loc4"),
-                            ObjectiveText4Loc1 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4_loc1")) ? string.Empty : reader.GetString("ObjectiveText4_loc1"),
-                            ObjectiveText4Loc2 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4_loc2")) ? string.Empty : reader.GetString("ObjectiveText4_loc2"),
-                            ObjectiveText4Loc3 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4_loc3")) ? string.Empty : reader.GetString("ObjectiveText4_loc3"),
-                            ObjectiveText4Loc4 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4_loc4")) ? string.Empty : reader.GetString("ObjectiveText4_loc4"),
-                            ObjectiveText4Loc5 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4_loc5")) ? string.Empty : reader.GetString("ObjectiveText4_loc5"),
-                            ObjectiveText4Loc6 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4_loc6")) ? string.Empty : reader.GetString("ObjectiveText4_loc6"),
-                            ObjectiveText4Loc7 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4_loc7")) ? string.Empty : reader.GetString("ObjectiveText4_loc7"),
-                            ObjectiveText4Loc8 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4_loc8")) ? string.Empty : reader.GetString("ObjectiveText4_loc8")
+                            TitleLoc1 = reader.IsDBNull(reader.GetOrdinal("Title_loc1"))
+                                ? string.Empty
+                                : reader.GetString("Title_loc1"),
+                            TitleLoc2 = reader.IsDBNull(reader.GetOrdinal("Title_loc2"))
+                                ? string.Empty
+                                : reader.GetString("Title_loc2"),
+                            TitleLoc3 = reader.IsDBNull(reader.GetOrdinal("Title_loc3"))
+                                ? string.Empty
+                                : reader.GetString("Title_loc3"),
+                            TitleLoc4 = reader.IsDBNull(reader.GetOrdinal("Title_loc4"))
+                                ? string.Empty
+                                : reader.GetString("Title_loc4"),
+                            TitleLoc5 = reader.IsDBNull(reader.GetOrdinal("Title_loc5"))
+                                ? string.Empty
+                                : reader.GetString("Title_loc5"),
+                            TitleLoc6 = reader.IsDBNull(reader.GetOrdinal("Title_loc6"))
+                                ? string.Empty
+                                : reader.GetString("Title_loc6"),
+                            TitleLoc7 = reader.IsDBNull(reader.GetOrdinal("Title_loc7"))
+                                ? string.Empty
+                                : reader.GetString("Title_loc7"),
+                            TitleLoc8 = reader.IsDBNull(reader.GetOrdinal("Title_loc8"))
+                                ? string.Empty
+                                : reader.GetString("Title_loc8"),
+                            DetailsLoc1 = reader.IsDBNull(reader.GetOrdinal("Details_loc1"))
+                                ? string.Empty
+                                : reader.GetString("Details_loc1"),
+                            DetailsLoc2 = reader.IsDBNull(reader.GetOrdinal("Details_loc2"))
+                                ? string.Empty
+                                : reader.GetString("Details_loc2"),
+                            DetailsLoc3 = reader.IsDBNull(reader.GetOrdinal("Details_loc3"))
+                                ? string.Empty
+                                : reader.GetString("Details_loc3"),
+                            DetailsLoc4 = reader.IsDBNull(reader.GetOrdinal("Details_loc4"))
+                                ? string.Empty
+                                : reader.GetString("Details_loc4"),
+                            DetailsLoc5 = reader.IsDBNull(reader.GetOrdinal("Details_loc5"))
+                                ? string.Empty
+                                : reader.GetString("Details_loc5"),
+                            DetailsLoc6 = reader.IsDBNull(reader.GetOrdinal("Details_loc6"))
+                                ? string.Empty
+                                : reader.GetString("Details_loc6"),
+                            DetailsLoc7 = reader.IsDBNull(reader.GetOrdinal("Details_loc7"))
+                                ? string.Empty
+                                : reader.GetString("Details_loc7"),
+                            DetailsLoc8 = reader.IsDBNull(reader.GetOrdinal("Details_loc8"))
+                                ? string.Empty
+                                : reader.GetString("Details_loc8"),
+                            ObjectivesLoc1 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc1"))
+                                ? string.Empty
+                                : reader.GetString("Objectives_loc1"),
+                            ObjectivesLoc2 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc2"))
+                                ? string.Empty
+                                : reader.GetString("Objectives_loc2"),
+                            ObjectivesLoc3 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc3"))
+                                ? string.Empty
+                                : reader.GetString("Objectives_loc3"),
+                            ObjectivesLoc4 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc4"))
+                                ? string.Empty
+                                : reader.GetString("Objectives_loc4"),
+                            ObjectivesLoc5 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc5"))
+                                ? string.Empty
+                                : reader.GetString("Objectives_loc5"),
+                            ObjectivesLoc6 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc6"))
+                                ? string.Empty
+                                : reader.GetString("Objectives_loc6"),
+                            ObjectivesLoc7 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc7"))
+                                ? string.Empty
+                                : reader.GetString("Objectives_loc7"),
+                            ObjectivesLoc8 = reader.IsDBNull(reader.GetOrdinal("Objectives_loc8"))
+                                ? string.Empty
+                                : reader.GetString("Objectives_loc8"),
+                            OfferRewardTextLoc1 = reader.IsDBNull(
+                                reader.GetOrdinal("OfferRewardText_loc1")
+                            )
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText_loc1"),
+                            OfferRewardTextLoc2 = reader.IsDBNull(
+                                reader.GetOrdinal("OfferRewardText_loc2")
+                            )
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText_loc2"),
+                            OfferRewardTextLoc3 = reader.IsDBNull(
+                                reader.GetOrdinal("OfferRewardText_loc3")
+                            )
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText_loc3"),
+                            OfferRewardTextLoc4 = reader.IsDBNull(
+                                reader.GetOrdinal("OfferRewardText_loc4")
+                            )
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText_loc4"),
+                            OfferRewardTextLoc5 = reader.IsDBNull(
+                                reader.GetOrdinal("OfferRewardText_loc5")
+                            )
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText_loc5"),
+                            OfferRewardTextLoc6 = reader.IsDBNull(
+                                reader.GetOrdinal("OfferRewardText_loc6")
+                            )
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText_loc6"),
+                            OfferRewardTextLoc7 = reader.IsDBNull(
+                                reader.GetOrdinal("OfferRewardText_loc7")
+                            )
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText_loc7"),
+                            OfferRewardTextLoc8 = reader.IsDBNull(
+                                reader.GetOrdinal("OfferRewardText_loc8")
+                            )
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText_loc8"),
+                            RequestItemsTextLoc1 = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText_loc1")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText_loc1"),
+                            RequestItemsTextLoc2 = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText_loc2")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText_loc2"),
+                            RequestItemsTextLoc3 = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText_loc3")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText_loc3"),
+                            RequestItemsTextLoc4 = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText_loc4")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText_loc4"),
+                            RequestItemsTextLoc5 = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText_loc5")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText_loc5"),
+                            RequestItemsTextLoc6 = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText_loc6")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText_loc6"),
+                            RequestItemsTextLoc7 = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText_loc7")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText_loc7"),
+                            RequestItemsTextLoc8 = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText_loc8")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText_loc8"),
+                            EndTextLoc1 = reader.IsDBNull(reader.GetOrdinal("EndText_loc1"))
+                                ? string.Empty
+                                : reader.GetString("EndText_loc1"),
+                            EndTextLoc2 = reader.IsDBNull(reader.GetOrdinal("EndText_loc2"))
+                                ? string.Empty
+                                : reader.GetString("EndText_loc2"),
+                            EndTextLoc3 = reader.IsDBNull(reader.GetOrdinal("EndText_loc3"))
+                                ? string.Empty
+                                : reader.GetString("EndText_loc3"),
+                            EndTextLoc4 = reader.IsDBNull(reader.GetOrdinal("EndText_loc4"))
+                                ? string.Empty
+                                : reader.GetString("EndText_loc4"),
+                            EndTextLoc5 = reader.IsDBNull(reader.GetOrdinal("EndText_loc5"))
+                                ? string.Empty
+                                : reader.GetString("EndText_loc5"),
+                            EndTextLoc6 = reader.IsDBNull(reader.GetOrdinal("EndText_loc6"))
+                                ? string.Empty
+                                : reader.GetString("EndText_loc6"),
+                            EndTextLoc7 = reader.IsDBNull(reader.GetOrdinal("EndText_loc7"))
+                                ? string.Empty
+                                : reader.GetString("EndText_loc7"),
+                            EndTextLoc8 = reader.IsDBNull(reader.GetOrdinal("EndText_loc8"))
+                                ? string.Empty
+                                : reader.GetString("EndText_loc8"),
+                            ObjectiveText1Loc1 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText1_loc1")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1_loc1"),
+                            ObjectiveText1Loc2 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText1_loc2")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1_loc2"),
+                            ObjectiveText1Loc3 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText1_loc3")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1_loc3"),
+                            ObjectiveText1Loc4 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText1_loc4")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1_loc4"),
+                            ObjectiveText1Loc5 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText1_loc5")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1_loc5"),
+                            ObjectiveText1Loc6 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText1_loc6")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1_loc6"),
+                            ObjectiveText1Loc7 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText1_loc7")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1_loc7"),
+                            ObjectiveText1Loc8 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText1_loc8")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1_loc8"),
+                            ObjectiveText2Loc1 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText2_loc1")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2_loc1"),
+                            ObjectiveText2Loc2 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText2_loc2")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2_loc2"),
+                            ObjectiveText2Loc3 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText2_loc3")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2_loc3"),
+                            ObjectiveText2Loc4 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText2_loc4")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2_loc4"),
+                            ObjectiveText2Loc5 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText2_loc5")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2_loc5"),
+                            ObjectiveText2Loc6 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText2_loc6")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2_loc6"),
+                            ObjectiveText2Loc7 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText2_loc7")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2_loc7"),
+                            ObjectiveText2Loc8 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText2_loc8")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2_loc8"),
+                            ObjectiveText3Loc1 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText3_loc1")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText3_loc1"),
+                            ObjectiveText3Loc2 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText3_loc2")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText3_loc2"),
+                            ObjectiveText3Loc3 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText3_loc3")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText3_loc3"),
+                            ObjectiveText3Loc4 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText3_loc4")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText3_loc4"),
+                            ObjectiveText4Loc1 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText4_loc1")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4_loc1"),
+                            ObjectiveText4Loc2 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText4_loc2")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4_loc2"),
+                            ObjectiveText4Loc3 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText4_loc3")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4_loc3"),
+                            ObjectiveText4Loc4 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText4_loc4")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4_loc4"),
+                            ObjectiveText4Loc5 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText4_loc5")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4_loc5"),
+                            ObjectiveText4Loc6 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText4_loc6")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4_loc6"),
+                            ObjectiveText4Loc7 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText4_loc7")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4_loc7"),
+                            ObjectiveText4Loc8 = reader.IsDBNull(
+                                reader.GetOrdinal("ObjectiveText4_loc8")
+                            )
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4_loc8"),
                         };
 
                         quests.Add(quest);
@@ -3763,6 +4382,7 @@ namespace DecisionEngineService.Repository
 
             return quests;
         }
+
         public static List<MailLootTemplate> GetMailLootTemplates()
         {
             List<MailLootTemplate> lootTemplates = [];
@@ -3789,7 +4409,7 @@ namespace DecisionEngineService.Repository
                             Maxcount = reader.GetByte("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         lootTemplates.Add(lootTemplate);
@@ -3803,6 +4423,7 @@ namespace DecisionEngineService.Repository
 
             return lootTemplates;
         }
+
         public static List<MangosString> GetMangosStrings()
         {
             List<MangosString> mangosStrings = [];
@@ -3823,14 +4444,30 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             ContentDefault = reader.GetString("content_default"),
-                            ContentLoc1 = reader.IsDBNull(reader.GetOrdinal("content_loc1")) ? string.Empty : reader.GetString("content_loc1"),
-                            ContentLoc2 = reader.IsDBNull(reader.GetOrdinal("content_loc2")) ? string.Empty : reader.GetString("content_loc2"),
-                            ContentLoc3 = reader.IsDBNull(reader.GetOrdinal("content_loc3")) ? string.Empty : reader.GetString("content_loc3"),
-                            ContentLoc4 = reader.IsDBNull(reader.GetOrdinal("content_loc4")) ? string.Empty : reader.GetString("content_loc4"),
-                            ContentLoc5 = reader.IsDBNull(reader.GetOrdinal("content_loc5")) ? string.Empty : reader.GetString("content_loc5"),
-                            ContentLoc6 = reader.IsDBNull(reader.GetOrdinal("content_loc6")) ? string.Empty : reader.GetString("content_loc6"),
-                            ContentLoc7 = reader.IsDBNull(reader.GetOrdinal("content_loc7")) ? string.Empty : reader.GetString("content_loc7"),
-                            ContentLoc8 = reader.IsDBNull(reader.GetOrdinal("content_loc8")) ? string.Empty : reader.GetString("content_loc8")
+                            ContentLoc1 = reader.IsDBNull(reader.GetOrdinal("content_loc1"))
+                                ? string.Empty
+                                : reader.GetString("content_loc1"),
+                            ContentLoc2 = reader.IsDBNull(reader.GetOrdinal("content_loc2"))
+                                ? string.Empty
+                                : reader.GetString("content_loc2"),
+                            ContentLoc3 = reader.IsDBNull(reader.GetOrdinal("content_loc3"))
+                                ? string.Empty
+                                : reader.GetString("content_loc3"),
+                            ContentLoc4 = reader.IsDBNull(reader.GetOrdinal("content_loc4"))
+                                ? string.Empty
+                                : reader.GetString("content_loc4"),
+                            ContentLoc5 = reader.IsDBNull(reader.GetOrdinal("content_loc5"))
+                                ? string.Empty
+                                : reader.GetString("content_loc5"),
+                            ContentLoc6 = reader.IsDBNull(reader.GetOrdinal("content_loc6"))
+                                ? string.Empty
+                                : reader.GetString("content_loc6"),
+                            ContentLoc7 = reader.IsDBNull(reader.GetOrdinal("content_loc7"))
+                                ? string.Empty
+                                : reader.GetString("content_loc7"),
+                            ContentLoc8 = reader.IsDBNull(reader.GetOrdinal("content_loc8"))
+                                ? string.Empty
+                                : reader.GetString("content_loc8"),
                         };
 
                         mangosStrings.Add(mangosString);
@@ -3844,6 +4481,7 @@ namespace DecisionEngineService.Repository
 
             return mangosStrings;
         }
+
         public static List<MapTemplate> GetMapTemplates()
         {
             List<MapTemplate> mapTemplates = [];
@@ -3875,7 +4513,7 @@ namespace DecisionEngineService.Repository
                             GhostEntranceX = reader.GetFloat("GhostEntranceX"),
                             GhostEntranceY = reader.GetFloat("GhostEntranceY"),
                             MapName = reader.GetString("MapName"),
-                            ScriptName = reader.GetString("ScriptName")
+                            ScriptName = reader.GetString("ScriptName"),
                         };
 
                         mapTemplates.Add(mapTemplate);
@@ -3889,6 +4527,7 @@ namespace DecisionEngineService.Repository
 
             return mapTemplates;
         }
+
         public static List<string> GetMigrations()
         {
             List<string> migrations = [];
@@ -3917,6 +4556,7 @@ namespace DecisionEngineService.Repository
 
             return migrations;
         }
+
         public static List<NpcGossip> GetNpcGossips()
         {
             List<NpcGossip> npcGossips = [];
@@ -3936,7 +4576,7 @@ namespace DecisionEngineService.Repository
                         var npcGossip = new NpcGossip
                         {
                             NpcGuid = reader.GetUInt32("npc_guid"),
-                            Textid = reader.GetUInt32("textid")
+                            Textid = reader.GetUInt32("textid"),
                         };
 
                         npcGossips.Add(npcGossip);
@@ -3950,6 +4590,7 @@ namespace DecisionEngineService.Repository
 
             return npcGossips;
         }
+
         public static List<NpcText> GetNpcTexts()
         {
             List<NpcText> npcTexts = [];
@@ -3984,7 +4625,7 @@ namespace DecisionEngineService.Repository
                             BroadcastTextID6 = reader.GetUInt32("BroadcastTextID6"),
                             Probability6 = reader.GetFloat("Probability6"),
                             BroadcastTextID7 = reader.GetUInt32("BroadcastTextID7"),
-                            Probability7 = reader.GetFloat("Probability7")
+                            Probability7 = reader.GetFloat("Probability7"),
                         };
 
                         npcTexts.Add(npcText);
@@ -3998,6 +4639,7 @@ namespace DecisionEngineService.Repository
 
             return npcTexts;
         }
+
         public static List<NpcTrainer> GetNpcTrainers()
         {
             List<NpcTrainer> npcTrainers = [];
@@ -4021,7 +4663,7 @@ namespace DecisionEngineService.Repository
                             Spellcost = reader.GetUInt32("spellcost"),
                             Reqskill = reader.GetUInt16("reqskill"),
                             Reqskillvalue = reader.GetUInt16("reqskillvalue"),
-                            Reqlevel = reader.GetByte("reqlevel")
+                            Reqlevel = reader.GetByte("reqlevel"),
                         };
 
                         npcTrainers.Add(npcTrainer);
@@ -4035,6 +4677,7 @@ namespace DecisionEngineService.Repository
 
             return npcTrainers;
         }
+
         public static List<NpcTrainerTemplate> GetNpcTrainerTemplates()
         {
             List<NpcTrainerTemplate> npcTrainerTemplates = [];
@@ -4058,7 +4701,7 @@ namespace DecisionEngineService.Repository
                             Spellcost = reader.GetUInt32("spellcost"),
                             Reqskill = reader.GetUInt16("reqskill"),
                             Reqskillvalue = reader.GetUInt16("reqskillvalue"),
-                            Reqlevel = reader.GetByte("reqlevel")
+                            Reqlevel = reader.GetByte("reqlevel"),
                         };
 
                         npcTrainerTemplates.Add(npcTrainerTemplate);
@@ -4072,6 +4715,7 @@ namespace DecisionEngineService.Repository
 
             return npcTrainerTemplates;
         }
+
         public static List<NpcVendor> GetNpcVendors()
         {
             List<NpcVendor> npcVendors = [];
@@ -4093,7 +4737,7 @@ namespace DecisionEngineService.Repository
                             Entry = reader.GetUInt32("entry"),
                             Item = reader.GetUInt32("item"),
                             Maxcount = reader.GetByte("maxcount"),
-                            Incrtime = reader.GetUInt32("incrtime")
+                            Incrtime = reader.GetUInt32("incrtime"),
                         };
 
                         npcVendors.Add(npcVendor);
@@ -4107,6 +4751,7 @@ namespace DecisionEngineService.Repository
 
             return npcVendors;
         }
+
         public static List<NpcVendorTemplate> GetNpcVendorTemplates()
         {
             List<NpcVendorTemplate> npcVendorTemplates = [];
@@ -4128,7 +4773,7 @@ namespace DecisionEngineService.Repository
                             Entry = reader.GetUInt32("entry"),
                             Item = reader.GetUInt32("item"),
                             Maxcount = reader.GetByte("maxcount"),
-                            Incrtime = reader.GetUInt32("incrtime")
+                            Incrtime = reader.GetUInt32("incrtime"),
                         };
 
                         npcVendorTemplates.Add(npcVendorTemplate);
@@ -4142,6 +4787,7 @@ namespace DecisionEngineService.Repository
 
             return npcVendorTemplates;
         }
+
         public static List<PageText> GetPageText()
         {
             List<PageText> pageTexts = [];
@@ -4162,7 +4808,7 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             Text = reader.GetString("text"),
-                            NextPage = reader.GetUInt32("next_page")
+                            NextPage = reader.GetUInt32("next_page"),
                         };
 
                         pageTexts.Add(pageText);
@@ -4176,6 +4822,7 @@ namespace DecisionEngineService.Repository
 
             return pageTexts;
         }
+
         public static List<PetCreateInfoSpell> GetPetCreateInfoSpells()
         {
             List<PetCreateInfoSpell> petCreateInfoSpells = [];
@@ -4198,7 +4845,7 @@ namespace DecisionEngineService.Repository
                             Spell1 = reader.GetUInt32("Spell1"),
                             Spell2 = reader.GetUInt32("Spell2"),
                             Spell3 = reader.GetUInt32("Spell3"),
-                            Spell4 = reader.GetUInt32("Spell4")
+                            Spell4 = reader.GetUInt32("Spell4"),
                         };
 
                         petCreateInfoSpells.Add(petCreateInfoSpell);
@@ -4212,6 +4859,7 @@ namespace DecisionEngineService.Repository
 
             return petCreateInfoSpells;
         }
+
         public static List<PetLevelStats> GetPetLevelStats()
         {
             List<PetLevelStats> petLevelStats = [];
@@ -4239,7 +4887,7 @@ namespace DecisionEngineService.Repository
                             Agi = reader.GetUInt16("agi"),
                             Sta = reader.GetUInt16("sta"),
                             Inte = reader.GetUInt16("inte"),
-                            Spi = reader.GetUInt16("spi")
+                            Spi = reader.GetUInt16("spi"),
                         };
 
                         petLevelStats.Add(stats);
@@ -4253,6 +4901,7 @@ namespace DecisionEngineService.Repository
 
             return petLevelStats;
         }
+
         public static List<PetNameGeneration> GetPetNameGenerations()
         {
             List<PetNameGeneration> petNames = [];
@@ -4274,7 +4923,7 @@ namespace DecisionEngineService.Repository
                             Id = reader.GetUInt32("id"),
                             Word = reader.GetString("word"),
                             Entry = reader.GetUInt32("entry"),
-                            Half = reader.GetUInt32("half")
+                            Half = reader.GetUInt32("half"),
                         };
 
                         petNames.Add(petName);
@@ -4288,6 +4937,7 @@ namespace DecisionEngineService.Repository
 
             return petNames;
         }
+
         public static List<PickpocketingLootTemplate> GetPickpocketingLoots()
         {
             List<PickpocketingLootTemplate> lootTemplates = [];
@@ -4314,7 +4964,7 @@ namespace DecisionEngineService.Repository
                             Maxcount = reader.GetByte("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         lootTemplates.Add(lootTemplate);
@@ -4328,6 +4978,7 @@ namespace DecisionEngineService.Repository
 
             return lootTemplates;
         }
+
         public static List<PlayerBot> GetPlayerBots()
         {
             List<PlayerBot> playerBots = [];
@@ -4348,7 +4999,9 @@ namespace DecisionEngineService.Repository
                         {
                             CharGuid = reader.GetUInt64("char_guid"),
                             Chance = reader.GetUInt32("chance"),
-                            Comment = reader.IsDBNull(reader.GetOrdinal("comment")) ? string.Empty : reader.GetString("comment")
+                            Comment = reader.IsDBNull(reader.GetOrdinal("comment"))
+                                ? string.Empty
+                                : reader.GetString("comment"),
                         };
 
                         playerBots.Add(playerBot);
@@ -4362,6 +5015,7 @@ namespace DecisionEngineService.Repository
 
             return playerBots;
         }
+
         public static List<PlayerCreateInfo> GetPlayerCreateInfo()
         {
             List<PlayerCreateInfo> playerCreateInfos = [];
@@ -4387,7 +5041,7 @@ namespace DecisionEngineService.Repository
                             PositionX = reader.GetFloat("position_x"),
                             PositionY = reader.GetFloat("position_y"),
                             PositionZ = reader.GetFloat("position_z"),
-                            Orientation = reader.GetFloat("orientation")
+                            Orientation = reader.GetFloat("orientation"),
                         };
 
                         playerCreateInfos.Add(playerCreateInfo);
@@ -4401,6 +5055,7 @@ namespace DecisionEngineService.Repository
 
             return playerCreateInfos;
         }
+
         public static List<PlayerCreateInfoAction> GetPlayerCreateInfoActions()
         {
             List<PlayerCreateInfoAction> playerCreateInfoActions = [];
@@ -4423,7 +5078,7 @@ namespace DecisionEngineService.Repository
                             Class = reader.GetByte("class"),
                             Button = reader.GetUInt16("button"),
                             Action = reader.GetUInt32("action"),
-                            Type = reader.GetUInt16("type")
+                            Type = reader.GetUInt16("type"),
                         };
 
                         playerCreateInfoActions.Add(playerCreateInfoAction);
@@ -4437,6 +5092,7 @@ namespace DecisionEngineService.Repository
 
             return playerCreateInfoActions;
         }
+
         public static List<PlayerCreateInfoItem> GetPlayerCreateInfoItems()
         {
             List<PlayerCreateInfoItem> playerCreateInfoItems = [];
@@ -4458,7 +5114,7 @@ namespace DecisionEngineService.Repository
                             Race = reader.GetByte("race"),
                             Class = reader.GetByte("class"),
                             Itemid = reader.GetUInt32("itemid"),
-                            Amount = reader.GetByte("amount")
+                            Amount = reader.GetByte("amount"),
                         };
 
                         playerCreateInfoItems.Add(playerCreateInfoItem);
@@ -4472,6 +5128,7 @@ namespace DecisionEngineService.Repository
 
             return playerCreateInfoItems;
         }
+
         public static List<PlayerCreateInfoSpell> GetPlayerCreateInfoSpells()
         {
             List<PlayerCreateInfoSpell> playerCreateInfoSpells = [];
@@ -4493,7 +5150,9 @@ namespace DecisionEngineService.Repository
                             Race = reader.GetByte("race"),
                             Class = reader.GetByte("class"),
                             Spell = reader.GetUInt32("Spell"),
-                            Note = reader.IsDBNull(reader.GetOrdinal("Note")) ? string.Empty : reader.GetString("Note")
+                            Note = reader.IsDBNull(reader.GetOrdinal("Note"))
+                                ? string.Empty
+                                : reader.GetString("Note"),
                         };
 
                         playerCreateInfoSpells.Add(playerCreateInfoSpell);
@@ -4507,6 +5166,7 @@ namespace DecisionEngineService.Repository
 
             return playerCreateInfoSpells;
         }
+
         public static List<PlayerClassLevelStats> GetPlayerClassLevelStats()
         {
             List<PlayerClassLevelStats> classLevelStats = [];
@@ -4528,7 +5188,7 @@ namespace DecisionEngineService.Repository
                             Class = reader.GetByte("class"),
                             Level = reader.GetByte("level"),
                             Basehp = reader.GetUInt16("basehp"),
-                            Basemana = reader.GetUInt16("basemana")
+                            Basemana = reader.GetUInt16("basemana"),
                         };
 
                         classLevelStats.Add(stats);
@@ -4542,6 +5202,7 @@ namespace DecisionEngineService.Repository
 
             return classLevelStats;
         }
+
         public static List<PlayerFactionChangeItems> GetPlayerFactionChangeItems()
         {
             List<PlayerFactionChangeItems> factionChangeItems = [];
@@ -4562,7 +5223,7 @@ namespace DecisionEngineService.Repository
                         {
                             AllianceId = reader.GetInt32("alliance_id"),
                             HordeId = reader.GetInt32("horde_id"),
-                            Comment = reader.GetString("comment")
+                            Comment = reader.GetString("comment"),
                         };
 
                         factionChangeItems.Add(item);
@@ -4576,6 +5237,7 @@ namespace DecisionEngineService.Repository
 
             return factionChangeItems;
         }
+
         public static List<PlayerFactionChangeMounts> GetPlayerFactionChangeMounts()
         {
             List<PlayerFactionChangeMounts> factionChangeMounts = [];
@@ -4597,7 +5259,7 @@ namespace DecisionEngineService.Repository
                             RaceId = reader.GetInt32("RaceId"),
                             MountNum = reader.GetInt32("MountNum"),
                             ItemEntry = reader.GetInt32("ItemEntry"),
-                            Comment = reader.GetString("Comment")
+                            Comment = reader.GetString("Comment"),
                         };
 
                         factionChangeMounts.Add(mount);
@@ -4611,6 +5273,7 @@ namespace DecisionEngineService.Repository
 
             return factionChangeMounts;
         }
+
         public static List<PlayerFactionChangeQuests> GetPlayerFactionChangeQuests()
         {
             List<PlayerFactionChangeQuests> factionChangeQuests = [];
@@ -4631,7 +5294,7 @@ namespace DecisionEngineService.Repository
                         {
                             AllianceId = reader.GetInt32("alliance_id"),
                             HordeId = reader.GetInt32("horde_id"),
-                            Comment = reader.GetString("comment")
+                            Comment = reader.GetString("comment"),
                         };
 
                         factionChangeQuests.Add(quest);
@@ -4645,6 +5308,7 @@ namespace DecisionEngineService.Repository
 
             return factionChangeQuests;
         }
+
         public static List<PlayerFactionChangeReputations> GetPlayerFactionChangeReputations()
         {
             List<PlayerFactionChangeReputations> factionChangeReputations = [];
@@ -4664,7 +5328,7 @@ namespace DecisionEngineService.Repository
                         var reputation = new PlayerFactionChangeReputations
                         {
                             AllianceId = reader.GetInt32("alliance_id"),
-                            HordeId = reader.GetInt32("horde_id")
+                            HordeId = reader.GetInt32("horde_id"),
                         };
 
                         factionChangeReputations.Add(reputation);
@@ -4678,6 +5342,7 @@ namespace DecisionEngineService.Repository
 
             return factionChangeReputations;
         }
+
         public static List<PlayerFactionChangeSpells> GetPlayerFactionChangeSpells()
         {
             List<PlayerFactionChangeSpells> factionChangeSpells = [];
@@ -4698,7 +5363,7 @@ namespace DecisionEngineService.Repository
                         {
                             AllianceId = reader.GetInt32("alliance_id"),
                             HordeId = reader.GetInt32("horde_id"),
-                            Comment = reader.GetString("comment")
+                            Comment = reader.GetString("comment"),
                         };
 
                         factionChangeSpells.Add(factionChangeSpell);
@@ -4712,6 +5377,7 @@ namespace DecisionEngineService.Repository
 
             return factionChangeSpells;
         }
+
         public static List<PlayerLevelStats> GetPlayerLevelStats()
         {
             List<PlayerLevelStats> levelStats = [];
@@ -4737,7 +5403,7 @@ namespace DecisionEngineService.Repository
                             Agi = reader.GetByte("agi"),
                             Sta = reader.GetByte("sta"),
                             Inte = reader.GetByte("inte"),
-                            Spi = reader.GetByte("spi")
+                            Spi = reader.GetByte("spi"),
                         };
 
                         levelStats.Add(levelStat);
@@ -4751,6 +5417,7 @@ namespace DecisionEngineService.Repository
 
             return levelStats;
         }
+
         public static List<PlayerXpForLevel> GetPlayerXpForLevel()
         {
             List<PlayerXpForLevel> xpForLevels = [];
@@ -4770,7 +5437,7 @@ namespace DecisionEngineService.Repository
                         var xpForLevel = new PlayerXpForLevel
                         {
                             Lvl = reader.GetUInt32("lvl"),
-                            XpForNextLevel = reader.GetUInt32("xp_for_next_level")
+                            XpForNextLevel = reader.GetUInt32("xp_for_next_level"),
                         };
 
                         xpForLevels.Add(xpForLevel);
@@ -4784,6 +5451,7 @@ namespace DecisionEngineService.Repository
 
             return xpForLevels;
         }
+
         public static List<PointsOfInterest> GetPointsOfInterest()
         {
             List<PointsOfInterest> pointsOfInterest = [];
@@ -4808,7 +5476,7 @@ namespace DecisionEngineService.Repository
                             Icon = reader.GetUInt32("icon"),
                             Flags = reader.GetUInt32("flags"),
                             Data = reader.GetUInt32("data"),
-                            IconName = reader.GetString("icon_name")
+                            IconName = reader.GetString("icon_name"),
                         };
 
                         pointsOfInterest.Add(pointOfInterest);
@@ -4822,6 +5490,7 @@ namespace DecisionEngineService.Repository
 
             return pointsOfInterest;
         }
+
         public static List<PoolCreature> GetPoolCreatures()
         {
             List<PoolCreature> poolCreatures = [];
@@ -4846,7 +5515,7 @@ namespace DecisionEngineService.Repository
                             Description = reader.GetString("description"),
                             Flags = reader.GetUInt32("flags"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         poolCreatures.Add(poolCreature);
@@ -4860,6 +5529,7 @@ namespace DecisionEngineService.Repository
 
             return poolCreatures;
         }
+
         public static List<PoolCreatureTemplate> GetPoolCreatureTemplates()
         {
             List<PoolCreatureTemplate> poolCreatureTemplates = [];
@@ -4882,7 +5552,7 @@ namespace DecisionEngineService.Repository
                             PoolEntry = reader.GetUInt32("pool_entry"),
                             Chance = reader.GetFloat("chance"),
                             Description = reader.GetString("description"),
-                            Flags = reader.GetUInt32("flags")
+                            Flags = reader.GetUInt32("flags"),
                         };
 
                         poolCreatureTemplates.Add(poolCreatureTemplate);
@@ -4896,6 +5566,7 @@ namespace DecisionEngineService.Repository
 
             return poolCreatureTemplates;
         }
+
         public static List<PoolGameObject> GetPoolGameObjects()
         {
             List<PoolGameObject> poolGameObjects = [];
@@ -4920,7 +5591,7 @@ namespace DecisionEngineService.Repository
                             Description = reader.GetString("description"),
                             Flags = reader.GetUInt32("flags"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         poolGameObjects.Add(poolGameObject);
@@ -4934,6 +5605,7 @@ namespace DecisionEngineService.Repository
 
             return poolGameObjects;
         }
+
         public static List<PoolGameObjectTemplate> GetPoolGameObjectTemplates()
         {
             List<PoolGameObjectTemplate> poolGameObjectTemplates = [];
@@ -4956,7 +5628,7 @@ namespace DecisionEngineService.Repository
                             PoolEntry = reader.GetUInt32("pool_entry"),
                             Chance = reader.GetFloat("chance"),
                             Description = reader.GetString("description"),
-                            Flags = reader.GetUInt32("flags")
+                            Flags = reader.GetUInt32("flags"),
                         };
 
                         poolGameObjectTemplates.Add(poolGameObjectTemplate);
@@ -4970,6 +5642,7 @@ namespace DecisionEngineService.Repository
 
             return poolGameObjectTemplates;
         }
+
         public static List<PoolPool> GetPoolPools()
         {
             List<PoolPool> poolPools = [];
@@ -4992,7 +5665,7 @@ namespace DecisionEngineService.Repository
                             MotherPool = reader.GetUInt32("mother_pool"),
                             Chance = reader.GetFloat("chance"),
                             Description = reader.GetString("description"),
-                            Flags = reader.GetUInt32("flags")
+                            Flags = reader.GetUInt32("flags"),
                         };
 
                         poolPools.Add(poolPool);
@@ -5006,6 +5679,7 @@ namespace DecisionEngineService.Repository
 
             return poolPools;
         }
+
         public static List<PoolTemplate> GetPoolTemplates()
         {
             List<PoolTemplate> poolTemplates = [];
@@ -5030,7 +5704,7 @@ namespace DecisionEngineService.Repository
                             Flags = reader.GetUInt32("flags"),
                             Instance = reader.GetUInt32("instance"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         poolTemplates.Add(poolTemplate);
@@ -5044,6 +5718,7 @@ namespace DecisionEngineService.Repository
 
             return poolTemplates;
         }
+
         public static List<QuestEndScripts> GetQuestEndScripts()
         {
             List<QuestEndScripts> questEndScripts = [];
@@ -5082,7 +5757,7 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.GetString("comments")
+                            Comments = reader.GetString("comments"),
                         };
 
                         questEndScripts.Add(questEndScript);
@@ -5096,6 +5771,7 @@ namespace DecisionEngineService.Repository
 
             return questEndScripts;
         }
+
         public static List<QuestGreeting> GetQuestGreeting()
         {
             List<QuestGreeting> questGreetings = [];
@@ -5117,16 +5793,32 @@ namespace DecisionEngineService.Repository
                             Entry = reader.GetUInt32("entry"),
                             Type = reader.GetByte("type"),
                             ContentDefault = reader.GetString("content_default"),
-                            ContentLoc1 = reader.IsDBNull(reader.GetOrdinal("content_loc1")) ? string.Empty : reader.GetString("content_loc1"),
-                            ContentLoc2 = reader.IsDBNull(reader.GetOrdinal("content_loc2")) ? string.Empty : reader.GetString("content_loc2"),
-                            ContentLoc3 = reader.IsDBNull(reader.GetOrdinal("content_loc3")) ? string.Empty : reader.GetString("content_loc3"),
-                            ContentLoc4 = reader.IsDBNull(reader.GetOrdinal("content_loc4")) ? string.Empty : reader.GetString("content_loc4"),
-                            ContentLoc5 = reader.IsDBNull(reader.GetOrdinal("content_loc5")) ? string.Empty : reader.GetString("content_loc5"),
-                            ContentLoc6 = reader.IsDBNull(reader.GetOrdinal("content_loc6")) ? string.Empty : reader.GetString("content_loc6"),
-                            ContentLoc7 = reader.IsDBNull(reader.GetOrdinal("content_loc7")) ? string.Empty : reader.GetString("content_loc7"),
-                            ContentLoc8 = reader.IsDBNull(reader.GetOrdinal("content_loc8")) ? string.Empty : reader.GetString("content_loc8"),
+                            ContentLoc1 = reader.IsDBNull(reader.GetOrdinal("content_loc1"))
+                                ? string.Empty
+                                : reader.GetString("content_loc1"),
+                            ContentLoc2 = reader.IsDBNull(reader.GetOrdinal("content_loc2"))
+                                ? string.Empty
+                                : reader.GetString("content_loc2"),
+                            ContentLoc3 = reader.IsDBNull(reader.GetOrdinal("content_loc3"))
+                                ? string.Empty
+                                : reader.GetString("content_loc3"),
+                            ContentLoc4 = reader.IsDBNull(reader.GetOrdinal("content_loc4"))
+                                ? string.Empty
+                                : reader.GetString("content_loc4"),
+                            ContentLoc5 = reader.IsDBNull(reader.GetOrdinal("content_loc5"))
+                                ? string.Empty
+                                : reader.GetString("content_loc5"),
+                            ContentLoc6 = reader.IsDBNull(reader.GetOrdinal("content_loc6"))
+                                ? string.Empty
+                                : reader.GetString("content_loc6"),
+                            ContentLoc7 = reader.IsDBNull(reader.GetOrdinal("content_loc7"))
+                                ? string.Empty
+                                : reader.GetString("content_loc7"),
+                            ContentLoc8 = reader.IsDBNull(reader.GetOrdinal("content_loc8"))
+                                ? string.Empty
+                                : reader.GetString("content_loc8"),
                             Emote = reader.GetUInt16("Emote"),
-                            EmoteDelay = reader.GetUInt32("EmoteDelay")
+                            EmoteDelay = reader.GetUInt32("EmoteDelay"),
                         };
 
                         questGreetings.Add(questGreeting);
@@ -5140,6 +5832,7 @@ namespace DecisionEngineService.Repository
 
             return questGreetings;
         }
+
         public static List<QuestStartScripts> GetQuestStartScripts()
         {
             List<QuestStartScripts> questStartScripts = [];
@@ -5178,7 +5871,7 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.GetString("comments")
+                            Comments = reader.GetString("comments"),
                         };
 
                         questStartScripts.Add(questStartScript);
@@ -5192,6 +5885,7 @@ namespace DecisionEngineService.Repository
 
             return questStartScripts;
         }
+
         public static List<QuestTemplate> GetQuestTemplates()
         {
             List<QuestTemplate> questTemplates = [];
@@ -5239,16 +5933,38 @@ namespace DecisionEngineService.Repository
                             SrcItemId = reader.GetUInt32("SrcItemId"),
                             SrcItemCount = reader.GetByte("SrcItemCount"),
                             SrcSpell = reader.GetUInt32("SrcSpell"),
-                            Title = reader.IsDBNull(reader.GetOrdinal("Title")) ? string.Empty : reader.GetString("Title"),
-                            Details = reader.IsDBNull(reader.GetOrdinal("Details")) ? string.Empty : reader.GetString("Details"),
-                            Objectives = reader.IsDBNull(reader.GetOrdinal("Objectives")) ? string.Empty : reader.GetString("Objectives"),
-                            OfferRewardText = reader.IsDBNull(reader.GetOrdinal("OfferRewardText")) ? string.Empty : reader.GetString("OfferRewardText"),
-                            RequestItemsText = reader.IsDBNull(reader.GetOrdinal("RequestItemsText")) ? string.Empty : reader.GetString("RequestItemsText"),
-                            EndText = reader.IsDBNull(reader.GetOrdinal("EndText")) ? string.Empty : reader.GetString("EndText"),
-                            ObjectiveText1 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1")) ? string.Empty : reader.GetString("ObjectiveText1"),
-                            ObjectiveText2 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2")) ? string.Empty : reader.GetString("ObjectiveText2"),
-                            ObjectiveText3 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText3")) ? string.Empty : reader.GetString("ObjectiveText3"),
-                            ObjectiveText4 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4")) ? string.Empty : reader.GetString("ObjectiveText4"),
+                            Title = reader.IsDBNull(reader.GetOrdinal("Title"))
+                                ? string.Empty
+                                : reader.GetString("Title"),
+                            Details = reader.IsDBNull(reader.GetOrdinal("Details"))
+                                ? string.Empty
+                                : reader.GetString("Details"),
+                            Objectives = reader.IsDBNull(reader.GetOrdinal("Objectives"))
+                                ? string.Empty
+                                : reader.GetString("Objectives"),
+                            OfferRewardText = reader.IsDBNull(reader.GetOrdinal("OfferRewardText"))
+                                ? string.Empty
+                                : reader.GetString("OfferRewardText"),
+                            RequestItemsText = reader.IsDBNull(
+                                reader.GetOrdinal("RequestItemsText")
+                            )
+                                ? string.Empty
+                                : reader.GetString("RequestItemsText"),
+                            EndText = reader.IsDBNull(reader.GetOrdinal("EndText"))
+                                ? string.Empty
+                                : reader.GetString("EndText"),
+                            ObjectiveText1 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText1"))
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText1"),
+                            ObjectiveText2 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText2"))
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText2"),
+                            ObjectiveText3 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText3"))
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText3"),
+                            ObjectiveText4 = reader.IsDBNull(reader.GetOrdinal("ObjectiveText4"))
+                                ? string.Empty
+                                : reader.GetString("ObjectiveText4"),
                             ReqItemId1 = reader.GetUInt32("ReqItemId1"),
                             ReqItemId2 = reader.GetUInt32("ReqItemId2"),
                             ReqItemId3 = reader.GetUInt32("ReqItemId3"),
@@ -5336,7 +6052,7 @@ namespace DecisionEngineService.Repository
                             OfferRewardEmoteDelay3 = reader.GetUInt32("OfferRewardEmoteDelay3"),
                             OfferRewardEmoteDelay4 = reader.GetUInt32("OfferRewardEmoteDelay4"),
                             StartScript = reader.GetUInt32("StartScript"),
-                            CompleteScript = reader.GetUInt32("CompleteScript")
+                            CompleteScript = reader.GetUInt32("CompleteScript"),
                         };
 
                         questTemplates.Add(questTemplate);
@@ -5350,6 +6066,7 @@ namespace DecisionEngineService.Repository
 
             return questTemplates;
         }
+
         public static List<ReferenceLootTemplate> GetReferenceLootTemplates()
         {
             List<ReferenceLootTemplate> lootTemplates = [];
@@ -5376,7 +6093,7 @@ namespace DecisionEngineService.Repository
                             MaxCount = reader.GetUInt32("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetUInt32("patch_min"),
-                            PatchMax = reader.GetUInt32("patch_max")
+                            PatchMax = reader.GetUInt32("patch_max"),
                         };
 
                         lootTemplates.Add(lootTemplate);
@@ -5390,6 +6107,7 @@ namespace DecisionEngineService.Repository
 
             return lootTemplates;
         }
+
         public static List<ReputationRewardRate> GetReputationRewardRates()
         {
             List<ReputationRewardRate> reputationRewardRates = [];
@@ -5411,7 +6129,7 @@ namespace DecisionEngineService.Repository
                             Faction = reader.GetUInt32("faction"),
                             QuestRate = reader.GetFloat("quest_rate"),
                             CreatureRate = reader.GetFloat("creature_rate"),
-                            SpellRate = reader.GetFloat("spell_rate")
+                            SpellRate = reader.GetFloat("spell_rate"),
                         };
                         reputationRewardRates.Add(reputationRewardRate);
                     }
@@ -5424,6 +6142,7 @@ namespace DecisionEngineService.Repository
 
             return reputationRewardRates;
         }
+
         public static List<ReputationSpilloverTemplate> GetReputationSpilloverTemplate()
         {
             List<ReputationSpilloverTemplate> spilloverTemplates = [];
@@ -5454,7 +6173,7 @@ namespace DecisionEngineService.Repository
                             Rank3 = reader.GetByte("rank_3"),
                             Faction4 = reader.GetUInt16("faction4"),
                             Rate4 = reader.GetFloat("rate_4"),
-                            Rank4 = reader.GetByte("rank_4")
+                            Rank4 = reader.GetByte("rank_4"),
                         };
                         spilloverTemplates.Add(spilloverTemplate);
                     }
@@ -5467,6 +6186,7 @@ namespace DecisionEngineService.Repository
 
             return spilloverTemplates;
         }
+
         public static List<string> GetReservedNames()
         {
             List<string> reservedNames = [];
@@ -5494,6 +6214,7 @@ namespace DecisionEngineService.Repository
 
             return reservedNames;
         }
+
         public static List<ScriptedAreatrigger> GetScriptedAreaTriggers()
         {
             List<ScriptedAreatrigger> areaTriggers = [];
@@ -5513,7 +6234,7 @@ namespace DecisionEngineService.Repository
                         ScriptedAreatrigger trigger = new()
                         {
                             Entry = reader.GetUInt32("entry"),
-                            ScriptName = reader.GetString("ScriptName")
+                            ScriptName = reader.GetString("ScriptName"),
                         };
 
                         areaTriggers.Add(trigger);
@@ -5527,6 +6248,7 @@ namespace DecisionEngineService.Repository
 
             return areaTriggers;
         }
+
         public static List<ScriptedEventId> GetScriptedEvents()
         {
             List<ScriptedEventId> events = [];
@@ -5546,7 +6268,7 @@ namespace DecisionEngineService.Repository
                         ScriptedEventId scriptedEvent = new()
                         {
                             Id = reader.GetUInt32("id"),
-                            ScriptName = reader.GetString("ScriptName")
+                            ScriptName = reader.GetString("ScriptName"),
                         };
 
                         events.Add(scriptedEvent);
@@ -5560,6 +6282,7 @@ namespace DecisionEngineService.Repository
 
             return events;
         }
+
         public static List<ScriptEscortData> GetScriptEscortData()
         {
             List<ScriptEscortData> escortDataList = [];
@@ -5580,7 +6303,7 @@ namespace DecisionEngineService.Repository
                         {
                             CreatureId = reader.GetUInt32("creature_id"),
                             Quest = reader.GetUInt32("quest"),
-                            EscortFaction = reader.GetUInt32("escort_faction")
+                            EscortFaction = reader.GetUInt32("escort_faction"),
                         };
 
                         escortDataList.Add(escortData);
@@ -5594,6 +6317,7 @@ namespace DecisionEngineService.Repository
 
             return escortDataList;
         }
+
         public static List<ScriptText> GetScriptTexts()
         {
             List<ScriptText> scriptTextList = [];
@@ -5614,19 +6338,37 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetInt32("entry"),
                             ContentDefault = reader.GetString("content_default"),
-                            ContentLoc1 = reader.IsDBNull(reader.GetOrdinal("content_loc1")) ? string.Empty : reader.GetString("content_loc1"),
-                            ContentLoc2 = reader.IsDBNull(reader.GetOrdinal("content_loc2")) ? string.Empty : reader.GetString("content_loc2"),
-                            ContentLoc3 = reader.IsDBNull(reader.GetOrdinal("content_loc3")) ? string.Empty : reader.GetString("content_loc3"),
-                            ContentLoc4 = reader.IsDBNull(reader.GetOrdinal("content_loc4")) ? string.Empty : reader.GetString("content_loc4"),
-                            ContentLoc5 = reader.IsDBNull(reader.GetOrdinal("content_loc5")) ? string.Empty : reader.GetString("content_loc5"),
-                            ContentLoc6 = reader.IsDBNull(reader.GetOrdinal("content_loc6")) ? string.Empty : reader.GetString("content_loc6"),
-                            ContentLoc7 = reader.IsDBNull(reader.GetOrdinal("content_loc7")) ? string.Empty : reader.GetString("content_loc7"),
-                            ContentLoc8 = reader.IsDBNull(reader.GetOrdinal("content_loc8")) ? string.Empty : reader.GetString("content_loc8"),
+                            ContentLoc1 = reader.IsDBNull(reader.GetOrdinal("content_loc1"))
+                                ? string.Empty
+                                : reader.GetString("content_loc1"),
+                            ContentLoc2 = reader.IsDBNull(reader.GetOrdinal("content_loc2"))
+                                ? string.Empty
+                                : reader.GetString("content_loc2"),
+                            ContentLoc3 = reader.IsDBNull(reader.GetOrdinal("content_loc3"))
+                                ? string.Empty
+                                : reader.GetString("content_loc3"),
+                            ContentLoc4 = reader.IsDBNull(reader.GetOrdinal("content_loc4"))
+                                ? string.Empty
+                                : reader.GetString("content_loc4"),
+                            ContentLoc5 = reader.IsDBNull(reader.GetOrdinal("content_loc5"))
+                                ? string.Empty
+                                : reader.GetString("content_loc5"),
+                            ContentLoc6 = reader.IsDBNull(reader.GetOrdinal("content_loc6"))
+                                ? string.Empty
+                                : reader.GetString("content_loc6"),
+                            ContentLoc7 = reader.IsDBNull(reader.GetOrdinal("content_loc7"))
+                                ? string.Empty
+                                : reader.GetString("content_loc7"),
+                            ContentLoc8 = reader.IsDBNull(reader.GetOrdinal("content_loc8"))
+                                ? string.Empty
+                                : reader.GetString("content_loc8"),
                             Sound = reader.GetUInt32("sound"),
                             Type = reader.GetUInt32("type"),
                             Language = reader.GetUInt32("language"),
                             Emote = reader.GetUInt32("emote"),
-                            Comment = reader.IsDBNull(reader.GetOrdinal("comment")) ? string.Empty : reader.GetString("comment")
+                            Comment = reader.IsDBNull(reader.GetOrdinal("comment"))
+                                ? string.Empty
+                                : reader.GetString("comment"),
                         };
 
                         scriptTextList.Add(scriptText);
@@ -5640,6 +6382,7 @@ namespace DecisionEngineService.Repository
 
             return scriptTextList;
         }
+
         public static List<ScriptWaypoint> GetScriptWaypoints()
         {
             List<ScriptWaypoint> waypoints = [];
@@ -5664,7 +6407,9 @@ namespace DecisionEngineService.Repository
                             LocationY = reader.GetFloat("location_y"),
                             LocationZ = reader.GetFloat("location_z"),
                             Waittime = reader.GetUInt32("waittime"),
-                            PointComment = reader.IsDBNull(reader.GetOrdinal("point_comment")) ? string.Empty : reader.GetString("point_comment")
+                            PointComment = reader.IsDBNull(reader.GetOrdinal("point_comment"))
+                                ? string.Empty
+                                : reader.GetString("point_comment"),
                         };
 
                         waypoints.Add(waypoint);
@@ -5678,6 +6423,7 @@ namespace DecisionEngineService.Repository
 
             return waypoints;
         }
+
         public static List<SkillDiscoveryTemplate> GetSkillDiscoveryTemplates()
         {
             List<SkillDiscoveryTemplate> skillDiscoveries = [];
@@ -5698,7 +6444,7 @@ namespace DecisionEngineService.Repository
                         {
                             SpellId = reader.GetUInt32("spellId"),
                             ReqSpell = reader.GetUInt32("reqSpell"),
-                            Chance = reader.GetFloat("chance")
+                            Chance = reader.GetFloat("chance"),
                         };
 
                         skillDiscoveries.Add(discovery);
@@ -5712,6 +6458,7 @@ namespace DecisionEngineService.Repository
 
             return skillDiscoveries;
         }
+
         public static List<SkillExtraItemTemplate> GetSkillExtraItemTemplates()
         {
             List<SkillExtraItemTemplate> skillExtraItems = [];
@@ -5733,7 +6480,7 @@ namespace DecisionEngineService.Repository
                             SpellId = reader.GetUInt32("spellId"),
                             RequiredSpecialization = reader.GetUInt32("requiredSpecialization"),
                             AdditionalCreateChance = reader.GetFloat("additionalCreateChance"),
-                            AdditionalMaxNum = reader.GetByte("additionalMaxNum")
+                            AdditionalMaxNum = reader.GetByte("additionalMaxNum"),
                         };
 
                         skillExtraItems.Add(extraItem);
@@ -5747,6 +6494,7 @@ namespace DecisionEngineService.Repository
 
             return skillExtraItems;
         }
+
         public static List<SkillFishingBaseLevel> GetSkillFishingBaseLevels()
         {
             List<SkillFishingBaseLevel> fishingBaseLevels = [];
@@ -5766,7 +6514,7 @@ namespace DecisionEngineService.Repository
                         SkillFishingBaseLevel fishingBaseLevel = new()
                         {
                             Entry = reader.GetUInt32("entry"),
-                            Skill = reader.GetInt32("skill")
+                            Skill = reader.GetInt32("skill"),
                         };
                         fishingBaseLevels.Add(fishingBaseLevel);
                     }
@@ -5779,6 +6527,7 @@ namespace DecisionEngineService.Repository
 
             return fishingBaseLevels;
         }
+
         public static List<SkinningLootTemplate> GetSkinningLootTemplates()
         {
             List<SkinningLootTemplate> skinningLootTemplates = [];
@@ -5805,7 +6554,7 @@ namespace DecisionEngineService.Repository
                             MaxCount = reader.GetByte("maxcount"),
                             ConditionId = reader.GetUInt32("condition_id"),
                             PatchMin = reader.GetByte("patch_min"),
-                            PatchMax = reader.GetByte("patch_max")
+                            PatchMax = reader.GetByte("patch_max"),
                         };
 
                         skinningLootTemplates.Add(lootTemplate);
@@ -5819,6 +6568,7 @@ namespace DecisionEngineService.Repository
 
             return skinningLootTemplates;
         }
+
         public static List<SoundEntries> GetSoundEntries()
         {
             List<SoundEntries> soundEntries = [];
@@ -5838,7 +6588,7 @@ namespace DecisionEngineService.Repository
                         SoundEntries soundEntry = new()
                         {
                             Id = reader.GetUInt32("ID"),
-                            Name = reader.GetString("name")
+                            Name = reader.GetString("name"),
                         };
                         soundEntries.Add(soundEntry);
                     }
@@ -5851,6 +6601,7 @@ namespace DecisionEngineService.Repository
 
             return soundEntries;
         }
+
         public static List<SpellAffect> GetSpellAffect()
         {
             List<SpellAffect> spellAffects = [];
@@ -5871,7 +6622,7 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             EffectId = reader.GetByte("effectId"),
-                            SpellFamilyMask = reader.GetUInt64("SpellFamilyMask")
+                            SpellFamilyMask = reader.GetUInt64("SpellFamilyMask"),
                         };
 
                         spellAffects.Add(affect);
@@ -5885,6 +6636,7 @@ namespace DecisionEngineService.Repository
 
             return spellAffects;
         }
+
         public static List<SpellArea> GetSpellAreas()
         {
             List<SpellArea> spellAreas = [];
@@ -5911,7 +6663,7 @@ namespace DecisionEngineService.Repository
                             AuraSpell = reader.GetUInt32("aura_spell"),
                             Racemask = reader.GetUInt32("racemask"),
                             Gender = reader.GetByte("gender"),
-                            Autocast = reader.GetByte("autocast")
+                            Autocast = reader.GetByte("autocast"),
                         };
 
                         spellAreas.Add(spellArea);
@@ -5925,6 +6677,7 @@ namespace DecisionEngineService.Repository
 
             return spellAreas;
         }
+
         public static List<SpellBonusData> GetSpellBonusData()
         {
             List<SpellBonusData> spellBonusDataList = [];
@@ -5948,7 +6701,9 @@ namespace DecisionEngineService.Repository
                             DotBonus = reader.GetFloat("dot_bonus"),
                             ApBonus = reader.GetFloat("ap_bonus"),
                             ApDotBonus = reader.GetFloat("ap_dot_bonus"),
-                            Comments = reader.IsDBNull("comments") ? string.Empty : reader.GetString("comments")
+                            Comments = reader.IsDBNull("comments")
+                                ? string.Empty
+                                : reader.GetString("comments"),
                         };
 
                         spellBonusDataList.Add(spellBonusData);
@@ -5962,6 +6717,7 @@ namespace DecisionEngineService.Repository
 
             return spellBonusDataList;
         }
+
         public static List<SpellChain> GetSpellChain()
         {
             List<SpellChain> spellChainList = [];
@@ -5984,7 +6740,7 @@ namespace DecisionEngineService.Repository
                             PrevSpell = reader.GetUInt32("prev_spell"),
                             FirstSpell = reader.GetUInt32("first_spell"),
                             Rank = reader.GetByte("rank"),
-                            ReqSpell = reader.GetUInt32("req_spell")
+                            ReqSpell = reader.GetUInt32("req_spell"),
                         };
 
                         spellChainList.Add(spellChain);
@@ -5998,6 +6754,7 @@ namespace DecisionEngineService.Repository
 
             return spellChainList;
         }
+
         public static List<SpellCheck> GetSpellCheck()
         {
             List<SpellCheck> spellCheckList = [];
@@ -6026,7 +6783,7 @@ namespace DecisionEngineService.Repository
                             EffectAura = reader.GetInt32("EffectAura"),
                             EffectIdx = reader.GetInt32("EffectIdx"),
                             Name = reader.GetString("Name"),
-                            Code = reader.GetString("Code")
+                            Code = reader.GetString("Code"),
                         };
 
                         spellCheckList.Add(spellCheck);
@@ -6040,6 +6797,7 @@ namespace DecisionEngineService.Repository
 
             return spellCheckList;
         }
+
         public static List<uint> GetDisabledSpells()
         {
             List<uint> disabledSpells = [];
@@ -6067,6 +6825,7 @@ namespace DecisionEngineService.Repository
 
             return disabledSpells;
         }
+
         public static List<SpellEffectMod> GetSpellEffectMods()
         {
             List<SpellEffectMod> spellEffectMods = [];
@@ -6094,7 +6853,9 @@ namespace DecisionEngineService.Repository
                             EffectRealPointsPerLevel = reader.GetFloat("EffectRealPointsPerLevel"),
                             EffectBasePoints = reader.GetInt32("EffectBasePoints"),
                             EffectAmplitude = reader.GetInt32("EffectAmplitude"),
-                            EffectPointsPerComboPoint = reader.GetFloat("EffectPointsPerComboPoint"),
+                            EffectPointsPerComboPoint = reader.GetFloat(
+                                "EffectPointsPerComboPoint"
+                            ),
                             EffectChainTarget = reader.GetInt32("EffectChainTarget"),
                             EffectMultipleValue = reader.GetFloat("EffectMultipleValue"),
                             EffectMechanic = reader.GetInt32("EffectMechanic"),
@@ -6105,7 +6866,9 @@ namespace DecisionEngineService.Repository
                             EffectItemType = reader.GetInt32("EffectItemType"),
                             EffectMiscValue = reader.GetInt32("EffectMiscValue"),
                             EffectTriggerSpell = reader.GetInt32("EffectTriggerSpell"),
-                            Comment = reader.IsDBNull("Comment") ? string.Empty : reader.GetString("Comment")
+                            Comment = reader.IsDBNull("Comment")
+                                ? string.Empty
+                                : reader.GetString("Comment"),
                         };
 
                         spellEffectMods.Add(effectMod);
@@ -6119,6 +6882,7 @@ namespace DecisionEngineService.Repository
 
             return spellEffectMods;
         }
+
         public static List<SpellElixir> GetSpellElixirs()
         {
             List<SpellElixir> spellElixirs = [];
@@ -6138,7 +6902,7 @@ namespace DecisionEngineService.Repository
                         SpellElixir elixir = new()
                         {
                             Entry = reader.GetUInt32("entry"),
-                            Mask = reader.GetByte("mask")
+                            Mask = reader.GetByte("mask"),
                         };
 
                         spellElixirs.Add(elixir);
@@ -6152,6 +6916,7 @@ namespace DecisionEngineService.Repository
 
             return spellElixirs;
         }
+
         public static List<SpellFacing> GetSpellFacings()
         {
             List<SpellFacing> spellFacings = [];
@@ -6171,7 +6936,7 @@ namespace DecisionEngineService.Repository
                         SpellFacing facing = new()
                         {
                             Entry = reader.GetUInt32("entry"),
-                            Facingcasterflag = reader.GetByte("facingcasterflag")
+                            Facingcasterflag = reader.GetByte("facingcasterflag"),
                         };
 
                         spellFacings.Add(facing);
@@ -6185,6 +6950,7 @@ namespace DecisionEngineService.Repository
 
             return spellFacings;
         }
+
         public static List<SpellGroup> GetSpellGroups()
         {
             List<SpellGroup> spellGroups = [];
@@ -6205,7 +6971,7 @@ namespace DecisionEngineService.Repository
                         {
                             GroupId = reader.GetUInt32("group_id"),
                             GroupSpellId = reader.GetUInt32("group_spell_id"),
-                            SpellId = reader.GetUInt32("spell_id")
+                            SpellId = reader.GetUInt32("spell_id"),
                         };
 
                         spellGroups.Add(group);
@@ -6219,6 +6985,7 @@ namespace DecisionEngineService.Repository
 
             return spellGroups;
         }
+
         public static List<SpellGroupStackRules> GetSpellGroupStackRules()
         {
             List<SpellGroupStackRules> spellGroupStackRules = [];
@@ -6238,7 +7005,7 @@ namespace DecisionEngineService.Repository
                         SpellGroupStackRules rule = new()
                         {
                             GroupId = reader.GetUInt32("group_id"),
-                            StackRule = reader.GetByte("stack_rule")
+                            StackRule = reader.GetByte("stack_rule"),
                         };
 
                         spellGroupStackRules.Add(rule);
@@ -6252,6 +7019,7 @@ namespace DecisionEngineService.Repository
 
             return spellGroupStackRules;
         }
+
         public static List<SpellLearnSpell> GetSpellLearnSpells()
         {
             List<SpellLearnSpell> spellLearnSpells = [];
@@ -6272,7 +7040,7 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             SpellId = reader.GetUInt32("SpellID"),
-                            Active = reader.GetByte("Active")
+                            Active = reader.GetByte("Active"),
                         };
 
                         spellLearnSpells.Add(learnSpell);
@@ -6286,6 +7054,7 @@ namespace DecisionEngineService.Repository
 
             return spellLearnSpells;
         }
+
         public static List<SpellMod> GetSpellMods()
         {
             List<SpellMod> spellMods = [];
@@ -6305,43 +7074,103 @@ namespace DecisionEngineService.Repository
                         SpellMod spellMod = new()
                         {
                             Id = reader.GetUInt32("Id"),
-                            ProcChance = reader.IsDBNull("procChance") ? -1 : reader.GetInt32("procChance"),
-                            ProcFlags = reader.IsDBNull("procFlags") ? -1 : reader.GetInt32("procFlags"),
-                            ProcCharges = reader.IsDBNull("procCharges") ? -1 : reader.GetInt32("procCharges"),
-                            DurationIndex = reader.IsDBNull("DurationIndex") ? -1 : reader.GetInt32("DurationIndex"),
-                            Category = reader.IsDBNull("Category") ? -1 : reader.GetInt32("Category"),
-                            CastingTimeIndex = reader.IsDBNull("CastingTimeIndex") ? -1 : reader.GetInt32("CastingTimeIndex"),
-                            StackAmount = reader.IsDBNull("StackAmount") ? -1 : reader.GetInt32("StackAmount"),
-                            SpellIconId = reader.IsDBNull("SpellIconID") ? -1 : reader.GetInt32("SpellIconID"),
-                            ActiveIconId = reader.IsDBNull("activeIconID") ? -1 : reader.GetInt32("activeIconID"),
-                            ManaCost = reader.IsDBNull("manaCost") ? -1 : reader.GetInt32("manaCost"),
-                            Attributes = reader.IsDBNull("Attributes") ? -1 : reader.GetInt32("Attributes"),
-                            AttributesEx = reader.IsDBNull("AttributesEx") ? -1 : reader.GetInt32("AttributesEx"),
-                            AttributesEx2 = reader.IsDBNull("AttributesEx2") ? -1 : reader.GetInt32("AttributesEx2"),
-                            AttributesEx3 = reader.IsDBNull("AttributesEx3") ? -1 : reader.GetInt32("AttributesEx3"),
-                            AttributesEx4 = reader.IsDBNull("AttributesEx4") ? -1 : reader.GetInt32("AttributesEx4"),
+                            ProcChance = reader.IsDBNull("procChance")
+                                ? -1
+                                : reader.GetInt32("procChance"),
+                            ProcFlags = reader.IsDBNull("procFlags")
+                                ? -1
+                                : reader.GetInt32("procFlags"),
+                            ProcCharges = reader.IsDBNull("procCharges")
+                                ? -1
+                                : reader.GetInt32("procCharges"),
+                            DurationIndex = reader.IsDBNull("DurationIndex")
+                                ? -1
+                                : reader.GetInt32("DurationIndex"),
+                            Category = reader.IsDBNull("Category")
+                                ? -1
+                                : reader.GetInt32("Category"),
+                            CastingTimeIndex = reader.IsDBNull("CastingTimeIndex")
+                                ? -1
+                                : reader.GetInt32("CastingTimeIndex"),
+                            StackAmount = reader.IsDBNull("StackAmount")
+                                ? -1
+                                : reader.GetInt32("StackAmount"),
+                            SpellIconId = reader.IsDBNull("SpellIconID")
+                                ? -1
+                                : reader.GetInt32("SpellIconID"),
+                            ActiveIconId = reader.IsDBNull("activeIconID")
+                                ? -1
+                                : reader.GetInt32("activeIconID"),
+                            ManaCost = reader.IsDBNull("manaCost")
+                                ? -1
+                                : reader.GetInt32("manaCost"),
+                            Attributes = reader.IsDBNull("Attributes")
+                                ? -1
+                                : reader.GetInt32("Attributes"),
+                            AttributesEx = reader.IsDBNull("AttributesEx")
+                                ? -1
+                                : reader.GetInt32("AttributesEx"),
+                            AttributesEx2 = reader.IsDBNull("AttributesEx2")
+                                ? -1
+                                : reader.GetInt32("AttributesEx2"),
+                            AttributesEx3 = reader.IsDBNull("AttributesEx3")
+                                ? -1
+                                : reader.GetInt32("AttributesEx3"),
+                            AttributesEx4 = reader.IsDBNull("AttributesEx4")
+                                ? -1
+                                : reader.GetInt32("AttributesEx4"),
                             Custom = reader.GetInt32("Custom"),
-                            InterruptFlags = reader.IsDBNull("InterruptFlags") ? -1 : reader.GetInt32("InterruptFlags"),
-                            AuraInterruptFlags = reader.IsDBNull("AuraInterruptFlags") ? -1 : reader.GetInt32("AuraInterruptFlags"),
-                            ChannelInterruptFlags = reader.IsDBNull("ChannelInterruptFlags") ? -1 : reader.GetInt32("ChannelInterruptFlags"),
+                            InterruptFlags = reader.IsDBNull("InterruptFlags")
+                                ? -1
+                                : reader.GetInt32("InterruptFlags"),
+                            AuraInterruptFlags = reader.IsDBNull("AuraInterruptFlags")
+                                ? -1
+                                : reader.GetInt32("AuraInterruptFlags"),
+                            ChannelInterruptFlags = reader.IsDBNull("ChannelInterruptFlags")
+                                ? -1
+                                : reader.GetInt32("ChannelInterruptFlags"),
                             Dispel = reader.GetInt32("Dispel"),
                             Stances = reader.IsDBNull("Stances") ? -1 : reader.GetInt32("Stances"),
-                            StancesNot = reader.IsDBNull("StancesNot") ? -1 : reader.GetInt32("StancesNot"),
-                            SpellVisual = reader.IsDBNull("SpellVisual") ? -1 : reader.GetInt32("SpellVisual"),
-                            ManaCostPercentage = reader.IsDBNull("ManaCostPercentage") ? -1 : reader.GetInt32("ManaCostPercentage"),
-                            StartRecoveryCategory = reader.IsDBNull("StartRecoveryCategory") ? -1 : reader.GetInt32("StartRecoveryCategory"),
-                            StartRecoveryTime = reader.IsDBNull("StartRecoveryTime") ? -1 : reader.GetInt32("StartRecoveryTime"),
-                            MaxAffectedTargets = reader.IsDBNull("MaxAffectedTargets") ? -1 : reader.GetInt32("MaxAffectedTargets"),
-                            MaxTargetLevel = reader.IsDBNull("MaxTargetLevel") ? -1 : reader.GetInt32("MaxTargetLevel"),
-                            DmgClass = reader.IsDBNull("DmgClass") ? -1 : reader.GetInt32("DmgClass"),
-                            RangeIndex = reader.IsDBNull("rangeIndex") ? -1 : reader.GetInt32("rangeIndex"),
+                            StancesNot = reader.IsDBNull("StancesNot")
+                                ? -1
+                                : reader.GetInt32("StancesNot"),
+                            SpellVisual = reader.IsDBNull("SpellVisual")
+                                ? -1
+                                : reader.GetInt32("SpellVisual"),
+                            ManaCostPercentage = reader.IsDBNull("ManaCostPercentage")
+                                ? -1
+                                : reader.GetInt32("ManaCostPercentage"),
+                            StartRecoveryCategory = reader.IsDBNull("StartRecoveryCategory")
+                                ? -1
+                                : reader.GetInt32("StartRecoveryCategory"),
+                            StartRecoveryTime = reader.IsDBNull("StartRecoveryTime")
+                                ? -1
+                                : reader.GetInt32("StartRecoveryTime"),
+                            MaxAffectedTargets = reader.IsDBNull("MaxAffectedTargets")
+                                ? -1
+                                : reader.GetInt32("MaxAffectedTargets"),
+                            MaxTargetLevel = reader.IsDBNull("MaxTargetLevel")
+                                ? -1
+                                : reader.GetInt32("MaxTargetLevel"),
+                            DmgClass = reader.IsDBNull("DmgClass")
+                                ? -1
+                                : reader.GetInt32("DmgClass"),
+                            RangeIndex = reader.IsDBNull("rangeIndex")
+                                ? -1
+                                : reader.GetInt32("rangeIndex"),
                             RecoveryTime = reader.GetInt32("RecoveryTime"),
                             CategoryRecoveryTime = reader.GetInt32("CategoryRecoveryTime"),
                             SpellFamilyName = reader.GetInt32("SpellFamilyName"),
                             SpellFamilyFlags = reader.GetUInt64("SpellFamilyFlags"),
-                            Mechanic = reader.IsDBNull("Mechanic") ? -1 : reader.GetInt32("Mechanic"),
-                            EquippedItemClass = reader.IsDBNull("EquippedItemClass") ? -1 : reader.GetInt32("EquippedItemClass"),
-                            Comment = reader.IsDBNull("Comment") ? string.Empty : reader.GetString("Comment")
+                            Mechanic = reader.IsDBNull("Mechanic")
+                                ? -1
+                                : reader.GetInt32("Mechanic"),
+                            EquippedItemClass = reader.IsDBNull("EquippedItemClass")
+                                ? -1
+                                : reader.GetInt32("EquippedItemClass"),
+                            Comment = reader.IsDBNull("Comment")
+                                ? string.Empty
+                                : reader.GetString("Comment"),
                         };
 
                         spellMods.Add(spellMod);
@@ -6355,6 +7184,7 @@ namespace DecisionEngineService.Repository
 
             return spellMods;
         }
+
         public static List<SpellPetAura> GetSpellPetAuras()
         {
             List<SpellPetAura> spellPetAuras = [];
@@ -6375,7 +7205,7 @@ namespace DecisionEngineService.Repository
                         {
                             Spell = reader.GetUInt32("spell"),
                             Pet = reader.GetUInt32("pet"),
-                            Aura = reader.GetUInt32("aura")
+                            Aura = reader.GetUInt32("aura"),
                         };
 
                         spellPetAuras.Add(spellPetAura);
@@ -6389,6 +7219,7 @@ namespace DecisionEngineService.Repository
 
             return spellPetAuras;
         }
+
         public static List<SpellProcEvent> GetSpellProcEvents()
         {
             List<SpellProcEvent> spellProcEvents = [];
@@ -6417,7 +7248,7 @@ namespace DecisionEngineService.Repository
                             ProcEx = reader.GetUInt32("procEx"),
                             PpmRate = reader.GetFloat("ppmRate"),
                             CustomChance = reader.GetFloat("CustomChance"),
-                            Cooldown = reader.GetUInt32("Cooldown")
+                            Cooldown = reader.GetUInt32("Cooldown"),
                         };
 
                         spellProcEvents.Add(spellProcEvent);
@@ -6431,6 +7262,7 @@ namespace DecisionEngineService.Repository
 
             return spellProcEvents;
         }
+
         public static List<SpellProcItemEnchant> GetSpellProcItemEnchants()
         {
             List<SpellProcItemEnchant> spellProcItemEnchants = [];
@@ -6450,7 +7282,7 @@ namespace DecisionEngineService.Repository
                         SpellProcItemEnchant itemEnchant = new()
                         {
                             Entry = reader.GetUInt32("entry"),
-                            PpmRate = reader.GetFloat("ppmRate")
+                            PpmRate = reader.GetFloat("ppmRate"),
                         };
 
                         spellProcItemEnchants.Add(itemEnchant);
@@ -6464,6 +7296,7 @@ namespace DecisionEngineService.Repository
 
             return spellProcItemEnchants;
         }
+
         public static List<SpellScript> GetSpellScripts()
         {
             List<SpellScript> spellScripts = [];
@@ -6502,7 +7335,7 @@ namespace DecisionEngineService.Repository
                             Z = reader.GetFloat("z"),
                             O = reader.GetFloat("o"),
                             ConditionId = reader.GetUInt32("condition_id"),
-                            Comments = reader.GetString("comments")
+                            Comments = reader.GetString("comments"),
                         };
 
                         spellScripts.Add(spellScript);
@@ -6516,6 +7349,7 @@ namespace DecisionEngineService.Repository
 
             return spellScripts;
         }
+
         public static List<SpellScriptTarget> GetSpellScriptTargets()
         {
             List<SpellScriptTarget> spellScriptTargets = [];
@@ -6536,7 +7370,7 @@ namespace DecisionEngineService.Repository
                         {
                             Entry = reader.GetUInt32("entry"),
                             Type = reader.GetByte("type"),
-                            TargetEntry = reader.GetUInt32("targetEntry")
+                            TargetEntry = reader.GetUInt32("targetEntry"),
                         };
 
                         spellScriptTargets.Add(target);
@@ -6550,6 +7384,7 @@ namespace DecisionEngineService.Repository
 
             return spellScriptTargets;
         }
+
         public static List<SpellTargetPosition> GetSpellTargetPositions()
         {
             List<SpellTargetPosition> spellTargetPositions = [];
@@ -6573,7 +7408,7 @@ namespace DecisionEngineService.Repository
                             TargetPositionX = reader.GetFloat("target_position_x"),
                             TargetPositionY = reader.GetFloat("target_position_y"),
                             TargetPositionZ = reader.GetFloat("target_position_z"),
-                            TargetOrientation = reader.GetFloat("target_orientation")
+                            TargetOrientation = reader.GetFloat("target_orientation"),
                         };
 
                         spellTargetPositions.Add(targetPosition);
@@ -6587,6 +7422,7 @@ namespace DecisionEngineService.Repository
 
             return spellTargetPositions;
         }
+
         public static List<SpellTemplate> GetSpellTemplates()
         {
             List<SpellTemplate> spellTemplates = [];
@@ -6665,7 +7501,9 @@ namespace DecisionEngineService.Repository
                             ReagentCount8 = reader.GetUInt32("reagentCount8"),
                             EquippedItemClass = reader.GetInt32("equippedItemClass"),
                             EquippedItemSubClassMask = reader.GetInt32("equippedItemSubClassMask"),
-                            EquippedItemInventoryTypeMask = reader.GetInt32("equippedItemInventoryTypeMask"),
+                            EquippedItemInventoryTypeMask = reader.GetInt32(
+                                "equippedItemInventoryTypeMask"
+                            ),
                             Effect1 = reader.GetUInt32("effect1"),
                             Effect2 = reader.GetUInt32("effect2"),
                             Effect3 = reader.GetUInt32("effect3"),
@@ -6678,9 +7516,15 @@ namespace DecisionEngineService.Repository
                             EffectDicePerLevel1 = reader.GetFloat("effectDicePerLevel1"),
                             EffectDicePerLevel2 = reader.GetFloat("effectDicePerLevel2"),
                             EffectDicePerLevel3 = reader.GetFloat("effectDicePerLevel3"),
-                            EffectRealPointsPerLevel1 = reader.GetFloat("effectRealPointsPerLevel1"),
-                            EffectRealPointsPerLevel2 = reader.GetFloat("effectRealPointsPerLevel2"),
-                            EffectRealPointsPerLevel3 = reader.GetFloat("effectRealPointsPerLevel3"),
+                            EffectRealPointsPerLevel1 = reader.GetFloat(
+                                "effectRealPointsPerLevel1"
+                            ),
+                            EffectRealPointsPerLevel2 = reader.GetFloat(
+                                "effectRealPointsPerLevel2"
+                            ),
+                            EffectRealPointsPerLevel3 = reader.GetFloat(
+                                "effectRealPointsPerLevel3"
+                            ),
                             EffectBasePoints1 = reader.GetInt32("effectBasePoints1"),
                             EffectBasePoints2 = reader.GetInt32("effectBasePoints2"),
                             EffectBasePoints3 = reader.GetInt32("effectBasePoints3"),
@@ -6717,9 +7561,15 @@ namespace DecisionEngineService.Repository
                             EffectTriggerSpell1 = reader.GetUInt32("effectTriggerSpell1"),
                             EffectTriggerSpell2 = reader.GetUInt32("effectTriggerSpell2"),
                             EffectTriggerSpell3 = reader.GetUInt32("effectTriggerSpell3"),
-                            EffectPointsPerComboPoint1 = reader.GetFloat("effectPointsPerComboPoint1"),
-                            EffectPointsPerComboPoint2 = reader.GetFloat("effectPointsPerComboPoint2"),
-                            EffectPointsPerComboPoint3 = reader.GetFloat("effectPointsPerComboPoint3"),
+                            EffectPointsPerComboPoint1 = reader.GetFloat(
+                                "effectPointsPerComboPoint1"
+                            ),
+                            EffectPointsPerComboPoint2 = reader.GetFloat(
+                                "effectPointsPerComboPoint2"
+                            ),
+                            EffectPointsPerComboPoint3 = reader.GetFloat(
+                                "effectPointsPerComboPoint3"
+                            ),
                             SpellVisual1 = reader.GetUInt32("spellVisual1"),
                             SpellVisual2 = reader.GetUInt32("spellVisual2"),
                             SpellIconId = reader.GetUInt32("spellIconId"),
@@ -6776,9 +7626,8 @@ namespace DecisionEngineService.Repository
                             DmgMultiplier3 = reader.GetFloat("dmgMultiplier3"),
                             MinFactionId = reader.GetUInt32("minFactionId"),
                             MinReputation = reader.GetUInt32("minReputation"),
-                            RequiredAuraVision = reader.GetUInt32("requiredAuraVision")
+                            RequiredAuraVision = reader.GetUInt32("requiredAuraVision"),
                         };
-
 
                         spellTemplates.Add(spellTemplate);
                     }
@@ -6791,6 +7640,7 @@ namespace DecisionEngineService.Repository
 
             return spellTemplates;
         }
+
         public static List<SpellThreat> GetSpellThreats()
         {
             List<SpellThreat> spellThreats = [];
@@ -6812,7 +7662,7 @@ namespace DecisionEngineService.Repository
                             Entry = reader.GetUInt32("entry"),
                             Threat = reader.GetInt32("Threat"),
                             Multiplier = reader.GetFloat("multiplier"),
-                            ApBonus = reader.GetFloat("ap_bonus")
+                            ApBonus = reader.GetFloat("ap_bonus"),
                         };
 
                         spellThreats.Add(spellThreat);
@@ -6826,6 +7676,7 @@ namespace DecisionEngineService.Repository
 
             return spellThreats;
         }
+
         public static List<TaxiPathTransition> GetTaxiPathTransitions()
         {
             List<TaxiPathTransition> taxiPathTransitions = [];
@@ -6848,7 +7699,9 @@ namespace DecisionEngineService.Repository
                             OutPath = reader.GetUInt32("outPath"),
                             InNode = reader.GetUInt32("inNode"),
                             OutNode = reader.GetUInt32("outNode"),
-                            Comment = reader.IsDBNull("comment") ? string.Empty : reader.GetString("comment")
+                            Comment = reader.IsDBNull("comment")
+                                ? string.Empty
+                                : reader.GetString("comment"),
                         };
 
                         taxiPathTransitions.Add(transition);
@@ -6862,6 +7715,7 @@ namespace DecisionEngineService.Repository
 
             return taxiPathTransitions;
         }
+
         public static List<Transport> GetTransports()
         {
             List<Transport> transports = [];
@@ -6882,8 +7736,10 @@ namespace DecisionEngineService.Repository
                         {
                             Guid = reader.GetUInt32("guid"),
                             Entry = reader.GetUInt32("entry"),
-                            Name = reader.IsDBNull("name") ? string.Empty : reader.GetString("name"),
-                            Period = reader.GetUInt32("period")
+                            Name = reader.IsDBNull("name")
+                                ? string.Empty
+                                : reader.GetString("name"),
+                            Period = reader.GetUInt32("period"),
                         };
 
                         transports.Add(transport);
@@ -6897,6 +7753,7 @@ namespace DecisionEngineService.Repository
 
             return transports;
         }
+
         public static List<Variables> GetVariables()
         {
             List<Variables> variables = [];
@@ -6916,7 +7773,7 @@ namespace DecisionEngineService.Repository
                         Variables variable = new()
                         {
                             Index = reader.GetUInt32("index"),
-                            Value = reader.GetUInt32("value")
+                            Value = reader.GetUInt32("value"),
                         };
 
                         variables.Add(variable);

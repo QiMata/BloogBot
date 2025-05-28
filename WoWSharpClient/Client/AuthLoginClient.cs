@@ -1,15 +1,16 @@
-﻿using GameData.Core.Enums;
-using GameData.Core.Models;
-using Org.BouncyCastle.Utilities;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using GameData.Core.Enums;
+using GameData.Core.Models;
+using Org.BouncyCastle.Utilities;
 using WowSrp.Client;
 
 namespace WoWSharpClient.Client
 {
-    internal class AuthLoginClient(string ipAddress, WoWSharpEventEmitter woWSharpEventEmitter) : IDisposable
+    internal class AuthLoginClient(string ipAddress, WoWSharpEventEmitter woWSharpEventEmitter)
+        : IDisposable
     {
         private string _username = string.Empty;
         private string _password = string.Empty;
@@ -28,6 +29,7 @@ namespace WoWSharpClient.Client
         public byte[] ServerProof => _serverProof;
         public byte[] SessionKey => _srpClient.SessionKey;
         public bool IsConnected => _client != null && _client.Connected;
+
         public void Connect()
         {
             try
@@ -122,12 +124,27 @@ namespace WoWSharpClient.Client
             }
         }
 
-        private void SendLogonProof(byte[] serverPublicKey, byte generator, byte[] largeSafePrime, byte[] salt, byte[] crcSalt)
+        private void SendLogonProof(
+            byte[] serverPublicKey,
+            byte generator,
+            byte[] largeSafePrime,
+            byte[] salt,
+            byte[] crcSalt
+        )
         {
             try
             {
-                _srpClientChallenge = new SrpClientChallenge(_username, _password, generator, largeSafePrime, serverPublicKey, salt);
-                byte[] crcHash = SHA1.HashData(Arrays.Concatenate(crcSalt, _srpClientChallenge.ClientProof));
+                _srpClientChallenge = new SrpClientChallenge(
+                    _username,
+                    _password,
+                    generator,
+                    largeSafePrime,
+                    serverPublicKey,
+                    salt
+                );
+                byte[] crcHash = SHA1.HashData(
+                    Arrays.Concatenate(crcSalt, _srpClientChallenge.ClientProof)
+                );
 
                 using var memoryStream = new MemoryStream();
                 using var writer = new BinaryWriter(memoryStream, Encoding.UTF8, true);
@@ -248,18 +265,22 @@ namespace WoWSharpClient.Client
                     using var bodyReader = new BinaryReader(bodyStream, Encoding.UTF8, true);
                     for (int i = 0; i < numOfRealms; i++)
                     {
-                        list.Add(new Realm()
-                        {
-                            RealmType = bodyReader.ReadUInt32(),
-                            Flags = bodyReader.ReadByte(),
-                            RealmName = PacketManager.ReadCString(bodyReader),
-                            AddressPort = int.Parse(PacketManager.ReadCString(bodyReader).Split(":")[1]),
+                        list.Add(
+                            new Realm()
+                            {
+                                RealmType = bodyReader.ReadUInt32(),
+                                Flags = bodyReader.ReadByte(),
+                                RealmName = PacketManager.ReadCString(bodyReader),
+                                AddressPort = int.Parse(
+                                    PacketManager.ReadCString(bodyReader).Split(":")[1]
+                                ),
 
-                            Population = bodyReader.ReadSingle(),
-                            NumChars = bodyReader.ReadByte(),
-                            RealmCategory = bodyReader.ReadByte(),
-                            RealmId = bodyReader.ReadByte(),
-                        });
+                                Population = bodyReader.ReadSingle(),
+                                NumChars = bodyReader.ReadByte(),
+                                RealmCategory = bodyReader.ReadByte(),
+                                RealmId = bodyReader.ReadByte(),
+                            }
+                        );
                     }
                 }
                 else
@@ -275,9 +296,6 @@ namespace WoWSharpClient.Client
             return list;
         }
 
-        public void Dispose()
-        {
-
-        }
+        public void Dispose() { }
     }
 }

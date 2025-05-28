@@ -1,4 +1,5 @@
-﻿using BloogBot.AI.StateMachine;
+﻿using BloogBot.AI;
+using BloogBot.AI.StateMachine;
 using BloogBot.AI.States;
 using BotRunner.Clients;
 using Communication;
@@ -10,26 +11,36 @@ using Xas.FluentBehaviourTree;
 
 namespace BotRunner;
 
-public class BotRunnerService
+public interface IBotRunnerService
+{
+    void Start();
+}
+
+public class BotRunnerService : IBotRunnerService
 {
     private readonly IObjectManager _objectManager;
     private readonly CharacterStateUpdateClient _characterStateUpdateClient;
     private readonly PathfindingClient _pathfindingClient;
-
     private ActivitySnapshot _activitySnapshot;
     private Task _asyncBotTaskRunnerTask;
     private IBehaviourTreeNode _behaviorTree;
+    private readonly BotActivityStateMachine _activityStateMachine;
+    private readonly KernelCoordinator _kernelCoordinator;
 
     public BotRunnerService(
         IObjectManager objectManager,
         CharacterStateUpdateClient characterStateUpdateClient,
-        PathfindingClient pathfindingClient
+        PathfindingClient pathfindingClient,
+        BotActivityStateMachine activityStateMachine,
+        KernelCoordinator kernelCoordinator
     )
     {
         _objectManager = objectManager;
         _activitySnapshot = new ActivitySnapshot { AccountName = "?" };
         _pathfindingClient = pathfindingClient;
         _characterStateUpdateClient = characterStateUpdateClient;
+        _activityStateMachine = activityStateMachine;
+        _kernelCoordinator = kernelCoordinator;
     }
 
     public void Start()
@@ -58,7 +69,18 @@ public class BotRunnerService
                             {
                                 if (_objectManager.CharacterSelectScreen.CharacterSelects.Count > 0)
                                 {
-                                    if (_objectManager.CharacterSelectScreen.HasEnteredWorld) { }
+                                    if (_objectManager.CharacterSelectScreen.HasEnteredWorld)
+                                    {
+                                        var desired = HeuristicPicker.PickNext(_objectManager);
+                                        if (desired != _activityStateMachine.Current)
+                                            _activityStateMachine.Fire(TransitionFor(desired));
+
+                                        _kernelCoordinator.OnActivityChanged(
+                                            _activityStateMachine.Current
+                                        );
+
+                                        // …swap plugins, call LLM, tick tree, etc.
+                                    }
                                     else
                                     {
                                         _behaviorTree = BuildEnterWorldSequence(
@@ -94,7 +116,6 @@ public class BotRunnerService
                                     );
                                 }
                             }
-                            else { }
                         }
                         else
                         {
@@ -121,6 +142,16 @@ public class BotRunnerService
             {
                 Console.WriteLine($"[BOT RUNNER] {ex}");
             }
+    }
+
+    private static Trigger TransitionFor(BotActivity activity)
+    {
+        return activity switch
+        {
+            BotActivity.Resting => Trigger.LowHealth,
+            BotActivity.Questing => Trigger.HealthRestored,
+            _ => throw new NotSupportedException($"No trigger defined for {activity}"),
+        };
     }
 
     private IBehaviourTreeNode BuildBehaviorTreeFromActions(

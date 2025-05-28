@@ -3,17 +3,46 @@ namespace BloogBot.AI.States;
 public enum BotActivity
 {
     // --- Character Development
-    Questing, Grinding, Professions, Talenting, Equipping,
+    Questing,
+    Grinding,
+    Professions,
+    Talenting,
+    Equipping,
+
     // --- Social
-    Trading, Guilding, Chatting, Helping, Mailing, Partying, RolePlaying,
+    Trading,
+    Guilding,
+    Chatting,
+    Helping,
+    Mailing,
+    Partying,
+    RolePlaying,
+
     // --- Combat & PvP
-    Combat, Battlegrounding, Dungeoning, Raiding, WorldPvPing, Camping,
+    Combat,
+    Battlegrounding,
+    Dungeoning,
+    Raiding,
+    WorldPvPing,
+    Camping,
+
     // --- Economy
-    Auction, Banking, Vending,
+    Auction,
+    Banking,
+    Vending,
+
     // --- Movement
-    Exploring, Traveling, Escaping,
+    Exploring,
+    Traveling,
+    Escaping,
+
     // --- Passive
     Resting,
+
     // --- Events
-    Eventing
+    Eventing,
+    LoggingIn,
+    RealmSelecting,
+    CharacterSelecting,
+    EnteringWorld,
 }

@@ -1,22 +1,29 @@
-﻿using ForegroundBotRunner.Mem;
+﻿using System.Runtime.InteropServices;
+using ForegroundBotRunner.Mem;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using System.Runtime.InteropServices;
 
 namespace ForegroundBotRunner.Objects
 {
-    public unsafe abstract class WoWObject(nint pointer, HighGuid guid, WoWObjectType objectType) : IWoWObject
+    public abstract unsafe class WoWObject(nint pointer, HighGuid guid, WoWObjectType objectType)
+        : IWoWObject
     {
         public nint Pointer { get; } = pointer;
+
         // used for interacting in vanilla
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
         private delegate void RightClickObjectDelegate(nint unitPtr, int autoLoot);
 
-        private readonly RightClickObjectDelegate rightClickObjectFunction = Marshal.GetDelegateForFunctionPointer<RightClickObjectDelegate>(0x60BEA0);
+        private readonly RightClickObjectDelegate rightClickObjectFunction =
+            Marshal.GetDelegateForFunctionPointer<RightClickObjectDelegate>(0x60BEA0);
 
-        public float ScaleX => MemoryManager.ReadFloat(nint.Add(GetDescriptorPtr(), MemoryAddresses.WoWObject_ScaleXOffset));
-        public float Height => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWObject_HeightOffset));
+        public float ScaleX =>
+            MemoryManager.ReadFloat(
+                nint.Add(GetDescriptorPtr(), MemoryAddresses.WoWObject_ScaleXOffset)
+            );
+        public float Height =>
+            MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWObject_HeightOffset));
         public Position Position => GetPosition();
 
         private Position GetPosition()
@@ -47,7 +54,9 @@ namespace ForegroundBotRunner.Objects
                     nint xyzStruct;
                     if (v2 != 0)
                     {
-                        var underlyingFuncPtr = MemoryManager.ReadInt(nint.Add(MemoryManager.ReadIntPtr(v2), 0x44));
+                        var underlyingFuncPtr = MemoryManager.ReadInt(
+                            nint.Add(MemoryManager.ReadIntPtr(v2), 0x44)
+                        );
                         switch (underlyingFuncPtr)
                         {
                             case 0x005F5C10:
@@ -56,7 +65,13 @@ namespace ForegroundBotRunner.Objects
                                 z = MemoryManager.ReadFloat(v2 + 0x2c + 0x8);
                                 return new(x, y, z);
                             case 0x005F3690:
-                                v2 = (int)nint.Add(MemoryManager.ReadIntPtr(nint.Add(MemoryManager.ReadIntPtr(v2 + 0x4), 0x110)), 0x24);
+                                v2 = (int)
+                                    nint.Add(
+                                        MemoryManager.ReadIntPtr(
+                                            nint.Add(MemoryManager.ReadIntPtr(v2 + 0x4), 0x110)
+                                        ),
+                                        0x24
+                                    );
                                 x = MemoryManager.ReadFloat(v2);
                                 y = MemoryManager.ReadFloat(v2 + 0x4);
                                 z = MemoryManager.ReadFloat(v2 + 0x8);
@@ -66,7 +81,10 @@ namespace ForegroundBotRunner.Objects
                     }
                     else
                     {
-                        xyzStruct = nint.Add(MemoryManager.ReadIntPtr(nint.Add(Pointer, 0x110)), 0x24);
+                        xyzStruct = nint.Add(
+                            MemoryManager.ReadIntPtr(nint.Add(Pointer, 0x110)),
+                            0x24
+                        );
                     }
                     x = MemoryManager.ReadFloat(xyzStruct);
                     y = MemoryManager.ReadFloat(nint.Add(xyzStruct, 0x4));
@@ -198,22 +216,59 @@ namespace ForegroundBotRunner.Objects
 
         public uint TransportLastUpdated => throw new NotImplementedException();
 
-        public SplineFlags SplineFlags { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public Position SplineFinalPoint { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public ulong SplineTargetGuid { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public float SplineFinalOrientation { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public int SplineTimePassed { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public int SplineDuration { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public uint SplineId { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public List<Position> SplineNodes { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public Position SplineFinalDestination { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public SplineFlags SplineFlags
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+        public Position SplineFinalPoint
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+        public ulong SplineTargetGuid
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+        public float SplineFinalOrientation
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+        public int SplineTimePassed
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+        public int SplineDuration
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+        public uint SplineId
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+        public List<Position> SplineNodes
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+        public Position SplineFinalDestination
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
 
         public void Interact()
         {
             rightClickObjectFunction(Pointer, 0);
         }
 
-        protected nint GetDescriptorPtr() => MemoryManager.ReadIntPtr(nint.Add(Pointer, MemoryAddresses.WoWObject_DescriptorOffset));
+        protected nint GetDescriptorPtr() =>
+            MemoryManager.ReadIntPtr(nint.Add(Pointer, MemoryAddresses.WoWObject_DescriptorOffset));
 
         public bool IsFacing(Position position)
         {

@@ -9,19 +9,20 @@ namespace ForegroundBotRunner.Objects
 {
     public class LocalPlayer : WoWPlayer, IWoWLocalPlayer
     {
-        internal LocalPlayer(
-            nint pointer,
-            HighGuid guid,
-            WoWObjectType objectType)
+        internal LocalPlayer(nint pointer, HighGuid guid, WoWObjectType objectType)
             : base(pointer, guid, objectType) => RefreshSpells();
 
         private readonly Random random = new();
 
         // LUA SCRIPTS
-        private const string WandLuaScript = "if IsCurrentAction(72) == nil then CastSpellByName('Shoot') end";
-        private const string TurnOffWandLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Shoot') end";
-        private const string AutoAttackLuaScript = "if IsCurrentAction(72) == nil then CastSpellByName('Attack') end";
-        private const string TurnOffAutoAttackLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Attack') end";
+        private const string WandLuaScript =
+            "if IsCurrentAction(72) == nil then CastSpellByName('Shoot') end";
+        private const string TurnOffWandLuaScript =
+            "if IsCurrentAction(72) ~= nil then CastSpellByName('Shoot') end";
+        private const string AutoAttackLuaScript =
+            "if IsCurrentAction(72) == nil then CastSpellByName('Attack') end";
+        private const string TurnOffAutoAttackLuaScript =
+            "if IsCurrentAction(72) ~= nil then CastSpellByName('Attack') end";
 
         // OPCODES
         private const int SET_FACING_OPCODE = 0xDA;
@@ -30,21 +31,28 @@ namespace ForegroundBotRunner.Objects
         public readonly List<int> PlayerSkills = [];
         public new ulong TargetGuid => MemoryManager.ReadUlong(Offsets.Player.TargetGuid, true);
 
-        public bool TargetInMeleeRange => Functions.LuaCallWithResult("{0} = CheckInteractDistance(\"target\", 3)")[0] == "1";
+        public bool TargetInMeleeRange =>
+            Functions.LuaCallWithResult("{0} = CheckInteractDistance(\"target\", 3)")[0] == "1";
 
         public new Class Class => (Class)MemoryManager.ReadByte(MemoryAddresses.LocalPlayerClass);
-        public new Race Race => Enum.GetValues(typeof(Race))
+        public new Race Race =>
+            Enum.GetValues(typeof(Race))
                 .Cast<Race>()
-            .FirstOrDefault(v => v.GetDescription() == Functions.LuaCallWithResult("{0} = UnitRace('player')")[0]);
+                .FirstOrDefault(v =>
+                    v.GetDescription() == Functions.LuaCallWithResult("{0} = UnitRace('player')")[0]
+                );
 
-        public Position CorpsePosition => new(
-            MemoryManager.ReadFloat(MemoryAddresses.LocalPlayerCorpsePositionX),
-            MemoryManager.ReadFloat(MemoryAddresses.LocalPlayerCorpsePositionY),
-            MemoryManager.ReadFloat(MemoryAddresses.LocalPlayerCorpsePositionZ));
+        public Position CorpsePosition =>
+            new(
+                MemoryManager.ReadFloat(MemoryAddresses.LocalPlayerCorpsePositionX),
+                MemoryManager.ReadFloat(MemoryAddresses.LocalPlayerCorpsePositionY),
+                MemoryManager.ReadFloat(MemoryAddresses.LocalPlayerCorpsePositionZ)
+            );
 
         public void Face(Position pos)
         {
-            if (pos == null) return;
+            if (pos == null)
+                return;
 
             // sometimes the client gets in a weird state and CurrentFacing is negative. correct that here.
             if (Facing < 0)
@@ -128,11 +136,15 @@ namespace ForegroundBotRunner.Objects
         }
 
         // Nat added this to see if he could test out the cleave radius which is larger than that isFacing radius
-        public bool IsInCleave(Position position) => Math.Abs(GetFacingForPosition(position) - Facing) < 3f;
+        public bool IsInCleave(Position position) =>
+            Math.Abs(GetFacingForPosition(position) - Facing) < 3f;
 
         public void SetFacing(float facing)
         {
-            Functions.SetFacing(nint.Add(Pointer, MemoryAddresses.LocalPlayer_SetFacingOffset), facing);
+            Functions.SetFacing(
+                nint.Add(Pointer, MemoryAddresses.LocalPlayer_SetFacingOffset),
+                facing
+            );
             Functions.SendMovementUpdate(Pointer, SET_FACING_OPCODE);
         }
 
@@ -163,7 +175,13 @@ namespace ForegroundBotRunner.Objects
         {
             if (MovementFlags != MovementFlags.MOVEFLAG_NONE)
             {
-                var bits = ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight;
+                var bits =
+                    ControlBits.Front
+                    | ControlBits.Back
+                    | ControlBits.Left
+                    | ControlBits.Right
+                    | ControlBits.StrafeLeft
+                    | ControlBits.StrafeRight;
 
                 StopMovement(bits);
             }
@@ -249,13 +267,16 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
-        public bool IsDiseased => GetDebuffs(LuaTarget.Player).Any(t => t.Type == EffectType.Disease);
+        public bool IsDiseased =>
+            GetDebuffs(LuaTarget.Player).Any(t => t.Type == EffectType.Disease);
 
         public bool IsCursed => GetDebuffs(LuaTarget.Player).Any(t => t.Type == EffectType.Curse);
 
-        public bool IsPoisoned => GetDebuffs(LuaTarget.Player).Any(t => t.Type == EffectType.Poison);
+        public bool IsPoisoned =>
+            GetDebuffs(LuaTarget.Player).Any(t => t.Type == EffectType.Poison);
 
-        public bool HasMagicDebuff => GetDebuffs(LuaTarget.Player).Any(t => t.Type == EffectType.Magic);
+        public bool HasMagicDebuff =>
+            GetDebuffs(LuaTarget.Player).Any(t => t.Type == EffectType.Magic);
 
         public void ReleaseCorpse() => Functions.ReleaseCorpse(Pointer);
 
@@ -266,8 +287,11 @@ namespace ForegroundBotRunner.Objects
             PlayerSpells.Clear();
             for (var i = 0; i < 1024; i++)
             {
-                var currentSpellId = MemoryManager.ReadInt(MemoryAddresses.LocalPlayerSpellsBase + 4 * i);
-                if (currentSpellId == 0) break;
+                var currentSpellId = MemoryManager.ReadInt(
+                    MemoryAddresses.LocalPlayerSpellsBase + 4 * i
+                );
+                if (currentSpellId == 0)
+                    break;
 
                 string name;
                 var spellsBasePtr = MemoryManager.ReadIntPtr(0x00C0D788);
@@ -277,10 +301,7 @@ namespace ForegroundBotRunner.Objects
                 name = MemoryManager.ReadString(spellNamePtr);
 
                 if (PlayerSpells.TryGetValue(name, out int[]? value))
-                    PlayerSpells[name] =
-                    [
-.. value,                         currentSpellId
-                    ];
+                    PlayerSpells[name] = [.. value, currentSpellId];
                 else
                     PlayerSpells.Add(name, [currentSpellId]);
             }
@@ -337,18 +358,30 @@ namespace ForegroundBotRunner.Objects
             if (parId >= MemoryManager.ReadUint(0x00C0D780 + 0xC) || parId <= 0)
                 return 0;
 
-            var entryPtr = MemoryManager.ReadIntPtr((nint)(uint)(MemoryManager.ReadUint(0x00C0D780 + 8) + parId * 4));
+            var entryPtr = MemoryManager.ReadIntPtr(
+                (nint)(uint)(MemoryManager.ReadUint(0x00C0D780 + 8) + parId * 4)
+            );
             return MemoryManager.ReadInt(entryPtr + 0x0080);
-
         }
 
         public bool KnowsSpell(string name) => PlayerSpells.ContainsKey(name);
 
-        public bool MainhandIsEnchanted => Functions.LuaCallWithResult("{0} = GetWeaponEnchantInfo()")[0] == "1";
+        public bool MainhandIsEnchanted =>
+            Functions.LuaCallWithResult("{0} = GetWeaponEnchantInfo()")[0] == "1";
 
-        public ulong GetBackpackItemGuid(int slot) => MemoryManager.ReadUlong(GetDescriptorPtr() + (MemoryAddresses.LocalPlayer_BackpackFirstItemOffset + slot * 8));
+        public ulong GetBackpackItemGuid(int slot) =>
+            MemoryManager.ReadUlong(
+                GetDescriptorPtr()
+                    + (MemoryAddresses.LocalPlayer_BackpackFirstItemOffset + slot * 8)
+            );
 
-        public ulong GetEquippedItemGuid(EquipSlot slot) => MemoryManager.ReadUlong(nint.Add(Pointer, MemoryAddresses.LocalPlayer_EquipmentFirstItemOffset + ((int)slot - 1) * 0x8));
+        public ulong GetEquippedItemGuid(EquipSlot slot) =>
+            MemoryManager.ReadUlong(
+                nint.Add(
+                    Pointer,
+                    MemoryAddresses.LocalPlayer_EquipmentFirstItemOffset + ((int)slot - 1) * 0x8
+                )
+            );
 
         public bool CanRiposte
         {
@@ -356,7 +389,9 @@ namespace ForegroundBotRunner.Objects
             {
                 if (PlayerSpells.ContainsKey("Riposte"))
                 {
-                    var results = Functions.LuaCallWithResult("{0}, {1} = IsUsableSpell('Riposte')");
+                    var results = Functions.LuaCallWithResult(
+                        "{0}, {1} = IsUsableSpell('Riposte')"
+                    );
                     if (results.Length > 0)
                         return results[0] == "1";
                     else
@@ -367,16 +402,20 @@ namespace ForegroundBotRunner.Objects
         }
 
         public bool TastyCorpsesNearby => throw new NotImplementedException();
-
         public uint Copper => throw new NotImplementedException();
-
         public bool IsAutoAttacking => throw new NotImplementedException();
-
         public bool CanResurrect => throw new NotImplementedException();
+        public bool InBattleground => throw new NotImplementedException();
+        public bool HasQuestTargets => throw new NotImplementedException();
+        public bool IsInWorld => throw new NotImplementedException();
+        public bool HealthRestored => throw new NotImplementedException();
 
         public void StartMeleeAttack()
         {
-            if (!IsCasting && (Class == Class.Warlock || Class == Class.Mage || Class == Class.Priest))
+            if (
+                !IsCasting
+                && (Class == Class.Warlock || Class == Class.Mage || Class == Class.Priest)
+            )
             {
                 Functions.LuaCall(WandLuaScript);
             }
@@ -501,7 +540,13 @@ namespace ForegroundBotRunner.Objects
             throw new NotImplementedException();
         }
 
-        public void SplitStack(int bag, int slot, int quantity, int destinationBag, int destinationSlot)
+        public void SplitStack(
+            int bag,
+            int slot,
+            int quantity,
+            int destinationBag,
+            int destinationSlot
+        )
         {
             throw new NotImplementedException();
         }
