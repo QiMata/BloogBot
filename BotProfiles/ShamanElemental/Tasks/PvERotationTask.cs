@@ -58,9 +58,20 @@ namespace ShamanElemental.Tasks
         {
             TryCastSpell(GroundingTotem, 0, int.MaxValue, ObjectManager.Aggressors.Any(a => a.IsCasting && ObjectManager.GetTarget(ObjectManager.Player).Mana > 0));
 
-            TryCastSpell(EarthShock, 0, 20, !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && (ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling || ObjectManager.Player.HasBuff(Clearcasting)));
+            TryCastSpell(EarthShock, 0, 20,
+                !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) &&
+                (ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling));
 
-            TryCastSpell(LightningBolt, 0, 30, !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && ObjectManager.Player.ManaPercent > 30 || (ObjectManager.Player.HasBuff(FocusedCasting) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 && Wait.For("FocusedLightningBoltDelay", 4000, true)));
+            TryCastSpell(FlameShock, 0, 20,
+                !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(FlameShock) &&
+                !FireImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) &&
+                ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
+
+            TryCastSpell(ElementalMastery, 0, int.MaxValue);
+
+            TryCastSpell(LightningBolt, 0, 30,
+                !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) &&
+                (ObjectManager.Player.ManaPercent > 20 || ObjectManager.Player.HasBuff(ElementalMastery)));
 
             TryCastSpell(TremorTotem, 0, int.MaxValue, FearingCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && !ObjectManager.Units.Any(u => u.Position.DistanceTo(ObjectManager.Player.Position) < 29 && u.HealthPercent > 0 && u.Name.Contains(TremorTotem)));
 
@@ -72,7 +83,6 @@ namespace ShamanElemental.Tasks
 
             TryCastSpell(ManaSpringTotem, 0, int.MaxValue, !ObjectManager.Units.Any(u => u.Position.DistanceTo(ObjectManager.Player.Position) < 19 && u.HealthPercent > 0 && u.Name.Contains(ManaSpringTotem)));
 
-            TryCastSpell(FlameShock, 0, 20, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(FlameShock) && (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent >= 50 || NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name)) && !FireImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name));
 
             TryCastSpell(LightningShield, 0, int.MaxValue, !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && !ObjectManager.Player.HasBuff(LightningShield));
 
@@ -80,7 +90,8 @@ namespace ShamanElemental.Tasks
 
             TryCastSpell(FlametongueWeapon, 0, int.MaxValue, ObjectManager.Player.IsSpellReady(FlametongueWeapon) && !ObjectManager.Player.MainhandIsEnchanted && !FireImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name));
 
-            TryCastSpell(ElementalMastery, 0, int.MaxValue);
+            if (ObjectManager.Player.ManaPercent < 5)
+                ObjectManager.Player.StartMeleeAttack();
         }
     }
 }
