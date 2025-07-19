@@ -5,13 +5,15 @@ namespace MageFire.Tasks
 {
     internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
-        public void Update()
-        {
-            BotTasks.Pop();
-        }
-        public override void PerformCombatRotation()
-        {
+        private readonly PvERotationTask pveRotation;
 
+        public PvPRotationTask(IBotContext botContext) : base(botContext)
+        {
+            pveRotation = new PvERotationTask(botContext);
         }
+
+        public void Update() => pveRotation.Update();
+
+        public override void PerformCombatRotation() => pveRotation.PerformCombatRotation();
     }
 }

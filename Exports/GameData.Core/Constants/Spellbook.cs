@@ -88,6 +88,16 @@
         public const string PresenceOfMind = "Presence of Mind";
         public const string ColdSnap = "Cold Snap";
         public const string ConeOfCold = "Cone of Cold";
+        public const string Flamestrike = "Flamestrike";
+        public const string ArcaneExplosion = "Arcane Explosion";
+        public const string Scorch = "Scorch";
+        public const string Pyroblast = "Pyroblast";
+        public const string Combustion = "Combustion";
+        public const string ArcaneBarrage = "Arcane Barrage";
+        public const string FingersOfFrost = "Fingers of Frost";
+        public const string BrainFreeze = "Brain Freeze";
+        public const string IceLance = "Ice Lance";
+        public const string DeepFreeze = "Deep Freeze";
         public const string Evocation = "Evocation";
         public const string FireWard = "Fire Ward";
         public const string FrostWard = "Frost Ward";
