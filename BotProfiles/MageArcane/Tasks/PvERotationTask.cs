@@ -79,6 +79,12 @@ namespace MageArcane.Tasks
 
             TryCastSpell(FrostNova, 0, 10, !ObjectManager.Units.Any(u => u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Health > 0 && u.Position.DistanceTo(ObjectManager.Player.Position) < 15), callback: FrostNovaCallback);
 
+            TryCastSpell(ArcaneExplosion, 0, 10, ObjectManager.Aggressors.Count() > 2);
+
+            TryCastSpell(Flamestrike, 0, 30, ObjectManager.Aggressors.Count() > 2);
+
+            TryCastSpell(ArcaneBarrage, 0, 30, ObjectManager.Player.Level >= 40);
+
             TryCastSpell(Fireball, 0, 34, ObjectManager.Player.Level < 15 || ObjectManager.Player.HasBuff(PresenceOfMind));
 
             TryCastSpell(ArcaneMissiles, 0, 29, ObjectManager.Player.Level >= 15);
