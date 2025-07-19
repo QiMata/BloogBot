@@ -7,6 +7,9 @@ namespace DruidBalance.Tasks
 {
     internal class PvERotationTask : CombatRotationTask, IBotTask
     {
+        private const string Starfire = "Starfire";
+        private const string EclipseSolar = "Eclipse (Solar)";
+        private const string EclipseLunar = "Eclipse (Lunar)";
         private static readonly string[] ImmuneToNatureDamage = ["Vortex", "Whirlwind", "Whirling", "Dust", "Cyclone"];
         private IWoWUnit secondaryTarget;
         private bool castingEntanglingRoots;
@@ -84,11 +87,29 @@ namespace DruidBalance.Tasks
 
             TryCastSpell(AbolishPoison, 0, int.MaxValue, ObjectManager.Player.IsPoisoned && !ObjectManager.Player.HasBuff(MoonkinForm), castOnSelf: true);
 
-            TryCastSpell(InsectSwarm, 0, 30, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(InsectSwarm) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 && !ImmuneToNatureDamage.Any(s => ObjectManager.GetTarget(ObjectManager.Player).Name.Contains(s)));
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
 
-            TryCastSpell(Moonfire, 0, 30, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Moonfire));
+            TryCastSpell(InsectSwarm, 0, 30,
+                target != null &&
+                !target.HasDebuff(InsectSwarm) &&
+                target.HealthPercent > 20 &&
+                !ImmuneToNatureDamage.Any(s => target.Name.Contains(s)));
 
-            TryCastSpell(Wrath, 0, 30, !ImmuneToNatureDamage.Any(s => ObjectManager.GetTarget(ObjectManager.Player).Name.Contains(s)));
+            TryCastSpell(Moonfire, 0, 30, target != null && !target.HasDebuff(Moonfire));
+
+            bool lunarEclipse = ObjectManager.Player.HasBuff(EclipseLunar);
+            bool solarEclipse = ObjectManager.Player.HasBuff(EclipseSolar);
+            bool hasClearcasting = ObjectManager.Player.HasBuff(Clearcasting);
+
+            TryCastSpell(Starfire, 0, 30,
+                target != null &&
+                (lunarEclipse || hasClearcasting) &&
+                !ImmuneToNatureDamage.Any(s => target.Name.Contains(s)));
+
+            TryCastSpell(Wrath, 0, 30,
+                target != null &&
+                (solarEclipse || (!lunarEclipse && !hasClearcasting)) &&
+                !ImmuneToNatureDamage.Any(s => target.Name.Contains(s)));
         }
 
         public override void PerformCombatRotation()
