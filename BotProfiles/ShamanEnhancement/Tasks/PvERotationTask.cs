@@ -97,7 +97,10 @@ namespace ShamanEnhancement.Tasks
 
             TryCastSpell(WindfuryWeapon, 0, int.MaxValue, !ObjectManager.Player.MainhandIsEnchanted && ObjectManager.Player.IsSpellReady(WindfuryWeapon));
 
-            //TryCastSpell(StoneclawTotem, 0, int.MaxValue, ObjectManager.Aggressors.Count() > 1);
+            TryCastSpell(StoneclawTotem, 0, int.MaxValue,
+                ObjectManager.Aggressors.Count() > 1 &&
+                !ObjectManager.Units.Any(u => u.Position.DistanceTo(ObjectManager.Player.Position) < 19 &&
+                    u.HealthPercent > 0 && u.Name.Contains(StoneclawTotem)));
 
             TryCastSpell(ManaSpringTotem, 0, int.MaxValue, !ObjectManager.Units.Any(u => u.Position.DistanceTo(ObjectManager.Player.Position) < 19 && u.HealthPercent > 0 && u.Name.Contains(ManaSpringTotem)));
 
@@ -108,6 +111,14 @@ namespace ShamanEnhancement.Tasks
             TryCastSpell(Stormstrike, 0, 5);
 
             TryCastSpell(FlameShock, 0, 20, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(FlameShock) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 70 || NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && !FireImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name));
+
+            TryCastSpell(EarthShock, 0, 20,
+                !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) &&
+                (ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling));
+
+            TryUseAbilityById(BloodFury, 4, 0, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
+
+            TryUseAbility(Berserking, 0, ObjectManager.Aggressors.Count() > 1);
 
             //TryCastSpell(EarthShock, 0, 20, !natureImmuneCreatures.Contains(target.Name) && !ObjectManager.Player.IsSpellReady(Stormstrike) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 70 || ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Stormstrike) || ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling || ObjectManager.Player.HasBuff(Clearcasting));
 

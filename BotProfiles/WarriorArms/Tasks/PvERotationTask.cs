@@ -34,7 +34,25 @@ namespace WarriorArms.Tasks
             if (Update(3))
                 return;
 
-            // Use these abilities when fighting any number of mobs.   
+            ExecuteRotation();
+        }
+
+        public override void PerformCombatRotation()
+        {
+            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
+            {
+                if (ObjectManager.Aggressors.Any())
+                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                else
+                    return;
+            }
+
+            ExecuteRotation();
+        }
+
+        private void ExecuteRotation()
+        {
+            // Use these abilities when fighting any number of mobs.
             TryUseAbility(Bloodrage, condition: ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
 
             TryUseAbilityById(BloodFury, 4, condition: ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
@@ -85,11 +103,6 @@ namespace WarriorArms.Tasks
                     TryUseAbility(HeroicStrike, ObjectManager.Player.Level < 30 ? 15 : 45, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
                 }
             }
-        }
-
-        public override void PerformCombatRotation()
-        {
-            throw new NotImplementedException();
         }
     }
 }

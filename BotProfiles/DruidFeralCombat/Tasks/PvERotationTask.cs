@@ -164,7 +164,14 @@ namespace DruidFeral.Tasks
         {
             float distanceToTarget = ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
-            if (ObjectManager.Player.IsSpellReady(name) && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(name) && distanceToTarget >= minRange && distanceToTarget <= maxRange && condition && !ObjectManager.Player.IsStunned && ObjectManager.Player.IsCasting && ObjectManager.Player.ChannelingId == 0)
+            if (ObjectManager.Player.IsSpellReady(name) &&
+                ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(name) &&
+                distanceToTarget >= minRange &&
+                distanceToTarget <= maxRange &&
+                condition &&
+                !ObjectManager.Player.IsStunned &&
+                !ObjectManager.Player.IsCasting &&
+                ObjectManager.Player.ChannelingId == 0)
             {
                 ObjectManager.Player.CastSpell(name);
                 callback?.Invoke();
