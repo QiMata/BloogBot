@@ -16,7 +16,15 @@ namespace ShamanElemental.Tasks
 
         public override void PerformCombatRotation()
         {
-            throw new NotImplementedException();
+            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
+            {
+                if (ObjectManager.Aggressors.Any())
+                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                else
+                    return;
+            }
+
+            ExecuteRotation();
         }
 
         public void Update()
@@ -43,6 +51,11 @@ namespace ShamanElemental.Tasks
                 return;
             }
 
+            ExecuteRotation();
+        }
+
+        private void ExecuteRotation()
+        {
             TryCastSpell(GroundingTotem, 0, int.MaxValue, ObjectManager.Aggressors.Any(a => a.IsCasting && ObjectManager.GetTarget(ObjectManager.Player).Mana > 0));
 
             TryCastSpell(EarthShock, 0, 20, !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && (ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling || ObjectManager.Player.HasBuff(Clearcasting)));
