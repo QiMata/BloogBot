@@ -7,9 +7,6 @@ namespace DruidFeral.Tasks
 {
     internal class PvERotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
-        private const string AutoAttackLuaScript = "if IsCurrentAction('12') == nil then CastSpellByName('Attack') end";
-
-        private Position targetLastPosition;
 
         public void Update()
         {
@@ -133,7 +130,6 @@ namespace DruidFeral.Tasks
                 //TryUseCatAbility(Rip, 30, true, (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 70 && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Rip)));
             }
 
-            targetLastPosition = ObjectManager.GetTarget(ObjectManager.Player).Position;
         }
 
         private void TryUseBearAbility(string name, int requiredRage = 0, bool condition = true, Action callback = null)
