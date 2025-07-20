@@ -10,6 +10,33 @@ namespace WarlockAffliction.Tasks
     {
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
+        private double GetDebuffRemaining(string debuff)
+        {
+            var result = Functions.LuaCallWithResult(
+                $"local _,_,_,_,_,expires = UnitDebuff('target','{debuff}'); if expires then {{0}} = expires - GetTime() else {{0}} = 0 end");
+            return result.Length > 0 && double.TryParse(result[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0;
+        }
+
+        private double GetCastTime(string spell)
+        {
+            var result = Functions.LuaCallWithResult($"local _,_,_,castTime = GetSpellInfo('{spell}'); if castTime then {{0}} = castTime / 1000 else {{0}} = 0 end");
+            return result.Length > 0 && double.TryParse(result[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0;
+        }
+
+        private bool ShouldReapply(string debuff, double threshold = 3)
+        {
+            var castTime = GetCastTime(debuff);
+            return !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(debuff) ||
+                   GetDebuffRemaining(debuff) < threshold + castTime;
+        }
+
+        private bool AllDotsActive() =>
+            GetDebuffRemaining(CurseOfAgony) > 3 &&
+            GetDebuffRemaining(Immolate) > 3 &&
+            GetDebuffRemaining(Corruption) > 3 &&
+            GetDebuffRemaining(SiphonLife) > 3 &&
+            GetDebuffRemaining(Haunt) > 3;
+
         public void Update()
         {
             if (!ObjectManager.Aggressors.Any())
@@ -53,27 +80,28 @@ namespace WarlockAffliction.Tasks
 
             TryCastSpell(LifeTap, 0, int.MaxValue, ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
 
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+
             // if target is low on health, turn off wand and cast drain soul
-            if (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 20)
+            if (target.HealthPercent <= 20)
             {
                 ObjectManager.Player.StopWand();
                 TryCastSpell(DrainSoul, 0, 29);
+                return;
             }
-            else
-            {
-                TryCastSpell(CurseOfAgony, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(CurseOfAgony) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 90);
 
-                TryCastSpell(Immolate, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Immolate) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
+            TryCastSpell(CurseOfAgony, 0, 28, ShouldReapply(CurseOfAgony) && target.HealthPercent > 90);
 
-                TryCastSpell(Corruption, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Corruption) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
+            TryCastSpell(Immolate, 0, 28, ShouldReapply(Immolate) && target.HealthPercent > 30);
 
+            TryCastSpell(Corruption, 0, 28, ShouldReapply(Corruption) && target.HealthPercent > 30);
 
-                TryCastSpell(SiphonLife, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(SiphonLife) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
+            TryCastSpell(SiphonLife, 0, 28, ShouldReapply(SiphonLife) && target.HealthPercent > 50);
 
-                TryCastSpell(Haunt, 0, 30, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Haunt));
+            TryCastSpell(Haunt, 0, 30, ShouldReapply(Haunt));
 
-                TryCastSpell(ShadowBolt, 0, 28, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 40);
-            }
+            if (AllDotsActive())
+                TryCastSpell(ShadowBolt, 0, 28, target.HealthPercent > 40);
         }
 
         private void UseCooldowns()
