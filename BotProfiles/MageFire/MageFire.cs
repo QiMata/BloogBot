@@ -4,38 +4,30 @@ using BotRunner.Interfaces;
 using Communication;
 using MageFire.Tasks;
 
+using BotProfiles.Common;
 namespace MageFire
 {
     [Export(typeof(IBot))]
-    internal class MageFire : IBot
+    internal class MageFire : BotBase
     {
-        public string Name => "Fire Mage";
+        public override string Name => "Fire Mage";
 
-        public string FileName => "MageFire.dll";
+        public override string FileName => "MageFire.dll";
 
-        public IClassContainer GetClassContainer(ActivityMemberState probe) =>
-            new ClassContainer(
-                Name,
-                CreateRestTask,
-                CreateBuffTask,
-                CreateMoveToTargetTask,
-                CreatePvERotationTask,
-                CreatePvPRotationTask,
-                probe);
 
-        public IBotTask CreateRestTask(IBotContext botContext) =>
+        public override IBotTask CreateRestTask(IBotContext botContext) =>
             new RestTask(botContext);
 
-        public IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
+        public override IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
             new PullTargetTask(botContext);
 
-        public IBotTask CreateBuffTask(IBotContext botContext) =>
+        public override IBotTask CreateBuffTask(IBotContext botContext) =>
             new BuffTask(botContext);
 
-        public IBotTask CreatePvERotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvERotationTask(IBotContext botContext) =>
             new PvERotationTask(botContext);
 
-        public IBotTask CreatePvPRotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvPRotationTask(IBotContext botContext) =>
             new PvPRotationTask(botContext);
     }
 }
