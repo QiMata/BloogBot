@@ -4,38 +4,30 @@ using Communication;
 using DruidBalance.Tasks;
 using System.ComponentModel.Composition;
 
+using BotProfiles.Common;
 namespace DruidBalance
 {
     [Export(typeof(IBot))]
-    internal class DruidBalance : IBot
+    internal class DruidBalance : BotBase
     {
-        public string Name => "Balance Druid";
+        public override string Name => "Balance Druid";
 
-        public string FileName => "DruidBalance.dll";
+        public override string FileName => "DruidBalance.dll";
 
-        public IClassContainer GetClassContainer(ActivityMemberState probe) =>
-            new ClassContainer(
-                Name,
-                CreateRestTask,
-                CreateBuffTask,
-                CreateMoveToTargetTask,
-                CreatePvERotationTask,
-                CreatePvPRotationTask,
-                probe);
 
-        public IBotTask CreateRestTask(IBotContext botContext) =>
+        public override IBotTask CreateRestTask(IBotContext botContext) =>
             new RestTask(botContext);
 
-        public IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
+        public override IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
             new PullTargetTask(botContext);
 
-        public IBotTask CreateBuffTask(IBotContext botContext) =>
+        public override IBotTask CreateBuffTask(IBotContext botContext) =>
             new BuffTask(botContext);
 
-        public IBotTask CreatePvERotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvERotationTask(IBotContext botContext) =>
             new PvERotationTask(botContext);
 
-        public IBotTask CreatePvPRotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvPRotationTask(IBotContext botContext) =>
             new PvPRotationTask(botContext);
     }
 }

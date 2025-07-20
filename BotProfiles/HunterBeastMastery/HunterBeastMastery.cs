@@ -4,38 +4,30 @@ using Communication;
 using HunterBeastMastery.Tasks;
 using System.ComponentModel.Composition;
 
+using BotProfiles.Common;
 namespace HunterBeastMastery
 {
     [Export(typeof(IBot))]
-    internal class HunterBeastMastery : IBot
+    internal class HunterBeastMastery : BotBase
     {
-        public string Name => "Beast Mastery Hunter";
+        public override string Name => "Beast Mastery Hunter";
 
-        public string FileName => "HunterBeastMastery.dll";
+        public override string FileName => "HunterBeastMastery.dll";
 
-        public IClassContainer GetClassContainer(ActivityMemberState probe) =>
-            new ClassContainer(
-                Name,
-                CreateRestTask,
-                CreateBuffTask,
-                CreateMoveToTargetTask,
-                CreatePvERotationTask,
-                CreatePvPRotationTask,
-                probe);
 
-        public IBotTask CreateRestTask(IBotContext botContext) =>
+        public override IBotTask CreateRestTask(IBotContext botContext) =>
             new RestTask(botContext);
 
-        public IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
+        public override IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
             new PullTargetTask(botContext);
 
-        public IBotTask CreateBuffTask(IBotContext botContext) =>
+        public override IBotTask CreateBuffTask(IBotContext botContext) =>
             new BuffTask(botContext);
 
-        public IBotTask CreatePvERotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvERotationTask(IBotContext botContext) =>
             new PvERotationTask(botContext);
 
-        public IBotTask CreatePvPRotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvPRotationTask(IBotContext botContext) =>
             new PvERotationTask(botContext);
     }
 }
