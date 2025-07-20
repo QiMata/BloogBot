@@ -1,6 +1,5 @@
 using BackgroundBotRunner;
 using DecisionEngineService;
-using PromptHandlingService;
 
 namespace StateManager
 {
@@ -65,7 +64,6 @@ namespace StateManager
                 {
                     services.AddHostedService<StateManagerWorker>();
                     services.AddHostedService<DecisionEngineWorker>();
-                    services.AddHostedService<PromptHandlingServiceWorker>();
                     services.AddTransient<BackgroundBotWorker>();
                 });
     }
