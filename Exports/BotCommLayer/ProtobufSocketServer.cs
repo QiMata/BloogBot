@@ -11,7 +11,7 @@ namespace BotCommLayer
     {
         private readonly TcpListener _server;
         private bool _isRunning;
-        private readonly ILogger _logger;
+        protected readonly ILogger _logger;
 
         public ProtobufSocketServer(string ipAddress, int port, ILogger logger)
         {
