@@ -27,19 +27,19 @@ namespace WarlockDemonology.Tasks
 
             string spellToCast = SummonImp;
 
-            if (ObjectManager.Aggressors.Count() > 1 || ObjectManager.Player.HealthPercent < 50)
+            bool needTankPet = ObjectManager.Aggressors.Count() > 1 || ObjectManager.Player.HealthPercent < 50;
+
+            if (needTankPet && ObjectManager.Player.IsSpellReady(SummonVoidwalker) && ObjectManager.Player.IsSpellReady(FelDomination))
             {
-                if (ObjectManager.Player.IsSpellReady(SummonVoidwalker))
-                    spellToCast = SummonVoidwalker;
+                ObjectManager.Player.CastSpell(FelDomination);
+                spellToCast = SummonVoidwalker;
             }
+            else if (ObjectManager.Player.IsSpellReady(SummonFelguard))
+                spellToCast = SummonFelguard;
             else if (ObjectManager.Player.IsSpellReady(SummonSuccubus))
-            {
                 spellToCast = SummonSuccubus;
-            }
             else if (ObjectManager.Player.IsSpellReady(SummonFelhunter))
-            {
                 spellToCast = SummonFelhunter;
-            }
 
             if (ObjectManager.Player.IsSpellReady(spellToCast))
                 ObjectManager.Player.CastSpell(spellToCast);
