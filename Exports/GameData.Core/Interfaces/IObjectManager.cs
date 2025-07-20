@@ -2,6 +2,10 @@
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Models;
+using Serilog;
+using System;
+using System.Linq;
+using GameData.Core;
 
 namespace GameData.Core.Interfaces
 {
@@ -176,7 +180,21 @@ namespace GameData.Core.Interfaces
         void AcceptResurrect();
         void UpdateSnapshot(ActivitySnapshot activitySnapshot)
         {
+            if (activitySnapshot == null) return;
 
+            activitySnapshot.Timestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            activitySnapshot.Player = Player?.ToProto(MapId);
+
+            activitySnapshot.NearbyObjects.Clear();
+            activitySnapshot.NearbyUnits.Clear();
+
+            foreach (var obj in Objects.OfType<IWoWGameObject>())
+                activitySnapshot.NearbyObjects.Add(obj.ToProto(MapId));
+
+            foreach (var unit in Objects.OfType<IWoWUnit>())
+                activitySnapshot.NearbyUnits.Add(unit.ToProto(MapId));
+
+            Serilog.Log.Information("Snapshot {@Snapshot}", activitySnapshot);
         }
 
         void EnterWorld(ulong characterGuid);

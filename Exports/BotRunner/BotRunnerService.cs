@@ -45,6 +45,7 @@ namespace BotRunner
             {
                 try
                 {
+                    _objectManager.UpdateSnapshot(_activitySnapshot);
                     var incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
                     if (_behaviorTree == null || _status != BehaviourTreeStatus.Running)
                     {

@@ -1,6 +1,7 @@
 using BackgroundBotRunner;
 using DecisionEngineService;
 using PromptHandlingService;
+using Serilog;
 
 namespace StateManager
 {
@@ -16,15 +17,26 @@ namespace StateManager
                 .AddEnvironmentVariables()
                 .Build();
 
+            Log.Logger = new LoggerConfiguration()
+                .WriteTo.File(new Serilog.Formatting.Json.JsonFormatter(), "logs/state_manager.json", rollingInterval: RollingInterval.Day)
+                .CreateLogger();
+
             // Launch PathfindingService if not already running
             if (!IsPathfindingServiceRunning())
             {
                 PathfindingService.Program.LaunchServiceFromCommandLine();
             }
 
-            CreateHostBuilder(args)
-                .Build()
-                .Run();
+            try
+            {
+                CreateHostBuilder(args)
+                    .Build()
+                    .Run();
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
         }
 
         private static bool IsPathfindingServiceRunning()
@@ -53,6 +65,7 @@ namespace StateManager
 
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
+                .UseSerilog()
                 .ConfigureAppConfiguration((context, builder) =>
                 {
                     builder.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
