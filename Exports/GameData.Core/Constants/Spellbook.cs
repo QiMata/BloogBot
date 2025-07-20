@@ -42,6 +42,9 @@
         public const string LifeTap = "Life Tap";
         public const string ShadowBolt = "Shadow Bolt";
         public const string SiphonLife = "Siphon Life";
+        public const string Haunt = "Haunt";
+        public const string DemonicEmpowerment = "Demonic Empowerment";
+        public const string Conflagrate = "Conflagrate";
         public const string RaptorStrike = "Raptor Strike";
         public const string ArcaneShot = "Arcane Shot";
         public const string SerpentSting = "Serpent Sting";

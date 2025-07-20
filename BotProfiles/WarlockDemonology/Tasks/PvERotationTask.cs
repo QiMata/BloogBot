@@ -40,6 +40,8 @@ namespace WarlockDemonology.Tasks
 
             TryCastSpell(LifeTap, 0, int.MaxValue, ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
 
+            TryCastSpell(DemonicEmpowerment, 0, int.MaxValue, ObjectManager.Pet != null && !ObjectManager.Pet.HasBuff(DemonicEmpowerment));
+
             // if target is low on health, turn off wand and cast drain soul
             if (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 20)
             {
