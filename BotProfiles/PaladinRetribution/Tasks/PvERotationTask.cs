@@ -25,7 +25,9 @@ namespace PaladinRetribution.Tasks
 
         public void Update()
         {
-            if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HolyLight))
+            if (ObjectManager.Player.HealthPercent < 30 &&
+                ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 &&
+                ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HolyLight))
             {
                 BotTasks.Push(new HealTask(BotContext));
                 return;
@@ -70,7 +72,13 @@ namespace PaladinRetribution.Tasks
 
             TryCastSpell(HolyShield, !ObjectManager.Player.HasBuff(HolyShield) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
 
-            TryCastSpell(Judgement, ObjectManager.Player.HasBuff(SealOfTheCrusader) || ((ObjectManager.Player.HasBuff(SealOfRighteousness) || ObjectManager.Player.HasBuff(SealOfCommand)) && (ObjectManager.Player.ManaPercent >= 95 || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 3)));
+            TryCastSpell(Judgement, ObjectManager.Player.HasBuff(SealOfTheCrusader) ||
+                ((ObjectManager.Player.HasBuff(SealOfRighteousness) || ObjectManager.Player.HasBuff(SealOfCommand)) &&
+                (ObjectManager.Player.ManaPercent >= 95 || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 3)));
+
+            TryCastSpell(DivineProtection, ObjectManager.Player.HealthPercent < 20, castOnSelf: true);
+            TryCastSpell(LayOnHands, ObjectManager.Player.HealthPercent < 10, castOnSelf: true);
         }
     }
 }
+
