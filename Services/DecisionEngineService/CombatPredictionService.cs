@@ -23,7 +23,7 @@ namespace DecisionEngineService
             _processedDirectory = processedDirectory;
             _logger = logger;
 
-            _logger.LogInformation($"Starting CombatPredictionService| ConnectionString: {connectionString} DataDirectory: {dataDirectory} ProcessedDirectory: {processedDirectory}");
+            LogServiceConfiguration();
 
             // Load the initial trained model from the SQLite database
             _trainedModel = LoadModelFromDatabase();
@@ -33,6 +33,15 @@ namespace DecisionEngineService
 
             // Start monitoring for new `.bin` files
             MonitorForNewData();
+        }
+
+        private void LogServiceConfiguration()
+        {
+            _logger.LogInformation(
+                "Starting CombatPredictionService | ConnectionString: {ConnectionString} DataDirectory: {DataDirectory} ProcessedDirectory: {ProcessedDirectory}",
+                _connectionString,
+                _dataDirectory,
+                _processedDirectory);
         }
 
         // Method to load the model from the SQLite database
@@ -101,6 +110,7 @@ namespace DecisionEngineService
             try
             {
                 // Load and process the new data file
+                _logger.LogInformation("Processing data file {FilePath}", filePath);
                 IDataView newData = LoadData(filePath);
 
                 // Update the model with the new data
@@ -200,7 +210,7 @@ namespace DecisionEngineService
                 }
 
                 File.Move(filePath, destPath);
-                _logger.LogInformation($"Moved processed file to {destPath}");
+                _logger.LogInformation("Moved processed file from {FilePath} to {DestinationPath}", filePath, destPath);
             }
             catch (Exception ex)
             {
