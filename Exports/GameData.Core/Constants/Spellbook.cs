@@ -74,6 +74,7 @@
         public const string Claw = "Claw";
         public const string Rake = "Rake";
         public const string Rip = "Rip";
+        public const string FerociousBite = "Ferocious Bite";
         public const string TigersFury = "Tiger's Fury";
         public const string Fireball = "Fireball";
         public const string Frostbolt = "Frostbolt";
