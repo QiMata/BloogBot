@@ -102,15 +102,33 @@ namespace StateManager
 
         private void OnWorldStateUpdate(AsyncRequest dataMessage)
         {
+            _logger.LogInformation($"Received world state update message with ID {dataMessage.Id}.");
+
             StateChangeRequest stateChange = dataMessage.StateChange;
 
             if (stateChange != null)
             {
+                string? parameterDetails = null;
+                if (stateChange.RequestParameter != null)
+                {
+                    RequestParameter param = stateChange.RequestParameter;
+                    parameterDetails = param.ParameterCase switch
+                    {
+                        RequestParameter.ParameterOneofCase.FloatParam => param.FloatParam.ToString(),
+                        RequestParameter.ParameterOneofCase.IntParam => param.IntParam.ToString(),
+                        RequestParameter.ParameterOneofCase.LongParam => param.LongParam.ToString(),
+                        RequestParameter.ParameterOneofCase.StringParam => param.StringParam,
+                        _ => null
+                    };
+                }
 
+                _logger.LogInformation(
+                    $"State change request received: ChangeType={stateChange.ChangeType}, Parameter={parameterDetails ?? "<none>"}");
             }
 
             StateChangeResponse stateChangeResponse = new();
             _worldStateManagerSocketListener.SendMessageToClient(dataMessage.Id, stateChangeResponse);
+            _logger.LogInformation($"StateChangeResponse dispatched to {dataMessage.Id}.");
         }
 
         private async Task<bool> ApplyDesiredWorkerState()
