@@ -41,13 +41,24 @@ namespace DecisionEngineService
         private void ProcessBinFile(string filePath)
         {
             _logger.LogInformation("Processing bin file {File}", filePath);
-            var snapshots = ReadBinFile(filePath);
-            foreach (var snapshot in snapshots)
+
+            try
             {
-                _model.LearnFromSnapshot(snapshot);
+                var snapshots = ReadBinFile(filePath);
+                for (int i = 0; i < snapshots.Count; i++)
+                {
+                    _logger.LogDebug("Learning from snapshot {Index}/{Total}", i + 1, snapshots.Count);
+                    _model.LearnFromSnapshot(snapshots[i]);
+                }
+
+                SaveModelToDatabase();
+                File.Delete(filePath); // Clean up after processing
+                _logger.LogInformation("Finished processing {Count} snapshots from {File}", snapshots.Count, filePath);
             }
-            SaveModelToDatabase();
-            File.Delete(filePath); // Clean up after processing
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process bin file {File}", filePath);
+            }
         }
 
         public static List<ActionMap> GetNextActions(ActivitySnapshot snapshot)
@@ -71,8 +82,15 @@ namespace DecisionEngineService
 
         private void SaveModelToDatabase()
         {
-            _db.SaveModelWeights(_model.GetWeights());
-            _logger.LogInformation("Model weights saved to database");
+            try
+            {
+                _db.SaveModelWeights(_model.GetWeights());
+                _logger.LogInformation("Model weights saved to database");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save model to database");
+            }
         }
 
         private MLModel LoadModelFromDatabase()
