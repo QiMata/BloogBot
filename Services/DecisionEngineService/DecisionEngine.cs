@@ -1,5 +1,6 @@
 ﻿using Communication;
 using System.Data.SQLite;
+using Microsoft.Extensions.Logging;
 
 namespace DecisionEngineService
 {
@@ -9,11 +10,13 @@ namespace DecisionEngineService
         private readonly SQLiteDatabase _db;
         private readonly string _binFileDirectory;
         private FileSystemWatcher _fileWatcher;
+        private readonly ILogger<DecisionEngine> _logger;
 
-        public DecisionEngine(string binFileDirectory, SQLiteDatabase db)
+        public DecisionEngine(string binFileDirectory, SQLiteDatabase db, ILogger<DecisionEngine> logger)
         {
             _binFileDirectory = binFileDirectory;
             _db = db;
+            _logger = logger;
             _model = LoadModelFromDatabase();
             InitializeFileWatcher();
         }
@@ -26,15 +29,18 @@ namespace DecisionEngineService
             };
             _fileWatcher.Created += OnBinFileCreated;
             _fileWatcher.EnableRaisingEvents = true;
+            _logger.LogInformation("File watcher initialized for directory {Directory}", _binFileDirectory);
         }
 
         private void OnBinFileCreated(object sender, FileSystemEventArgs e)
         {
+            _logger.LogInformation("Detected new bin file: {File}", e.FullPath);
             ProcessBinFile(e.FullPath);
         }
 
         private void ProcessBinFile(string filePath)
         {
+            _logger.LogInformation("Processing bin file {File}", filePath);
             var snapshots = ReadBinFile(filePath);
             foreach (var snapshot in snapshots)
             {
@@ -66,6 +72,7 @@ namespace DecisionEngineService
         private void SaveModelToDatabase()
         {
             _db.SaveModelWeights(_model.GetWeights());
+            _logger.LogInformation("Model weights saved to database");
         }
 
         private MLModel LoadModelFromDatabase()
