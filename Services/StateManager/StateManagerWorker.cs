@@ -89,9 +89,18 @@ namespace StateManager
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Here you can add logic to start/stop services based on certain conditions.
-                await ApplyDesiredWorkerState();
-                await Task.Delay(100, stoppingToken);
+                try
+                {
+                    if (_logger.IsEnabled(LogLevel.Information))
+                        _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+
+                    await ApplyDesiredWorkerState();
+                    await Task.Delay(100, stoppingToken);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && stoppingToken.IsCancellationRequested))
+                {
+                    _logger.LogError(ex, "Error occurred in StateManagerServiceWorker loop.");
+                }
             }
 
             foreach (var (Service, TokenSource, Task) in _managedServices.Values)
