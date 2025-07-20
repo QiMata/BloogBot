@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Serilog;
 
 namespace ForegroundBotRunner.Mem
 {
@@ -96,7 +97,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[THREAD]{e.Message} {e.StackTrace}");
+                Log.Error($"[THREAD]{e.Message} {e.StackTrace}");
             }
 
             return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);

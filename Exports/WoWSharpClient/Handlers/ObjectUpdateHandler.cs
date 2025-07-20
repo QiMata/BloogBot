@@ -4,6 +4,7 @@ using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Parsers;
 using WoWSharpClient.Utils;
+using Serilog;
 using static GameData.Core.Enums.UpdateFields;
 
 namespace WoWSharpClient.Handlers
@@ -51,7 +52,7 @@ namespace WoWSharpClient.Handlers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[{updateType}] {ex}");
+                Log.Error($"[{updateType}] {ex}");
             }
         }
 
@@ -741,7 +742,7 @@ namespace WoWSharpClient.Handlers
             EItemFields field
         )
         {
-            Console.WriteLine($"[ReadItemField] {field}");
+            Log.Error($"[ReadItemField] {field}");
             if (field <= EItemFields.ITEM_FIELD_OWNER + 0x01)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadBytes(4);
             else if (field <= EItemFields.ITEM_FIELD_CONTAINED + 0x01)

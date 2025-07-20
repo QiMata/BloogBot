@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using WowSrp.Client;
+using Serilog;
 
 namespace WoWSharpClient.Client
 {
@@ -39,7 +40,7 @@ namespace WoWSharpClient.Client
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[LoginClient] {ex}");
+                Log.Error($"[LoginClient] {ex}");
             }
         }
 
@@ -75,7 +76,7 @@ namespace WoWSharpClient.Client
             writer.Flush();
             byte[] packetData = memoryStream.ToArray();
 
-            Console.WriteLine($"[AuthLoginClient] -> CMD_AUTH_LOGON_CHALLENGE [{packetData.Length}]");
+            Log.Information($"[AuthLoginClient] -> CMD_AUTH_LOGON_CHALLENGE [{packetData.Length}]");
 
             WoWSharpEventEmitter.Instance.FireOnHandshakeBegin();
             _stream.Write(packetData, 0, packetData.Length);
@@ -90,7 +91,7 @@ namespace WoWSharpClient.Client
                 using var reader = new BinaryReader(_stream, Encoding.UTF8, true);
                 byte[] packet = reader.ReadBytes(119); // Adjust length if necessary
 
-                Console.WriteLine($"[AuthLoginClient] <- CMD_AUTH_LOGON_CHALLENGE [{packet.Length}]");
+                Log.Information($"[AuthLoginClient] <- CMD_AUTH_LOGON_CHALLENGE [{packet.Length}]");
 
                 byte opcode = packet[0];
                 ResponseCode result = (ResponseCode)packet[2];
@@ -114,12 +115,12 @@ namespace WoWSharpClient.Client
                 }
                 else
                 {
-                    Console.WriteLine($"[AuthLoginClient] Unexpected AUTH_CHALLENGE response: opcode {opcode:X2}, result {result}");
+                    Log.Error($"[AuthLoginClient] Unexpected AUTH_CHALLENGE response: opcode {opcode:X2}, result {result}");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[AuthLoginClient] Error in ReceiveAuthLogonChallengeServer: {ex}");
+                Log.Error($"[AuthLoginClient] Error in ReceiveAuthLogonChallengeServer: {ex}");
             }
         }
 
@@ -144,14 +145,14 @@ namespace WoWSharpClient.Client
                 writer.Flush();
                 byte[] packetData = memoryStream.ToArray();
 
-                Console.WriteLine($"[AuthLoginClient] -> CMD_AUTH_LOGON_PROOF [{packetData.Length}]");
+                Log.Information($"[AuthLoginClient] -> CMD_AUTH_LOGON_PROOF [{packetData.Length}]");
 
                 _stream.Write(packetData, 0, packetData.Length);
                 ReceiveAuthProofLogonResponse();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[LoginClient] Error in SendLogonProof: {ex}");
+                Log.Error($"[LoginClient] Error in SendLogonProof: {ex}");
             }
         }
 
@@ -162,7 +163,7 @@ namespace WoWSharpClient.Client
                 using var reader = new BinaryReader(_stream, Encoding.UTF8, true);
                 byte[] header = reader.ReadBytes(2);
 
-                Console.WriteLine($"[AuthLoginClient] <- CMD_AUTH_LOGON_PROOF [{header.Length}]");
+                Log.Information($"[AuthLoginClient] <- CMD_AUTH_LOGON_PROOF [{header.Length}]");
 
                 if (header.Length < 2)
                     return;
@@ -188,13 +189,13 @@ namespace WoWSharpClient.Client
                 }
                 else
                 {
-                    Console.WriteLine($"[AuthLoginClient] Failed AUTH_PROOF response: opcode {opcode:X2}, result {result}");
+                    Log.Error($"[AuthLoginClient] Failed AUTH_PROOF response: opcode {opcode:X2}, result {result}");
                     WoWSharpEventEmitter.Instance.FireOnLoginFailure();
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[AuthLoginClient] Error in ReceiveAuthProofLogonResponse: {ex}");
+                Log.Error($"[AuthLoginClient] Error in ReceiveAuthProofLogonResponse: {ex}");
                 WoWSharpEventEmitter.Instance.FireOnLoginFailure();
             }
         }
@@ -212,13 +213,13 @@ namespace WoWSharpClient.Client
                 writer.Flush();
                 byte[] packetData = memoryStream.ToArray();
 
-                Console.WriteLine($"[AuthLoginClient] -> CMD_REALM_LIST ({packetData.Length} bytes)");
+                Log.Information($"[AuthLoginClient] -> CMD_REALM_LIST ({packetData.Length} bytes)");
 
                 _stream.Write(packetData, 0, packetData.Length);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[LoginClient] Error in SendRealmListRequest: {ex}");
+                Log.Error($"[LoginClient] Error in SendRealmListRequest: {ex}");
             }
         }
 
@@ -262,12 +263,12 @@ namespace WoWSharpClient.Client
                 }
                 else
                 {
-                    //Console.WriteLine("[LoginClient] Unexpected opcode received in REALM_LIST response.");
+                    //Log.Error("[LoginClient Unexpected opcode received in REALM_LIST response.");
                 }
             }
             catch (Exception ex)
             {
-                //Console.WriteLine($"[LoginClient] An error occurred while receiving REALM_LIST response: {ex}");
+                //Log.Information($"[LoginClient] An error occurred while receiving REALM_LIST response: {ex}");
             }
 
             return list;

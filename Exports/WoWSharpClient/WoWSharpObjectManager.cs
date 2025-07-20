@@ -6,6 +6,7 @@ using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using Serilog;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
@@ -120,7 +121,7 @@ namespace WoWSharpClient
             _isInControl = true;
             _isBeingTeleported = false;
 
-            Console.WriteLine($"[OnClientControlUpdate]{Player.Position}");
+            _logger.LogInformation($"[OnClientControlUpdate]{Player.Position}");
         }
 
         private void EventEmitter_OnSetTimeSpeed(object? sender, OnSetTimeSpeedArgs e)
@@ -415,7 +416,7 @@ namespace WoWSharpClient
                 SendMovementFlagChange(player, Opcode.MSG_MOVE_SET_WALK_MODE);
             }
 
-            Console.WriteLine($"[Movement] WalkMode: {(isWalking ? "Run" : "Walk")}");
+            _logger.LogInformation($"[Movement] WalkMode: {(isWalking ? "Run" : "Walk")}");
         }
 
         private void SendMovementFlagChange(WoWLocalPlayer player, Opcode opcode)
@@ -517,7 +518,7 @@ namespace WoWSharpClient
                 player,
                 (uint)_worldTimeTracker.NowMS.TotalMilliseconds
             );
-            Console.WriteLine($"[Movement] Start: Opcode={opcode}, Flags={newFlags}");
+            _logger.LogInformation($"[Movement] Start: Opcode={opcode}, Flags={newFlags}");
             _woWClient.SendMovementOpcode(opcode, buffer);
         }
 
@@ -558,7 +559,7 @@ namespace WoWSharpClient
                 player,
                 (uint)_worldTimeTracker.NowMS.TotalMilliseconds
             );
-            Console.WriteLine($"[Movement] Stop: Opcode={opcode}, Flags={player.MovementFlags}");
+            _logger.LogInformation($"[Movement] Stop: Opcode={opcode}, Flags={player.MovementFlags}");
             _woWClient.SendMovementOpcode(opcode, buffer);
         }
 
@@ -764,14 +765,14 @@ namespace WoWSharpClient
 
             sb.Append(e.Text);
 
-            Console.WriteLine(sb.ToString());
+            _logger.LogInformation(sb.ToString());
 
             Console.ForegroundColor = ConsoleColor.White;
         }
 
         private void EventEmitter_OnTeleport(object? sender, RequiresAcknowledgementArgs e)
         {
-            Console.WriteLine($"[ACK] TELEPORT counter={e.Counter}");
+            _logger.LogInformation($"[ACK] TELEPORT counter={e.Counter}");
 
             _woWClient.SendMSGPacked(
                 Opcode.MSG_MOVE_TELEPORT_ACK,
@@ -878,7 +879,7 @@ namespace WoWSharpClient
                 try
                 {
                     var update = _pendingUpdates.Dequeue();
-                    Console.WriteLine(
+                    _logger.LogInformation(
                         $"[ProcessUpdates] operations={update.Operation} type={update.ObjectType} guid={update.Guid}"
                     );
                     switch (update.Operation)
@@ -914,7 +915,7 @@ namespace WoWSharpClient
 
                         case ObjectUpdateOperation.Update:
                             var index = _objects.FindIndex(o => o.Guid == update.Guid);
-                            Console.WriteLine($"Updating Object: {update.Guid}");
+                            _logger.LogInformation($"Updating Object: {update.Guid}");
                             if (index != -1)
                             {
                                 var obj = _objects[index];
@@ -927,7 +928,7 @@ namespace WoWSharpClient
                                     ApplyMovementData((WoWUnit)obj, update.MovementData);
 
                                 if (obj is WoWLocalPlayer)
-                                    Console.WriteLine("Potential teleport from server.");
+                                    _logger.LogInformation("Potential teleport from server.");
                             }
 
                             break;
@@ -939,7 +940,7 @@ namespace WoWSharpClient
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ProcessUpdates] {ex}");
+                    _logger.LogError($"[ProcessUpdates] {ex}");
                 }
             }
         }
@@ -1368,13 +1369,13 @@ namespace WoWSharpClient
             switch (field)
             {
                 case EObjectFields.OBJECT_FIELD_GUID:
-                    Console.WriteLine(
+                    _logger.LogInformation(
                         $"[GUID DEBUG] Attempting to modify object GUID Low for {obj.GetType().Name} (current GUID: {obj.Guid}), ignoring..."
                     );
                     // obj.HighGuid.LowGuidValue = (byte[])value; // COMMENTED OUT - should not modify object's own GUID
                     break;
                 case EObjectFields.OBJECT_FIELD_GUID + 1:
-                    Console.WriteLine(
+                    _logger.LogInformation(
                         $"[GUID DEBUG] Attempting to modify object GUID High for {obj.GetType().Name} (current GUID: {obj.Guid}), ignoring..."
                     );
                     // obj.HighGuid.HighGuidValue = (byte[])value; // COMMENTED OUT - should not modify object's own GUID
@@ -1621,7 +1622,7 @@ namespace WoWSharpClient
         )
         {
             var field = (EPlayerFields)key;
-            Console.WriteLine(
+            _logger.LogInformation(
                 $"[ApplyPlayerFieldDiffs] Processing field: {field} (0x{(uint)field:X})"
             );
             switch (field)
@@ -1682,7 +1683,7 @@ namespace WoWSharpClient
                         }
                         else
                         {
-                            Console.WriteLine(
+                            _logger.LogInformation(
                                 $"[ApplyPlayerFieldDiffs] QuestLog index out of bounds: {questIndex}, array length: {player.QuestLog.Length}"
                             );
                         }
@@ -1759,7 +1760,7 @@ namespace WoWSharpClient
                                 }
                                 else
                                 {
-                                    Console.WriteLine(
+                                    _logger.LogInformation(
                                         $"[ApplyPlayerFieldDiffs] No item found for GUID {itemGuid:X} at inventory index {inventoryIndex}"
                                     );
                                 }
@@ -1767,7 +1768,7 @@ namespace WoWSharpClient
                         }
                         else
                         {
-                            Console.WriteLine(
+                            _logger.LogInformation(
                                 $"[ApplyPlayerFieldDiffs] inventoryIndex {inventoryIndex} out of bounds for Inventory array (length: {player.Inventory.Length}), field: {field}"
                             );
                         }
@@ -1783,7 +1784,7 @@ namespace WoWSharpClient
                         }
                         else
                         {
-                            Console.WriteLine(
+                            _logger.LogInformation(
                                 $"[ApplyPlayerFieldDiffs] packIndex {packIndex} out of bounds for PackSlots array (length: {player.PackSlots.Length}), field: {field}"
                             );
                         }
@@ -1799,7 +1800,7 @@ namespace WoWSharpClient
                         }
                         else
                         {
-                            Console.WriteLine(
+                            _logger.LogInformation(
                                 $"[ApplyPlayerFieldDiffs] bankIndex {bankIndex} out of bounds for BankSlots array (length: {player.BankSlots.Length}), field: {field}"
                             );
                         }
@@ -1815,7 +1816,7 @@ namespace WoWSharpClient
                         }
                         else
                         {
-                            Console.WriteLine(
+                            _logger.LogInformation(
                                 $"[ApplyPlayerFieldDiffs] bankBagIndex {bankBagIndex} out of bounds for BankBagSlots array (length: {player.BankBagSlots.Length}), field: {field}"
                             );
                         }
@@ -1831,7 +1832,7 @@ namespace WoWSharpClient
                         }
                         else
                         {
-                            Console.WriteLine(
+                            _logger.LogInformation(
                                 $"[ApplyPlayerFieldDiffs] vendorIndex {vendorIndex} out of bounds for VendorBuybackSlots array (length: {player.VendorBuybackSlots.Length}), field: {field}"
                             );
                         }
@@ -1847,7 +1848,7 @@ namespace WoWSharpClient
                         }
                         else
                         {
-                            Console.WriteLine(
+                            _logger.LogInformation(
                                 $"[ApplyPlayerFieldDiffs] keyringIndex {keyringIndex} out of bounds for KeyringSlots array (length: {player.KeyringSlots.Length}), field: {field}"
                             );
                         }

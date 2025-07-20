@@ -3,6 +3,7 @@ using Communication;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using Serilog;
 using Xas.FluentBehaviourTree;
 
 namespace BotRunner
@@ -137,7 +138,7 @@ namespace BotRunner
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[BOT RUNNER] {ex}");
+                    Log.Error($"[BOT RUNNER] {ex}");
                 }
             }
         }
