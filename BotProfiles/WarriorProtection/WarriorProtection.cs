@@ -33,7 +33,7 @@ namespace WarriorProtection
             new BuffTask(botContext);
 
         public IBotTask CreatePvERotationTask(IBotContext botContext) =>
-            new PvERotationTask(botContext);
+            new PvERotationTask(botContext, botContext.ObjectManager.Player.Position);
 
         public IBotTask CreatePvPRotationTask(IBotContext botContext) =>
             new PvPRotationTask(botContext);
