@@ -223,6 +223,7 @@
         public const string SummonSuccubus = "Summon Succubus";
         public const string SummonFelhunter = "Summon Felhunter";
         public const string SummonFelguard = "Summon Felguard";
+        public const string FelDomination = "Fel Domination";
         public const string Torment = "Torment";
         public const string Sacrifice = "Sacrifice";
         public const string DemonArmor = "Demon Armor";
