@@ -1,5 +1,7 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using ForegroundBotRunner.Mem;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarlockAffliction.Tasks
@@ -27,6 +29,20 @@ namespace WarlockAffliction.Tasks
             ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
             ObjectManager.Pet?.Attack();
 
+
+            UseCooldowns();
+
+            if (ObjectManager.Pet != null)
+            {
+                if (ObjectManager.Player.HealthPercent < 40 && ObjectManager.Pet.CanUse(Sacrifice))
+                    ObjectManager.Pet.Cast(Sacrifice);
+
+                if (ObjectManager.Pet.CanUse(Torment))
+                    ObjectManager.Pet.Cast(Torment);
+            }
+
+            TryCastSpell(LifeTap, 0, int.MaxValue, ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
+
             // crowd control / interrupt abilities
             TryCastSpell(DeathCoil, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
             TryCastSpell(Fear, 0, 20,
@@ -36,6 +52,7 @@ namespace WarlockAffliction.Tasks
 
             TryCastSpell(LifeTap, 0, int.MaxValue,
                 ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
+
 
             if (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 20)
             {
@@ -63,6 +80,33 @@ namespace WarlockAffliction.Tasks
                 TryCastSpell(ShadowBolt, 0, 28,
                     ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 40);
             }
+        }
+
+        private void UseCooldowns()
+        {
+            var trinket1 = ObjectManager.GetEquippedItem(EquipSlot.Trinket1);
+            var trinket2 = ObjectManager.GetEquippedItem(EquipSlot.Trinket2);
+
+            if (ItemReady(trinket1))
+                trinket1.Use();
+
+            if (ItemReady(trinket2))
+                trinket2.Use();
+
+            if (ObjectManager.Player.IsSpellReady(BloodFury))
+                ObjectManager.Player.CastSpell(BloodFury);
+
+            if (ObjectManager.Player.IsSpellReady(Berserking))
+                ObjectManager.Player.CastSpell(Berserking);
+        }
+
+        private bool ItemReady(IWoWItem? item)
+        {
+            if (item == null)
+                return false;
+
+            var result = Functions.LuaCallWithResult($"startTime, duration, enable = GetItemCooldown({item.ItemId}); {{0}} = duration;");
+            return result.Length > 0 && result[0] == "0";
         }
     }
 }
