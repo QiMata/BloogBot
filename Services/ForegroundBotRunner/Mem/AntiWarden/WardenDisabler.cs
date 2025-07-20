@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Serilog;
 
 namespace ForegroundBotRunner.Mem.AntiWarden
 {
@@ -180,12 +181,12 @@ namespace ForegroundBotRunner.Mem.AntiWarden
 
         private static void DisableWardenInternal(nint _)
         {
-            Console.WriteLine("[WARDEN] DisableWardenHook called.");
-            Console.WriteLine($"[WARDEN] WardenPtr = {_} (0x{_:X})");
+            Log.Information("[WARDEN] DisableWardenHook called.");
+            Log.Information($"[WARDEN] WardenPtr = {_} (0x{_:X})");
             if (_ != nint.Zero)
             {
                 var wardenBaseAddr = MemoryManager.ReadIntPtr(_);
-                Console.WriteLine($"[WARDEN] DisableWardenHook found WardenBaseAddress = {wardenBaseAddr} (0x{wardenBaseAddr:X})");
+                Log.Information($"[WARDEN] DisableWardenHook found WardenBaseAddress = {wardenBaseAddr} (0x{wardenBaseAddr:X})");
                 //InitializeWardenPageScanHook(wardenBaseAddr);
                 //InitializeWardenMemScanHook(wardenBaseAddr);
             }
@@ -219,7 +220,7 @@ namespace ForegroundBotRunner.Mem.AntiWarden
                 }
             }
 
-            Console.WriteLine($"[WARDEN] PageScan module found in memory, continuing with hook... {(int)pageScanPtr}");
+            Log.Information($"[WARDEN] PageScan module found in memory, continuing with hook... {(int)pageScanPtr}");
 
             wardenPageScanDelegate = WardenPageScanHook;
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(wardenPageScanDelegate);
@@ -246,20 +247,20 @@ namespace ForegroundBotRunner.Mem.AntiWarden
             MemoryManager.InjectAssembly("WardenPageScanHook", (uint)pageScanPtr, "JMP 0x" + wardenPageScanDetourPtr.ToString("X"));
 
             wardenPageScanFunPtr = pageScanPtr;
-            Console.WriteLine($"[WARDEN] PageScan Hooked! WardenModulePtr=0x{wardenModuleStart:X} OriginalPageScanFunPtr=0x{pageScanPtr:X} DetourFunPtr=0x{wardenPageScanDetourPtr:X}");
+            Log.Information($"[WARDEN] PageScan Hooked! WardenModulePtr=0x{wardenModuleStart:X} OriginalPageScanFunPtr=0x{pageScanPtr:X} DetourFunPtr=0x{wardenPageScanDetourPtr:X}");
         }
 
         private static void WardenPageScanHook(nint readBase, int readOffset, nint writeTo)
         {
             // Logging this to the console lags the client like crazy.
-            // Console.WriteLine($"[WARDEN PageScan] BaseAddr: {readBase.ToString("X")}, Offset: {readOffset}");
+            // Log.Information($"[WARDEN PageScan] BaseAddr: {readBase.ToString("X")}, Offset: {readOffset}");
 
             var readByteFrom = readBase + readOffset;
 
             var hacksWithinRange = HackManager.Hacks.Where(h => h.IsWithinScanRange(readByteFrom, 1));
 
             foreach (var hack in hacksWithinRange)
-                Console.WriteLine($"[WARDEN PageScan] Disabling {hack.Name} at {hack.Address:X}");
+                Log.Information($"[WARDEN PageScan] Disabling {hack.Name} at {hack.Address:X}");
 
             foreach (var hack in hacksWithinRange)
                 HackManager.DisableHack(hack);
@@ -290,7 +291,7 @@ namespace ForegroundBotRunner.Mem.AntiWarden
                 }
             }
 
-            Console.WriteLine($"[WARDEN] MemScan module found in memory, continuing with hook... {(int)memScanPtr}");
+            Log.Information($"[WARDEN] MemScan module found in memory, continuing with hook... {(int)memScanPtr}");
 
             wardenMemScanDelegate = WardenMemScanHook;
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(wardenMemScanDelegate);
@@ -322,7 +323,7 @@ namespace ForegroundBotRunner.Mem.AntiWarden
             MemoryManager.InjectAssembly("WardenMemScanHook", (uint)memScanPtr, "JMP 0x" + wardenMemScanDetourPtr.ToString("X"));
 
             wardenMemScanFunPtr = memScanPtr;
-            Console.WriteLine($"[WARDEN] MemScan Hooked! WardenModulePtr={wardenModuleStart:X} OriginalMemScanFunPtr=0x{memScanPtr:X} DetourFunPtr=0x{wardenMemScanDetourPtr:X}");
+            Log.Information($"[WARDEN] MemScan Hooked! WardenModulePtr={wardenModuleStart:X} OriginalMemScanFunPtr=0x{memScanPtr:X} DetourFunPtr=0x{wardenMemScanDetourPtr:X}");
         }
 
         private static void WardenMemScanHook(nint addr, int size, nint bufferStart)
@@ -331,13 +332,13 @@ namespace ForegroundBotRunner.Mem.AntiWarden
             if (size != 0)
             {
                 // Logging this to the console lags the client like crazy
-                //Console.WriteLine($"[WARDEN MemoryScan] BaseAddr: {addr.ToString("X")}, Size: {size}");
+                //Log.Information($"[WARDEN MemoryScan] BaseAddr: {addr.ToString("X")}, Size: {size}");
 
                 var hacksWithinRange = HackManager.Hacks
                     .Where(i => i.Address.ToInt32() <= nint.Add(addr, size).ToInt32() && i.Address.ToInt32() >= addr.ToInt32());
 
                 foreach (var hack in hacksWithinRange)
-                    Console.WriteLine($"[WARDEN MemoryScan] Disabling {hack.Name} at {hack.Address:X}");
+                    Log.Information($"[WARDEN MemoryScan] Disabling {hack.Name} at {hack.Address:X}");
 
                 foreach (var hack in hacksWithinRange)
                     HackManager.DisableHack(hack);
@@ -370,14 +371,14 @@ namespace ForegroundBotRunner.Mem.AntiWarden
             module32NextDelegate = Marshal.GetDelegateForFunctionPointer<Module32NextDelegate>(nextAddr);
             module32NextHook = new Detour(module32NextDelegate, new Module32NextDelegate(Module32NextDetour), "Module32Next");
 
-            Console.WriteLine($"[WARDEN] ModuleScan Hooked 0x{(int)handle:X} 0x{(int)firstAddr:X} 0x{(int)nextAddr:X}");
+            Log.Information($"[WARDEN] ModuleScan Hooked 0x{(int)handle:X} 0x{(int)firstAddr:X} 0x{(int)nextAddr:X}");
         }
 
         private static readonly HashSet<string> protectedItems = [];
 
         private static bool Module32FirstDetour(nint snapshot, ref MODULEENTRY32 module)
         {
-            Console.WriteLine("[WARDEN ModuleScan] Started");
+            Log.Information("[WARDEN ModuleScan] Started");
 
             // TODO: try to read the Warden packet to see which Module they're scanning for
             //var ptr1 = MemoryManager.ReadIntPtr((IntPtr)WARDEN_PACKET_PTR);
@@ -411,7 +412,7 @@ namespace ForegroundBotRunner.Mem.AntiWarden
             var match = buffer.SequenceEqual(dllHash);
 
             if (match)
-                Console.WriteLine($"[WARDEN ModuleScan] Scan detected for {moduleName}, detouring");
+                Log.Information($"[WARDEN ModuleScan] Scan detected for {moduleName}, detouring");
 
             while (!modules.Contains(module.szModule.ToLower()) && ret)
             {

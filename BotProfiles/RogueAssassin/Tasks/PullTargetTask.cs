@@ -2,6 +2,7 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using PathfindingService.Models;
+using Serilog;
 using static BotRunner.Constants.Spellbook;
 
 namespace RogueAssassin.Tasks
@@ -34,10 +35,10 @@ namespace RogueAssassin.Tasks
             IWoWItem OffHand = ObjectManager.GetEquippedItem(EquipSlot.OffHand);
             IWoWItem SwapSlotWeap = ObjectManager.GetItem(4, 1);
 
-            //Console.WriteLineVerbose("Mainhand Item Type:  " + MainHand.Info.ItemSubclass);
-            //Console.WriteLineVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
-            //Console.WriteLineVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
-            //Console.WriteLineVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
+            //Log.InformationVerbose("Mainhand Item Type:  " + MainHand.Info.ItemSubclass);
+            //Log.InformationVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
+            //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
+            //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
 
             // Check to see if a Dagger is Equipped in the mainhand
 
@@ -79,7 +80,7 @@ namespace RogueAssassin.Tasks
             // if (SwapMaceOrSwordReady == true)
             // {
             //    Functions.LuaCall($"UseContainerItem({4}, {2})");
-            //    Console.WriteLineVerbose(MainHand.Info.Name + "Swapped Into Mainhand!");
+            //    Log.InformationVerbose(MainHand.Info.Name + "Swapped Into Mainhand!");
             //}
 
             // If Swap dagger is ready and the playe is not in combat, swap to a mainhand dagger.
@@ -87,7 +88,7 @@ namespace RogueAssassin.Tasks
             if (SwapDaggerReady == true && !ObjectManager.Player.IsInCombat && !ObjectManager.Player.HasBuff(Stealth))
             {
                 ObjectManager.UseContainerItem(4, 2);
-                Console.WriteLine(MainHand.Info.Name + " swapped Into Mainhand!");
+                Log.Information(MainHand.Info.Name + " swapped Into Mainhand!");
             }
 
 

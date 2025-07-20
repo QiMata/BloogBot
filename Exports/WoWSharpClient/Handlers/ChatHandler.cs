@@ -1,5 +1,6 @@
 ﻿using GameData.Core.Enums;
 using WoWSharpClient.Utils;
+using Serilog;
 
 namespace WoWSharpClient.Handlers
 {
@@ -81,7 +82,7 @@ namespace WoWSharpClient.Handlers
             }
             catch (EndOfStreamException e)
             {
-                Console.WriteLine($"Error reading chat message: {e.Message}");
+                Log.Error($"Error reading chat message: {e.Message}");
             }
         }
     }

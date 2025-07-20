@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using WowSrp.Header;
+using Serilog;
 
 namespace WoWSharpClient.Client
 {
@@ -53,7 +54,7 @@ namespace WoWSharpClient.Client
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
+                Log.Error(ex);
             }
         }
 
@@ -64,7 +65,7 @@ namespace WoWSharpClient.Client
 
             if (header.Length < 4)
             {
-                Console.WriteLine($"[WorldClient] Received incomplete SMSG_AUTH_CHALLENGE header.");
+                Log.Error($"[WorldClient] Received incomplete SMSG_AUTH_CHALLENGE header.");
                 return;
             }
 
@@ -74,7 +75,7 @@ namespace WoWSharpClient.Client
             byte[] serverSeed = reader.ReadBytes(size - sizeof(ushort));
             if (serverSeed.Length < 4)
             {
-                Console.WriteLine($"[WorldClient] Incomplete SMSG_AUTH_CHALLENGE packet.");
+                Log.Error($"[WorldClient] Incomplete SMSG_AUTH_CHALLENGE packet.");
                 return;
             }
 
@@ -85,7 +86,7 @@ namespace WoWSharpClient.Client
         {
             EnqueueSend(async () =>
             {
-                Console.WriteLine($"[WorldClient] Sending packet: {opcode} ({packetData.Length} bytes)");
+                Log.Information( Sending packet: {opcode} ({packetData.Length} bytes)");
                 await _stream.WriteAsync(packetData);
             });
         }
@@ -128,7 +129,7 @@ namespace WoWSharpClient.Client
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[WorldClient] An error occurred while sending CMSG_AUTH_SESSION: {ex}");
+                Log.Error($"[WorldClient] An error occurred while sending CMSG_AUTH_SESSION: {ex}");
             }
         }
 
@@ -231,7 +232,7 @@ namespace WoWSharpClient.Client
 
         public void SendMSGMove(Opcode opcode, byte[] movementInfo)
         {
-            //Console.WriteLine($"[SendMSGMove] {opcode} {BitConverter.ToString(movementInfo)}");
+            //Log.Error($"[SendMSGMove] {opcode} {BitConverter.ToString(movementInfo)}");
             using var ms = new MemoryStream();
             using var writer = new BinaryWriter(ms);
             var header = _vanillaEncryption.CreateClientHeader((uint)(4 + movementInfo.Length), (uint)opcode);
@@ -294,7 +295,7 @@ namespace WoWSharpClient.Client
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[WorldClient][HandleNetworkMessages] An error occurred while handling network messages: {ex} {BitConverter.ToString(body)}");
+                    Log.Error($"[WorldClient][HandleNetworkMessages] An error occurred while handling network messages: {ex} {BitConverter.ToString(body)}");
                 }
             }
             await Task.Delay(10);
@@ -320,7 +321,7 @@ namespace WoWSharpClient.Client
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("[WorldClient] Error during send: " + ex);
+                    Log.Error("[WorldClient] Error during send: " + ex);
                 }
                 finally
                 {

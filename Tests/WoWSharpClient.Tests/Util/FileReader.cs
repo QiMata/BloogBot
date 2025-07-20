@@ -1,4 +1,6 @@
-﻿namespace WoWSharpClient.Tests.Util
+﻿using Serilog;
+
+namespace WoWSharpClient.Tests.Util
 {
     internal class FileReader
     {
@@ -16,7 +18,7 @@
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"An error occurred while reading the file: {ex.Message}");
+                Log.Error($"An error occurred while reading the file: {ex.Message}");
                 throw;
             }
         }

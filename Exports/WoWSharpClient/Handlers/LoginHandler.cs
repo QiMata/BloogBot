@@ -1,5 +1,6 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Interfaces;
+using Serilog;
 
 namespace WoWSharpClient.Handlers
 {
@@ -43,11 +44,11 @@ namespace WoWSharpClient.Handlers
             }
             catch (EndOfStreamException e)
             {
-                Console.WriteLine($"Error reading login verify world packet: {e.Message}");
+                Log.Error($"Error reading login verify world packet: {e.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unexpected error: {ex.Message}");
+                Log.Error($"Unexpected error: {ex.Message}");
             }
         }
         public static void HandleSetTimeSpeed(Opcode opcode, byte[] data)
@@ -72,11 +73,11 @@ namespace WoWSharpClient.Handlers
             }
             catch (EndOfStreamException e)
             {
-                Console.WriteLine($"Error reading login verify world packet: {e.Message}");
+                Log.Error($"Error reading login verify world packet: {e.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unexpected error: {ex.Message}");
+                Log.Error($"Unexpected error: {ex.Message}");
             }
         }
         public static void HandleTimeQueryResponse(Opcode opcode, byte[] data)
@@ -92,17 +93,17 @@ namespace WoWSharpClient.Handlers
 
                 // Read MapId (4 bytes)
                 uint serverTime = reader.ReadUInt32();
-                Console.WriteLine($"[LoginHandler] SMSG_QUERY_TIME_RESPONSE {serverTime}");
+                Log.Error($"[LoginHandler] SMSG_QUERY_TIME_RESPONSE {serverTime}");
                 // Process the login verification as needed
                 //_woWSharpEventEmitter.FireOnSetTimeSpeed(new OnSetTimeSpeedArgs(serverTime, timescale));
             }
             catch (EndOfStreamException e)
             {
-                Console.WriteLine($"Error reading login verify world packet: {e.Message}");
+                Log.Error($"Error reading login verify world packet: {e.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unexpected error: {ex.Message}");
+                Log.Error($"Unexpected error: {ex.Message}");
             }
         }
     }

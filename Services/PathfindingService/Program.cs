@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Net.Sockets;
+using Serilog;
 
 namespace PathfindingService
 {
@@ -43,11 +44,11 @@ namespace PathfindingService
                 };
 
                 Process.Start(processInfo);
-                Console.WriteLine("PathfindingService has been launched externally.");
+                Log.Information("PathfindingService has been launched externally.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to launch PathfindingService: {ex.Message}");
+                Log.Error($"Failed to launch PathfindingService: {ex.Message}");
             }
         }
     }
