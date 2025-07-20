@@ -1,6 +1,7 @@
 ﻿using Communication;
 using Microsoft.Data.Sqlite;
 using Microsoft.ML;
+using Microsoft.Extensions.Logging;
 
 namespace DecisionEngineService
 {
@@ -12,13 +13,17 @@ namespace DecisionEngineService
         private readonly string _connectionString;
         private readonly string _dataDirectory;
         private readonly string _processedDirectory;
+        private readonly ILogger<CombatPredictionService> _logger;
 
-        public CombatPredictionService(string connectionString, string dataDirectory, string processedDirectory)
+        public CombatPredictionService(string connectionString, string dataDirectory, string processedDirectory, ILogger<CombatPredictionService> logger)
         {
             _mlContext = new MLContext();
             _connectionString = connectionString;
             _dataDirectory = dataDirectory;
             _processedDirectory = processedDirectory;
+            _logger = logger;
+
+            _logger.LogInformation($"Starting CombatPredictionService| ConnectionString: {connectionString} DataDirectory: {dataDirectory} ProcessedDirectory: {processedDirectory}");
 
             // Load the initial trained model from the SQLite database
             _trainedModel = LoadModelFromDatabase();
@@ -91,15 +96,23 @@ namespace DecisionEngineService
         private void OnNewDataFile(object source, FileSystemEventArgs e)
         {
             string filePath = e.FullPath;
+            _logger.LogInformation($"New data file detected: {filePath}");
 
-            // Load and process the new data file
-            IDataView newData = LoadData(filePath);
+            try
+            {
+                // Load and process the new data file
+                IDataView newData = LoadData(filePath);
 
-            // Update the model with the new data
-            RetrainModel(newData);
+                // Update the model with the new data
+                RetrainModel(newData);
 
-            // Move the processed file to the processed directory
-            MoveProcessedFile(filePath);
+                // Move the processed file to the processed directory
+                MoveProcessedFile(filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error processing new data file {filePath}: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         // Method to load data from a `.bin` file
@@ -113,31 +126,40 @@ namespace DecisionEngineService
         // Method to retrain the model with new data
         private void RetrainModel(IDataView newData)
         {
-            // Assuming you're using a similar pipeline to the one in the initial model training
-            var pipeline = _mlContext.Transforms.Conversion.MapValueToKey("ActionTaken")
-                .Append(_mlContext.Transforms.Concatenate("Features",
-                    "self.health",
-                    "self.max_health",
-                    "self.position.x",
-                    "self.position.y",
-                    "self.position.z",
-                    "self.facing",
-                    "target_id",
-                    "nearby_units"))
-                .Append(_mlContext.MulticlassClassification.Trainers.SdcaMaximumEntropy("ActionTaken", "Features"))
-                .Append(_mlContext.Transforms.Conversion.MapKeyToValue("PredictedAction", "PredictedLabel"));
+            try
+            {
+                // Assuming you're using a similar pipeline to the one in the initial model training
+                var pipeline = _mlContext.Transforms.Conversion.MapValueToKey("ActionTaken")
+                    .Append(_mlContext.Transforms.Concatenate("Features",
+                        "self.health",
+                        "self.max_health",
+                        "self.position.x",
+                        "self.position.y",
+                        "self.position.z",
+                        "self.facing",
+                        "target_id",
+                        "nearby_units"))
+                    .Append(_mlContext.MulticlassClassification.Trainers.SdcaMaximumEntropy("ActionTaken", "Features"))
+                    .Append(_mlContext.Transforms.Conversion.MapKeyToValue("PredictedAction", "PredictedLabel"));
 
-            // Combine the new data with any existing data if necessary
-            var combinedData = CombineWithExistingData(newData);
+                // Combine the new data with any existing data if necessary
+                var combinedData = CombineWithExistingData(newData);
 
-            // Train the model
-            _trainedModel = pipeline.Fit(combinedData);
+                // Train the model
+                _trainedModel = pipeline.Fit(combinedData);
 
-            // Update the prediction engine with the new model
-            _predictionEngine = _mlContext.Model.CreatePredictionEngine<ActivitySnapshot, ActivitySnapshot>(_trainedModel);
+                // Update the prediction engine with the new model
+                _predictionEngine = _mlContext.Model.CreatePredictionEngine<ActivitySnapshot, ActivitySnapshot>(_trainedModel);
 
-            // Save the updated model to the SQLite database
-            SaveModelToDatabase(_trainedModel);
+                // Save the updated model to the SQLite database
+                SaveModelToDatabase(_trainedModel);
+
+                _logger.LogInformation("Model retraining completed");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error retraining model: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         // Method to combine new data with existing data
@@ -170,12 +192,20 @@ namespace DecisionEngineService
             string fileName = Path.GetFileName(filePath);
             string destPath = Path.Combine(_processedDirectory, fileName);
 
-            if (File.Exists(destPath))
+            try
             {
-                File.Delete(destPath);
-            }
+                if (File.Exists(destPath))
+                {
+                    File.Delete(destPath);
+                }
 
-            File.Move(filePath, destPath);
+                File.Move(filePath, destPath);
+                _logger.LogInformation($"Moved processed file to {destPath}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error moving processed file {filePath}: {ex.Message}\n{ex.StackTrace}");
+            }
         }
     }
 }
