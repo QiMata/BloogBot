@@ -54,7 +54,10 @@ namespace WarlockAffliction.Tasks
 
                 TryCastSpell(Corruption, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Corruption) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
 
+
                 TryCastSpell(SiphonLife, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(SiphonLife) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
+
+                TryCastSpell(Haunt, 0, 30, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Haunt));
 
                 TryCastSpell(ShadowBolt, 0, 28, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 40);
             }
