@@ -37,6 +37,7 @@
         public const string Corruption = "Corruption";
         public const string CurseOfAgony = "Curse of Agony";
         public const string DeathCoil = "Death Coil";
+        public const string Fear = "Fear";
         public const string DrainSoul = "Drain Soul";
         public const string Immolate = "Immolate";
         public const string LifeTap = "Life Tap";
