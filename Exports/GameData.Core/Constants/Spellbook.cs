@@ -37,6 +37,7 @@
         public const string Corruption = "Corruption";
         public const string CurseOfAgony = "Curse of Agony";
         public const string DeathCoil = "Death Coil";
+        public const string Fear = "Fear";
         public const string DrainSoul = "Drain Soul";
         public const string Immolate = "Immolate";
         public const string LifeTap = "Life Tap";
@@ -77,6 +78,7 @@
         public const string Claw = "Claw";
         public const string Rake = "Rake";
         public const string Rip = "Rip";
+        public const string FerociousBite = "Ferocious Bite";
         public const string TigersFury = "Tiger's Fury";
         public const string Fireball = "Fireball";
         public const string Frostbolt = "Frostbolt";

@@ -28,11 +28,20 @@ namespace HunterBeastMastery.Tasks
 
         public void Update()
         {
-            // Check on your pet
-            if (pet != null && !PetHappy && !PetBeingFed)
+            // keep pet summoned and happy
+            if (ObjectManager.Pet == null && ObjectManager.Player.IsSpellReady(CallPet))
+                ObjectManager.Player.CastSpell(CallPet);
+            if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 40 && ObjectManager.Player.IsSpellReady(MendPet))
+                ObjectManager.Player.CastSpell(MendPet);
+
+            if (pet != null && !PetHappy && !PetBeingFed && petFood != null && ObjectManager.Player.IsSpellReady(FeedPet))
             {
-                
+                ObjectManager.Player.CastSpell(FeedPet);
+                petFood.Use();
             }
+
+            if (ObjectManager.Player.AmmoId != 0 && ObjectManager.GetItemCount(ObjectManager.Player.AmmoId) < 20)
+                ObjectManager.SendChatMessage("Low ammo - consider buying more");
             if (ObjectManager.Player.HealthPercent >= 95 ||
                 ObjectManager.Player.HealthPercent >= 80 && !ObjectManager.Player.IsEating ||
                 ObjectManager.Player.IsInCombat ||
