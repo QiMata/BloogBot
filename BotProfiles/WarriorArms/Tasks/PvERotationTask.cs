@@ -57,7 +57,8 @@ namespace WarriorArms.Tasks
 
             TryUseAbilityById(BloodFury, 4, condition: ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
 
-            //TryUseAbility(Overpower, 5, ObjectManager.Player.Ca);
+            TryUseAbility(Overpower, 5,
+                ObjectManager.Player.CurrentStance == BattleStance);
 
             TryUseAbility(Execute, 15, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 20);
 
@@ -102,7 +103,9 @@ namespace WarriorArms.Tasks
 
                     TryUseAbility(HeroicStrike, ObjectManager.Player.Level < 30 ? 15 : 45, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
                 }
+
             }
+
         }
     }
 }

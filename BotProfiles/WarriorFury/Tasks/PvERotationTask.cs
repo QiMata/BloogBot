@@ -1,7 +1,6 @@
 ﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using System.Diagnostics;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarriorFury.Tasks
@@ -13,22 +12,15 @@ namespace WarriorFury.Tasks
         private bool backpedaling;
         private int backpedalStartTime;
         private int backpedalDuration;
-        private readonly Stopwatch overpowerStopwatch = new();
 
         internal PvERotationTask(IBotContext botContext) : base(botContext)
         {
             EventHandler.OnSlamReady += OnSlamReadyCallback;
-            EventHandler.OnBlockParryDodge += Instance_OnBlockParryDodge;
         }
 
         ~PvERotationTask()
         {
             EventHandler.OnSlamReady -= OnSlamReadyCallback;
-        }
-
-        private void Instance_OnBlockParryDodge(object sender, EventArgs e)
-        {
-            overpowerStopwatch.Restart();
         }
 
         public void Update()
@@ -153,7 +145,7 @@ namespace WarriorFury.Tasks
 
             TryUseAbility(BerserkerRage, condition: ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 70 && currentStance == BerserkerStance);
 
-            TryUseAbility(Overpower, 5, currentStance == BattleStance && overpowerStopwatch.IsRunning);
+            TryUseAbility(Overpower, 5, currentStance == BattleStance);
 
             // Use these abilities if you are fighting TWO OR MORE mobs at once.
             if (ObjectManager.Aggressors.Count() >= 2)
@@ -162,7 +154,8 @@ namespace WarriorFury.Tasks
 
                 TryUseAbility(DemoralizingShout, 10, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(DemoralizingShout));
 
-                // TryUseAbility(Cleave, 20, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 && FacingAllTargets);
+                TryUseAbility(Cleave, 20,
+                    ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 && FacingAllTargets);
 
                 TryUseAbility(Whirlwind, 25, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 && currentStance == BerserkerStance && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(IntimidatingShout) && AggressorsInMelee);
 
@@ -188,10 +181,6 @@ namespace WarriorFury.Tasks
                 TryUseAbility(SunderArmor, 15, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 80 && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(SunderArmor));
             }
 
-            if (overpowerStopwatch.ElapsedMilliseconds > 5000)
-            {
-                overpowerStopwatch.Stop();
-            }
         }
     }
 }
