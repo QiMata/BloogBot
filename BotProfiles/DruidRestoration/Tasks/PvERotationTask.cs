@@ -1,14 +1,16 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidRestoration.Tasks
 {
+    /// <summary>
+    /// Basic PvE rotation for a restoration druid.
+    /// Focuses on staying alive while dealing modest damage.
+    /// </summary>
     internal class PvERotationTask : CombatRotationTask, IBotTask
     {
-
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
-
 
         public void Update()
         {
@@ -20,46 +22,27 @@ namespace DruidRestoration.Tasks
 
             AssignDPSTarget();
 
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null) return;
+            if (ObjectManager.GetTarget(ObjectManager.Player) == null)
+                return;
 
-            //if (Container.State.TankInPosition)
-            //{
-            //    if (MoveTowardsTarget())
-            //        return;
+            if (Update(30))
+                return;
 
-            //    PerformCombatRotation();
-            //}
-            //else if (MoveBehindTankSpot(15))
-            //    return;
-            //else
-            //    ObjectManager.Player.StopAllMovement();
+            PerformCombatRotation();
         }
+
         public override void PerformCombatRotation()
         {
             ObjectManager.Player.StopAllMovement();
             ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            ObjectManager.Pet?.Attack();
 
-            TryCastSpell(LifeTap, 0, int.MaxValue, ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
+            // keep ourselves alive
+            TryCastSpell(Rejuvenation, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
+            TryCastSpell(HealingTouch, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
 
-            // if target is low on health, turn off wand and cast drain soul
-            if (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 20)
-            {
-                ObjectManager.Player.StopWand();
-                TryCastSpell(DrainSoul, 0, 29);
-            }
-            else
-            {
-                TryCastSpell(CurseOfAgony, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(CurseOfAgony) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 90);
-
-                TryCastSpell(Immolate, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Immolate) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
-
-                TryCastSpell(Corruption, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Corruption) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
-
-                TryCastSpell(SiphonLife, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(SiphonLife) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
-
-                TryCastSpell(ShadowBolt, 0, 28, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 40);
-            }
+            // offensive abilities
+            TryCastSpell(Moonfire, 0, 30, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Moonfire));
+            TryCastSpell(Wrath, 0, 30);
         }
     }
 }

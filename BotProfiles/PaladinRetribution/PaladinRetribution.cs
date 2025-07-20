@@ -36,6 +36,6 @@ namespace PaladinRetribution
             new PvERotationTask(botContext);
 
         public IBotTask CreatePvPRotationTask(IBotContext botContext) =>
-            new PvERotationTask(botContext);
+            new PvPRotationTask(botContext);
     }
 }

@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\BotRunner\BotRunner.csproj" />
+    <Compile Include="..\Common\WarlockBaseRotationTask.cs" />
   </ItemGroup>
 
   <ItemGroup>

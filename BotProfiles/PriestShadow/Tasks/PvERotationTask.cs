@@ -104,9 +104,11 @@ namespace PriestShadow.Tasks
                 ObjectManager.Player.StartWand();
             else
             {
-                //TryCastSpell(ShadowForm, 0, int.MaxValue, !ObjectManager.Player.HasBuff(ShadowForm));
+                TryCastSpell(ShadowForm, 0, int.MaxValue, !ObjectManager.Player.HasBuff(ShadowForm));
 
-                //TryCastSpell(VampiricEmbrace, 0, 29, ObjectManager.Player.HealthPercent < 100 && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(VampiricEmbrace) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
+                TryCastSpell(VampiricEmbrace, 0, 29,
+                             ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 &&
+                             !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(VampiricEmbrace));
 
                 //bool noNeutralsNearby = !ObjectManager.Units.Any(u => u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.UnitReaction == UnitReaction.Neutral && u.Position.DistanceTo(ObjectManager.Player.Position) <= 10);
                 //TryCastSpell(PsychicScream, 0, 7, (ObjectManager.GetTarget(ObjectManager.Player).Position.DistanceTo(ObjectManager.Player.Position) < 8 && !ObjectManager.Player.HasBuff(PowerWordShield)) || ObjectManager.Aggressors.Count() > 1 && ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Elemental);
@@ -124,12 +126,14 @@ namespace PriestShadow.Tasks
 
                 //TryCastSpell(PowerWordShield, 0, int.MaxValue, !ObjectManager.Player.HasDebuff(WeakenedSoul) && !ObjectManager.Player.HasBuff(PowerWordShield) && (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 || ObjectManager.Player.HealthPercent < 10), castOnSelf: true);
 
-                //TryCastSpell(MindBlast, 0, 29);
+                TryCastSpell(MindBlast, 0, 29);
 
-                //if (ObjectManager.Player.IsSpellReady(MindFlay) && ObjectManager.GetTarget(ObjectManager.Player).Position.DistanceTo(ObjectManager.Player.Position) <= 19 && (!ObjectManager.Player.IsSpellReady(PowerWordShield) || ObjectManager.Player.HasBuff(PowerWordShield)))
-                //    TryCastSpell(MindFlay, 0, 19);
-                //else
-                //    TryCastSpell(Smite, 0, 29, !ObjectManager.Player.HasBuff(ShadowForm));
+                if (ObjectManager.Player.IsSpellReady(MindFlay) &&
+                    ObjectManager.GetTarget(ObjectManager.Player).Position.DistanceTo(ObjectManager.Player.Position) <= 19 &&
+                    (!ObjectManager.Player.IsSpellReady(PowerWordShield) || ObjectManager.Player.HasBuff(PowerWordShield)))
+                    TryCastSpell(MindFlay, 0, 19);
+                else
+                    TryCastSpell(Smite, 0, 29, !ObjectManager.Player.HasBuff(ShadowForm));
             }
         }
     }

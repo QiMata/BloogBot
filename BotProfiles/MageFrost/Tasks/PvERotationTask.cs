@@ -11,8 +11,6 @@ namespace MageFrost.Tasks
         private readonly int range;
         private bool frostNovaBackpedaling;
         private int frostNovaBackpedalStartTime;
-        private bool frostNovaJumped;
-        private bool frostNovaStartedMoving;
 
         internal PvERotationTask(IBotContext botContext) : base(botContext)
         {
@@ -32,21 +30,9 @@ namespace MageFrost.Tasks
 
         public void Update()
         {
-            if (frostNovaBackpedaling && !frostNovaStartedMoving && Environment.TickCount - frostNovaBackpedalStartTime > 200)
+            if (frostNovaBackpedaling && Environment.TickCount - frostNovaBackpedalStartTime > 1500)
             {
-                ObjectManager.Player.Turn180();
-                ObjectManager.Player.StartMovement(ControlBits.Front);
-                frostNovaStartedMoving = true;
-            }
-            if (frostNovaBackpedaling && !frostNovaJumped && Environment.TickCount - frostNovaBackpedalStartTime > 500)
-            {
-                ObjectManager.Player.Jump();
-                frostNovaJumped = true;
-            }
-            if (frostNovaBackpedaling && Environment.TickCount - frostNovaBackpedalStartTime > 2500)
-            {
-                ObjectManager.Player.StopMovement(ControlBits.Front);
-                ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+                ObjectManager.Player.StopMovement(ControlBits.Back);
                 frostNovaBackpedaling = false;
             }
 
@@ -93,9 +79,20 @@ namespace MageFrost.Tasks
 
                 TryCastSpell(FrostNova, 0, 9, ObjectManager.GetTarget(ObjectManager.Player).TargetGuid == ObjectManager.Player.Guid && (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 || ObjectManager.Player.HealthPercent < 30) && !IsTargetFrozen && !ObjectManager.Units.Any(u => u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.HealthPercent > 0 && u.Guid != ObjectManager.Player.Guid && u.Position.DistanceTo(ObjectManager.Player.Position) <= 12), callback: FrostNovaCallback);
 
+                TryCastSpell(ArcaneExplosion, 0, 10, ObjectManager.Aggressors.Count() > 2);
+
+                TryCastSpell(Flamestrike, 0, 30, ObjectManager.Aggressors.Count() > 2);
+
                 TryCastSpell(ConeOfCold, 0, 8, ObjectManager.Player.Level >= 30 && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 && IsTargetFrozen);
 
+
+                TryCastSpell(IceLance, 0, 30, ObjectManager.Player.HasBuff(FingersOfFrost));
+
+                TryCastSpell(DeepFreeze, 0, 30, ObjectManager.Player.HasBuff(FingersOfFrost));
+
                 TryCastSpell(FireBlast, 0, 20, !IsTargetFrozen);
+
+                TryCastSpell(Fireball, 0, range, ObjectManager.Player.HasBuff(BrainFreeze));
 
                 // Either Frostbolt or Fireball depending on what is stronger. Will always use Frostbolt at level 8+.
                 TryCastSpell(nuke, 0, range);
@@ -109,10 +106,9 @@ namespace MageFrost.Tasks
 
         private Action FrostNovaCallback => () =>
         {
-            frostNovaStartedMoving = false;
-            frostNovaJumped = false;
             frostNovaBackpedaling = true;
             frostNovaBackpedalStartTime = Environment.TickCount;
+            ObjectManager.Player.StartMovement(ControlBits.Back);
         };
 
         private bool IsTargetFrozen => ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Frostbite) || ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(FrostNova);

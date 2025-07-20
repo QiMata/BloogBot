@@ -10,11 +10,26 @@ namespace ShamanElemental.Tasks
 
         public void Update()
         {
-            BotTasks.Pop();
+            if (!ObjectManager.Aggressors.Any())
+            {
+                BotTasks.Pop();
+                return;
+            }
+
+            if (Update(30))
+                return;
+
+            PerformCombatRotation();
         }
         public override void PerformCombatRotation()
         {
+            ObjectManager.Player.StopAllMovement();
+            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
+            TryCastSpell(GroundingTotem, 0, int.MaxValue, ObjectManager.Aggressors.Any(a => a.IsCasting));
+            TryCastSpell(EarthShock, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
+            TryCastSpell(FlameShock, 0, 20, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(FlameShock));
+            TryCastSpell(LightningBolt, 0, 30, ObjectManager.Player.ManaPercent > 10);
         }
     }
 }

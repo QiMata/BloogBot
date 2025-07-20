@@ -1,5 +1,6 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using static BotRunner.Constants.Spellbook;
 
 namespace PaladinProtection.Tasks
 {
@@ -9,11 +10,36 @@ namespace PaladinProtection.Tasks
 
         public void Update()
         {
-            BotTasks.Pop();
+            if (!ObjectManager.Aggressors.Any())
+            {
+                BotTasks.Pop();
+                return;
+            }
+
+            if (ObjectManager.GetTarget(ObjectManager.Player) == null ||
+                ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
+            {
+                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+            }
+
+            if (Update(3))
+                return;
+
+            ExecuteRotation();
         }
+
         public override void PerformCombatRotation()
         {
+            ExecuteRotation();
+        }
 
+        private void ExecuteRotation()
+        {
+            TryCastSpell(RighteousFury, !ObjectManager.Player.HasBuff(RighteousFury));
+            TryCastSpell(SealOfRighteousness, !ObjectManager.Player.HasBuff(SealOfRighteousness));
+            TryCastSpell(Judgement, ObjectManager.Player.HasBuff(SealOfRighteousness));
+            TryCastSpell(HolyShield, !ObjectManager.Player.HasBuff(HolyShield));
         }
     }
 }
+

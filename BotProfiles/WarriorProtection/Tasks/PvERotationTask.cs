@@ -12,7 +12,12 @@ namespace WarriorProtection.Tasks
         private readonly Stopwatch overpowerStopwatch = new();
         private readonly Position tankSpot;
         private IWoWUnit currentDPSTarget;
-        internal PvERotationTask(IBotContext botContext) : base(botContext) => EventHandler.OnBlockParryDodge += Instance_OnBlockParryDodge;
+
+        internal PvERotationTask(IBotContext botContext, Position tankSpot) : base(botContext)
+        {
+            this.tankSpot = tankSpot;
+            EventHandler.OnBlockParryDodge += Instance_OnBlockParryDodge;
+        }
         ~PvERotationTask()
         {
             EventHandler.OnBlockParryDodge -= Instance_OnBlockParryDodge;

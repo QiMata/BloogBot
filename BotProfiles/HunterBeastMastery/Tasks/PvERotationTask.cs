@@ -17,7 +17,14 @@ namespace HunterBeastMastery.Tasks
 
         public void Update()
         {
-            if (ObjectManager.Aggressors.Any())
+            // ensure our pet is helping and alive
+            ObjectManager.Pet?.Attack();
+            if (ObjectManager.Pet == null && ObjectManager.Player.IsSpellReady(CallPet))
+                ObjectManager.Player.CastSpell(CallPet);
+            else if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 40)
+                TryCastSpell(MendPet, castOnSelf: true);
+
+            if (!ObjectManager.Aggressors.Any())
             {
                 BotTasks.Pop();
                 return;
@@ -43,29 +50,26 @@ namespace HunterBeastMastery.Tasks
             {
                 ObjectManager.Player.StartRangedAttack();
             }
-            else if (gun != null && canUseRanged)
+            else if (canUseRanged)
             {
-                //if (!target.HasDebuff(HuntersMark)) 
-                //{
-                //     TryCastSpell(HuntersMark, 0, 34);
-                //}
-                //else 
-                if (!ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(SerpentSting))
-                {
+                var target = ObjectManager.GetTarget(ObjectManager.Player);
+                TryCastSpell(HuntersMark, 0, 34, !target.HasDebuff(HuntersMark));
+                TryCastSpell(ConcussiveShot, 0, 34, !target.HasDebuff(ConcussiveShot));
+                if (!target.HasDebuff(SerpentSting))
                     TryCastSpell(SerpentSting, 0, 34);
-                }
+                else if (ObjectManager.Aggressors.Count() > 1)
+                    TryCastSpell(MultiShot, 0, 34);
                 else if (ObjectManager.Player.ManaPercent > 60)
-                {
                     TryCastSpell(ArcaneShot, 0, 34);
-                }
+
+                TryCastSpell(RapidFire, 0, int.MaxValue, target.HealthPercent > 80);
                 return;
-
-
-                //TryCastSpell(ConcussiveShot, 0, 34);
             }
             else
             {
                 // melee rotation
+                TryCastSpell(MongooseBite, 0, 5);
+                TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip));
                 TryCastSpell(RaptorStrike, 0, 5);
             }
         }

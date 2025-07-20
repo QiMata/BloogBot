@@ -7,6 +7,8 @@ namespace WarriorProtection.Tasks
 {
     internal class PullTargetTask : BotTask, IBotTask
     {
+        private readonly Position tankSpot;
+
         internal PullTargetTask(IBotContext botContext) : base(botContext)
         {
             IWoWItem rangedWeapon = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
@@ -44,14 +46,18 @@ namespace WarriorProtection.Tasks
             IWoWUnit nearestHostile = ObjectManager.Hostiles.Where(x => !x.IsInCombat).OrderBy(x => x.Position.DistanceTo(ObjectManager.Player.Position)).First();
             float distance = nearestHostile.Position.DistanceTo(ObjectManager.Player.Position) < 15 ? 30 : 15;
 
-            Position tankSpot;
+            tankSpot = DetermineTankSpot(distance);
+        }
 
-            //if (Container.State.VisitedWaypoints.Count(x => Container.PathfindingClient.GetPathingDistance(ObjectManager.MapId, ObjectManager.Player.Position, x, true) > distance) > 0)
-            //    tankSpot = Container.State.VisitedWaypoints.Where(x => Container.PathfindingClient.GetPathingDistance(ObjectManager.MapId, ObjectManager.Player.Position, x, true) > 15)
-            //        .OrderBy(x => Container.PathfindingClient.GetPathingDistance(ObjectManager.MapId, ObjectManager.Player.Position, x, true))
-            //        .First();
-            //else
-            //    tankSpot = ObjectManager.Player.Position;
+        private Position DetermineTankSpot(float distance)
+        {
+            if (Container.State.VisitedWaypoints.Count(x => Container.PathfindingClient.GetPathingDistance(ObjectManager.MapId, ObjectManager.Player.Position, x, true) > distance) > 0)
+                return Container.State.VisitedWaypoints
+                    .Where(x => Container.PathfindingClient.GetPathingDistance(ObjectManager.MapId, ObjectManager.Player.Position, x, true) > 15)
+                    .OrderBy(x => Container.PathfindingClient.GetPathingDistance(ObjectManager.MapId, ObjectManager.Player.Position, x, true))
+                    .First();
+
+            return ObjectManager.Player.Position;
         }
 
         public void Update()
@@ -65,7 +71,7 @@ namespace WarriorProtection.Tasks
             if (ObjectManager.Aggressors.Any())
             {
                 BotTasks.Pop();
-                BotTasks.Push(Container.CreatePvERotationTask(BotContext));
+                BotTasks.Push(new PvERotationTask(BotContext, tankSpot));
                 return;
             }
 

@@ -14,17 +14,33 @@ namespace WarlockDestruction.Tasks
 
             ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
 
-            if ((!ObjectManager.Player.IsSpellReady(SummonImp) && !ObjectManager.Player.IsSpellReady(SummonVoidwalker)) || ObjectManager.Pet != null)
+            if ((!ObjectManager.Player.IsSpellReady(SummonImp)
+                && !ObjectManager.Player.IsSpellReady(SummonVoidwalker)
+                && !ObjectManager.Player.IsSpellReady(SummonSuccubus)
+                && !ObjectManager.Player.IsSpellReady(SummonFelhunter)
+                && !ObjectManager.Player.IsSpellReady(SummonFelguard)) || ObjectManager.Pet != null)
             {
                 BotTasks.Pop();
                 BotTasks.Push(new BuffTask(BotContext));
                 return;
             }
 
-            if (ObjectManager.Player.IsSpellReady(SummonImp))
-                ObjectManager.Player.CastSpell(SummonImp);
-            else
-                ObjectManager.Player.CastSpell(SummonVoidwalker);
+            string spellToCast = SummonImp;
+
+            bool needTankPet = ObjectManager.Aggressors.Count() > 1 || ObjectManager.Player.HealthPercent < 50;
+
+            if (needTankPet && ObjectManager.Player.IsSpellReady(SummonVoidwalker) && ObjectManager.Player.IsSpellReady(FelDomination))
+            {
+                ObjectManager.Player.CastSpell(FelDomination);
+                spellToCast = SummonVoidwalker;
+            }
+            else if (ObjectManager.Player.IsSpellReady(SummonSuccubus))
+                spellToCast = SummonSuccubus;
+            else if (ObjectManager.Player.IsSpellReady(SummonFelhunter))
+                spellToCast = SummonFelhunter;
+
+            if (ObjectManager.Player.IsSpellReady(spellToCast))
+                ObjectManager.Player.CastSpell(spellToCast);
         }
     }
 }

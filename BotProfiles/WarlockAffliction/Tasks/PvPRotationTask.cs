@@ -1,64 +1,26 @@
-﻿using BotRunner.Interfaces;
-using BotRunner.Tasks;
+using BotProfiles.Common;
+using BotRunner.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarlockAffliction.Tasks
 {
-    internal class PvPRotationTask : CombatRotationTask, IBotTask
+    internal class PvPRotationTask(IBotContext botContext) : WarlockBaseRotationTask(botContext), IBotTask
     {
-        internal PvPRotationTask(IBotContext botContext) : base(botContext) { }
+        protected override IEnumerable<string> DotSpells =>
+            new[] { CurseOfAgony, Immolate, Corruption, SiphonLife, Haunt };
 
-
-        public void Update()
+        protected override void BeforeRotation()
         {
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
-                return;
-            }
-
-            AssignDPSTarget();
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null) return;
-
-            //if (Container.State.TankInPosition)
-            //{
-            //    if (MoveTowardsTarget())
-            //        return;
-
-            //    PerformCombatRotation();
-            //}
-            //else if (MoveBehindTankSpot(15))
-            //    return;
-            //else
-            //    ObjectManager.Player.StopAllMovement();
+            TryCastSpell(DeathCoil, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
+            TryCastSpell(Fear, 0, 20,
+                (ObjectManager.GetTarget(ObjectManager.Player).IsCasting ||
+                 ObjectManager.GetTarget(ObjectManager.Player).IsChanneling) &&
+                !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Fear));
+            TryCastSpell(LifeTap, 0, int.MaxValue,
+                ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
         }
-        public override void PerformCombatRotation()
-        {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            ObjectManager.Pet?.Attack();
 
-            TryCastSpell(LifeTap, 0, int.MaxValue, ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
-
-            // if target is low on health, turn off wand and cast drain soul
-            if (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 20)
-            {
-                ObjectManager.Player.StopWand();
-                TryCastSpell(DrainSoul, 0, 29);
-            }
-            else
-            {
-                TryCastSpell(CurseOfAgony, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(CurseOfAgony) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 90);
-
-                TryCastSpell(Immolate, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Immolate) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
-
-                TryCastSpell(Corruption, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Corruption) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
-
-                TryCastSpell(SiphonLife, 0, 28, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(SiphonLife) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
-
-                TryCastSpell(ShadowBolt, 0, 28, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 40);
-            }
-        }
+        protected override void AfterDots() =>
+            TryCastSpell(Haunt, 0, 30, ShouldReapply(Haunt));
     }
 }

@@ -12,12 +12,22 @@ namespace PaladinRetribution.Tasks
 
         public override void PerformCombatRotation()
         {
-            throw new NotImplementedException();
+            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
+            {
+                if (ObjectManager.Aggressors.Any())
+                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                else
+                    return;
+            }
+
+            ExecuteRotation();
         }
 
         public void Update()
         {
-            if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HolyLight))
+            if (ObjectManager.Player.HealthPercent < 30 &&
+                ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 &&
+                ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HolyLight))
             {
                 BotTasks.Push(new HealTask(BotContext));
                 return;
@@ -37,6 +47,11 @@ namespace PaladinRetribution.Tasks
             if (Update(3))
                 return;
 
+            ExecuteRotation();
+        }
+
+        private void ExecuteRotation()
+        {
             TryCastSpell(Purify, ObjectManager.Player.IsPoisoned || ObjectManager.Player.IsDiseased, castOnSelf: true);
 
             TryCastSpell(DevotionAura, !ObjectManager.Player.HasBuff(DevotionAura) && !ObjectManager.Player.IsSpellReady(RetributionAura) && !ObjectManager.Player.IsSpellReady(SanctityAura));
@@ -48,7 +63,7 @@ namespace PaladinRetribution.Tasks
             TryCastSpell(Exorcism, ObjectManager.GetTarget(ObjectManager.Player).CreatureType == CreatureType.Undead || ObjectManager.GetTarget(ObjectManager.Player).CreatureType == CreatureType.Demon);
 
             TryCastSpell(HammerOfJustice, ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Humanoid || (ObjectManager.GetTarget(ObjectManager.Player).CreatureType == CreatureType.Humanoid && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 20));
-            
+
             TryCastSpell(SealOfTheCrusader, !ObjectManager.Player.HasBuff(SealOfTheCrusader) && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(JudgementOfTheCrusader));
 
             TryCastSpell(SealOfRighteousness, !ObjectManager.Player.HasBuff(SealOfRighteousness) && ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(JudgementOfTheCrusader) && !ObjectManager.Player.IsSpellReady(SealOfCommand));
@@ -57,7 +72,13 @@ namespace PaladinRetribution.Tasks
 
             TryCastSpell(HolyShield, !ObjectManager.Player.HasBuff(HolyShield) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50);
 
-            TryCastSpell(Judgement, ObjectManager.Player.HasBuff(SealOfTheCrusader) || ((ObjectManager.Player.HasBuff(SealOfRighteousness) || ObjectManager.Player.HasBuff(SealOfCommand)) && (ObjectManager.Player.ManaPercent >= 95 || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 3)));
+            TryCastSpell(Judgement, ObjectManager.Player.HasBuff(SealOfTheCrusader) ||
+                ((ObjectManager.Player.HasBuff(SealOfRighteousness) || ObjectManager.Player.HasBuff(SealOfCommand)) &&
+                (ObjectManager.Player.ManaPercent >= 95 || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 3)));
+
+            TryCastSpell(DivineProtection, ObjectManager.Player.HealthPercent < 20, castOnSelf: true);
+            TryCastSpell(LayOnHands, ObjectManager.Player.HealthPercent < 10, castOnSelf: true);
         }
     }
 }
+
