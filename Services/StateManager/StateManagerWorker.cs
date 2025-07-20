@@ -32,7 +32,9 @@ namespace StateManager
             _serviceProvider = serviceProvider;
             _configuration = configuration;
 
-            _mangosSOAPClient = new MangosSOAPClient(configuration["MangosSOAP:IpAddress"]);
+            _mangosSOAPClient = new MangosSOAPClient(
+                configuration["MangosSOAP:IpAddress"],
+                _loggerFactory.CreateLogger<MangosSOAPClient>());
 
             _activityMemberSocketListener = new CharacterStateSocketListener(
                 StateManagerSettings.Instance.CharacterDefinitions,
