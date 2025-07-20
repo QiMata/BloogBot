@@ -218,6 +218,11 @@
         public const string HealthFunnel = "Health Funnel";
         public const string SummonImp = "Summon Imp";
         public const string SummonVoidwalker = "Summon Voidwalker";
+        public const string SummonSuccubus = "Summon Succubus";
+        public const string SummonFelhunter = "Summon Felhunter";
+        public const string SummonFelguard = "Summon Felguard";
+        public const string Torment = "Torment";
+        public const string Sacrifice = "Sacrifice";
         public const string DemonArmor = "Demon Armor";
         public const string DemonSkin = "Demon Skin";
         public const string MortalStrike = "Mortal Strike";
