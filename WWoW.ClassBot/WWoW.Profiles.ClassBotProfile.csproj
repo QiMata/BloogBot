@@ -7,13 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\BotProfiles\**\*.cs" />
-    <None Include="..\BotProfiles\**\*.json" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\Exports\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\Exports\BotRunner\BotRunner.csproj" />
+    <ProjectReference Include="..\Exports\GameData.Core\GameData.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
