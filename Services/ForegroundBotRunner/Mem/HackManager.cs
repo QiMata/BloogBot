@@ -1,4 +1,6 @@
-﻿namespace ForegroundBotRunner.Mem
+﻿using Serilog;
+
+namespace ForegroundBotRunner.Mem
 {
     internal static class HackManager
     {
@@ -6,7 +8,7 @@
 
         static internal void AddHack(Hack hack)
         {
-            Console.WriteLine($"[HACK MANAGER] Adding hack {hack.Name}");
+            Log.Information($"[HACK MANAGER] Adding hack {hack.Name}");
             Hacks.Add(hack);
             EnableHack(hack);
         }

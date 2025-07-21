@@ -1,4 +1,5 @@
 ﻿using MySql.Data.MySqlClient;
+using Serilog;
 
 namespace StateManager.Repository
 {
@@ -21,7 +22,7 @@ namespace StateManager.Repository
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
             }
 
             return false;

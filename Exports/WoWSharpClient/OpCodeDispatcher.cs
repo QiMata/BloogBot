@@ -1,6 +1,7 @@
 ﻿using GameData.Core.Enums;
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Utils;
+using Serilog;
 
 namespace WoWSharpClient
 {
@@ -104,7 +105,7 @@ namespace WoWSharpClient
             }
             else
             {
-                //Console.WriteLine($"Unhandled opcode: {opcode} byte[{data.Length}]");
+                //Log.Error($"Unhandled opcode: {opcode} byte[{data.Length}]");
             }
         }
         private async Task Runner()
@@ -120,7 +121,7 @@ namespace WoWSharpClient
                     }
                     catch (Exception e)
                     {
-                        Console.WriteLine($"Error in OpCodeDispatcher.Runner: {e}\n");
+                        Log.Error($"Error in OpCodeDispatcher.Runner: {e}\n");
                     }
                 }
                 await Task.Delay(50);

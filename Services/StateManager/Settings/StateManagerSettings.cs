@@ -1,6 +1,7 @@
 ﻿using Communication;
 using Newtonsoft.Json;
 using System.Reflection;
+using Serilog;
 
 namespace StateManager.Settings
 {
@@ -40,7 +41,7 @@ namespace StateManager.Settings
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
+                Log.Error(ex);
             }
         }
         private StateManagerSettings() { }

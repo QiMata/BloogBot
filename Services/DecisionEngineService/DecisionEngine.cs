@@ -1,5 +1,6 @@
 ﻿using Communication;
 using System.Data.SQLite;
+using Microsoft.Extensions.Logging;
 
 namespace DecisionEngineService
 {
@@ -9,11 +10,13 @@ namespace DecisionEngineService
         private readonly SQLiteDatabase _db;
         private readonly string _binFileDirectory;
         private FileSystemWatcher _fileWatcher;
+        private readonly ILogger<DecisionEngine> _logger;
 
-        public DecisionEngine(string binFileDirectory, SQLiteDatabase db)
+        public DecisionEngine(string binFileDirectory, SQLiteDatabase db, ILogger<DecisionEngine> logger)
         {
             _binFileDirectory = binFileDirectory;
             _db = db;
+            _logger = logger;
             _model = LoadModelFromDatabase();
             InitializeFileWatcher();
         }
@@ -26,22 +29,36 @@ namespace DecisionEngineService
             };
             _fileWatcher.Created += OnBinFileCreated;
             _fileWatcher.EnableRaisingEvents = true;
+            _logger.LogInformation("File watcher initialized for directory {Directory}", _binFileDirectory);
         }
 
         private void OnBinFileCreated(object sender, FileSystemEventArgs e)
         {
+            _logger.LogInformation("Detected new bin file: {File}", e.FullPath);
             ProcessBinFile(e.FullPath);
         }
 
         private void ProcessBinFile(string filePath)
         {
-            var snapshots = ReadBinFile(filePath);
-            foreach (var snapshot in snapshots)
+            _logger.LogInformation("Processing bin file {File}", filePath);
+
+            try
             {
-                _model.LearnFromSnapshot(snapshot);
+                var snapshots = ReadBinFile(filePath);
+                for (int i = 0; i < snapshots.Count; i++)
+                {
+                    _logger.LogDebug("Learning from snapshot {Index}/{Total}", i + 1, snapshots.Count);
+                    _model.LearnFromSnapshot(snapshots[i]);
+                }
+
+                SaveModelToDatabase();
+                File.Delete(filePath); // Clean up after processing
+                _logger.LogInformation("Finished processing {Count} snapshots from {File}", snapshots.Count, filePath);
             }
-            SaveModelToDatabase();
-            File.Delete(filePath); // Clean up after processing
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process bin file {File}", filePath);
+            }
         }
 
         public static List<ActionMap> GetNextActions(ActivitySnapshot snapshot)
@@ -65,7 +82,15 @@ namespace DecisionEngineService
 
         private void SaveModelToDatabase()
         {
-            _db.SaveModelWeights(_model.GetWeights());
+            try
+            {
+                _db.SaveModelWeights(_model.GetWeights());
+                _logger.LogInformation("Model weights saved to database");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save model to database");
+            }
         }
 
         private MLModel LoadModelFromDatabase()

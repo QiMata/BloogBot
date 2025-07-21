@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using TerrainLib;
+using Serilog;
 
 public class AdtGroundZLoader
 {
@@ -26,7 +27,7 @@ public class AdtGroundZLoader
         {
             if (!StormLib.SFileOpenArchive(path, 0, MPQ_OPEN_FORCE_MPQ_V1, out var archive))
             {
-                Console.WriteLine($"[AdtGroundZLoader] Failed to open MPQ archive: {path}");
+                Log.Error($"[AdtGroundZLoader] Failed to open MPQ archive: {path}");
                 continue;
             }
 
@@ -37,13 +38,13 @@ public class AdtGroundZLoader
                     for (int tileY = 0; tileY < 64; tileY++)
                     {
                         string filePath = $"World\\Maps\\{mapDirName}\\{mapDirName}_{tileX}_{tileY}.adt";
-                        //Console.WriteLine($"[AdtGroundZLoader] Attempting to load file: {filePath}");
+                        //Log.Error($"[AdtGroundZLoader] Attempting to load file: {filePath}");
 
                         try
                         {
                             if (!StormLib.SFileOpenFileEx(archive, filePath, 0, out var fileHandle))
                             {
-                                Console.WriteLine($"[AdtGroundZLoader] Failed to open file: {filePath}");
+                                Log.Error($"[AdtGroundZLoader] Failed to open file: {filePath}");
                                 continue;
                             }
 
@@ -53,7 +54,7 @@ public class AdtGroundZLoader
                             uint len = StormLib.SFileGetFileSize(fileHandle);
                             if (len == 0)
                             {
-                                Console.WriteLine($"[AdtGroundZLoader] File size is zero (invalid): {filePath}");
+                                Log.Error($"[AdtGroundZLoader] File size is zero (invalid): {filePath}");
                                 StormLib.SFileCloseFile(fileHandle);
                                 continue;
                             }
@@ -61,7 +62,7 @@ public class AdtGroundZLoader
                             byte[] buf = new byte[len];
                             if (!StormLib.SFileReadFile(fileHandle, buf, len, out _, IntPtr.Zero))
                             {
-                                Console.WriteLine($"[AdtGroundZLoader] Failed to read file contents: {filePath}");
+                                Log.Error($"[AdtGroundZLoader] Failed to read file contents: {filePath}");
                                 StormLib.SFileCloseFile(fileHandle);
                                 continue;
                             }
@@ -73,7 +74,7 @@ public class AdtGroundZLoader
                             }
                             catch (Exception ex)
                             {
-                                Console.WriteLine($"[AdtGroundZLoader] Failed to parse ADT file {filePath}: {ex.Message} {ex.StackTrace}");
+                                Log.Error($"[AdtGroundZLoader] Failed to parse ADT file {filePath}: {ex.Message} {ex.StackTrace}");
                             }
                             finally
                             {
@@ -82,7 +83,7 @@ public class AdtGroundZLoader
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"[AdtGroundZLoader] Exception while handling file {filePath}: {ex}");
+                            Log.Error($"[AdtGroundZLoader] Exception while handling file {filePath}: {ex}");
                         }
                     }
                 }
@@ -370,7 +371,7 @@ namespace TerrainLib
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[AdtFile] Error reading ADT: {ex.Message}");
+                Log.Error($"[AdtFile] Error reading ADT: {ex.Message}");
                 throw;
             }
 

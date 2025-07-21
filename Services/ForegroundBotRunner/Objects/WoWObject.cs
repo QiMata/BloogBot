@@ -3,6 +3,7 @@ using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Runtime.InteropServices;
+using Serilog;
 
 namespace ForegroundBotRunner.Objects
 {
@@ -76,11 +77,11 @@ namespace ForegroundBotRunner.Objects
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access violation on WoWObject.Position. Swallowing.");
+                Log.Error("Access violation on WoWObject.Position. Swallowing.");
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[WOW OBJECT]{e.Message} {e.StackTrace}");
+                Log.Error($"[WOW OBJECT]{e.Message} {e.StackTrace}");
             }
             return new(0, 0, 0);
         }
@@ -108,7 +109,7 @@ namespace ForegroundBotRunner.Objects
                 }
                 catch (AccessViolationException)
                 {
-                    Console.WriteLine("Access violation on WoWObject.Facing. Swallowing.");
+                    Log.Error("Access violation on WoWObject.Facing. Swallowing.");
                     return 0;
                 }
             }
@@ -153,12 +154,12 @@ namespace ForegroundBotRunner.Objects
                 }
                 catch (AccessViolationException)
                 {
-                    Console.WriteLine("Access violation on WoWObject.Name. Swallowing.");
+                    Log.Error("Access violation on WoWObject.Name. Swallowing.");
                     return "";
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"Catchall exception {e.Message} {e.StackTrace}");
+                    Log.Error($"Catchall exception {e.Message} {e.StackTrace}");
                     return "";
                 }
             }

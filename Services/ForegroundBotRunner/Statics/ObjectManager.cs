@@ -6,6 +6,7 @@ using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Runtime.InteropServices;
+using Serilog;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -608,7 +609,7 @@ namespace ForegroundBotRunner.Statics
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"[OBJECT MANAGER] {e}");
+                    Log.Error($"[OBJECT MANAGER] {e}");
                 }
             }
         }
@@ -747,7 +748,7 @@ namespace ForegroundBotRunner.Statics
             }
             catch (Exception e)
             {
-                Console.WriteLine($"OBJECT MANAGER: CallbackInternal => {e.StackTrace}");
+                Log.Error($"OBJECT MANAGER: CallbackInternal => {e.StackTrace}");
             }
 
             return 1;
@@ -945,7 +946,7 @@ namespace ForegroundBotRunner.Statics
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[OBJECT MANAGER]{ex.Message} {ex.StackTrace}");
+                Log.Error($"[OBJECT MANAGER]{ex.Message} {ex.StackTrace}");
             }
         }
 

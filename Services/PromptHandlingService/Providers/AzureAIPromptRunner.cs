@@ -1,6 +1,7 @@
 ﻿using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Serilog;
 
 namespace PromptHandlingService.Providers
 {
@@ -52,11 +53,11 @@ namespace PromptHandlingService.Providers
                     }
                     else
                     {
-                        Console.WriteLine($"The request failed with status code: {response.StatusCode}");
-                        Console.WriteLine(response.Headers.ToString());
+                        Log.Error($"The request failed with status code: {response.StatusCode}");
+                        Log.Error(response.Headers.ToString());
 
                         string responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                        Console.WriteLine(responseContent);
+                        Log.Error(responseContent);
                         tryCount++;
                     }
                 }

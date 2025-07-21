@@ -3,6 +3,7 @@ using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using Newtonsoft.Json;
 using System.Text.RegularExpressions;
+using Serilog;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -230,7 +231,7 @@ namespace ForegroundBotRunner.Statics
         internal void TriggerCtmEvent(OnCtmArgs args)
         {
 #if DEBUG
-            Console.WriteLine(args.Position);
+            Log.Information(args.Position.ToString());
 #endif
             Task.Run(() => OnCtm?.Invoke(this, args));
         }
@@ -336,11 +337,11 @@ namespace ForegroundBotRunner.Statics
                 try
                 {
                     _evaluteEvent(parEvent, parArgs);
-                    //Console.WriteLine($"EVENT HANDLER: {parEvent} {JsonConvert.SerializeObject(parArgs)}");
+                    //Log.Error($"EVENT HANDLER: {parEvent} {JsonConvert.SerializeObject(parArgs)}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"EVENT HANDLER: {parEvent} {JsonConvert.SerializeObject(parArgs)} {ex.Message}");
+                    Log.Error($"EVENT HANDLER: {parEvent} {JsonConvert.SerializeObject(parArgs)} {ex.Message}");
                 }
             });
         }

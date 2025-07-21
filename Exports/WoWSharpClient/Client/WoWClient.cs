@@ -1,6 +1,7 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Models;
 using System.Net;
+using Serilog;
 
 namespace WoWSharpClient.Client
 {
@@ -40,7 +41,7 @@ namespace WoWSharpClient.Client
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Exception occured during login: {ex}");
+                Log.Error($"Exception occured during login: {ex}");
                 _isLoggedIn = false;
             }
             _isLoggedIn = true;

@@ -38,19 +38,36 @@ namespace BackgroundBotRunner
         {
             _stoppingToken = stoppingToken;
 
+            _logger.LogInformation("BackgroundBotWorker is running.");
+
+            stoppingToken.Register(() =>
+                _logger.LogInformation("BackgroundBotWorker is stopping."));
+
             try
             {
                 _botRunner.Start();
 
                 while (!stoppingToken.IsCancellationRequested)
                 {
-                    await Task.Delay(100, stoppingToken);
+                    try
+                    {
+                        if (_logger.IsEnabled(LogLevel.Information))
+                            _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+
+                        await Task.Delay(100, stoppingToken);
+                    }
+                    catch (Exception ex) when (!(ex is OperationCanceledException && stoppingToken.IsCancellationRequested))
+                    {
+                        _logger.LogError(ex, "Error occurred in BackgroundBotWorker loop.");
+                    }
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in ActivityBackgroundMemberWorker");
             }
+
+            _logger.LogInformation("BackgroundBotWorker has stopped.");
         }
     }
 }
