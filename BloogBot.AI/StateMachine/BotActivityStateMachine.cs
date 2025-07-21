@@ -8,9 +8,13 @@ namespace BloogBot.AI.StateMachine;
 public sealed class BotActivityStateMachine
 {
     private readonly StateMachine<BotActivity, Trigger> _sm;
+    private readonly Queue<BotActivityHistoryEntry> _history = new();
+    private DateTime _enteredAt;
     public BotActivity Current => _sm.State;
     public IObjectManager ObjectManager { get; private set; }
     private ILogger Logger;
+
+    public IReadOnlyList<BotActivityHistoryEntry> History => _history.ToArray();
 
     public BotActivityStateMachine(
         ILoggerFactory loggerFactory,
@@ -21,6 +25,8 @@ public sealed class BotActivityStateMachine
         Logger = loggerFactory.CreateLogger<BotActivityStateMachine>();
         ObjectManager = objectManager;
         _sm = new(initial);
+        _enteredAt = DateTime.UtcNow;
+        _sm.OnTransitioned(t => RecordTransition(t.Source));
 
         ConfigureGlobalTransitions();
         ConfigureResting();
@@ -50,6 +56,15 @@ public sealed class BotActivityStateMachine
         ConfigureEscaping();
         ConfigureEventing();
         DecideNextActiveState();
+    }
+
+    void RecordTransition(BotActivity previous)
+    {
+        var duration = DateTime.UtcNow - _enteredAt;
+        _history.Enqueue(new BotActivityHistoryEntry(previous, duration));
+        if (_history.Count > 5)
+            _history.Dequeue();
+        _enteredAt = DateTime.UtcNow;
     }
 
     void ConfigureGlobalTransitions()
