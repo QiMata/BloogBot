@@ -7,13 +7,14 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <BaseOutputPath>..\..\Bot</BaseOutputPath>
+	 <AssemblyName>WoWActivityMember</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Fasm.NET" Version="1.70.3.2" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
     <PackageReference Include="Vcpkg.Nuget" Version="1.5.0" />
@@ -32,8 +33,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Resources\Fasm.NET.dll" />
-    <Resource Include="Resources\FastCall.dll" />
+    <Content Include="Resources\Fasm.NET.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\FastCall.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

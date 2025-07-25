@@ -113,6 +113,9 @@ public static class WinProcessImports
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool GetExitCodeThread(IntPtr hThread, out uint lpExitCode);
+
     public enum MemoryAllocationType
     {
         MEM_COMMIT = 0x1000,
