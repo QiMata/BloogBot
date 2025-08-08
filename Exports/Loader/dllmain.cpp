@@ -23,7 +23,8 @@
 // No rough configuration needed. :)
 #pragma comment( lib, "mscoree" )
 
-#define LOAD_DLL_FILE_NAME L"WoWActivityMember.exe"
+// IMPORTANT: Use the DLL instead of EXE for .NET 8 applications
+#define LOAD_DLL_FILE_NAME L"WoWActivityMember.dll"
 #define NAMESPACE_AND_CLASS L"WoWActivityMember.Loader"
 #define MAIN_METHOD L"Load"
 #define MAIN_METHOD_ARGS L"NONE"
@@ -77,13 +78,13 @@ unsigned __stdcall ThreadMain(void* pParam)
 		DWORD fileAttr = GetFileAttributesW(dllLocation);
 		if (fileAttr == INVALID_FILE_ATTRIBUTES)
 		{
-			DebugOutputW(L"ERROR: Target executable does not exist!");
-			MB(L"Target executable does not exist!");
+			DebugOutputW(L"ERROR: Target assembly does not exist!");
+			MB(L"Target assembly does not exist!");
 			return 1;
 		}
 		else
 		{
-			DebugOutputW(L"Target executable found");
+			DebugOutputW(L"Target assembly found");
 		}
 	}
 
@@ -148,7 +149,7 @@ unsigned __stdcall ThreadMain(void* pParam)
 		else
 		{
 			wchar_t buff[1024];
-			wsprintf(buff, L"Could not get an instance of ICLRRuntimeInfo -- hr = 0x%lx -- Is WoWActivityMember.exe present?", hr);
+			wsprintf(buff, L"Could not get an instance of ICLRRuntimeInfo -- hr = 0x%lx -- Is WoWActivityMember.dll present?", hr);
 			MB(buff);
 		}
 
@@ -157,16 +158,16 @@ unsigned __stdcall ThreadMain(void* pParam)
 	DebugOutput("Runtime info obtained successfully");
 
 	// We need this if we have old .NET 3.5 mixed-mode DLLs
-	DebugOutput("Binding as legacy v2 runtime...");
-	hr = g_pRuntimeInfo->BindAsLegacyV2Runtime();
+	//DebugOutput("Binding as legacy v2 runtime...");
+	//hr = g_pRuntimeInfo->BindAsLegacyV2Runtime();
 
-	if (FAILED(hr))
-	{
-		DebugOutput("FAILED: BindAsLegacyV2Runtime");
-		MB(L"Failed to bind as legacy v2 runtime! (.NET 3.5 Mixed-Mode Support)");
-		return 1;
-	}
-	DebugOutput("Legacy v2 runtime binding successful");
+	//if (FAILED(hr))
+	//{
+	//	DebugOutput("FAILED: BindAsLegacyV2Runtime");
+	//	MB(L"Failed to bind as legacy v2 runtime! (.NET 3.5 Mixed-Mode Support)");
+	//	return 1;
+	//}
+	//DebugOutput("Legacy v2 runtime binding successful");
 
 	DebugOutput("Getting CLR runtime host interface...");
 	hr = g_pRuntimeInfo->GetInterface(CLSID_CLRRuntimeHost, IID_ICLRRuntimeHost, (LPVOID*)&g_clrHost);
@@ -228,7 +229,7 @@ unsigned __stdcall ThreadMain(void* pParam)
 
 	DebugOutput("Executing in default app domain...");
 	wchar_t debugExecMsg[1024];
-	swprintf(debugExecMsg, 1024, L"Calling: %s.%s(%s)", dllLocation, NAMESPACE_AND_CLASS, MAIN_METHOD_ARGS);
+	swprintf(debugExecMsg, 1024, L"Calling: %s.%s.%s(%s)", dllLocation, NAMESPACE_AND_CLASS, MAIN_METHOD, MAIN_METHOD_ARGS);
 	DebugOutputW(debugExecMsg);
 
 	DWORD dwRet = 0;
@@ -301,7 +302,7 @@ void LoadClr()
 	modulePath = modulePath.substr(0, modulePath.find_last_of('\\') + 1);
 	modulePath = modulePath.append(LOAD_DLL_FILE_NAME);
 
-	swprintf(debugMsg, 512, L"Target executable path: %s", modulePath.c_str());
+	swprintf(debugMsg, 512, L"Target assembly path: %s", modulePath.c_str());
 	DebugOutputW(debugMsg);
 
 	// Copy the string, or we end up with junk data by the time we send it off

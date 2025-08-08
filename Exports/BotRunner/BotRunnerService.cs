@@ -37,6 +37,14 @@ namespace BotRunner
                 _asyncBotTaskRunnerTask = StartBotTaskRunnerAsync();
         }
 
+        public void Stop()
+        {
+            if (_asyncBotTaskRunnerTask != null && !_asyncBotTaskRunnerTask.IsCompleted)
+            {
+                _asyncBotTaskRunnerTask.Dispose();
+            }
+        }
+
         private async Task StartBotTaskRunnerAsync()
         {
             var _status = BehaviourTreeStatus.Success;

@@ -7,12 +7,15 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <BaseOutputPath>..\..\Bot</BaseOutputPath>
-	 <AssemblyName>WoWActivityMember</AssemblyName>
+    <AssemblyName>WoWActivityMember</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Fasm.NET" Version="1.70.3.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

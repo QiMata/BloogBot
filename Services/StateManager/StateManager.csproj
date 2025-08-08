@@ -6,15 +6,32 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-StateManagerService-7f14e0e4-8dd1-4062-9c6f-3bf08fcf4e1d</UserSecretsId>
     <BaseOutputPath>..\..\Bot</BaseOutputPath>
+    <Platforms>AnyCPU;x86</Platforms>
   </PropertyGroup>
+	
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <IsPublishable>False</IsPublishable>
+  </PropertyGroup>
+	
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
     <IsPublishable>False</IsPublishable>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <IsPublishable>False</IsPublishable>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
+    <IsPublishable>False</IsPublishable>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<None Update="appsettings.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="8.0.8" />

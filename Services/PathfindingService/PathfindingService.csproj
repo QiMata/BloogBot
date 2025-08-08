@@ -6,10 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-PathfindingService-39a8725a-a686-4a1d-b7b7-5b2fbfca5f95</UserSecretsId>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <OutputType>Exe</OutputType>
-    <BaseOutputPath>..\..\Bot</BaseOutputPath>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <Platforms>AnyCPU;x64</Platforms>
+    <BaseOutputPath>..\..\Bot\Debug\net8.0</BaseOutputPath>
+    <PlatformTarget>x86</PlatformTarget>
+    <Platforms>AnyCPU;x64;x86</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +23,12 @@
     <Content Include="StormLib.lib">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

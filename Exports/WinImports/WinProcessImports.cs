@@ -116,6 +116,10 @@ public static class WinProcessImports
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GetExitCodeThread(IntPtr hThread, out uint lpExitCode);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWow64Process(IntPtr hProcess, [MarshalAs(UnmanagedType.Bool)] out bool wow64Process);
+
     public enum MemoryAllocationType
     {
         MEM_COMMIT = 0x1000,
