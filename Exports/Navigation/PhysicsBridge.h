@@ -1,69 +1,8 @@
-﻿// PhysicsBridge.h
+// PhysicsBridge.h - Physics Input/Output structures for DLL interface
 #pragma once
 #include <cstdint>
 
-#pragma pack(push,1)
-/// Input from C#: position, velocity, world info, orientation, map context.
-struct PhysicsInput
-{
-    // MovementInfoUpdate core
-    uint32_t movementFlags;       // MovementFlags bitfield
-
-    // Position & orientation
-    float posX, posY, posZ;       // world-space coordinates
-    float facing;                 // heading around Z-axis (yaw)
-
-    // Transport (if HasTransport flag set)
-    uint64_t transportGuid;       // unique transport identifier
-    float transportOffsetX;       // position offset from transport
-    float transportOffsetY;
-    float transportOffsetZ;
-    float transportOrientation;    // orientation on transport
-
-    // Swimming
-    float swimPitch;              // up/down angle when swimming
-
-    // Falling / jumping
-    uint32_t fallTime;            // time since fall start (ms)
-    float jumpVerticalSpeed;      // initial vertical speed for jump/fall
-    float jumpCosAngle;           // horizontal direction X component
-    float jumpSinAngle;           // horizontal direction Y component
-    float jumpHorizontalSpeed;    // initial horizontal speed magnitude
-
-    // Spline elevation
-    float splineElevation;        // optional spline elevation value
-
-    // MovementBlockUpdate speeds
-    float walkSpeed;              // client WalkSpeed
-    float runSpeed;               // client RunSpeed
-    float runBackSpeed;           // client RunBackSpeed
-    float swimSpeed;              // client SwimSpeed
-    float swimBackSpeed;          // client SwimBackSpeed
-
-    // Current velocity
-    float velX, velY, velZ;       // world-space velocity
-
-    // Collision & world
-    float radius;                 // collision capsule radius
-    float height;                 // collision capsule height / step height
-    float gravity;                // gravity constant
-
-    // Terrain fallbacks
-    float adtGroundZ;             // ADT-sampled ground height
-    float adtLiquidZ;             // ADT-sampled liquid level
-
-    // Context
-    uint32_t mapId;               // map identifier
-};
-
-/// Output back to C#: new position, velocity, and state flags.
-struct PhysicsOutput
-{
-    float newPosX, newPosY, newPosZ;
-    float newVelX, newVelY, newVelZ;
-    uint32_t movementFlags;   // authoritative post-tick bitfield
-};
-
+// Movement flags from WoW client
 enum MovementFlags
 {
     MOVEFLAG_NONE = 0x00000000, // 0
@@ -111,4 +50,85 @@ enum MovementFlags
     // this is to avoid that a jumping character that stands still triggers melee-leeway
     MOVEFLAG_MASK_XZ = MOVEFLAG_FORWARD | MOVEFLAG_BACKWARD | MOVEFLAG_STRAFE_LEFT | MOVEFLAG_STRAFE_RIGHT
 };
-#pragma pack(pop)
+
+// Physics input from the game
+struct PhysicsInput
+{
+    // Movement state
+    uint32_t moveFlags;        // Movement flags bitmap
+
+    // Position & orientation
+    float x, y, z;             // World position
+    float orientation;         // Facing direction (radians)
+    float pitch;               // Swimming/flying pitch
+
+    // Velocity
+    float vx, vy, vz;          // Current velocity vector
+
+    // Movement speeds (yards/second)
+    float walkSpeed;           // Default: 2.5
+    float runSpeed;            // Default: 7.0
+    float runBackSpeed;        // Default: 4.5
+    float swimSpeed;           // Default: 4.72
+    float swimBackSpeed;       // Default: 2.5
+    float flightSpeed;         // Default: 7.0
+    float turnSpeed;           // Radians/second
+
+    // Transport (boats, zeppelins, elevators)
+    uint64_t transportGuid;    // Transport object GUID
+    float transportX;          // Position on transport
+    float transportY;
+    float transportZ;
+    float transportO;          // Orientation on transport
+
+    // Falling
+    uint32_t fallTime;         // Time spent falling (ms)
+
+    // Unit properties
+    float height;              // Unit height (for collision)
+    float radius;              // Unit radius (for collision)
+
+    // Spline movement (if following a path)
+    bool hasSplinePath;
+    float splineSpeed;
+    float* splinePoints;       // Array of x,y,z coordinates
+    int splinePointCount;
+    int currentSplineIndex;
+
+    // Context
+    uint32_t mapId;            // Current map ID
+    float deltaTime;           // Time since last update
+};
+
+// Physics output back to the game
+struct PhysicsOutput
+{
+    // New position
+    float x, y, z;
+    float orientation;
+    float pitch;
+
+    // New velocity
+    float vx, vy, vz;
+
+    // Updated movement flags
+    uint32_t moveFlags;
+
+    // State flags
+    bool isGrounded;
+    bool isSwimming;
+    bool isFlying;
+    bool collided;
+
+    // Height information
+    float groundZ;             // Ground height at position
+    float liquidZ;             // Liquid surface height (if any)
+
+    // Fall damage info
+    float fallDistance;
+    float fallTime;
+
+    // Spline progress
+    int currentSplineIndex;
+    float splineProgress;      // 0.0 to 1.0 between current and next point
+};
