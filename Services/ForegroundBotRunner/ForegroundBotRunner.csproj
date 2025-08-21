@@ -1,47 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
+    <AssemblyName>ForegroundBotRunner</AssemblyName>
+    <Platforms>x86</Platforms>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <BaseOutputPath>..\..\Bot</BaseOutputPath>
-    <AssemblyName>WoWActivityMember</AssemblyName>
   </PropertyGroup>
 
+  <!-- Remove ALL items that might cause issues -->
   <ItemGroup>
-    <PackageReference Include="Fasm.NET" Version="1.70.3.2" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.Memory" Version="4.6.3" />
-    <PackageReference Include="Vcpkg.Nuget" Version="1.5.0" />
+    <Compile Remove="Program.cs" />
+    <Compile Remove="ForegroundBotWorker.cs" />
+    <Compile Remove="Loader.cs" />
+    <Compile Remove="Frames\**\*.cs" />
+    <Compile Remove="Mem\**\*.cs" />
+    <Compile Remove="Objects\**\*.cs" />
+    <Compile Remove="Statics\**\*.cs" />
   </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
-    <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
-    <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="System.ComponentModel.Composition">
-      <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8.1\System.ComponentModel.Composition.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Resources\Fasm.NET.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Resources\FastCall.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
 </Project>

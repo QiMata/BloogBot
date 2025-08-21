@@ -26,6 +26,12 @@ namespace StateManager
 
         private readonly Dictionary<string, (IHostedService Service, CancellationTokenSource TokenSource, Task asyncTask)> _managedServices = [];
 
+        // Prevent repeated launches each loop iteration
+        private bool _initialLaunchCompleted = false;
+        // Optional basic backoff tracking (account -> last launch time)
+        private readonly Dictionary<string, DateTime> _lastLaunchTimes = new();
+        private static readonly TimeSpan MinRelaunchInterval = TimeSpan.FromMinutes(1);
+
         public StateManagerWorker(
             ILogger<StateManagerWorker> logger,
             ILoggerFactory loggerFactory,
@@ -75,6 +81,14 @@ namespace StateManager
 
         public void StartForegroundBotWorker(string accountName)
         {
+            // Backoff: prevent rapid re-launch loops if process dies immediately
+            if (_lastLaunchTimes.TryGetValue(accountName, out var last) && DateTime.UtcNow - last < MinRelaunchInterval)
+            {
+                _logger.LogWarning($"Skipping launch for {accountName} - last attempt {DateTime.UtcNow - last:g} ago (< {MinRelaunchInterval}).");
+                return;
+            }
+            _lastLaunchTimes[accountName] = DateTime.UtcNow;
+
             // Start WoW process and inject the bot worker service
             StartForegroundBotRunner(accountName);
         }
@@ -85,12 +99,12 @@ namespace StateManager
         public Dictionary<string, string> GetManagedBotStatus()
         {
             var status = new Dictionary<string, string>();
-            
+
             foreach (var kvp in _managedServices)
             {
                 var accountName = kvp.Key;
                 var (Service, TokenSource, Task) = kvp.Value;
-                
+
                 if (Service != null)
                 {
                     // This is a hosted service (BackgroundBotWorker)
@@ -104,7 +118,7 @@ namespace StateManager
                         // Try to get the process to check if it's still running
                         var process = System.Diagnostics.Process.GetProcessesByName("wow")
                             .FirstOrDefault(p => _managedServices.ContainsKey(accountName));
-                        
+
                         if (process != null && !process.HasExited)
                         {
                             status[accountName] = $"Running (WoW PID: {process.Id})";
@@ -120,7 +134,7 @@ namespace StateManager
                     }
                 }
             }
-            
+
             return status;
         }
 
@@ -135,7 +149,7 @@ namespace StateManager
             }
 
             var (Service, TokenSource, Task) = serviceTuple;
-            
+
             if (Service != null)
             {
                 return $"Account: {accountName}\nType: Hosted Background Service\nTask Status: {Task.Status}\nCancellation Requested: {TokenSource.Token.IsCancellationRequested}";
@@ -165,11 +179,11 @@ namespace StateManager
             {
                 var characterDef = StateManagerSettings.Instance.CharacterDefinitions[i];
                 var accountName = characterDef.AccountName;
-                
-                // Check if this account is already being managed
+
+                // Already tracked? skip
                 if (_managedServices.ContainsKey(accountName))
                 {
-                    _logger.LogDebug($"Account {accountName} is already being managed, skipping");
+                    _logger.LogDebug($"Account {accountName} already managed, skipping");
                     continue;
                 }
 
@@ -184,14 +198,14 @@ namespace StateManager
                     await _mangosSOAPClient.SetGMLevelAsync(accountName, 3);
                 }
 
-                // Start the foreground bot worker (with WoW injection)
+                // Start the foreground bot worker (with WoW injection) regardless of SOAP status
                 StartForegroundBotWorker(accountName);
-                
+
                 // Small delay to prevent overwhelming the system
                 await Task.Delay(100, stoppingToken);
-                
+
                 // Longer delay to allow the process to fully initialize
-                await Task.Delay(500);
+                await Task.Delay(500, stoppingToken);
             }
 
             return true;
@@ -199,13 +213,30 @@ namespace StateManager
 
         private void StartForegroundBotRunner(string accountName)
         {
-            const string PATH_TO_GAME = @"C:\Users\wowadmin\Desktop\Elysium Project Game Client\WoW.exe";
+            // Set the path to ForegroundBotRunner.dll in an environment variable
+            var foregroundBotDllPath = Path.Combine(AppContext.BaseDirectory, "ForegroundBotRunner.dll");
+            Environment.SetEnvironmentVariable("FOREGROUNDBOT_DLL_PATH", foregroundBotDllPath);
+            Environment.SetEnvironmentVariable("LOADER_PAUSE_ON_EXCEPTION", "1"); // Enable pause on exception for debugging
+
+            // Enable optional loader console + extra diagnostics (config flag or always on for now)
+            // Add to appsettings.json if desired: "Injection:AllocateConsole": "true"
+            var allocConsoleFlag = _configuration["Injection:AllocateConsole"];
+            if (string.IsNullOrEmpty(allocConsoleFlag) || allocConsoleFlag.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                Environment.SetEnvironmentVariable("LOADER_ALLOC_CONSOLE", "1");
+            }
+            else
+            {
+                Environment.SetEnvironmentVariable("LOADER_ALLOC_CONSOLE", null); // ensure not set
+            }
+
+            var PATH_TO_GAME = _configuration["GameClient:ExecutablePath"];
 
             var startupInfo = new STARTUPINFO();
 
             // Pre-injection diagnostics
             _logger.LogInformation("=== DLL INJECTION DIAGNOSTICS START ===");
-            
+
             // Check if WoW.exe exists
             if (!File.Exists(PATH_TO_GAME))
             {
@@ -257,58 +288,6 @@ namespace StateManager
             _managedServices.Add(accountName, (null!, tokenSource, monitoringTask));
             _logger.LogInformation($"Added {accountName} to managed services - preventing duplicate launches");
 
-            // Enhanced Process Architecture Diagnostics
-            try
-            {
-                _logger.LogInformation("TARGET PROCESS ARCHITECTURE ANALYSIS");
-                
-                // Check if target process is 64-bit or 32-bit
-                bool isWow64Process = false;
-                if (IsWow64Process(process.Handle, out isWow64Process))
-                {
-                    bool isCurrentProcess64Bit = Environment.Is64BitProcess;
-                    bool isTargetProcess64Bit = Environment.Is64BitOperatingSystem && !isWow64Process;
-                    
-                    var currentProcessName = Process.GetCurrentProcess().ProcessName;
-                    var currentProcessArch = isCurrentProcess64Bit ? "x64" : "x86";
-                    var targetProcessArch = isTargetProcess64Bit ? "x64" : "x86";
-                    
-                    _logger.LogInformation($"Source Process ({currentProcessName}): {currentProcessArch}");
-                    _logger.LogInformation($"Target Process ({process.ProcessName}): {targetProcessArch}");
-                    
-                    if (isCurrentProcess64Bit != isTargetProcess64Bit)
-                    {
-                        _logger.LogWarning($"WARNING: ARCHITECTURE MISMATCH DETECTED between {currentProcessName} ({currentProcessArch}) and {process.ProcessName} ({targetProcessArch})!");
-                        _logger.LogWarning("This may cause DLL injection to fail.");
-                        _logger.LogWarning("Ensure both processes have the same architecture (x64/x86).");
-                    }
-                    else
-                    {
-                        _logger.LogInformation($"[OK] Architecture match confirmed: both processes are {currentProcessArch}");
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("Could not determine target process architecture");
-                }
-
-                // Display process information
-                _logger.LogInformation($"Target Process Name: {process.ProcessName}");
-                _logger.LogInformation($"Target Process ID: {process.Id}");
-                _logger.LogInformation($"Target Process Handle: 0x{process.Handle:X}");
-                
-                if (process.MainModule != null)
-                {
-                    _logger.LogInformation($"Target Main Module: {process.MainModule.FileName}");
-                    _logger.LogInformation($"Target Base Address: 0x{process.MainModule.BaseAddress:X}");
-                    _logger.LogInformation($"Target Module Size: {process.MainModule.ModuleMemorySize} bytes");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error during process architecture analysis");
-            }
-
             // this seems to help prevent timing issues
             Thread.Sleep(500);
 
@@ -316,10 +295,16 @@ namespace StateManager
             var processHandle = Process.GetProcessById((int)processInfo.dwProcessId).Handle;
 
             // Enhanced DLL Path Diagnostics
-            var loaderPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0\Loader.dll");
-            
+            var loaderPath = _configuration["LoaderDllPath"];
+
+            if (string.IsNullOrWhiteSpace(loaderPath))
+            {
+                _logger.LogError("Loader DLL path is not configured. Please set 'LoaderDllPath' in appsettings.json.");
+                return;
+            }
+
             _logger.LogInformation("DLL FILE ANALYSIS");
-            
+
             // Verify the DLL exists before attempting injection
             if (!File.Exists(loaderPath))
             {
@@ -327,25 +312,6 @@ namespace StateManager
                 return;
             }
             _logger.LogInformation($"[OK] Loader.dll found at: {loaderPath}");
-
-            // Get DLL file information
-            try
-            {
-                var fileInfo = new FileInfo(loaderPath);
-                _logger.LogInformation($"DLL Size: {fileInfo.Length} bytes");
-                _logger.LogInformation($"DLL Last Modified: {fileInfo.LastWriteTime}");
-                
-                // Check DLL architecture
-                var dllArchitecture = GetDllArchitecture(loaderPath);
-                _logger.LogInformation($"DLL Architecture: {dllArchitecture}");
-                
-                // Check if DLL has dependencies
-                CheckDllDependencies(loaderPath);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error analyzing DLL file");
-            }
 
             _logger.LogInformation($"ATTEMPTING DLL INJECTION: {loaderPath}");
 
@@ -416,7 +382,7 @@ namespace StateManager
                 _logger.LogError($"[FAIL] Failed to create remote thread for DLL injection");
                 _logger.LogError($"Error Code: {lastError} (0x{lastError:X})");
                 _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
-                
+
                 // Common reasons for remote thread creation failure
                 if (lastError == 5) // ACCESS_DENIED
                 {
@@ -426,7 +392,7 @@ namespace StateManager
                 {
                     _logger.LogError("NOT_ENOUGH_MEMORY - Insufficient memory in target process");
                 }
-                
+
                 VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
                 return;
             }
@@ -450,7 +416,7 @@ namespace StateManager
                     else
                     {
                         _logger.LogError($"[FAIL] DLL injection failed. LoadLibrary returned 0 (failed to load)");
-                        
+
                         // Enhanced error analysis for LoadLibrary failure
                         _logger.LogError("POSSIBLE CAUSES FOR LOADLIBRARY FAILURE:");
                         _logger.LogError("   - DLL architecture mismatch");
@@ -459,18 +425,6 @@ namespace StateManager
                         _logger.LogError("   - Insufficient permissions");
                         _logger.LogError("   - DLL path contains invalid characters");
                         _logger.LogError("   - Target process doesn't support .NET CLR hosting");
-                        _logger.LogError("   - WoWActivityMember.exe not found in same directory as Loader.dll");
-                        
-                        // Check for target executable
-                        var activityMemberPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0\WoWActivityMember.exe");
-                        if (!File.Exists(activityMemberPath))
-                        {
-                            _logger.LogError($"[FAIL] WoWActivityMember.exe not found at expected path: {activityMemberPath}");
-                        }
-                        else
-                        {
-                            _logger.LogInformation($"[OK] WoWActivityMember.exe found at: {activityMemberPath}");
-                        }
                     }
                 }
                 else
@@ -505,89 +459,6 @@ namespace StateManager
 
             _logger.LogInformation($"Foreground Bot Runner setup completed for account {accountName} (Process ID: {processInfo.dwProcessId})");
             _logger.LogInformation("=== DLL INJECTION DIAGNOSTICS END ===");
-
-            // Additional verification: Check if WoWActivityMember.exe is present
-            var activityMemberVerifyPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0\WoWActivityMember.exe");
-            if (!File.Exists(activityMemberVerifyPath))
-            {
-                _logger.LogWarning($"WARNING: WoWActivityMember.exe not found at expected path: {activityMemberVerifyPath}");
-                _logger.LogWarning("This may cause the CLR hosting to fail even if DLL injection succeeds");
-            }
-            else
-            {
-                _logger.LogInformation($"[OK] WoWActivityMember.exe verified at: {activityMemberVerifyPath}");
-            }
-        }
-
-        /// <summary>
-        /// Gets the architecture of a DLL file (x86, x64, AnyCPU)
-        /// </summary>
-        private string GetDllArchitecture(string dllPath)
-        {
-            try
-            {
-                using (var fs = new FileStream(dllPath, FileMode.Open, FileAccess.Read))
-                using (var br = new BinaryReader(fs))
-                {
-                    // Read DOS header
-                    fs.Seek(0x3C, SeekOrigin.Begin);
-                    var peHeaderOffset = br.ReadInt32();
-                    
-                    // Read PE header
-                    fs.Seek(peHeaderOffset + 4, SeekOrigin.Begin);
-                    var machine = br.ReadUInt16();
-                    
-                    return machine switch
-                    {
-                        0x014c => "x86 (32-bit)",
-                        0x8664 => "x64 (64-bit)",
-                        0x0200 => "Itanium (64-bit)",
-                        _ => $"Unknown (0x{machine:X4})"
-                    };
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not determine DLL architecture");
-                return "Unknown";
-            }
-        }
-
-        /// <summary>
-        /// Checks for common DLL dependencies
-        /// </summary>
-        private void CheckDllDependencies(string dllPath)
-        {
-            try
-            {
-                var directory = Path.GetDirectoryName(dllPath);
-                _logger.LogInformation("CHECKING DLL DEPENDENCIES:");
-                
-                // Check for common .NET dependencies
-                var commonDependencies = new[]
-                {
-                    "WoWActivityMember.exe",
-                    "WoWActivityMember.runtimeconfig.json",
-                    "WoWActivityMember.deps.json"
-                };
-                
-                foreach (var dep in commonDependencies)
-                {
-                    var depPath = Path.Combine(directory!, dep);
-                    if (File.Exists(depPath))
-                    {
-                        _logger.LogInformation($"   [OK] {dep}");
-                    }
-                    else
-                    {
-                        _logger.LogWarning($"   [MISSING] {dep}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error checking DLL dependencies");
-            }
         }
 
         public void StopManagedService(string accountName)
@@ -595,18 +466,18 @@ namespace StateManager
             if (_managedServices.TryGetValue(accountName, out var serviceTuple))
             {
                 var (Service, TokenSource, Task) = serviceTuple;
-                
+
                 _logger.LogInformation($"Stopping managed service for account {accountName}");
-                
+
                 // Cancel the token to signal shutdown
                 TokenSource.Cancel();
-                
+
                 // If it's a background service, stop it properly
                 if (Service != null)
                 {
                     Task.Factory.StartNew(async () => await Service.StopAsync(CancellationToken.None));
                 }
-                
+
                 // Remove from tracking immediately to prevent issues
                 _managedServices.Remove(accountName);
                 _logger.LogInformation($"Stopped managed service for account {accountName}");
@@ -623,27 +494,27 @@ namespace StateManager
         public async Task StopAllManagedServices()
         {
             _logger.LogInformation("Stopping all managed services...");
-            
+
             var servicesToStop = _managedServices.ToList(); // Create a copy to avoid modification during iteration
-            
+
             foreach (var kvp in servicesToStop)
             {
                 var accountName = kvp.Key;
                 var (Service, TokenSource, Task) = kvp.Value;
-                
+
                 try
                 {
                     _logger.LogInformation($"Stopping service for account {accountName}");
-                    
+
                     // Cancel the token
                     TokenSource.Cancel();
-                    
+
                     // Stop hosted services properly
                     if (Service != null)
                     {
                         await Service.StopAsync(CancellationToken.None);
                     }
-                    
+
                     // Wait for monitoring task to complete (with timeout)
                     try
                     {
@@ -659,7 +530,7 @@ namespace StateManager
                     _logger.LogError(ex, $"Error stopping service for account {accountName}");
                 }
             }
-            
+
             // Clear all services
             _managedServices.Clear();
             _logger.LogInformation("All managed services stopped");
@@ -668,15 +539,20 @@ namespace StateManager
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation($"StateManagerServiceWorker is running.");
-
             stoppingToken.Register(() => _logger.LogInformation($"StateManagerServiceWorker is stopping."));
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    await ApplyDesiredWorkerState(stoppingToken);
-                    
+                    // Only launch bots once at startup (prevents repeated WoW.exe spawning)
+                    if (!_initialLaunchCompleted)
+                    {
+                        await ApplyDesiredWorkerState(stoppingToken);
+                        _initialLaunchCompleted = true;
+                        _logger.LogInformation("Initial bot launch completed. Further launches suppressed.");
+                    }
+
                     // Log status of managed services periodically
                     if (_managedServices.Count > 0)
                     {
@@ -692,8 +568,7 @@ namespace StateManager
                 }
                 catch (OperationCanceledException)
                 {
-                    // Expected when cancellation is requested
-                    break;
+                    break; // normal shutdown
                 }
                 catch (Exception ex)
                 {
@@ -702,11 +577,9 @@ namespace StateManager
                 }
             }
 
-            // Use the new method for proper cleanup
             await StopAllManagedServices();
-            
             _logger.LogInformation($"StateManagerServiceWorker has stopped.");
         }
     }
-    
+
 }

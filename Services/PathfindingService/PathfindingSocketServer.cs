@@ -5,10 +5,17 @@ using PathfindingService.Repository;
 
 namespace PathfindingService
 {
-    public class PathfindingSocketServer(string ipAddress, int port, ILogger logger)
-        : ProtobufSocketServer<PathfindingRequest, PathfindingResponse>(ipAddress, port, logger)
+    public class PathfindingSocketServer : ProtobufSocketServer<PathfindingRequest, PathfindingResponse>
     {
-        private readonly Navigation _navigation = new();
+        private readonly Navigation _navigation;
+        private readonly ILogger _logger;
+
+        public PathfindingSocketServer(string ipAddress, int port, ILogger logger, Navigation navigation)
+            : base(ipAddress, port, logger)
+        {
+            _navigation = navigation;
+            _logger = logger;
+        }
 
         protected override PathfindingResponse HandleRequest(PathfindingRequest request)
         {
@@ -24,7 +31,7 @@ namespace PathfindingService
             }
             catch (Exception ex)
             {
-                logger.LogError($"[PathfindingSocketServer] Error: {ex.Message}\n{ex.StackTrace}");
+                _logger.LogError($"[PathfindingSocketServer] Error: {ex.Message}\n{ex.StackTrace}");
                 return ErrorResponse($"Internal error: {ex.Message}");
             }
         }

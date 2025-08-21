@@ -1,4 +1,5 @@
 ﻿using GameData.Core.Models;
+using Microsoft.Extensions.Configuration;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Position = GameData.Core.Models.Position;
@@ -8,7 +9,6 @@ namespace PathfindingService.Repository
     public unsafe class Navigation
     {
         /* ─────────────── Structs ─────────────── */
-
         [StructLayout(LayoutKind.Sequential)]
         public struct NavPoly
         {
@@ -16,69 +16,29 @@ namespace PathfindingService.Repository
             public uint Area;
             public uint Flags;
             public uint VertCount;
-
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)]
             public XYZ[] Verts;
         }
-        // Newly added for physics bridge:
+
+        // Must match native PhysicsInput (see native PhysicsBridge.h)
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
         public struct PhysicsInput
         {
-            // MovementInfoUpdate core
             public uint movementFlags;
-
-            // Position & orientation
-            public float posX;
-            public float posY;
-            public float posZ;
-            public float facing;
-
-            // Transport
+            public float posX, posY, posZ, facing;
             public ulong transportGuid;
-            public float transportOffsetX;
-            public float transportOffsetY;
-            public float transportOffsetZ;
-            public float transportOrientation;
-
-            // Swimming
+            public float transportOffsetX, transportOffsetY, transportOffsetZ, transportOrientation;
             public float swimPitch;
-
-            // Falling / jumping
             public uint fallTime;
-            public float jumpVerticalSpeed;
-            public float jumpCosAngle;
-            public float jumpSinAngle;
-            public float jumpHorizontalSpeed;
-
-            // Spline elevation
+            public float jumpVerticalSpeed, jumpCosAngle, jumpSinAngle, jumpHorizontalSpeed;
             public float splineElevation;
-
-            // MovementBlockUpdate speeds
-            public float walkSpeed;
-            public float runSpeed;
-            public float runBackSpeed;
-            public float swimSpeed;
-            public float swimBackSpeed;
-
-            // Current velocity
-            public float velX;
-            public float velY;
-            public float velZ;
-
-            // Collision & world
-            public float radius;
-            public float height;
-            public float gravity;
-
-            // Terrain fallbacks
-            public float adtGroundZ;
-            public float adtLiquidZ;
-
-            // Context
+            public float walkSpeed, runSpeed, runBackSpeed, swimSpeed, swimBackSpeed;
+            public float velX, velY, velZ;
+            public float radius, height, gravity;
+            public float adtGroundZ, adtLiquidZ;
             public uint mapId;
         }
 
-        // PhysicsOutput.cs
         [StructLayout(LayoutKind.Sequential)]
         public struct PhysicsOutput
         {
@@ -88,29 +48,14 @@ namespace PathfindingService.Repository
         }
 
         /* ─────────────── Native delegates ─────────────── */
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate XYZ* CalculatePathDelegate(uint mapId, XYZ start, XYZ end,
-                                                    bool straightPath, out int length);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate void FreePathArrDelegate(XYZ* pathArr);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate bool LineOfSightDelegate(uint mapId, XYZ from, XYZ to);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr CapsuleOverlapDelegate(uint mapId, XYZ position,
-                                                       float radius, float height, out int count);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate void FreeNavPolyArrDelegate(IntPtr ptr);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate PhysicsOutput StepPhysicsDelegate(ref PhysicsInput input, float dt);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate XYZ* CalculatePathDelegate(uint mapId, XYZ start, XYZ end, bool straightPath, out int length);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void FreePathArrDelegate(XYZ* pathArr);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate bool LineOfSightDelegate(uint mapId, XYZ from, XYZ to);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr CapsuleOverlapDelegate(uint mapId, XYZ position, float radius, float height, out int count);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void FreeNavPolyArrDelegate(IntPtr ptr);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate PhysicsOutput StepPhysicsDelegate(ref PhysicsInput input, float dt);
 
         /* ─────────────── Function pointers ─────────────── */
-
         private readonly CalculatePathDelegate calculatePath;
         private readonly FreePathArrDelegate freePathArr;
         private readonly LineOfSightDelegate lineOfSight;
@@ -118,87 +63,81 @@ namespace PathfindingService.Repository
         private readonly FreeNavPolyArrDelegate freeNavPolyArr;
         private readonly StepPhysicsDelegate stepPhysics;
 
-        /* ─────────────── Constructor: bind all exports ─────────────── */
+        private readonly AdtGroundZLoader _adtGroundZLoader; // currently unused (lazy terrain loading)
 
-        private readonly AdtGroundZLoader _adtGroundZLoader;
-
-        public Navigation()
+        public Navigation(IConfiguration configuration)
         {
-            var binFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
-            var dllPath = FindNavigationDll(binFolder);
+            // Try to get DLL path from environment variable first, then fallback to configuration
+            var dllPath = Environment.GetEnvironmentVariable("NAVIGATION_DLL_PATH");
             
             if (string.IsNullOrEmpty(dllPath))
             {
-                throw new FileNotFoundException($"Navigation.dll not found in any of the expected locations. Searched in: {binFolder}");
+                // Read from configuration
+                dllPath = configuration["Navigation:DllPath"];
             }
-            
-            var mod = WinProcessImports.LoadLibrary(dllPath);
 
+            if (string.IsNullOrEmpty(dllPath))
+            {
+                throw new InvalidOperationException(
+                    "Navigation DLL path not found. Set either NAVIGATION_DLL_PATH environment variable or Navigation:DllPath in configuration.");
+            }
+
+            if (!File.Exists(dllPath))
+            {
+                throw new FileNotFoundException($"Navigation.dll not found at path: {dllPath}");
+            }
+
+            Console.WriteLine($"[Navigation] Loading Navigation.dll from: {dllPath}");
+
+            // Validate architecture before attempting to load (prevents cryptic 193/1114)
+            ValidateArchitecture(dllPath);
+
+            var mod = WinProcessImports.LoadLibrary(dllPath);
             if (mod == IntPtr.Zero)
             {
-                // Get the last Win32 error for more detailed error information
                 var lastError = Marshal.GetLastWin32Error();
-                throw new FileNotFoundException($"Failed to load Navigation.dll from path: {dllPath}. Win32 Error Code: {lastError} (0x{lastError:X})", dllPath);
+                throw new FileNotFoundException($"Failed to load Navigation.dll from path: {dllPath}. Win32 Error Code: {lastError} (0x{lastError:X}). This typically indicates DllMain failure or missing dependency.", dllPath);
             }
 
-            calculatePath = Marshal.GetDelegateForFunctionPointer<CalculatePathDelegate>(
-                WinProcessImports.GetProcAddress(mod, "CalculatePath"));
-            freePathArr = Marshal.GetDelegateForFunctionPointer<FreePathArrDelegate>(
-                WinProcessImports.GetProcAddress(mod, "FreePathArr"));
-            lineOfSight = Marshal.GetDelegateForFunctionPointer<LineOfSightDelegate>(
-                WinProcessImports.GetProcAddress(mod, "LineOfSight"));
-            capsuleOverlap = Marshal.GetDelegateForFunctionPointer<CapsuleOverlapDelegate>(
-                WinProcessImports.GetProcAddress(mod, "CapsuleOverlap"));
-            freeNavPolyArr = Marshal.GetDelegateForFunctionPointer<FreeNavPolyArrDelegate>(
-                WinProcessImports.GetProcAddress(mod, "FreeNavPolyArr"));
-            stepPhysics = Marshal.GetDelegateForFunctionPointer<StepPhysicsDelegate>(
-                WinProcessImports.GetProcAddress(mod, "StepPhysics"));
+            calculatePath   = GetExport<CalculatePathDelegate>(mod, "CalculatePath");
+            freePathArr     = GetExport<FreePathArrDelegate>(mod, "FreePathArr");
+            lineOfSight     = GetExport<LineOfSightDelegate>(mod, "LineOfSight");
+            capsuleOverlap  = GetExport<CapsuleOverlapDelegate>(mod, "CapsuleOverlap");
+            freeNavPolyArr  = GetExport<FreeNavPolyArrDelegate>(mod, "FreeNavPolyArr");
+            stepPhysics     = GetExport<StepPhysicsDelegate>(mod, "StepPhysics");
 
-            //_adtGroundZLoader = new AdtGroundZLoader([Path.Combine(binFolder, @"Data\terrain.MPQ")]);
+            Console.WriteLine("[Navigation] Successfully loaded all exports from Navigation.dll");
         }
 
-        /// <summary>
-        /// Finds Navigation.dll in multiple possible locations to handle different build configurations
-        /// </summary>
-        private static string? FindNavigationDll(string binFolder)
+        private static T GetExport<T>(IntPtr module, string name) where T : Delegate
         {
-            var possiblePaths = new[]
-            {
-                // Current directory (most common case)
-                Path.Combine(binFolder, "Navigation.dll"),
-                
-                // Parent directory (in case of platform-specific subdirectories)
-                Path.Combine(Path.GetDirectoryName(binFolder)!, "Navigation.dll"),
-                
-                // Common Debug output directory (from platform-specific x86/x64 to main Debug)
-                Path.Combine(binFolder, "..", "..", "..", "Debug", "net8.0", "Navigation.dll"),
-                
-                // Alternative paths for different nesting levels
-                Path.Combine(binFolder, "..", "..", "Debug", "net8.0", "Navigation.dll"),
-                Path.Combine(binFolder, "..", "Debug", "net8.0", "Navigation.dll"),
-                
-                // Direct fallback to known location
-                Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(binFolder)!))!, "Debug", "net8.0", "Navigation.dll")
-            };
+            var proc = WinProcessImports.GetProcAddress(module, name);
+            if (proc == IntPtr.Zero)
+                throw new EntryPointNotFoundException($"Export '{name}' not found in Navigation.dll");
+            return Marshal.GetDelegateForFunctionPointer<T>(proc);
+        }
 
-            foreach (var path in possiblePaths)
+        private static void ValidateArchitecture(string dllPath)
+        {
+            try
             {
-                try
-                {
-                    var resolvedPath = Path.GetFullPath(path);
-                    if (File.Exists(resolvedPath))
-                    {
-                        return resolvedPath;
-                    }
-                }
-                catch
-                {
-                    // Ignore path resolution errors and continue searching
-                    continue;
-                }
+                using var fs = new FileStream(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var br = new BinaryReader(fs);
+                if (br.ReadUInt16() != 0x5A4D) return; // MZ
+                fs.Seek(0x3C, SeekOrigin.Begin);
+                var peOffset = br.ReadInt32();
+                fs.Seek(peOffset, SeekOrigin.Begin);
+                if (br.ReadUInt32() != 0x4550) return; // PE00
+                var machine = br.ReadUInt16();
+                bool proc64 = Environment.Is64BitProcess;
+                bool dll64 = machine == 0x8664;
+                if (proc64 != dll64)
+                    throw new BadImageFormatException($"Architecture mismatch: process {(proc64 ? "x64" : "x86")} vs DLL {(dll64 ? "x64" : "x86")}");
             }
-
-            return null;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Navigation] Architecture validation warning: {ex.Message}");
+            }
         }
 
         public Position[] CalculatePath(uint mapId, Position start, Position end, bool straightPath)
@@ -211,19 +150,14 @@ namespace PathfindingService.Repository
             return path;
         }
 
-        public bool IsLineOfSight(uint mapId, Position from, Position to)
-        {
-            return lineOfSight(mapId, from.ToXYZ(), to.ToXYZ());
-        }
+        public bool IsLineOfSight(uint mapId, Position from, Position to) => lineOfSight(mapId, from.ToXYZ(), to.ToXYZ());
 
-        public PhysicsOutput StepPhysics(PhysicsInput input,
-            float dt)
+        public PhysicsOutput StepPhysics(PhysicsInput input, float dt)
         {
-            _adtGroundZLoader.TryGetZ((int)input.mapId, input.posX, input.posY, out float adtGroundZ, out float adtLiquidZ);
-
+            float adtGroundZ = 0f, adtLiquidZ = 0f;
+            _adtGroundZLoader?.TryGetZ((int)input.mapId, input.posX, input.posY, out adtGroundZ, out adtLiquidZ);
             input.adtGroundZ = adtGroundZ;
             input.adtLiquidZ = adtLiquidZ;
-
             return stepPhysics(ref input, dt);
         }
     }

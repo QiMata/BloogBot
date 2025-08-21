@@ -4,24 +4,60 @@
 #include "PhysicsBridge.h"
 #include "PhysicsEngine.h"
 
+// Flag to track if initialization has been performed
+static bool g_initialized = false;
+
+// Lazy initialization helper
+static bool EnsureInitialized()
+{
+    if (g_initialized) return true;
+    
+    try
+    {
+        OutputDebugStringA("Navigation.dll: Starting lazy initialization...");
+        
+        if (auto* physics = PhysicsEngine::Instance()) 
+        {
+            physics->Initialize();
+            OutputDebugStringA("Navigation.dll: PhysicsEngine initialized");
+        }
+        
+        if (auto* navigation = Navigation::GetInstance()) 
+        {
+            navigation->Initialize();
+            OutputDebugStringA("Navigation.dll: Navigation initialized");
+        }
+        
+        g_initialized = true;
+        OutputDebugStringA("Navigation.dll: Lazy initialization complete");
+        return true;
+    }
+    catch (...)
+    {
+        OutputDebugStringA("Navigation.dll: Lazy initialization failed");
+        return false;
+    }
+}
+
 extern "C"
 {
     __declspec(dllexport) XYZ* CalculatePath(uint32_t mapId, XYZ start, XYZ end, bool straightPath, int* length)
     {
-        if (!length) return nullptr;
+        if (!EnsureInitialized() || !length) return nullptr;
         auto nav = Navigation::GetInstance();
         return nav ? nav->CalculatePath(mapId, start, end, straightPath, length) : nullptr;
     }
 
     __declspec(dllexport) void FreePathArr(XYZ* path)
     {
-        if (!path) return;
+        if (!EnsureInitialized() || !path) return;
         if (auto* nav = Navigation::GetInstance())
             nav->FreePathArr(path);
     }
 
     __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ to)
     {
+        if (!EnsureInitialized()) return false;
         return Navigation::GetInstance()->IsLineOfSight(mapId, from, to);
     }
 
@@ -29,7 +65,7 @@ extern "C"
             float radius, float height,
             int* outCount)
     {
-        if (!outCount) return nullptr;
+        if (!EnsureInitialized() || !outCount) return nullptr;
 
         std::vector<NavPoly> v;
         try
@@ -61,20 +97,32 @@ extern "C"
     
     __declspec(dllexport) PhysicsOutput __cdecl StepPhysics(const PhysicsInput* in, float dt)
     {
+        if (!EnsureInitialized()) return PhysicsOutput{};
         return PhysicsEngine::Instance()->Step(*in, dt);
     }
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
-    if (ul_reason_for_call == DLL_PROCESS_ATTACH)
+    switch (ul_reason_for_call)
     {
-        if (auto* physics = PhysicsEngine::Instance()) physics->Initialize();
-        if (auto* navigation = Navigation::GetInstance()) navigation->Initialize();
-    }
-    else if (ul_reason_for_call == DLL_PROCESS_DETACH)
-    {
-        if (auto* navigation = Navigation::GetInstance()) navigation->Release();
+    case DLL_PROCESS_ATTACH:
+        OutputDebugStringA("Navigation.dll: DLL_PROCESS_ATTACH - lightweight init only");
+        // Only lightweight initialization here - defer heavy work to first function call
+        break;
+        
+    case DLL_PROCESS_DETACH:
+        OutputDebugStringA("Navigation.dll: DLL_PROCESS_DETACH");
+        if (g_initialized)
+        {
+            if (auto* navigation = Navigation::GetInstance()) 
+                navigation->Release();
+        }
+        break;
+        
+    case DLL_THREAD_ATTACH:
+    case DLL_THREAD_DETACH:
+        break;
     }
     return TRUE;
 }

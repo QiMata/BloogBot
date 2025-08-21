@@ -1,12 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-DecisionEngine-63dd65ad-447e-4f8b-a148-a87a20cf98c0</UserSecretsId>
     <OutputType>Library</OutputType>
-    <BaseOutputPath>..\..\Bot</BaseOutputPath>
+    <Platforms>AnyCPU;x86</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
