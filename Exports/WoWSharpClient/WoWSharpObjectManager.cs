@@ -35,14 +35,13 @@ namespace WoWSharpClient
         }
 
         private ILogger<WoWSharpObjectManager> _logger;
-
-        // Wrapper client for both auth and world transactions
-        private WoWClient _woWClient;
+        private IGameClientAdapter _clientAdapter;
         private PathfindingClient _pathfindingClient;
 
-        private LoginScreen _loginScreen;
-        private RealmSelectScreen _realmScreen;
-        private CharacterSelectScreen _characterSelectScreen;
+        // Use interface types so we can plug in in-process stubs
+        private ILoginScreen _loginScreen;
+        private IRealmSelectScreen _realmScreen;
+        private ICharacterSelectScreen _characterSelectScreen;
 
         private Timer _gameLoopTimer;
 
@@ -69,18 +68,33 @@ namespace WoWSharpClient
         private WoWSharpObjectManager() { }
 
         public void Initialize(
-            WoWClient wowClient,
+            IGameClientAdapter clientAdapter,
             PathfindingClient pathfindingClient,
             ILogger<WoWSharpObjectManager> logger
         )
         {
+            InProcessLog.Info("ObjectManager Initialize start");
             WoWSharpEventEmitter.Instance.Reset();
             _objects.Clear();
             _pendingUpdates.Clear();
 
             _logger = logger;
             _pathfindingClient = pathfindingClient;
-            _woWClient = wowClient;
+            _clientAdapter = clientAdapter;
+
+            // Screen abstractions
+            if (clientAdapter is NetworkGameClientAdapter netAdapter)
+            {
+                _loginScreen = new LoginScreen(netAdapter.Client);
+                _realmScreen = new RealmSelectScreen(netAdapter.Client);
+                _characterSelectScreen = new CharacterSelectScreen(netAdapter.Client);
+            }
+            else
+            {
+                _loginScreen = new InProcessLoginScreen();
+                _realmScreen = new InProcessRealmSelectScreen();
+                _characterSelectScreen = new InProcessCharacterSelectScreen();
+            }
 
             WoWSharpEventEmitter.Instance.OnLoginFailure += EventEmitter_OnLoginFailure;
             WoWSharpEventEmitter.Instance.OnLoginVerifyWorld += EventEmitter_OnLoginVerifyWorld;
@@ -105,10 +119,15 @@ namespace WoWSharpClient
             WoWSharpEventEmitter.Instance.OnSetTimeSpeed += EventEmitter_OnSetTimeSpeed;
             WoWSharpEventEmitter.Instance.OnSpellGo += EventEmitter_OnSpellGo;
 
-            _loginScreen = new(_woWClient);
-            _realmScreen = new(_woWClient);
-            _characterSelectScreen = new(_woWClient);
+            InProcessLog.Info($"Adapter={clientAdapter.GetType().Name} pathfinding={pathfindingClient != null}");
         }
+
+        // Legacy initializer kept for backward compatibility (wraps WoWClient)
+        public void Initialize(
+            WoWClient wowClient,
+            PathfindingClient pathfindingClient,
+            ILogger<WoWSharpObjectManager> logger
+        ) => Initialize(new NetworkGameClientAdapter(wowClient), pathfindingClient, logger);
 
         private void EventEmitter_OnSpellGo(object? sender, EventArgs e) { }
 
@@ -122,7 +141,7 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnSetTimeSpeed(object? sender, OnSetTimeSpeedArgs e)
         {
-            _woWClient.QueryTime();
+            _clientAdapter.QueryTime();
         }
 
         public void StartGameLoop()
@@ -159,11 +178,12 @@ namespace WoWSharpClient
 
             _lastPingMs = now;
 
-            _woWClient.SendPing();
+            _clientAdapter.SendPing();
         }
 
         public void UpdatePlayerPosition(float deltaTimeMs)
         {
+            if (Player == null) return;
             var player = (WoWLocalPlayer)Player;
             float dt = deltaTimeMs * 0.001f;
 
@@ -219,6 +239,8 @@ namespace WoWSharpClient
                 MapId = MapId,
             };
 
+            InProcessLog.Info($"Physics step dt={deltaTimeMs}ms pos=({player.Position.X:F2},{player.Position.Y:F2},{player.Position.Z:F2}) flags={player.MovementFlags}");
+
             PhysicsOutput physicsOutput = _pathfindingClient.PhysicsStep(physicsInput);
             ApplyPhysicsUpdate(physicsOutput);
 
@@ -241,26 +263,22 @@ namespace WoWSharpClient
                 physicsOutput.NewVelZ);
 
             player.MovementFlags = (MovementFlags)physicsOutput.MovementFlags;
+
+            InProcessLog.Info($"Physics result pos=({player.Position.X:F2},{player.Position.Y:F2},{player.Position.Z:F2}) vel=({_velocity.X:F2},{_velocity.Y:F2},{_velocity.Z:F2}) flags={player.MovementFlags}");
         }
 
         /* Emits MOVE_STOP / MOVE_START_* / HEARTBEAT automatically */
         private void EmitMovementPacketIfNeeded(WoWLocalPlayer player)
         {
-            if (player.MovementFlags == MovementFlags.MOVEFLAG_NONE)
-                return;                                   // idle – no movement packets
-
+            if (player.MovementFlags == MovementFlags.MOVEFLAG_NONE) return;
             uint now = (uint)_worldTimeTracker.NowMS.TotalMilliseconds;
-
-            if (now - _lastSentTime < HeartbeatMinMs)
-                return;                                   // heartbeat not yet due
-
+            if (now - _lastSentTime < HeartbeatMinMs) return;
             Opcode opcode = DetermineMovementOpcode(player.MovementFlags, _lastMovementFlags);
-            byte[] buf = MovementPacketHandler.BuildMovementInfoBuffer(
-                                player,
-                                now,
-                                _fallTime);
+            byte[] buf = MovementPacketHandler.BuildMovementInfoBuffer(player, now, _fallTime);
 
-            _woWClient.SendMovementOpcode(opcode, buf);
+            _clientAdapter.SendMovementOpcode(opcode, buf);
+
+            InProcessLog.Info($"Sent movement opcode={opcode} flags={player.MovementFlags} pos=({player.Position.X:F2},{player.Position.Y:F2},{player.Position.Z:F2})");
 
             _lastSentTime = now;
             _lastSentPosition = player.Position;
@@ -273,7 +291,7 @@ namespace WoWSharpClient
             //    return;
 
             ((WoWPlayer)Player).Facing = facing;
-            _woWClient.SendMovementOpcode(
+            _clientAdapter.SendMovementOpcode(
                 Opcode.MSG_MOVE_SET_FACING,
                 MovementPacketHandler.BuildMovementInfoBuffer(
                     (WoWLocalPlayer)Player,
@@ -307,7 +325,7 @@ namespace WoWSharpClient
                 player,
                 (uint)_worldTimeTracker.NowMS.TotalMilliseconds
             );
-            _woWClient.SendMovementOpcode(opcode, buffer);
+            _clientAdapter.SendMovementOpcode(opcode, buffer);
         }
 
         private static Opcode DetermineMovementOpcode(MovementFlags current, MovementFlags previous)
@@ -338,8 +356,7 @@ namespace WoWSharpClient
 
         public void StartMovement(ControlBits bits)
         {
-            if (_isBeingTeleported || !_isInControl)
-                return;
+            if (_isBeingTeleported || !_isInControl) return;
 
             _controlBits = bits;
             var player = (WoWLocalPlayer)Player;
@@ -376,7 +393,6 @@ namespace WoWSharpClient
                     newFlags |= MovementFlags.MOVEFLAG_TURN_LEFT;
                     newFlags &= ~MovementFlags.MOVEFLAG_TURN_RIGHT;
                     break;
-
                 case ControlBits.Right:
                     opcode = Opcode.MSG_MOVE_START_TURN_RIGHT;
                     newFlags |= MovementFlags.MOVEFLAG_TURN_RIGHT;
@@ -399,8 +415,8 @@ namespace WoWSharpClient
                 player,
                 (uint)_worldTimeTracker.NowMS.TotalMilliseconds
             );
-            Console.WriteLine($"[Movement] Start: Opcode={opcode}, Flags={newFlags}");
-            _woWClient.SendMovementOpcode(opcode, buffer);
+            InProcessLog.Info($"StartMovement bits={bits} newFlags={((WoWLocalPlayer)Player).MovementFlags}");
+            _clientAdapter.SendMovementOpcode(opcode, buffer);
         }
 
         public void StopMovement(ControlBits bits)
@@ -440,8 +456,8 @@ namespace WoWSharpClient
                 player,
                 (uint)_worldTimeTracker.NowMS.TotalMilliseconds
             );
-            Console.WriteLine($"[Movement] Stop: Opcode={opcode}, Flags={player.MovementFlags}");
-            _woWClient.SendMovementOpcode(opcode, buffer);
+            InProcessLog.Info($"StopMovement bits={bits} newFlags={player.MovementFlags}");
+            _clientAdapter.SendMovementOpcode(opcode, buffer);
         }
 
         private WoWObject CreateObjectFromFields(
@@ -478,7 +494,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            _woWClient.SendMSGPacked(
+            _clientAdapter.SendMSGPacked(
                 Opcode.CMSG_MOVE_KNOCK_BACK_ACK,
                 MovementPacketHandler.BuildMovementInfoBuffer(
                     (WoWLocalPlayer)Player,
@@ -492,7 +508,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            _woWClient.SendMSGPacked(
+            _clientAdapter.SendMSGPacked(
                 Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
                     (WoWLocalPlayer)Player,
@@ -507,7 +523,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            _woWClient.SendMSGPacked(
+            _clientAdapter.SendMSGPacked(
                 Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
                     (WoWLocalPlayer)Player,
@@ -522,7 +538,7 @@ namespace WoWSharpClient
             RequiresAcknowledgementArgs e
         )
         {
-            _woWClient.SendMSGPacked(
+            _clientAdapter.SendMSGPacked(
                 Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
                     (WoWLocalPlayer)Player,
@@ -534,7 +550,7 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnForceMoveUnroot(object? sender, RequiresAcknowledgementArgs e)
         {
-            _woWClient.SendMSGPacked(
+            _clientAdapter.SendMSGPacked(
                 Opcode.CMSG_FORCE_MOVE_UNROOT_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
                     (WoWLocalPlayer)Player,
@@ -546,7 +562,7 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnForceMoveRoot(object? sender, RequiresAcknowledgementArgs e)
         {
-            _woWClient.SendMSGPacked(
+            _clientAdapter.SendMSGPacked(
                 Opcode.CMSG_FORCE_MOVE_ROOT_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
                     (WoWLocalPlayer)Player,
@@ -654,9 +670,9 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnTeleport(object? sender, RequiresAcknowledgementArgs e)
         {
-            Console.WriteLine($"[ACK] TELEPORT counter={e.Counter}");
+            InProcessLog.Warn($"Teleport event counter={e.Counter} guid={e.Guid}");
 
-            _woWClient.SendMSGPacked(
+            _clientAdapter.SendMSGPacked(
                 Opcode.MSG_MOVE_TELEPORT_ACK,
                 MovementPacketHandler.BuildMoveTeleportAckPayload(
                     e.Guid,
@@ -670,6 +686,8 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnLoginVerifyWorld(object? sender, WorldInfo e)
         {
+            InProcessLog.Info($"LoginVerifyWorld map={e.MapId} pos=({e.PositionX:F2},{e.PositionY:F2},{e.PositionZ:F2})");
+
             MapId = e.MapId;
 
             Player.Position.X = e.PositionX;
@@ -680,8 +698,8 @@ namespace WoWSharpClient
             _lastPositionUpdate = _worldTimeTracker.NowMS;
             StartGameLoop();
 
-            _woWClient.SendMoveWorldPortAcknowledge();
-            _woWClient.SendMSGPacked(
+            _clientAdapter.SendMoveWorldPortAcknowledge();
+            _clientAdapter.SendMSGPacked(
                 Opcode.CMSG_FORCE_MOVE_ROOT_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
                     (WoWLocalPlayer)Player,
@@ -704,7 +722,7 @@ namespace WoWSharpClient
         private void EventEmitter_OnLoginFailure(object? sender, EventArgs e)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            _woWClient.Dispose();
+            // _clientAdapter.Dispose();  // Removed incorrect Dispose call
         }
 
         private void EventEmitter_OnWorldSessionEnd(object? sender, EventArgs e)
@@ -715,6 +733,7 @@ namespace WoWSharpClient
         public bool HasEnteredWorld { get; internal set; }
         public List<Spell> Spells { get; internal set; } = [];
         public List<Cooldown> Cooldowns { get; internal set; } = [];
+
 
         private HighGuid _playerGuid = new(new byte[4], new byte[4]);
 
@@ -744,18 +763,20 @@ namespace WoWSharpClient
             HasEnteredWorld = true;
 
             _playerGuid = new HighGuid(characterGuid);
-            _woWClient.EnterWorld(characterGuid);
+            //_clientAdapter.EnterWorld(characterGuid);
         }
 
         private readonly Queue<ObjectStateUpdate> _pendingUpdates = new();
 
         public void QueueUpdate(ObjectStateUpdate update)
         {
+            InProcessLog.Info($"QueueUpdate op={update.Operation} type={update.ObjectType} guid={update.Guid}");
             _pendingUpdates.Enqueue(update);
         }
 
         public void ProcessUpdates()
         {
+            int processed = 0;
             while (_pendingUpdates.Count > 0)
             {
                 try
@@ -782,11 +803,11 @@ namespace WoWSharpClient
 
                             if (newObject is WoWPlayer player)
                             {
-                                _woWClient.SendNameQuery(update.Guid);
+                                _clientAdapter.SendNameQuery(update.Guid);
 
                                 if (newObject is WoWLocalPlayer)
                                 {
-                                    _woWClient.SendSetActiveMover(PlayerGuid.FullGuid);
+                                    _clientAdapter.SendSetActiveMover(PlayerGuid.FullGuid);
 
                                     _isInControl = true;
                                     _isBeingTeleported = false;
@@ -824,7 +845,9 @@ namespace WoWSharpClient
                 {
                     Console.WriteLine($"[ProcessUpdates] {ex}");
                 }
+                processed++;
             }
+            if (processed > 0) InProcessLog.Info($"Processed {processed} updates; objectCount={_objects.Count}");
         }
 
         private static void ApplyContainerFieldDiffs(
@@ -861,7 +884,7 @@ namespace WoWSharpClient
                                 // Store low part GUID value in slot
                                 container.Slots[slotIndex] = (uint)value;
                             }
-                            // Note: Currently not storing high part since Slots is uint[]
+                            // Note: Currently not storing high part since Slots is uint[] 
                             // This could be enhanced to support full 64-bit GUIDs if needed
                         }
                     }

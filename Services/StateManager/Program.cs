@@ -177,7 +177,7 @@ namespace StateManager
                     services.AddHostedService<StateManagerWorker>();
                     services.AddHostedService<DecisionEngineWorker>();
                     services.AddHostedService<PromptHandlingServiceWorker>();
-                    // services.AddTransient<ForegroundBotWorker>(); // temporarily disabled for isolation
+                    services.AddTransient<ForegroundBotWorker>(); // temporarily disabled for isolation
                 });
     }
 }

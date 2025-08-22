@@ -216,6 +216,7 @@ namespace StateManager
             // Set the path to ForegroundBotRunner.dll in an environment variable
             var foregroundBotDllPath = Path.Combine(AppContext.BaseDirectory, "ForegroundBotRunner.dll");
             Environment.SetEnvironmentVariable("FOREGROUNDBOT_DLL_PATH", foregroundBotDllPath);
+            Environment.SetEnvironmentVariable("BLOOGBOT_WAIT_DEBUG", "1");
             Environment.SetEnvironmentVariable("LOADER_PAUSE_ON_EXCEPTION", "1"); // Enable pause on exception for debugging
 
             // Enable optional loader console + extra diagnostics (config flag or always on for now)

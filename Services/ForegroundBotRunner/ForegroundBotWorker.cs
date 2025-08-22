@@ -1,11 +1,15 @@
-﻿using BotRunner;
+﻿using System.Diagnostics;
+
+#if NET8_0_OR_GREATER
+using WoWSharpClient;
+using BotRunner;
 using BotRunner.Clients;
 using Communication;
-using ForegroundBotRunner.Statics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
+using GameData.Core.Interfaces;
+using WoWSharpClient.Client;
 
 namespace ForegroundBotRunner
 {
@@ -15,29 +19,43 @@ namespace ForegroundBotRunner
         private readonly CharacterStateUpdateClient _characterStateUpdateClient;
         private readonly ILogger<ForegroundBotWorker> _logger;
         private readonly IConfiguration _configuration;
+        private readonly ILoggerFactory _loggerFactory;
+        private readonly WoWClient _wowClient = new();
 
-        private BotRunnerService _botRunner;
+        private BotRunnerService? _botRunner;
         private CancellationToken _stoppingToken;
 
         public ForegroundBotWorker(IConfiguration configuration, ILoggerFactory loggerFactory)
         {
             _configuration = configuration;
+            _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<ForegroundBotWorker>();
 
-            // Initialize clients with retry logic built-in
+            _wowClient.SetIpAddress(configuration["LoginServer:IpAddress"] ?? "127.0.0.1");
+
             _pathfindingClient = new PathfindingClient(
-                configuration["PathfindingService:IpAddress"]!, 
-                int.Parse(configuration["PathfindingService:Port"]!), 
+                configuration["PathfindingService:IpAddress"]!,
+                int.Parse(configuration["PathfindingService:Port"]!),
                 loggerFactory.CreateLogger<PathfindingClient>()
             );
-            
+
             _characterStateUpdateClient = new CharacterStateUpdateClient(
-                configuration["CharacterStateListener:IpAddress"]!, 
-                int.Parse(configuration["CharacterStateListener:Port"]!), 
+                configuration["CharacterStateListener:IpAddress"]!,
+                int.Parse(configuration["CharacterStateListener:Port"]!),
                 loggerFactory.CreateLogger<CharacterStateUpdateClient>()
             );
 
             _logger.LogInformation("ForegroundBotWorker initialized");
+
+            if (Environment.GetEnvironmentVariable("BLOOGBOT_WAIT_DEBUG") == "1")
+            {
+                while (!Debugger.IsAttached)
+                {
+                    Console.WriteLine("[ForegroundBotWorker] Waiting for debugger attach...");
+                    Thread.Sleep(1000);
+                }
+                Debugger.Break();
+            }
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -50,7 +68,8 @@ namespace ForegroundBotRunner
                 _logger.LogInformation($"Current Process: {Process.GetCurrentProcess().ProcessName} (ID: {Process.GetCurrentProcess().Id})");
 
                 // Log to injection log file for diagnostics
-                var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
+                var logPath = Path.Combine(AppContext.BaseDirectory, "BloogBotLogs", "injection.log");
+                Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
                 File.AppendAllText(logPath, $"ForegroundBotWorker started at {DateTime.Now:HH:mm:ss}\n");
 
                 // Initialize WoW integration components
@@ -88,7 +107,7 @@ namespace ForegroundBotRunner
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Fatal error in ForegroundBotWorker");
-                var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
+                var logPath = Path.Combine(AppContext.BaseDirectory, "BloogBotLogs", "injection.log");
                 File.AppendAllText(logPath, $"FATAL ERROR in ForegroundBotWorker: {ex}\n");
                 throw;
             }
@@ -97,37 +116,17 @@ namespace ForegroundBotRunner
         private async Task InitializeBotComponents()
         {
             _logger.LogInformation("Initializing bot components...");
-
-            // Create ActivitySnapshot for tracking character state
             var activitySnapshot = new ActivitySnapshot();
-
-            // Create core components directly (since we're in the injected WoW process)
-            var eventHandler = WoWEventHandler.Instance;
-            var objectManager = new ObjectManager(eventHandler, activitySnapshot);
-
-            // Create BotRunnerService with the proper dependencies
-            _botRunner = new BotRunnerService(objectManager, _characterStateUpdateClient, _pathfindingClient);
-
+            WoWSharpObjectManager.Instance.Initialize(_wowClient, _pathfindingClient, _loggerFactory.CreateLogger<WoWSharpObjectManager>());
+            _botRunner = new BotRunnerService(WoWSharpObjectManager.Instance, _characterStateUpdateClient, _pathfindingClient);
             _logger.LogInformation("BotRunnerService initialized, starting bot...");
-
-            // Start the bot
             _botRunner.Start();
-
             _logger.LogInformation("Bot started successfully. Bot is now running injected in WoW process...");
-
-            // Give the bot a moment to fully initialize
             await Task.Delay(1000);
         }
 
         private async Task MonitorBotHealth()
         {
-            // Add bot health monitoring logic here
-            // For example:
-            // - Check if bot is responsive
-            // - Monitor for crashes or exceptions
-            // - Restart bot if needed
-            // - Report health status back to StateManager
-
             if (_botRunner == null)
             {
                 _logger.LogWarning("BotRunner is null, attempting to reinitialize...");
@@ -137,25 +136,19 @@ namespace ForegroundBotRunner
 
         private async Task PeriodicDiagnostics(CancellationToken cancellationToken)
         {
-            var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
-
+            var logPath = Path.Combine(AppContext.BaseDirectory, "BloogBotLogs", "injection.log");
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
-                    await Task.Delay(30000, cancellationToken); // Every 30 seconds
-
+                    await Task.Delay(30000, cancellationToken);
                     _logger.LogInformation("=== PERIODIC BOT STATUS CHECK ===");
                     _logger.LogInformation($"Bot Status: {(_botRunner != null ? "Running" : "Not Initialized")}");
                     _logger.LogInformation($"Process: {Process.GetCurrentProcess().ProcessName} (ID: {Process.GetCurrentProcess().Id})");
                     _logger.LogInformation("=====================================");
-
                     File.AppendAllText(logPath, $"Periodic check at {DateTime.Now:HH:mm:ss} - Bot: {(_botRunner != null ? "Running" : "Not Initialized")}\n");
                 }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Error in periodic diagnostics");
@@ -166,16 +159,12 @@ namespace ForegroundBotRunner
         public override async Task StopAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("ForegroundBotWorker stop requested...");
-
-            // Stop the bot runner if it's running
-            _botRunner.Stop();
-
-            // Clean up clients
+            _botRunner?.Stop();
             _pathfindingClient?.Close();
             _characterStateUpdateClient?.Close();
-
             await base.StopAsync(cancellationToken);
             _logger.LogInformation("ForegroundBotWorker stopped.");
         }
     }
 }
+#endif

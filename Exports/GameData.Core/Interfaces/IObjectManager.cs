@@ -1,5 +1,4 @@
-﻿using Communication;
-using GameData.Core.Enums;
+﻿using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Models;
 
@@ -46,11 +45,10 @@ namespace GameData.Core.Interfaces
         string GlueDialogText { get; }
         LoginStates LoginState { get; }
         bool HasEnteredWorld { get; }
+#if NET8_0_OR_GREATER
         public void Face(Position pos)
         {
             if (pos == null) return;
-
-            // sometimes the client gets in a weird state and CurrentFacing is negative. correct that here.
             if (Player.Facing < 0)
             {
                 SetFacing((float)(Math.PI * 2) + Player.Facing);
@@ -58,14 +56,12 @@ namespace GameData.Core.Interfaces
             }
             if (!Player.IsFacing(pos))
                 SetFacing(Player.GetFacingForPosition(pos));
-            return;
         }
         public void MoveToward(Position pos)
         {
             Face(pos);
             StartMovement(ControlBits.Front);
         }
-
         public void Turn180()
         {
             var newFacing = Player.Facing + Math.PI;
@@ -76,7 +72,6 @@ namespace GameData.Core.Interfaces
         public void StopAllMovement()
         {
             var bits = ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight;
-
             StopMovement(bits);
         }
         public IEnumerable<IWoWGameObject> GameObjects => Objects.OfType<IWoWGameObject>();
@@ -93,26 +88,33 @@ namespace GameData.Core.Interfaces
             get
             {
                 var partyMembers = new List<IWoWPlayer>() { Player };
-
                 var partyMember1 = (IWoWPlayer)Objects.FirstOrDefault(p => p.Guid == Party1Guid);
-                if (partyMember1 != null)
-                    partyMembers.Add(partyMember1);
-
+                if (partyMember1 != null) partyMembers.Add(partyMember1);
                 var partyMember2 = (IWoWPlayer)Objects.FirstOrDefault(p => p.Guid == Party2Guid);
-                if (partyMember2 != null)
-                    partyMembers.Add(partyMember2);
-
+                if (partyMember2 != null) partyMembers.Add(partyMember2);
                 var partyMember3 = (IWoWPlayer)Objects.FirstOrDefault(p => p.Guid == Party3Guid);
-                if (partyMember3 != null)
-                    partyMembers.Add(partyMember3);
-
+                if (partyMember3 != null) partyMembers.Add(partyMember3);
                 var partyMember4 = (IWoWPlayer)Objects.FirstOrDefault(p => p.Guid == Party4Guid);
-                if (partyMember4 != null)
-                    partyMembers.Add(partyMember4);
-
+                if (partyMember4 != null) partyMembers.Add(partyMember4);
                 return partyMembers;
             }
         }
+#else
+        void Face(Position pos);
+        void MoveToward(Position pos);
+        void Turn180();
+        void StopAllMovement();
+        IEnumerable<IWoWGameObject> GameObjects { get; }
+        IEnumerable<IWoWUnit> Units { get; }
+        IEnumerable<IWoWPlayer> Players { get; }
+        IEnumerable<IWoWItem> Items { get; }
+        IEnumerable<IWoWContainer> Containers { get; }
+        IEnumerable<IWoWUnit> CasterAggressors { get; }
+        IEnumerable<IWoWUnit> MeleeAggressors { get; }
+        IEnumerable<IWoWUnit> Aggressors { get; }
+        IEnumerable<IWoWUnit> Hostiles { get; }
+        IEnumerable<IWoWPlayer> PartyMembers { get; }
+#endif
         IWoWUnit GetTarget(IWoWUnit woWUnit);
         sbyte GetTalentRank(uint tabIndex, uint talentIndex);
         void PickupInventoryItem(uint inventorySlot);
@@ -175,11 +177,6 @@ namespace GameData.Core.Interfaces
         void EquipItem(int bagSlot, int slotId, EquipSlot? equipSlot = null);
         void UnequipItem(EquipSlot slot);
         void AcceptResurrect();
-        void UpdateSnapshot(ActivitySnapshot activitySnapshot)
-        {
-
-        }
-
         void EnterWorld(ulong characterGuid);
     }
 }

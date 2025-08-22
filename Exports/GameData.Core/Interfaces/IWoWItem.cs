@@ -26,7 +26,11 @@ namespace GameData.Core.Interfaces
         ItemCacheInfo? Info { get; }
         ItemDynFlags ItemDynamicFlags { get; set; }
         ItemQuality Quality { get; }
+#if NET8_0_OR_GREATER
         uint DurabilityPercentage => (uint)((double)Durability / MaxDurability * 100);
+#else
+        uint DurabilityPercentage { get; }
+#endif
         void Use();
         void Loot();
     }

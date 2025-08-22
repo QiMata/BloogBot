@@ -6,7 +6,7 @@ namespace WoWSharpClient.Client
 {
     public class WoWClient : IDisposable
     {
-        private IPAddress _ipAddress;
+        private IPAddress _ipAddress; 
         private AuthLoginClient _loginClient;
         private readonly WorldClient _worldClient = new(new());
         private bool _isLoggedIn;

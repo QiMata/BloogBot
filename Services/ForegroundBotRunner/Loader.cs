@@ -1,9 +1,32 @@
-﻿namespace ForegroundBotRunner
+﻿using System;
+using System.IO;
+using System.Threading;
+
+namespace ForegroundBotRunner
 {
     public class Loader
     {
         private static Thread? thread;
         private static bool isInitialized = false;
+        private static int firstChanceReentrancy = 0;
+        private static int firstChanceLogged = 0;
+        private const int FirstChanceLogLimit = 50;
+        private static readonly string LogDirectory = InitLogDirectory();
+        private static string InjectionLog => Path.Combine(LogDirectory, "injection.log");
+        private static string FirstChanceLog => Path.Combine(LogDirectory, "injection_firstchance.log");
+
+        private static string InitLogDirectory()
+        {
+            try
+            {
+                var env = Environment.GetEnvironmentVariable("BLOOGBOT_INJECT_LOG_DIR");
+                string baseDir = !string.IsNullOrWhiteSpace(env) ? env : (AppDomain.CurrentDomain.BaseDirectory ?? Environment.CurrentDirectory);
+                var dir = Path.Combine(baseDir, "BloogBotLogs");
+                Directory.CreateDirectory(dir);
+                return dir;
+            }
+            catch { return Environment.CurrentDirectory; }
+        }
 
         static Loader()
         {
@@ -11,18 +34,21 @@
             {
                 AppDomain.CurrentDomain.FirstChanceException += (s, e) =>
                 {
+                    if (firstChanceLogged >= FirstChanceLogLimit) return;
+                    if (Interlocked.Exchange(ref firstChanceReentrancy, 1) == 1) return;
                     try
                     {
-                        var p = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection_firstchance.log");
-                        File.AppendAllText(p, $"[{DateTime.Now:HH:mm:ss}] FirstChance: {e.Exception.GetType()}: {e.Exception.Message}\n");
+                        firstChanceLogged++;
+                        File.AppendAllText(FirstChanceLog, $"[{DateTime.Now:HH:mm:ss}] FirstChance({firstChanceLogged}): {e.Exception.GetType()}: {e.Exception.Message}\n");
                     }
                     catch { }
+                    finally { Interlocked.Exchange(ref firstChanceReentrancy, 0); }
                 };
             }
             catch { }
         }
 
-        // Correct signature: two parameters (args pointer, size)
+#if NET8_0_OR_GREATER
         [System.Runtime.InteropServices.UnmanagedCallersOnly(EntryPoint = "LoadUnmanaged")]
         public static int LoadUnmanaged(System.IntPtr argsPtr, int size)
         {
@@ -37,121 +63,56 @@
             catch { }
             return Load("NONE");
         }
+#else
+        public static int LoadUnmanaged(System.IntPtr argsPtr, int size) => Load("NONE");
+#endif
 
         public static int Load(string args)
         {
             try
             {
-                var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
-                File.AppendAllText(logPath, $"\n=== CORRECT ENTRY POINT - Loader.Load() called at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
-                File.AppendAllText(logPath, $"Arguments: {args}\n");
-                File.AppendAllText(logPath, $"Current Process: {System.Diagnostics.Process.GetCurrentProcess().ProcessName}\n");
-                File.AppendAllText(logPath, $"Current Thread ID: {Thread.CurrentThread.ManagedThreadId}\n");
-
-                Console.WriteLine("=== CORRECT ENTRY POINT - Loader.Load() called ===");
-                Console.WriteLine($"Arguments: {args}");
-                Console.WriteLine($"Current Process: {System.Diagnostics.Process.GetCurrentProcess().ProcessName}");
-                Console.WriteLine($"Current Thread ID: {Thread.CurrentThread.ManagedThreadId}");
+                File.AppendAllText(InjectionLog, $"\n=== Loader.Load() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\nArguments: {args}\nProcess: {System.Diagnostics.Process.GetCurrentProcess().ProcessName}\nThread ID: {Thread.CurrentThread.ManagedThreadId}\n");
+                Console.WriteLine($"Loader.Load invoked. LogDir={LogDirectory}");
 
                 if (isInitialized)
                 {
-                    Console.WriteLine("Loader already initialized, skipping...");
-                    File.AppendAllText(logPath, "Loader already initialized, skipping...\n");
+                    File.AppendAllText(InjectionLog, "Loader already initialized, skipping.\n");
                     return 1;
                 }
                 isInitialized = true;
 
-                var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                var isWoWProcess = currentProcess.ProcessName.Contains("wow", StringComparison.OrdinalIgnoreCase) ||
-                                   currentProcess.MainModule?.FileName?.Contains("wow", StringComparison.OrdinalIgnoreCase) == true;
+#if NETFRAMEWORK && !NET8_0_OR_GREATER
+                // Start the injected bot host (net48 minimal loop)
+                InjectedBotHost.Start();
+                File.AppendAllText(InjectionLog, "InjectedBotHost.Start() invoked.\n");
+#endif
 
-                if (isWoWProcess)
-                {
-                    Console.WriteLine($"*** INJECTION SUCCESS: Running in WoW Process (PID: {currentProcess.Id}) ***");
-                    File.AppendAllText(logPath, $"SUCCESS: Running in WoW Process (PID: {currentProcess.Id})\n");
-                }
-                else
-                {
-                    Console.WriteLine($"*** WARNING: Not running in WoW Process (PID: {currentProcess.Id}, Name: {currentProcess.ProcessName}) ***");
-                    File.AppendAllText(logPath, $"WARNING: Not in WoW Process (PID: {currentProcess.Id}, Name: {currentProcess.ProcessName})\n");
-                }
-
-                thread = new Thread(() =>
-                {
-                    try
-                    {
-                        Console.WriteLine("Starting ultra-simplified bot...");
-                        File.AppendAllText(logPath, "Starting ultra-simplified bot...\n");
-                        InitializeUltraSimplifiedBot();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error in ultra-simplified bot: {ex.Message}");
-                        File.AppendAllText(logPath, $"Error in ultra-simplified bot: {ex}\n");
-                    }
-                })
-                {
-                    IsBackground = true,
-                    Name = "UltraSimplifiedBot"
-                };
-
+                // Keep a small heartbeat thread for visibility
+                thread = new Thread(() => HeartbeatLoop()) { IsBackground = true, Name = "ForegroundHeartbeat" };
                 thread.Start();
 
-                Console.WriteLine("=== Loader.Load() completed successfully ===");
-                File.AppendAllText(logPath, "=== Loader.Load() completed successfully ===\n");
+                File.AppendAllText(InjectionLog, "Loader.Load completed successfully.\n");
                 return 1;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error in Loader.Load(): {ex}");
-                try
-                {
-                    var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
-                    File.AppendAllText(logPath, $"Error in Loader.Load(): {ex}\n");
-                }
-                catch { }
+                try { File.AppendAllText(InjectionLog, $"Error in Loader.Load(): {ex}\n"); } catch { }
                 return 0;
             }
         }
 
-        private static void InitializeUltraSimplifiedBot()
+        private static void HeartbeatLoop()
         {
-            try
+            int counter = 0;
+            while (true)
             {
-                Console.WriteLine("=== ULTRA-SIMPLIFIED BOT STARTING ===");
-                var process = System.Diagnostics.Process.GetCurrentProcess();
-                Console.WriteLine($"Bot running in process: {process.ProcessName} (PID: {process.Id})");
-                int counter = 0;
-                while (true)
+                Thread.Sleep(10000);
+                counter++;
+                if (counter % 6 == 0)
                 {
-                    Thread.Sleep(10000);
-                    counter++;
-                    if (counter % 6 == 0)
-                    {
-                        Console.WriteLine($"[Ultra-Simple Bot] Heartbeat #{counter} - Running for {counter * 10} seconds");
-                        try
-                        {
-                            var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
-                            File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss}] Heartbeat #{counter} - Bot still alive\n");
-                        }
-                        catch { }
-                    }
-                    if (counter >= 30)
-                    {
-                        Console.WriteLine($"[Ultra-Simple Bot] Successfully running for {counter * 10} seconds without crashing WoW!");
-                        counter = 0;
-                    }
+                    try { File.AppendAllText(InjectionLog, $"[{DateTime.Now:HH:mm:ss}] Loader heartbeat #{counter}\n"); } catch { }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in ultra-simplified bot: {ex}");
-                try
-                {
-                    var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
-                    File.AppendAllText(logPath, $"Error in ultra-simplified bot: {ex}\n");
-                }
-                catch { }
             }
         }
     }

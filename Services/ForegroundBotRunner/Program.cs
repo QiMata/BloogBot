@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿#if NET8_0_OR_GREATER
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -11,45 +12,31 @@ namespace ForegroundBotRunner
         {
             try
             {
-                // This Main method should only run when WoWActivityMember.exe is executed directly
-                // When called through CLR injection, only the Loader.Load() method should be called
-                
-                Console.WriteLine("=== WoWActivityMember.exe Main() called directly ===");
+                Console.WriteLine("=== ForegroundBotRunner.exe Main() called directly ===");
                 Console.WriteLine("This should NOT run during CLR injection!");
-                Console.WriteLine("If you see this during injection, there's a problem with the CLR execution.");
-                
-                var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
+
+                var logPath = Path.Combine(AppContext.BaseDirectory, "BloogBotLogs", "injection.log");
+                Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
                 File.AppendAllText(logPath, $"\n=== DIRECT EXECUTION - Program.Main() called at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
                 File.AppendAllText(logPath, "This should NOT happen during CLR injection!\n");
-                
-                // Check if this is being run in the context of WoW (which would be wrong)
+
                 var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                var isWoWProcess = currentProcess.ProcessName.ToLower().Contains("wow");
-                
-                if (isWoWProcess)
+                if (currentProcess.ProcessName.Contains("wow", StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("ERROR: Program.Main() is running in WoW process!");
-                    Console.WriteLine("This means the CLR injection is calling the wrong entry point!");
+                    Console.WriteLine("ERROR: Program.Main() is running in WoW process! Wrong entry point used.");
                     File.AppendAllText(logPath, "ERROR: Program.Main() running in WoW process - CLR calling wrong entry point!\n");
-                    
-                    // Exit immediately to prevent WoW crash
-                    Console.WriteLine("Exiting immediately to prevent WoW crash...");
                     return;
                 }
-                
-                // If not in WoW, this is normal direct execution
+
                 Console.WriteLine("Running ForegroundBotRunner in standalone mode...");
                 DisplayProcessInfo();
 
-                // Use the Worker Service pattern for standalone execution
-                CreateHostBuilder(args)
-                    .Build()
-                    .Run();
+                CreateHostBuilder(args).Build().Run();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Fatal error in ForegroundBotRunner Program.Main(): {ex}");
-                var logPath = Path.Combine(@"C:\Users\wowadmin\RiderProjects\BloogBot\Bot\Debug\net8.0", "injection.log");
+                var logPath = Path.Combine(AppContext.BaseDirectory, "BloogBotLogs", "injection.log");
                 File.AppendAllText(logPath, $"FATAL ERROR in Program.Main(): {ex}\n");
             }
         }
@@ -58,7 +45,6 @@ namespace ForegroundBotRunner
             Host.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration((context, builder) =>
                 {
-                    // Simple configuration using hard-coded values for injection context
                     var configDict = new Dictionary<string, string?>
                     {
                         ["PathfindingService:IpAddress"] = "127.0.0.1",
@@ -66,13 +52,11 @@ namespace ForegroundBotRunner
                         ["CharacterStateListener:IpAddress"] = "127.0.0.1",
                         ["CharacterStateListener:Port"] = "5002"
                     };
-
                     builder.AddInMemoryCollection(configDict);
                     builder.AddEnvironmentVariables();
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
-                    // Register the ForegroundBotWorker as the main hosted service
                     services.AddHostedService<ForegroundBotWorker>();
                 })
                 .ConfigureLogging((context, builder) =>
@@ -86,7 +70,6 @@ namespace ForegroundBotRunner
             try
             {
                 var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                
                 Console.WriteLine("=== PROCESS INFORMATION ===");
                 Console.WriteLine($"Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
                 Console.WriteLine($"Process Name: {currentProcess.ProcessName}");
@@ -103,3 +86,4 @@ namespace ForegroundBotRunner
         }
     }
 }
+#endif

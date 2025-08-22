@@ -1,21 +1,55 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Library</OutputType>
-    <AssemblyName>ForegroundBotRunner</AssemblyName>
-    <Platforms>x86</Platforms>
-    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
-    <TargetFramework>net8.0</TargetFramework>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<AssemblyName>ForegroundBotRunner</AssemblyName>
+		<Platforms>x86</Platforms>
+		<TargetFrameworks>net8.0;net48</TargetFrameworks>
+		<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+		<LangVersion>latest</LangVersion>
+		<PlatformTarget>x86</PlatformTarget>
+	</PropertyGroup>
 
-  <!-- Remove ALL items that might cause issues -->
-  <ItemGroup>
-    <Compile Remove="Program.cs" />
-    <Compile Remove="ForegroundBotWorker.cs" />
-    <Compile Remove="Loader.cs" />
-    <Compile Remove="Frames\**\*.cs" />
-    <Compile Remove="Mem\**\*.cs" />
-    <Compile Remove="Objects\**\*.cs" />
-    <Compile Remove="Statics\**\*.cs" />
-  </ItemGroup>
+	<!-- For net48 we do not need runtimeconfig.json; also force copy of all local deps -->
+	<PropertyGroup Condition="'$(TargetFramework)'=='net48'">
+		<GenerateRuntimeConfigurationFiles>false</GenerateRuntimeConfigurationFiles>
+		<DefineConstants>NETFRAMEWORK;INJECTION_SHIM</DefineConstants>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	</PropertyGroup>
+
+	<!-- Copy net48 build output (DLL + PDBs) next to Loader.dll (solution root) for injection debugging -->
+	<Target Name="CopyNet48ArtifactsToLoader" AfterTargets="Build" Condition="'$(TargetFramework)'=='net48'">
+		<ItemGroup>
+			<_BuiltDll Include="$(TargetDir)$(AssemblyName).dll" />
+			<_BuiltPdb Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+			<!-- Any additional shim-local pdbs in its output folder (rare) -->
+			<_AllShimPdbs Include="$(TargetDir)*.pdb" />
+		</ItemGroup>
+		<Message Text="Copying ForegroundBotRunner shim artifacts to $(SolutionDir)" Importance="High" />
+		<Copy SourceFiles="@(_BuiltDll)" DestinationFolder="$(SolutionDir)" SkipUnchangedFiles="true" />
+		<Copy SourceFiles="@(_AllShimPdbs)" DestinationFolder="$(SolutionDir)" SkipUnchangedFiles="true" Condition="'@(_AllShimPdbs)' != ''" />
+	</Target>
+
+	<!-- Only reference net8.0 projects when building for net8.0 -->
+	<ItemGroup Condition="'$(TargetFramework)'=='net8.0'">
+		<ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
+		<ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
+		<ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
+		<ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
+	</ItemGroup>
+
+	<!-- Hosting/Logging only needed for net8 build -->
+	<ItemGroup Condition="'$(TargetFramework)'=='net8.0'">
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+	</ItemGroup>
+
+	<!-- Exclude heavy folders from both builds (still allow adding specific files later) -->
+	<ItemGroup>
+		<Compile Remove="Frames\**\*.cs" />
+		<Compile Remove="Mem\**\*.cs" />
+		<Compile Remove="Objects\**\*.cs" />
+		<Compile Remove="Statics\**\*.cs" />
+	</ItemGroup>
+
 </Project>
