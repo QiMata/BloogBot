@@ -448,55 +448,6 @@ bool PhysicsEngine::CheckCollision(uint32_t mapId, float startX, float startY, f
 	return false;
 }
 
-bool PhysicsEngine::IsGrounded(uint32_t mapId, float x, float y, float z, float radius, float height)
-{
-	EnsureMapLoaded(mapId);
-	float groundZ = GetHeight(mapId, x, y, z, true, DEFAULT_HEIGHT_SEARCH);
-
-	if (groundZ <= PhysicsConstants::INVALID_HEIGHT)
-		return false;
-
-	float distToGround = z - groundZ;
-
-	// Check if within step height (2.0f) of ground
-	bool grounded = (distToGround >= 0 && distToGround < STEP_HEIGHT) ||
-		std::abs(distToGround) < GROUND_HEIGHT_TOLERANCE;
-
-	return grounded;
-}
-
-bool PhysicsEngine::IsInWater(uint32_t mapId, float x, float y, float z, float height)
-{
-	EnsureMapLoaded(mapId);
-	uint32_t liquidType;
-	float liquidZ = GetLiquidHeight(mapId, x, y, z, liquidType);
-
-	if (liquidZ <= PhysicsConstants::INVALID_HEIGHT)
-		return false;
-
-	// Match server logic: 2.0 units below surface = swimming
-	// Add small tolerance for floating point precision
-	const float SWIM_DEPTH_THRESHOLD = 2.0f;
-	float depth = liquidZ - z;
-
-	return depth >= SWIM_DEPTH_THRESHOLD - 0.05f; // Small tolerance
-}
-
-bool PhysicsEngine::CanWalkOn(uint32_t mapId, float x, float y, float z)
-{
-	// Check if the surface is walkable based on slope
-	EnsureMapLoaded(mapId);
-
-	// Get height at the position
-	float groundZ = GetHeight(mapId, x, y, z, true, DEFAULT_HEIGHT_SEARCH);
-	if (groundZ <= PhysicsConstants::INVALID_HEIGHT)
-		return false;
-
-	// For now, assume all valid ground is walkable
-	// In the future, could add slope checking here
-	return true;
-}
-
 PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 {
 	PhysicsOutput output = {};
@@ -556,10 +507,7 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 
 	if (collision.hasLiquid)
 	{
-		// Use character-specific swimming depth (like GetMinSwimDepth())
-		// TODO: Get actual character collision height from character data
-		float characterHeight = 2.0f; // Standard character height - should be configurable
-		float minSwimDepth = characterHeight * 0.75f; // 1.5f for standard character
+		float minSwimDepth = input.height * 0.75f; // 1.5f for standard character
 
 		swimmingThreshold = collision.liquidZ - minSwimDepth;
 		inWater = state.z < swimmingThreshold;
@@ -704,21 +652,34 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 
 			if (newGroundZ > PhysicsConstants::INVALID_HEIGHT)
 			{
-				float heightDiff = newGroundZ - state.z;
+				float heightDiff = newGroundZ - state.z;  // Positive = step up, Negative = step down
 				LOG_INFO("  Height difference: " << heightDiff);
 
-				// Check if we can step to this height
-				if (std::abs(heightDiff) <= PhysicsConstants::STEP_HEIGHT)
+				// Define separate thresholds for up vs down
+				const float STEP_UP_HEIGHT = 2.0f;      // Max step up
+				const float STEP_DOWN_HEIGHT = 4.0f;    // Max step down before falling
+				const float GROUND_TOLERANCE = 0.1f;    // Flat ground tolerance
+
+				if (heightDiff >= -GROUND_TOLERANCE && heightDiff <= STEP_UP_HEIGHT)
 				{
-					LOG_INFO("  ALLOWED: Moving and stepping to new height");
+					// Step up or flat ground - allow movement
+					LOG_INFO("  ALLOWED: Step up/flat (diff=" << heightDiff << ")");
 					state.x = newX;
 					state.y = newY;
 					state.z = newGroundZ + PhysicsConstants::GROUND_HEIGHT_TOLERANCE;
 				}
-				else if (heightDiff < -PhysicsConstants::STEP_HEIGHT)
+				else if (heightDiff < -GROUND_TOLERANCE && heightDiff >= -STEP_DOWN_HEIGHT)
 				{
-					LOG_INFO("  FALLING: Stepped off edge");
-					// Falling off edge
+					// Step down within limits - allow movement
+					LOG_INFO("  ALLOWED: Step down (diff=" << heightDiff << ")");
+					state.x = newX;
+					state.y = newY;
+					state.z = newGroundZ + PhysicsConstants::GROUND_HEIGHT_TOLERANCE;
+				}
+				else if (heightDiff < -STEP_DOWN_HEIGHT)
+				{
+					// Drop too large - start falling but allow horizontal movement
+					LOG_INFO("  FALLING: Drop too large (diff=" << heightDiff << ")");
 					state.x = newX;
 					state.y = newY;
 					state.isGrounded = false;
@@ -727,12 +688,15 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 				}
 				else
 				{
-					LOG_INFO("  BLOCKED: Height difference too large");
+					// Step up too high - block movement
+					LOG_INFO("  BLOCKED: Step up too high (diff=" << heightDiff << ")");
+					// Don't update position - movement blocked
 				}
 			}
 			else
 			{
 				LOG_INFO("  BLOCKED: No valid ground at new position");
+				// Don't update position - movement blocked
 			}
 		}
 		else

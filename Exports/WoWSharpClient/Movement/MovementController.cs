@@ -180,15 +180,5 @@ namespace WoWSharpClient.Movement
             _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] MSG_MOVE_STOP (forced)");
         }
-
-        // ======== STATE MANAGEMENT ========
-        public void Reset()
-        {
-            // Reset physics state (after teleport, death, etc)
-            _velocity = Vector3.Zero;
-            _fallTime = 0;
-            _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
-            _lastPacketTime = 0;
-        }
     }
 }

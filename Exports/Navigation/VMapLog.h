@@ -7,10 +7,10 @@
 #define WARN_LOG
 #define ERROR_LOG
 #define INFO_LOG
-#define DEBUG_LOG
-#define TRACE_LOG
-#define VECTOR3_LOG
-#define RAY_LOG
+#define DEBUG_LOG1
+#define TRACE_LOG1
+#define VECTOR3_LOG1
+#define RAY_LOG1
 
 #ifdef WARN_LOG
 #define LOG_WARN(msg) do { \

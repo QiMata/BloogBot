@@ -31,6 +31,13 @@ namespace PhysicsConstants
 
     // Collision detection - vMaNGOS values
     constexpr float STEP_HEIGHT = 2.0f;  // ATTACK_DISTANCE equivalent for step-up
+    constexpr float STEP_DOWN_HEIGHT = 1.2f;    // Max step-down without falling
+    constexpr float MAX_WALKABLE_SLOPE = 0.675f; // cos(50°) - WoW's actual slope limit
+
+    // Ground snapping
+    constexpr float STEP_UP_HEIGHT = 0.6f;
+    constexpr float GROUND_SNAP_DISTANCE = 0.5f; // Snap to ground within this distance
+    constexpr float MOVEMENT_EPSILON = 0.001f;   // Minimum movement threshold
     constexpr float MIN_WALK_NORMAL_Z = 0.7071f;  // 45 degree slope
 
     // Fall damage thresholds
@@ -83,7 +90,6 @@ private:
 
     // Physics calculations
     CollisionInfo QueryEnvironment(uint32_t mapId, float x, float y, float z, float radius, float height);
-    MovementState UpdateMovement(const PhysicsInput& input, const CollisionInfo& collision, float dt);
     MovementState HandleGroundMovement(const PhysicsInput& input, MovementState& state, float dt);
     MovementState HandleAirMovement(const PhysicsInput& input, MovementState& state, float dt);
     MovementState HandleSwimMovement(const PhysicsInput& input, MovementState& state, float dt);
@@ -114,9 +120,5 @@ public:
 
     PhysicsOutput Step(const PhysicsInput& input, float dt);
 
-    // Utility functions (vMaNGOS compatible)
-    bool IsGrounded(uint32_t mapId, float x, float y, float z, float radius, float height);
-    bool IsInWater(uint32_t mapId, float x, float y, float z, float height);
-    bool CanWalkOn(uint32_t mapId, float x, float y, float z);
     float GetHeight(uint32_t mapId, float x, float y, float z, bool checkVMap, float maxSearchDist);
 };
