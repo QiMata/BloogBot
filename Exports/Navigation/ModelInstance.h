@@ -3,11 +3,13 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 #include "Vector3.h"
 #include "AABox.h"
 #include "Ray.h"
 #include "Matrix3.h"
 #include "VMapDefinitions.h"  // For MOD_M2 and other constants
+#include "CylinderCollision.h"
 
 namespace VMAP
 {
@@ -56,11 +58,35 @@ namespace VMAP
         ModelInstance();
         ModelInstance(const ModelSpawn& spawn, std::shared_ptr<WorldModel> model);
 
+        // Original ray-based collision methods
         bool intersectRay(const G3D::Ray& ray, float& maxDist, bool stopAtFirstHit, bool ignoreM2Model = false) const;
         void intersectPoint(const G3D::Vector3& p, AreaInfo& info) const;
         bool GetLocationInfo(const G3D::Vector3& p, LocationInfo& info) const;
         bool GetLiquidLevel(const G3D::Vector3& p, LocationInfo& info, float& liqHeight) const;
         void setUnloaded() { iModel = nullptr; }
         void getAreaInfo(G3D::Vector3& pos, uint32_t& flags, int32_t& adtId, int32_t& rootId, int32_t& groupId) const;
+
+        // New cylinder collision methods
+        CylinderIntersection IntersectCylinder(const Cylinder& worldCylinder) const;
+        std::vector<CylinderSweepHit> SweepCylinder(const Cylinder& worldCylinder,
+            const G3D::Vector3& sweepDir, float sweepDistance) const;
+
+        // Helper to get transformed vertices for external collision testing
+        bool GetTransformedMeshData(std::vector<G3D::Vector3>& outVertices,
+            std::vector<uint32_t>& outIndices) const;
+
+        // Check if a world-space cylinder collides with this model instance
+        bool CheckCylinderCollision(const Cylinder& worldCylinder,
+            float& outContactHeight, G3D::Vector3& outContactNormal) const;
+
+        // Test if cylinder can fit at position without collision
+        bool CanCylinderFitAtPosition(const Cylinder& worldCylinder, float tolerance = 0.05f) const;
+
+    private:
+        // Transform vertices from model space to world space
+        G3D::Vector3 TransformToWorld(const G3D::Vector3& modelVertex) const;
+
+        // Transform cylinder from world space to model space
+        Cylinder TransformCylinderToModel(const Cylinder& worldCylinder) const;
     };
 }

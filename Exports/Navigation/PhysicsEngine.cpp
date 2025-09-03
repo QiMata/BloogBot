@@ -1,4 +1,4 @@
-﻿// PhysicsEngine.cpp - Fixed step-down movement continuity
+﻿// PhysicsEngine.cpp - Enhanced with cylinder collision support and fixed ground detection
 #include "PhysicsEngine.h"
 #include "CylinderCollision.h"
 #include "VMapManager2.h"
@@ -12,6 +12,7 @@
 #include <cfloat>
 
 using namespace PhysicsConstants;
+using namespace VMAP;
 
 PhysicsEngine* PhysicsEngine::s_instance = nullptr;
 
@@ -31,7 +32,8 @@ void PhysicsEngine::Destroy()
 PhysicsEngine::PhysicsEngine()
     : m_vmapManager(nullptr), m_navigation(nullptr),
     m_initialized(false), m_currentMapId(UINT32_MAX),
-    m_lastStepWasDown(false), m_framesSinceStepDown(0)
+    m_lastStepWasDown(false), m_framesSinceStepDown(0),
+    m_playerRadius(PLAYER_RADIUS), m_playerHeight(PLAYER_HEIGHT)
 {
 }
 
@@ -40,22 +42,24 @@ void PhysicsEngine::Initialize()
     if (m_initialized)
         return;
 
-    std::cout << "[PhysicsEngine] Initializing..." << std::endl;
+    std::cout << "[PhysicsEngine] Initializing with cylinder collision support..." << std::endl;
 
     // Initialize MapLoader for terrain data
     m_mapLoader = std::make_unique<MapLoader>();
     std::vector<std::string> mapPaths = { "maps/", "Data/maps/", "../Data/maps/" };
 
-    for (const auto& path : mapPaths)
+    auto pathIt = mapPaths.begin();
+    while (pathIt != mapPaths.end())
     {
-        if (std::filesystem::exists(path))
+        if (std::filesystem::exists(*pathIt))
         {
-            if (m_mapLoader->Initialize(path))
+            if (m_mapLoader->Initialize(*pathIt))
             {
-                std::cout << "[PhysicsEngine] MapLoader initialized with path: " << path << std::endl;
+                std::cout << "[PhysicsEngine] MapLoader initialized with path: " << *pathIt << std::endl;
                 break;
             }
         }
+        ++pathIt;
     }
 
     // Initialize VMAP system
@@ -69,14 +73,16 @@ void PhysicsEngine::Initialize()
             VMAP::VMapFactory::initialize();
 
             std::vector<std::string> vmapPaths = { "vmaps/", "Data/vmaps/", "../Data/vmaps/" };
-            for (const auto& path : vmapPaths)
+            auto vmapPathIt = vmapPaths.begin();
+            while (vmapPathIt != vmapPaths.end())
             {
-                if (std::filesystem::exists(path))
+                if (std::filesystem::exists(*vmapPathIt))
                 {
-                    m_vmapManager->setBasePath(path);
-                    std::cout << "[PhysicsEngine] VMapManager initialized with path: " << path << std::endl;
+                    m_vmapManager->setBasePath(*vmapPathIt);
+                    std::cout << "[PhysicsEngine] VMapManager initialized with path: " << *vmapPathIt << std::endl;
                     break;
                 }
+                ++vmapPathIt;
             }
         }
     }
@@ -88,7 +94,8 @@ void PhysicsEngine::Initialize()
 
     m_navigation = Navigation::GetInstance();
     m_initialized = true;
-    std::cout << "[PhysicsEngine] Initialization complete" << std::endl;
+    std::cout << "[PhysicsEngine] Initialization complete - Cylinder radius: " << m_playerRadius
+        << " height: " << m_playerHeight << std::endl;
 }
 
 void PhysicsEngine::Shutdown()
@@ -151,7 +158,12 @@ float PhysicsEngine::GetLiquidHeight(uint32_t mapId, float x, float y, float z, 
     return INVALID_HEIGHT;
 }
 
-PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurface(
+Cylinder PhysicsEngine::CreatePlayerCylinder(float x, float y, float z) const
+{
+    return Cylinder(G3D::Vector3(x, y, z), G3D::Vector3(0, 0, 1), m_playerRadius, m_playerHeight);
+}
+
+PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurfaceWithCylinder(
     uint32_t mapId, float x, float y, float currentZ,
     float maxStepUp, float maxStepDown)
 {
@@ -159,11 +171,11 @@ PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurface(
     result.found = false;
     result.height = INVALID_HEIGHT;
     result.source = SurfaceSource::NONE;
+    result.normal = G3D::Vector3(0, 0, 1);
 
-    std::cout << "\n[FindWalkableSurface] pos(" << x << "," << y << ") currentZ:"
+    std::cout << "\n[FindWalkableSurfaceWithCylinder] pos(" << x << "," << y << ") currentZ:"
         << currentZ << " stepUp:" << maxStepUp << " stepDown:" << maxStepDown;
 
-    // Add context about recent movement
     if (m_lastStepWasDown)
     {
         std::cout << " [RECENT STEP DOWN - frame " << m_framesSinceStepDown << "]";
@@ -181,6 +193,15 @@ PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurface(
         m_vmapManager->loadMap(nullptr, mapId, tileX, tileY);
     }
 
+    // Collect ALL valid surfaces within range
+    struct SurfaceCandidate
+    {
+        float height;
+        SurfaceSource source;
+        float priority; // Lower is better
+    };
+    std::vector<SurfaceCandidate> candidates;
+
     // Check terrain height
     float terrainZ = GetTerrainHeight(mapId, x, y);
     if (terrainZ > INVALID_HEIGHT)
@@ -188,90 +209,198 @@ PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurface(
         float terrainDiff = terrainZ - currentZ;
         std::cout << "  Terrain height: " << terrainZ << " (diff: " << terrainDiff << ")" << std::endl;
 
-        if (terrainDiff >= -maxStepDown && terrainDiff <= maxStepUp)
+        if (terrainDiff >= -(maxStepDown + GROUND_HEIGHT_TOLERANCE) &&
+            terrainDiff <= (maxStepUp + GROUND_HEIGHT_TOLERANCE))
         {
-            result.found = true;
-            result.height = terrainZ;
-            result.source = SurfaceSource::TERRAIN;
+            SurfaceCandidate candidate;
+            candidate.height = terrainZ;
+            candidate.source = SurfaceSource::TERRAIN;
+
+            // Calculate priority based on movement preference
+            if (terrainDiff > 0.1f && terrainDiff <= maxStepUp)
+                candidate.priority = 1.0f; // Step up
+            else if (std::abs(terrainDiff) <= 0.1f)
+                candidate.priority = 2.0f; // Maintain
+            else if (terrainDiff < -0.1f && terrainDiff >= -maxStepDown)
+                candidate.priority = 3.0f; // Step down
+            else
+                candidate.priority = 4.0f; // Fall
+
+            candidates.push_back(candidate);
         }
     }
 
-    // Check VMAP surfaces with improved search strategy
+    // Use cylinder collision for VMAP surfaces
     if (m_vmapManager)
     {
-        // Define search ranges based on step limits and recent movement
-        struct SearchRange {
-            float startZ;      // Where to start searching from
-            float searchDist;  // How far to search
-            const char* desc;
-        };
+        // Search multiple heights to find ALL surfaces
+        std::vector<float> foundHeights;
 
-        // Adjust search strategy based on recent step-down
-        float extraSearchMargin = 0.0f;
-        if (m_lastStepWasDown && m_framesSinceStepDown < 3)
+        // Search from above current position
+        for (float searchOffset = -maxStepDown; searchOffset <= maxStepUp; searchOffset += 0.5f)
         {
-            // After stepping down, be more aggressive in finding ground
-            extraSearchMargin = 2.0f;
-        }
+            float searchZ = currentZ + searchOffset + maxStepUp;
+            float cylHeight = m_vmapManager->GetCylinderHeight(
+                mapId, x, y, searchZ,
+                m_playerRadius, m_playerHeight, 2.0f); // Small search distance
 
-        // Improved search ranges for better ground detection
-        SearchRange ranges[] = {
-            // Main search from above - covers most cases
-            {currentZ + maxStepUp + 2.0f, maxStepUp + maxStepDown + 4.0f + extraSearchMargin, "full range"},
-
-            // Search immediately below feet - crucial for maintaining ground contact
-            {currentZ + 0.5f, 2.0f + extraSearchMargin, "at feet"},
-
-            // Extended search below for step-down scenarios
-            {currentZ - 2.0f, 5.0f + extraSearchMargin, "below feet"},
-
-            // Mid-range search for steps
-            {currentZ + STEP_HEIGHT * 0.5f, STEP_HEIGHT, "mid step"}
-        };
-
-        float bestVmapZ = INVALID_HEIGHT;
-
-        for (const auto& range : ranges)
-        {
-            float vmapZ = m_vmapManager->getHeight(mapId, x, y, range.startZ, range.searchDist);
-
-            if (vmapZ > INVALID_HEIGHT)
+            if (cylHeight > INVALID_HEIGHT)
             {
-                float vmapDiff = vmapZ - currentZ;
-                std::cout << "  VMAP search from " << range.desc << " found surface at "
-                    << vmapZ << " (diff: " << vmapDiff << ")" << std::endl;
-
-                // Is this within our step limits?
-                if (vmapDiff >= -maxStepDown && vmapDiff <= maxStepUp)
+                // Check if we already have this height
+                bool isDuplicate = false;
+                for (float h : foundHeights)
                 {
-                    // Prefer the highest valid VMAP surface
-                    if (bestVmapZ <= INVALID_HEIGHT || vmapZ > bestVmapZ)
+                    if (std::abs(h - cylHeight) < 0.05f) // Small tolerance for duplicates
                     {
-                        bestVmapZ = vmapZ;
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+
+                if (!isDuplicate)
+                {
+                    foundHeights.push_back(cylHeight);
+                    float heightDiff = cylHeight - currentZ;
+                    std::cout << "  Found VMAP surface at " << cylHeight
+                        << " (diff: " << heightDiff << ")" << std::endl;
+
+                    // Check if within step range
+                    if (heightDiff >= -(maxStepDown + GROUND_HEIGHT_TOLERANCE) &&
+                        heightDiff <= (maxStepUp + GROUND_HEIGHT_TOLERANCE))
+                    {
+                        SurfaceCandidate candidate;
+                        candidate.height = cylHeight;
+                        candidate.source = SurfaceSource::VMAP;
+
+                        // Calculate priority - prefer stepping up
+                        if (heightDiff > 0.1f && heightDiff <= maxStepUp)
+                        {
+                            candidate.priority = 0.5f; // VMAP step up (highest priority)
+                        }
+                        else if (std::abs(heightDiff) <= 0.1f)
+                        {
+                            candidate.priority = 1.5f; // VMAP maintain
+                        }
+                        else if (heightDiff < -0.1f && heightDiff >= -GROUND_HEIGHT_TOLERANCE)
+                        {
+                            candidate.priority = 2.5f; // VMAP small step down
+                        }
+                        else if (heightDiff < -GROUND_HEIGHT_TOLERANCE && heightDiff >= -maxStepDown)
+                        {
+                            candidate.priority = 3.5f; // VMAP larger step down
+                        }
+                        else
+                        {
+                            candidate.priority = 4.5f; // VMAP fall
+                        }
+
+                        candidates.push_back(candidate);
                     }
                 }
             }
         }
 
-        // Compare VMAP with terrain and select the best surface
-        if (bestVmapZ > INVALID_HEIGHT)
+        // Also try FindCylinderWalkableSurface
+        Cylinder testCylinder = CreatePlayerCylinder(x, y, currentZ);
+        float cylinderHeight = INVALID_HEIGHT;
+        G3D::Vector3 cylinderNormal;
+
+        bool foundCylinderSurface = m_vmapManager->FindCylinderWalkableSurface(
+            mapId, testCylinder, currentZ, maxStepUp + 1.0f, maxStepDown + 1.0f,
+            cylinderHeight, cylinderNormal);
+
+        if (foundCylinderSurface && cylinderHeight > INVALID_HEIGHT)
         {
-            // If we have both VMAP and terrain, prefer VMAP if it's higher
-            // (player should walk on structures rather than terrain below them)
-            if (!result.found || bestVmapZ > result.height)
+            float heightDiff = cylinderHeight - currentZ;
+
+            // Check if surface normal indicates it's walkable
+            bool isWalkable = cylinderNormal.z >= 0.65f;
+
+            if (isWalkable &&
+                heightDiff >= -(maxStepDown + GROUND_HEIGHT_TOLERANCE) &&
+                heightDiff <= (maxStepUp + GROUND_HEIGHT_TOLERANCE))
             {
-                result.found = true;
-                result.height = bestVmapZ;
-                result.source = SurfaceSource::VMAP;
+                // Check for duplicate
+                bool isDuplicate = false;
+                for (const auto& c : candidates)
+                {
+                    if (c.source == SurfaceSource::CYLINDER && std::abs(c.height - cylinderHeight) < 0.05f)
+                    {
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+
+                if (!isDuplicate)
+                {
+                    std::cout << "  Found cylinder surface at " << cylinderHeight
+                        << " (diff: " << heightDiff << ")" << std::endl;
+
+                    SurfaceCandidate candidate;
+                    candidate.height = cylinderHeight;
+                    candidate.source = SurfaceSource::CYLINDER;
+
+                    // Calculate priority
+                    if (heightDiff > 0.1f && heightDiff <= maxStepUp)
+                        candidate.priority = 0.6f; // Cylinder step up
+                    else if (std::abs(heightDiff) <= 0.1f)
+                        candidate.priority = 1.6f; // Cylinder maintain
+                    else if (heightDiff < -0.1f && heightDiff >= -maxStepDown)
+                        candidate.priority = 3.6f; // Cylinder step down
+                    else
+                        candidate.priority = 4.6f; // Cylinder fall
+
+                    candidates.push_back(candidate);
+                }
             }
         }
     }
 
+    // Select the best surface based on priority
+    if (!candidates.empty())
+    {
+        std::cout << "  Evaluating " << candidates.size() << " candidate surfaces:" << std::endl;
+
+        // Sort by priority (lower is better)
+        std::sort(candidates.begin(), candidates.end(),
+            [](const SurfaceCandidate& a, const SurfaceCandidate& b) {
+                // First sort by priority
+                if (std::abs(a.priority - b.priority) > 0.01f)
+                    return a.priority < b.priority;
+
+                // If same priority category, prefer higher surfaces
+                // This helps stay on top of overlapping geometry
+                return a.height > b.height;
+            });
+
+        // Log the candidates
+        for (const auto& c : candidates)
+        {
+            const char* sourceStr = (c.source == SurfaceSource::TERRAIN) ? "TERRAIN" :
+                (c.source == SurfaceSource::VMAP) ? "VMAP" : "CYLINDER";
+            std::cout << "    Height: " << c.height << " Priority: " << c.priority
+                << " Source: " << sourceStr << std::endl;
+        }
+
+        // Select the best candidate
+        const auto& best = candidates[0];
+        result.found = true;
+        result.height = best.height;
+        result.source = best.source;
+
+        std::cout << "  Selected best surface at " << result.height
+            << " with priority " << best.priority << std::endl;
+    }
+
     if (result.found)
     {
-        std::cout << "  Selected surface: " << result.height
-            << " (source: " << (result.source == SurfaceSource::TERRAIN ? "TERRAIN" : "VMAP")
-            << ")" << std::endl;
+        const char* sourceStr = "UNKNOWN";
+        if (result.source == SurfaceSource::TERRAIN) sourceStr = "TERRAIN";
+        else if (result.source == SurfaceSource::VMAP) sourceStr = "VMAP";
+        else if (result.source == SurfaceSource::CYLINDER) sourceStr = "CYLINDER";
+
+        std::cout << "  Final selection: " << result.height
+            << " (source: " << sourceStr << ")" << std::endl;
     }
     else
     {
@@ -280,20 +409,49 @@ PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurface(
 
     return result;
 }
+PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurface(
+    uint32_t mapId, float x, float y, float currentZ,
+    float maxStepUp, float maxStepDown)
+{
+    // This is now a wrapper that uses cylinder collision
+    return FindWalkableSurfaceWithCylinder(mapId, x, y, currentZ, maxStepUp, maxStepDown);
+}
+
+bool PhysicsEngine::CheckCylinderMovement(uint32_t mapId, const MovementState& currentState,
+    float newX, float newY, float& outZ, G3D::Vector3& outNormal)
+{
+    // Find walkable surface at new position
+    WalkableSurface surface = FindWalkableSurfaceWithCylinder(
+        mapId, newX, newY, currentState.z, STEP_HEIGHT, STEP_DOWN_HEIGHT);
+
+    if (surface.found)
+    {
+        outZ = surface.height;
+        outNormal = surface.normal;
+        return true;
+    }
+
+    return false;
+}
+
+bool PhysicsEngine::ValidateCylinderPosition(uint32_t mapId, float x, float y, float z, float tolerance)
+{
+    if (!m_vmapManager)
+        return true;  // No collision if no VMAP
+
+    Cylinder testCylinder = CreatePlayerCylinder(x, y, z);
+    return m_vmapManager->CanCylinderFitAtPosition(mapId, testCylinder, tolerance);
+}
 
 float PhysicsEngine::GetHeight(uint32_t mapId, float x, float y, float z, bool checkVMap, float maxSearchDist)
 {
-    // This method is now a simple wrapper that uses FindWalkableSurface
-    // It's kept for backward compatibility
-
     if (!checkVMap)
     {
         return GetTerrainHeight(mapId, x, y);
     }
 
-    // Use the new unified surface finding logic
-    // For generic height queries, we search both up and down from the given Z
-    WalkableSurface surface = FindWalkableSurface(mapId, x, y, z,
+    // Use cylinder-based surface finding
+    WalkableSurface surface = FindWalkableSurfaceWithCylinder(mapId, x, y, z,
         maxSearchDist * 0.5f,  // Search up
         maxSearchDist);         // Search down
 
@@ -324,12 +482,11 @@ void PhysicsEngine::ApplyGravity(MovementState& state, float dt)
         state.vz = -54.0f;
 }
 
-void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, MovementState& state, float dt)
+void PhysicsEngine::ProcessGroundMovementWithCylinder(const PhysicsInput& input, MovementState& state, float dt)
 {
-    std::cout << "\n=== ProcessGroundMovement ===" << std::endl;
+    std::cout << "\n=== ProcessGroundMovementWithCylinder ===" << std::endl;
     std::cout << "Current pos: (" << state.x << ", " << state.y << ", " << state.z << ")" << std::endl;
 
-    // Track step-down state
     if (m_framesSinceStepDown < 10)
     {
         std::cout << "Frames since step-down: " << m_framesSinceStepDown << std::endl;
@@ -345,7 +502,7 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, MovementSta
         state.vz = JUMP_VELOCITY;
         state.isGrounded = false;
         state.fallTime = 0;
-        m_lastStepWasDown = false;  // Reset step-down tracking
+        m_lastStepWasDown = false;
         return;
     }
 
@@ -388,23 +545,10 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, MovementSta
 
     std::cout << "Desired pos: (" << newX << ", " << newY << ", ?)" << std::endl;
 
-    // Track previous height for step detection
-    float previousZ = state.z;
-
     // Find walkable surface at destination
-    // Increase search range if we recently stepped down
-    float searchUp = STEP_HEIGHT;
-    float searchDown = STEP_DOWN_HEIGHT;
-
-    if (m_lastStepWasDown && m_framesSinceStepDown < 3)
-    {
-        // After stepping down, be more generous with ground detection
-        searchDown += 1.0f;
-    }
-
-    WalkableSurface destSurface = FindWalkableSurface(
+    WalkableSurface destSurface = FindWalkableSurfaceWithCylinder(
         input.mapId, newX, newY, state.z,
-        searchUp, searchDown);
+        STEP_HEIGHT, STEP_DOWN_HEIGHT);
 
     if (destSurface.found)
     {
@@ -412,121 +556,36 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, MovementSta
         std::cout << "Found surface at destination: " << destSurface.height
             << " (diff: " << heightDiff << ")" << std::endl;
 
-        // Determine step type
-        auto stepResult = VMAP::CylinderHelpers::CheckStepHeight(
-            state.z, destSurface.height, STEP_HEIGHT, STEP_DOWN_HEIGHT);
+        // Update position with proper ground snapping
+        state.x = newX;
+        state.y = newY;
 
-        switch (stepResult)
+        // Snap to ground with small tolerance to prevent floating
+        if (std::abs(heightDiff) < GROUND_HEIGHT_TOLERANCE)
         {
-        case VMAP::CylinderHelpers::STEP_UP:
-            std::cout << "STEP_UP - Moving to new position" << std::endl;
-            state.x = newX;
-            state.y = newY;
-            state.z = destSurface.height + GROUND_HEIGHT_TOLERANCE;
-            m_lastStepWasDown = false;  // Reset step-down tracking
-            break;
-
-        case VMAP::CylinderHelpers::STEP_DOWN:
-            std::cout << "STEP_DOWN - Moving to new position" << std::endl;
-            state.x = newX;
-            state.y = newY;
-            // Use slightly larger tolerance after stepping down for stability
-            state.z = destSurface.height + GROUND_HEIGHT_TOLERANCE * 2.0f;
-            m_lastStepWasDown = true;
-            m_framesSinceStepDown = 0;
-            break;
-
-        case VMAP::CylinderHelpers::STEP_BLOCKED:
-            // Surface too high - try sliding
-            std::cout << "STEP_BLOCKED - Surface too high, attempting slide" << std::endl;
-            AttemptSlideMovement(input, state, moveX, moveY, speed * dt);
-            break;
-
-        case VMAP::CylinderHelpers::STEP_FALL:
-            // Drop too far - but if we just stepped down, be more lenient
-            if (m_lastStepWasDown && m_framesSinceStepDown < 2)
-            {
-                // Allow slightly larger drops right after a step-down
-                if (heightDiff >= -(STEP_DOWN_HEIGHT + 1.0f))
-                {
-                    std::cout << "STEP_FALL (lenient) - Continuing step-down chain" << std::endl;
-                    state.x = newX;
-                    state.y = newY;
-                    state.z = destSurface.height + GROUND_HEIGHT_TOLERANCE * 2.0f;
-                    m_framesSinceStepDown = 0;  // Reset counter
-                    break;
-                }
-            }
-
-            std::cout << "STEP_FALL - Drop too far, starting fall" << std::endl;
-            state.x = newX;
-            state.y = newY;
-            state.isGrounded = false;
-            state.fallTime = 0;
-            m_lastStepWasDown = false;
-            break;
+            // Very close to ground - snap directly
+            state.z = destSurface.height;
         }
-    }
-    else
-    {
-        std::cout << "No valid ground at destination - checking for edge" << std::endl;
-
-        // No ground found - but if we just stepped down, try harder to find ground
-        if (m_lastStepWasDown && m_framesSinceStepDown < 2)
+        else if (heightDiff > 0)
         {
-            // Try an extended search with more generous parameters
-            std::cout << "Recent step-down detected - trying extended ground search" << std::endl;
-
-            WalkableSurface extendedSearch = FindWalkableSurface(
-                input.mapId, newX, newY, state.z,
-                STEP_HEIGHT, STEP_DOWN_HEIGHT + 2.0f);
-
-            if (extendedSearch.found)
-            {
-                float heightDiff = extendedSearch.height - state.z;
-                if (heightDiff >= -(STEP_DOWN_HEIGHT + 2.0f))
-                {
-                    std::cout << "Extended search successful - continuing movement" << std::endl;
-                    state.x = newX;
-                    state.y = newY;
-                    state.z = extendedSearch.height + GROUND_HEIGHT_TOLERANCE * 2.0f;
-                    m_framesSinceStepDown = 0;
-                }
-                else
-                {
-                    std::cout << "Extended search found ground but too far down" << std::endl;
-                    // Stay in place
-                }
-            }
-            else
-            {
-                std::cout << "Extended search failed - stopping at edge" << std::endl;
-                // Stay in place
-            }
+            // Stepping up
+            state.z = destSurface.height;
+            m_lastStepWasDown = false;
         }
         else
         {
-            // Check if we're at an edge
-            WalkableSurface currentSurface = FindWalkableSurface(
-                input.mapId, state.x, state.y, state.z,
-                1.0f, 1.0f);
-
-            if (currentSurface.found && std::abs(currentSurface.height - state.z) < 1.0f)
-            {
-                std::cout << "At edge - stopping movement" << std::endl;
-                // Stay in place (at edge)
-            }
-            else
-            {
-                std::cout << "No ground below either - possibly in air" << std::endl;
-                // Move forward but start falling
-                state.x = newX;
-                state.y = newY;
-                state.isGrounded = false;
-                state.fallTime = 0;
-                m_lastStepWasDown = false;
-            }
+            // Stepping down
+            state.z = destSurface.height;
+            m_lastStepWasDown = true;
+            m_framesSinceStepDown = 0;
         }
+
+        std::cout << "Moved to new position at height " << state.z << std::endl;
+    }
+    else
+    {
+        // No movement if no valid surface found
+        std::cout << "No valid surface at destination - staying in place" << std::endl;
     }
 
     // Update frame counter for step-down tracking
@@ -535,25 +594,26 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, MovementSta
         m_framesSinceStepDown++;
         if (m_framesSinceStepDown > 10)
         {
-            m_lastStepWasDown = false;  // Reset after enough frames
+            m_lastStepWasDown = false;
         }
     }
 
     std::cout << "Final position: (" << state.x << ", " << state.y << ", " << state.z << ")" << std::endl;
-    std::cout << "=== End ProcessGroundMovement ===\n" << std::endl;
+    std::cout << "=== End ProcessGroundMovementWithCylinder ===\n" << std::endl;
 }
 
-void PhysicsEngine::AttemptSlideMovement(const PhysicsInput& input, MovementState& state,
+void PhysicsEngine::AttemptSlideMovementWithCylinder(const PhysicsInput& input, MovementState& state,
     float moveX, float moveY, float moveDist)
 {
     // Try sliding perpendicular to the movement direction
     float slideX = moveY * moveDist * 0.7f;
     float slideY = -moveX * moveDist * 0.7f;
 
-    std::cout << "Attempting slide movement: (" << slideX << ", " << slideY << ")" << std::endl;
+    std::cout << "Attempting cylinder-based slide movement: (" << slideX << ", " << slideY << ")" << std::endl;
 
     // Try both slide directions
-    for (int dir = 0; dir < 2; ++dir)
+    int dir = 0;
+    while (dir < 2)
     {
         float testX = state.x + (dir == 0 ? slideX : -slideX);
         float testY = state.y + (dir == 0 ? slideY : -slideY);
@@ -561,40 +621,33 @@ void PhysicsEngine::AttemptSlideMovement(const PhysicsInput& input, MovementStat
         std::cout << "Testing slide direction " << dir << ": (" << testX << ", " << testY << ")" << std::endl;
 
         // Find surface at slide position
-        WalkableSurface slideSurface = FindWalkableSurface(
+        WalkableSurface slideSurface = FindWalkableSurfaceWithCylinder(
             input.mapId, testX, testY, state.z,
             STEP_HEIGHT, STEP_DOWN_HEIGHT);
 
         if (slideSurface.found)
         {
-            auto slideResult = VMAP::CylinderHelpers::CheckStepHeight(
-                state.z, slideSurface.height, STEP_HEIGHT, STEP_DOWN_HEIGHT);
+            float heightDiff = slideSurface.height - state.z;
 
-            if (slideResult == VMAP::CylinderHelpers::STEP_UP ||
-                slideResult == VMAP::CylinderHelpers::STEP_DOWN)
+            if (std::abs(heightDiff) <= STEP_HEIGHT)
             {
-                std::cout << "Slide successful to height " << slideSurface.height << std::endl;
+                std::cout << "Cylinder slide successful to height " << slideSurface.height << std::endl;
                 state.x = testX;
                 state.y = testY;
-                state.z = slideSurface.height + GROUND_HEIGHT_TOLERANCE;
+                state.z = slideSurface.height;
 
-                // Track if this was a step-down
-                if (slideResult == VMAP::CylinderHelpers::STEP_DOWN)
-                {
-                    m_lastStepWasDown = true;
+                m_lastStepWasDown = (heightDiff < -GROUND_HEIGHT_TOLERANCE);
+                if (m_lastStepWasDown)
                     m_framesSinceStepDown = 0;
-                }
-                else
-                {
-                    m_lastStepWasDown = false;
-                }
 
                 return;
             }
         }
+
+        ++dir;
     }
 
-    std::cout << "Slide movement failed - staying in place" << std::endl;
+    std::cout << "Cylinder slide movement failed - staying in place" << std::endl;
 }
 
 void PhysicsEngine::ProcessAirMovement(const PhysicsInput& input, MovementState& state, float dt)
@@ -609,7 +662,7 @@ void PhysicsEngine::ProcessAirMovement(const PhysicsInput& input, MovementState&
     m_framesSinceStepDown = 0;
 
     // Limited air control
-    float speed = CalculateMoveSpeed(input, false) * 0.5f;  // Reduced air control
+    float speed = CalculateMoveSpeed(input, false) * 0.5f;
 
     if (input.moveFlags & MOVEFLAG_FORWARD)
     {
@@ -624,11 +677,11 @@ void PhysicsEngine::ProcessAirMovement(const PhysicsInput& input, MovementState&
 
     state.z += state.vz * dt;
 
-    // Check for landing
-    WalkableSurface groundSurface = FindWalkableSurface(
+    // Check for landing using cylinder collision
+    WalkableSurface groundSurface = FindWalkableSurfaceWithCylinder(
         input.mapId, state.x, state.y, state.z,
         0.1f,  // Don't look for surfaces above us when falling
-        DEFAULT_HEIGHT_SEARCH);  // Look far below
+        DEFAULT_HEIGHT_SEARCH);
 
     if (state.vz <= 0 && groundSurface.found)
     {
@@ -636,10 +689,11 @@ void PhysicsEngine::ProcessAirMovement(const PhysicsInput& input, MovementState&
         std::cout << "Air: Checking landing - ground at " << groundSurface.height
             << " dist: " << distToGround << std::endl;
 
-        if (distToGround <= GROUND_HEIGHT_TOLERANCE)
+        // Land if we're close enough to the ground
+        if (distToGround <= GROUND_HEIGHT_TOLERANCE * 2.0f)
         {
             std::cout << "Landing!" << std::endl;
-            state.z = groundSurface.height + GROUND_HEIGHT_TOLERANCE;
+            state.z = groundSurface.height;
             state.vz = 0;
             state.isGrounded = true;
             state.fallTime = 0;
@@ -696,6 +750,13 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
         return output;
     }
 
+    // Update player dimensions if provided
+    if (input.height > 0)
+    {
+        m_playerHeight = input.height;
+        m_playerRadius = input.height * 0.175f;  // Scale radius with height
+    }
+
     // Initialize state
     MovementState state{};
     state.x = input.x;
@@ -708,31 +769,46 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
     state.vz = input.vz;
     state.fallTime = input.fallTime;
 
-    std::cout << "\n========== Physics Step ==========" << std::endl;
+    std::cout << "\n========== Physics Step (Cylinder) ==========" << std::endl;
     std::cout << "Input pos: (" << state.x << ", " << state.y << ", " << state.z << ")" << std::endl;
+    std::cout << "Player cylinder: radius=" << m_playerRadius << " height=" << m_playerHeight << std::endl;
 
-    // Get environment info using the new unified surface finding
-    WalkableSurface currentSurface = FindWalkableSurface(
+    // Get environment info using cylinder collision with generous tolerance
+    WalkableSurface currentSurface = FindWalkableSurfaceWithCylinder(
         input.mapId, state.x, state.y, state.z,
-        STEP_HEIGHT,  // Look for surfaces we could step up to
-        STEP_HEIGHT);  // And surfaces we could be standing on
+        STEP_HEIGHT,     // Search up
+        STEP_HEIGHT);    // Search down
 
     uint32_t liquidType = 0;
     float liquidLevel = GetLiquidHeight(input.mapId, state.x, state.y, state.z, liquidType);
 
-    // Determine movement state
+    // Determine movement state with improved ground detection
     float distToGround = INVALID_HEIGHT;
     if (currentSurface.found)
     {
         distToGround = state.z - currentSurface.height;
         std::cout << "Current surface at: " << currentSurface.height
             << " Distance: " << distToGround << std::endl;
-    }
 
-    // Improved ground detection with tolerance
-    state.isGrounded = currentSurface.found &&
-        distToGround >= -GROUND_HEIGHT_TOLERANCE * 2.0f &&  // More lenient below
-        distToGround <= STEP_HEIGHT;
+        // CRITICAL FIX: Accept the found surface as ground
+        // We're grounded if we found a surface within step range
+        state.isGrounded = (distToGround >= -GROUND_HEIGHT_TOLERANCE - 1.0f &&
+            distToGround <= STEP_HEIGHT);
+
+        // If we found a surface very close below us, snap to it
+        if (distToGround > 0 && distToGround < 2.0f)
+        {
+            std::cout << "Snapping down to surface from distance " << distToGround << std::endl;
+            state.z = currentSurface.height;
+            state.isGrounded = true;
+            distToGround = 0;
+        }
+    }
+    else
+    {
+        state.isGrounded = false;
+        std::cout << "No surface found - not grounded" << std::endl;
+    }
 
     std::cout << "Is grounded: " << (state.isGrounded ? "YES" : "NO") << std::endl;
 
@@ -740,15 +816,18 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
     bool inWater = false;
     if (liquidLevel > INVALID_HEIGHT)
     {
-        float playerHeight = input.height > 0 ? input.height : 2.0f;
-        float swimmingThreshold = liquidLevel - playerHeight * 0.75f;
+        float swimmingThreshold = liquidLevel - m_playerHeight * 0.75f;
         inWater = state.z < swimmingThreshold;
         std::cout << "Liquid level: " << liquidLevel << " In water: " << (inWater ? "YES" : "NO") << std::endl;
+    }
+    else
+    {
+        std::cout << "Liquid level: " << liquidLevel << " In water: NO" << std::endl;
     }
 
     state.isSwimming = inWater && !state.isGrounded;
 
-    // Process movement
+    // Process movement with cylinder collision
     if (state.isSwimming)
     {
         std::cout << "Processing swim movement" << std::endl;
@@ -756,8 +835,22 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
     }
     else if (state.isGrounded)
     {
-        std::cout << "Processing ground movement" << std::endl;
-        ProcessGroundMovement(input, state, dt);
+        std::cout << "Processing ground movement with cylinder collision" << std::endl;
+
+        // For idle/stationary, ensure we stay properly grounded
+        if ((input.moveFlags & (MOVEFLAG_FORWARD | MOVEFLAG_BACKWARD | MOVEFLAG_STRAFE_LEFT | MOVEFLAG_STRAFE_RIGHT)) == 0)
+        {
+            // Not moving - just ensure we're on the ground
+            if (currentSurface.found)
+            {
+                state.z = currentSurface.height;
+                std::cout << "Idle - snapped to ground at " << state.z << std::endl;
+            }
+        }
+        else
+        {
+            ProcessGroundMovementWithCylinder(input, state, dt);
+        }
     }
     else
     {
@@ -808,7 +901,9 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
     }
 
     std::cout << "Output pos: (" << output.x << ", " << output.y << ", " << output.z << ")" << std::endl;
-    std::cout << "==================================\n" << std::endl;
+    std::cout << "Movement Flags: " << ((output.moveFlags == 0) ? "MOVEFLAG_NONE" :
+        (output.moveFlags & MOVEFLAG_FALLINGFAR) ? "MOVEFLAG_FALLINGFAR" : "OTHER") << std::endl;
+    std::cout << "==========================================\n" << std::endl;
 
     return output;
 }

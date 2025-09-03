@@ -1,4 +1,4 @@
-// WorldModel.h - Complete with all required classes
+// WorldModel.h - Complete with cylinder collision support
 #pragma once
 
 #include <vector>
@@ -9,6 +9,7 @@
 #include "Ray.h"
 #include "BIH.h"
 #include "G3D/BoundsTrait.h"
+#include "CylinderCollision.h"
 
 namespace VMAP
 {
@@ -72,7 +73,7 @@ namespace VMAP
         WmoLiquid() : iTilesX(0), iTilesY(0), iCorner(), iType(0), iHeight(nullptr), iFlags(nullptr) {}
     };
 
-    // GroupModel class definition
+    // GroupModel class definition with cylinder collision support
     class GroupModel
     {
     private:
@@ -86,7 +87,6 @@ namespace VMAP
 
         GroupModel(const GroupModel& other) = delete;
         GroupModel& operator=(const GroupModel& other) = delete;
-
 
     public:
         GroupModel() : iMogpFlags(0), iGroupWMOID(0), iLiquid(nullptr) {}
@@ -116,10 +116,21 @@ namespace VMAP
         bool GetLiquidLevel(const G3D::Vector3& pos, float& liqHeight) const;
         uint32_t GetLiquidType() const;
         bool writeToFile(FILE* wf) const;
-        bool readFromFile(FILE* rf); 
+        bool readFromFile(FILE* rf);
         const G3D::AABox& GetBound() const { return iBound; }
         uint32_t GetMogpFlags() const { return iMogpFlags; }
         uint32_t GetWmoID() const { return iGroupWMOID; }
+
+        // Cylinder collision methods
+        CylinderIntersection IntersectCylinder(const Cylinder& cyl) const;
+        std::vector<CylinderSweepHit> SweepCylinder(const Cylinder& cyl,
+            const G3D::Vector3& sweepDir, float sweepDistance) const;
+
+        // Mesh data access for external collision testing
+        const std::vector<G3D::Vector3>& GetVertices() const { return vertices; }
+        const std::vector<MeshTriangle>& GetTriangles() const { return triangles; }
+        void GetMeshData(std::vector<G3D::Vector3>& outVertices,
+            std::vector<uint32_t>& outIndices) const;
 
         static bool IntersectTriangle(const MeshTriangle& tri,
             std::vector<G3D::Vector3>::const_iterator vertices,
@@ -158,7 +169,7 @@ namespace VMAP
         };
     };
 
-    // WorldModel class
+    // WorldModel class with cylinder collision support
     class WorldModel
     {
     public:
@@ -174,6 +185,21 @@ namespace VMAP
         bool readFile(const std::string& filename);
         void setModelFlags(uint32_t newFlags) { modelFlags = newFlags; }
         uint32_t getModelFlags() const { return modelFlags; }
+
+        // Cylinder collision methods
+        CylinderIntersection IntersectCylinder(const Cylinder& cyl) const;
+        std::vector<CylinderSweepHit> SweepCylinder(const Cylinder& cyl,
+            const G3D::Vector3& sweepDir, float sweepDistance) const;
+        bool CheckCylinderCollision(const Cylinder& cyl,
+            float& outContactHeight, G3D::Vector3& outContactNormal) const;
+        bool CanCylinderFitAtPosition(const Cylinder& cyl, float tolerance = 0.05f) const;
+
+        // Mesh data extraction for external use
+        bool GetAllMeshData(std::vector<G3D::Vector3>& outVertices,
+            std::vector<uint32_t>& outIndices) const;
+        bool GetMeshDataInBounds(const G3D::AABox& bounds,
+            std::vector<G3D::Vector3>& outVertices,
+            std::vector<uint32_t>& outIndices) const;
 
     protected:
         uint32_t RootWMOID;

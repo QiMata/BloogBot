@@ -1,4 +1,4 @@
-// VMapManager2.h
+// VMapManager2.h - Enhanced with cylinder collision support
 #pragma once
 
 #include "IVMapManager.h"
@@ -8,6 +8,7 @@
 #include <shared_mutex>
 #include <string>
 #include "Vector3.h"
+#include "CylinderCollision.h"
 
 namespace VMAP
 {
@@ -71,5 +72,41 @@ namespace VMAP
             uint8_t ReqLiquidTypeMask, float& level, float& floor, uint32_t& type) const override;
 
         std::shared_ptr<WorldModel> acquireModelInstance(const std::string& basepath, const std::string& filename);
+
+        // New cylinder collision methods
+        CylinderIntersection IntersectCylinder(unsigned int pMapId, const Cylinder& worldCylinder) const;
+        std::vector<CylinderSweepHit> SweepCylinder(unsigned int pMapId, const Cylinder& worldCylinder,
+            const G3D::Vector3& sweepDir, float sweepDistance) const;
+        bool CheckCylinderCollision(unsigned int pMapId, const Cylinder& worldCylinder,
+            float& outContactHeight, G3D::Vector3& outContactNormal,
+            ModelInstance** outHitInstance = nullptr) const;
+        bool CanCylinderFitAtPosition(unsigned int pMapId, const Cylinder& worldCylinder,
+            float tolerance = 0.05f) const;
+
+        // Find walkable surface for cylinder movement
+        bool FindCylinderWalkableSurface(unsigned int pMapId, const Cylinder& worldCylinder,
+            float currentHeight, float maxStepUp, float maxStepDown,
+            float& outHeight, G3D::Vector3& outNormal) const;
+
+        // Get height using cylinder for more accurate ground detection
+        // NOTE: This is non-const because it calls the non-const getHeight() method
+        float GetCylinderHeight(unsigned int pMapId, float x, float y, float z,
+            float cylinderRadius, float cylinderHeight, float maxSearchDist);
+
+        // Check if cylinder path is clear
+        bool IsCylinderPathClear(unsigned int pMapId, const Cylinder& startCylinder,
+            const G3D::Vector3& endPos, float stepHeight = 2.3f) const;
+
+        // Get all collision candidates for a cylinder
+        void GetCylinderCollisionCandidates(unsigned int pMapId, const Cylinder& worldCylinder,
+            std::vector<ModelInstance*>& outInstances) const;
+
+        // Convert cylinder between coordinate systems
+        Cylinder ConvertCylinderToInternal(const Cylinder& worldCylinder) const;
+        Cylinder ConvertCylinderToWorld(const Cylinder& internalCylinder) const;
+
+        // Multi-map cylinder operations
+        CylinderIntersection IntersectCylinderAllMaps(const Cylinder& worldCylinder) const;
+        bool CanCylinderFitAllMaps(const Cylinder& worldCylinder, float tolerance = 0.05f) const;
     };
 }

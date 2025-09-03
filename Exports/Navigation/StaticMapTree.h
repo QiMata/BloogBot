@@ -1,4 +1,4 @@
-// StaticMapTree.h - Add this method declaration
+// StaticMapTree.h - Enhanced with cylinder collision support
 #pragma once
 
 #include <unordered_map>
@@ -8,12 +8,72 @@
 #include "Vector3.h"
 #include "Ray.h"
 #include "ModelInstance.h"
+#include "CylinderCollision.h"
 
 namespace VMAP
 {
     class VMapManager2;
     class GroupModel;
     class WorldModel;
+
+    // Callback for cylinder collision with map
+    class MapCylinderCallback
+    {
+    public:
+        MapCylinderCallback(ModelInstance* val, const Cylinder& cyl)
+            : prims(val), cylinder(cyl), bestIntersection() {
+        }
+
+        bool operator()(const G3D::Vector3& point, uint32_t entry)
+        {
+            CylinderIntersection result = prims[entry].IntersectCylinder(cylinder);
+            if (result.hit)
+            {
+                if (!bestIntersection.hit || result.contactHeight > bestIntersection.contactHeight)
+                {
+                    bestIntersection = result;
+                    hitInstance = &prims[entry];
+                }
+                return true;
+            }
+            return false;
+        }
+
+        ModelInstance* prims;
+        const Cylinder& cylinder;
+        CylinderIntersection bestIntersection;
+        ModelInstance* hitInstance = nullptr;
+    };
+
+    // Callback for cylinder sweep through map
+    class MapCylinderSweepCallback
+    {
+    public:
+        MapCylinderSweepCallback(ModelInstance* val, const Cylinder& cyl,
+            const G3D::Vector3& dir, float dist)
+            : prims(val), cylinder(cyl), sweepDir(dir), sweepDistance(dist) {
+        }
+
+        void operator()(const G3D::Vector3& point, uint32_t entry)
+        {
+            std::vector<CylinderSweepHit> modelHits = prims[entry].SweepCylinder(
+                cylinder, sweepDir, sweepDistance);
+
+            // Merge hits from this model
+            auto it = modelHits.begin();
+            while (it != modelHits.end())
+            {
+                allHits.push_back(*it);
+                ++it;
+            }
+        }
+
+        ModelInstance* prims;
+        const Cylinder& cylinder;
+        G3D::Vector3 sweepDir;
+        float sweepDistance;
+        std::vector<CylinderSweepHit> allHits;
+    };
 
     class StaticMapTree
     {
@@ -29,7 +89,7 @@ namespace VMAP
         std::unordered_map<uint32_t, uint32_t> iLoadedSpawns;
         std::unordered_map<uint32_t, bool> iLoadedTiles;
 
-        // NEW: Preload all tiles for maximum performance
+        // Preload all tiles for maximum performance
         bool PreloadAllTiles(VMapManager2* vm);
 
     public:
@@ -41,7 +101,7 @@ namespace VMAP
         void UnloadMapTile(uint32_t tileX, uint32_t tileY, VMapManager2* vm);
         void UnloadMap(VMapManager2* vm);
 
-        // Collision and height queries
+        // Original collision and height queries
         bool isInLineOfSight(const G3D::Vector3& pos1, const G3D::Vector3& pos2, bool ignoreM2Model) const;
         bool getObjectHitPos(const G3D::Vector3& pos1, const G3D::Vector3& pos2,
             G3D::Vector3& resultHitPos, float modifyDist) const;
@@ -55,6 +115,24 @@ namespace VMAP
             bool stopAtFirstHit, bool ignoreM2Model) const;
 
         ModelInstance* FindCollisionModel(const G3D::Vector3& pos1, const G3D::Vector3& pos2);
+
+        // New cylinder collision methods
+        CylinderIntersection IntersectCylinder(const Cylinder& cyl) const;
+        std::vector<CylinderSweepHit> SweepCylinder(const Cylinder& cyl,
+            const G3D::Vector3& sweepDir, float sweepDistance) const;
+        bool CheckCylinderCollision(const Cylinder& cyl,
+            float& outContactHeight, G3D::Vector3& outContactNormal,
+            ModelInstance** outHitInstance = nullptr) const;
+        bool CanCylinderFitAtPosition(const Cylinder& cyl, float tolerance = 0.05f) const;
+
+        // Find best walkable surface for cylinder movement
+        bool FindCylinderWalkableSurface(const Cylinder& cyl,
+            float currentHeight, float maxStepUp, float maxStepDown,
+            float& outHeight, G3D::Vector3& outNormal) const;
+
+        // Get all model instances that a cylinder might collide with
+        void GetCylinderCollisionCandidates(const Cylinder& cyl,
+            std::vector<ModelInstance*>& outInstances) const;
 
         // Utility functions
         static uint32_t packTileID(uint32_t tileX, uint32_t tileY);
