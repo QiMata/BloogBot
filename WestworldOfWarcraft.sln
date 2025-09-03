@@ -19,9 +19,6 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WoWSharpClient", "Exports\WoWSharpClient\WoWSharpClient.csproj", "{0E823F6A-007F-4FAF-9819-B561347525EC}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Services", "Services", "{A34E454D-EDFF-4AE3-806D-F17D3E19FF66}"
-	ProjectSection(SolutionItems) = preProject
-		Services\README.md = Services\README.md
-	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Exports", "Exports", "{2B5ADD00-9FA5-4839-A06C-21FA6C02FE8E}"
 	ProjectSection(SolutionItems) = preProject

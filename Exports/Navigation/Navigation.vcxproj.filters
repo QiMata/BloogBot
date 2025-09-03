@@ -146,5 +146,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="BIH.inl" />
+    <None Include="README.md" />
   </ItemGroup>
 </Project>

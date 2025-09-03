@@ -1,117 +1,317 @@
-# Core Bot Engine Overview
+# BloogBot Exports Overview
 
-The **Core Bot Engine** is the heart of the BloogBot system, running inside the World of Warcraft (WoW) game process to enable bot functionality. It is responsible for low-level memory access and in-game function calls, acting as the bridge between the game client and higher-level bot logic (like AI routines or UI modules). In the overall architecture, the Core Bot Engine works alongside an external **Bootstrapper** (injector program) and supporting native libraries to interact with WoW. Its main roles include: reading/writing game memory, calling internal game functions (e.g. to move or cast spells), and hooking certain game routines (especially anti-cheat functions) to remain undetected. By encapsulating these tasks, the Core Bot Engine provides a safe, high-performance API that higher-level modules (like class-specific combat scripts or user interfaces) can use without dealing with the complexities of memory manipulation and anti-cheat bypass.
+The **Exports** directory contains the core libraries and components that form the foundation of the BloogBot World of Warcraft automation ecosystem. These projects provide essential functionality for game interaction, communication, data management, and automation orchestration.
 
-## High-Level Architecture and Injection Process
+## Quick Reference
 
-The Core Bot Engine runs *inside* the WoW process. This is achieved by a separate injector program (the **Bootstrapper**) that launches WoW and injects a native DLL (**Loader.dll**) into it. The Bootstrapper uses the Windows API to create the WoW process and then allocates memory in it to write the path of Loader.dll, finally creating a remote thread to load that DLL in WoW. Once injected, Loader.dll acts as a bootstrap within the game process: it starts up the .NET Common Language Runtime (CLR) inside WoW and loads the BloogBot core assembly (compiled as a .NET **BloogBot.exe**). In this way, the Core Bot Engine (a managed C# component) is initialized inside the game’s memory space.
+| Project | Type | Purpose | Key Features |
+|---------|------|---------|--------------|
+| [**WoWSharpClient**](WoWSharpClient/README.md) | C# Library | Pure C# WoW network protocol client | Authentication, object management, movement control |
+| [**BotRunner**](BotRunner/README.md) | C# Library | Bot automation engine with behavior trees | Intelligent decision making, pathfinding integration |
+| [**BotCommLayer**](BotCommLayer/README.md) | C# Library | Inter-service communication infrastructure | Protocol Buffers messaging, TCP sockets |
+| [**GameData.Core**](GameData.Core/README.md) | C# Library | Core game data structures and interfaces | WoW object models, enumerations, type definitions |
+| [**FastCall**](FastCall/README.md) | C++ DLL | Native game function interop bridge | Memory marshaling, calling convention support |
+| [**Loader**](Loader/README.md) | C++ DLL | CLR hosting and DLL injection | Process injection, managed code execution |
+| [**Navigation**](Navigation/README.md) | C++ DLL | Pathfinding and collision detection | A* pathfinding, navigation meshes, physics |
+| [**WinImports**](WinImports/README.md) | C# Library | Windows API P/Invoke wrapper | Process management, memory operations |
 
-**Native Helper (FastCall DLL):** In addition to Loader.dll, the bot uses a small native library called **FastCall.dll** for certain function calls on older game clients (e.g. Vanilla WoW). This DLL is loaded into the game process and exports helper functions that can invoke game routines with calling conventions that .NET cannot easily handle directly (such as x86 fastcall). The Core Bot Engine will call into FastCall.dll via P/Invoke when it needs to execute those specific game functions. For example, in the Vanilla client, the bot uses `FastCall.dll` to call functions like `BuyVendorItem` and `EnumerateVisibleObjects` by passing the target function pointer as an argument. For newer expansions (TBC/WotLK), the FastCall helper is largely bypassed in favor of direct delegate calls from C# (described below), but the architecture keeps it available for legacy support.
+## Architecture Overview
 
-Once the Core Bot Engine is loaded and running inside WoW, it initializes its subsystems: the memory manager, function call handlers (which wrap game APIs), object manager, and anti-cheat hooks. At this point, higher-level modules (like combat or routine scripts, often implemented as separate classes or plugins in the BloogBot solution) can interface with the Core Bot Engine to query game state or perform actions. The Core Bot Engine essentially exposes an API for those modules, handling all the low-level details of process manipulation under the hood.
+The BloogBot exports are organized into several functional layers:
 
-## Memory Access: Reading and Writing Game Memory
+### Core Infrastructure Layer
+- **GameData.Core**: Foundational data types, interfaces, and enumerations
+- **WinImports**: Windows API wrappers for system interaction
+- **BotCommLayer**: Service communication and messaging infrastructure
 
-Interacting with game memory is a primary responsibility of the Core Bot Engine. The bot runs within the WoW process, so it can directly read from and write to the game’s memory space using pointers. The **MemoryManager** (`MemoryManager.cs`) provides a suite of methods for safe memory access. It uses unsafe C# code to dereference pointers and read primitive data types (bytes, ints, floats, etc.) directly from given addresses. For example, `MemoryManager.ReadFloat(addr)` will cast the address to a float pointer and read its value. All such reads are wrapped in try/catch blocks to handle any invalid memory access gracefully (catching `AccessViolationException` if the address was not readable). This ensures the bot doesn’t crash if it attempts to read an address that isn’t currently valid.
+### Game Interaction Layer
+- **WoWSharpClient**: Pure C# WoW protocol implementation for network communication
+- **FastCall**: Native bridge for legacy calling conventions and memory operations
+- **Loader**: Process injection and managed code hosting
 
-Writing to game memory is more sensitive – especially if the memory is protected or write-protected. MemoryManager provides functions like `WriteByte`, `WriteInt`, and `WriteBytes` to modify game memory. Simple writes use `Marshal.StructureToPtr` for primitive types. For a sequence of bytes, the bot takes additional steps: it obtains a process handle with all access rights and uses the native `WriteProcessMemory` function to write into the current process (WoW) memory. After writing bytes, it may adjust memory protection using `VirtualProtect` to ensure the modified memory is executable if needed (for example, when injecting code). This is particularly important when patching game functions or placing hooks, since the code region might be read-only or non-executable by default (the bot temporarily changes protections to allow writing, then restores execute permissions).
+### Automation Layer
+- **BotRunner**: High-level bot orchestration with behavior trees
+- **Navigation**: Advanced pathfinding and collision detection
 
-**Memory Patterns and Addresses:** The Core Bot Engine identifies key game variables and function addresses through static offsets or signatures defined in the code. The `MemoryAddresses.cs` file contains a dictionary of important memory addresses (and function pointers) for each supported client version (Vanilla, TBC, WotLK). These include player data pointers, object list pointers, function entry points for things like `CastSpell`, `GetObjectPtr`, etc. When the bot attaches, it selects the correct address constants for the running game version. New memory values can be accessed by adding their address to this list (for static globals) or by reading structures via known offsets from base addresses. The MemoryManager’s methods can also read complex structures: for example, `ReadItemCacheEntry` reads a game’s item cache record by instantiating a managed structure from a memory address. In summary, reading game state (health, position, object lists, etc.) is done by direct memory reads at known addresses, and modifying game state (simulating input, changing flags) is done by writing to specific memory locations, all through the MemoryManager.
+## Key Capabilities
 
-## Calling Internal Game Functions
+### Network Communication
+- **WoWSharpClient** provides a complete C# implementation of the WoW network protocol
+- Handles authentication (SRP), realm selection, character management, and world communication
+- Supports encrypted sessions, object updates, movement synchronization, and chat messaging
+- See: [WoWSharpClient README](WoWSharpClient/README.md)
 
-Beyond reading raw data, the bot often needs to **call game’s internal functions** as if the game itself were executing them. This allows the bot to perform complex actions (casting spells, moving the character, interacting with NPCs) by leveraging WoW’s own code. The Core Bot Engine accomplishes this via delegates and function pointers, and occasionally via the FastCall native helper for certain cases.
+### Bot Automation
+- **BotRunner** orchestrates intelligent bot behavior using behavior trees
+- Supports complex decision making, quest handling, combat, trading, and social interactions
+- Integrates with pathfinding services for advanced movement and navigation
+- See: [BotRunner README](BotRunner/README.md)
 
-For each important game function, the bot defines a C# delegate with the exact signature and calling convention that the game expects. For example, for WotLK, the bot defines:
+### Service Communication
+- **BotCommLayer** enables distributed bot architecture with Protocol Buffers messaging
+- Provides TCP socket communication for coordinating multiple bot services
+- Includes comprehensive game object models and action definitions
+- See: [BotCommLayer README](BotCommLayer/README.md)
 
-* `CastSpellByIdDelegate` as a cdecl function (since WotLK `CastSpell` uses a cdecl convention with multiple params),
-* `GetCreatureTypeDelegate` as a thiscall (method of an object, passing `this` in ECX),
-* `BuyVendorItemDelegate` as stdcall, etc.
+### Navigation & Pathfinding
+- **Navigation** provides A* pathfinding using Detour navigation meshes
+- Supports line-of-sight checks, collision detection, and multi-map terrain navigation
+- Integrates with C# services through P/Invoke wrappers
+- See: [Navigation README](Navigation/README.md)
 
-Using `Marshal.GetDelegateForFunctionPointer`, the bot obtains a callable delegate instance tied to the actual memory address of the game function. After that, invoking the delegate in C# will execute the game’s function inside the process. This is a powerful technique: it essentially “calls into” the game’s own code. The Core Bot Engine abstracts these in an **IGameFunctionHandler** interface (with separate implementations per expansion, e.g. `VanillaGameFunctionHandler`, `TBCGameFunctionHandler`, `WotLKGameFunctionHandler`). The appropriate handler is chosen at runtime (based on the client version) in the static **Functions** class. Higher-level code can then simply call `Functions.CastSpellById(spellId, targetGuid)` and the Core Engine will route it to the correct internal function for the current client. For instance, calling `Functions.CastSpellById(12345, targetGuid)` in WotLK will invoke the game’s `CastSpell` function via the delegate, causing the spell to be cast as if the player did it, and return any result code from that function.
+### System Integration
+- **Loader** enables injection of managed .NET code into game processes
+- **FastCall** bridges managed C# code with native game functions
+- **WinImports** provides safe Windows API access for process and memory management
+- See: [Loader README](Loader/README.md), [FastCall README](FastCall/README.md), [WinImports README](WinImports/README.md)
 
-There are cases, particularly in Vanilla WoW, where the calling conventions are unusual (e.g. true fastcall, or functions that .NET can’t directly call). That’s where **FastCall.dll** comes in. In the VanillaGameFunctionHandler, instead of using `GetDelegateForFunctionPointer`, you’ll see `[DllImport("FastCall.dll", EntryPoint="FunctionName")]` for some functions. These native exports take the target function address as a parameter along with the original arguments, and internally set up the CPU registers and stack as needed to call the game function. For example, `FastCall.dll` export `BuyVendorItem` expects (itemId, quantity, vendorGuid, functionPtr) – it will place registers appropriately and jump to the functionPtr inside the game. The Core Engine calls this export, effectively outsourcing the call mechanics to native code. This approach is only used when necessary; in most cases (TBC/WotLK) the pure C# delegate method is sufficient and preferred for simplicity.
+## Native C++ Components Integration
 
-**Hooking vs. Calling:** It’s worth noting the difference between *actively calling* a game function (described above) and *hooking* a game function (which is intercepting when the game calls something – discussed in the Warden section below). The Core Bot Engine primarily uses direct calls for game actions. However, it does install a few hooks on game functions as part of anti-cheat measures, or to inject assembly code (using `MemoryManager.InjectAssembly`) into the game’s execution flow when needed (for example, to detour Warden’s functions).
+The BloogBot ecosystem includes three critical native C++ DLLs that provide advanced functionality:
 
-In summary, the Core Engine interacts with game logic by either calling internal functions directly (through delegates or FastCall) or executing small pieces of injected assembly code. This allows the bot to **simulate player actions** very naturally – the game essentially performs the requested action using its own code, so from the server’s perspective, it’s indistinguishable from a real player’s input in many cases.
+### FastCall.dll - Function Interop Bridge
+**Purpose**: Enables managed C# code to call game functions with proper calling conventions
 
-## Anti-Cheat Countermeasures (Warden Bypass)
+**Key Exported Functions**:
+- `LuaCall()` - Execute Lua scripts within the game client
+- `EnumerateVisibleObjects()` - Query visible game objects
+- `BuyVendorItem()` / `SellItemByGuid()` - Vendor interactions
+- `LootSlot()` - Automated looting
+- `Intersect()` / `Intersect2()` - 3D collision detection
 
-To avoid detection by WoW’s anti-cheat mechanisms (like **Warden**), the Core Bot Engine implements several countermeasures. Warden (in WoW’s context) is a system that scans the game’s memory for unauthorized changes or suspicious modules. BloogBot’s strategy is to **hook and detour Warden’s routines**, effectively blinding it to the bot’s presence. According to the project’s FAQ, the current implementation *“hooks Warden’s MemoryScan, PageScan, and ModuleScan”* to remain undetected on the supported private servers.
+**Integration Pattern**:
+```csharp
+// C# P/Invoke wrapper in ForegroundBotRunner
+[DllImport("FastCall.dll", EntryPoint = "LuaCall")]
+private static extern void LuaCallFunction(string code, int ptr);
 
-The anti-cheat bypass is handled in `WardenDisabler.cs`. When the Core Bot Engine starts, it initializes Warden hooks via `WardenDisabler.Initialize()`. The approach is multi-pronged:
+// Usage
+Functions.LuaCall("CastSpellByName('Fireball')");
+```
 
-* **Module Scanning Hook:** Warden typically enumerates loaded modules (DLLs) in the process to see if any disallowed modules are present. BloogBot hooks the WinAPI functions `Module32First` and `Module32Next` (used for module enumeration) by detouring them to its own handlers. It does this by obtaining the real function addresses from kernel32.dll and installing a **Detour** (inline hook) on each. The detour uses the `Detour` class to overwrite the first bytes of `Module32First/Next` with an instruction to jump to the bot’s handler. In the bot’s handler (`Module32NextDetour`), BloogBot filters out any modules that are not on a known “safe list”. Essentially, if Warden tries to iterate to the bot’s own module (or any other unexpected module), the detour code will skip it. It repeatedly calls the real `Module32Next` until it reaches either the end or a module that is on the approved list, effectively hiding all protected modules from Warden’s view. If it reaches the end of the list, it cleans up by returning a “no more modules” code (`SetLastError(18)` which is `ERROR_NO_MORE_FILES`). This means Warden’s module scan will never see Loader.dll, FastCall.dll, or the injected .NET assembly – they are invisible, as if they weren’t loaded.
+### Loader.dll - CLR Hosting
+**Purpose**: Hosts .NET runtime within game process for direct memory access
 
-* **Memory Scanning Hook:** Warden also scans game memory pages looking for alterations. BloogBot hooks Warden’s internal *PageScan* and *MemScan* functions. It finds the addresses of these functions by scanning the Warden module in memory for known byte patterns (the first few bytes of the functions, stored as `pageScanOriginalBytes` etc.). Once located, it injects a jmp detour similar to above. The detour assembly, created via Fasm.NET, will redirect execution to the bot’s `WardenPageScanHook` (and similarly `WardenMemScanHook`) in C#.
+**Key Features**:
+- CLR 4.0+ hosting with legacy v2 fallback
+- Loads `WoWActivityMember.exe` as managed entry point
+- Thread-safe CLR initialization
+- Debug support with console allocation
 
-  In `WardenPageScanHook(readBase, readOffset, writeTo)`, the bot intercepts Warden’s attempt to read a byte from memory. It computes the exact address being scanned (`readBase + readOffset`), then checks if any of the bot’s applied memory patches (“hacks”) fall in that range. The Core Engine keeps track of all active hooks/patches via a HackManager; each hack knows the address range it affects. If the scan would hit a patched byte, the bot **temporarily disables those hooks** before allowing the scan to proceed. Specifically, it restores the original bytes of any hack in that address range, then performs the memory read on Warden’s behalf (copying the byte to `writeTo` which is Warden’s buffer). After copying the *original* data, it re-enables the hacks (writing back the bot’s modifications). This way, Warden reads the “clean” memory, unaware that right before and after, the memory might be altered by the bot. The process is so quick that the game and player won’t notice any issue, but Warden is effectively fooled.
+**Integration Flow**:
+1. DLL injected into WoW.exe process
+2. `DllMain` triggers CLR initialization
+3. Managed assembly loaded and executed
+4. Bot gains direct memory access capabilities
 
-  The `WardenMemScanHook(addr, size, bufferStart)` works on larger memory scans similarly: it disables any hacks in the target range, then copies the entire block of memory to Warden’s buffer, then re-applies the hacks. Both hooks are careful to do nothing if the size is 0 or if the addresses haven’t been found, to avoid any unintended effects.
+### Navigation.dll - Pathfinding Engine
+**Purpose**: Provides advanced pathfinding using Detour navigation meshes
 
-By detouring these anti-cheat functions, the Core Bot Engine implements a **“on-demand cloaking”**: the bot’s presence (its modules and its code patches in memory) is visible to the game most of the time, but *the moment Warden tries to inspect them, they are hidden or reverted*. This design philosophy ensures maximum compatibility (the bot can still patch memory or inject code freely) while reducing detection risk.
+**Key API Methods**:
+- `CalculatePath()` - A* pathfinding between coordinates
+- `IsLineOfSight()` - Visibility testing
+- `CapsuleOverlap()` - Collision detection
+- `RaycastToWmoMesh()` - World geometry queries
 
-It’s important to note that these measures are tailored to the private server environments and Warden implementations known to the developers. The FAQ warns that more advanced server-side detections (heuristics beyond Warden scans) could still detect a bot – so while the Warden bypass prevents the standard memory scans from noticing anything, botting is **never 100% safe**. The Core Engine’s anti-cheat module is an arms-length component that can be updated as needed if new anti-bot techniques arise.
+**Integration Pattern**:
+```csharp
+// C# wrapper in PathfindingService
+[DllImport("Navigation.dll", CallingConvention = CallingConvention.Cdecl)]
+private static extern IntPtr FindPath(uint mapId, XYZ start, XYZ end, bool smoothPath, out int length);
 
-## Developer Onboarding Guide
+// High-level usage
+var path = navigationService.CalculatePath(mapId, startPos, endPos, smoothing: true);
+```
 
-New contributors to the Core Bot Engine should understand the key components and typical workflows for extending or debugging the bot. Below is a breakdown of important files/classes and some common developer tasks:
+## Development Guidelines
 
-### Key Files and Classes
+### Project Dependencies
+```mermaid
+graph TD
+    A[BotRunner] --> B[GameData.Core]
+    A --> C[BotCommLayer]
+    A --> D[WoWSharpClient]
+    
+    D --> B
+    D --> E[WinImports]
+    
+    C --> B
+    
+    F[Services] --> A
+    F --> C
+    F --> G[Navigation]
+    
+    H[FastCall] --> I[Game Process]
+    J[Loader] --> I
+    
+    G --> J
+```
 
-* **Bootstrapper/Program.cs:** The entry-point of the BloogBot application (external). It handles launching WoW and injecting the Loader DLL. While not inside the core engine, understanding this helps you know how the core gets into the game.
-* **Loader/dllmain.cpp:** The C++ DLL that sets up the CLR in the WoW process and invokes `BloogBot.Loader.Load()` to start the managed bot code. It also opens a console window for debug output and includes a debug break opportunity (pausing 10 seconds to attach a debugger in debug builds). This is useful for debugging the very early stages of injection.
-* **BloogBot.Loader (C# static class):** Likely contains the `Load` method called by Loader.dll. This method probably initializes the bot’s subsystems (MemoryManager, ObjectManager, WardenDisabler, etc.) and starts the main bot logic loop or state machine. (Search for `Loader.Load` in the codebase to inspect what it does during startup.)
-* **MemoryManager.cs:** Provides all memory read/write functions. New memory access patterns (reading a new struct, etc.) would typically be added here. This file also contains utilities for injecting assembly (`InjectAssembly`) if you need to patch new code.
-* **Game/MemoryAddresses.cs:** Database of memory offsets and function addresses per client version. If the bot needs to read a new value or call a new function, you will add its address here for each expansion. This is often the first step in supporting a new game feature.
-* **Game/IGameFunctionHandler and implementing classes (VanillaGameFunctionHandler, TBCGameFunctionHandler, WotLKGameFunctionHandler):** These define how to call various game functions for each version. They contain the delegates and P/Invoke definitions discussed earlier. When adding support for a new game API call, you will add a method and delegate here (and possibly a FastCall DLL export for Vanilla if needed). Also update the Functions class accordingly.
-* **Game/Functions.cs:** A static façade that exposes game function calls in a version-agnostic way. It holds a static `IGameFunctionHandler gameFunctionHandler` chosen for the client. Higher-level code uses `Functions.SomeAction(...)` which delegates to the underlying handler. Understanding this is crucial: any new game function you implement should be added to IGameFunctionHandler + the concrete classes, and then exposed in Functions for easy use.
-* **Game/ObjectManager.cs and Game/Objects/\*.cs:** These manage the enumeration of game objects (players, NPCs, items) and provide object-oriented wrappers for game entities. For example, `LocalPlayer` represents the player’s character and has properties like Health, Position, Target, etc., which internally use MemoryManager to fetch the data. If you need to fetch new information about objects or add new object types, this is where to look. The ObjectManager uses the game’s `EnumerateVisibleObjects` function to populate the list of active objects in the world.
-* **WardenDisabler.cs:** As discussed, this implements anti-cheat hooks. If working on detection prevention or updating for new anti-cheat behaviors, you’ll be in this file. It’s well-commented and a critical part of staying safe.
-* **HackManager.cs and Detour.cs:** These handle generic patch/hook management. Whenever the bot applies a detour or writes new bytes to game memory, it registers a `Hack` (contains original bytes, new bytes, address, and an identifier) in HackManager. HackManager can enable/disable all hacks globally – which is what WardenDisabler uses to temporarily disable them during scans. If you create new hooks or patches, make sure to register them via HackManager so they are tracked (and thus can be safely removed or toggled).
-* **AI and State classes (in Bot subprojects like “ArmsWarriorBot”, “BalanceDruidBot”, etc.):** These are higher-level modules (not part of Core Bot Engine) implementing the logic for different classes or behaviors. They interact with the Core Engine through the API (Functions, ObjectManager, etc.). While not core engine code, as a new developer it helps to see how the engine is used in practice by these modules. It gives context on what features the core needs to provide.
+### Technology Stack
+- **Managed Code**: .NET 8 with C# 12, nullable reference types, implicit usings
+- **Native Code**: C++17/C++20 with Visual Studio 2022 toolset
+- **Communication**: Protocol Buffers, TCP sockets, System.Reactive
+- **Navigation**: Detour navigation meshes, A* pathfinding
+- **Security**: SRP authentication, encrypted sessions, anti-cheat countermeasures
 
-### Adding a New Game API Call
+### Build Configuration
+All projects output to the shared `Bot/` directory:
+- **Debug**: `Bot/Debug/net8.0/`
+- **Release**: `Bot/Release/net8.0/`
 
-Suppose you want to extend the Core Engine to call a new internal game function (for example, a function to open the character pane, or a new spell-casting API). The general process is:
+This enables seamless integration and deployment of the complete bot ecosystem.
 
-1. **Find the function address and calling convention:** Using reverse engineering tools or existing research, determine the memory address of the function in each game version and how it’s called (stdcall, thiscall, cdecl, parameters, etc.). Add these addresses to `MemoryAddresses` for each relevant expansion. Use the existing entries as a template.
+### Native C++ Build Requirements
 
-2. **Define a delegate in the GameFunctionHandler:** In the appropriate `*GameFunctionHandler.cs` file(s), add a delegate with the correct `[UnmanagedFunctionPointer(...)]` attribute for the function. Use an existing one as an example (e.g., see how `LuaCallDelegate` or others are defined). Then create a `static readonly ...Function = Marshal.GetDelegateForFunctionPointer<YourDelegate>((IntPtr)MemoryAddresses.NewFunPtr)` to map the address to the delegate.
+#### Prerequisites
+- **Visual Studio 2022** with C++ workload
+- **Windows 10 SDK** (latest version)
+- **Platform Toolset**: v143 or compatible
 
-3. **Implement a public method on IGameFunctionHandler:** Add a method signature to `IGameFunctionHandler` interface for this action (e.g., `void OpenCharacterPane()` or whatever is appropriate). Implement it in each concrete GameFunctionHandler. Typically, the implementation just calls the delegate (and perhaps handles differences if one version needs extra args or returns something different). For example, in WotLK you might call the function directly, whereas in Vanilla you might instead call a Lua fallback or use the FastCall DLL if needed (like how `CastSpellById` is a direct call in TBC/WotLK but not used in Vanilla which relies on Lua).
+#### Platform Support
+| Project | Win32 | x64 | Configuration |
+|---------|-------|-----|---------------|
+| FastCall | Yes | Yes | Debug/Release |
+| Loader | Yes | Yes | Debug/Release |
+| Navigation | Yes | Yes | Debug/Release |
 
-4. **Expose it in Functions.cs:** Add a static method in the `Functions` class that calls `gameFunctionHandler.YourNewMethod()`. This makes it easily accessible to the rest of the bot.
+#### Language Standards
+- **FastCall**: C++14 (compatibility with game client)
+- **Loader**: C++17 (Debug), C++20 (Release)
+- **Navigation**: C++20 with modern STL features
 
-5. **Use and test:** Now higher-level modules can call `Functions.OpenCharacterPane()` (for example) and it will route to the correct internal call. Be sure to test in-game: run the bot and trigger the call (perhaps via a console command or temporary hotkey in code) to ensure the game responds as expected. Debug any crashes (likely calling convention mismatches or wrong addresses) by verifying the delegate definitions and function parameters.
+### Memory Management Patterns
 
-### Reading a New Memory Value
+The native components follow specific memory management patterns:
 
-If you need to fetch a piece of game data not currently exposed (e.g. a new player stat or an aura list), you will:
+**FastCall**: Thin wrapper functions with minimal allocation
+```cpp
+// Functions act as bridges to game memory
+extern "C" __declspec(dllexport) void LuaCall(char* code, unsigned int ptr);
+```
 
-* Locate the address or pointer path for that data. For static globals, add it to `MemoryAddresses`. For something that’s part of an object structure, find the offset from the object’s base. For example, if you wanted to get the player’s mana, you might find it in the same structure as health, so you identify the offset and then use MemoryManager to read it.
+**Loader**: CLR hosting with automatic cleanup
+```cpp
+// Thread-safe CLR initialization
+DWORD ThreadMain(LPVOID lpParameter);
+```
 
-* Implement the read in an appropriate class. If it’s part of `LocalPlayer` (player object), add a property there that uses MemoryManager to read from the player’s base pointer plus offset. For instance, see how `LocalPlayer.Class` property reads a byte from `MemoryAddresses.LocalPlayerClass` address or how `CorpsePosition` reads three floats from known addresses. Mimic those patterns.
+**Navigation**: Singleton pattern with mesh caching
+```cpp
+// Cached navigation mesh access
+Navigation* Navigation::GetInstance();
+```
 
-* If the value is dynamic (e.g. changes or is part of an array), consider if you need caching. The bot has a caching layer (`Game.Cache` namespace) for certain frequently-read data to reduce repeated memory reads, but for most new values this is unnecessary unless performance profiling shows a need.
+## Getting Started
 
-* Test the value by printing it to the console or logging (the bot has a Logger; you can use `Logger.Log` or even `Console.WriteLine` since Loader opens a console). Verify it matches what you see in-game (for example, print player mana and cross-check with the WoW client UI).
+### For Bot Users
+1. **Read the Architecture**: Start with [WoWSharpClient](WoWSharpClient/README.md) to understand network communication
+2. **Understand Automation**: Review [BotRunner](BotRunner/README.md) for behavior and decision making
+3. **Explore Services**: Check [BotCommLayer](BotCommLayer/README.md) for service coordination
 
-### Testing and Debugging Techniques
+### For Developers
+1. **Core Data**: Begin with [GameData.Core](GameData.Core/README.md) for foundational types
+2. **System Integration**: Study [Loader](Loader/README.md) and [FastCall](FastCall/README.md) for injection mechanics
+3. **Advanced Features**: Explore [Navigation](Navigation/README.md) for pathfinding implementation
 
-**Setting up for debugging:** Make sure you compile BloogBot in Debug mode and have Visual Studio configured to run the **Bootstrapper** project as the startup (this launches WoW and does injection). Because we are injecting into another process, debugging is a bit special: you can’t just F5 debug the core as a normal process. Instead, you launch Bootstrapper (as admin), and once WoW is running with the Loader injected, you **attach Visual Studio’s debugger to WoW\.exe** (which now has the managed Core Bot Engine loaded). The Loader.dll explicitly waits and prints a message to give you time to attach a debugger in debug mode. When running under the debugger, you can set breakpoints in the Core Bot Engine code (MemoryManager, ObjectManager, etc.) and they will hit, because the .NET assembly is loaded in WoW and is now under VS debugging. Remember to compile the C++ projects too (Loader and FastCall) – Visual Studio may not auto-build them on solution build if not configured, so build the solution fully. As the FAQ notes, run VS as administrator (so it can debug/inject into WoW) and ensure the .NET and C++ runtime dependencies are installed.
+### For Service Developers
+1. **Communication**: Start with [BotCommLayer](BotCommLayer/README.md) for messaging patterns
+2. **Windows Integration**: Use [WinImports](WinImports/README.md) for system operations
+3. **Game Integration**: Leverage [WoWSharpClient](WoWSharpClient/README.md) for game state access
 
-**In-Game testing:** The bot console (opened by Loader.dll) will show log outputs. Use `Console.WriteLine` in the code or Logger to print debug info. This console is attached to WoW process; be cautious not to spam too much (especially inside Warden hooks, as noted in comments, printing per scan can lag the client). For quick iterative testing, you can also create simple chat commands or hotkeys to trigger actions. For example, you might modify the bot to listen for a specific chat message (the codebase might already support some debug chat commands) and then call a function, allowing you to trigger new functionality without a full UI.
+### For Native C++ Developers
+1. **Function Bridging**: Examine [FastCall](FastCall/README.md) for calling convention patterns
+2. **Process Injection**: Study [Loader](Loader/README.md) for CLR hosting techniques
+3. **Pathfinding**: Analyze [Navigation](Navigation/README.md) for Detour integration
 
-**Memory inspection:** Tools like Cheat Engine can be attached to the WoW process (on a private server, with Warden disabled by our hooks, this is generally safe for debugging) to verify addresses and memory values. If something read by MemoryManager is coming back wrong, open CE, go to that address and see what’s there. Often you’ll find an offset is off or the structure size is different than assumed.
+## Deployment Considerations
 
-**Common pitfalls:** If the game crashes after a new change, consider whether you: (a) used the correct calling convention in your delegate (a wrong convention can corrupt stack/registers – symptoms include instant crashes or “weird” behavior in unrelated parts of code), (b) wrote to the correct address (writing to a wrong place can overwrite important game data), or (c) forgot to disable protections (if you attempt to write to a protected page without using the provided WriteBytes method, you might crash or fail silently). Leverage the existing patterns – e.g., always use MemoryManager for writes (it sets up permissions and uses the proper process handle).
+### Runtime Dependencies
+**Managed Components**:
+- .NET 8 Runtime
+- Protocol Buffers libraries
+- Azure AI services (optional)
 
-**Stepping through code:** Once attached to WoW, you can step through managed code like MemoryManager. You can also view disassembly in Visual Studio for the injected assembly or the game’s functions. For example, if you set a breakpoint after writing a patch and then use Visual Studio’s **Debug > Windows > Disassembly** view, you can see the bytes at the address to confirm your patch took effect (comments in code even suggest doing this for verification). This is extremely useful for verifying that hooks like WardenDetours are in place – you can check the first bytes of Warden functions to ensure they were overwritten with the jump as expected.
+**Native Components**:
+- Visual C++ Redistributable 2022
+- Windows API compatibility
+- Game client memory layout compatibility
 
-**Warden testing:** It’s risky to test anti-cheat triggers on live servers, but on a controlled private server you could attempt to intentionally trip Warden scans to see if the hooks hold. The log messages in `WardenDisabler` will notify when a Warden scan is detected and a hack is being disabled. If you see those messages and no disconnect, it’s working. The FAQ indicates that on known servers these hooks suffice, but be vigilant if targeting a new server.
+### Security and Anti-Detection
 
-**Stability:** If you encounter crashes, try to get stack traces or at least pinpoint which part of the code caused it (often by logging before and after a suspect call to narrow it down). Keep in mind you are manipulating a live game; even innocuous mistakes can crash WoW. During development, it’s wise to use a throwaway account/character for testing. Always start the game in a windowed mode for easier debugging (since you’ll be alt-tabbing frequently).
+**WoWSharpClient Approach**:
+- Pure network protocol implementation
+- No memory injection or client modification
+- Educational and research focus
 
-Finally, don’t hesitate to refer to the project’s documentation and comments. The code is sprinkled with helpful commentary explaining intentions (for example, why certain signatures differ between Vanilla/TBC/WotLK in Warden hooks, or tips for debugging memory protection issues). The original author also suggests using the Discord/FAQ for learning resources, emphasizing this project is as much about learning reverse engineering as it is about having a working bot. By studying how each piece works – from injection to memory editing to hooking – you’ll quickly become comfortable contributing to the Core Bot Engine. Happy hacking, and remember to always test carefully in a safe environment!
+**Native Component Approach**:
+- Direct memory access capabilities
+- Process injection techniques
+- Advanced anti-detection measures
+- Requires elevated privileges
+
+**Deployment Strategy**:
+- Choose approach based on requirements
+- WoWSharpClient for network-only automation
+- Native components for advanced memory operations
+
+## Educational Value
+
+The BloogBot exports serve as comprehensive educational resources for:
+
+- **Network Protocol Implementation**: Complete WoW protocol in pure C#
+- **Behavior Tree Systems**: Advanced AI decision making patterns
+- **Process Injection**: CLR hosting and DLL injection techniques
+- **Game Automation**: Pathfinding, collision detection, and bot orchestration
+- **Distributed Systems**: Service communication and coordination patterns
+- **Native Interop**: P/Invoke patterns and calling convention bridging
+
+## Troubleshooting Common Issues
+
+### Native DLL Loading Problems
+```
+Issue: "Unable to load Navigation.dll"
+Solutions:
+- Verify Visual C++ Redistributable is installed
+- Check DLL architecture matches process (x86/x64)
+- Ensure all dependencies are in the same directory
+- Verify Windows version compatibility
+```
+
+### P/Invoke Marshaling Errors
+```
+Issue: "PInvokeStackImbalance was detected"
+Solutions:
+- Verify calling conventions match (CallingConvention.Cdecl/StdCall)
+- Check parameter types and order
+- Ensure proper structure layouts with [StructLayout]
+- Validate pointer lifetime management
+```
+
+### CLR Hosting Failures
+```
+Issue: "Unable to load the CLR runtime"
+Solutions:
+- Verify .NET Framework 4.0+ is installed
+- Check process architecture compatibility
+- Ensure managed assembly is accessible
+- Review Windows security policies
+```
+
+## Safety & Compliance
+
+**Important**: These libraries are designed for educational and research purposes. They implement protocols and techniques without reverse engineering or game client modification.
+
+- **No Memory Injection**: WoWSharpClient uses pure network communication
+- **Educational Focus**: Emphasizes learning network protocols and automation patterns
+- **Compliance Responsibility**: Users must ensure compliance with applicable terms of service
+
+## Support & Community
+
+- **Documentation**: Each project includes comprehensive README files with usage examples
+- **Architecture**: Code is well-commented and follows established patterns
+- **Integration**: Projects are designed to work together as a cohesive ecosystem
+
+---
+
+*For detailed information about any specific component, please refer to the individual project README files linked above.*
