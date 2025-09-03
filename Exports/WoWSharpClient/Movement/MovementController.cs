@@ -35,6 +35,7 @@ namespace WoWSharpClient.Movement
         // ======== MAIN UPDATE - Called every frame ========
         public void Update(float deltaMs, uint gameTimeMs)
         {
+            if (_lastSentFlags == MovementFlags.MOVEFLAG_NONE && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE) { return; }
             // 1. Run physics based on current player state
             var physicsResult = RunPhysics(deltaMs);
             ApplyPhysicsResult(physicsResult);

@@ -141,7 +141,7 @@ namespace VMAP
                 if (result)
                 {
                     ++hit;
-                    LOG_INFO("[GModelRayCallback] Triangle " << entry << " HIT! Total hits: " << hit
+                    LOG_TRACE("[GModelRayCallback] Triangle " << entry << " HIT! Total hits: " << hit
                         << " New distance: " << distance);
                 }
                 else
