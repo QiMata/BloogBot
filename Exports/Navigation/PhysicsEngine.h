@@ -1,4 +1,4 @@
-// PhysicsEngine.h - Enhanced with cylinder collision support
+// PhysicsEngine.h - Stateless physics engine with singleton pattern for resource management
 #pragma once
 
 #include "PhysicsBridge.h"
@@ -27,55 +27,43 @@ namespace PhysicsConstants
 
     // Ground detection
     constexpr float GROUND_HEIGHT_TOLERANCE = 0.1f;
-    constexpr float STEP_HEIGHT = 2.3f;
+    constexpr float STEP_HEIGHT = 2.8f;
     constexpr float STEP_DOWN_HEIGHT = 4.0f;
 
     // Height constants
     constexpr float INVALID_HEIGHT = -200000.0f;
     constexpr float MAX_HEIGHT = 100000.0f;
     constexpr float DEFAULT_HEIGHT_SEARCH = 50.0f;
-
-    // Player cylinder dimensions (based on WoW capsule collision)
-    constexpr float PLAYER_RADIUS = 0.35f;  // Standard player collision radius
-    constexpr float PLAYER_HEIGHT = 2.0f;   // Standard player height
 }
 
 class PhysicsEngine
 {
 public:
+    // Singleton pattern for resource management
     static PhysicsEngine* Instance();
     static void Destroy();
 
     void Initialize();
     void Shutdown();
 
+    // Main physics step - completely stateless
     PhysicsOutput Step(const PhysicsInput& input, float dt);
 
-    // Legacy method kept for backward compatibility
-    float GetHeight(uint32_t mapId, float x, float y, float z, bool checkVMap, float maxSearchDist);
-
 private:
+    PhysicsEngine();
+    ~PhysicsEngine();
+
+    // Delete copy constructor and assignment operator
+    PhysicsEngine(const PhysicsEngine&) = delete;
+    PhysicsEngine& operator=(const PhysicsEngine&) = delete;
+
     static PhysicsEngine* s_instance;
+
     VMAP::VMapManager2* m_vmapManager;
     std::unique_ptr<MapLoader> m_mapLoader;
-    Navigation* m_navigation;
     bool m_initialized;
-    uint32_t m_currentMapId;
 
-    // Step-down tracking to improve movement continuity
-    bool m_lastStepWasDown;
-    int m_framesSinceStepDown;
-
-    // Cylinder collision parameters
-    float m_playerRadius;
-    float m_playerHeight;
-
-    float m_lastValidSurfaceHeight = PhysicsConstants::INVALID_HEIGHT;
-    int m_framesSinceLastSurface = 0;
-
-    PhysicsEngine();
-
-    // Simple movement state
+    // Movement state (created fresh each Step call)
     struct MovementState
     {
         float x, y, z;
@@ -109,32 +97,32 @@ private:
     float GetTerrainHeight(uint32_t mapId, float x, float y);
     float GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType);
 
-    // Cylinder-based surface finding
+    // Cylinder-based surface finding - now takes radius and height as parameters
     WalkableSurface FindWalkableSurfaceWithCylinder(uint32_t mapId, float x, float y, float currentZ,
-        float maxStepUp, float maxStepDown);
+        float maxStepUp, float maxStepDown, float cylinderRadius, float cylinderHeight);
 
-    // Legacy ray-based surface finding (fallback)
-    WalkableSurface FindWalkableSurface(uint32_t mapId, float x, float y, float currentZ,
-        float maxStepUp, float maxStepDown);
-
-    // Movement processing with cylinder collision
-    void ProcessGroundMovementWithCylinder(const PhysicsInput& input, MovementState& state, float dt);
+    // Movement processing with cylinder collision - now takes radius and height
+    void ProcessGroundMovementWithCylinder(const PhysicsInput& input, MovementState& state,
+        float dt, float cylinderRadius, float cylinderHeight);
     void ProcessAirMovement(const PhysicsInput& input, MovementState& state, float dt);
     void ProcessSwimMovement(const PhysicsInput& input, MovementState& state, float dt);
 
-    // Cylinder collision helpers
+    // Cylinder collision helpers - now take dimensions as parameters
     bool CheckCylinderMovement(uint32_t mapId, const MovementState& currentState,
-        float newX, float newY, float& outZ, G3D::Vector3& outNormal);
-    bool ValidateCylinderPosition(uint32_t mapId, float x, float y, float z, float tolerance = 0.05f);
+        float newX, float newY, float& outZ, G3D::Vector3& outNormal,
+        float cylinderRadius, float cylinderHeight);
+    bool ValidateCylinderPosition(uint32_t mapId, float x, float y, float z,
+        float tolerance, float cylinderRadius, float cylinderHeight);
 
-    // Separated slide movement logic with cylinder collision
+    // Slide movement logic with cylinder collision
     void AttemptSlideMovementWithCylinder(const PhysicsInput& input, MovementState& state,
-        float moveX, float moveY, float moveDist);
+        float moveX, float moveY, float moveDist, float cylinderRadius, float cylinderHeight);
 
     // Helper methods
     float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming);
     void ApplyGravity(MovementState& state, float dt);
 
-    // Create player cylinder at position
-    VMAP::Cylinder CreatePlayerCylinder(float x, float y, float z) const;
+    // Create player cylinder at position with specified dimensions
+    VMAP::Cylinder CreatePlayerCylinder(float x, float y, float z,
+        float radius, float height) const;
 };
