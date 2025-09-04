@@ -572,7 +572,7 @@ namespace WoWSharpClient
             _pendingUpdates.Enqueue(update);
         }
 
-        private async Task ProcessUpdatesAsync(CancellationToken token)
+        public async Task ProcessUpdatesAsync(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
             {
