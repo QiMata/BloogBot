@@ -3,7 +3,8 @@ using BotRunner.Clients;
 using PromptHandlingService;
 using WoWSharpClient;
 using WoWSharpClient.Client;
-using WoWSharpClient.Agent;
+using WoWSharpClient.Networking.Agent;
+using WoWSharpClient.Networking.Agent.I;
 
 namespace BackgroundBotRunner
 {
@@ -25,7 +26,14 @@ namespace BackgroundBotRunner
             IAttackNetworkAgent AttackAgent,
             IQuestNetworkAgent QuestAgent,
             ILootingNetworkAgent LootingAgent,
-            IGameObjectNetworkAgent GameObjectAgent
+            IGameObjectNetworkAgent GameObjectAgent,
+            IVendorNetworkAgent VendorAgent,
+            IFlightMasterNetworkAgent FlightMasterAgent,
+            IDeadActorAgent DeadActorAgent,
+            IInventoryNetworkAgent InventoryAgent,
+            IItemUseNetworkAgent ItemUseAgent,
+            IEquipmentNetworkAgent EquipmentAgent,
+            ISpellCastingNetworkAgent SpellCastingAgent
         ) _allAgents;
         
         private readonly CombatIntegrationExample _combatExample;
@@ -45,7 +53,7 @@ namespace BackgroundBotRunner
             WoWSharpObjectManager.Instance.Initialize(_wowClient, _pathfindingClient, loggerFactory.CreateLogger<WoWSharpObjectManager>());
             _botRunner = new BotRunnerService(WoWSharpObjectManager.Instance, _characterStateUpdateClient, _pathfindingClient);
             
-            // Initialize all network agents
+            // Initialize all network agents including the new ones
             var worldClient = WoWClientFactory.CreateWorldClient();
             _allAgents = WoWClientFactory.CreateAllNetworkAgents(worldClient, loggerFactory);
             _combatExample = new CombatIntegrationExample(worldClient, loggerFactory);
@@ -64,14 +72,31 @@ namespace BackgroundBotRunner
                     // Example: Demonstrate agent functionality through internal logic
                     if (_wowClient.IsWorldConnected())
                     {
-                        // This is where you would integrate targeting, attacking, questing, looting, and game object interaction with your bot logic
-                        // For example, find and attack enemies, complete quests, loot items, gather from nodes, etc.
+                        // This is where you would integrate targeting, attacking, questing, looting, game object interaction,
+                        // vendor operations, flight master usage, and death handling with your bot logic
                         
                         // Example usage (commented out to avoid actual actions):
                         // await _combatExample.EngageCombatAsync(enemyGuid);
                         // await InternalProcessQuestsAsync();
                         // await InternalLootNearbyBodiesAsync();
                         // await InternalGatherFromNodesAsync();
+                        // await InternalBuySuppliesAsync();
+                        // await InternalTakeFlight();
+                        // await InternalHandleDeathAsync();
+                        
+                        // Access individual agents like this:
+                        // var targetingAgent = _allAgents.TargetingAgent;
+                        // var attackAgent = _allAgents.AttackAgent;
+                        // var questAgent = _allAgents.QuestAgent;
+                        // var lootingAgent = _allAgents.LootingAgent;
+                        // var gameObjectAgent = _allAgents.GameObjectAgent;
+                        // var vendorAgent = _allAgents.VendorAgent;
+                        // var flightMasterAgent = _allAgents.FlightMasterAgent;
+                        // var deadActorAgent = _allAgents.DeadActorAgent;
+                        // var inventoryAgent = _allAgents.InventoryAgent;
+                        // var itemUseAgent = _allAgents.ItemUseAgent;
+                        // var equipmentAgent = _allAgents.EquipmentAgent;
+                        // var spellCastingAgent = _allAgents.SpellCastingAgent;
                     }
 
                     await Task.Delay(100, stoppingToken);
@@ -79,7 +104,7 @@ namespace BackgroundBotRunner
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in ActivityBackgroundMemberWorker");
+                _logger.LogError(ex, "Error in BackgroundBotWorker");
             }
         }
     }

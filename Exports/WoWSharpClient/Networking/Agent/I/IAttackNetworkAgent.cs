@@ -1,6 +1,4 @@
-using GameData.Core.Enums;
-
-namespace WoWSharpClient.Agent
+namespace WoWSharpClient.Networking.Agent.I
 {
     /// <summary>
     /// Interface for handling attack operations in World of Warcraft.

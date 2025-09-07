@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
+using WoWSharpClient.Networking.Agent.I;
 
-namespace WoWSharpClient.Agent
+namespace WoWSharpClient.Networking.Agent
 {
     /// <summary>
     /// Example implementation showing how to integrate the separated TargetingNetworkAgent and AttackNetworkAgent.

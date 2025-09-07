@@ -2,8 +2,9 @@ using System;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using WoWSharpClient.Agent;
 using WoWSharpClient.Networking.Abstractions;
+using WoWSharpClient.Networking.Agent;
+using WoWSharpClient.Networking.Agent.I;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
 
@@ -266,6 +267,160 @@ namespace WoWSharpClient.Client
         }
 
         /// <summary>
+        /// Creates a vendor network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending vendor packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging vendor operations.</param>
+        /// <returns>A configured vendor network agent instance.</returns>
+        public static IVendorNetworkAgent CreateVendorNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateVendorNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a vendor network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending vendor packets.</param>
+        /// <param name="logger">The logger for vendor operations.</param>
+        /// <returns>A configured vendor network agent instance.</returns>
+        public static IVendorNetworkAgent CreateVendorNetworkAgent(IWorldClient worldClient, ILogger<VendorNetworkAgent> logger)
+        {
+            return AgentFactory.CreateVendorNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a flight master network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending flight master packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging flight master operations.</param>
+        /// <returns>A configured flight master network agent instance.</returns>
+        public static IFlightMasterNetworkAgent CreateFlightMasterNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateFlightMasterNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a flight master network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending flight master packets.</param>
+        /// <param name="logger">The logger for flight master operations.</param>
+        /// <returns>A configured flight master network agent instance.</returns>
+        public static IFlightMasterNetworkAgent CreateFlightMasterNetworkAgent(IWorldClient worldClient, ILogger<FlightMasterNetworkAgent> logger)
+        {
+            return AgentFactory.CreateFlightMasterNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a dead actor agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending death/resurrection packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging death operations.</param>
+        /// <returns>A configured dead actor agent instance.</returns>
+        public static IDeadActorAgent CreateDeadActorAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateDeadActorAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a dead actor agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending death/resurrection packets.</param>
+        /// <param name="logger">The logger for death operations.</param>
+        /// <returns>A configured dead actor agent instance.</returns>
+        public static IDeadActorAgent CreateDeadActorAgent(IWorldClient worldClient, ILogger<DeadActorAgent> logger)
+        {
+            return AgentFactory.CreateDeadActorAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates an inventory network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending inventory packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging inventory operations.</param>
+        /// <returns>A configured inventory network agent instance.</returns>
+        public static IInventoryNetworkAgent CreateInventoryNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateInventoryNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates an inventory network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending inventory packets.</param>
+        /// <param name="logger">The logger for inventory operations.</param>
+        /// <returns>A configured inventory network agent instance.</returns>
+        public static IInventoryNetworkAgent CreateInventoryNetworkAgent(IWorldClient worldClient, ILogger<InventoryNetworkAgent> logger)
+        {
+            return AgentFactory.CreateInventoryNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates an item use network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending item use packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging item use operations.</param>
+        /// <returns>A configured item use network agent instance.</returns>
+        public static IItemUseNetworkAgent CreateItemUseNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateItemUseNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates an item use network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending item use packets.</param>
+        /// <param name="logger">The logger for item use operations.</param>
+        /// <returns>A configured item use network agent instance.</returns>
+        public static IItemUseNetworkAgent CreateItemUseNetworkAgent(IWorldClient worldClient, ILogger<ItemUseNetworkAgent> logger)
+        {
+            return AgentFactory.CreateItemUseNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates an equipment network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending equipment packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging equipment operations.</param>
+        /// <returns>A configured equipment network agent instance.</returns>
+        public static IEquipmentNetworkAgent CreateEquipmentNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateEquipmentNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates an equipment network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending equipment packets.</param>
+        /// <param name="logger">The logger for equipment operations.</param>
+        /// <returns>A configured equipment network agent instance.</returns>
+        public static IEquipmentNetworkAgent CreateEquipmentNetworkAgent(IWorldClient worldClient, ILogger<EquipmentNetworkAgent> logger)
+        {
+            return AgentFactory.CreateEquipmentNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a spell casting network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending spell casting packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging spell casting operations.</param>
+        /// <returns>A configured spell casting network agent instance.</returns>
+        public static ISpellCastingNetworkAgent CreateSpellCastingNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateSpellCastingNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a spell casting network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending spell casting packets.</param>
+        /// <param name="logger">The logger for spell casting operations.</param>
+        /// <returns>A configured spell casting network agent instance.</returns>
+        public static ISpellCastingNetworkAgent CreateSpellCastingNetworkAgent(IWorldClient worldClient, ILogger<SpellCastingNetworkAgent> logger)
+        {
+            return AgentFactory.CreateSpellCastingNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
         /// Creates all network agents as a coordinated set.
         /// This is a convenience method for creating all agents that work together.
         /// </summary>
@@ -277,7 +432,14 @@ namespace WoWSharpClient.Client
             IAttackNetworkAgent AttackAgent,
             IQuestNetworkAgent QuestAgent,
             ILootingNetworkAgent LootingAgent,
-            IGameObjectNetworkAgent GameObjectAgent
+            IGameObjectNetworkAgent GameObjectAgent,
+            IVendorNetworkAgent VendorAgent,
+            IFlightMasterNetworkAgent FlightMasterAgent,
+            IDeadActorAgent DeadActorAgent,
+            IInventoryNetworkAgent InventoryAgent,
+            IItemUseNetworkAgent ItemUseAgent,
+            IEquipmentNetworkAgent EquipmentAgent,
+            ISpellCastingNetworkAgent SpellCastingAgent
         ) CreateAllNetworkAgents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return AgentFactory.CreateAllNetworkAgents(worldClient, loggerFactory);

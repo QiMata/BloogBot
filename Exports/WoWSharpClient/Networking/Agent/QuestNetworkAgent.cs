@@ -1,8 +1,9 @@
 using GameData.Core.Enums;
-using WoWSharpClient.Client;
 using Microsoft.Extensions.Logging;
+using WoWSharpClient.Client;
+using WoWSharpClient.Networking.Agent.I;
 
-namespace WoWSharpClient.Agent
+namespace WoWSharpClient.Networking.Agent
 {
     /// <summary>
     /// Implementation of quest network agent that handles quest operations in World of Warcraft.

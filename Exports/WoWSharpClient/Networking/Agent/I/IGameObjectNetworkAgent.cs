@@ -1,6 +1,4 @@
-using GameData.Core.Enums;
-
-namespace WoWSharpClient.Agent
+namespace WoWSharpClient.Networking.Agent.I
 {
     /// <summary>
     /// Interface for handling game object interactions in World of Warcraft.

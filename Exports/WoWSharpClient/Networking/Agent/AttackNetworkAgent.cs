@@ -1,8 +1,9 @@
 using GameData.Core.Enums;
-using WoWSharpClient.Client;
 using Microsoft.Extensions.Logging;
+using WoWSharpClient.Client;
+using WoWSharpClient.Networking.Agent.I;
 
-namespace WoWSharpClient.Agent
+namespace WoWSharpClient.Networking.Agent
 {
     /// <summary>
     /// Implementation of attack network agent that handles combat operations in World of Warcraft.

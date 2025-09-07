@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Moq;
-using WoWSharpClient.Agent;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
+using WoWSharpClient.Networking.Agent;
+using WoWSharpClient.Networking.Agent.I;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
