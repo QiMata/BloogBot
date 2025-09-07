@@ -1,18 +1,93 @@
 # WoWSharpClient
 
-## Overview
+A comprehensive C# client library for World of Warcraft 1.12.1 (Vanilla) servers, implementing the complete network protocol without memory injection or game client modification.
 
-WoWSharpClient is a comprehensive C# library that provides a complete client implementation for World of Warcraft Classic (Vanilla) server communication. It handles authentication, world connection, object management, movement control, and game state tracking through a pure C# implementation of the WoW network protocol.
+## Modern Composable Architecture
 
-## Architecture
+WoWSharpClient has been completely redesigned with a modern, composable networking architecture that separates concerns and provides maximum flexibility:
 
-WoWSharpClient consists of several key components:
+### New Client Components
+- **`AuthClient`** - Modern authentication server client with full async support
+- **`NewWorldClient`** - Advanced world server client with complete packet handling
+- **`WoWClientOrchestrator`** - High-level orchestration for complete WoW client experience
+- **`WoWClientFactory`** - Factory for creating pre-configured client instances
+- **`PacketPipeline<T>`** - Composable networking pipeline with pluggable components
 
-### Client Layer
-- **`WoWClient`** - Main client facade coordinating authentication and world connections
-- **`AuthLoginClient`** - Handles SRP authentication with login servers
-- **`WorldClient`** - Manages encrypted communication with world servers
-- **`PacketManager`** - Low-level packet encryption, compression, and parsing utilities
+### Networking Abstractions
+The new architecture is built on clean abstractions that can be composed and tested independently:
+
+```csharp
+// Composable networking stack
+IConnection (TCP) ? IEncryptor (None/RC4) ? IMessageFramer (WoW Protocol) 
+    ? IPacketCodec (Opcode Handling) ? IMessageRouter (Handler Dispatch)
+```
+
+### Legacy Support
+- **`WoWClient`** - Updated to use new architecture internally (100% backward compatible)
+- **`AuthLoginClient`** - Legacy auth client (deprecated, use `AuthClient`)  
+- **`WorldClient`** - Legacy world client (deprecated, use `NewWorldClient`)
+
+## Quick Start
+
+### Using the Orchestrator (Recommended)
+```csharp
+// Create orchestrator for complete WoW client experience
+var orchestrator = WoWClientFactory.CreateOrchestrator();
+
+// Complete authentication and realm connection flow
+await orchestrator.LoginAsync("127.0.0.1", "username", "password");
+var realms = await orchestrator.GetRealmListAsync();
+await orchestrator.ConnectToRealmAsync(realms[0]);
+
+// World server operations
+await orchestrator.RefreshCharacterListAsync();
+await orchestrator.EnterWorldAsync(characterGuid);
+await orchestrator.SendChatMessageAsync(ChatMsg.CHAT_MSG_SAY, Language.Common, "", "Hello World!");
+```
+
+### Using Individual Clients (Advanced)
+```csharp
+// Authentication server
+var authClient = WoWClientFactory.CreateAuthClient();
+await authClient.ConnectAsync("127.0.0.1");
+await authClient.LoginAsync("username", "password");
+
+// World server  
+var worldClient = WoWClientFactory.CreateWorldClient();
+await worldClient.ConnectAsync("username", "127.0.0.1", authClient.SessionKey);
+await worldClient.SendCharEnumAsync();
+```
+
+### Backward Compatibility
+```csharp
+// Existing code continues to work unchanged
+var client = new WoWClient(); // Now uses modern architecture internally
+client.SetIpAddress("127.0.0.1");
+await client.LoginAsync("username", "password"); // Async recommended
+// OR
+client.Login("username", "password"); // Legacy sync (deprecated but functional)
+```
+
+## Architecture Overview
+
+### Client Layer Hierarchy
+```
+WoWClientOrchestrator (High-level coordination)
+??? AuthClient (Authentication)
+?   ??? PacketPipeline<Opcode>
+?       ??? TcpConnection (IConnection)
+?       ??? NoEncryption (IEncryptor)  
+?       ??? LengthPrefixedFramer (IMessageFramer)
+?       ??? WoWPacketCodec (IPacketCodec)
+?       ??? MessageRouter (IMessageRouter)
+??? NewWorldClient (World server communication)
+    ??? PacketPipeline<Opcode>
+        ??? TcpConnection (IConnection)
+        ??? NoEncryption/RC4 (IEncryptor)
+        ??? WoWMessageFramer (IMessageFramer)
+        ??? WoWPacketCodec (IPacketCodec)
+        ??? MessageRouter (IMessageRouter)
+```
 
 ### Object Management
 - **`WoWSharpObjectManager`** - Central object state manager implementing `IObjectManager`
@@ -24,7 +99,14 @@ WoWSharpClient consists of several key components:
 - **Specialized Handlers** - Dedicated handlers for movement, objects, chat, spells, etc.
 - **Movement System** - Advanced movement control with server synchronization
 
-## Features
+## Key Features
+
+### Modern Networking
+- **Async/Await Support** - Non-blocking operations throughout
+- **Composable Architecture** - Mix and match networking components
+- **Runtime Encryption Switching** - NoEncryption ? RC4 after authentication
+- **Automatic Reconnection** - Configurable retry policies with exponential backoff
+- **Thread-Safe Operations** - Proper synchronization for multi-threaded usage
 
 ### Authentication & Connection
 - **SRP Authentication** - Secure Remote Password protocol implementation
@@ -57,18 +139,14 @@ objectManager.StopMovement(ControlBits.Front);
 objectManager.ToggleWalkMode();
 ```
 
-### Communication
+### Modern Communication
 ```csharp
-var client = new WoWClient();
-client.SetIpAddress("127.0.0.1");
-
-// Login and select realm
-client.Login("username", "password");
-var realms = client.GetRealmList();
-client.SelectRealm(realms.First());
+// Async communication patterns
+var orchestrator = WoWClientFactory.CreateOrchestrator();
+await orchestrator.LoginAsync("127.0.0.1", "username", "password");
 
 // Send chat messages
-client.SendChatMessage(ChatMsg.CHAT_MSG_SAY, Language.COMMON, "", "Hello World!");
+await orchestrator.SendChatMessageAsync(ChatMsg.CHAT_MSG_SAY, Language.Common, "", "Hello World!");
 ```
 
 ## Object Model Hierarchy
@@ -158,7 +236,7 @@ WoWSharpClient integrates seamlessly with the BloogBot ecosystem:
 // Initialize with dependency injection
 var objectManager = WoWSharpObjectManager.Instance;
 objectManager.Initialize(
-    wowClient: new WoWClient(),
+    wowClient: WoWClientFactory.CreateModernWoWClient(),
     pathfindingClient: pathfindingClient,
     logger: logger
 );
@@ -168,6 +246,7 @@ objectManager.Initialize(
 
 ### Project Configuration
 - **Target Framework**: .NET 8.0
+- **Language Features**: C# 12.0 with nullable reference types
 - **Unsafe Code**: Enabled for memory operations
 - **Output Path**: `..\..\Bot` (shared build directory)
 
@@ -193,6 +272,12 @@ The client includes screen management for different game states:
 - No direct memory manipulation or game client modification
 - Implements the protocol from scratch for educational purposes
 
+### Performance Optimizations
+- **Zero-Copy Operations** - `ReadOnlyMemory<byte>` for efficient memory usage
+- **Queued Updates** - Batched object processing for performance
+- **Efficient Parsing** - Optimized binary readers for packet processing
+- **Async I/O** - Non-blocking network operations
+
 ### Debugging & Diagnostics
 ```csharp
 // Comprehensive logging for debugging
@@ -200,37 +285,36 @@ Console.WriteLine($"[{timestamp}][Movement-Update] Guid={guid:X} " +
                  $"Pos=({x:F2}, {y:F2}, {z:F2}) Flags=0x{flags:X8}");
 ```
 
-### Performance Optimizations
-- **Queued Updates** - Batched object processing for performance
-- **Efficient Parsing** - Optimized binary readers for packet processing
-- **Thread Safety** - Proper synchronization for multi-threaded usage
-
 ## Usage Examples
 
-### Complete Client Setup
+### Complete Modern Client Setup
 ```csharp
-// Initialize the client system
-var client = new WoWClient();
-var pathfindingClient = new PathfindingClient();
-var logger = new Logger<WoWSharpObjectManager>();
+// Initialize the client system with modern architecture
+var orchestrator = WoWClientFactory.CreateOrchestrator();
 
-var objectManager = WoWSharpObjectManager.Instance;
-objectManager.Initialize(client, pathfindingClient, logger);
+// Subscribe to events
+orchestrator.WorldConnected += () => Console.WriteLine("Connected to world!");
+orchestrator.WorldDisconnected += (ex) => Console.WriteLine($"Disconnected: {ex?.Message}");
 
 // Connect and authenticate
-client.SetIpAddress("127.0.0.1");
-client.Login("myusername", "mypassword");
+await orchestrator.LoginAsync("127.0.0.1", "username", "password");
 
 // Select realm and character
-var realms = client.GetRealmList();
-client.SelectRealm(realms.First());
-
-var characterScreen = objectManager.CharacterSelectScreen;
-characterScreen.RefreshCharacterListFromServer();
-// ... character selection logic
+var realms = await orchestrator.GetRealmListAsync();
+await orchestrator.ConnectToRealmAsync(realms.First());
 
 // Enter world
-objectManager.EnterWorld(characterGuid);
+await orchestrator.EnterWorldAsync(characterGuid);
+```
+
+### Advanced Networking Configuration
+```csharp
+// Custom networking setup with reconnection
+var worldClient = WoWClientFactory.CreateWorldClientWithReconnection("127.0.0.1", 8085);
+
+// Or with custom encryption
+var rc4Encryptor = new RC4Encryptor(sessionKey);
+var encryptedClient = WoWClientFactory.CreateWorldClientWithEncryption(rc4Encryptor);
 ```
 
 ### Movement Control
@@ -254,6 +338,7 @@ The project includes comprehensive test coverage:
 
 - **Unit Tests** - `WoWSharpClient.Tests` project with xUnit framework
 - **Integration Tests** - Real packet parsing from captured game data
+- **Network Tests** - `WowSharpClient.NetworkTests` for networking abstractions
 - **Mock Support** - Uses Moq for service isolation in tests
 
 ### Test Resources
@@ -264,19 +349,46 @@ Tests/WoWSharpClient.Tests/Resources/
 ??? SMSG_AUTH_RESPONSE/     # Authentication test data
 ```
 
+## Migration Guide
+
+### From Legacy Clients
+The new architecture maintains 100% backward compatibility:
+
+```csharp
+// OLD CODE - Still works with deprecation warnings
+var client = new WoWClient();
+client.Login("user", "pass");               // Warning: Deprecated
+
+// NEW CODE - Recommended approach  
+var client = WoWClientFactory.CreateModernWoWClient();
+await client.LoginAsync("user", "pass");    // Modern async
+
+// ADVANCED - Direct orchestrator usage
+var orchestrator = WoWClientFactory.CreateOrchestrator();
+await orchestrator.LoginAsync("127.0.0.1", "user", "pass");
+```
+
+### Benefits of Migration
+- **Performance**: Async I/O and memory optimizations
+- **Reliability**: Automatic reconnection and error recovery
+- **Maintainability**: Clean separation of concerns
+- **Testability**: Mock-friendly architecture
+- **Extensibility**: Easy to add new protocols or encryption
+
 ## Contributing
 
 When contributing to WoWSharpClient:
 
 1. **Protocol Accuracy** - Ensure changes match official WoW protocol specifications
-2. **Thread Safety** - All public APIs must be thread-safe
-3. **Performance** - Consider impact on packet processing performance
-4. **Testing** - Add tests for new packet types or object models
-5. **Documentation** - Update this README for significant changes
+2. **Async Patterns** - Use proper async/await patterns for new code
+3. **Testing** - Add tests for new packet types or networking components
+4. **Performance** - Consider impact on packet processing performance
+5. **Architecture** - Follow the composable design principles
+6. **Documentation** - Update this README for significant changes
 
 ## Security & Legal
 
-?? **Important**: This library is designed for educational and research purposes. It implements the WoW network protocol from publicly available specifications without any reverse engineering or game client modification.
+**Important**: This library is designed for educational and research purposes. It implements the WoW network protocol from publicly available specifications without any reverse engineering or game client modification.
 
 - Does not inject code into or modify the game client
 - Does not access game memory directly
@@ -293,7 +405,8 @@ This project is part of the BloogBot ecosystem. Please refer to the main project
 - **[GameData.Core](../GameData.Core/)** - Shared game data models and enumerations  
 - **[PathfindingService](../../Services/PathfindingService/)** - Navigation and collision detection
 - **[BotCommLayer](../BotCommLayer/)** - Communication infrastructure
+- **[StateManager](../../Services/StateManager/)** - Multi-bot coordination service
 
 ---
 
-WoWSharpClient provides the foundational network communication layer that enables BloogBot to interact with World of Warcraft servers through a clean, type-safe C# API while maintaining full protocol compliance and educational value.
+WoWSharpClient provides the foundational network communication layer that enables BloogBot to interact with World of Warcraft servers through a clean, modern, composable C# API while maintaining full protocol compliance and educational value.
