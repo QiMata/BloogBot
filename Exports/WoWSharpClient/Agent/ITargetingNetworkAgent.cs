@@ -6,7 +6,7 @@ namespace WoWSharpClient.Agent
     /// Interface for handling targeting operations in World of Warcraft.
     /// Focuses solely on target selection without combat functionality.
     /// </summary>
-    public interface ITargetingAgent
+    public interface ITargetingNetworkAgent
     {
         /// <summary>
         /// Gets the currently targeted unit's GUID.

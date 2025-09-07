@@ -6,7 +6,7 @@ namespace WoWSharpClient.Agent
     /// Interface for handling attack operations in World of Warcraft.
     /// Focuses solely on combat actions like starting and stopping auto-attack.
     /// </summary>
-    public interface IAttackAgent
+    public interface IAttackNetworkAgent
     {
         /// <summary>
         /// Gets whether the character is currently in auto-attack mode.
@@ -55,7 +55,7 @@ namespace WoWSharpClient.Agent
         /// <param name="targetingAgent">The targeting agent to use for target selection.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        Task AttackTargetAsync(ulong targetGuid, ITargetingAgent targetingAgent, CancellationToken cancellationToken = default);
+        Task AttackTargetAsync(ulong targetGuid, ITargetingNetworkAgent targetingAgent, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Toggles auto-attack state. If attacking, stops. If not attacking, starts.

@@ -1,20 +1,16 @@
 using Microsoft.Extensions.Logging;
-using WoWSharpClient.Agent;
 using WoWSharpClient.Client;
-using WoWSharpClient.Models;
-using GameData.Core.Models;
-using GameData.Core.Enums;
 
 namespace WoWSharpClient.Agent
 {
     /// <summary>
-    /// Example implementation showing how to integrate the separated TargetingAgent and AttackAgent.
+    /// Example implementation showing how to integrate the separated TargetingNetworkAgent and AttackNetworkAgent.
     /// This class demonstrates how to wire both agents into your BackgroundBotRunner.
     /// </summary>
     public class CombatIntegrationExample
     {
-        private readonly ITargetingAgent _targetingAgent;
-        private readonly IAttackAgent _attackAgent;
+        private readonly ITargetingNetworkAgent _targetingAgent;
+        private readonly IAttackNetworkAgent _attackAgent;
         private readonly ILogger<CombatIntegrationExample> _logger;
 
         public CombatIntegrationExample(IWorldClient worldClient, ILoggerFactory loggerFactory)
@@ -22,222 +18,146 @@ namespace WoWSharpClient.Agent
             _logger = loggerFactory.CreateLogger<CombatIntegrationExample>();
             
             // Create both agents using the factory
-            var (targetingAgent, attackAgent) = WoWClientFactory.CreateCombatAgents(worldClient, loggerFactory);
+            var (targetingAgent, attackAgent) = WoWClientFactory.CreateCombatNetworkAgents(worldClient, loggerFactory);
             _targetingAgent = targetingAgent;
             _attackAgent = attackAgent;
-            
-            // Subscribe to targeting events
+
+            // Wire up event handlers for coordination
+            SetupEventHandlers();
+        }
+
+        private void SetupEventHandlers()
+        {
+            // When target changes, log the change
             _targetingAgent.TargetChanged += OnTargetChanged;
             
-            // Subscribe to attack events
+            // When attack starts/stops, log the changes
             _attackAgent.AttackStarted += OnAttackStarted;
             _attackAgent.AttackStopped += OnAttackStopped;
             _attackAgent.AttackError += OnAttackError;
         }
 
         /// <summary>
-        /// Example method showing how to use separated targeting and attacking.
-        /// This could be called from your BackgroundBotRunner's ExecuteAsync method.
+        /// Example method showing how to engage a target in combat
         /// </summary>
-        public async Task DemonstrateCombatAsync()
+        public async Task EngageCombatAsync(ulong enemyGuid)
         {
             try
             {
-                // Example: Target a specific enemy (you would get this GUID from WoWSharpObjectManager)
-                ulong enemyGuid = 0x12345678;
-                
-                _logger.LogInformation("Starting combat demonstration...");
-                
-                // Step 1: Set target using targeting agent
-                await _targetingAgent.SetTargetAsync(enemyGuid);
-                
-                // Step 2: Start attacking using attack agent
-                await _attackAgent.StartAttackAsync();
-                
-                // Wait for some combat
-                await Task.Delay(5000);
-                
-                // Step 3: Stop attacking
+                _logger.LogInformation("Engaging combat with enemy: {EnemyGuid:X}", enemyGuid);
+
+                // Use the coordinated attack method that handles both targeting and attacking
+                await _attackAgent.AttackTargetAsync(enemyGuid, _targetingAgent);
+
+                _logger.LogInformation("Combat engagement initiated successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to engage combat with enemy: {EnemyGuid:X}", enemyGuid);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Example method showing how to stop combat
+        /// </summary>
+        public async Task StopCombatAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Stopping combat");
+
+                // Stop attacking first
                 await _attackAgent.StopAttackAsync();
-                
-                // Step 4: Clear target
+
+                // Then clear target
                 await _targetingAgent.ClearTargetAsync();
-                
-                _logger.LogInformation("Combat demonstration completed");
+
+                _logger.LogInformation("Combat stopped successfully");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during combat demonstration");
+                _logger.LogError(ex, "Failed to stop combat");
+                throw;
             }
         }
 
         /// <summary>
-        /// Convenience method that combines targeting and attacking in one call.
-        /// Uses the AttackAgent's built-in coordination with the targeting agent.
+        /// Example method showing how to assist another player
         /// </summary>
-        /// <param name="targetGuid">The GUID of the target to attack.</param>
-        public async Task AttackTargetAsync(ulong targetGuid)
-        {
-            try
-            {
-                await _attackAgent.AttackTargetAsync(targetGuid, _targetingAgent);
-                _logger.LogInformation($"Started attacking target: {targetGuid:X}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error attacking target {targetGuid:X}");
-            }
-        }
-
-        /// <summary>
-        /// Assists another player by targeting what they are targeting, then attacking.
-        /// </summary>
-        /// <param name="playerGuid">The GUID of the player to assist.</param>
         public async Task AssistPlayerAsync(ulong playerGuid)
         {
             try
             {
-                // Use targeting agent to assist the player
+                _logger.LogInformation("Assisting player: {PlayerGuid:X}", playerGuid);
+
+                // Assist the player (this will target whatever they're targeting)
                 await _targetingAgent.AssistAsync(playerGuid);
-                
-                // Small delay to let the server update our target
-                await Task.Delay(200);
-                
-                // If we now have a target (from the assist), start attacking
+
+                // Small delay to ensure target is set
+                await Task.Delay(100);
+
+                // If we now have a target, start attacking
                 if (_targetingAgent.HasTarget())
                 {
                     await _attackAgent.StartAttackAsync();
-                    _logger.LogInformation($"Assisting player {playerGuid:X} and attacking their target");
+                    _logger.LogInformation("Started attacking assist target");
                 }
                 else
                 {
-                    _logger.LogWarning($"Assist failed - player {playerGuid:X} has no target");
+                    _logger.LogWarning("Player {PlayerGuid:X} doesn't appear to have a target", playerGuid);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error assisting player {playerGuid:X}");
+                _logger.LogError(ex, "Failed to assist player: {PlayerGuid:X}", playerGuid);
+                throw;
             }
         }
 
         /// <summary>
-        /// Toggles attack state. If attacking, stops. If not attacking, starts.
+        /// Example method showing how to toggle attack state
         /// </summary>
-        public async Task ToggleAttackAsync()
+        public async Task ToggleCombatAsync()
         {
             try
             {
-                await _attackAgent.ToggleAttackAsync();
-                _logger.LogInformation($"Toggled attack state. Now attacking: {_attackAgent.IsAttacking}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error toggling attack state");
-            }
-        }
-
-        /// <summary>
-        /// Example of how to find targets using WoWSharpObjectManager and attack them.
-        /// This would be integrated with your bot's AI logic.
-        /// </summary>
-        public async Task FindAndAttackNearestEnemyAsync()
-        {
-            try
-            {
-                var player = WoWSharpObjectManager.Instance.Player;
-                if (player?.Position == null)
+                if (_attackAgent.IsAttacking)
                 {
-                    _logger.LogWarning("Player position not available");
-                    return;
-                }
-
-                // Get nearby hostile units
-                var nearbyEnemies = WoWSharpObjectManager.Instance.Objects
-                    .OfType<WoWUnit>()
-                    .Where(u => IsHostileUnit(u) && u.Position.DistanceTo(player.Position) < 30)
-                    .OrderBy(u => u.Position.DistanceTo(player.Position))
-                    .ToList();
-
-                if (nearbyEnemies.Any())
-                {
-                    var target = nearbyEnemies.First();
-                    _logger.LogInformation($"Found nearest enemy: {target.Guid:X} at distance {target.Position.DistanceTo(player.Position):F2}");
-                    
-                    // Use the convenience method to attack the target
-                    await _attackAgent.AttackTargetAsync(target.Guid, _targetingAgent);
+                    _logger.LogInformation("Toggling attack off");
+                    await _attackAgent.StopAttackAsync();
                 }
                 else
                 {
-                    _logger.LogInformation("No nearby enemies found");
+                    if (_targetingAgent.HasTarget())
+                    {
+                        _logger.LogInformation("Toggling attack on");
+                        await _attackAgent.StartAttackAsync();
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Cannot start attack - no target selected");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error finding and attacking nearest enemy");
+                _logger.LogError(ex, "Failed to toggle combat");
+                throw;
             }
-        }
-
-        /// <summary>
-        /// Demonstrates pure targeting without attacking.
-        /// </summary>
-        /// <param name="targetGuid">The GUID to target.</param>
-        public async Task JustTargetAsync(ulong targetGuid)
-        {
-            try
-            {
-                await _targetingAgent.SetTargetAsync(targetGuid);
-                _logger.LogInformation($"Set target to: {targetGuid:X}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error setting target {targetGuid:X}");
-            }
-        }
-
-        /// <summary>
-        /// Demonstrates attacking current target without changing target.
-        /// </summary>
-        public async Task AttackCurrentTargetAsync()
-        {
-            try
-            {
-                if (!_targetingAgent.HasTarget())
-                {
-                    _logger.LogWarning("No target selected");
-                    return;
-                }
-
-                await _attackAgent.StartAttackAsync();
-                _logger.LogInformation($"Started attacking current target: {_targetingAgent.CurrentTarget:X}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error attacking current target");
-            }
-        }
-
-        /// <summary>
-        /// Determines if a unit is hostile based on UnitReaction.
-        /// </summary>
-        /// <param name="unit">The unit to check.</param>
-        /// <returns>True if the unit is hostile, false otherwise.</returns>
-        private static bool IsHostileUnit(WoWUnit unit)
-        {
-            return unit.UnitReaction == UnitReaction.Hostile ||
-                   unit.UnitReaction == UnitReaction.Unfriendly;
         }
 
         private void OnTargetChanged(ulong? newTarget)
         {
             if (newTarget.HasValue)
             {
-                _logger.LogInformation($"Target changed to: {newTarget.Value:X}");
+                _logger.LogDebug("Target changed to: {NewTarget:X}", newTarget.Value);
             }
             else
             {
-                _logger.LogInformation("Target cleared");
+                _logger.LogDebug("Target cleared");
                 
-                // If target is cleared while attacking, stop attacking
+                // Optionally stop attacking when target is cleared
                 if (_attackAgent.IsAttacking)
                 {
                     _ = Task.Run(async () =>
@@ -248,44 +168,72 @@ namespace WoWSharpClient.Agent
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "Error stopping attack when target was cleared");
+                            _logger.LogError(ex, "Failed to stop attack when target was cleared");
                         }
                     });
                 }
             }
         }
 
-        private void OnAttackStarted(ulong targetGuid)
+        private void OnAttackStarted(ulong victimGuid)
         {
-            _logger.LogInformation($"Started attacking target: {targetGuid:X}");
+            _logger.LogInformation("Attack started on: {VictimGuid:X}", victimGuid);
         }
 
         private void OnAttackStopped()
         {
-            _logger.LogInformation("Stopped attacking");
+            _logger.LogInformation("Attack stopped");
         }
 
-        private void OnAttackError(string errorMessage)
+        private void OnAttackError(string error)
         {
-            _logger.LogWarning($"Attack error: {errorMessage}");
+            _logger.LogWarning("Attack error: {Error}", error);
         }
 
         /// <summary>
-        /// Gets the current target information.
+        /// Example of a more complex combat behavior
         /// </summary>
-        /// <returns>The current target GUID, or null if no target.</returns>
-        public ulong? GetCurrentTarget() => _targetingAgent.CurrentTarget;
+        public async Task AutoCombatAsync(ulong[] enemyGuids, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Starting auto-combat against {EnemyCount} enemies", enemyGuids.Length);
 
-        /// <summary>
-        /// Gets whether the character is currently attacking.
-        /// </summary>
-        /// <returns>True if attacking, false otherwise.</returns>
-        public bool IsAttacking() => _attackAgent.IsAttacking;
+            foreach (var enemyGuid in enemyGuids)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
 
-        /// <summary>
-        /// Gets whether a target is currently selected.
-        /// </summary>
-        /// <returns>True if a target is selected, false otherwise.</returns>
-        public bool HasTarget() => _targetingAgent.HasTarget();
+                try
+                {
+                    _logger.LogDebug("Engaging enemy: {EnemyGuid:X}", enemyGuid);
+
+                    // Target and attack the enemy
+                    await _attackAgent.AttackTargetAsync(enemyGuid, _targetingAgent);
+
+                    // Simulate combat duration (in real implementation, you'd wait for combat to end)
+                    await Task.Delay(2000, cancellationToken);
+
+                    // Stop combat with this enemy
+                    await _attackAgent.StopAttackAsync();
+
+                    _logger.LogDebug("Finished combat with enemy: {EnemyGuid:X}", enemyGuid);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation("Auto-combat cancelled");
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during auto-combat with enemy: {EnemyGuid:X}", enemyGuid);
+                    // Continue with next enemy
+                }
+            }
+
+            // Ensure we're not attacking anything at the end
+            await StopCombatAsync();
+            _logger.LogInformation("Auto-combat completed");
+        }
     }
 }

@@ -5,22 +5,22 @@ using Microsoft.Extensions.Logging;
 namespace WoWSharpClient.Agent
 {
     /// <summary>
-    /// Implementation of targeting agent that handles target selection operations in World of Warcraft.
+    /// Implementation of targeting network agent that handles target selection operations in World of Warcraft.
     /// Manages target selection and assist functionality using the Mangos protocol.
     /// This agent focuses solely on targeting without combat functionality.
     /// </summary>
-    public class TargetingAgent : ITargetingAgent
+    public class TargetingNetworkAgent : ITargetingNetworkAgent
     {
         private readonly IWorldClient _worldClient;
-        private readonly ILogger<TargetingAgent> _logger;
+        private readonly ILogger<TargetingNetworkAgent> _logger;
         private ulong? _currentTarget;
 
         /// <summary>
-        /// Initializes a new instance of the TargetingAgent class.
+        /// Initializes a new instance of the TargetingNetworkAgent class.
         /// </summary>
         /// <param name="worldClient">The world client for sending packets.</param>
         /// <param name="logger">Logger instance.</param>
-        public TargetingAgent(IWorldClient worldClient, ILogger<TargetingAgent> logger)
+        public TargetingNetworkAgent(IWorldClient worldClient, ILogger<TargetingNetworkAgent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));

@@ -7,17 +7,17 @@ using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
-    public class TargetingAgentTests
+    public class TargetingNetworkAgentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<TargetingAgent>> _mockLogger;
-        private readonly TargetingAgent _targetingAgent;
+        private readonly Mock<ILogger<TargetingNetworkAgent>> _mockLogger;
+        private readonly TargetingNetworkAgent _targetingAgent;
 
-        public TargetingAgentTests()
+        public TargetingNetworkAgentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<TargetingAgent>>();
-            _targetingAgent = new TargetingAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<TargetingNetworkAgent>>();
+            _targetingAgent = new TargetingNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         [Fact]

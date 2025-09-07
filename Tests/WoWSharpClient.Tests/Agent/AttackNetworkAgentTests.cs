@@ -7,17 +7,17 @@ using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
-    public class AttackAgentTests
+    public class AttackNetworkAgentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<AttackAgent>> _mockLogger;
-        private readonly AttackAgent _attackAgent;
+        private readonly Mock<ILogger<AttackNetworkAgent>> _mockLogger;
+        private readonly AttackNetworkAgent _attackAgent;
 
-        public AttackAgentTests()
+        public AttackNetworkAgentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<AttackAgent>>();
-            _attackAgent = new AttackAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<AttackNetworkAgent>>();
+            _attackAgent = new AttackNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         [Fact]
@@ -118,7 +118,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             ulong targetGuid = 0x12345678;
-            var mockTargetingAgent = new Mock<ITargetingAgent>();
+            var mockTargetingAgent = new Mock<ITargetingNetworkAgent>();
             
             mockTargetingAgent
                 .Setup(x => x.SetTargetAsync(It.IsAny<ulong>(), It.IsAny<CancellationToken>()))

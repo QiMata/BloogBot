@@ -5,22 +5,22 @@ using Microsoft.Extensions.Logging;
 namespace WoWSharpClient.Agent
 {
     /// <summary>
-    /// Implementation of attack agent that handles combat operations in World of Warcraft.
+    /// Implementation of attack network agent that handles combat operations in World of Warcraft.
     /// Manages auto-attack functionality using the Mangos protocol.
     /// Works in coordination with the targeting agent for target selection.
     /// </summary>
-    public class AttackAgent : IAttackAgent
+    public class AttackNetworkAgent : IAttackNetworkAgent
     {
         private readonly IWorldClient _worldClient;
-        private readonly ILogger<AttackAgent> _logger;
+        private readonly ILogger<AttackNetworkAgent> _logger;
         private bool _isAttacking;
 
         /// <summary>
-        /// Initializes a new instance of the AttackAgent class.
+        /// Initializes a new instance of the AttackNetworkAgent class.
         /// </summary>
         /// <param name="worldClient">The world client for sending packets.</param>
         /// <param name="logger">Logger instance.</param>
-        public AttackAgent(IWorldClient worldClient, ILogger<AttackAgent> logger)
+        public AttackNetworkAgent(IWorldClient worldClient, ILogger<AttackNetworkAgent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -85,7 +85,7 @@ namespace WoWSharpClient.Agent
         }
 
         /// <inheritdoc />
-        public async Task AttackTargetAsync(ulong targetGuid, ITargetingAgent targetingAgent, CancellationToken cancellationToken = default)
+        public async Task AttackTargetAsync(ulong targetGuid, ITargetingNetworkAgent targetingAgent, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(targetingAgent);
 

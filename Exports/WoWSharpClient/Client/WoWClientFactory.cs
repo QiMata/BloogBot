@@ -1,6 +1,7 @@
 using System;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using WoWSharpClient.Agent;
 using WoWSharpClient.Networking.Abstractions;
 using WoWSharpClient.Networking.Implementation;
@@ -134,64 +135,6 @@ namespace WoWSharpClient.Client
         }
 
         /// <summary>
-        /// Creates a targeting agent for the specified world client.
-        /// </summary>
-        /// <param name="worldClient">The world client to use for sending targeting packets.</param>
-        /// <param name="loggerFactory">Optional logger factory for logging targeting operations.</param>
-        /// <returns>A configured targeting agent instance.</returns>
-        public static ITargetingAgent CreateTargetingAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
-        {
-            return AgentFactory.CreateTargetingAgentForClient(worldClient, loggerFactory);
-        }
-
-        /// <summary>
-        /// Creates a targeting agent with a specific logger.
-        /// </summary>
-        /// <param name="worldClient">The world client to use for sending targeting packets.</param>
-        /// <param name="logger">The logger for targeting operations.</param>
-        /// <returns>A configured targeting agent instance.</returns>
-        public static ITargetingAgent CreateTargetingAgent(IWorldClient worldClient, ILogger<TargetingAgent> logger)
-        {
-            return AgentFactory.CreateTargetingAgent(worldClient, logger);
-        }
-
-        /// <summary>
-        /// Creates an attack agent for the specified world client.
-        /// </summary>
-        /// <param name="worldClient">The world client to use for sending attack packets.</param>
-        /// <param name="loggerFactory">Optional logger factory for logging attack operations.</param>
-        /// <returns>A configured attack agent instance.</returns>
-        public static IAttackAgent CreateAttackAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
-        {
-            return AgentFactory.CreateAttackAgentForClient(worldClient, loggerFactory);
-        }
-
-        /// <summary>
-        /// Creates an attack agent with a specific logger.
-        /// </summary>
-        /// <param name="worldClient">The world client to use for sending attack packets.</param>
-        /// <param name="logger">The logger for attack operations.</param>
-        /// <returns>A configured attack agent instance.</returns>
-        public static IAttackAgent CreateAttackAgent(IWorldClient worldClient, ILogger<AttackAgent> logger)
-        {
-            return AgentFactory.CreateAttackAgent(worldClient, logger);
-        }
-
-        /// <summary>
-        /// Creates both targeting and attack agents as a coordinated pair.
-        /// This is a convenience method for creating both agents that work together.
-        /// </summary>
-        /// <param name="worldClient">The world client to use for sending packets.</param>
-        /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
-        /// <returns>A tuple containing both the targeting agent and attack agent.</returns>
-        public static (ITargetingAgent TargetingAgent, IAttackAgent AttackAgent) CreateCombatAgents(
-            IWorldClient worldClient, 
-            ILoggerFactory? loggerFactory = null)
-        {
-            return AgentFactory.CreateCombatAgents(worldClient, loggerFactory);
-        }
-
-        /// <summary>
         /// Creates a modern WoWClient that uses the new networking architecture internally.
         /// This provides backward compatibility for existing code.
         /// </summary>
@@ -210,6 +153,181 @@ namespace WoWSharpClient.Client
         public static WoWClient CreateLegacyWoWClient()
         {
             return new WoWClient();
+        }
+
+        /// <summary>
+        /// Creates a targeting network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending targeting packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging targeting operations.</param>
+        /// <returns>A configured targeting network agent instance.</returns>
+        public static ITargetingNetworkAgent CreateTargetingNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateTargetingNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a targeting network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending targeting packets.</param>
+        /// <param name="logger">The logger for targeting operations.</param>
+        /// <returns>A configured targeting network agent instance.</returns>
+        public static ITargetingNetworkAgent CreateTargetingNetworkAgent(IWorldClient worldClient, ILogger<TargetingNetworkAgent> logger)
+        {
+            return AgentFactory.CreateTargetingNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates an attack network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending attack packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging attack operations.</param>
+        /// <returns>A configured attack network agent instance.</returns>
+        public static IAttackNetworkAgent CreateAttackNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateAttackNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates an attack network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending attack packets.</param>
+        /// <param name="logger">The logger for attack operations.</param>
+        /// <returns>A configured attack network agent instance.</returns>
+        public static IAttackNetworkAgent CreateAttackNetworkAgent(IWorldClient worldClient, ILogger<AttackNetworkAgent> logger)
+        {
+            return AgentFactory.CreateAttackNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a quest network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending quest packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging quest operations.</param>
+        /// <returns>A configured quest network agent instance.</returns>
+        public static IQuestNetworkAgent CreateQuestNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateQuestNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a quest network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending quest packets.</param>
+        /// <param name="logger">The logger for quest operations.</param>
+        /// <returns>A configured quest network agent instance.</returns>
+        public static IQuestNetworkAgent CreateQuestNetworkAgent(IWorldClient worldClient, ILogger<QuestNetworkAgent> logger)
+        {
+            return AgentFactory.CreateQuestNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a looting network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending looting packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging looting operations.</param>
+        /// <returns>A configured looting network agent instance.</returns>
+        public static ILootingNetworkAgent CreateLootingNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateLootingNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a looting network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending looting packets.</param>
+        /// <param name="logger">The logger for looting operations.</param>
+        /// <returns>A configured looting network agent instance.</returns>
+        public static ILootingNetworkAgent CreateLootingNetworkAgent(IWorldClient worldClient, ILogger<LootingNetworkAgent> logger)
+        {
+            return AgentFactory.CreateLootingNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a game object network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending game object packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging game object operations.</param>
+        /// <returns>A configured game object network agent instance.</returns>
+        public static IGameObjectNetworkAgent CreateGameObjectNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateGameObjectNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a game object network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending game object packets.</param>
+        /// <param name="logger">The logger for game object operations.</param>
+        /// <returns>A configured game object network agent instance.</returns>
+        public static IGameObjectNetworkAgent CreateGameObjectNetworkAgent(IWorldClient worldClient, ILogger<GameObjectNetworkAgent> logger)
+        {
+            return AgentFactory.CreateGameObjectNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates all network agents as a coordinated set.
+        /// This is a convenience method for creating all agents that work together.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
+        /// <returns>A tuple containing all network agents.</returns>
+        public static (
+            ITargetingNetworkAgent TargetingAgent,
+            IAttackNetworkAgent AttackAgent,
+            IQuestNetworkAgent QuestAgent,
+            ILootingNetworkAgent LootingAgent,
+            IGameObjectNetworkAgent GameObjectAgent
+        ) CreateAllNetworkAgents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateAllNetworkAgents(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates combat-focused network agents (targeting and attack) as a coordinated pair.
+        /// This maintains backward compatibility with the previous combat agents pattern.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
+        /// <returns>A tuple containing both the targeting agent and attack agent.</returns>
+        public static (ITargetingNetworkAgent TargetingAgent, IAttackNetworkAgent AttackAgent) CreateCombatNetworkAgents(
+            IWorldClient worldClient,
+            ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateCombatNetworkAgents(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a Network Agent Factory that provides coordinated access to all network agents.
+        /// </summary>
+        /// <param name="worldClient">The world client for network communication.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
+        /// <returns>A configured Network Agent Factory instance.</returns>
+        public static IAgentFactory CreateNetworkAgentFactory(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateNetworkAgentFactory(worldClient, loggerFactory ?? new NullLoggerFactory());
+        }
+
+        /// <summary>
+        /// Creates a Network Agent Factory with individual agents.
+        /// This method allows for more granular control over agent creation.
+        /// </summary>
+        /// <param name="targetingAgent">The targeting network agent.</param>
+        /// <param name="attackAgent">The attack network agent.</param>
+        /// <param name="questAgent">The quest network agent.</param>
+        /// <param name="lootingAgent">The looting network agent.</param>
+        /// <param name="gameObjectAgent">The game object network agent.</param>
+        /// <param name="logger">Logger instance.</param>
+        /// <returns>A configured Network Agent Factory instance.</returns>
+        public static IAgentFactory CreateNetworkAgentFactory(
+            ITargetingNetworkAgent targetingAgent,
+            IAttackNetworkAgent attackAgent,
+            IQuestNetworkAgent questAgent,
+            ILootingNetworkAgent lootingAgent,
+            IGameObjectNetworkAgent gameObjectAgent,
+            ILogger<NetworkAgentFactory> logger)
+        {
+            return AgentFactory.CreateNetworkAgentFactory(targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, logger);
         }
     }
 }
