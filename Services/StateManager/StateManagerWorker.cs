@@ -245,6 +245,112 @@ namespace StateManager
             }
             _logger.LogInformation($"[OK] WoW.exe found at: {PATH_TO_GAME}");
 
+            // Enhanced DLL Path Diagnostics
+            var loaderPath = _configuration["LoaderDllPath"];
+
+            if (string.IsNullOrWhiteSpace(loaderPath))
+            {
+                _logger.LogError("Loader DLL path is not configured. Please set 'LoaderDllPath' in appsettings.json.");
+                return;
+            }
+
+            // Resolve relative paths relative to the application base directory
+            if (!Path.IsPathRooted(loaderPath))
+            {
+                var appBaseDir = AppContext.BaseDirectory;
+                // Walk up from bin/Debug/net8.0 to find the repo root
+                var repoRoot = appBaseDir;
+                for (int i = 0; i < 5; i++)
+                {
+                    if (File.Exists(Path.Combine(repoRoot, "BloogBot.sln")))
+                    {
+                        break;
+                    }
+                    var parent = Directory.GetParent(repoRoot);
+                    if (parent == null) break;
+                    repoRoot = parent.FullName;
+                }
+                
+                loaderPath = Path.Combine(repoRoot, loaderPath);
+                _logger.LogInformation($"Resolved relative path to: {loaderPath}");
+            }
+
+            _logger.LogInformation("DLL FILE ANALYSIS");
+
+            // Verify the DLL exists before attempting injection
+            if (!File.Exists(loaderPath))
+            {
+                _logger.LogError($"[FAIL] Loader.dll not found at path: {loaderPath}");
+                return;
+            }
+            _logger.LogInformation($"[OK] Loader.dll found at: {loaderPath}");
+
+            // Check loader DLL architecture
+            try
+            {
+                var loaderInfo = FileVersionInfo.GetVersionInfo(loaderPath);
+                _logger.LogInformation($"[OK] Loader.dll version info: {loaderInfo.FileDescription ?? "N/A"}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"[WARN] Could not read Loader.dll version info: {ex.Message}");
+            }
+
+            // Verify ForegroundBotRunner.dll exists
+            var loaderDir = Path.GetDirectoryName(loaderPath);
+            var foregroundBotPath = Path.Combine(loaderDir ?? "", "ForegroundBotRunner.dll");
+            
+            if (!File.Exists(foregroundBotPath))
+            {
+                _logger.LogError($"[FAIL] ForegroundBotRunner.dll not found at: {foregroundBotPath}");
+                _logger.LogError("The C++ loader expects ForegroundBotRunner.dll to be in the same directory as Loader.dll");
+                return;
+            }
+            _logger.LogInformation($"[OK] ForegroundBotRunner.dll found at: {foregroundBotPath}");
+
+            // Check for runtime config
+            var runtimeConfigPath = Path.Combine(loaderDir ?? "", "ForegroundBotRunner.runtimeconfig.json");
+            if (!File.Exists(runtimeConfigPath))
+            {
+                _logger.LogError($"[FAIL] ForegroundBotRunner.runtimeconfig.json not found at: {runtimeConfigPath}");
+                _logger.LogError("The .NET loader requires a runtime config file for proper .NET 8 hosting");
+                return;
+            }
+            _logger.LogInformation($"[OK] ForegroundBotRunner.runtimeconfig.json found at: {runtimeConfigPath}");
+
+            // Verify .NET 8 runtime availability
+            try
+            {
+                var dotnetInfo = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    Arguments = "--info",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+
+                using var dotnetProcess = Process.Start(dotnetInfo);
+                if (dotnetProcess != null)
+                {
+                    var output = dotnetProcess.StandardOutput.ReadToEnd();
+                    dotnetProcess.WaitForExit();
+                    
+                    if (output.Contains(".NET 8.0"))
+                    {
+                        _logger.LogInformation("[OK] .NET 8.0 runtime detected on system");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("[WARN] .NET 8.0 runtime not clearly detected in dotnet --info output");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"[WARN] Could not verify .NET runtime: {ex.Message}");
+            }
+
             // run WoW.exe in a new process
             CreateProcess(
                 PATH_TO_GAME,
@@ -288,30 +394,11 @@ namespace StateManager
             _managedServices.Add(accountName, (null!, tokenSource, monitoringTask));
             _logger.LogInformation($"Added {accountName} to managed services - preventing duplicate launches");
 
-            // this seems to help prevent timing issues
-            Thread.Sleep(500);
+            // Give WoW.exe time to initialize before injection
+            Thread.Sleep(2000);
 
             // get a handle to the WoW process
             var processHandle = Process.GetProcessById((int)processInfo.dwProcessId).Handle;
-
-            // Enhanced DLL Path Diagnostics
-            var loaderPath = _configuration["LoaderDllPath"];
-
-            if (string.IsNullOrWhiteSpace(loaderPath))
-            {
-                _logger.LogError("Loader DLL path is not configured. Please set 'LoaderDllPath' in appsettings.json.");
-                return;
-            }
-
-            _logger.LogInformation("DLL FILE ANALYSIS");
-
-            // Verify the DLL exists before attempting injection
-            if (!File.Exists(loaderPath))
-            {
-                _logger.LogError($"[FAIL] Loader.dll not found at path: {loaderPath}");
-                return;
-            }
-            _logger.LogInformation($"[OK] Loader.dll found at: {loaderPath}");
 
             _logger.LogInformation($"ATTEMPTING DLL INJECTION: {loaderPath}");
 
@@ -328,11 +415,22 @@ namespace StateManager
                 var lastError = Marshal.GetLastWin32Error();
                 _logger.LogError($"[FAIL] Failed to allocate memory in target process. Error Code: {lastError} (0x{lastError:X})");
                 _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
+                
+                // Check if target process is still running
+                try
+                {
+                    if (process.HasExited)
+                    {
+                        _logger.LogError($"[FAIL] Target WoW process (PID {processInfo.dwProcessId}) has already exited");
+                    }
+                }
+                catch { }
+                
                 return;
             }
             _logger.LogInformation($"[OK] Memory allocated at address: 0x{loaderPathPtr:X}");
 
-            // this seems to help prevent timing issues
+            // Give some time for memory allocation to settle
             Thread.Sleep(500);
 
             // write the file path to Loader.dll to the WoW process's memory
@@ -367,7 +465,7 @@ namespace StateManager
             }
             _logger.LogInformation($"[OK] LoadLibraryW address: 0x{loaderDllPointer:X}");
 
-            // this seems to help prevent timing issues
+            // Give some time before remote thread creation
             Thread.Sleep(500);
 
             _logger.LogInformation("Creating remote thread for DLL injection...");
@@ -387,6 +485,7 @@ namespace StateManager
                 if (lastError == 5) // ACCESS_DENIED
                 {
                     _logger.LogError("ACCESS_DENIED - Target process may have higher privileges or be protected");
+                    _logger.LogError("Try running StateManager as Administrator");
                 }
                 else if (lastError == 8) // NOT_ENOUGH_MEMORY
                 {
@@ -401,7 +500,7 @@ namespace StateManager
             _logger.LogInformation("Waiting for injection to complete...");
 
             // Wait for the injection thread to complete (with timeout)
-            var waitResult = WaitForSingleObject(threadHandle, 10000); // 10 second timeout
+            var waitResult = WaitForSingleObject(threadHandle, 30000); // 30 second timeout for injection
 
             if (waitResult == 0) // WAIT_OBJECT_0
             {
@@ -412,6 +511,34 @@ namespace StateManager
                     {
                         _logger.LogInformation($"SUCCESS: DLL injection completed successfully!");
                         _logger.LogInformation($"[OK] LoadLibrary returned: 0x{exitCode:X} (Module handle)");
+                        
+                        // Give the injected DLL time to initialize
+                        Thread.Sleep(2000);
+                        
+                        // Check for loader breadcrumb files to verify execution
+                        var baseDir = loaderDir;
+                        var stdcallBreadcrumb = Path.Combine(baseDir ?? "", "testentry_stdcall.txt");
+                        var cdeclBreadcrumb = Path.Combine(baseDir ?? "", "testentry_cdecl.txt");
+                        
+                        if (File.Exists(stdcallBreadcrumb))
+                        {
+                            _logger.LogInformation($"[OK] Managed code execution confirmed (stdcall breadcrumb found)");
+                            try
+                            {
+                                var content = File.ReadAllText(stdcallBreadcrumb);
+                                _logger.LogInformation($"[OK] Breadcrumb content: {content.Trim()}");
+                            }
+                            catch { }
+                        }
+                        else if (File.Exists(cdeclBreadcrumb))
+                        {
+                            _logger.LogInformation($"[OK] Managed code execution confirmed (cdecl breadcrumb found)");
+                        }
+                        else
+                        {
+                            _logger.LogWarning($"[WARN] No execution breadcrumbs found. Managed code may not have executed properly.");
+                            _logger.LogWarning($"Expected files: {stdcallBreadcrumb} or {cdeclBreadcrumb}");
+                        }
                     }
                     else
                     {
@@ -419,12 +546,13 @@ namespace StateManager
 
                         // Enhanced error analysis for LoadLibrary failure
                         _logger.LogError("POSSIBLE CAUSES FOR LOADLIBRARY FAILURE:");
-                        _logger.LogError("   - DLL architecture mismatch");
+                        _logger.LogError("   - DLL architecture mismatch (32-bit vs 64-bit)");
                         _logger.LogError("   - Missing dependencies (.NET runtime, Visual C++ redistributables)");
                         _logger.LogError("   - DLL file is corrupted or invalid");
                         _logger.LogError("   - Insufficient permissions");
                         _logger.LogError("   - DLL path contains invalid characters");
                         _logger.LogError("   - Target process doesn't support .NET CLR hosting");
+                        _logger.LogError("   - WoW.exe may have anti-debugging/injection protection");
                     }
                 }
                 else
@@ -440,7 +568,8 @@ namespace StateManager
                 _logger.LogWarning($"WARNING: Thread wait timed out or failed. Wait result: {waitResult}");
                 if (waitResult == 258) // WAIT_TIMEOUT
                 {
-                    _logger.LogWarning("Thread execution timed out after 10 seconds");
+                    _logger.LogWarning("Thread execution timed out after 30 seconds");
+                    _logger.LogWarning("This may indicate the DLL is loading but taking a long time to initialize");
                 }
                 else if (waitResult == 0xFFFFFFFF) // WAIT_FAILED
                 {
@@ -451,7 +580,7 @@ namespace StateManager
 
             CloseHandle(threadHandle);
 
-            // this seems to help prevent timing issues
+            // Give some time before cleanup
             Thread.Sleep(500);
 
             // free the memory that was allocated by VirtualAllocEx

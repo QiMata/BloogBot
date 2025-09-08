@@ -8,6 +8,22 @@
     <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
 
+  <!-- Add required project references for BotRunnerService integration -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
+    <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
+    <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
+    <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
+    <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
+  </ItemGroup>
+
+  <!-- Add required NuGet packages -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+  </ItemGroup>
+
   <!-- Remove ALL items that might cause issues -->
   <ItemGroup>
     <Compile Remove="Program.cs" />
