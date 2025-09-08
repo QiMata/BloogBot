@@ -16,6 +16,13 @@ namespace WoWSharpClient.Networking.Agent
         private bool _isLootWindowOpen;
         private ulong? _currentLootTarget;
 
+        // Callback fields
+        private Action<ulong>? _lootWindowOpenedCallback;
+        private Action? _lootWindowClosedCallback;
+        private Action<uint, uint>? _itemLootedCallback;
+        private Action<uint>? _moneyLootedCallback;
+        private Action<string>? _lootErrorCallback;
+
         /// <summary>
         /// Initializes a new instance of the LootingNetworkAgent class.
         /// </summary>
@@ -31,19 +38,34 @@ namespace WoWSharpClient.Networking.Agent
         public bool IsLootWindowOpen => _isLootWindowOpen;
 
         /// <inheritdoc />
-        public event Action<ulong>? LootWindowOpened;
+        public void SetLootWindowOpenedCallback(Action<ulong>? callback)
+        {
+            _lootWindowOpenedCallback = callback;
+        }
 
         /// <inheritdoc />
-        public event Action? LootWindowClosed;
+        public void SetLootWindowClosedCallback(Action? callback)
+        {
+            _lootWindowClosedCallback = callback;
+        }
 
         /// <inheritdoc />
-        public event Action<uint, uint>? ItemLooted;
+        public void SetItemLootedCallback(Action<uint, uint>? callback)
+        {
+            _itemLootedCallback = callback;
+        }
 
         /// <inheritdoc />
-        public event Action<uint>? MoneyLooted;
+        public void SetMoneyLootedCallback(Action<uint>? callback)
+        {
+            _moneyLootedCallback = callback;
+        }
 
         /// <inheritdoc />
-        public event Action<string>? LootError;
+        public void SetLootErrorCallback(Action<string>? callback)
+        {
+            _lootErrorCallback = callback;
+        }
 
         /// <inheritdoc />
         public async Task OpenLootAsync(ulong lootTargetGuid, CancellationToken cancellationToken = default)
@@ -263,13 +285,13 @@ namespace WoWSharpClient.Networking.Agent
                 {
                     _currentLootTarget = lootTargetGuid.Value;
                     _logger.LogDebug("Loot window opened for target: {LootTargetGuid:X}", lootTargetGuid.Value);
-                    LootWindowOpened?.Invoke(lootTargetGuid.Value);
+                    _lootWindowOpenedCallback?.Invoke(lootTargetGuid.Value);
                 }
                 else if (!isOpen)
                 {
                     _logger.LogDebug("Loot window closed");
                     _currentLootTarget = null;
-                    LootWindowClosed?.Invoke();
+                    _lootWindowClosedCallback?.Invoke();
                 }
             }
         }
@@ -291,17 +313,17 @@ namespace WoWSharpClient.Networking.Agent
                 case "item":
                     if (itemId.HasValue && quantity.HasValue)
                     {
-                        ItemLooted?.Invoke(itemId.Value, quantity.Value);
+                        _itemLootedCallback?.Invoke(itemId.Value, quantity.Value);
                     }
                     break;
                 case "money":
                     if (quantity.HasValue)
                     {
-                        MoneyLooted?.Invoke(quantity.Value);
+                        _moneyLootedCallback?.Invoke(quantity.Value);
                     }
                     break;
                 case "error":
-                    LootError?.Invoke(message ?? "Loot error occurred");
+                    _lootErrorCallback?.Invoke(message ?? "Loot error occurred");
                     break;
                 default:
                     _logger.LogWarning("Unknown loot event type: {EventType}", eventType);

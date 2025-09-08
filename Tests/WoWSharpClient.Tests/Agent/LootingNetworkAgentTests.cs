@@ -264,118 +264,151 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void UpdateLootWindowState_OpenWindow_FiresLootWindowOpenedEvent()
+        public void UpdateLootWindowState_OpenWindow_InvokesLootWindowOpenedCallback()
         {
             // Arrange
             ulong lootTargetGuid = 0x12345678;
-            ulong? eventTargetGuid = null;
-            bool eventFired = false;
+            ulong? callbackTargetGuid = null;
+            bool callbackInvoked = false;
 
-            _lootingAgent.LootWindowOpened += (targetGuid) =>
+            _lootingAgent.SetLootWindowOpenedCallback((targetGuid) =>
             {
-                eventTargetGuid = targetGuid;
-                eventFired = true;
-            };
+                callbackTargetGuid = targetGuid;
+                callbackInvoked = true;
+            });
 
             // Act
             _lootingAgent.UpdateLootWindowState(true, lootTargetGuid);
 
             // Assert
             Assert.True(_lootingAgent.IsLootWindowOpen);
-            Assert.True(eventFired);
-            Assert.Equal(lootTargetGuid, eventTargetGuid);
+            Assert.True(callbackInvoked);
+            Assert.Equal(lootTargetGuid, callbackTargetGuid);
         }
 
         [Fact]
-        public void UpdateLootWindowState_CloseWindow_FiresLootWindowClosedEvent()
+        public void UpdateLootWindowState_CloseWindow_InvokesLootWindowClosedCallback()
         {
             // Arrange
-            bool eventFired = false;
+            bool callbackInvoked = false;
 
             // First open the window
             _lootingAgent.UpdateLootWindowState(true, 0x12345678);
 
-            _lootingAgent.LootWindowClosed += () =>
+            _lootingAgent.SetLootWindowClosedCallback(() =>
             {
-                eventFired = true;
-            };
+                callbackInvoked = true;
+            });
 
             // Act
             _lootingAgent.UpdateLootWindowState(false);
 
             // Assert
             Assert.False(_lootingAgent.IsLootWindowOpen);
-            Assert.True(eventFired);
+            Assert.True(callbackInvoked);
         }
 
         [Fact]
-        public void ReportLootEvent_ItemLooted_FiresItemLootedEvent()
+        public void ReportLootEvent_ItemLooted_InvokesItemLootedCallback()
         {
             // Arrange
             uint itemId = 1234;
             uint quantity = 5;
-            uint? eventItemId = null;
-            uint? eventQuantity = null;
-            bool eventFired = false;
+            uint? callbackItemId = null;
+            uint? callbackQuantity = null;
+            bool callbackInvoked = false;
 
-            _lootingAgent.ItemLooted += (id, qty) =>
+            _lootingAgent.SetItemLootedCallback((id, qty) =>
             {
-                eventItemId = id;
-                eventQuantity = qty;
-                eventFired = true;
-            };
+                callbackItemId = id;
+                callbackQuantity = qty;
+                callbackInvoked = true;
+            });
 
             // Act
             _lootingAgent.ReportLootEvent("item", itemId, quantity);
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(itemId, eventItemId);
-            Assert.Equal(quantity, eventQuantity);
+            Assert.True(callbackInvoked);
+            Assert.Equal(itemId, callbackItemId);
+            Assert.Equal(quantity, callbackQuantity);
         }
 
         [Fact]
-        public void ReportLootEvent_MoneyLooted_FiresMoneyLootedEvent()
+        public void ReportLootEvent_MoneyLooted_InvokesMoneyLootedCallback()
         {
             // Arrange
             uint amount = 1000; // 10 silver in copper
-            uint? eventAmount = null;
-            bool eventFired = false;
+            uint? callbackAmount = null;
+            bool callbackInvoked = false;
 
-            _lootingAgent.MoneyLooted += (amt) =>
+            _lootingAgent.SetMoneyLootedCallback((amt) =>
             {
-                eventAmount = amt;
-                eventFired = true;
-            };
+                callbackAmount = amt;
+                callbackInvoked = true;
+            });
 
             // Act
             _lootingAgent.ReportLootEvent("money", null, amount);
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(amount, eventAmount);
+            Assert.True(callbackInvoked);
+            Assert.Equal(amount, callbackAmount);
         }
 
         [Fact]
-        public void ReportLootEvent_LootError_FiresLootErrorEvent()
+        public void ReportLootEvent_LootError_InvokesLootErrorCallback()
         {
             // Arrange
             string errorMessage = "Inventory is full";
-            string? eventErrorMessage = null;
-            bool eventFired = false;
+            string? callbackErrorMessage = null;
+            bool callbackInvoked = false;
 
-            _lootingAgent.LootError += (error) =>
+            _lootingAgent.SetLootErrorCallback((error) =>
             {
-                eventErrorMessage = error;
-                eventFired = true;
-            };
+                callbackErrorMessage = error;
+                callbackInvoked = true;
+            });
 
             // Act
             _lootingAgent.ReportLootEvent("error", null, null, errorMessage);
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(errorMessage, eventErrorMessage);
+            Assert.True(callbackInvoked);
+            Assert.Equal(errorMessage, callbackErrorMessage);
+        }
+
+        [Fact]
+        public void SetLootWindowOpenedCallback_ReplacesExistingCallback()
+        {
+            // Arrange
+            int firstCallbackCount = 0;
+            int secondCallbackCount = 0;
+
+            _lootingAgent.SetLootWindowOpenedCallback((targetGuid) => firstCallbackCount++);
+            _lootingAgent.SetLootWindowOpenedCallback((targetGuid) => secondCallbackCount++);
+
+            // Act
+            _lootingAgent.UpdateLootWindowState(true, 0x12345678);
+
+            // Assert
+            Assert.Equal(0, firstCallbackCount); // First callback should not be called
+            Assert.Equal(1, secondCallbackCount); // Second callback should be called
+        }
+
+        [Fact]
+        public void SetLootWindowOpenedCallback_WithNull_ClearsCallback()
+        {
+            // Arrange
+            int callbackCount = 0;
+            _lootingAgent.SetLootWindowOpenedCallback((targetGuid) => callbackCount++);
+            _lootingAgent.SetLootWindowOpenedCallback(null); // Clear callback
+
+            // Act
+            _lootingAgent.UpdateLootWindowState(true, 0x12345678);
+
+            // Assert
+            Assert.Equal(0, callbackCount); // No callback should be invoked
         }
 
         [Fact]
@@ -431,18 +464,18 @@ namespace WoWSharpClient.Tests.Agent
         public void ReportLootEvent_VariousEventTypes_HandledCorrectly(string eventType)
         {
             // Arrange
-            bool eventFired = false;
+            bool callbackInvoked = false;
 
-            // Subscribe to all events
-            _lootingAgent.ItemLooted += (id, qty) => eventFired = true;
-            _lootingAgent.MoneyLooted += (amt) => eventFired = true;
-            _lootingAgent.LootError += (error) => eventFired = true;
+            // Subscribe to all callbacks
+            _lootingAgent.SetItemLootedCallback((id, qty) => callbackInvoked = true);
+            _lootingAgent.SetMoneyLootedCallback((amt) => callbackInvoked = true);
+            _lootingAgent.SetLootErrorCallback((error) => callbackInvoked = true);
 
             // Act
             _lootingAgent.ReportLootEvent(eventType, 1234, 100, "Test message");
 
             // Assert
-            Assert.True(eventFired);
+            Assert.True(callbackInvoked);
         }
     }
 }

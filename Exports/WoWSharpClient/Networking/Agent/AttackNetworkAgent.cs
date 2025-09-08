@@ -16,6 +16,11 @@ namespace WoWSharpClient.Networking.Agent
         private readonly ILogger<AttackNetworkAgent> _logger;
         private bool _isAttacking;
 
+        // Callback fields
+        private Action<ulong>? _attackStartedCallback;
+        private Action? _attackStoppedCallback;
+        private Action<string>? _attackErrorCallback;
+
         /// <summary>
         /// Initializes a new instance of the AttackNetworkAgent class.
         /// </summary>
@@ -31,13 +36,22 @@ namespace WoWSharpClient.Networking.Agent
         public bool IsAttacking => _isAttacking;
 
         /// <inheritdoc />
-        public event Action<ulong>? AttackStarted;
+        public void SetAttackStartedCallback(Action<ulong>? callback)
+        {
+            _attackStartedCallback = callback;
+        }
 
         /// <inheritdoc />
-        public event Action? AttackStopped;
+        public void SetAttackStoppedCallback(Action? callback)
+        {
+            _attackStoppedCallback = callback;
+        }
 
         /// <inheritdoc />
-        public event Action<string>? AttackError;
+        public void SetAttackErrorCallback(Action<string>? callback)
+        {
+            _attackErrorCallback = callback;
+        }
 
         /// <inheritdoc />
         public async Task StartAttackAsync(CancellationToken cancellationToken = default)
@@ -94,11 +108,53 @@ namespace WoWSharpClient.Networking.Agent
             {
                 _logger.LogDebug("Setting target and starting attack on: {TargetGuid:X}", targetGuid);
 
-                // Set target first using the targeting agent
-                await targetingAgent.SetTargetAsync(targetGuid, cancellationToken);
+                // Set up a task completion source to wait for target confirmation
+                var targetCompletionSource = new TaskCompletionSource<bool>();
+                var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                
+                // Create a temporary callback for target changes
+                Action<ulong?> onTargetChanged = (newTarget) =>
+                {
+                    if (newTarget == targetGuid)
+                    {
+                        targetCompletionSource.TrySetResult(true);
+                    }
+                };
 
-                // Small delay to ensure target is set before attacking
-                await Task.Delay(50, cancellationToken);
+                // Add temporary callback and ensure it gets removed
+                IDisposable? callbackSubscription = null;
+                if (targetingAgent is TargetingNetworkAgent concreteAgent)
+                {
+                    callbackSubscription = concreteAgent.AddTemporaryTargetChangedCallback(onTargetChanged);
+                }
+
+                try
+                {
+                    // Set target first using the targeting agent
+                    await targetingAgent.SetTargetAsync(targetGuid, cancellationToken);
+
+                    // Wait for target confirmation with timeout (max 1000ms)
+                    timeoutCts.CancelAfter(1000);
+                    var targetSetTask = targetCompletionSource.Task;
+                    var timeoutTask = Task.Delay(-1, timeoutCts.Token);
+
+                    var completedTask = await Task.WhenAny(targetSetTask, timeoutTask);
+                    
+                    if (completedTask == timeoutTask)
+                    {
+                        _logger.LogWarning("Target setting timed out, proceeding with attack anyway for: {TargetGuid:X}", targetGuid);
+                    }
+                    else if (targetSetTask.IsCompletedSuccessfully)
+                    {
+                        _logger.LogDebug("Target confirmed, proceeding with attack on: {TargetGuid:X}", targetGuid);
+                    }
+                }
+                finally
+                {
+                    // Remove the temporary callback
+                    callbackSubscription?.Dispose();
+                    timeoutCts.Dispose();
+                }
 
                 // Start auto-attack
                 await StartAttackAsync(cancellationToken);
@@ -141,12 +197,12 @@ namespace WoWSharpClient.Networking.Agent
                 if (isAttacking && victimGuid.HasValue)
                 {
                     _logger.LogDebug("Server confirmed attack started on: {VictimGuid:X}", victimGuid.Value);
-                    AttackStarted?.Invoke(victimGuid.Value);
+                    _attackStartedCallback?.Invoke(victimGuid.Value);
                 }
                 else if (!isAttacking)
                 {
                     _logger.LogDebug("Server confirmed attack stopped");
-                    AttackStopped?.Invoke();
+                    _attackStoppedCallback?.Invoke();
                 }
             }
         }
@@ -159,7 +215,7 @@ namespace WoWSharpClient.Networking.Agent
         public void ReportAttackError(string errorMessage)
         {
             _logger.LogWarning("Attack error: {ErrorMessage}", errorMessage);
-            AttackError?.Invoke(errorMessage);
+            _attackErrorCallback?.Invoke(errorMessage);
         }
     }
 }

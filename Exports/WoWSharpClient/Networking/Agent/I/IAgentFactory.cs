@@ -67,6 +67,31 @@ namespace WoWSharpClient.Networking.Agent.I
         /// </summary>
         ISpellCastingNetworkAgent SpellCastingAgent { get; }
 
+        /// <summary>
+        /// Gets the auction house network agent for auction house operations.
+        /// </summary>
+        IAuctionHouseNetworkAgent AuctionHouseAgent { get; }
+
+        /// <summary>
+        /// Gets the bank network agent for personal bank operations.
+        /// </summary>
+        IBankNetworkAgent BankAgent { get; }
+
+        /// <summary>
+        /// Gets the mail network agent for mail system interactions.
+        /// </summary>
+        IMailNetworkAgent MailAgent { get; }
+
+        /// <summary>
+        /// Gets the guild network agent for guild management operations.
+        /// </summary>
+        IGuildNetworkAgent GuildAgent { get; }
+
+        /// <summary>
+        /// Gets the party network agent for party/raid group management operations.
+        /// </summary>
+        IPartyNetworkAgent PartyAgent { get; }
+
         #endregion
     }
 }

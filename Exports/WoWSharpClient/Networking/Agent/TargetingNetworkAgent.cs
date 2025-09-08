@@ -2,6 +2,7 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.Agent.Helpers;
 
 namespace WoWSharpClient.Networking.Agent
 {
@@ -15,6 +16,9 @@ namespace WoWSharpClient.Networking.Agent
         private readonly IWorldClient _worldClient;
         private readonly ILogger<TargetingNetworkAgent> _logger;
         private ulong? _currentTarget;
+
+        // Callback manager for target changed callbacks
+        private readonly CallbackManager<ulong?> _targetChangedCallbackManager = new();
 
         /// <summary>
         /// Initializes a new instance of the TargetingNetworkAgent class.
@@ -31,7 +35,21 @@ namespace WoWSharpClient.Networking.Agent
         public ulong? CurrentTarget => _currentTarget;
 
         /// <inheritdoc />
-        public event Action<ulong?>? TargetChanged;
+        public void SetTargetChangedCallback(Action<ulong?>? callback)
+        {
+            _targetChangedCallbackManager.SetPermanentCallback(callback);
+        }
+
+        /// <summary>
+        /// Adds a temporary callback for target changes that can be removed later.
+        /// This is useful for operations that need to temporarily monitor target changes.
+        /// </summary>
+        /// <param name="callback">The temporary callback to add.</param>
+        /// <returns>A disposable that, when disposed, removes the temporary callback.</returns>
+        public IDisposable AddTemporaryTargetChangedCallback(Action<ulong?> callback)
+        {
+            return _targetChangedCallbackManager.AddTemporaryCallback(callback);
+        }
 
         /// <inheritdoc />
         public async Task SetTargetAsync(ulong targetGuid, CancellationToken cancellationToken = default)
@@ -51,12 +69,12 @@ namespace WoWSharpClient.Networking.Agent
                 var previousTarget = _currentTarget;
                 _currentTarget = targetGuid == 0 ? null : targetGuid;
 
-                // Fire target changed event if target actually changed
+                // Fire target changed callback if target actually changed
                 if (previousTarget != _currentTarget)
                 {
                     _logger.LogInformation("Target changed from {PreviousTarget:X} to {NewTarget:X}", 
                         previousTarget ?? 0, _currentTarget ?? 0);
-                    TargetChanged?.Invoke(_currentTarget);
+                    _targetChangedCallbackManager.InvokeCallbacks(_currentTarget);
                 }
             }
             catch (Exception ex)
@@ -127,7 +145,7 @@ namespace WoWSharpClient.Networking.Agent
                 _logger.LogDebug("Server updated target from {PreviousTarget:X} to {NewTarget:X}",
                     previousTarget ?? 0, _currentTarget ?? 0);
                     
-                TargetChanged?.Invoke(_currentTarget);
+                _targetChangedCallbackManager.InvokeCallbacks(_currentTarget);
             }
         }
     }

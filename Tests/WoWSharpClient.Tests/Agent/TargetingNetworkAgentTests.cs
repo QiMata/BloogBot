@@ -97,50 +97,50 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public async Task SetTargetAsync_FiresTargetChangedEvent()
+        public async Task SetTargetAsync_InvokesTargetChangedCallback()
         {
             // Arrange
             ulong targetGuid = 0x12345678;
-            ulong? eventTargetGuid = null;
-            bool eventFired = false;
+            ulong? callbackTargetGuid = null;
+            bool callbackInvoked = false;
 
             _mockWorldClient
                 .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
-            _targetingAgent.TargetChanged += (newTarget) =>
+            _targetingAgent.SetTargetChangedCallback((newTarget) =>
             {
-                eventTargetGuid = newTarget;
-                eventFired = true;
-            };
+                callbackTargetGuid = newTarget;
+                callbackInvoked = true;
+            });
 
             // Act
             await _targetingAgent.SetTargetAsync(targetGuid);
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(targetGuid, eventTargetGuid);
+            Assert.True(callbackInvoked);
+            Assert.Equal(targetGuid, callbackTargetGuid);
         }
 
         [Fact]
-        public async Task SetTargetAsync_SameTarget_DoesNotFireEvent()
+        public async Task SetTargetAsync_SameTarget_DoesNotInvokeCallback()
         {
             // Arrange
             ulong targetGuid = 0x12345678;
-            int eventCount = 0;
+            int callbackCount = 0;
 
             _mockWorldClient
                 .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
-            _targetingAgent.TargetChanged += (newTarget) => eventCount++;
+            _targetingAgent.SetTargetChangedCallback((newTarget) => callbackCount++);
 
             // Act
             await _targetingAgent.SetTargetAsync(targetGuid);
             await _targetingAgent.SetTargetAsync(targetGuid); // Same target again
 
             // Assert
-            Assert.Equal(1, eventCount); // Event should only fire once
+            Assert.Equal(1, callbackCount); // Callback should only be invoked once
         }
 
         [Fact]
@@ -214,26 +214,26 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void UpdateCurrentTarget_UpdatesStateAndFiresEvent()
+        public void UpdateCurrentTarget_UpdatesStateAndInvokesCallback()
         {
             // Arrange
             ulong newTargetGuid = 0x11111111;
-            ulong? eventTargetGuid = null;
-            bool eventFired = false;
+            ulong? callbackTargetGuid = null;
+            bool callbackInvoked = false;
 
-            _targetingAgent.TargetChanged += (newTarget) =>
+            _targetingAgent.SetTargetChangedCallback((newTarget) =>
             {
-                eventTargetGuid = newTarget;
-                eventFired = true;
-            };
+                callbackTargetGuid = newTarget;
+                callbackInvoked = true;
+            });
 
             // Act
             _targetingAgent.UpdateCurrentTarget(newTargetGuid);
 
             // Assert
             Assert.Equal(newTargetGuid, _targetingAgent.CurrentTarget);
-            Assert.True(eventFired);
-            Assert.Equal(newTargetGuid, eventTargetGuid);
+            Assert.True(callbackInvoked);
+            Assert.Equal(newTargetGuid, callbackTargetGuid);
         }
 
         [Fact]
@@ -243,22 +243,55 @@ namespace WoWSharpClient.Tests.Agent
             ulong initialTarget = 0x12345678;
             _targetingAgent.UpdateCurrentTarget(initialTarget); // Set initial target
 
-            ulong? eventTargetGuid = null;
-            bool eventFired = false;
+            ulong? callbackTargetGuid = null;
+            bool callbackInvoked = false;
 
-            _targetingAgent.TargetChanged += (newTarget) =>
+            _targetingAgent.SetTargetChangedCallback((newTarget) =>
             {
-                eventTargetGuid = newTarget;
-                eventFired = true;
-            };
+                callbackTargetGuid = newTarget;
+                callbackInvoked = true;
+            });
 
             // Act
             _targetingAgent.UpdateCurrentTarget(0);
 
             // Assert
             Assert.Null(_targetingAgent.CurrentTarget);
-            Assert.True(eventFired);
-            Assert.Null(eventTargetGuid);
+            Assert.True(callbackInvoked);
+            Assert.Null(callbackTargetGuid);
+        }
+
+        [Fact]
+        public void SetTargetChangedCallback_ReplacesExistingCallback()
+        {
+            // Arrange
+            int firstCallbackCount = 0;
+            int secondCallbackCount = 0;
+
+            _targetingAgent.SetTargetChangedCallback((target) => firstCallbackCount++);
+            _targetingAgent.SetTargetChangedCallback((target) => secondCallbackCount++);
+
+            // Act
+            _targetingAgent.UpdateCurrentTarget(0x12345678);
+
+            // Assert
+            Assert.Equal(0, firstCallbackCount); // First callback should not be called
+            Assert.Equal(1, secondCallbackCount); // Second callback should be called
+        }
+
+        [Fact]
+        public void SetTargetChangedCallback_WithNull_ClearsCallback()
+        {
+            // Arrange
+            int callbackCount = 0;
+            _targetingAgent.SetTargetChangedCallback((target) => callbackCount++);
+            _targetingAgent.SetTargetChangedCallback(null); // Clear callback
+
+            // Act
+            _targetingAgent.UpdateCurrentTarget(0x12345678);
+
+            // Assert
+            Assert.Equal(0, callbackCount); // No callback should be invoked
         }
 
         [Fact]

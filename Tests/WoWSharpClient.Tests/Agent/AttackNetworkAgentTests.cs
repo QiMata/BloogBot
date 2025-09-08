@@ -155,88 +155,121 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void UpdateAttackingState_FromFalseToTrue_FiresAttackStartedEvent()
+        public void UpdateAttackingState_FromFalseToTrue_InvokesAttackStartedCallback()
         {
             // Arrange
             ulong attackerGuid = 0x12345678;
             ulong victimGuid = 0x87654321;
-            ulong? eventVictimGuid = null;
-            bool eventFired = false;
+            ulong? callbackVictimGuid = null;
+            bool callbackInvoked = false;
 
-            _attackAgent.AttackStarted += (victim) =>
+            _attackAgent.SetAttackStartedCallback((victim) =>
             {
-                eventVictimGuid = victim;
-                eventFired = true;
-            };
+                callbackVictimGuid = victim;
+                callbackInvoked = true;
+            });
 
             // Act
             _attackAgent.UpdateAttackingState(true, attackerGuid, victimGuid);
 
             // Assert
             Assert.True(_attackAgent.IsAttacking);
-            Assert.True(eventFired);
-            Assert.Equal(victimGuid, eventVictimGuid);
+            Assert.True(callbackInvoked);
+            Assert.Equal(victimGuid, callbackVictimGuid);
         }
 
         [Fact]
-        public void UpdateAttackingState_FromTrueToFalse_FiresAttackStoppedEvent()
+        public void UpdateAttackingState_FromTrueToFalse_InvokesAttackStoppedCallback()
         {
             // Arrange
-            bool eventFired = false;
+            bool callbackInvoked = false;
 
             // Set initial attacking state
             _attackAgent.UpdateAttackingState(true, 0x12345678, 0x87654321);
 
-            _attackAgent.AttackStopped += () =>
+            _attackAgent.SetAttackStoppedCallback(() =>
             {
-                eventFired = true;
-            };
+                callbackInvoked = true;
+            });
 
             // Act
             _attackAgent.UpdateAttackingState(false);
 
             // Assert
             Assert.False(_attackAgent.IsAttacking);
-            Assert.True(eventFired);
+            Assert.True(callbackInvoked);
         }
 
         [Fact]
-        public void UpdateAttackingState_SameState_DoesNotFireEvent()
+        public void UpdateAttackingState_SameState_DoesNotInvokeCallbacks()
         {
             // Arrange
-            int eventCount = 0;
+            int callbackCount = 0;
 
-            _attackAgent.AttackStarted += (victim) => eventCount++;
-            _attackAgent.AttackStopped += () => eventCount++;
+            _attackAgent.SetAttackStartedCallback((victim) => callbackCount++);
+            _attackAgent.SetAttackStoppedCallback(() => callbackCount++);
 
             // Act
             _attackAgent.UpdateAttackingState(false); // Initial state is already false
             _attackAgent.UpdateAttackingState(false); // Same state again
 
             // Assert
-            Assert.Equal(0, eventCount); // No events should fire
+            Assert.Equal(0, callbackCount); // No callbacks should be invoked
         }
 
         [Fact]
-        public void ReportAttackError_FiresAttackErrorEvent()
+        public void ReportAttackError_InvokesAttackErrorCallback()
         {
             // Arrange
             string errorMessage = "Target not in range";
-            string? eventErrorMessage = null;
-            bool eventFired = false;
+            string? callbackErrorMessage = null;
+            bool callbackInvoked = false;
 
-            _attackAgent.AttackError += (error) =>
+            _attackAgent.SetAttackErrorCallback((error) =>
             {
-                eventErrorMessage = error;
-                eventFired = true;
-            };
+                callbackErrorMessage = error;
+                callbackInvoked = true;
+            });
 
             // Act
             _attackAgent.ReportAttackError(errorMessage);
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(errorMessage, eventErrorMessage);
+            Assert.True(callbackInvoked);
+            Assert.Equal(errorMessage, callbackErrorMessage);
+        }
+
+        [Fact]
+        public void SetAttackStartedCallback_ReplacesExistingCallback()
+        {
+            // Arrange
+            int firstCallbackCount = 0;
+            int secondCallbackCount = 0;
+
+            _attackAgent.SetAttackStartedCallback((victim) => firstCallbackCount++);
+            _attackAgent.SetAttackStartedCallback((victim) => secondCallbackCount++);
+
+            // Act
+            _attackAgent.UpdateAttackingState(true, 0x12345678, 0x87654321);
+
+            // Assert
+            Assert.Equal(0, firstCallbackCount); // First callback should not be called
+            Assert.Equal(1, secondCallbackCount); // Second callback should be called
+        }
+
+        [Fact]
+        public void SetAttackStartedCallback_WithNull_ClearsCallback()
+        {
+            // Arrange
+            int callbackCount = 0;
+            _attackAgent.SetAttackStartedCallback((victim) => callbackCount++);
+            _attackAgent.SetAttackStartedCallback(null); // Clear callback
+
+            // Act
+            _attackAgent.UpdateAttackingState(true, 0x12345678, 0x87654321);
+
+            // Assert
+            Assert.Equal(0, callbackCount); // No callback should be invoked
         }
 
         [Fact]
@@ -305,18 +338,18 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void UpdateAttackingState_WithoutVictimGuid_DoesNotFireAttackStarted()
+        public void UpdateAttackingState_WithoutVictimGuid_DoesNotInvokeAttackStartedCallback()
         {
             // Arrange
-            bool eventFired = false;
-            _attackAgent.AttackStarted += (victim) => eventFired = true;
+            bool callbackInvoked = false;
+            _attackAgent.SetAttackStartedCallback((victim) => callbackInvoked = true);
 
             // Act - Start attacking but without victim GUID
             _attackAgent.UpdateAttackingState(true);
 
             // Assert
             Assert.True(_attackAgent.IsAttacking);
-            Assert.False(eventFired); // Event should not fire without victim GUID
+            Assert.False(callbackInvoked); // Callback should not be invoked without victim GUID
         }
     }
 }

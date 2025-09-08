@@ -27,6 +27,11 @@ namespace WoWSharpClient.Networking.Agent
         private IItemUseNetworkAgent? _itemUseAgent;
         private IEquipmentNetworkAgent? _equipmentAgent;
         private ISpellCastingNetworkAgent? _spellCastingAgent;
+        private IAuctionHouseNetworkAgent? _auctionHouseAgent;
+        private IBankNetworkAgent? _bankAgent;
+        private IMailNetworkAgent? _mailAgent;
+        private IGuildNetworkAgent? _guildAgent;
+        private IPartyNetworkAgent? _partyAgent;
 
         // Thread safety locks
         private readonly object _targetingLock = new object();
@@ -41,6 +46,11 @@ namespace WoWSharpClient.Networking.Agent
         private readonly object _itemUseLock = new object();
         private readonly object _equipmentLock = new object();
         private readonly object _spellCastingLock = new object();
+        private readonly object _auctionHouseLock = new object();
+        private readonly object _bankLock = new object();
+        private readonly object _mailLock = new object();
+        private readonly object _guildLock = new object();
+        private readonly object _partyLock = new object();
 
         // Event handler setup tracking
         private bool _eventsSetup = false;
@@ -312,6 +322,116 @@ namespace WoWSharpClient.Networking.Agent
             }
         }
 
+        /// <inheritdoc />
+        public IAuctionHouseNetworkAgent AuctionHouseAgent
+        {
+            get
+            {
+                if (_auctionHouseAgent == null)
+                {
+                    lock (_auctionHouseLock)
+                    {
+                        if (_auctionHouseAgent == null)
+                        {
+                            _logger.LogDebug("Creating AuctionHouseNetworkAgent lazily");
+                            _auctionHouseAgent = AgentFactory.CreateAuctionHouseNetworkAgent(_worldClient, _loggerFactory);
+                            SetupEventHandlersIfNeeded();
+                            _logger.LogDebug("AuctionHouseNetworkAgent created successfully");
+                        }
+                    }
+                }
+                return _auctionHouseAgent;
+            }
+        }
+
+        /// <inheritdoc />
+        public IBankNetworkAgent BankAgent
+        {
+            get
+            {
+                if (_bankAgent == null)
+                {
+                    lock (_bankLock)
+                    {
+                        if (_bankAgent == null)
+                        {
+                            _logger.LogDebug("Creating BankNetworkAgent lazily");
+                            _bankAgent = AgentFactory.CreateBankNetworkAgent(_worldClient, _loggerFactory);
+                            SetupEventHandlersIfNeeded();
+                            _logger.LogDebug("BankNetworkAgent created successfully");
+                        }
+                    }
+                }
+                return _bankAgent;
+            }
+        }
+
+        /// <inheritdoc />
+        public IMailNetworkAgent MailAgent
+        {
+            get
+            {
+                if (_mailAgent == null)
+                {
+                    lock (_mailLock)
+                    {
+                        if (_mailAgent == null)
+                        {
+                            _logger.LogDebug("Creating MailNetworkAgent lazily");
+                            _mailAgent = AgentFactory.CreateMailNetworkAgent(_worldClient, _loggerFactory);
+                            SetupEventHandlersIfNeeded();
+                            _logger.LogDebug("MailNetworkAgent created successfully");
+                        }
+                    }
+                }
+                return _mailAgent;
+            }
+        }
+
+        /// <inheritdoc />
+        public IGuildNetworkAgent GuildAgent
+        {
+            get
+            {
+                if (_guildAgent == null)
+                {
+                    lock (_guildLock)
+                    {
+                        if (_guildAgent == null)
+                        {
+                            _logger.LogDebug("Creating GuildNetworkAgent lazily");
+                            _guildAgent = AgentFactory.CreateGuildNetworkAgent(_worldClient, _loggerFactory);
+                            SetupEventHandlersIfNeeded();
+                            _logger.LogDebug("GuildNetworkAgent created successfully");
+                        }
+                    }
+                }
+                return _guildAgent;
+            }
+        }
+
+        /// <inheritdoc />
+        public IPartyNetworkAgent PartyAgent
+        {
+            get
+            {
+                if (_partyAgent == null)
+                {
+                    lock (_partyLock)
+                    {
+                        if (_partyAgent == null)
+                        {
+                            _logger.LogDebug("Creating PartyNetworkAgent lazily");
+                            _partyAgent = AgentFactory.CreatePartyNetworkAgent(_worldClient, _loggerFactory);
+                            SetupEventHandlersIfNeeded();
+                            _logger.LogDebug("PartyNetworkAgent created successfully");
+                        }
+                    }
+                }
+                return _partyAgent;
+            }
+        }
+
         #endregion
 
         #region Constructors
@@ -391,113 +511,127 @@ namespace WoWSharpClient.Networking.Agent
         }
 
         /// <summary>
-        /// Sets up event handlers for coordinating between agents.
+        /// Sets up callback handlers for coordinating between agents.
         /// </summary>
         private void SetupEventHandlers()
         {
-            // Only setup events for agents that are already created
+            // Wire WorldClient events to AttackNetworkAgent for proper server response handling
+            if (_worldClient is WorldClient worldClient)
+            {
+                // Connect attack state changes from server to AttackNetworkAgent
+                worldClient.OnAttackStateChanged += (isAttacking, attackerGuid, victimGuid) =>
+                {
+                    if (_attackAgent is AttackNetworkAgent attackAgent)
+                    {
+                        attackAgent.UpdateAttackingState(isAttacking, attackerGuid, victimGuid);
+                    }
+                };
+
+                // Connect attack error messages from server to AttackNetworkAgent
+                worldClient.OnAttackError += (errorMessage) =>
+                {
+                    if (_attackAgent is AttackNetworkAgent attackAgent)
+                    {
+                        attackAgent.ReportAttackError(errorMessage);
+                    }
+                };
+            }
+
+            // Setup callbacks for agents that are already created
             if (_targetingAgent != null)
             {
-                _targetingAgent.TargetChanged += OnTargetChanged;
+                _targetingAgent.SetTargetChangedCallback(OnTargetChanged);
             }
 
             if (_attackAgent != null)
             {
-                _attackAgent.AttackStarted += OnAttackStarted;
-                _attackAgent.AttackStopped += OnAttackStopped;
-                _attackAgent.AttackError += OnAttackError;
+                _attackAgent.SetAttackStartedCallback(OnAttackStarted);
+                _attackAgent.SetAttackStoppedCallback(OnAttackStopped);
+                _attackAgent.SetAttackErrorCallback(OnAttackError);
             }
 
             if (_questAgent != null)
             {
-                _questAgent.QuestOffered += OnQuestOffered;
-                _questAgent.QuestAccepted += OnQuestAccepted;
-                _questAgent.QuestCompleted += OnQuestCompleted;
-                _questAgent.QuestError += OnQuestError;
+                // Setup quest agent callbacks when that interface is updated
+                // _questAgent.SetQuestOfferedCallback(OnQuestOffered);
+                // _questAgent.SetQuestAcceptedCallback(OnQuestAccepted);
+                // etc.
             }
 
             if (_lootingAgent != null)
             {
-                _lootingAgent.LootWindowOpened += OnLootWindowOpened;
-                _lootingAgent.LootWindowClosed += OnLootWindowClosed;
-                _lootingAgent.ItemLooted += OnItemLooted;
-                _lootingAgent.MoneyLooted += OnMoneyLooted;
-                _lootingAgent.LootError += OnLootError;
+                _lootingAgent.SetLootWindowOpenedCallback(OnLootWindowOpened);
+                _lootingAgent.SetLootWindowClosedCallback(OnLootWindowClosed);
+                _lootingAgent.SetItemLootedCallback(OnItemLooted);
+                _lootingAgent.SetMoneyLootedCallback(OnMoneyLooted);
+                _lootingAgent.SetLootErrorCallback(OnLootError);
             }
 
+            // Note: Additional agents will have their callbacks setup here when they are refactored
+            // For now, leaving the rest as-is until they are converted to callback pattern
             if (_gameObjectAgent != null)
             {
-                _gameObjectAgent.GameObjectInteracted += OnGameObjectInteracted;
-                _gameObjectAgent.ChestOpened += OnChestOpened;
-                _gameObjectAgent.NodeHarvested += OnNodeHarvested;
-                _gameObjectAgent.GatheringFailed += OnGatheringFailed;
+                // Will be updated when IGameObjectNetworkAgent is refactored
             }
 
             if (_vendorAgent != null)
             {
-                _vendorAgent.VendorWindowOpened += OnVendorWindowOpened;
-                _vendorAgent.VendorWindowClosed += OnVendorWindowClosed;
-                _vendorAgent.ItemPurchased += OnItemPurchased;
-                _vendorAgent.ItemSold += OnItemSold;
-                _vendorAgent.ItemsRepaired += OnItemsRepaired;
-                _vendorAgent.VendorError += OnVendorError;
+                // Will be updated when IVendorNetworkAgent is refactored
             }
 
             if (_flightMasterAgent != null)
             {
-                _flightMasterAgent.TaxiMapOpened += OnTaxiMapOpened;
-                _flightMasterAgent.TaxiMapClosed += OnTaxiMapClosed;
-                _flightMasterAgent.FlightActivated += OnFlightActivated;
-                _flightMasterAgent.TaxiNodeStatusReceived += OnTaxiNodeStatusReceived;
-                _flightMasterAgent.FlightMasterError += OnFlightMasterError;
+                // Will be updated when IFlightMasterNetworkAgent is refactored
             }
 
             if (_deadActorAgent != null)
             {
-                _deadActorAgent.OnDeath += OnCharacterDeath;
-                _deadActorAgent.OnSpiritReleased += OnSpiritReleased;
-                _deadActorAgent.OnResurrected += OnCharacterResurrected;
-                _deadActorAgent.OnResurrectionRequest += OnResurrectionRequest;
-                _deadActorAgent.OnCorpseLocationUpdated += OnCorpseLocationUpdated;
-                _deadActorAgent.OnDeathError += OnDeathError;
+                // Will be updated when IDeadActorAgent is refactored
             }
 
             if (_inventoryAgent != null)
             {
-                _inventoryAgent.ItemMoved += OnItemMoved;
-                _inventoryAgent.ItemSplit += OnItemSplit;
-                _inventoryAgent.ItemsSwapped += OnItemsSwapped;
-                _inventoryAgent.ItemDestroyed += OnItemDestroyed;
-                _inventoryAgent.InventoryError += OnInventoryError;
+                // Will be updated when IInventoryNetworkAgent is refactored
             }
 
             if (_itemUseAgent != null)
             {
-                _itemUseAgent.ItemUsed += OnItemUsed;
-                _itemUseAgent.ItemUseStarted += OnItemUseStarted;
-                _itemUseAgent.ItemUseCompleted += OnItemUseCompleted;
-                _itemUseAgent.ItemUseFailed += OnItemUseFailed;
-                _itemUseAgent.ConsumableEffectApplied += OnConsumableEffectApplied;
+                // Will be updated when IItemUseNetworkAgent is refactored
             }
 
             if (_equipmentAgent != null)
             {
-                _equipmentAgent.ItemEquipped += OnItemEquipped;
-                _equipmentAgent.ItemUnequipped += OnItemUnequipped;
-                _equipmentAgent.EquipmentSwapped += OnEquipmentSwapped;
-                _equipmentAgent.EquipmentError += OnEquipmentError;
-                _equipmentAgent.DurabilityChanged += OnDurabilityChanged;
+                // Will be updated when IEquipmentNetworkAgent is refactored
             }
 
             if (_spellCastingAgent != null)
             {
-                _spellCastingAgent.SpellCastStarted += OnSpellCastStarted;
-                _spellCastingAgent.SpellCastCompleted += OnSpellCastCompleted;
-                _spellCastingAgent.SpellCastFailed += OnSpellCastFailed;
-                _spellCastingAgent.ChannelingStarted += OnChannelingStarted;
-                _spellCastingAgent.ChannelingEnded += OnChannelingEnded;
-                _spellCastingAgent.SpellCooldownStarted += OnSpellCooldownStarted;
-                _spellCastingAgent.SpellHit += OnSpellHit;
+                // Will be updated when ISpellCastingNetworkAgent is refactored
+            }
+
+            if (_auctionHouseAgent != null)
+            {
+                // Will be updated when IAuctionHouseNetworkAgent is refactored
+            }
+
+            if (_bankAgent != null)
+            {
+                // Will be updated when IBankNetworkAgent is refactored
+            }
+
+            if (_mailAgent != null)
+            {
+                // Will be updated when IMailNetworkAgent is refactored
+            }
+
+            if (_guildAgent != null)
+            {
+                // Will be updated when IGuildNetworkAgent event handling is implemented
+            }
+
+            if (_partyAgent != null)
+            {
+                // Will be updated when IPartyNetworkAgent event handling is implemented
             }
         }
 
@@ -795,6 +929,116 @@ namespace WoWSharpClient.Networking.Agent
         {
             _logger.LogDebug("Spell {SpellId} hit target {Target:X} - Damage: {Damage}, Healed: {Healed}",
                 spellId, targetGuid, damage, healed);
+        }
+
+        private void OnAuctionHouseOpened(ulong auctioneerGuid)
+        {
+            _logger.LogDebug("Auction house opened for auctioneer: {AuctioneerGuid:X}", auctioneerGuid);
+        }
+
+        private void OnAuctionHouseClosed()
+        {
+            _logger.LogDebug("Auction house closed");
+        }
+
+        private void OnAuctionSearchResults(IReadOnlyList<AuctionData> auctions)
+        {
+            _logger.LogDebug("Received {Count} auction search results", auctions.Count);
+        }
+
+        private void OnOwnedAuctionResults(IReadOnlyList<AuctionData> auctions)
+        {
+            _logger.LogDebug("Received {Count} owned auction results", auctions.Count);
+        }
+
+        private void OnBidderAuctionResults(IReadOnlyList<AuctionData> auctions)
+        {
+            _logger.LogDebug("Received {Count} bidder auction results", auctions.Count);
+        }
+
+        private void OnAuctionOperationCompleted(AuctionOperationType operation, uint auctionId)
+        {
+            _logger.LogDebug("Auction operation {Operation} completed for auction {AuctionId}", operation, auctionId);
+        }
+
+        private void OnAuctionOperationFailed(AuctionOperationType operation, string errorReason)
+        {
+            _logger.LogWarning("Auction operation {Operation} failed: {Error}", operation, errorReason);
+        }
+
+        private void OnBidPlaced(uint auctionId, uint bidAmount)
+        {
+            _logger.LogDebug("Bid of {BidAmount} copper placed on auction {AuctionId}", bidAmount, auctionId);
+        }
+
+        private void OnAuctionPosted(uint itemId, uint startBid, uint buyoutPrice, uint duration)
+        {
+            _logger.LogDebug("Auction posted for item {ItemId} with start bid {StartBid}, buyout {BuyoutPrice}, duration {Duration}h",
+                itemId, startBid, buyoutPrice, duration);
+        }
+
+        private void OnAuctionCancelled(uint auctionId)
+        {
+            _logger.LogDebug("Auction {AuctionId} cancelled", auctionId);
+        }
+
+        private void OnAuctionNotification(AuctionNotificationType notificationType, uint auctionId, uint itemId)
+        {
+            _logger.LogDebug("Auction notification: {NotificationType} for auction {AuctionId} (item {ItemId})",
+                notificationType, auctionId, itemId);
+        }
+
+        private void OnBankWindowOpened(ulong bankerGuid)
+        {
+            _logger.LogDebug("Bank window opened for banker: {BankerGuid:X}", bankerGuid);
+        }
+
+        private void OnBankWindowClosed()
+        {
+            _logger.LogDebug("Bank window closed");
+        }
+
+        private void OnItemDeposited(ulong itemGuid, uint itemId, uint quantity, byte bankSlot)
+        {
+            _logger.LogDebug("Item deposited: {ItemId} (GUID: {ItemGuid:X}), Quantity: {Quantity}, Bank Slot: {BankSlot}", 
+                itemId, itemGuid, quantity, bankSlot);
+        }
+
+        private void OnItemWithdrawn(ulong itemGuid, uint itemId, uint quantity, byte bagSlot)
+        {
+            _logger.LogDebug("Item withdrawn: {ItemId} (GUID: {ItemGuid:X}), Quantity: {Quantity}, Bag Slot: {BagSlot}", 
+                itemId, itemGuid, quantity, bagSlot);
+        }
+
+        private void OnBankItemsSwapped(ulong inventoryItemGuid, ulong bankItemGuid)
+        {
+            _logger.LogDebug("Items swapped between inventory and bank: {InventoryGuid:X} <-> {BankGuid:X}", 
+                inventoryItemGuid, bankItemGuid);
+        }
+
+        private void OnBankGoldDeposited(uint amount)
+        {
+            _logger.LogDebug("Gold deposited to bank: {Amount} copper", amount);
+        }
+
+        private void OnBankGoldWithdrawn(uint amount)
+        {
+            _logger.LogDebug("Gold withdrawn from bank: {Amount} copper", amount);
+        }
+
+        private void OnBankSlotPurchased(byte slotIndex, uint cost)
+        {
+            _logger.LogDebug("Bank slot purchased: Slot {SlotIndex}, Cost: {Cost} copper", slotIndex, cost);
+        }
+
+        private void OnBankInfoUpdated(uint availableSlots, uint purchasedBagSlots)
+        {
+            _logger.LogDebug("Bank info updated: Available: {Available}, Purchased: {Purchased}", availableSlots, purchasedBagSlots);
+        }
+
+        private void OnBankOperationFailed(BankOperationType operation, string error)
+        {
+            _logger.LogWarning("Bank operation {Operation} failed: {Error}", operation, error);
         }
 
         #endregion

@@ -12,9 +12,10 @@ namespace WoWSharpClient.Networking.Agent.I
         ulong? CurrentTarget { get; }
 
         /// <summary>
-        /// Event fired when the target changes.
+        /// Sets the callback function to be invoked when the target changes.
         /// </summary>
-        event Action<ulong?> TargetChanged;
+        /// <param name="callback">Callback function that receives the new target GUID (null if target is cleared).</param>
+        void SetTargetChangedCallback(Action<ulong?>? callback);
 
         /// <summary>
         /// Sets the current target to the specified GUID.

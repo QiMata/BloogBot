@@ -23,19 +23,19 @@ namespace WoWSharpClient.Networking.Agent
             _targetingAgent = targetingAgent;
             _attackAgent = attackAgent;
 
-            // Wire up event handlers for coordination
-            SetupEventHandlers();
+            // Wire up callback handlers for coordination
+            SetupCallbackHandlers();
         }
 
-        private void SetupEventHandlers()
+        private void SetupCallbackHandlers()
         {
             // When target changes, log the change
-            _targetingAgent.TargetChanged += OnTargetChanged;
+            _targetingAgent.SetTargetChangedCallback(OnTargetChanged);
             
             // When attack starts/stops, log the changes
-            _attackAgent.AttackStarted += OnAttackStarted;
-            _attackAgent.AttackStopped += OnAttackStopped;
-            _attackAgent.AttackError += OnAttackError;
+            _attackAgent.SetAttackStartedCallback(OnAttackStarted);
+            _attackAgent.SetAttackStoppedCallback(OnAttackStopped);
+            _attackAgent.SetAttackErrorCallback(OnAttackError);
         }
 
         /// <summary>

@@ -422,7 +422,7 @@ namespace WoWSharpClient.Client
 
         /// <summary>
         /// Creates all network agents as a coordinated set.
-        /// This is a convenience method for creating all agents that work together.
+        /// This maintains backward compatibility while providing access to all available agents.
         /// </summary>
         /// <param name="worldClient">The world client to use for sending packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
@@ -439,7 +439,12 @@ namespace WoWSharpClient.Client
             IInventoryNetworkAgent InventoryAgent,
             IItemUseNetworkAgent ItemUseAgent,
             IEquipmentNetworkAgent EquipmentAgent,
-            ISpellCastingNetworkAgent SpellCastingAgent
+            ISpellCastingNetworkAgent SpellCastingAgent,
+            IAuctionHouseNetworkAgent AuctionHouseAgent,
+            IBankNetworkAgent BankAgent,
+            IMailNetworkAgent MailAgent,
+            IGuildNetworkAgent GuildAgent,
+            IPartyNetworkAgent PartyAgent
         ) CreateAllNetworkAgents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return AgentFactory.CreateAllNetworkAgents(worldClient, loggerFactory);
@@ -490,6 +495,94 @@ namespace WoWSharpClient.Client
             ILogger<NetworkAgentFactory> logger)
         {
             return AgentFactory.CreateNetworkAgentFactory(targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, logger);
+        }
+
+        /// <summary>
+        /// Creates an auction house network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending auction house packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging auction house operations.</param>
+        /// <returns>A configured auction house network agent instance.</returns>
+        public static IAuctionHouseNetworkAgent CreateAuctionHouseNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateAuctionHouseNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a bank network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
+        /// <returns>A configured bank network agent.</returns>
+        public static IBankNetworkAgent CreateBankNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateBankNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a mail network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending mail packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging mail operations.</param>
+        /// <returns>A configured mail network agent instance.</returns>
+        public static IMailNetworkAgent CreateMailNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateMailNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a mail network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending mail packets.</param>
+        /// <param name="logger">The logger for mail operations.</param>
+        /// <returns>A configured mail network agent instance.</returns>
+        public static IMailNetworkAgent CreateMailNetworkAgent(IWorldClient worldClient, ILogger<MailNetworkAgent> logger)
+        {
+            return AgentFactory.CreateMailNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a guild network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending guild packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging guild operations.</param>
+        /// <returns>A configured guild network agent instance.</returns>
+        public static IGuildNetworkAgent CreateGuildNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateGuildNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a guild network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending guild packets.</param>
+        /// <param name="logger">The logger for guild operations.</param>
+        /// <returns>A configured guild network agent instance.</returns>
+        public static IGuildNetworkAgent CreateGuildNetworkAgent(IWorldClient worldClient, ILogger<GuildNetworkAgent> logger)
+        {
+            return AgentFactory.CreateGuildNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a party network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending party packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging party operations.</param>
+        /// <returns>A configured party network agent instance.</returns>
+        public static IPartyNetworkAgent CreatePartyNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreatePartyNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a party network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending party packets.</param>
+        /// <param name="logger">The logger for party operations.</param>
+        /// <returns>A configured party network agent instance.</returns>
+        public static IPartyNetworkAgent CreatePartyNetworkAgent(IWorldClient worldClient, ILogger<PartyNetworkAgent> logger)
+        {
+            return AgentFactory.CreatePartyNetworkAgent(worldClient, logger);
         }
     }
 }

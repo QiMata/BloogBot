@@ -12,29 +12,34 @@ namespace WoWSharpClient.Networking.Agent.I
         bool IsLootWindowOpen { get; }
 
         /// <summary>
-        /// Event fired when a loot window is opened.
+        /// Sets the callback function to be invoked when a loot window is opened.
         /// </summary>
-        event Action<ulong> LootWindowOpened;
+        /// <param name="callback">Callback function that receives the loot target GUID.</param>
+        void SetLootWindowOpenedCallback(Action<ulong>? callback);
 
         /// <summary>
-        /// Event fired when a loot window is closed.
+        /// Sets the callback function to be invoked when a loot window is closed.
         /// </summary>
-        event Action LootWindowClosed;
+        /// <param name="callback">Callback function to invoke when loot window closes.</param>
+        void SetLootWindowClosedCallback(Action? callback);
 
         /// <summary>
-        /// Event fired when an item is successfully looted.
+        /// Sets the callback function to be invoked when an item is successfully looted.
         /// </summary>
-        event Action<uint, uint> ItemLooted; // ItemId, Quantity
+        /// <param name="callback">Callback function that receives ItemId and Quantity.</param>
+        void SetItemLootedCallback(Action<uint, uint>? callback);
 
         /// <summary>
-        /// Event fired when money is looted.
+        /// Sets the callback function to be invoked when money is looted.
         /// </summary>
-        event Action<uint> MoneyLooted; // Amount in copper
+        /// <param name="callback">Callback function that receives the amount in copper.</param>
+        void SetMoneyLootedCallback(Action<uint>? callback);
 
         /// <summary>
-        /// Event fired when a loot error occurs.
+        /// Sets the callback function to be invoked when a loot error occurs.
         /// </summary>
-        event Action<string> LootError;
+        /// <param name="callback">Callback function that receives the error message.</param>
+        void SetLootErrorCallback(Action<string>? callback);
 
         /// <summary>
         /// Opens a loot container (corpse, chest, etc.).

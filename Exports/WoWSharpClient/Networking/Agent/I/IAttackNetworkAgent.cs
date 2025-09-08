@@ -12,19 +12,22 @@ namespace WoWSharpClient.Networking.Agent.I
         bool IsAttacking { get; }
 
         /// <summary>
-        /// Event fired when auto-attack starts.
+        /// Sets the callback function to be invoked when auto-attack starts.
         /// </summary>
-        event Action<ulong> AttackStarted;
+        /// <param name="callback">Callback function that receives the victim's GUID.</param>
+        void SetAttackStartedCallback(Action<ulong>? callback);
 
         /// <summary>
-        /// Event fired when auto-attack stops.
+        /// Sets the callback function to be invoked when auto-attack stops.
         /// </summary>
-        event Action AttackStopped;
+        /// <param name="callback">Callback function to invoke when attack stops.</param>
+        void SetAttackStoppedCallback(Action? callback);
 
         /// <summary>
-        /// Event fired when an attack error occurs (not in range, bad facing, etc.).
+        /// Sets the callback function to be invoked when an attack error occurs.
         /// </summary>
-        event Action<string> AttackError;
+        /// <param name="callback">Callback function that receives the error message.</param>
+        void SetAttackErrorCallback(Action<string>? callback);
 
         /// <summary>
         /// Starts auto-attack on the current target.

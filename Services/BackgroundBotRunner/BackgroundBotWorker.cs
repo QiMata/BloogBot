@@ -33,7 +33,11 @@ namespace BackgroundBotRunner
             IInventoryNetworkAgent InventoryAgent,
             IItemUseNetworkAgent ItemUseAgent,
             IEquipmentNetworkAgent EquipmentAgent,
-            ISpellCastingNetworkAgent SpellCastingAgent
+            ISpellCastingNetworkAgent SpellCastingAgent,
+            IAuctionHouseNetworkAgent AuctionHouseAgent,
+            IBankNetworkAgent BankAgent,
+            IMailNetworkAgent MailAgent,
+            IGuildNetworkAgent GuildAgent
         ) _allAgents;
         
         private readonly CombatIntegrationExample _combatExample;
@@ -97,6 +101,10 @@ namespace BackgroundBotRunner
                         // var itemUseAgent = _allAgents.ItemUseAgent;
                         // var equipmentAgent = _allAgents.EquipmentAgent;
                         // var spellCastingAgent = _allAgents.SpellCastingAgent;
+                        // var auctionHouseAgent = _allAgents.AuctionHouseAgent;
+                        // var bankAgent = _allAgents.BankAgent;
+                        // var mailAgent = _allAgents.MailAgent;
+                        // var guildAgent = _allAgents.GuildAgent;
                     }
 
                     await Task.Delay(100, stoppingToken);
