@@ -1,128 +1,179 @@
-﻿#include "Navigation.h"
+﻿// DllMain.cpp - Refactored to use VMapManager2 directly
+#include "Navigation.h"
+#include "VMapManager2.h"
+#include "VMapFactory.h"
+#include "PhysicsEngine.h"
+#include "PhysicsBridge.h"
+#include "MapLoader.h"
+
+#define NOMINMAX
 #include <windows.h>
 #include <iostream>
-#include "PhysicsBridge.h"
-#include "PhysicsEngine.h"
+#include <memory>
+#include <mutex>
+#include <filesystem>
+#include <vector>
 
-// Flag to track if initialization has been performed
+// Global instances
+static VMAP::VMapManager2* g_vmapManager = nullptr;  // Direct pointer to VMapManager2
+static std::unique_ptr<MapLoader> g_mapLoader = nullptr;
 static bool g_initialized = false;
+static std::mutex g_initMutex;
 
-// Lazy initialization helper
-static bool EnsureInitialized()
+void InitializeAllSystems()
 {
-    if (g_initialized) return true;
-    
+    std::lock_guard<std::mutex> lock(g_initMutex);
+
+    if (g_initialized)
+        return;
+
     try
     {
-        OutputDebugStringA("Navigation.dll: Starting lazy initialization...");
-        
-        if (auto* physics = PhysicsEngine::Instance()) 
+        // Initialize MapLoader (optional, for terrain data)
+        g_mapLoader = std::make_unique<MapLoader>();
+        std::vector<std::string> mapPaths = { "maps/" };
+
+        for (const auto& path : mapPaths)
         {
-            physics->Initialize();
-            OutputDebugStringA("Navigation.dll: PhysicsEngine initialized");
+            if (std::filesystem::exists(path))
+            {
+                if (g_mapLoader->Initialize(path))
+                    break;
+            }
         }
-        
-        if (auto* navigation = Navigation::GetInstance()) 
+
+        // Initialize VMAP system directly using VMapManager2
+        std::vector<std::string> vmapPaths = { "vmaps/" };
+        for (const auto& path : vmapPaths)
         {
-            navigation->Initialize();
-            OutputDebugStringA("Navigation.dll: Navigation initialized");
+            if (std::filesystem::exists(path))
+            {
+                // Get or create the VMapManager2 instance through factory
+                g_vmapManager = static_cast<VMAP::VMapManager2*>(
+                    VMAP::VMapFactory::createOrGetVMapManager());
+
+                if (g_vmapManager)
+                {
+                    // Initialize factory and set base path
+                    VMAP::VMapFactory::initialize();
+                    g_vmapManager->setBasePath(path);
+                    break;
+                }
+            }
         }
-        
+
+        // Initialize Navigation
+        Navigation::GetInstance()->Initialize();
+
+        // Initialize Physics Engine
+        PhysicsEngine::Instance()->Initialize();
+
         g_initialized = true;
-        OutputDebugStringA("Navigation.dll: Lazy initialization complete");
-        return true;
     }
     catch (...)
     {
-        OutputDebugStringA("Navigation.dll: Lazy initialization failed");
-        return false;
+        g_initialized = true; // Prevent retry
     }
 }
 
-extern "C"
+// ===============================
+// ESSENTIAL EXPORTS ONLY
+// ===============================
+
+extern "C" __declspec(dllexport) void PreloadMap(uint32_t mapId)
 {
-    __declspec(dllexport) XYZ* CalculatePath(uint32_t mapId, XYZ start, XYZ end, bool straightPath, int* length)
-    {
-        if (!EnsureInitialized() || !length) return nullptr;
-        auto nav = Navigation::GetInstance();
-        return nav ? nav->CalculatePath(mapId, start, end, straightPath, length) : nullptr;
-    }
+    if (!g_initialized)
+        InitializeAllSystems();
 
-    __declspec(dllexport) void FreePathArr(XYZ* path)
+    // Preload VMAP data directly using VMapManager2
+    if (g_vmapManager)
     {
-        if (!EnsureInitialized() || !path) return;
-        if (auto* nav = Navigation::GetInstance())
-            nav->FreePathArr(path);
-    }
-
-    __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ to)
-    {
-        if (!EnsureInitialized()) return false;
-        return Navigation::GetInstance()->IsLineOfSight(mapId, from, to);
-    }
-
-    __declspec(dllexport) NavPoly* CapsuleOverlap(uint32_t mapId, XYZ pos,
-            float radius, float height,
-            int* outCount)
-    {
-        if (!EnsureInitialized() || !outCount) return nullptr;
-
-        std::vector<NavPoly> v;
         try
         {
-            v = Navigation::GetInstance()->CapsuleOverlap(mapId, pos, radius, height);
+            // Initialize the map if not already done
+            if (!g_vmapManager->isMapInitialized(mapId))
+            {
+                g_vmapManager->initializeMap(mapId);
+            }
         }
-        catch (const std::exception& ex)
+        catch (...) {}
+    }
+
+    // Preload navigation mesh
+    try
+    {
+        auto* navigation = Navigation::GetInstance();
+        if (navigation)
         {
-            return nullptr;
+            MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
+            navigation->GetQueryForMap(mapId);
         }
-
-        *outCount = static_cast<int>(v.size());
-
-        if (v.empty()) return nullptr;
-
-        size_t bytes = v.size() * sizeof(NavPoly);
-
-        auto* buf = static_cast<NavPoly*>(::CoTaskMemAlloc(bytes));
-        if (!buf) return nullptr;
-
-        std::memcpy(buf, v.data(), bytes);
-        return buf;
     }
-
-    __declspec(dllexport) void FreeNavPolyArr(NavPoly* p)
-    {
-        if (p) ::CoTaskMemFree(p);
-    }
-    
-    __declspec(dllexport) PhysicsOutput __cdecl StepPhysics(const PhysicsInput* in, float dt)
-    {
-        if (!EnsureInitialized()) return PhysicsOutput{};
-        return PhysicsEngine::Instance()->Step(*in, dt);
-    }
+    catch (...) {}
 }
 
+extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ end, bool smoothPath, int* length)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    auto* navigation = Navigation::GetInstance();
+    if (navigation)
+        return navigation->CalculatePath(mapId, start, end, smoothPath, length);
+
+    *length = 0;
+    return nullptr;
+}
+
+extern "C" __declspec(dllexport) void PathArrFree(XYZ* pathArr)
+{
+    delete[] pathArr;
+}
+
+extern "C" __declspec(dllexport) PhysicsOutput PhysicsStep(const PhysicsInput& input)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    if (auto* physics = PhysicsEngine::Instance())
+        return physics->Step(input, input.deltaTime);
+
+    // Return passthrough if physics isn't available
+    PhysicsOutput output = {};
+    output.x = input.x;
+    output.y = input.y;
+    output.z = input.z;
+    output.orientation = input.orientation;
+    output.pitch = input.pitch;
+    output.vx = input.vx;
+    output.vy = input.vy;
+    output.vz = input.vz;
+    output.moveFlags = input.moveFlags;
+    output.isGrounded = false;
+    output.isSwimming = false;
+    output.isFlying = (input.moveFlags & MOVEFLAG_FLYING) != 0;
+    output.groundZ = -100000.0f;
+    output.liquidZ = -100000.0f;
+    return output;
+}
+
+// DLL Entry Point
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
-    switch (ul_reason_for_call)
+    if (ul_reason_for_call == DLL_PROCESS_ATTACH)
     {
-    case DLL_PROCESS_ATTACH:
-        OutputDebugStringA("Navigation.dll: DLL_PROCESS_ATTACH - lightweight init only");
-        // Only lightweight initialization here - defer heavy work to first function call
-        break;
-        
-    case DLL_PROCESS_DETACH:
-        OutputDebugStringA("Navigation.dll: DLL_PROCESS_DETACH");
-        if (g_initialized)
+        SetConsoleOutputCP(CP_UTF8);
+    }
+    else if (ul_reason_for_call == DLL_PROCESS_DETACH)
+    {
+        if (lpReserved == nullptr)  // FreeLibrary was called
         {
-            if (auto* navigation = Navigation::GetInstance()) 
-                navigation->Release();
+            // Don't delete g_vmapManager as it's managed by the factory
+            g_vmapManager = nullptr;
+            g_mapLoader.reset();
+            PhysicsEngine::Destroy();
+            VMAP::VMapFactory::clear();  // Clean up the factory
         }
-        break;
-        
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
-        break;
     }
     return TRUE;
 }
