@@ -1,0 +1,13 @@
+[
+  {
+    "AccountName": "TESTBOT01",
+    "CharacterName": "TestCharacter",
+    "RealmName": "TestRealm",
+    "Class": "Warrior",
+    "Race": "Human",
+    "StartingZone": "Elwynn Forest",
+    "BotType": "Foreground",
+    "Enabled": true,
+    "Notes": "Integration test character - automatically created by StateUpdateIntegrationTest"
+  }
+]

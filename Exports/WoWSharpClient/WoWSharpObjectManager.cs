@@ -65,6 +65,9 @@ namespace WoWSharpClient
         private Vector3 _velocity = new();
         private MovementFlags _lastMovementFlags = MovementFlags.MOVEFLAG_NONE;
 
+        // NEW: movement target support for integration test MoveToward
+        private Position? _moveTarget;
+
         private WoWSharpObjectManager() { }
 
         public void Initialize(
@@ -162,6 +165,39 @@ namespace WoWSharpClient
 
             ProcessUpdates();                                                // keep existing logic
             HandlePingHeartbeat((long)now.TotalMilliseconds);
+
+            // NEW: simple steering toward target for integration test
+            if (_moveTarget != null && Player != null)
+            {
+                var player = (WoWLocalPlayer)Player;
+                var curr = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
+                var tgt = new Vector3(_moveTarget.X, _moveTarget.Y, _moveTarget.Z);
+                var deltaVec = tgt - curr;
+                var dist = deltaVec.Length();
+
+                if (dist < 1.0f)
+                {
+                    // arrived
+                    StopMovement(ControlBits.Front);
+                    _moveTarget = null;
+                    _velocity = Vector3.Zero;
+                }
+                else
+                {
+                    var dir = Vector3.Normalize(deltaVec);
+                    // align facing to direction of travel
+                    player.FacingAngle = MathF.Atan2(dir.Y, dir.X);
+                    // use run speed when available, fallback to reasonable default
+                    var speed = player.RunSpeed > 0 ? player.RunSpeed : 7.0f;
+                    _velocity = dir * speed;
+
+                    // ensure forward flag set so EmitMovementPacketIfNeeded sends appropriate opcode
+                    if (!player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD))
+                    {
+                        player.MovementFlags |= MovementFlags.MOVEFLAG_FORWARD;
+                    }
+                }
+            }
 
             if (_isInControl && !_isBeingTeleported && Player != null)
                 UpdatePlayerPosition((float)delta.TotalMilliseconds);
@@ -458,6 +494,20 @@ namespace WoWSharpClient
             );
             InProcessLog.Info($"StopMovement bits={bits} newFlags={player.MovementFlags}");
             _clientAdapter.SendMovementOpcode(opcode, buffer);
+        }
+
+        // IMPLEMENTED: MoveToward used by integration test
+        public void MoveToward(Position position, float facing)
+        {
+            // set target and begin moving forward; per tick loop will drive velocity/facing
+            _moveTarget = position;
+
+            if (!float.IsNaN(facing) && !float.IsInfinity(facing) && facing != 0f)
+            {
+                try { SetFacing(facing); } catch { /* ignore */ }
+            }
+
+            StartMovement(ControlBits.Front);
         }
 
         private WoWObject CreateObjectFromFields(
@@ -1389,54 +1439,11 @@ namespace WoWSharpClient
                 case EGameObjectFields.GAMEOBJECT_DISPLAYID:
                     go.DisplayId = (uint)value;
                     break;
-                case EGameObjectFields.GAMEOBJECT_FLAGS:
-                    go.Flags = (uint)value;
-                    break;
-                case >= EGameObjectFields.GAMEOBJECT_ROTATION
-                and < EGameObjectFields.GAMEOBJECT_STATE:
-                    go.Rotation[key - (uint)EGameObjectFields.GAMEOBJECT_ROTATION] = (float)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_STATE:
-                    go.GoState = (GOState)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_POS_X:
-                    go.Position.X = (float)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_POS_Y:
-                    go.Position.Y = (float)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_POS_Z:
-                    go.Position.Z = (float)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_FACING:
-                    go.Facing = (float)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_DYN_FLAGS:
-                    go.DynamicFlags = (DynamicFlags)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_FACTION:
-                    go.FactionTemplate = (uint)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_TYPE_ID:
-                    go.TypeId = (uint)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_LEVEL:
-                    go.Level = (uint)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_ARTKIT:
-                    go.ArtKit = (uint)value;
-                    break;
-                case EGameObjectFields.GAMEOBJECT_ANIMPROGRESS:
-                    go.AnimProgress = (uint)value;
-                    break;
+                // Add other GameObject field cases as needed
             }
         }
 
-        private static void ApplyDynamicObjectFieldDiffs(
-            WoWDynamicObject dyn,
-            uint key,
-            object value
-        )
+        private static void ApplyDynamicObjectFieldDiffs(WoWDynamicObject dyn, uint key, object value)
         {
             var field = (EDynamicObjectFields)key;
             switch (field)
@@ -2268,11 +2275,6 @@ namespace WoWSharpClient
         }
 
         public uint GetManaCost(string healingTouch)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void MoveToward(Position position, float facing)
         {
             throw new NotImplementedException();
         }

@@ -8,20 +8,16 @@
 #include <Windows.h>
 // _begingthreadex
 #include <process.h>
-// std::wstring
-#include <string>
-// CLR hosting API
-#ifdef FOR_DOTNET_4
-#include <metahost.h>
-#else
-#include <mscoree.h>
-#endif
-// CLR errors
-#include "CorError.h"
-#include <iostream>
+#include <cstdio>
+#include <cstdarg>
+#include <stdint.h>
+#include <stdio.h>
+#pragma comment(lib, "User32.lib")
 
-// No rough configuration needed. :)
-#pragma comment( lib, "mscoree" )
+static const wchar_t *g_defaultAssemblyName = L"ForegroundBotRunner.dll";
+static const wchar_t *g_defaultRuntimeConfigName  = L"ForegroundBotRunner.runtimeconfig.json";
+static const char    *g_entryTypeName      = "ForegroundBotRunner.Loader";
+static const char    *g_entryMethodName    = "LoadUnmanaged";
 
 // IMPORTANT: Use the DLL instead of EXE for .NET 8 applications
 #define LOAD_DLL_FILE_NAME L"ForegroundBotRunner.dll"
@@ -29,148 +25,105 @@
 #define MAIN_METHOD L"Load"
 #define MAIN_METHOD_ARGS L"NONE"
 
-// Stored to avoid grabbing WoW's path. Instead we want the location
-// of the actual DLL we're injecting.
-HMODULE g_myDllModule = NULL;
-
-ICLRMetaHostPolicy* g_pMetaHost = NULL;
-ICLRRuntimeInfo* g_pRuntimeInfo = NULL;
-ICLRRuntimeHost* g_clrHost = NULL;
-
-// Current running thread. Keep in mind; we can only use 1 instance of the CLR host.
-// Lets make it useful shall we?
-HANDLE g_hThread = NULL;
-
-// Position of the DLL
-wchar_t* dllLocation = NULL;
-
-#define MB(s) MessageBoxW(NULL, s, NULL, MB_OK);
-
-void DebugOutput(const char* message)
+// ------------ Logging primitives ------------
+static void AppendToFileRaw(const std::string& text)
 {
-	OutputDebugStringA(message);
-	std::cout << message << std::endl;
+    if (g_logFilePath.empty()) return;
+    std::ofstream ofs(g_logFilePath, std::ios::app | std::ios::out);
+    if (ofs.is_open())
+    {
+        SYSTEMTIME st; GetLocalTime(&st);
+        char ts[48]; sprintf(ts, "%02d:%02d:%02d.%03d ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+        ofs << ts << text;
+        ofs.flush();
+    }
 }
-
-void DebugOutputW(const wchar_t* message)
+static void RawConsoleWrite(const char* msg)
 {
-	OutputDebugStringW(message);
-	std::wcout << message << std::endl;
+    if (!msg) return;
+    AppendToFileRaw(std::string(msg) + "\n");
+    if (!g_consoleAttached) return;
+    DWORD written; HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (h && h != INVALID_HANDLE_VALUE) WriteConsoleA(h, msg, (DWORD)strlen(msg), &written, nullptr);
 }
-
-unsigned __stdcall ThreadMain(void* pParam)
+static void AppendLogNoDebug(const std::string& msg)
 {
-	AllocConsole();
-	freopen("CONOUT$", "w", stdout);
-	freopen("CONOUT$", "w", stderr);
+    AppendToFileRaw(msg + "\n");
+    if (!g_quiet) RawConsoleWrite(msg.c_str());
+}
+static void AppendLog(const std::string &msg)
+{
+    if (!g_quiet) RawConsoleWrite(msg.c_str());
+    OutputDebugStringA(msg.c_str());
+}
+static void AppendLogW(const std::wstring &msg){ if (!g_quiet) AppendLog(std::string(msg.begin(), msg.end())); }
 
-	DebugOutput("=== DLL INJECTION STARTED ===");
-	DebugOutput("Console allocated successfully");
-
-	// Show the path we're trying to load
-	if (dllLocation)
-	{
-		wchar_t debugMsg[1024];
-		swprintf(debugMsg, 1024, L"Attempting to load: %s", dllLocation);
-		DebugOutputW(debugMsg);
-
-		// Check if file exists
-		DWORD fileAttr = GetFileAttributesW(dllLocation);
-		if (fileAttr == INVALID_FILE_ATTRIBUTES)
-		{
-			DebugOutputW(L"ERROR: Target assembly does not exist!");
-			MB(L"Target assembly does not exist!");
-			return 1;
-		}
-		else
-		{
-			DebugOutputW(L"Target assembly found");
-		}
-	}
-
-#if _DEBUG
-	DebugOutput("Debug build - waiting for debugger attachment...");
-	std::cout << std::string("Attach a debugger now to WoW.exe if you want to debug Loader.dll. Waiting 10 seconds...") << std::endl;
-
-	HANDLE hEvent = CreateEvent(nullptr, TRUE, FALSE, L"MyDebugEvent");
-	WaitForSingleObject(hEvent, 10000);  // Wait for 10 seconds
-	bool isDebuggerAttached = IsDebuggerPresent() != FALSE;
-
-	if (isDebuggerAttached)
-	{
-		DebugOutput("Debugger found.");
-	}
-	else
-	{
-		DebugOutput("Debugger not found.");
-	}
-
-	SetEvent(hEvent);
-	CloseHandle(hEvent);
+// ------------ hostfxr types ------------
+using hostfxr_initialize_for_runtime_config_fn = int(*)(const wchar_t *runtimeConfigPath, void *parameters, void **hostContextHandle);
+using hostfxr_get_runtime_delegate_fn = int(*)(void *hostContextHandle, int type, void **delegate);
+using hostfxr_close_fn = int(*)(void *hostContextHandle);
+using load_assembly_and_get_function_pointer_fn = int(*)(const wchar_t*,const wchar_t*,const wchar_t*,const wchar_t*,void*,void**);
+#ifdef _M_IX86
+using component_entrypoint_fn_stdcall = int(__stdcall *)(void*, int32_t);
+using component_entrypoint_fn_cdecl   = int(__cdecl   *)(void*, int32_t);
+#else
+using component_entrypoint_fn_stdcall = int(*)(void*, int32_t); // x64 single calling convention
+using component_entrypoint_fn_cdecl   = int(*)(void*, int32_t);
 #endif
 
-	DebugOutput("Creating CLR MetaHost instance...");
-	HRESULT hr = CLRCreateInstance(CLSID_CLRMetaHostPolicy, IID_ICLRMetaHostPolicy, (LPVOID*)&g_pMetaHost);
+// ------------ Diagnostics helpers ------------
+static void MaybePauseForDiagnostics(const char* where, DWORD code, PEXCEPTION_POINTERS info)
+{
+    if (GetEnvironmentVariableW(L"LOADER_PAUSE_ON_EXCEPTION", nullptr, 0) == 0) return;
+    if (InterlockedCompareExchange(&g_pauseTriggered, 1, 0) != 0) return;
+    char buf[256]; sprintf(buf, "[PAUSE] %s caught exception 0x%08X. Pausing...", where, code); AppendLogNoDebug(buf);
+    if (info && info->ExceptionRecord){ sprintf(buf, "[PAUSE] ExceptionAddress=0x%p", info->ExceptionRecord->ExceptionAddress); AppendLogNoDebug(buf);}    
+    AppendLogNoDebug("Process sleeping (LOADER_PAUSE_ON_EXCEPTION set). Attach debugger or kill process.");
+    MessageBoxA(nullptr, "Loader paused after exception (LOADER_PAUSE_ON_EXCEPTION).", "Loader", MB_OK | MB_ICONWARNING);
+    while (true) Sleep(1000);
+}
 
-	if (FAILED(hr))
-	{
-		DebugOutput("FAILED: Could not create instance of ICLRMetaHost");
-		MB(L"Could not create instance of ICLRMetaHost");
-		return 1;
-	}
-	DebugOutput("CLR MetaHost created successfully");
+static LONG WINAPI VectoredHandler(PEXCEPTION_POINTERS info)
+{
+    if (!info || !info->ExceptionRecord) return EXCEPTION_CONTINUE_SEARCH;
+    DWORD code = info->ExceptionRecord->ExceptionCode;
+    // Ignore debug print exceptions to prevent recursion loop (DBG_PRINTEXCEPTION_C == 0x40010006)
+    if (code == 0x40010006) return EXCEPTION_CONTINUE_SEARCH;
+    if (g_inVehLogging) return EXCEPTION_CONTINUE_SEARCH; // prevent re-entrancy if any nested issue
+    g_inVehLogging = true;
+    char buf[256]; sprintf(buf, "[VEH] (filtered) Exception 0x%08X at 0x%p", code, info->ExceptionRecord->ExceptionAddress); AppendLogNoDebug(buf);
+    MaybePauseForDiagnostics("VEH", code, info);
+    g_inVehLogging = false;
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 
-	DWORD pcchVersion = 0;
-	DWORD dwConfigFlags = 0;
-
-	DebugOutput("Getting requested runtime...");
-	hr = g_pMetaHost->GetRequestedRuntime(METAHOST_POLICY_HIGHCOMPAT,
-		dllLocation, NULL,
-		NULL, &pcchVersion,
-		NULL, NULL,
-		&dwConfigFlags,
-		IID_ICLRRuntimeInfo,
-		(LPVOID*)&g_pRuntimeInfo);
-
-	if (FAILED(hr))
-	{
-		char errorMsg[512];
-		sprintf(errorMsg, "FAILED: GetRequestedRuntime - HRESULT: 0x%lx", hr);
-		DebugOutput(errorMsg);
-
-		if (hr == E_POINTER)
-		{
-			MB(L"Could not get an instance of ICLRRuntimeInfo -- E_POINTER");
-		}
-		else if (hr == E_INVALIDARG)
-		{
-			MB(L"Could not get an instance of ICLRRuntimeInfo -- E_INVALIDARG");
-		}
-		else
-		{
-			wchar_t buff[1024];
-			wsprintf(buff, L"Could not get an instance of ICLRRuntimeInfo -- hr = 0x%lx -- Is WoWActivityMember.dll present?", hr);
-			MB(buff);
-		}
-
-		return 1;
-	}
-	DebugOutput("Runtime info obtained successfully");
-
-	// We need this if we have old .NET 3.5 mixed-mode DLLs
-	//DebugOutput("Binding as legacy v2 runtime...");
-	//hr = g_pRuntimeInfo->BindAsLegacyV2Runtime();
-
-	//if (FAILED(hr))
-	//{
-	//	DebugOutput("FAILED: BindAsLegacyV2Runtime");
-	//	MB(L"Failed to bind as legacy v2 runtime! (.NET 3.5 Mixed-Mode Support)");
-	//	return 1;
-	//}
-	//DebugOutput("Legacy v2 runtime binding successful");
-
-	DebugOutput("Getting CLR runtime host interface...");
-	hr = g_pRuntimeInfo->GetInterface(CLSID_CLRRuntimeHost, IID_ICLRRuntimeHost, (LPVOID*)&g_clrHost);
+// ------------ Utility functions ------------
+// Rewritten without local lambdas to avoid potential SEH/C++ EH interaction (C2712)
+static std::wstring ProbeFxrUnderRoot(const std::wstring& root, const std::wstring& relative)
+{
+    std::wstring dir = root + L"\\" + relative;
+    WIN32_FIND_DATAW ffd{};
+    std::wstring newest;
+    std::wstring search = dir + L"\\*";
+    HANDLE hFind = FindFirstFileW(search.c_str(), &ffd);
+    if (hFind != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && ffd.cFileName[0] != L'.')
+            {
+                std::wstring candidate = ffd.cFileName;
+                if (candidate.rfind(L"8.", 0) == 0 && candidate > newest)
+                    newest = candidate;
+            }
+        } while (FindNextFileW(hFind, &ffd));
+        FindClose(hFind);
+    }
+    if (newest.empty()) return L"";
+    std::wstring fxr = dir + L"\\" + newest + L"\\hostfxr.dll";
+    if (GetFileAttributesW(fxr.c_str()) != INVALID_FILE_ATTRIBUTES) return fxr;
+    return L"";
+}
 
 	if (FAILED(hr))
 	{
@@ -275,85 +228,67 @@ unsigned __stdcall ThreadMain(void* pParam)
 		return 1;
 	}
 
-	char successMsg[256];
-	sprintf(successMsg, "SUCCESS: ExecuteInDefaultAppDomain completed - Return value: %lu", dwRet);
-	DebugOutput(successMsg);
+static std::wstring GetModuleDirectory(HMODULE hMod){ wchar_t path[MAX_PATH]; DWORD len=GetModuleFileNameW(hMod,path,MAX_PATH); if(len==0||len==MAX_PATH) return L""; std::wstring p(path,len); size_t pos=p.find_last_of(L"\\/"); return (pos==std::wstring::npos)?L"":p.substr(0,pos+1);} 
+static void MaybeAttachConsole(){ if (GetEnvironmentVariableW(L"LOADER_ALLOC_CONSOLE", nullptr,0)>0 && AllocConsole()){ FILE* fDummy; freopen_s(&fDummy,"CONOUT$","w",stdout); freopen_s(&fDummy,"CONOUT$","w",stderr); freopen_s(&fDummy,"CONIN$","r",stdin); g_consoleAttached=true; AppendLog("[Loader] Console allocated (LOADER_ALLOC_CONSOLE=1)"); }}
+static bool FileExistsW(const std::wstring& p){ return GetFileAttributesW(p.c_str())!=INVALID_FILE_ATTRIBUTES; }
+static void ResolveAssemblyPaths(const std::wstring& baseDir,std::wstring& asmPath,std::wstring& runtimeCfg){ wchar_t buf[2048]; DWORD len=GetEnvironmentVariableW(L"FOREGROUNDBOT_DLL_PATH",buf,2048); if(len>0 && len<2048){ std::wstring envPath(buf,len); AppendLogW(L"FOREGROUNDBOT_DLL_PATH set: "+envPath); if(envPath.size()>4 && _wcsicmp(envPath.c_str()+envPath.size()-4,L".dll")==0){ asmPath=envPath; size_t slash=envPath.find_last_of(L"\\/"); runtimeCfg=(slash!=std::wstring::npos)? envPath.substr(0,slash+1)+g_defaultRuntimeConfigName : g_defaultRuntimeConfigName;} else { if(!envPath.empty() && envPath.back()!=L'\\' && envPath.back()!=L'/') envPath.push_back(L'\\'); asmPath=envPath+g_defaultAssemblyName; runtimeCfg=envPath+g_defaultRuntimeConfigName; } AppendLogW(L"Using assembly path from env: "+asmPath); AppendLogW(L"Using runtimeconfig path from env: "+runtimeCfg); return;} asmPath=baseDir+g_defaultAssemblyName; runtimeCfg=baseDir+g_defaultRuntimeConfigName; AppendLog("Using default co-located assembly path (env var not set)"); }
 
-	return 0;
-}
+enum hostfxr_delegate_type_local { hdt_com_activation=0, hdt_load_in_memory_assembly=1, hdt_winrt_activation=2, hdt_com_register=3, hdt_com_unregister=4, hdt_load_assembly_and_get_function_pointer=5, hdt_get_function_pointer=6 };
 
-void LoadClr()
+static void InitLogFile(const std::wstring& baseDir)
 {
-	DebugOutput("=== LoadClr() called ===");
-
-	wchar_t buffer[255];
-	if (!GetModuleFileNameW(g_myDllModule, buffer, 255))
-	{
-		DebugOutput("FAILED: Could not get module file name");
-		return;
-	}
-
-	std::wstring modulePath(buffer);
-	wchar_t debugMsg[512];
-	swprintf(debugMsg, 512, L"Module path: %s", modulePath.c_str());
-	DebugOutputW(debugMsg);
-
-	// Get just the directory path.
-	modulePath = modulePath.substr(0, modulePath.find_last_of('\\') + 1);
-	modulePath = modulePath.append(LOAD_DLL_FILE_NAME);
-
-	swprintf(debugMsg, 512, L"Target assembly path: %s", modulePath.c_str());
-	DebugOutputW(debugMsg);
-
-	// Copy the string, or we end up with junk data by the time we send it off
-	// to our thread routine.
-	dllLocation = new wchar_t[modulePath.length() + 1];
-	wcscpy(dllLocation, modulePath.c_str());
-	dllLocation[modulePath.length()] = '\0';
-
-	DebugOutput("Starting CLR thread...");
-	g_hThread = (HANDLE)_beginthreadex(NULL, 0, ThreadMain, NULL, 0, NULL);
-
-	if (g_hThread)
-	{
-		DebugOutput("CLR thread started successfully");
-	}
-	else
-	{
-		DebugOutput("FAILED: Could not start CLR thread");
-	}
+    wchar_t overrideBuf[MAX_PATH * 4]; DWORD len = GetEnvironmentVariableW(L"LOADER_LOG_PATH", overrideBuf, _countof(overrideBuf));
+    if (len > 0 && len < _countof(overrideBuf)) { g_logFilePath.assign(overrideBuf, len); }
+    else { SYSTEMTIME st; GetLocalTime(&st); wchar_t name[128]; swprintf(name, 128, L"loader_full_%04d%02d%02d_%02d%02d%02d.txt", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond); g_logFilePath = baseDir + name; }
+    AppendLog("================ LOADER LOG START ================");
 }
 
-BOOL WINAPI DllMain(HMODULE hDll, DWORD dwReason, LPVOID lpReserved)
+// ------------ Main host thread ------------
+static unsigned __stdcall HostThread(void* param)
 {
-	g_myDllModule = hDll;
+    HMODULE hSelf=(HMODULE)param; g_quiet = GetEnvironmentVariableW(L"LOADER_QUIET", nullptr, 0)>0;
+    std::wstring baseDir=GetModuleDirectory(hSelf); if(baseDir.empty()){ RawConsoleWrite("[Loader] Could not resolve loader directory\n"); return 1; }
+    InitLogFile(baseDir);
+    MaybeAttachConsole();
+    AppendLog("[Loader] Host thread initializing...");
+    AppendLogW(L"Loader BaseDir: "+baseDir);
+    AppendLog(std::string("Process Arch: ") + (
+#ifdef _WIN64
+        "x64"
+#else
+        "x86"
+#endif
+    ));
 
-	if (dwReason == DLL_PROCESS_ATTACH)
-	{
-		// Immediate debug output
-		OutputDebugStringA("=== DLL_PROCESS_ATTACH ===");
-		LoadClr();
-	}
-	else if (dwReason == DLL_PROCESS_DETACH)
-	{
-		OutputDebugStringA("=== DLL_PROCESS_DETACH ===");
+    AddVectoredExceptionHandler(1,VectoredHandler);
 
-		if (g_clrHost)
-		{
-			// We eventually 'die' so we make sure we stop the CLR.
-			g_clrHost->Stop();
-			// And release it.
-			g_clrHost->Release();
-		}
+    std::wstring assemblyPath,runtimeConfig; ResolveAssemblyPaths(baseDir,assemblyPath,runtimeConfig); if(!FileExistsW(assemblyPath)){ AppendLog("Missing ForegroundBotRunner.dll"); AppendLogW(L"Tried: "+assemblyPath); return 1;} if(!FileExistsW(runtimeConfig)){ AppendLog("Missing ForegroundBotRunner.runtimeconfig.json"); AppendLogW(L"Tried: "+runtimeConfig); return 1;} AppendLog("Found managed assembly & runtimeconfig");
 
-		// Yes yes, I know. I should be using _endthread(ex)
-		// however, I can't. Since we don't want the thread killed until we exit.
-		if (g_hThread)
-		{
-			TerminateThread(g_hThread, 0);
-			CloseHandle(g_hThread);
-		}
-	}
+    std::wstring hostfxrPath=GetHostFxrPath(); AppendLogW(L"hostfxr path attempt: "+hostfxrPath); if(hostfxrPath.empty()){ AppendLog("ERROR: hostfxr.dll not found"); return 1; }
+    HMODULE hostfxr=LoadLibraryW(hostfxrPath.c_str()); if(!hostfxr){ AppendLog("Failed to load hostfxr.dll"); return 1;} AppendLog("hostfxr loaded");
 
-	return TRUE;
+    auto init_f=(hostfxr_initialize_for_runtime_config_fn)GetProcAddress(hostfxr,"hostfxr_initialize_for_runtime_config");
+    auto get_delegate_f=(hostfxr_get_runtime_delegate_fn)GetProcAddress(hostfxr,"hostfxr_get_runtime_delegate");
+    auto close_f=(hostfxr_close_fn)GetProcAddress(hostfxr,"hostfxr_close");
+    if(!init_f||!get_delegate_f||!close_f){ AppendLog("hostfxr exports missing"); return 1; }
+
+    void* hostContext=nullptr; int rc=init_f(runtimeConfig.c_str(),nullptr,&hostContext); AppendLog((std::string)"init_f rc="+std::to_string(rc)); if(rc!=0||!hostContext){ AppendLog("hostfxr_initialize_for_runtime_config failed"); return rc; }
+    void* loadAssemblyDelegate=nullptr; rc=get_delegate_f(hostContext,hdt_load_assembly_and_get_function_pointer,&loadAssemblyDelegate); AppendLog((std::string)"get_delegate rc="+std::to_string(rc)); if(rc!=0||!loadAssemblyDelegate){ AppendLog("Failed to get load_assembly_and_get_function_pointer delegate"); close_f(hostContext); return rc; }
+
+    auto load_assembly_and_get_function_pointer=(load_assembly_and_get_function_pointer_fn)loadAssemblyDelegate;
+    AppendLog("About to call load_assembly_and_get_function_pointer..."); AppendLogW(L"Assembly path: "+assemblyPath); AppendLogW(L"Type name: ForegroundBotRunner.MinimalLoader"); AppendLogW(L"Method name: TestEntry");
+
+    const wchar_t* typeNameQualified=L"ForegroundBotRunner.MinimalLoader, ForegroundBotRunner"; component_entrypoint_fn_stdcall entry_std=nullptr; rc=load_assembly_and_get_function_pointer(assemblyPath.c_str(),typeNameQualified,L"TestEntry",nullptr,nullptr,(void**)&entry_std); AppendLog((std::string)"resolve entry rc="+std::to_string(rc)); if(rc!=0||!entry_std){ AppendLog("Failed to resolve managed entrypoint TestEntry"); char buf[64]; sprintf(buf,"HRESULT: 0x%08X",rc); AppendLog(buf); close_f(hostContext); return rc; }
+
+    // Log pointer value
+    { char buf[64]; sprintf(buf, "Entry pointer: 0x%p", (void*)entry_std); AppendLog(buf); }
+
+    // Direct call only (no SEH) to avoid C2712; use VEH for faults
+    AppendLog("Invoking managed entrypoint (direct)...");
+    int r = entry_std(nullptr,0);
+    AppendLog((std::string)"Direct call returned " + std::to_string(r));
+
+    close_f(hostContext); AppendLog("hostfxr context closed"); AppendLog("=== Loader host thread finished ==="); return 0;
 }
+
+BOOL WINAPI DllMain(HMODULE hDll,DWORD reason,LPVOID){ if(reason==DLL_PROCESS_ATTACH){ DisableThreadLibraryCalls(hDll); _beginthreadex(nullptr,0,HostThread,hDll,0,nullptr);} return TRUE; }

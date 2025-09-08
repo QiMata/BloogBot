@@ -4,6 +4,8 @@
 		<UserSecretsId>dotnet-PathfindingService-39a8725a-a686-4a1d-b7b7-5b2fbfca5f95</UserSecretsId>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<Platforms>x86</Platforms>
+		<PlatformTarget>x86</PlatformTarget>
+		<Prefer32Bit>true</Prefer32Bit>
 		<OutputType>Exe</OutputType>
 	</PropertyGroup>
 
