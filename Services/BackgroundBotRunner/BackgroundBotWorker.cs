@@ -37,7 +37,9 @@ namespace BackgroundBotRunner
             IAuctionHouseNetworkAgent AuctionHouseAgent,
             IBankNetworkAgent BankAgent,
             IMailNetworkAgent MailAgent,
-            IGuildNetworkAgent GuildAgent
+            IGuildNetworkAgent GuildAgent,
+            IPartyNetworkAgent PartyAgent,
+            ITrainerNetworkAgent TrainerAgent
         ) _allAgents;
         
         private readonly CombatIntegrationExample _combatExample;
@@ -105,6 +107,8 @@ namespace BackgroundBotRunner
                         // var bankAgent = _allAgents.BankAgent;
                         // var mailAgent = _allAgents.MailAgent;
                         // var guildAgent = _allAgents.GuildAgent;
+                        // var partyAgent = _allAgents.PartyAgent; // Accessing the party agent
+                        // var trainerAgent = _allAgents.TrainerAgent; // Accessing the trainer agent
                     }
 
                     await Task.Delay(100, stoppingToken);

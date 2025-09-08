@@ -661,7 +661,8 @@ namespace WoWSharpClient.Networking.Agent
             IBankNetworkAgent BankAgent,
             IMailNetworkAgent MailAgent,
             IGuildNetworkAgent GuildAgent,
-            IPartyNetworkAgent PartyAgent
+            IPartyNetworkAgent PartyAgent,
+            ITrainerNetworkAgent TrainerAgent
         ) CreateAllNetworkAgents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             var targetingAgent = CreateTargetingNetworkAgentForClient(worldClient, loggerFactory);
@@ -681,8 +682,9 @@ namespace WoWSharpClient.Networking.Agent
             var mailAgent = CreateMailNetworkAgentForClient(worldClient, loggerFactory);
             var guildAgent = CreateGuildNetworkAgentForClient(worldClient, loggerFactory);
             var partyAgent = CreatePartyNetworkAgentForClient(worldClient, loggerFactory);
+            var trainerAgent = CreateTrainerNetworkAgentForClient(worldClient, loggerFactory);
 
-            return (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent);
+            return (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent);
         }
 
         /// <summary>
@@ -999,6 +1001,58 @@ namespace WoWSharpClient.Networking.Agent
 
             var logger = new ConsoleLogger<PartyNetworkAgent>();
             return new PartyNetworkAgent(worldClient, logger);
+        }
+
+        #endregion
+
+        #region Trainer Network Agent
+
+        /// <summary>
+        /// Creates a new trainer network agent instance.
+        /// </summary>
+        /// <param name="worldClient">The world client for sending packets.</param>
+        /// <param name="logger">Logger instance for the trainer agent.</param>
+        /// <returns>A new trainer network agent instance.</returns>
+        public static ITrainerNetworkAgent CreateTrainerNetworkAgent(IWorldClient worldClient, ILogger<TrainerNetworkAgent> logger)
+        {
+            ArgumentNullException.ThrowIfNull(worldClient);
+            ArgumentNullException.ThrowIfNull(logger);
+
+            return new TrainerNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a new trainer network agent instance with a logger factory.
+        /// </summary>
+        /// <param name="worldClient">The world client for sending packets.</param>
+        /// <param name="loggerFactory">Logger factory for creating the trainer agent logger.</param>
+        /// <returns>A new trainer network agent instance.</returns>
+        public static ITrainerNetworkAgent CreateTrainerNetworkAgent(IWorldClient worldClient, ILoggerFactory loggerFactory)
+        {
+            ArgumentNullException.ThrowIfNull(worldClient);
+            ArgumentNullException.ThrowIfNull(loggerFactory);
+
+            var logger = loggerFactory.CreateLogger<TrainerNetworkAgent>();
+            return new TrainerNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a trainer network agent using the WoWClientFactory pattern.
+        /// </summary>
+        /// <param name="worldClient">The world client instance.</param>
+        /// <param name="loggerFactory">Optional logger factory. If null, a simple console logger will be created.</param>
+        /// <returns>A configured trainer network agent.</returns>
+        public static ITrainerNetworkAgent CreateTrainerNetworkAgentForClient(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            ArgumentNullException.ThrowIfNull(worldClient);
+
+            if (loggerFactory != null)
+            {
+                return CreateTrainerNetworkAgent(worldClient, loggerFactory);
+            }
+
+            var logger = new ConsoleLogger<TrainerNetworkAgent>();
+            return new TrainerNetworkAgent(worldClient, logger);
         }
 
         #endregion

@@ -78,10 +78,10 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public async Task InvitePlayerAsync_WithNullPlayerName_ThrowsArgumentException()
+        public async Task InvitePlayerAsync_WithNullPlayerName_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
-            await Assert.ThrowsAsync<ArgumentException>(() => _partyAgent.InvitePlayerAsync(null!));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => _partyAgent.InvitePlayerAsync(null!));
         }
 
         [Fact]
@@ -89,6 +89,13 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange, Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(() => _partyAgent.InvitePlayerAsync(""));
+        }
+
+        [Fact]
+        public async Task InvitePlayerAsync_WithWhitespacePlayerName_ThrowsArgumentException()
+        {
+            // Arrange, Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(() => _partyAgent.InvitePlayerAsync("   "));
         }
 
         [Fact]
@@ -185,6 +192,20 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
+        public async Task KickPlayerAsync_WithNullPlayerName_ThrowsArgumentNullException()
+        {
+            // Arrange, Act & Assert
+            await Assert.ThrowsAsync<ArgumentNullException>(() => _partyAgent.KickPlayerAsync((string)null!));
+        }
+
+        [Fact]
+        public async Task KickPlayerAsync_WithEmptyPlayerName_ThrowsArgumentException()
+        {
+            // Arrange, Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(() => _partyAgent.KickPlayerAsync(""));
+        }
+
+        [Fact]
         public async Task LeaveGroupAsync_SendsCorrectPacket()
         {
             // Arrange
@@ -235,6 +256,20 @@ namespace WoWSharpClient.Tests.Agent
 
             // Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(() => _partyAgent.PromoteToLeaderAsync(playerName));
+        }
+
+        [Fact]
+        public async Task PromoteToLeaderAsync_WithNullPlayerName_ThrowsArgumentNullException()
+        {
+            // Arrange, Act & Assert
+            await Assert.ThrowsAsync<ArgumentNullException>(() => _partyAgent.PromoteToLeaderAsync((string)null!));
+        }
+
+        [Fact]
+        public async Task PromoteToLeaderAsync_WithEmptyPlayerName_ThrowsArgumentException()
+        {
+            // Arrange, Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(() => _partyAgent.PromoteToLeaderAsync(""));
         }
 
         [Fact]

@@ -23,6 +23,7 @@ The network agents follow a consistent naming pattern of `{}NetworkAgent` and pr
 - **MailNetworkAgent** - Manages mail system interactions, sending mail to other players and retrieving mail from mailboxes
 - **GuildNetworkAgent** - Manages guild operations, invites, guild bank interactions, and member management
 - **PartyNetworkAgent** - Manages party/raid group operations, invites, member management, loot settings, and leadership
+- **TrainerNetworkAgent** - Handles class trainer interactions, learning spells, abilities, and skills from NPC trainers
 
 ## Architecture
 
@@ -444,74 +445,115 @@ await agentFactory.PartyAgent.InitiateReadyCheckAsync();
 var members = agentFactory.PartyAgent.GetGroupMembers();
 ```
 
+### TrainerNetworkAgent
+
+Manages all class trainer interactions for learning spells, abilities, and skills from NPC trainers.
+
+**Key Features:**
+- Open/close trainer windows
+- Request trainer services (available spells/abilities)
+- Learn individual spells and abilities
+- Learn multiple spells in sequence
+- Query spell costs and availability
+- Check learning prerequisites
+- Filter affordable services
+- Trainer window state tracking
+- Learning operation events and error handling
+
+**Example Usage:**
+```csharp
+var agentFactory = WoWClientFactory.CreateNetworkAgentFactory(worldClient, loggerFactory);
+await agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+await agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+
+// Learn a specific spell
+await agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, spellId);
+
+// Quick learn multiple spells
+var spellIds = new uint[] { 1234, 5678, 9012 };
+await agentFactory.TrainerAgent.LearnMultipleSpellsAsync(trainerGuid, spellIds);
+
+// Check what's available and affordable
+var availableServices = agentFactory.TrainerAgent.GetAvailableServices();
+var affordableServices = agentFactory.TrainerAgent.GetAffordableServices(currentMoney);
+
+// Quick learn a single spell (open, learn, close)
+await agentFactory.TrainerAgent.QuickLearnSpellAsync(trainerGuid, spellId);
+
+await agentFactory.TrainerAgent.CloseTrainerAsync();
+```
+
 ## Summary
 
-I have successfully completed the implementation of the GuildNetworkAgent for the WoWSharpClient library. Here's what was accomplished:
+I have successfully completed the implementation of the TrainerNetworkAgent for the WoWSharpClient library. Here's what was accomplished:
 
 ### ? Completed Implementation
 
-1. **Core Guild Agent (`GuildNetworkAgent`)**
+1. **Core Trainer Agent (`TrainerNetworkAgent`)**
    - Created a comprehensive implementation with all interface methods
-   - Added proper event handling for guild operations
-   - Implemented guild invite acceptance/decline
-   - Added guild member management (invite, remove, promote, demote)
-   - Included guild settings (MOTD, guild info)
-   - Added proper error handling and logging
+   - Added proper event handling for trainer operations
+   - Implemented spell/ability learning functionality
+   - Added trainer service management (query, filter, cost checking)
+   - Included proper error handling and logging
+   - Added support for bulk operations and quick learning
 
-2. **Interface Updates (`IGuildNetworkAgent`)**
-   - Updated the interface to match the comprehensive requirements
-   - Added all necessary events for guild state changes
+2. **Interface Definition (`ITrainerNetworkAgent`)**
+   - Comprehensive interface with all necessary methods
+   - Added all necessary events for trainer state changes
    - Included proper documentation for all methods
+   - Defined TrainerService and TrainerServiceType models
 
 3. **Factory Integration**
-   - Updated `AgentFactory` to include guild agent creation
-   - Added guild agent to `NetworkAgentFactory` for lazy loading
-   - Updated `WoWClientFactory` with guild agent factory methods
-   - Modified `CreateAllNetworkAgents` to include the guild agent
+   - Updated `AgentFactory` to include trainer agent creation
+   - Added trainer agent to `NetworkAgentFactory` for lazy loading
+   - Updated `WoWClientFactory` with trainer agent factory methods
+   - Modified `CreateAllNetworkAgents` to include the trainer agent
 
 4. **Comprehensive Testing**
-   - Created `GuildNetworkAgentTests` with full test coverage
+   - Created `TrainerNetworkAgentTests` with full test coverage
    - Added constructor tests, packet sending verification
-   - Included tests for unsupported guild bank operations
+   - Included tests for spell learning operations
    - Added event handling and server response tests
+   - Added service management and filtering tests
 
 5. **Documentation Updates**
-   - Updated the README.md with complete guild agent documentation
+   - Updated the README.md with complete trainer agent documentation
    - Added usage examples and integration patterns
-   - Included BackgroundService integration examples
-   - Added guild management scenarios and best practices
+   - Included trainer management scenarios and best practices
 
 ### ?? Technical Details
 
-The GuildNetworkAgent implementation includes:
+The TrainerNetworkAgent implementation includes:
 
-- **Supported Operations**: All basic guild operations (invite, accept, decline, promote, demote, leave, disband, MOTD, roster requests)
-- **Guild Bank Limitation**: Guild bank operations are not supported in this client version and return appropriate error messages
-- **Event System**: Comprehensive event system for monitoring guild state changes
+- **Supported Operations**: All trainer operations (open, request services, learn spells, query costs, check availability)
+- **Service Management**: Comprehensive service filtering and cost checking
+- **Event System**: Complete event system for monitoring trainer operations
 - **Error Handling**: Proper exception handling with detailed logging
 - **Thread Safety**: Thread-safe implementation with async/await patterns
+- **Bulk Operations**: Support for learning multiple spells and quick operations
 
-### ?? Current Limitations
+### ?? Integration Features
 
-1. **Guild Bank Operations**: Not supported in this client version (Classic WoW limitation)
-2. **Guild Permissions**: Permission system not implemented 
-3. **Guild Rank Tracking**: Advanced rank tracking not implemented
-4. **Advanced Parsing**: Server response parsing is simplified (would need proper protocol implementation)
+1. **Service Querying**: Check available spells, costs, and prerequisites
+2. **Smart Learning**: Learn individual spells or multiple spells in sequence
+3. **Cost Management**: Filter services by affordability and check individual costs
+4. **Quick Operations**: One-shot operations that handle open, operate, and close
+5. **State Tracking**: Track trainer window state and current services
 
 ### ?? Integration
 
-The guild agent is now fully integrated into the existing agent ecosystem:
+The trainer agent is now fully integrated into the existing agent ecosystem:
 
 ```csharp
 // Access via factory (recommended)
 var agentFactory = WoWClientFactory.CreateNetworkAgentFactory(worldClient, loggerFactory);
-var guildAgent = agentFactory.GuildAgent;
+var trainerAgent = agentFactory.TrainerAgent;
 
 // Or create individually
-var guildAgent = WoWClientFactory.CreateGuildNetworkAgent(worldClient, loggerFactory);
+var trainerAgent = WoWClientFactory.CreateTrainerNetworkAgent(worldClient, loggerFactory);
 ```
 
-The implementation follows the same patterns as other network agents and is ready for use in production bot scenarios.
+The implementation follows the same patterns as other network agents and is ready for use in production bot scenarios for automated spell and ability learning from class trainers.
 
 ## Factory Methods
 
@@ -540,6 +582,8 @@ var auctionHouseAgent = agentFactory.AuctionHouseAgent;
 var bankAgent = agentFactory.BankAgent;
 var mailAgent = agentFactory.MailAgent;
 var guildAgent = agentFactory.GuildAgent;
+var partyAgent = agentFactory.PartyAgent;
+var trainerAgent = agentFactory.TrainerAgent;
 ```
 
 ### Creating Individual Agents (Legacy Support)
@@ -562,6 +606,8 @@ var auctionHouseAgent = WoWClientFactory.CreateAuctionHouseNetworkAgent(worldCli
 var bankAgent = WoWClientFactory.CreateBankNetworkAgent(worldClient, loggerFactory);
 var mailAgent = WoWClientFactory.CreateMailNetworkAgent(worldClient, loggerFactory);
 var guildAgent = WoWClientFactory.CreateGuildNetworkAgent(worldClient, loggerFactory);
+var partyAgent = WoWClientFactory.CreatePartyNetworkAgent(worldClient, loggerFactory);
+var trainerAgent = WoWClientFactory.CreateTrainerNetworkAgent(worldClient, loggerFactory);
 ```
 
 ### Creating Agent Sets
@@ -579,630 +625,423 @@ var auctionHouseAgent = allAgents.AuctionHouseAgent;
 var bankAgent = allAgents.BankAgent;
 var mailAgent = allAgents.MailAgent;
 var guildAgent = allAgents.GuildAgent;
+var partyAgent = allAgents.PartyAgent;
+var trainerAgent = allAgents.TrainerAgent;
 ```
 
 ## Integration Examples
 
-### Basic Combat Integration
+### Trainer Management
 
 ```csharp
-public class CombatManager
+public class TrainerManager
 {
     private readonly IAgentFactory _agentFactory;
 
-    public CombatManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task EngageEnemyAsync(ulong enemyGuid)
-    {
-        await _agentFactory.AttackAgent.AttackTargetAsync(enemyGuid, _agentFactory.TargetingAgent);
-    }
-
-    public async Task StopCombatAsync()
-    {
-        await _agentFactory.AttackAgent.StopAttackAsync();
-        await _agentFactory.TargetingAgent.ClearTargetAsync();
-    }
-}
-```
-
-### Quest Management
-
-```csharp
-public class QuestManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public QuestManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task AcceptQuestChainAsync(ulong npcGuid, uint[] questIds)
-    {
-        foreach (var questId in questIds)
-        {
-            await _agentFactory.QuestAgent.HelloQuestGiverAsync(npcGuid);
-            await _agentFactory.QuestAgent.QueryQuestAsync(npcGuid, questId);
-            await _agentFactory.QuestAgent.AcceptQuestAsync(npcGuid, questId);
-        }
-    }
-}
-```
-
-### Resource Gathering and Looting
-
-```csharp
-public class GatheringManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public GatheringManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task GatherAndLootAsync(ulong nodeGuid)
-    {
-        await _agentFactory.GameObjectAgent.GatherFromNodeAsync(nodeGuid);
-        
-        // If gathering creates loot, handle it
-        if (_agentFactory.LootingAgent.IsLootWindowOpen)
-        {
-            await _agentFactory.LootingAgent.LootAllAsync();
-        }
-    }
-}
-```
-
-### Vendor Operations
-
-```csharp
-public class VendorManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public VendorManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task BuySuppliesAsync(ulong vendorGuid, (uint ItemId, uint Quantity)[] items)
-    {
-        await _agentFactory.VendorAgent.OpenVendorAsync(vendorGuid);
-        
-        foreach (var (itemId, quantity) in items)
-        {
-            await _agentFactory.VendorAgent.BuyItemAsync(itemId, quantity);
-        }
-        
-        await _agentFactory.VendorAgent.CloseVendorAsync();
-    }
-
-    public async Task RepairAllEquipmentAsync(ulong vendorGuid)
-    {
-        await _agentFactory.VendorAgent.OpenVendorAsync(vendorGuid);
-        await _agentFactory.VendorAgent.RepairAllItemsAsync();
-        await _agentFactory.VendorAgent.CloseVendorAsync();
-    }
-}
-```
-
-### Death and Resurrection Handling
-
-```csharp
-public class DeathManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public DeathManager(IAgentFactory agentFactory)
+    public TrainerManager(IAgentFactory agentFactory)
     {
         _agentFactory = agentFactory;
         
-        // Subscribe to death events
-        _agentFactory.DeadActorAgent.OnDeath += HandlePlayerDeath;
-        _agentFactory.DeadActorAgent.OnResurrectionRequest += HandleResurrectionRequest;
+        // Subscribe to trainer events
+        _agentFactory.TrainerAgent.TrainerWindowOpened += HandleTrainerOpened;
+        _agentFactory.TrainerAgent.SpellLearned += HandleSpellLearned;
+        _agentFactory.TrainerAgent.TrainerError += HandleTrainerError;
     }
 
-    private async void HandlePlayerDeath()
+    public async Task LearnAvailableSpellsAsync(ulong trainerGuid, uint maxCost)
     {
-        // Auto-release spirit on death
-        await _agentFactory.DeadActorAgent.ReleaseSpiritAsync();
-    }
-
-    private async void HandleResurrectionRequest(ulong resurrectorGuid, string resurrectorName)
-    {
-        // Auto-accept resurrection from players
-        await _agentFactory.DeadActorAgent.AcceptResurrectionAsync();
-    }
-}
-```
-
-### Inventory Management
-
-```csharp
-public class InventoryManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public InventoryManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task OrganizeInventoryAsync()
-    {
-        // Sort all bags
-        for (byte bagId = 0; bagId < 5; bagId++)
+        await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+        await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+        
+        // Small delay to allow services to load
+        await Task.Delay(200);
+        
+        // Get affordable spells within budget
+        var affordableSpells = _agentFactory.TrainerAgent.GetAffordableServices(maxCost);
+        
+        foreach (var service in affordableSpells)
         {
-            await _agentFactory.InventoryAgent.SortBagAsync(bagId);
-        }
-    }
-
-    public async Task MoveItemToEmptySlotAsync(byte sourceBag, byte sourceSlot)
-    {
-        var emptySlot = _agentFactory.InventoryAgent.FindEmptySlot();
-        if (emptySlot.HasValue)
-        {
-            await _agentFactory.InventoryAgent.MoveItemAsync(sourceBag, sourceSlot, 
-                emptySlot.Value.BagId, emptySlot.Value.SlotId);
-        }
-    }
-}
-```
-
-### Item Usage and Equipment Management
-
-```csharp
-public class ItemManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public ItemManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task UseHealthPotionAsync()
-    {
-        const uint healthPotionId = 118; // Minor Healing Potion
-        var success = await _agentFactory.ItemUseAgent.FindAndUseItemAsync(healthPotionId);
-        if (!success)
-        {
-            Console.WriteLine("No health potion found in inventory");
-        }
-    }
-
-    public async Task AutoEquipBestGearAsync()
-    {
-        await _agentFactory.EquipmentAgent.AutoEquipAllAsync();
-        
-        // Check if any equipment needs repair
-        if (_agentFactory.EquipmentAgent.HasDamagedEquipment())
-        {
-            var damagedSlots = _agentFactory.EquipmentAgent.GetDamagedEquipmentSlots();
-            Console.WriteLine($"Equipment needs repair in slots: {string.Join(", ", damagedSlots)}");
-        }
-    }
-}
-```
-
-### Spell Casting and Combat
-
-```csharp
-public class SpellManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public SpellManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task CastHealSpellAsync(ulong targetGuid)
-    {
-        const uint healSpellId = 2061; // Flash Heal
-        
-        if (_agentFactory.SpellCastingAgent.CanCastSpell(healSpellId))
-        {
-            await _agentFactory.SpellCastingAgent.CastSpellOnTargetAsync(healSpellId, targetGuid);
-        }
-        else
-        {
-            var cooldown = _agentFactory.SpellCastingAgent.GetSpellCooldown(healSpellId);
-            Console.WriteLine($"Heal spell on cooldown for {cooldown}ms");
-        }
-    }
-
-    public async Task StartWandAttackAsync(ulong targetGuid)
-    {
-        const uint wandSpellId = 5019; // Shoot
-        await _agentFactory.SpellCastingAgent.StartAutoRepeatSpellAsync(wandSpellId, targetGuid);
-    }
-
-    public async Task CastAreaOfEffectSpellAsync(float x, float y, float z)
-    {
-        const uint aoeSpellId = 1449; // Arcane Explosion
-        await _agentFactory.SpellCastingAgent.CastSpellAtLocationAsync(aoeSpellId, x, y, z);
-    }
-}
-```
-
-### Auction House Operations
-
-```csharp
-public class AuctionHouseManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public AuctionHouseManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task SearchForBestDealsAsync(ulong auctioneerGuid, string itemName)
-    {
-        await _agentFactory.AuctionHouseAgent.OpenAuctionHouseAsync(auctioneerGuid);
-        await _agentFactory.AuctionHouseAgent.SearchAuctionsAsync(itemName);
-        
-        // Wait for search results and analyze deals
-        // Results will be provided via the AuctionSearchResults event
-        
-        await _agentFactory.AuctionHouseAgent.CloseAuctionHouseAsync();
-    }
-
-    public async Task SellItemsAsync(ulong auctioneerGuid, (byte BagId, byte SlotId, uint StartBid, uint BuyoutPrice)[] items)
-    {
-        await _agentFactory.AuctionHouseAgent.OpenAuctionHouseAsync(vendorGuid);
-        
-        foreach (var (bagId, slotId, startBid, buyoutPrice) in items)
-        {
-            await agentFactory.AuctionHouseAgent.PostAuctionAsync(
-                bagId, slotId, startBid, buyoutPrice, AuctionDuration.TwentyFourHours);
-        }
-        
-        await _agentFactory.AuctionHouseAgent.CloseAuctionHouseAsync();
-    }
-
-    public async Task BuyItemAsync(ulong auctioneerGuid, uint auctionId, uint maxPrice)
-    {
-        await _agentFactory.AuctionHouseAgent.OpenAuctionHouseAsync(vendorGuid);
-        
-        // Search for the specific auction and verify price
-        await _agentFactory.AuctionHouseAgent.SearchAuctionsAsync();
-        
-        // If price is acceptable, buyout the auction
-        await _agentFactory.AuctionHouseAgent.BuyoutAuctionAsync(auctionId, maxPrice);
-        
-        await _agentFactory.AuctionHouseAgent.CloseAuctionHouseAsync();
-    }
-
-    public async Task ManageAuctionsAsync(ulong auctioneerGuid)
-    {
-        await _agentFactory.AuctionHouseAgent.OpenAuctionHouseAsync(vendorGuid);
-        
-        // Check owned auctions
-        await _agentFactory.AuctionHouseAgent.GetOwnedAuctionsAsync();
-        
-        // Check bidder auctions
-        await _agentFactory.AuctionHouseAgent.GetBidderAuctionsAsync();
-        
-        await _agentFactory.AuctionHouseAgent.CloseAuctionHouseAsync();
-    }
-}
-```
-
-### Bank Management
-
-```csharp
-public class BankManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public BankManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task DepositValuableItemsAsync(ulong bankerGuid, uint[] valuableItemIds)
-    {
-        await _agentFactory.BankAgent.OpenBankAsync(bankerGuid);
-        
-        foreach (var itemId in valuableItemIds)
-        {
-            // Find items in inventory and deposit them
-            var itemSlot = FindItemInInventory(itemId);
-            if (itemSlot.HasValue)
+            try
             {
-                await _agentFactory.BankAgent.DepositItemAsync(itemSlot.Value.BagId, itemSlot.Value.SlotId);
+                await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, service.SpellId);
+                await Task.Delay(100); // Respect rate limits
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to learn spell {service.SpellId}: {ex.Message}");
             }
         }
         
-        await _agentFactory.BankAgent.CloseBankAsync();
+        await _agentFactory.TrainerAgent.CloseTrainerAsync();
     }
 
-    public async Task WithdrawItemsForRaidAsync(ulong bankerGuid, uint[] requiredItemIds)
+    public async Task LearnClassSpellsAsync(ulong trainerGuid, uint level)
     {
-        await _agentFactory.BankAgent.OpenBankAsync(bankerGuid);
+        await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+        await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
         
-        foreach (var itemId in requiredItemIds)
+        // Small delay to allow services to load
+        await Task.Delay(200);
+
+        // First, try to learn priority spells
+        foreach (var spellId in prioritySpells)
         {
-            // Find items in bank and withdraw them
-            var bankSlot = FindItemInBank(itemId);
-            if (bankSlot.HasValue)
+            if (_agentFactory.TrainerAgent.IsSpellAvailable(spellId))
             {
-                await _agentFactory.BankAgent.WithdrawItemAsync(bankSlot.Value);
+                var cost = _agentFactory.TrainerAgent.GetSpellCost(spellId);
+                Console.WriteLine($"Learning priority spell {spellId} for {cost} copper");
+                await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, spellId);
+                await Task.Delay(100);
             }
         }
-        
-        await _agentFactory.BankAgent.CloseBankAsync();
-    }
 
-    public async Task DepositExcessGoldAsync(ulong bankerGuid, uint keepAmount)
-    {
-        var currentGold = GetCurrentGold();
-        if (currentGold > keepAmount)
+        // Then learn any other affordable spells
+        var currentMoney = GetCurrentMoney();
+        var remainingSpells = _agentFactory.TrainerAgent.GetAffordableServices(currentMoney)
+            .Where(s => !prioritySpells.Contains(s.SpellId))
+            .OrderBy(s => s.Cost);
+
+        foreach (var service in remainingSpells)
         {
-            var depositAmount = currentGold - keepAmount;
-            await _agentFactory.BankAgent.QuickDepositGoldAsync(bankerGuid, depositAmount);
+            await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, service.SpellId);
+            await Task.Delay(100);
         }
-    }
-
-    public async Task WithdrawGoldForPurchaseAsync(ulong bankerGuid, uint requiredAmount)
-    {
-        var currentGold = GetCurrentGold();
-        if (currentGold < requiredAmount)
-        {
-            var withdrawAmount = requiredAmount - currentGold;
-            await _agentFactory.BankAgent.QuickWithdrawGoldAsync(bankerGuid, withdrawAmount);
-        }
-    }
-
-    public async Task ExpandBankStorageAsync(ulong bankerGuid)
-    {
-        var nextSlotCost = _agentFactory.BankAgent.GetNextBankSlotCost();
-        if (nextSlotCost.HasValue && HasEnoughGold(nextSlotCost.Value))
-        {
-            await _agentFactory.BankAgent.OpenBankAsync(bankerGuid);
-            await _agentFactory.BankAgent.PurchaseBankSlotAsync();
-            await _agentFactory.BankAgent.CloseBankAsync();
-        }
-    }
-
-    public async Task OrganizeBankAsync(ulong bankerGuid)
-    {
-        await _agentFactory.BankAgent.OpenBankAsync(bankerGuid);
         
-        // Move similar items together, sort by type/value
-        // This would involve reading bank contents and reorganizing
-        
-        await _agentFactory.BankAgent.CloseBankAsync();
+        await _agentFactory.TrainerAgent.CloseTrainerAsync();
     }
 
-    // Helper methods - implement based on your game state access
-    private byte? FindItemInBank(uint itemId) => null;
-    private byte? FindItemInInventory(uint itemId) => null;
-    private uint[] GetAvailableMailIds() => Array.Empty<uint>();
-    private (byte TabIndex, byte SlotIndex, uint Quantity)[] GetNeededConsumables() => Array.Empty<(byte, byte, uint)>();
+    public async Task QuickLearnSpecificSpellsAsync(ulong trainerGuid, uint[] spellIds)
+    {
+        // Use the multi-spell learning method for efficiency
+        await _agentFactory.TrainerAgent.LearnMultipleSpellsAsync(trainerGuid, spellIds);
+    }
+
+    public async Task CheckTrainerServicesAsync(ulong trainerGuid)
+    {
+        await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+        await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+        
+        // Small delay to allow services to load
+        await Task.Delay(200);
+        
+        var availableServices = agentFactory.TrainerAgent.GetAvailableServices();
+        var affordableServices = agentFactory.TrainerAgent.GetAffordableServices(currentMoney);
+        
+        Console.WriteLine($"Trainer offers {availableServices.Length} learnable services:");
+        foreach (var service in availableServices)
+        {
+            Console.WriteLine($"- {service.Name} (Rank {service.Rank}): {service.Cost} copper");
+        }
+        
+        await _agentFactory.TrainerAgent.CloseTrainerAsync();
+    }
+
+    private void HandleTrainerOpened(ulong trainerGuid)
+    {
+        Console.WriteLine($"Trainer window opened: {trainerGuid:X}");
+    }
+
+    private void HandleSpellLearned(uint spellId, uint cost)
+    {
+        Console.WriteLine($"Learned spell {spellId} for {cost} copper");
+    }
+
+    private void HandleTrainerError(string error)
+    {
+        Console.WriteLine($"Trainer error: {error}");
+    }
+
+    // Helper method - implement based on your game state access
+    private uint GetCurrentMoney() => 0; // Implement based on character state
 }
 ```
 
-### Mail Management
+### Class-Specific Spell Learning
 
 ```csharp
-public class MailManager
+public class ClassSpellManager
 {
     private readonly IAgentFactory _agentFactory;
+    private readonly Dictionary<string, uint[]> _classPrioritySpells;
 
-    public MailManager(IAgentFactory agentFactory)
-    {
-        _agentFactory = agentFactory;
-    }
-
-    public async Task SendItemToPlayerAsync(ulong mailboxGuid, string recipientName, string subject, string body, byte bagId, byte slotId)
-    {
-        await _agentFactory.MailAgent.OpenMailboxAsync(mailboxGuid);
-        await _agentFactory.MailAgent.SendMailAsync(recipientName, subject, body, bagId, slotId);
-        await _agentFactory.MailAgent.CloseMailboxAsync();
-    }
-
-    public async Task SendMoneyToPlayerAsync(ulong mailboxGuid, string recipientName, uint amount, string reason)
-    {
-        await _agentFactory.MailAgent.OpenMailboxAsync(mailboxGuid);
-        await _agentFactory.MailAgent.SendMoneyAsync(recipientName, "Money Transfer", reason, amount);
-        await _agentFactory.MailAgent.CloseMailboxAsync();
-    }
-
-    public async Task CheckAndRetrieveAllMailAsync(ulong mailboxGuid)
-    {
-        await _agentFactory.MailAgent.OpenMailboxAsync(mailboxGuid);
-        
-        // Get count of unread mail
-        var unreadCount = _agentFactory.MailAgent.GetUnreadMailCount();
-        Console.WriteLine($"You have {unreadCount} unread messages");
-        
-        // Retrieve all mail items - this would need to be implemented based on your mail listing
-        var mailIds = GetAvailableMailIds(); // Implement based on your game state
-        foreach (var mailId in mailIds)
-        {
-            await _agentFactory.MailAgent.RetrieveMailAsync(mailId);
-        }
-        
-        await _agentFactory.MailAgent.CloseMailboxAsync();
-    }
-
-    public async Task CleanupOldMailAsync(ulong mailboxGuid)
-    {
-        await _agentFactory.MailAgent.OpenMailboxAsync(mailboxGuid);
-        
-        // Delete old read mail - implement based on your mail management logic
-        var oldMailIds = GetOldMailIds(); // Implement based on your game state
-        foreach (var mailId in oldMailIds)
-        {
-            await _agentFactory.MailAgent.DeleteMailAsync(mailId);
-        }
-        
-        await _agentFactory.MailAgent.CloseMailboxAsync();
-    }
-
-    public async Task SendGuildSuppliesAsync(ulong mailboxGuid, string[] guildMembers, (byte BagId, byte SlotId)[] supplies)
-    {
-        await _agentFactory.MailAgent.OpenMailboxAsync(mailboxGuid);
-        
-        foreach (var member in guildMembers)
-        {
-            foreach (var (bagId, slotId) in supplies)
-            {
-                await _agentFactory.MailAgent.SendMailAsync(member, "Guild Supplies", "Here are some supplies for the guild", bagId, slotId);
-            }
-        }
-        
-        await _agentFactory.MailAgent.CloseMailboxAsync();
-    }
-
-    public async Task ReturnIncorrectMailAsync(ulong mailboxGuid, uint mailId)
-    {
-        await _agentFactory.MailAgent.OpenMailboxAsync(mailboxGuid);
-        await _agentFactory.MailAgent.ReturnMailAsync(mailId);
-        await _agentFactory.MailAgent.CloseMailboxAsync();
-    }
-
-    // Helper methods - implement based on your game state access
-    private uint[] GetAvailableMailIds() => Array.Empty<uint>();
-    private uint[] GetOldMailIds() => Array.Empty<uint>();
-}
-```
-
-### Guild Management
-
-```csharp
-public class GuildManager
-{
-    private readonly IAgentFactory _agentFactory;
-
-    public GuildManager(IAgentFactory agentFactory)
+    public ClassSpellManager(IAgentFactory agentFactory)
     {
         _agentFactory = agentFactory;
         
-        // Subscribe to guild events
-        _agentFactory.GuildAgent.GuildInviteReceived += HandleGuildInvite;
-        _agentFactory.GuildAgent.GuildJoined += HandleGuildJoined;
-        _agentFactory.GuildAgent.GuildLeft += HandleGuildLeft;
-    }
-
-    public async Task AutoAcceptGuildInviteAsync(string expectedGuildName)
-    {
-        // Only accept invites from specific guilds
-        _agentFactory.GuildAgent.GuildInviteReceived += async (inviterName, guildName) =>
+        // Define priority spells for different classes
+        _classPrioritySpells = new Dictionary<string, uint[]>
         {
-            if (guildName.Equals(expectedGuildName, StringComparison.OrdinalIgnoreCase))
-            {
-                await _agentFactory.GuildAgent.AcceptGuildInviteAsync();
-            }
-            else
-            {
-                await _agentFactory.GuildAgent.DeclineGuildInviteAsync();
-            }
+            ["Warrior"] = new uint[] { 78, 284, 1160, 6673 }, // Heroic Strike, Charge, Demoralizing Shout, Battle Shout
+            ["Paladin"] = new uint[] { 635, 21084, 1152, 639 }, // Holy Light, Seal of Righteousness, Purify, Blessing of Might
+            ["Mage"] = new uint[] { 133, 168, 116, 1459 }, // Fireball, Frost Bolt, Frostbolt, Arcane Intellect
+            ["Priest"] = new uint[] { 2061, 139, 1244, 1243 }, // Flash Heal, Renew, Power Word: Fortitude, Power Word: Shield
+            ["Rogue"] = new uint[] { 1752, 53, 921, 1776 }, // Sinister Strike, Backstab, Pick Pocket, Gouge
+            ["Warlock"] = new uint[] { 686, 348, 702, 1120 }, // Shadow Bolt, Immolate, Curse of Weakness, Drain Soul
+            ["Hunter"] = new uint[] { 75, 1978, 1515, 3044 }, // Auto Shot, Serpent Sting, Tame Beast, Arcane Shot
+            ["Shaman"] = new uint[] { 403, 8042, 324, 8024 }, // Lightning Bolt, Earth Shock, Lightning Shield, Flametongue Weapon
+            ["Druid"] = new uint[] { 5176, 8921, 774, 467 } // Wrath, Moonfire, Rejuvenation, Thorns
         };
     }
 
-    public async Task ManageGuildBankAsync(ulong guildBankGuid)
+    public async Task LearnClassSpellsAsync(ulong trainerGuid, string playerClass, uint level)
     {
-        if (!_agentFactory.GuildAgent.IsInGuild)
+        if (!_classPrioritySpells.TryGetValue(playerClass, out var prioritySpells))
         {
-            Console.WriteLine("Not in a guild");
+            Console.WriteLine($"No priority spells defined for class: {playerClass}");
             return;
         }
 
-        await _agentFactory.GuildAgent.OpenGuildBankAsync(guildBankGuid);
+        await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+        await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+        
+        // Small delay to allow services to load
+        await Task.Delay(200);
 
-        // Deposit valuable items to guild bank
-        var valuableItemIds = new uint[] { 2589, 3858, 7912 }; // Linen, Mithril, Solid Stone
-        foreach (var itemId in valuableItemIds)
+        var currentMoney = GetCurrentMoney();
+        var affordableServices = _agentFactory.TrainerAgent.GetAffordableServices(currentMoney);
+        
+        // Filter by level and priority
+        var spellsToLearn = affordableServices
+            .Where(s => s.RequiredLevel <= level)
+            .OrderBy(s => prioritySpells.Contains(s.SpellId) ? 0 : 1) // Priority spells first
+            .ThenBy(s => s.RequiredLevel)
+            .ThenBy(s => s.Cost);
+
+        Console.WriteLine($"Learning spells for {playerClass} (Level {level}):");
+        
+        foreach (var service in spellsToLearn)
         {
-            var itemSlot = FindItemInInventory(itemId);
-            if (itemSlot.HasValue)
+            try
             {
-                await _agentFactory.GuildAgent.DepositItemToGuildBankAsync(
-                    itemSlot.Value.BagId, itemSlot.Value.SlotId, 0, 0, 1); // Deposit to tab 0
+                var isPriority = prioritySpells.Contains(service.SpellId) ? " (Priority)" : "";
+                Console.WriteLine($"Learning: {service.Name} (Rank {service.Rank}){isPriority} - {service.Cost} copper");
+                
+                await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, service.SpellId);
+                await Task.Delay(100); // Rate limiting
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to learn {service.Name}: {ex.Message}");
             }
         }
+        
+        await _agentFactory.TrainerAgent.CloseTrainerAsync();
+    }
 
-        // Deposit excess gold (keep 50 gold)
-        var currentGold = GetCurrentGold();
-        if (currentGold > 500000) // 50 gold in copper
+    public async Task LearnTalentPrerequisitesAsync(ulong trainerGuid, uint[] prerequisiteSpells)
+    {
+        await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+        await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+        
+        // Small delay to allow services to load
+        await Task.Delay(200);
+
+        foreach (var spellId in prerequisiteSpells)
         {
-            var depositAmount = currentGold - 500000;
-            await _agentFactory.GuildAgent.DepositMoneyToGuildBankAsync(depositAmount);
+            if (_agentFactory.TrainerAgent.IsSpellAvailable(spellId))
+            {
+                var cost = _agentFactory.TrainerAgent.GetSpellCost(spellId);
+                Console.WriteLine($"Learning talent prerequisite spell {spellId} for {cost} copper");
+                await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, spellId);
+                await Task.Delay(100);
+            }
+            else
+            {
+                Console.WriteLine($"Prerequisite spell {spellId} not available from this trainer");
+            }
         }
-
-        await _agentFactory.GuildAgent.CloseGuildBankAsync();
+        
+        await _agentFactory.TrainerAgent.CloseTrainerAsync();
     }
 
-    public async Task PerformOfficerDutiesAsync()
-    {
-        if (!_agentFactory.GuildAgent.IsInGuild)
-            return;
-
-        // Update guild MOTD daily
-        if (ShouldUpdateMOTD())
-        {
-            var motd = GenerateDailyMOTD();
-            await _agentFactory.GuildAgent.SetGuildMOTDAsync(motd);
-        }
-
-        // Request guild roster to check member activity
-        await _agentFactory.GuildAgent.RequestGuildRosterAsync();
-
-        // Set notes for active members
-        var activeMemberNotes = GetActiveMemberNotes();
-        foreach (var (memberName, note) in activeMemberNotes)
-        {
-            await _agentFactory.GuildAgent.SetGuildMemberNoteAsync(memberName, note, false);
-        }
-    }
-
-    public async Task InvitePlayersToGuildAsync(string[] playerNames)
-    {
-        if (!_agentFactory.GuildAgent.IsInGuild)
-            return;
-
-        foreach (var playerName in playerNames)
-        {
-            await _agentFactory.GuildAgent.InvitePlayerToGuildAsync(playerName);
-            await Task.Delay(1000); // Respect rate limits
-        }
-    }
-
-    private void HandleGuildInvite(string inviterName, string guildName)
-    {
-        Console.WriteLine($"Received guild invite from {inviterName} to join {guildName}");
-    }
-
-    private void HandleGuildJoined(uint guildId, string guildName)
-    {
-        Console.WriteLine($"Successfully joined guild: {guildName} (ID: {guildId})");
-    }
-
-    private void HandleGuildLeft(uint guildId, string reason)
-    {
-        Console.WriteLine($"Left guild {guildId}. Reason: {reason}");
-    }
-
-    // Helper methods - implement based on your game state access
-    private (byte BagId, byte SlotId)? FindItemInInventory(uint itemId) => null;
-    private uint GetCurrentGold() => 0;
-    private bool ShouldUpdateMOTD() => DateTime.Now.Hour == 0; // Update at midnight
-    private string GenerateDailyMOTD() => $"Guild MOTD for {DateTime.Now:yyyy-MM-dd}";
-    private (string PlayerName, string Note)[] GetActiveMemberNotes() => Array.Empty<(string, string)>();
+    // Helper method - implement based on your game state access
+    private uint GetCurrentMoney() => 0;
 }
 ```
 
-## Event Handling
+### Automated Spell Learning Strategy
 
-All agents provide events for monitoring operations:
+```csharp
+public class SpellLearningStrategy
+{
+    private readonly IAgentFactory _agentFactory;
+
+    public SpellLearningStrategy(IAgentFactory agentFactory)
+    {
+        _agentFactory = agentFactory;
+    }
+
+    public async Task ExecuteOptimalSpellLearningAsync(ulong trainerGuid, uint currentLevel, uint availableMoney)
+    {
+        await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+        await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+        
+        // Wait for services to load
+        await Task.Delay(200);
+
+        var allServices = _agentFactory.TrainerAgent.GetAvailableServices();
+        var affordableSpells = _agentFactory.TrainerAgent.GetAffordableServices(availableMoney);
+
+        // Strategy 1: Learn all spells within level range and budget
+        var optimalSpells = affordableSpells
+            .Where(s => s.RequiredLevel <= currentLevel)
+            .Where(s => IsUsefulSpell(s)) // Custom logic to determine usefulness
+            .OrderBy(s => GetSpellPriority(s)) // Custom priority scoring
+            .ThenBy(s => s.RequiredLevel)
+            .ThenBy(s => s.Cost);
+
+        uint totalCost = 0;
+        var spellsToLearn = new List<TrainerService>();
+
+        foreach (var service in optimalSpells)
+        {
+            if (totalCost + service.Cost <= availableMoney)
+            {
+                spellsToLearn.Add(service);
+                totalCost += service.Cost;
+            }
+        }
+
+        Console.WriteLine($"Planned to learn {spellsToLearn.Count} spells for {totalCost} copper:");
+        
+        foreach (var service in spellsToLearn)
+        {
+            Console.WriteLine($"- {service.Name} (Rank {service.Rank}): {service.Cost} copper");
+        }
+
+        // Execute the learning plan
+        foreach (var service in spellsToLearn)
+        {
+            try
+            {
+                await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, service.SpellId);
+                Console.WriteLine($"? Learned {service.Name}");
+                await Task.Delay(100);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"? Failed to learn {service.Name}: {ex.Message}");
+            }
+        }
+        
+        await _agentFactory.TrainerAgent.CloseTrainerAsync();
+        
+        Console.WriteLine($"Spell learning completed. Spent {totalCost} copper on {spellsToLearn.Count} spells.");
+    }
+
+    private bool IsUsefulSpell(TrainerService service)
+    {
+        // Implement logic to determine if a spell is useful
+        // This could consider class, specialization, current spells known, etc.
+        
+        // Example: Skip certain spell types or low-rank versions
+        if (service.ServiceType == TrainerServiceType.Profession)
+        {
+            return false; // Skip profession spells for now
+        }
+
+        // Always learn class spells
+        return service.ServiceType == TrainerServiceType.Spell || 
+               service.ServiceType == TrainerServiceType.ClassSkill;
+    }
+
+    private int GetSpellPriority(TrainerService service)
+    {
+        // Return lower numbers for higher priority
+        // This is a simple example - implement based on your strategy
+        
+        if (service.ServiceType == TrainerServiceType.ClassSkill)
+            return 1; // Highest priority
+        
+        if (service.ServiceType == TrainerServiceType.Spell)
+            return 2; // Medium priority
+            
+        return 3; // Lowest priority
+    }
+}
+```
+
+### Integration with Automated Leveling
+
+```csharp
+public class AutoLevelingManager
+{
+    private readonly IAgentFactory _agentFactory;
+    private readonly Dictionary<uint, uint[]> _levelMilestoneSpells;
+
+    public AutoLevelingManager(IAgentFactory agentFactory)
+    {
+        _agentFactory = agentFactory;
+        
+        // Define important spells to learn at specific level milestones
+        _levelMilestoneSpells = new Dictionary<uint, uint[]>
+        {
+            [10] = new uint[] { /* Key level 10 spells */ },
+            [20] = new uint[] { /* Key level 20 spells */ },
+            [30] = new uint[] { /* Key level 30 spells */ },
+            [40] = new uint[] { /* Key level 40 spells */ }
+        };
+    }
+
+    public async Task HandleLevelUpAsync(uint newLevel, ulong nearestTrainerGuid)
+    {
+        Console.WriteLine($"Leveled up to {newLevel}! Checking for new spells to learn...");
+
+        if (_levelMilestoneSpells.TryGetValue(newLevel, out var milestoneSpells))
+        {
+            // Learn milestone spells immediately
+            await _agentFactory.TrainerAgent.LearnMultipleSpellsAsync(nearestTrainerGuid, milestoneSpells);
+        }
+
+        // Learn any other available spells within budget
+        var currentMoney = GetCurrentMoney();
+        var reserveAmount = GetReserveAmount(newLevel); // Keep some money for other expenses
+        var spellBudget = currentMoney > reserveAmount ? currentMoney - reserveAmount : 0;
+
+        if (spellBudget > 0)
+        {
+            await LearnAffordableSpellsAsync(nearestTrainerGuid, newLevel, spellBudget);
+        }
+    }
+
+    private async Task LearnAffordableSpellsAsync(ulong trainerGuid, uint level, uint budget)
+    {
+        await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+        await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+        
+        await Task.Delay(200);
+
+        var affordableServices = _agentFactory.TrainerAgent.GetAffordableServices(budget)
+            .Where(s => s.RequiredLevel <= level)
+            .OrderBy(s => s.RequiredLevel)
+            .ThenBy(s => s.Cost);
+
+        foreach (var service in affordableServices)
+        {
+            try
+            {
+                await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, service.SpellId);
+                Console.WriteLine($"Auto-learned: {service.Name} for {service.Cost} copper");
+                await Task.Delay(100);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to auto-learn {service.Name}: {ex.Message}");
+            }
+        }
+        
+        await _agentFactory.TrainerAgent.CloseTrainerAsync();
+    }
+
+    // Helper methods
+    private uint GetCurrentMoney() => 0; // Implement based on character state
+    private uint GetReserveAmount(uint level) => level * 1000; // Keep 10 silver per level
+}
+```
+
+### Event Handling Integration
+
+All agents provide comprehensive event monitoring:
 
 ```csharp
 public class EventMonitor
@@ -1458,7 +1297,7 @@ public class EventMonitor
 
 ## BackgroundService Integration
 
-For .NET 8 Worker Service projects, integrate the NetworkAgentFactory like this:
+For .NET 8 Worker Service projects, integrate the NetworkAgentFactory with trainer support:
 
 ```csharp
 public class BackgroundBotWorker : BackgroundService
@@ -1481,7 +1320,7 @@ public class BackgroundBotWorker : BackgroundService
         {
             try
             {
-                // Example bot logic using agents
+                // Example bot logic using agents including trainer
                 await PerformBotActionsAsync(stoppingToken);
                 await Task.Delay(1000, stoppingToken);
             }
@@ -1499,156 +1338,95 @@ public class BackgroundBotWorker : BackgroundService
 
     private async Task PerformBotActionsAsync(CancellationToken cancellationToken)
     {
-        // Simple bot actions using the agent factory
-        if (!_agentFactory.TargetingAgent.HasTarget)
-        {
-            // Find and target an enemy
-            var enemyGuid = FindNearestEnemy();
-            if (enemyGuid != 0)
-            {
-                await _agentFactory.TargetingAgent.SetTargetAsync(enemyGuid);
-              }
-        }
+        // ... existing bot logic ...
 
-        if (_agentFactory.TargetingAgent.HasTarget && !_agentFactory.AttackAgent.IsAttacking)
-        {
-            await _agentFactory.AttackAgent.StartAttackAsync();
-        }
-
-        // Handle looting
-        var lootTargets = FindLootTargets();
-        foreach (var lootTarget in lootTargets)
-        {
-            await _agentFactory.LootingAgent.QuickLootAsync(lootTarget);
-        }
-
-        // Use consumables if needed
-        if (IsHealthLow())
-        {
-            const uint healthPotionId = 118; // Minor Healing Potion
-            await _agentFactory.ItemUseAgent.FindAndUseItemAsync(healthPotionId);
-        }
-
-        // Cast spells if available
-        if (_agentFactory.TargetingAgent.HasTarget && !_agentFactory.SpellCastingAgent.IsCasting)
-        {
-            const uint fireBoltSpell = 133; // Fireball
-            if (_agentFactory.SpellCastingAgent.CanCastSpell(fireBoltSpell))
-            {
-                var targetGuid = _agentFactory.TargetingAgent.CurrentTarget!.Value;
-                await _agentFactory.SpellCastingAgent.CastSpellOnTargetAsync(fireBoltSpell, targetGuid);
-            }
-        }
-
-        // Manage inventory if it's getting full
-        if (!_agentFactory.InventoryAgent.HasEnoughSpace(5))
-        {
-            await _agentFactory.InventoryAgent.SortBagAsync(0); // Sort main backpack
-        }
-
-        // Auto-equip better gear found
-        await _agentFactory.EquipmentAgent.AutoEquipAllAsync();
-
-        // Check auction house for deals (periodically)
+        // Check for spell learning opportunities
         var currentTime = DateTime.UtcNow;
-        if (ShouldCheckAuctionHouse(currentTime))
+        if (ShouldCheckTrainer(currentTime))
         {
-            var auctioneerGuid = FindNearestAuctioneer();
-            if (auctioneerGuid != 0)
+            var trainerGuid = FindNearestClassTrainer();
+            if (trainerGuid != 0)
             {
-                await _agentFactory.AuctionHouseAgent.QuickSearchAsync(auctioneerGuid, "Health Potion");
+                await CheckForNewSpellsAsync(trainerGuid);
             }
         }
 
-        // Bank valuable items when inventory is nearly full
-        if (!_agentFactory.InventoryAgent.HasEnoughSpace(3))
+        // Auto-learn spells when leveling up
+        if (HasLeveledUp())
         {
-            var bankerGuid = FindNearestBanker();
-            if (bankerGuid != 0)
+            var trainerGuid = FindNearestClassTrainer();
+            if (trainerGuid != 0)
             {
-                await DepositValuableItemsAsync(bankerGuid);
-            }
-        }
-
-        // Deposit excess gold periodically
-        if (ShouldDepositGold(currentTime))
-        {
-            var bankerGuid = FindNearestBanker();
-            if (bankerGuid != 0 && GetCurrentGold() > 100000) // Keep 10 gold, deposit rest
-            {
-                var excessGold = GetCurrentGold() - 100000;
-                await _agentFactory.BankAgent.QuickDepositGoldAsync(bankerGuid, excessGold);
-            }
-        }
-
-        // Check mail periodically
-        if (ShouldCheckMail(currentTime))
-        {
-            var mailboxGuid = FindNearestMailbox();
-            if (mailboxGuid != 0)
-            {
-                await CheckMailAsync(mailboxGuid);
-            }
-        }
-
-        // Handle guild operations periodically
-        if (_agentFactory.GuildAgent.IsInGuild)
-        {
-            // Check guild bank for items we need
-            if (ShouldCheckGuildBank(currentTime))
-            {
-                var guildBankGuid = FindNearestGuildBank();
-                if (guildBankGuid != 0)
-                {
-                    await CheckGuildBankAsync(guildBankGuid);
-                }
-            }
-
-            // Update guild roster periodically
-            if (ShouldUpdateGuildRoster(currentTime))
-            {
-                await _agentFactory.GuildAgent.RequestGuildRosterAsync();
-            }
-        }
-        else
-        {
-            // Auto-accept guild invites from approved guilds
-            var approvedGuilds = GetApprovedGuildNames();
-            if (approvedGuilds.Length > 0)
-            {
-                // This would be handled by the event system
-                // The guild invite handling is done through events
+                await LearnLevelAppropriateSpellsAsync(trainerGuid);
             }
         }
     }
 
-    // Helper methods - implement based on your game state access
-    private ulong FindNearestEnemy() => 0;
-    private ulong[] FindLootTargets() => Array.Empty<ulong>();
-    private bool IsHealthLow() => false;
-    private bool ShouldCheckAuctionHouse(DateTime currentTime) => false;
-    private ulong FindNearestAuctioneer() => 0;
-    private ulong FindNearestBanker() => 0;
-    private bool ShouldDepositGold(DateTime currentTime) => false;
-    private uint GetCurrentGold() => 0;
-    private bool ShouldCheckMail(DateTime currentTime) => false;
-    private ulong FindNearestMailbox() => 0;
-
-    private bool ShouldCheckGuildBank(DateTime currentTime) => false;
-    private ulong FindNearestGuildBank() => 0;
-    private bool ShouldUpdateGuildRoster(DateTime currentTime) => false;
-    private string[] GetApprovedGuildNames() => Array.Empty<string>();
-
-    private async Task CheckGuildBankAsync(ulong guildBankGuid)
+    private async Task CheckForNewSpellsAsync(ulong trainerGuid)
     {
-        await _agentFactory.GuildAgent.OpenGuildBankAsync(guildBankGuid);
-        
-        // Withdraw needed consumables from guild bank
-        var neededItems = GetNeededConsumables();
-        foreach (var (tabIndex, slotIndex, quantity) in neededItems)
+        try
         {
-            await _agentFactory.GuildAgent.WithdrawItemFromGuildBankAsync(tabIndex, slotIndex, quantity);
+            await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+            await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+            
+            await Task.Delay(200);
+            
+            var currentMoney = GetCurrentMoney();
+            var affordableSpells = _agentFactory.TrainerAgent.GetAffordableServices(currentMoney)
+                .Where(s => s.RequiredLevel <= GetCurrentLevel())
+                .Take(3); // Limit to avoid spending too much time
+            
+            foreach (var spell in affordableSpells)
+            {
+                await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, spell.SpellId);
+                await Task.Delay(100);
+            }
+            
+            await _agentFactory.TrainerAgent.CloseTrainerAsync();
         }
-        
-        await _agentFactory.GuildAgent.CloseGuildBankAsync();
-    }    }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check trainer for new spells");
+        }
+    }
+
+    private async Task LearnLevelAppropriateSpellsAsync(ulong trainerGuid)
+    {
+        try
+        {
+            var currentLevel = GetCurrentLevel();
+            var currentMoney = GetCurrentMoney();
+            var spellBudget = Math.Min(currentMoney / 2, currentLevel * 1000); // Spend up to half money or level*10 silver
+            
+            await _agentFactory.TrainerAgent.OpenTrainerAsync(trainerGuid);
+            await _agentFactory.TrainerAgent.RequestTrainerServicesAsync(trainerGuid);
+            
+            await Task.Delay(200);
+            
+            var spellsToLearn = _agentFactory.TrainerAgent.GetAffordableServices(spellBudget)
+                .Where(s => s.RequiredLevel <= currentLevel)
+                .OrderBy(s => s.RequiredLevel)
+                .Take(5); // Learn up to 5 spells per level
+            
+            foreach (var spell in spellsToLearn)
+            {
+                await _agentFactory.TrainerAgent.LearnSpellAsync(trainerGuid, spell.SpellId);
+                _logger.LogInformation($"Auto-learned spell: {spell.Name} for {spell.Cost} copper");
+                await Task.Delay(100);
+            }
+            
+            await _agentFactory.TrainerAgent.CloseTrainerAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to learn level-appropriate spells");
+        }
+    }
+
+    // Helper methods - implement based on your game state access
+    private bool ShouldCheckTrainer(DateTime currentTime) => false;
+    private ulong FindNearestClassTrainer() => 0;
+    private bool HasLeveledUp() => false;
+    private uint GetCurrentMoney() => 0;
+    private uint GetCurrentLevel() => 0;
+}

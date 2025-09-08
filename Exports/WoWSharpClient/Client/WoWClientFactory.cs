@@ -444,7 +444,8 @@ namespace WoWSharpClient.Client
             IBankNetworkAgent BankAgent,
             IMailNetworkAgent MailAgent,
             IGuildNetworkAgent GuildAgent,
-            IPartyNetworkAgent PartyAgent
+            IPartyNetworkAgent PartyAgent,
+            ITrainerNetworkAgent TrainerAgent
         ) CreateAllNetworkAgents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return AgentFactory.CreateAllNetworkAgents(worldClient, loggerFactory);
@@ -583,6 +584,28 @@ namespace WoWSharpClient.Client
         public static IPartyNetworkAgent CreatePartyNetworkAgent(IWorldClient worldClient, ILogger<PartyNetworkAgent> logger)
         {
             return AgentFactory.CreatePartyNetworkAgent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a trainer network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending trainer packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging trainer operations.</param>
+        /// <returns>A configured trainer network agent instance.</returns>
+        public static ITrainerNetworkAgent CreateTrainerNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateTrainerNetworkAgentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a trainer network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending trainer packets.</param>
+        /// <param name="logger">The logger for trainer operations.</param>
+        /// <returns>A configured trainer network agent instance.</returns>
+        public static ITrainerNetworkAgent CreateTrainerNetworkAgent(IWorldClient worldClient, ILogger<TrainerNetworkAgent> logger)
+        {
+            return AgentFactory.CreateTrainerNetworkAgent(worldClient, logger);
         }
     }
 }

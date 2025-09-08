@@ -92,6 +92,11 @@ namespace WoWSharpClient.Networking.Agent.I
         /// </summary>
         IPartyNetworkAgent PartyAgent { get; }
 
+        /// <summary>
+        /// Gets the trainer network agent for learning spells and abilities from class trainers.
+        /// </summary>
+        ITrainerNetworkAgent TrainerAgent { get; }
+
         #endregion
     }
 }

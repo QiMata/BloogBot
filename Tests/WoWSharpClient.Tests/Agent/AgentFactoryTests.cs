@@ -27,6 +27,7 @@ namespace WoWSharpClient.Tests.Agent
         private readonly Mock<ILogger<BankNetworkAgent>> _mockBankLogger;
         private readonly Mock<ILogger<MailNetworkAgent>> _mockMailLogger;
         private readonly Mock<ILogger<GuildNetworkAgent>> _mockGuildLogger;
+        private readonly Mock<ILogger<PartyNetworkAgent>> _mockPartyLogger;
         private readonly Mock<ILogger<NetworkAgentFactory>> _mockNetworkAgentFactoryLogger;
 
         public AgentFactoryTests()
@@ -49,6 +50,7 @@ namespace WoWSharpClient.Tests.Agent
             _mockBankLogger = new Mock<ILogger<BankNetworkAgent>>();
             _mockMailLogger = new Mock<ILogger<MailNetworkAgent>>();
             _mockGuildLogger = new Mock<ILogger<GuildNetworkAgent>>();
+            _mockPartyLogger = new Mock<ILogger<PartyNetworkAgent>>();
             _mockNetworkAgentFactoryLogger = new Mock<ILogger<NetworkAgentFactory>>();
 
             // Setup the factory to return our specific loggers
@@ -115,6 +117,10 @@ namespace WoWSharpClient.Tests.Agent
             _mockLoggerFactory
                 .Setup(x => x.CreateLogger(typeof(GuildNetworkAgent).FullName!))
                 .Returns(_mockGuildLogger.Object);
+
+            _mockLoggerFactory
+                .Setup(x => x.CreateLogger(typeof(PartyNetworkAgent).FullName!))
+                .Returns(_mockPartyLogger.Object);
 
             _mockLoggerFactory
                 .Setup(x => x.CreateLogger(typeof(NetworkAgentFactory).FullName!))
@@ -511,8 +517,7 @@ namespace WoWSharpClient.Tests.Agent
         public void CreateAllNetworkAgents_WithLoggerFactory_ReturnsAllAgents()
         {
             // Act
-            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent) =
-                AgentFactory.CreateAllNetworkAgents(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent) = AgentFactory.CreateAllNetworkAgents(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(targetingAgent);
@@ -531,6 +536,8 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(bankAgent);
             Assert.NotNull(mailAgent);
             Assert.NotNull(guildAgent);
+            Assert.NotNull(partyAgent);
+            Assert.NotNull(trainerAgent);
             Assert.IsType<TargetingNetworkAgent>(targetingAgent);
             Assert.IsType<AttackNetworkAgent>(attackAgent);
             Assert.IsType<QuestNetworkAgent>(questAgent);
@@ -547,14 +554,15 @@ namespace WoWSharpClient.Tests.Agent
             Assert.IsType<BankNetworkAgent>(bankAgent);
             Assert.IsType<MailNetworkAgent>(mailAgent);
             Assert.IsType<GuildNetworkAgent>(guildAgent);
+            Assert.IsType<PartyNetworkAgent>(partyAgent);
+            Assert.IsType<TrainerNetworkAgent>(trainerAgent);
         }
 
         [Fact]
         public void CreateAllNetworkAgents_WithoutLoggerFactory_ReturnsAllAgents()
         {
             // Act
-            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent) =
-                AgentFactory.CreateAllNetworkAgents(_mockWorldClient.Object, null);
+            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent) = AgentFactory.CreateAllNetworkAgents(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(targetingAgent);
@@ -573,6 +581,8 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(bankAgent);
             Assert.NotNull(mailAgent);
             Assert.NotNull(guildAgent);
+            Assert.NotNull(partyAgent);
+            Assert.NotNull(trainerAgent);
             Assert.IsType<TargetingNetworkAgent>(targetingAgent);
             Assert.IsType<AttackNetworkAgent>(attackAgent);
             Assert.IsType<QuestNetworkAgent>(questAgent);
@@ -589,6 +599,8 @@ namespace WoWSharpClient.Tests.Agent
             Assert.IsType<BankNetworkAgent>(bankAgent);
             Assert.IsType<MailNetworkAgent>(mailAgent);
             Assert.IsType<GuildNetworkAgent>(guildAgent);
+            Assert.IsType<PartyNetworkAgent>(partyAgent);
+            Assert.IsType<TrainerNetworkAgent>(trainerAgent);
         }
 
         [Fact]
@@ -940,98 +952,146 @@ namespace WoWSharpClient.Tests.Agent
 
         #endregion
 
-        #region Mail Network Agent Tests
+        #region Party Network Agent Tests
 
         [Fact]
-        public void CreateMailNetworkAgent_WithLogger_ReturnsMailNetworkAgent()
+        public void CreatePartyNetworkAgent_WithLogger_ReturnsPartyNetworkAgent()
         {
             // Act
-            var agent = AgentFactory.CreateMailNetworkAgent(_mockWorldClient.Object, _mockMailLogger.Object);
+            var agent = AgentFactory.CreatePartyNetworkAgent(_mockWorldClient.Object, _mockPartyLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<MailNetworkAgent>(agent);
+            Assert.IsType<PartyNetworkAgent>(agent);
         }
 
         [Fact]
-        public void CreateMailNetworkAgent_WithLoggerFactory_ReturnsMailNetworkAgent()
+        public void CreatePartyNetworkAgent_WithLoggerFactory_ReturnsPartyNetworkAgent()
         {
             // Act
-            var agent = AgentFactory.CreateMailNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreatePartyNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<MailNetworkAgent>(agent);
+            Assert.IsType<PartyNetworkAgent>(agent);
         }
 
         [Fact]
-        public void CreateMailNetworkAgentForClient_WithLoggerFactory_ReturnsMailNetworkAgent()
+        public void CreatePartyNetworkAgentForClient_WithLoggerFactory_ReturnsPartyNetworkAgent()
         {
             // Act
-            var agent = AgentFactory.CreateMailNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreatePartyNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<MailNetworkAgent>(agent);
+            Assert.IsType<PartyNetworkAgent>(agent);
         }
 
         [Fact]
-        public void CreateMailNetworkAgentForClient_WithoutLoggerFactory_ReturnsMailNetworkAgent()
+        public void CreatePartyNetworkAgentForClient_WithoutLoggerFactory_ReturnsPartyNetworkAgent()
         {
             // Act
-            var agent = AgentFactory.CreateMailNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreatePartyNetworkAgentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<MailNetworkAgent>(agent);
+            Assert.IsType<PartyNetworkAgent>(agent);
+        }
+
+        [Fact]
+        public void CreatePartyNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreatePartyNetworkAgent(null!, _mockPartyLogger.Object));
+        }
+
+        [Fact]
+        public void CreatePartyNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreatePartyNetworkAgent(_mockWorldClient.Object, (ILogger<PartyNetworkAgent>)null!));
+        }
+
+        [Fact]
+        public void CreatePartyNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreatePartyNetworkAgentForClient(null!, _mockLoggerFactory.Object));
         }
 
         #endregion
 
-        #region Guild Network Agent Tests
+        #region Trainer Network Agent Tests
 
         [Fact]
-        public void CreateGuildNetworkAgent_WithLogger_ReturnsGuildNetworkAgent()
+        public void CreateTrainerNetworkAgent_WithLoggerFactory_ReturnsAgent()
         {
             // Act
-            var agent = AgentFactory.CreateGuildNetworkAgent(_mockWorldClient.Object, _mockGuildLogger.Object);
+            var agent = AgentFactory.CreateTrainerNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<GuildNetworkAgent>(agent);
+            Assert.IsType<TrainerNetworkAgent>(agent);
         }
 
         [Fact]
-        public void CreateGuildNetworkAgent_WithLoggerFactory_ReturnsGuildNetworkAgent()
+        public void CreateTrainerNetworkAgent_WithLogger_ReturnsAgent()
         {
             // Act
-            var agent = AgentFactory.CreateGuildNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateTrainerNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object.CreateLogger<TrainerNetworkAgent>());
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<GuildNetworkAgent>(agent);
+            Assert.IsType<TrainerNetworkAgent>(agent);
         }
 
         [Fact]
-        public void CreateGuildNetworkAgentForClient_WithLoggerFactory_ReturnsGuildNetworkAgent()
+        public void CreateTrainerNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
         {
-            // Act
-            var agent = AgentFactory.CreateGuildNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
-
-            // Assert
-            Assert.NotNull(agent);
-            Assert.IsType<GuildNetworkAgent>(agent);
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateTrainerNetworkAgent(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateGuildNetworkAgentForClient_WithoutLoggerFactory_ReturnsGuildNetworkAgent()
+        public void CreateTrainerNetworkAgent_WithNullLoggerFactory_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateTrainerNetworkAgent(_mockWorldClient.Object, (ILoggerFactory)null!));
+        }
+
+        [Fact]
+        public void CreateTrainerNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateTrainerNetworkAgent(_mockWorldClient.Object, (ILogger<TrainerNetworkAgent>)null!));
+        }
+
+        [Fact]
+        public void CreateTrainerNetworkAgentForClient_WithLoggerFactory_ReturnsAgent()
         {
             // Act
-            var agent = AgentFactory.CreateGuildNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateTrainerNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<GuildNetworkAgent>(agent);
+            Assert.IsType<TrainerNetworkAgent>(agent);
+        }
+
+        [Fact]
+        public void CreateTrainerNetworkAgentForClient_WithoutLoggerFactory_ReturnsAgent()
+        {
+            // Act
+            var agent = AgentFactory.CreateTrainerNetworkAgentForClient(_mockWorldClient.Object, null);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<TrainerNetworkAgent>(agent);
         }
 
         #endregion

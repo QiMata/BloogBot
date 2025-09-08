@@ -15,12 +15,6 @@ namespace WoWSharpClient.Networking.Agent
         private readonly IWorldClient _worldClient;
         private readonly ILogger<PartyNetworkAgent> _logger;
 
-        private bool _isInGroup;
-        private bool _isInRaid;
-        private bool _isGroupLeader;
-        private uint _groupSize;
-        private LootMethod _currentLootMethod;
-        private bool _hasPendingInvite;
         private readonly List<GroupMember> _groupMembers = new();
         private readonly object _groupLock = new object();
 

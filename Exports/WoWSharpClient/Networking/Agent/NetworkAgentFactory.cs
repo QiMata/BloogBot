@@ -32,6 +32,7 @@ namespace WoWSharpClient.Networking.Agent
         private IMailNetworkAgent? _mailAgent;
         private IGuildNetworkAgent? _guildAgent;
         private IPartyNetworkAgent? _partyAgent;
+        private ITrainerNetworkAgent? _trainerAgent;
 
         // Thread safety locks
         private readonly object _targetingLock = new object();
@@ -51,6 +52,7 @@ namespace WoWSharpClient.Networking.Agent
         private readonly object _mailLock = new object();
         private readonly object _guildLock = new object();
         private readonly object _partyLock = new object();
+        private readonly object _trainerLock = new object();
 
         // Event handler setup tracking
         private bool _eventsSetup = false;
@@ -432,6 +434,28 @@ namespace WoWSharpClient.Networking.Agent
             }
         }
 
+        /// <inheritdoc />
+        public ITrainerNetworkAgent TrainerAgent
+        {
+            get
+            {
+                if (_trainerAgent == null)
+                {
+                    lock (_trainerLock)
+                    {
+                        if (_trainerAgent == null)
+                        {
+                            _logger.LogDebug("Creating TrainerNetworkAgent lazily");
+                            _trainerAgent = AgentFactory.CreateTrainerNetworkAgent(_worldClient, _loggerFactory);
+                            SetupEventHandlersIfNeeded();
+                            _logger.LogDebug("TrainerNetworkAgent created successfully");
+                        }
+                    }
+                }
+                return _trainerAgent;
+            }
+        }
+
         #endregion
 
         #region Constructors
@@ -632,6 +656,11 @@ namespace WoWSharpClient.Networking.Agent
             if (_partyAgent != null)
             {
                 // Will be updated when IPartyNetworkAgent event handling is implemented
+            }
+
+            if (_trainerAgent != null)
+            {
+                // Will be updated when ITrainerNetworkAgent event handling is implemented
             }
         }
 
