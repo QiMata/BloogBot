@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.Abstractions;
+using System.Reactive.Disposables;
 
 namespace WoWSharpClient.Networking.Implementation
 {
@@ -18,6 +19,7 @@ namespace WoWSharpClient.Networking.Implementation
         private bool _disposed;
         private bool _isReconnecting;
         private CancellationTokenSource? _reconnectCancellation;
+        private IDisposable? _connSubscriptions;
 
         public ConnectionManager(IConnection connection, IReconnectPolicy reconnectPolicy, string host, int port)
         {
@@ -26,8 +28,10 @@ namespace WoWSharpClient.Networking.Implementation
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _port = port;
 
-            _connection.Connected += OnConnected;
-            _connection.Disconnected += OnDisconnected;
+            _connSubscriptions = new CompositeDisposable(
+                _connection.WhenConnected.Subscribe(_ => OnConnected()),
+                _connection.WhenDisconnected.Subscribe(ex => OnDisconnected(ex))
+            );
         }
 
         /// <summary>
@@ -44,9 +48,7 @@ namespace WoWSharpClient.Networking.Implementation
         /// Connects to the configured host and port.
         /// </summary>
         public Task ConnectAsync(CancellationToken cancellationToken = default)
-        {
-            return _connection.ConnectAsync(_host, _port, cancellationToken);
-        }
+            => _connection.ConnectAsync(_host, _port, cancellationToken);
 
         /// <summary>
         /// Disconnects and stops any reconnection attempts.
@@ -76,8 +78,7 @@ namespace WoWSharpClient.Networking.Implementation
 
         private async void OnDisconnected(Exception? exception)
         {
-            if (_disposed)
-                return;
+            if (_disposed) return;
 
             // If we manually disconnected (graceful disconnect), don't attempt to reconnect
             if (exception == null)
@@ -87,16 +88,13 @@ namespace WoWSharpClient.Networking.Implementation
                 return;
             }
 
-            if (_isReconnecting)
-                return;
-
+            if (_isReconnecting) return;
             _isReconnecting = true;
 
             while (true)
             {
                 _reconnectAttempts++;
                 var delay = _reconnectPolicy.GetDelay(_reconnectAttempts, exception);
-                
                 if (!delay.HasValue)
                 {
                     // No more reconnection attempts
@@ -109,7 +107,6 @@ namespace WoWSharpClient.Networking.Implementation
                 {
                     _reconnectCancellation = new CancellationTokenSource();
                     await Task.Delay(delay.Value, _reconnectCancellation.Token);
-                    
                     if (_reconnectCancellation.Token.IsCancellationRequested || _disposed)
                     {
                         _isReconnecting = false;
@@ -117,7 +114,6 @@ namespace WoWSharpClient.Networking.Implementation
                     }
 
                     await _connection.ConnectAsync(_host, _port, _reconnectCancellation.Token);
-                    
                     // If we get here, connection was successful
                     _isReconnecting = false;
                     return;
@@ -140,8 +136,7 @@ namespace WoWSharpClient.Networking.Implementation
             if (!_disposed)
             {
                 _reconnectCancellation?.Cancel();
-                _connection.Connected -= OnConnected;
-                _connection.Disconnected -= OnDisconnected;
+                _connSubscriptions?.Dispose();
                 _connection.Dispose();
                 _reconnectCancellation?.Dispose();
                 _disposed = true;

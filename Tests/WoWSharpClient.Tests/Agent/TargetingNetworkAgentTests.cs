@@ -2,22 +2,23 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
-using WoWSharpClient.Networking.Agent;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.Models;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
-    public class TargetingNetworkAgentTests
+    public class TargetingNetworkClientComponentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<TargetingNetworkAgent>> _mockLogger;
-        private readonly TargetingNetworkAgent _targetingAgent;
+        private readonly Mock<ILogger<TargetingNetworkClientComponent>> _mockLogger;
+        private readonly TargetingNetworkClientComponent _targetingAgent;
 
-        public TargetingNetworkAgentTests()
+        public TargetingNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<TargetingNetworkAgent>>();
-            _targetingAgent = new TargetingNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<TargetingNetworkClientComponent>>();
+            _targetingAgent = new TargetingNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         [Fact]
@@ -60,7 +61,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong targetGuid = 0x12345678;
             
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -68,7 +69,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_SET_SELECTION,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == targetGuid),
                     It.IsAny<CancellationToken>()
@@ -84,7 +85,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong targetGuid = 0x12345678;
             
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -97,50 +98,54 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public async Task SetTargetAsync_InvokesTargetChangedCallback()
+        public async Task SetTargetAsync_RaisesTargetChangesObservable()
         {
             // Arrange
             ulong targetGuid = 0x12345678;
-            ulong? callbackTargetGuid = null;
-            bool callbackInvoked = false;
+            TargetingData? receivedData = null;
+            bool observableTriggered = false;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
-            _targetingAgent.SetTargetChangedCallback((newTarget) =>
+            // Subscribe to the reactive observable
+            _targetingAgent.TargetChanges.Subscribe(data =>
             {
-                callbackTargetGuid = newTarget;
-                callbackInvoked = true;
+                receivedData = data;
+                observableTriggered = true;
             });
 
             // Act
             await _targetingAgent.SetTargetAsync(targetGuid);
 
             // Assert
-            Assert.True(callbackInvoked);
-            Assert.Equal(targetGuid, callbackTargetGuid);
+            Assert.True(observableTriggered);
+            Assert.NotNull(receivedData);
+            Assert.Equal(targetGuid, receivedData.CurrentTarget);
+            Assert.Null(receivedData.PreviousTarget);
         }
 
         [Fact]
-        public async Task SetTargetAsync_SameTarget_DoesNotInvokeCallback()
+        public async Task SetTargetAsync_SameTarget_DoesNotTriggerObservable()
         {
             // Arrange
             ulong targetGuid = 0x12345678;
-            int callbackCount = 0;
+            int observableCount = 0;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
-            _targetingAgent.SetTargetChangedCallback((newTarget) => callbackCount++);
+            // Subscribe to the reactive observable
+            _targetingAgent.TargetChanges.Subscribe(data => observableCount++);
 
             // Act
             await _targetingAgent.SetTargetAsync(targetGuid);
             await _targetingAgent.SetTargetAsync(targetGuid); // Same target again
 
             // Assert
-            Assert.Equal(1, callbackCount); // Callback should only be invoked once
+            Assert.Equal(1, observableCount); // Observable should only be triggered once
         }
 
         [Fact]
@@ -148,7 +153,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -156,7 +161,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_SET_SELECTION,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == 0),
                     It.IsAny<CancellationToken>()
@@ -172,7 +177,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong targetGuid = 0x12345678;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Set a target first
@@ -194,7 +199,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong playerGuid = 0x87654321;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -202,7 +207,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_SET_SELECTION,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == playerGuid),
                     It.IsAny<CancellationToken>()
@@ -214,84 +219,86 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void UpdateCurrentTarget_UpdatesStateAndInvokesCallback()
+        public void HandleTargetChanged_UpdatesStateAndRaisesObservable()
         {
             // Arrange
             ulong newTargetGuid = 0x11111111;
-            ulong? callbackTargetGuid = null;
-            bool callbackInvoked = false;
+            TargetingData? receivedData = null;
+            bool observableTriggered = false;
 
-            _targetingAgent.SetTargetChangedCallback((newTarget) =>
+            // Subscribe to the reactive observable
+            _targetingAgent.TargetChanges.Subscribe(data =>
             {
-                callbackTargetGuid = newTarget;
-                callbackInvoked = true;
+                receivedData = data;
+                observableTriggered = true;
             });
 
             // Act
-            _targetingAgent.UpdateCurrentTarget(newTargetGuid);
+            _targetingAgent.HandleTargetChanged(newTargetGuid);
 
             // Assert
             Assert.Equal(newTargetGuid, _targetingAgent.CurrentTarget);
-            Assert.True(callbackInvoked);
-            Assert.Equal(newTargetGuid, callbackTargetGuid);
+            Assert.True(observableTriggered);
+            Assert.NotNull(receivedData);
+            Assert.Equal(newTargetGuid, receivedData.CurrentTarget);
         }
 
         [Fact]
-        public void UpdateCurrentTarget_WithZero_ClearsTarget()
+        public void HandleTargetChanged_WithNull_ClearsTarget()
         {
             // Arrange
             ulong initialTarget = 0x12345678;
-            _targetingAgent.UpdateCurrentTarget(initialTarget); // Set initial target
+            _targetingAgent.HandleTargetChanged(initialTarget); // Set initial target
 
-            ulong? callbackTargetGuid = null;
-            bool callbackInvoked = false;
+            TargetingData? receivedData = null;
+            bool observableTriggered = false;
 
-            _targetingAgent.SetTargetChangedCallback((newTarget) =>
+            // Subscribe to the reactive observable
+            _targetingAgent.TargetChanges.Subscribe(data =>
             {
-                callbackTargetGuid = newTarget;
-                callbackInvoked = true;
+                receivedData = data;
+                observableTriggered = true;
             });
 
             // Act
-            _targetingAgent.UpdateCurrentTarget(0);
+            _targetingAgent.HandleTargetChanged(null);
 
             // Assert
             Assert.Null(_targetingAgent.CurrentTarget);
-            Assert.True(callbackInvoked);
-            Assert.Null(callbackTargetGuid);
+            Assert.True(observableTriggered);
+            Assert.NotNull(receivedData);
+            Assert.Null(receivedData.CurrentTarget);
+            Assert.Equal(initialTarget, receivedData.PreviousTarget);
         }
 
         [Fact]
-        public void SetTargetChangedCallback_ReplacesExistingCallback()
+        public void TargetChanges_Observable_WorksCorrectly()
         {
             // Arrange
-            int firstCallbackCount = 0;
-            int secondCallbackCount = 0;
-
-            _targetingAgent.SetTargetChangedCallback((target) => firstCallbackCount++);
-            _targetingAgent.SetTargetChangedCallback((target) => secondCallbackCount++);
-
-            // Act
-            _targetingAgent.UpdateCurrentTarget(0x12345678);
-
-            // Assert
-            Assert.Equal(0, firstCallbackCount); // First callback should not be called
-            Assert.Equal(1, secondCallbackCount); // Second callback should be called
-        }
-
-        [Fact]
-        public void SetTargetChangedCallback_WithNull_ClearsCallback()
-        {
-            // Arrange
-            int callbackCount = 0;
-            _targetingAgent.SetTargetChangedCallback((target) => callbackCount++);
-            _targetingAgent.SetTargetChangedCallback(null); // Clear callback
+            var receivedData = new List<TargetingData>();
+            
+            // Subscribe to the observable
+            _targetingAgent.TargetChanges.Subscribe(data => receivedData.Add(data));
 
             // Act
-            _targetingAgent.UpdateCurrentTarget(0x12345678);
+            _targetingAgent.HandleTargetChanged(0x12345678);
+            _targetingAgent.HandleTargetChanged(0x87654321);
+            _targetingAgent.HandleTargetChanged(null);
 
             // Assert
-            Assert.Equal(0, callbackCount); // No callback should be invoked
+            Assert.Equal(3, receivedData.Count);
+            
+            // First target change
+            Assert.Null(receivedData[0].PreviousTarget);
+            Assert.Equal((ulong)0x12345678, receivedData[0].CurrentTarget);
+
+            // Second target change
+            Assert.Equal((ulong)0x12345678, receivedData[1].PreviousTarget);
+            Assert.Equal((ulong)0x87654321, receivedData[1].CurrentTarget);
+
+            // Clear target
+            Assert.Equal((ulong)0x87654321, receivedData[2].PreviousTarget);
+            Assert.Null(receivedData[2].CurrentTarget);
         }
 
         [Fact]
@@ -302,7 +309,7 @@ namespace WoWSharpClient.Tests.Agent
             var expectedException = new InvalidOperationException("Network error");
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(expectedException);
 
             // Act & Assert
@@ -319,7 +326,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong targetGuid = 0x12345678;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             await _targetingAgent.SetTargetAsync(targetGuid);
@@ -329,6 +336,81 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.Equal(expected, result);
+        }
+
+        [Fact]
+        public void HandleTargetingError_RaisesTargetingErrorObservable()
+        {
+            // Arrange
+            string errorMessage = "Target not in range";
+            ulong targetGuid = 0x12345678;
+            TargetingErrorData? receivedData = null;
+            bool observableTriggered = false;
+
+            // Subscribe to the observable
+            _targetingAgent.TargetingErrors.Subscribe(data =>
+            {
+                receivedData = data;
+                observableTriggered = true;
+            });
+
+            // Act
+            _targetingAgent.HandleTargetingError(errorMessage, targetGuid);
+
+            // Assert
+            Assert.True(observableTriggered);
+            Assert.NotNull(receivedData);
+            Assert.Equal(errorMessage, receivedData.ErrorMessage);
+            Assert.Equal(targetGuid, receivedData.TargetGuid);
+        }
+
+        [Fact]
+        public async Task AssistOperations_Observable_WorksCorrectly()
+        {
+            // Arrange
+            ulong playerGuid = 0x87654321;
+            AssistData? receivedData = null;
+            bool observableTriggered = false;
+
+            _mockWorldClient
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            // Subscribe to the observable
+            _targetingAgent.AssistOperations.Subscribe(data =>
+            {
+                receivedData = data;
+                observableTriggered = true;
+            });
+
+            // Act - Call AssistAsync instead of HandleTargetChanged to properly test assist operations
+            await _targetingAgent.AssistAsync(playerGuid);
+
+            // Assert
+            Assert.True(observableTriggered);
+            Assert.NotNull(receivedData);
+            Assert.Equal(playerGuid, receivedData.PlayerGuid);
+            Assert.Equal(playerGuid, receivedData.AssistTarget); // After assist, we're targeting the player we assisted
+        }
+
+        [Fact]
+        public void IsOperationInProgress_InitiallyFalse()
+        {
+            // Arrange & Act
+            var isInProgress = _targetingAgent.IsOperationInProgress;
+
+            // Assert
+            Assert.False(isInProgress);
+        }
+
+        [Fact]
+        public void LastOperationTime_InitiallyNull()
+        {
+            // Arrange & Act
+            var lastOperationTime = _targetingAgent.LastOperationTime;
+
+            // Assert
+            Assert.Null(lastOperationTime);
         }
     }
 }

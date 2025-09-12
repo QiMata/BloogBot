@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
+using WoWSharpClient.Networking.ClientComponents;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
@@ -9,14 +9,14 @@ namespace WoWSharpClient.Tests.Agent
     public class DeadActorAgentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<DeadActorAgent>> _mockLogger;
-        private readonly DeadActorAgent _deadActorAgent;
+        private readonly Mock<ILogger<DeadActorClientComponent>> _mockLogger;
+        private readonly DeadActorClientComponent _deadActorAgent;
 
         public DeadActorAgentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<DeadActorAgent>>();
-            _deadActorAgent = new DeadActorAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<DeadActorClientComponent>>();
+            _deadActorAgent = new DeadActorClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         [Fact]
@@ -34,14 +34,14 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new DeadActorAgent(null!, _mockLogger.Object));
+            Assert.Throws<ArgumentNullException>(() => new DeadActorClientComponent(null!, _mockLogger.Object));
         }
 
         [Fact]
         public void Constructor_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new DeadActorAgent(_mockWorldClient.Object, null!));
+            Assert.Throws<ArgumentNullException>(() => new DeadActorClientComponent(_mockWorldClient.Object, null!));
         }
 
         [Fact]
@@ -52,7 +52,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_REPOP_REQUEST,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -67,7 +67,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_RECLAIM_CORPSE,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -85,7 +85,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_RESURRECT_RESPONSE,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -105,7 +105,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_RESURRECT_RESPONSE,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -125,7 +125,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_SPIRIT_HEALER_ACTIVATE,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -140,7 +140,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.MSG_CORPSE_QUERY,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -155,7 +155,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_SELF_RES,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),

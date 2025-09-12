@@ -2,23 +2,23 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
-    public class GameObjectNetworkAgentTests
+    public class GameObjectNetworkClientComponentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<GameObjectNetworkAgent>> _mockLogger;
-        private readonly GameObjectNetworkAgent _gameObjectAgent;
+        private readonly Mock<ILogger<GameObjectNetworkClientComponent>> _mockLogger;
+        private readonly GameObjectNetworkClientComponent _gameObjectAgent;
 
-        public GameObjectNetworkAgentTests()
+        public GameObjectNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<GameObjectNetworkAgent>>();
-            _gameObjectAgent = new GameObjectNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<GameObjectNetworkClientComponent>>();
+            _gameObjectAgent = new GameObjectNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         [Fact]
@@ -28,7 +28,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong gameObjectGuid = 0x12345678;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -36,7 +36,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_GAMEOBJ_USE,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == gameObjectGuid),
                     It.IsAny<CancellationToken>()
@@ -52,7 +52,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong chestGuid = 0x87654321;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -60,7 +60,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_GAMEOBJ_USE,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == chestGuid),
                     It.IsAny<CancellationToken>()
@@ -76,7 +76,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong nodeGuid = 0x11111111;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -84,7 +84,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_GAMEOBJ_USE,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == nodeGuid),
                     It.IsAny<CancellationToken>()
@@ -100,7 +100,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong doorGuid = 0x22222222;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -108,7 +108,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_GAMEOBJ_USE,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == doorGuid),
                     It.IsAny<CancellationToken>()
@@ -124,7 +124,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong buttonGuid = 0x33333333;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -132,7 +132,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_GAMEOBJ_USE,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == buttonGuid),
                     It.IsAny<CancellationToken>()
@@ -153,7 +153,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong gameObjectGuid = 0x44444444;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -161,7 +161,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_GAMEOBJ_USE,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == gameObjectGuid),
                     It.IsAny<CancellationToken>()
@@ -177,7 +177,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong gameObjectGuid = 0x55555555;
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             // Act
@@ -185,7 +185,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     Opcode.CMSG_GAMEOBJ_USE,
                     It.Is<byte[]>(payload => payload.Length == 8 && BitConverter.ToUInt64(payload, 0) == gameObjectGuid),
                     It.IsAny<CancellationToken>()
@@ -216,7 +216,7 @@ namespace WoWSharpClient.Tests.Agent
         [InlineData(GameObjectType.QuestGiver, 4.0f)]
         [InlineData(GameObjectType.Mailbox, 3.0f)]
         [InlineData(GameObjectType.AuctionHouse, 4.0f)]
-        [InlineData(GameObjectType.TradeSkillMaster, 4.0f)]
+        [InlineData(GameObjectType.SpellCaster, 4.0f)]
         [InlineData(GameObjectType.Generic, 3.0f)]
         public void GetInteractionDistance_VariousObjectTypes_ReturnsCorrectDistance(GameObjectType objectType, float expectedDistance)
         {
@@ -382,7 +382,7 @@ namespace WoWSharpClient.Tests.Agent
             var expectedException = new InvalidOperationException("Network error");
 
             _mockWorldClient
-                .Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(expectedException);
 
             // Act & Assert

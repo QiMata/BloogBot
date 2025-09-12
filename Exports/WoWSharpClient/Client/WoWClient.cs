@@ -146,7 +146,7 @@ namespace WoWSharpClient.Client
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
                 
-            await _worldClient.SendMovementAsync(opcode, movementInfo, cancellationToken);
+            await _worldClient.SendOpcodeAsync(opcode, movementInfo, cancellationToken);
         }
 
         public async Task SendMSGPackedAsync(Opcode opcode, byte[] payload, CancellationToken cancellationToken = default)
@@ -156,7 +156,7 @@ namespace WoWSharpClient.Client
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
                 
-            await _worldClient.SendMovementAsync(opcode, payload, cancellationToken);
+            await _worldClient.SendOpcodeAsync(opcode, payload, cancellationToken);
         }
 
         public async Task SendCharacterCreateAsync(string name, Race race, Class clazz, Gender gender, byte skin, byte face, byte hairStyle, byte hairColor, byte facialHair, byte outfitId, CancellationToken cancellationToken = default)
@@ -182,7 +182,7 @@ namespace WoWSharpClient.Client
             writer.Write(outfitId);
 
             writer.Flush();
-            await _worldClient.SendMovementAsync(Opcode.CMSG_CHAR_CREATE, ms.ToArray(), cancellationToken);
+            await _worldClient.SendOpcodeAsync(Opcode.CMSG_CHAR_CREATE, ms.ToArray(), cancellationToken);
         }
 
         public async Task SendPingAsync(CancellationToken cancellationToken = default)

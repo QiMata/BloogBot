@@ -1,4 +1,5 @@
 using System;
+using System.Reactive;
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.Abstractions;
@@ -16,6 +17,9 @@ namespace WoWSharpClient.Networking.Implementation
         private readonly IMessageFramer _framer;
         private readonly IPacketCodec<TOpcode> _codec;
         private readonly IMessageRouter<TOpcode> _router;
+        private IDisposable? _rxSubscription;
+        private IDisposable? _discSubscription;
+        private IDisposable? _connSubscription;
         private bool _disposed;
 
         /// <summary>
@@ -37,14 +41,28 @@ namespace WoWSharpClient.Networking.Implementation
             _codec = codec ?? throw new ArgumentNullException(nameof(codec));
             _router = router ?? throw new ArgumentNullException(nameof(router));
 
-            // Subscribe to connection events
-            _connection.BytesReceived += OnBytesReceived;
+            // Subscribe to bytes stream
+            _rxSubscription = _connection.ReceivedBytes.Subscribe(OnBytesReceived);
+
+            // Forward lifecycle events
+            _connSubscription = _connection.WhenConnected.Subscribe(_ => Connected?.Invoke());
+            _discSubscription = _connection.WhenDisconnected.Subscribe(ex => Disconnected?.Invoke(ex));
         }
 
         /// <summary>
         /// Gets a value indicating whether the underlying connection is established.
         /// </summary>
         public bool IsConnected => _connection.IsConnected;
+
+        /// <summary>
+        /// Event fired when the underlying connection is established.
+        /// </summary>
+        public event Action? Connected;
+
+        /// <summary>
+        /// Event fired when the underlying connection is disconnected. Exception is null for graceful disconnects.
+        /// </summary>
+        public event Action<Exception?>? Disconnected;
 
         /// <summary>
         /// Connects to the specified host and port.
@@ -65,10 +83,6 @@ namespace WoWSharpClient.Networking.Implementation
         /// <summary>
         /// Sends a packet with the specified opcode and payload.
         /// </summary>
-        /// <param name="opcode">The opcode to send.</param>
-        /// <param name="payload">The payload to send.</param>
-        /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
-        /// <returns>A task representing the asynchronous send operation.</returns>
         public async Task SendAsync(TOpcode opcode, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
         {
             if (_disposed)
@@ -98,22 +112,10 @@ namespace WoWSharpClient.Networking.Implementation
         }
 
         /// <summary>
-        /// Exposes connection events.
+        /// Exposes connection observables.
         /// </summary>
-        public event Action? Connected
-        {
-            add => _connection.Connected += value;
-            remove => _connection.Connected -= value;
-        }
-
-        /// <summary>
-        /// Exposes disconnection events.
-        /// </summary>
-        public event Action<Exception?>? Disconnected
-        {
-            add => _connection.Disconnected += value;
-            remove => _connection.Disconnected -= value;
-        }
+        public IObservable<System.Reactive.Unit> WhenConnected => _connection.WhenConnected;
+        public IObservable<Exception?> WhenDisconnected => _connection.WhenDisconnected;
 
         private async void OnBytesReceived(ReadOnlyMemory<byte> data)
         {
@@ -150,9 +152,11 @@ namespace WoWSharpClient.Networking.Implementation
         {
             if (!_disposed)
             {
-                _connection.BytesReceived -= OnBytesReceived;
+                _rxSubscription?.Dispose();
+                _discSubscription?.Dispose();
+                _connSubscription?.Dispose();
                 _connection.Dispose();
-                
+
                 if (_framer is IDisposable disposableFramer)
                     disposableFramer.Dispose();
 

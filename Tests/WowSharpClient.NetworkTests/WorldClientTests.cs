@@ -90,7 +90,7 @@ namespace WowSharpClient.NetworkTests
             var movementInfo = CreateMockMovementInfo();
 
             // Act
-            await worldClient.SendMovementAsync(Opcode.MSG_MOVE_START_FORWARD, movementInfo);
+            await worldClient.SendOpcodeAsync(Opcode.MSG_MOVE_START_FORWARD, movementInfo);
 
             // Assert
             var sentData = connection.GetSentData();

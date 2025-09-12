@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
@@ -11,166 +12,190 @@ namespace WoWSharpClient.Tests.Agent
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
         private readonly Mock<ILoggerFactory> _mockLoggerFactory;
-        private readonly Mock<ILogger<TargetingNetworkAgent>> _mockTargetingLogger;
-        private readonly Mock<ILogger<AttackNetworkAgent>> _mockAttackLogger;
-        private readonly Mock<ILogger<QuestNetworkAgent>> _mockQuestLogger;
-        private readonly Mock<ILogger<LootingNetworkAgent>> _mockLootingLogger;
-        private readonly Mock<ILogger<GameObjectNetworkAgent>> _mockGameObjectLogger;
-        private readonly Mock<ILogger<VendorNetworkAgent>> _mockVendorLogger;
-        private readonly Mock<ILogger<FlightMasterNetworkAgent>> _mockFlightMasterLogger;
-        private readonly Mock<ILogger<DeadActorAgent>> _mockDeadActorLogger;
-        private readonly Mock<ILogger<InventoryNetworkAgent>> _mockInventoryLogger;
-        private readonly Mock<ILogger<ItemUseNetworkAgent>> _mockItemUseLogger;
-        private readonly Mock<ILogger<EquipmentNetworkAgent>> _mockEquipmentLogger;
-        private readonly Mock<ILogger<SpellCastingNetworkAgent>> _mockSpellCastingLogger;
-        private readonly Mock<ILogger<AuctionHouseNetworkAgent>> _mockAuctionHouseLogger;
-        private readonly Mock<ILogger<BankNetworkAgent>> _mockBankLogger;
-        private readonly Mock<ILogger<MailNetworkAgent>> _mockMailLogger;
-        private readonly Mock<ILogger<GuildNetworkAgent>> _mockGuildLogger;
-        private readonly Mock<ILogger<PartyNetworkAgent>> _mockPartyLogger;
-        private readonly Mock<ILogger<NetworkAgentFactory>> _mockNetworkAgentFactoryLogger;
+        private readonly Mock<ILogger<TargetingNetworkClientComponent>> _mockTargetingLogger;
+        private readonly Mock<ILogger<AttackNetworkClientComponent>> _mockAttackLogger;
+        private readonly Mock<ILogger<QuestNetworkClientComponent>> _mockQuestLogger;
+        private readonly Mock<ILogger<LootingNetworkClientComponent>> _mockLootingLogger;
+        private readonly Mock<ILogger<GameObjectNetworkClientComponent>> _mockGameObjectLogger;
+        private readonly Mock<ILogger<VendorNetworkClientComponent>> _mockVendorLogger;
+        private readonly Mock<ILogger<FlightMasterNetworkClientComponent>> _mockFlightMasterLogger;
+        private readonly Mock<ILogger<DeadActorClientComponent>> _mockDeadActorLogger;
+        private readonly Mock<ILogger<InventoryNetworkClientComponent>> _mockInventoryLogger;
+        private readonly Mock<ILogger<ItemUseNetworkClientComponent>> _mockItemUseLogger;
+        private readonly Mock<ILogger<EquipmentNetworkClientComponent>> _mockEquipmentLogger;
+        private readonly Mock<ILogger<SpellCastingNetworkClientComponent>> _mockSpellCastingLogger;
+        private readonly Mock<ILogger<AuctionHouseNetworkClientComponent>> _mockAuctionHouseLogger;
+        private readonly Mock<ILogger<BankNetworkClientComponent>> _mockBankLogger;
+        private readonly Mock<ILogger<MailNetworkClientComponent>> _mockMailLogger;
+        private readonly Mock<ILogger<GuildNetworkClientComponent>> _mockGuildLogger;
+        private readonly Mock<ILogger<PartyNetworkClientComponent>> _mockPartyLogger;
+        private readonly Mock<ILogger<TrainerNetworkClientComponent>> _mockTrainerLogger;
+        private readonly Mock<ILogger<TalentNetworkClientComponent>> _mockTalentLogger;
+        private readonly Mock<ILogger<ProfessionsNetworkClientComponent>> _mockProfessionsLogger;
+        private readonly Mock<ILogger<EmoteNetworkClientComponent>> _mockEmoteLogger;
+        private readonly Mock<ILogger<NetworkClientComponentFactory>> _mockNetworkClientComponentFactoryLogger;
 
         public AgentFactoryTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
             _mockLoggerFactory = new Mock<ILoggerFactory>();
-            _mockTargetingLogger = new Mock<ILogger<TargetingNetworkAgent>>();
-            _mockAttackLogger = new Mock<ILogger<AttackNetworkAgent>>();
-            _mockQuestLogger = new Mock<ILogger<QuestNetworkAgent>>();
-            _mockLootingLogger = new Mock<ILogger<LootingNetworkAgent>>();
-            _mockGameObjectLogger = new Mock<ILogger<GameObjectNetworkAgent>>();
-            _mockVendorLogger = new Mock<ILogger<VendorNetworkAgent>>();
-            _mockFlightMasterLogger = new Mock<ILogger<FlightMasterNetworkAgent>>();
-            _mockDeadActorLogger = new Mock<ILogger<DeadActorAgent>>();
-            _mockInventoryLogger = new Mock<ILogger<InventoryNetworkAgent>>();
-            _mockItemUseLogger = new Mock<ILogger<ItemUseNetworkAgent>>();
-            _mockEquipmentLogger = new Mock<ILogger<EquipmentNetworkAgent>>();
-            _mockSpellCastingLogger = new Mock<ILogger<SpellCastingNetworkAgent>>();
-            _mockAuctionHouseLogger = new Mock<ILogger<AuctionHouseNetworkAgent>>();
-            _mockBankLogger = new Mock<ILogger<BankNetworkAgent>>();
-            _mockMailLogger = new Mock<ILogger<MailNetworkAgent>>();
-            _mockGuildLogger = new Mock<ILogger<GuildNetworkAgent>>();
-            _mockPartyLogger = new Mock<ILogger<PartyNetworkAgent>>();
-            _mockNetworkAgentFactoryLogger = new Mock<ILogger<NetworkAgentFactory>>();
+            _mockTargetingLogger = new Mock<ILogger<TargetingNetworkClientComponent>>();
+            _mockAttackLogger = new Mock<ILogger<AttackNetworkClientComponent>>();
+            _mockQuestLogger = new Mock<ILogger<QuestNetworkClientComponent>>();
+            _mockLootingLogger = new Mock<ILogger<LootingNetworkClientComponent>>();
+            _mockGameObjectLogger = new Mock<ILogger<GameObjectNetworkClientComponent>>();
+            _mockVendorLogger = new Mock<ILogger<VendorNetworkClientComponent>>();
+            _mockFlightMasterLogger = new Mock<ILogger<FlightMasterNetworkClientComponent>>();
+            _mockDeadActorLogger = new Mock<ILogger<DeadActorClientComponent>>();
+            _mockInventoryLogger = new Mock<ILogger<InventoryNetworkClientComponent>>();
+            _mockItemUseLogger = new Mock<ILogger<ItemUseNetworkClientComponent>>();
+            _mockEquipmentLogger = new Mock<ILogger<EquipmentNetworkClientComponent>>();
+            _mockSpellCastingLogger = new Mock<ILogger<SpellCastingNetworkClientComponent>>();
+            _mockAuctionHouseLogger = new Mock<ILogger<AuctionHouseNetworkClientComponent>>();
+            _mockBankLogger = new Mock<ILogger<BankNetworkClientComponent>>();
+            _mockMailLogger = new Mock<ILogger<MailNetworkClientComponent>>();
+            _mockGuildLogger = new Mock<ILogger<GuildNetworkClientComponent>>();
+            _mockPartyLogger = new Mock<ILogger<PartyNetworkClientComponent>>();
+            _mockTrainerLogger = new Mock<ILogger<TrainerNetworkClientComponent>>();
+            _mockTalentLogger = new Mock<ILogger<TalentNetworkClientComponent>>();
+            _mockProfessionsLogger = new Mock<ILogger<ProfessionsNetworkClientComponent>>();
+            _mockEmoteLogger = new Mock<ILogger<EmoteNetworkClientComponent>>();
+            _mockNetworkClientComponentFactoryLogger = new Mock<ILogger<NetworkClientComponentFactory>>();
 
             // Setup the factory to return our specific loggers
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(TargetingNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(TargetingNetworkClientComponent).FullName!))
                 .Returns(_mockTargetingLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(AttackNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(AttackNetworkClientComponent).FullName!))
                 .Returns(_mockAttackLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(QuestNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(QuestNetworkClientComponent).FullName!))
                 .Returns(_mockQuestLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(LootingNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(LootingNetworkClientComponent).FullName!))
                 .Returns(_mockLootingLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(GameObjectNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(GameObjectNetworkClientComponent).FullName!))
                 .Returns(_mockGameObjectLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(VendorNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(VendorNetworkClientComponent).FullName!))
                 .Returns(_mockVendorLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(FlightMasterNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(FlightMasterNetworkClientComponent).FullName!))
                 .Returns(_mockFlightMasterLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(DeadActorAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(DeadActorClientComponent).FullName!))
                 .Returns(_mockDeadActorLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(InventoryNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(InventoryNetworkClientComponent).FullName!))
                 .Returns(_mockInventoryLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(ItemUseNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(ItemUseNetworkClientComponent).FullName!))
                 .Returns(_mockItemUseLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(EquipmentNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(EquipmentNetworkClientComponent).FullName!))
                 .Returns(_mockEquipmentLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(SpellCastingNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(SpellCastingNetworkClientComponent).FullName!))
                 .Returns(_mockSpellCastingLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(AuctionHouseNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(AuctionHouseNetworkClientComponent).FullName!))
                 .Returns(_mockAuctionHouseLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(BankNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(BankNetworkClientComponent).FullName!))
                 .Returns(_mockBankLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(MailNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(MailNetworkClientComponent).FullName!))
                 .Returns(_mockMailLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(GuildNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(GuildNetworkClientComponent).FullName!))
                 .Returns(_mockGuildLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(PartyNetworkAgent).FullName!))
+                .Setup(x => x.CreateLogger(typeof(PartyNetworkClientComponent).FullName!))
                 .Returns(_mockPartyLogger.Object);
 
             _mockLoggerFactory
-                .Setup(x => x.CreateLogger(typeof(NetworkAgentFactory).FullName!))
-                .Returns(_mockNetworkAgentFactoryLogger.Object);
+                .Setup(x => x.CreateLogger(typeof(TrainerNetworkClientComponent).FullName!))
+                .Returns(_mockTrainerLogger.Object);
+
+            _mockLoggerFactory
+                .Setup(x => x.CreateLogger(typeof(TalentNetworkClientComponent).FullName!))
+                .Returns(_mockTalentLogger.Object);
+
+            _mockLoggerFactory
+                .Setup(x => x.CreateLogger(typeof(ProfessionsNetworkClientComponent).FullName!))
+                .Returns(_mockProfessionsLogger.Object);
+
+            _mockLoggerFactory
+                .Setup(x => x.CreateLogger(typeof(EmoteNetworkClientComponent).FullName!))
+                .Returns(_mockEmoteLogger.Object);
+
+            _mockLoggerFactory
+                .Setup(x => x.CreateLogger(typeof(NetworkClientComponentFactory).FullName!))
+                .Returns(_mockNetworkClientComponentFactoryLogger.Object);
         }
 
         #region Targeting Network Agent Tests
 
         [Fact]
-        public void CreateTargetingNetworkAgent_WithLogger_ReturnsTargetingNetworkAgent()
+        public void CreateTargetingNetworkClientComponent_WithLogger_ReturnsTargetingNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateTargetingNetworkAgent(_mockWorldClient.Object, _mockTargetingLogger.Object);
+            var agent = AgentFactory.CreateTargetingNetworkClientComponent(_mockWorldClient.Object, _mockTargetingLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TargetingNetworkAgent>(agent);
+            Assert.IsType<TargetingNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateTargetingNetworkAgent_WithLoggerFactory_ReturnsTargetingNetworkAgent()
+        public void CreateTargetingNetworkClientComponent_WithLoggerFactory_ReturnsTargetingNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateTargetingNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateTargetingNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TargetingNetworkAgent>(agent);
+            Assert.IsType<TargetingNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateTargetingNetworkAgentForClient_WithLoggerFactory_ReturnsTargetingNetworkAgent()
+        public void CreateTargetingNetworkClientComponentForClient_WithLoggerFactory_ReturnsTargetingNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateTargetingNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateTargetingNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TargetingNetworkAgent>(agent);
+            Assert.IsType<TargetingNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateTargetingNetworkAgentForClient_WithoutLoggerFactory_ReturnsTargetingNetworkAgent()
+        public void CreateTargetingNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsTargetingNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateTargetingNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateTargetingNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TargetingNetworkAgent>(agent);
+            Assert.IsType<TargetingNetworkClientComponent>(agent);
         }
 
         #endregion
@@ -178,47 +203,47 @@ namespace WoWSharpClient.Tests.Agent
         #region Attack Network Agent Tests
 
         [Fact]
-        public void CreateAttackNetworkAgent_WithLogger_ReturnsAttackNetworkAgent()
+        public void CreateAttackNetworkClientComponent_WithLogger_ReturnsAttackNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateAttackNetworkAgent(_mockWorldClient.Object, _mockAttackLogger.Object);
+            var agent = AgentFactory.CreateAttackNetworkClientComponent(_mockWorldClient.Object, _mockAttackLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<AttackNetworkAgent>(agent);
+            Assert.IsType<AttackNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateAttackNetworkAgent_WithLoggerFactory_ReturnsAttackNetworkAgent()
+        public void CreateAttackNetworkClientComponent_WithLoggerFactory_ReturnsAttackNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateAttackNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateAttackNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<AttackNetworkAgent>(agent);
+            Assert.IsType<AttackNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateAttackNetworkAgentForClient_WithLoggerFactory_ReturnsAttackNetworkAgent()
+        public void CreateAttackNetworkClientComponentForClient_WithLoggerFactory_ReturnsAttackNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateAttackNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateAttackNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<AttackNetworkAgent>(agent);
+            Assert.IsType<AttackNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateAttackNetworkAgentForClient_WithoutLoggerFactory_ReturnsAttackNetworkAgent()
+        public void CreateAttackNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsAttackNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateAttackNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateAttackNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<AttackNetworkAgent>(agent);
+            Assert.IsType<AttackNetworkClientComponent>(agent);
         }
 
         #endregion
@@ -226,47 +251,47 @@ namespace WoWSharpClient.Tests.Agent
         #region Quest Network Agent Tests
 
         [Fact]
-        public void CreateQuestNetworkAgent_WithLogger_ReturnsQuestNetworkAgent()
+        public void CreateQuestNetworkClientComponent_WithLogger_ReturnsQuestNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateQuestNetworkAgent(_mockWorldClient.Object, _mockQuestLogger.Object);
+            var agent = AgentFactory.CreateQuestNetworkClientComponent(_mockWorldClient.Object, _mockQuestLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<QuestNetworkAgent>(agent);
+            Assert.IsType<QuestNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateQuestNetworkAgent_WithLoggerFactory_ReturnsQuestNetworkAgent()
+        public void CreateQuestNetworkClientComponent_WithLoggerFactory_ReturnsQuestNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateQuestNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateQuestNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<QuestNetworkAgent>(agent);
+            Assert.IsType<QuestNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateQuestNetworkAgentForClient_WithLoggerFactory_ReturnsQuestNetworkAgent()
+        public void CreateQuestNetworkClientComponentForClient_WithLoggerFactory_ReturnsQuestNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateQuestNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateQuestNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<QuestNetworkAgent>(agent);
+            Assert.IsType<QuestNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateQuestNetworkAgentForClient_WithoutLoggerFactory_ReturnsQuestNetworkAgent()
+        public void CreateQuestNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsQuestNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateQuestNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateQuestNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<QuestNetworkAgent>(agent);
+            Assert.IsType<QuestNetworkClientComponent>(agent);
         }
 
         #endregion
@@ -274,47 +299,47 @@ namespace WoWSharpClient.Tests.Agent
         #region Looting Network Agent Tests
 
         [Fact]
-        public void CreateLootingNetworkAgent_WithLogger_ReturnsLootingNetworkAgent()
+        public void CreateLootingNetworkClientComponent_WithLogger_ReturnsLootingNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateLootingNetworkAgent(_mockWorldClient.Object, _mockLootingLogger.Object);
+            var agent = AgentFactory.CreateLootingNetworkClientComponent(_mockWorldClient.Object, _mockLootingLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<LootingNetworkAgent>(agent);
+            Assert.IsType<LootingNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateLootingNetworkAgent_WithLoggerFactory_ReturnsLootingNetworkAgent()
+        public void CreateLootingNetworkClientComponent_WithLoggerFactory_ReturnsLootingNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateLootingNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateLootingNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<LootingNetworkAgent>(agent);
+            Assert.IsType<LootingNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateLootingNetworkAgentForClient_WithLoggerFactory_ReturnsLootingNetworkAgent()
+        public void CreateLootingNetworkClientComponentForClient_WithLoggerFactory_ReturnsLootingNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateLootingNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateLootingNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<LootingNetworkAgent>(agent);
+            Assert.IsType<LootingNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateLootingNetworkAgentForClient_WithoutLoggerFactory_ReturnsLootingNetworkAgent()
+        public void CreateLootingNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsLootingNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateLootingNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateLootingNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<LootingNetworkAgent>(agent);
+            Assert.IsType<LootingNetworkClientComponent>(agent);
         }
 
         #endregion
@@ -322,47 +347,47 @@ namespace WoWSharpClient.Tests.Agent
         #region Game Object Network Agent Tests
 
         [Fact]
-        public void CreateGameObjectNetworkAgent_WithLogger_ReturnsGameObjectNetworkAgent()
+        public void CreateGameObjectNetworkClientComponent_WithLogger_ReturnsGameObjectNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateGameObjectNetworkAgent(_mockWorldClient.Object, _mockGameObjectLogger.Object);
+            var agent = AgentFactory.CreateGameObjectNetworkClientComponent(_mockWorldClient.Object, _mockGameObjectLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<GameObjectNetworkAgent>(agent);
+            Assert.IsType<GameObjectNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateGameObjectNetworkAgent_WithLoggerFactory_ReturnsGameObjectNetworkAgent()
+        public void CreateGameObjectNetworkClientComponent_WithLoggerFactory_ReturnsGameObjectNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateGameObjectNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateGameObjectNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<GameObjectNetworkAgent>(agent);
+            Assert.IsType<GameObjectNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateGameObjectNetworkAgentForClient_WithLoggerFactory_ReturnsGameObjectNetworkAgent()
+        public void CreateGameObjectNetworkClientComponentForClient_WithLoggerFactory_ReturnsGameObjectNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateGameObjectNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateGameObjectNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<GameObjectNetworkAgent>(agent);
+            Assert.IsType<GameObjectNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateGameObjectNetworkAgentForClient_WithoutLoggerFactory_ReturnsGameObjectNetworkAgent()
+        public void CreateGameObjectNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsGameObjectNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateGameObjectNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateGameObjectNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<GameObjectNetworkAgent>(agent);
+            Assert.IsType<GameObjectNetworkClientComponent>(agent);
         }
 
         #endregion
@@ -370,47 +395,47 @@ namespace WoWSharpClient.Tests.Agent
         #region Vendor Network Agent Tests
 
         [Fact]
-        public void CreateVendorNetworkAgent_WithLogger_ReturnsVendorNetworkAgent()
+        public void CreateVendorNetworkClientComponent_WithLogger_ReturnsVendorNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateVendorNetworkAgent(_mockWorldClient.Object, _mockVendorLogger.Object);
+            var agent = AgentFactory.CreateVendorNetworkClientComponent(_mockWorldClient.Object, _mockVendorLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<VendorNetworkAgent>(agent);
+            Assert.IsType<VendorNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateVendorNetworkAgent_WithLoggerFactory_ReturnsVendorNetworkAgent()
+        public void CreateVendorNetworkClientComponent_WithLoggerFactory_ReturnsVendorNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateVendorNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateVendorNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<VendorNetworkAgent>(agent);
+            Assert.IsType<VendorNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateVendorNetworkAgentForClient_WithLoggerFactory_ReturnsVendorNetworkAgent()
+        public void CreateVendorNetworkClientComponentForClient_WithLoggerFactory_ReturnsVendorNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateVendorNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateVendorNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<VendorNetworkAgent>(agent);
+            Assert.IsType<VendorNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateVendorNetworkAgentForClient_WithoutLoggerFactory_ReturnsVendorNetworkAgent()
+        public void CreateVendorNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsVendorNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateVendorNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateVendorNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<VendorNetworkAgent>(agent);
+            Assert.IsType<VendorNetworkClientComponent>(agent);
         }
 
         #endregion
@@ -418,47 +443,47 @@ namespace WoWSharpClient.Tests.Agent
         #region Flight Master Network Agent Tests
 
         [Fact]
-        public void CreateFlightMasterNetworkAgent_WithLogger_ReturnsFlightMasterNetworkAgent()
+        public void CreateFlightMasterNetworkClientComponent_WithLogger_ReturnsFlightMasterNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateFlightMasterNetworkAgent(_mockWorldClient.Object, _mockFlightMasterLogger.Object);
+            var agent = AgentFactory.CreateFlightMasterNetworkClientComponent(_mockWorldClient.Object, _mockFlightMasterLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<FlightMasterNetworkAgent>(agent);
+            Assert.IsType<FlightMasterNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateFlightMasterNetworkAgent_WithLoggerFactory_ReturnsFlightMasterNetworkAgent()
+        public void CreateFlightMasterNetworkClientComponent_WithLoggerFactory_ReturnsFlightMasterNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateFlightMasterNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateFlightMasterNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<FlightMasterNetworkAgent>(agent);
+            Assert.IsType<FlightMasterNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateFlightMasterNetworkAgentForClient_WithLoggerFactory_ReturnsFlightMasterNetworkAgent()
+        public void CreateFlightMasterNetworkClientComponentForClient_WithLoggerFactory_ReturnsFlightMasterNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateFlightMasterNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateFlightMasterNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<FlightMasterNetworkAgent>(agent);
+            Assert.IsType<FlightMasterNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateFlightMasterNetworkAgentForClient_WithoutLoggerFactory_ReturnsFlightMasterNetworkAgent()
+        public void CreateFlightMasterNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsFlightMasterNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreateFlightMasterNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateFlightMasterNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<FlightMasterNetworkAgent>(agent);
+            Assert.IsType<FlightMasterNetworkClientComponent>(agent);
         }
 
         #endregion
@@ -473,7 +498,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<DeadActorAgent>(agent);
+            Assert.IsType<DeadActorClientComponent>(agent);
         }
 
         [Fact]
@@ -484,7 +509,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<DeadActorAgent>(agent);
+            Assert.IsType<DeadActorClientComponent>(agent);
         }
 
         [Fact]
@@ -495,7 +520,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<DeadActorAgent>(agent);
+            Assert.IsType<DeadActorClientComponent>(agent);
         }
 
         [Fact]
@@ -506,7 +531,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<DeadActorAgent>(agent);
+            Assert.IsType<DeadActorClientComponent>(agent);
         }
 
         #endregion
@@ -514,10 +539,10 @@ namespace WoWSharpClient.Tests.Agent
         #region Convenience Methods Tests
 
         [Fact]
-        public void CreateAllNetworkAgents_WithLoggerFactory_ReturnsAllAgents()
+        public void CreateAllNetworkClientComponents_WithLoggerFactory_ReturnsAllAgents()
         {
             // Act
-            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent) = AgentFactory.CreateAllNetworkAgents(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(targetingAgent);
@@ -538,31 +563,37 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(guildAgent);
             Assert.NotNull(partyAgent);
             Assert.NotNull(trainerAgent);
-            Assert.IsType<TargetingNetworkAgent>(targetingAgent);
-            Assert.IsType<AttackNetworkAgent>(attackAgent);
-            Assert.IsType<QuestNetworkAgent>(questAgent);
-            Assert.IsType<LootingNetworkAgent>(lootingAgent);
-            Assert.IsType<GameObjectNetworkAgent>(gameObjectAgent);
-            Assert.IsType<VendorNetworkAgent>(vendorAgent);
-            Assert.IsType<FlightMasterNetworkAgent>(flightMasterAgent);
-            Assert.IsType<DeadActorAgent>(deadActorAgent);
-            Assert.IsType<InventoryNetworkAgent>(inventoryAgent);
-            Assert.IsType<ItemUseNetworkAgent>(itemUseAgent);
-            Assert.IsType<EquipmentNetworkAgent>(equipmentAgent);
-            Assert.IsType<SpellCastingNetworkAgent>(spellCastingAgent);
-            Assert.IsType<AuctionHouseNetworkAgent>(auctionHouseAgent);
-            Assert.IsType<BankNetworkAgent>(bankAgent);
-            Assert.IsType<MailNetworkAgent>(mailAgent);
-            Assert.IsType<GuildNetworkAgent>(guildAgent);
-            Assert.IsType<PartyNetworkAgent>(partyAgent);
-            Assert.IsType<TrainerNetworkAgent>(trainerAgent);
+            Assert.NotNull(talentAgent);
+            Assert.NotNull(professionsAgent);
+            Assert.NotNull(emoteAgent);
+            Assert.IsType<TargetingNetworkClientComponent>(targetingAgent);
+            Assert.IsType<AttackNetworkClientComponent>(attackAgent);
+            Assert.IsType<QuestNetworkClientComponent>(questAgent);
+            Assert.IsType<LootingNetworkClientComponent>(lootingAgent);
+            Assert.IsType<GameObjectNetworkClientComponent>(gameObjectAgent);
+            Assert.IsType<VendorNetworkClientComponent>(vendorAgent);
+            Assert.IsType<FlightMasterNetworkClientComponent>(flightMasterAgent);
+            Assert.IsType<DeadActorClientComponent>(deadActorAgent);
+            Assert.IsType<InventoryNetworkClientComponent>(inventoryAgent);
+            Assert.IsType<ItemUseNetworkClientComponent>(itemUseAgent);
+            Assert.IsType<EquipmentNetworkClientComponent>(equipmentAgent);
+            Assert.IsType<SpellCastingNetworkClientComponent>(spellCastingAgent);
+            Assert.IsType<AuctionHouseNetworkClientComponent>(auctionHouseAgent);
+            Assert.IsType<BankNetworkClientComponent>(bankAgent);
+            Assert.IsType<MailNetworkClientComponent>(mailAgent);
+            Assert.IsType<GuildNetworkClientComponent>(guildAgent);
+            Assert.IsType<PartyNetworkClientComponent>(partyAgent);
+            Assert.IsType<TrainerNetworkClientComponent>(trainerAgent);
+            Assert.IsType<TalentNetworkClientComponent>(talentAgent);
+            Assert.IsType<ProfessionsNetworkClientComponent>(professionsAgent);
+            Assert.IsType<EmoteNetworkClientComponent>(emoteAgent);
         }
 
         [Fact]
-        public void CreateAllNetworkAgents_WithoutLoggerFactory_ReturnsAllAgents()
+        public void CreateAllNetworkClientComponents_WithoutLoggerFactory_ReturnsAllAgents()
         {
             // Act
-            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent) = AgentFactory.CreateAllNetworkAgents(_mockWorldClient.Object, null);
+            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(targetingAgent);
@@ -583,50 +614,56 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(guildAgent);
             Assert.NotNull(partyAgent);
             Assert.NotNull(trainerAgent);
-            Assert.IsType<TargetingNetworkAgent>(targetingAgent);
-            Assert.IsType<AttackNetworkAgent>(attackAgent);
-            Assert.IsType<QuestNetworkAgent>(questAgent);
-            Assert.IsType<LootingNetworkAgent>(lootingAgent);
-            Assert.IsType<GameObjectNetworkAgent>(gameObjectAgent);
-            Assert.IsType<VendorNetworkAgent>(vendorAgent);
-            Assert.IsType<FlightMasterNetworkAgent>(flightMasterAgent);
-            Assert.IsType<DeadActorAgent>(deadActorAgent);
-            Assert.IsType<InventoryNetworkAgent>(inventoryAgent);
-            Assert.IsType<ItemUseNetworkAgent>(itemUseAgent);
-            Assert.IsType<EquipmentNetworkAgent>(equipmentAgent);
-            Assert.IsType<SpellCastingNetworkAgent>(spellCastingAgent);
-            Assert.IsType<AuctionHouseNetworkAgent>(auctionHouseAgent);
-            Assert.IsType<BankNetworkAgent>(bankAgent);
-            Assert.IsType<MailNetworkAgent>(mailAgent);
-            Assert.IsType<GuildNetworkAgent>(guildAgent);
-            Assert.IsType<PartyNetworkAgent>(partyAgent);
-            Assert.IsType<TrainerNetworkAgent>(trainerAgent);
+            Assert.NotNull(talentAgent);
+            Assert.NotNull(professionsAgent);
+            Assert.NotNull(emoteAgent);
+            Assert.IsType<TargetingNetworkClientComponent>(targetingAgent);
+            Assert.IsType<AttackNetworkClientComponent>(attackAgent);
+            Assert.IsType<QuestNetworkClientComponent>(questAgent);
+            Assert.IsType<LootingNetworkClientComponent>(lootingAgent);
+            Assert.IsType<GameObjectNetworkClientComponent>(gameObjectAgent);
+            Assert.IsType<VendorNetworkClientComponent>(vendorAgent);
+            Assert.IsType<FlightMasterNetworkClientComponent>(flightMasterAgent);
+            Assert.IsType<DeadActorClientComponent>(deadActorAgent);
+            Assert.IsType<InventoryNetworkClientComponent>(inventoryAgent);
+            Assert.IsType<ItemUseNetworkClientComponent>(itemUseAgent);
+            Assert.IsType<EquipmentNetworkClientComponent>(equipmentAgent);
+            Assert.IsType<SpellCastingNetworkClientComponent>(spellCastingAgent);
+            Assert.IsType<AuctionHouseNetworkClientComponent>(auctionHouseAgent);
+            Assert.IsType<BankNetworkClientComponent>(bankAgent);
+            Assert.IsType<MailNetworkClientComponent>(mailAgent);
+            Assert.IsType<GuildNetworkClientComponent>(guildAgent);
+            Assert.IsType<PartyNetworkClientComponent>(partyAgent);
+            Assert.IsType<TrainerNetworkClientComponent>(trainerAgent);
+            Assert.IsType<TalentNetworkClientComponent>(talentAgent);
+            Assert.IsType<ProfessionsNetworkClientComponent>(professionsAgent);
+            Assert.IsType<EmoteNetworkClientComponent>(emoteAgent);
         }
 
         [Fact]
-        public void CreateCombatNetworkAgents_WithLoggerFactory_ReturnsBothAgents()
+        public void CreateCombatNetworkClientComponents_WithLoggerFactory_ReturnsBothAgents()
         {
             // Act
-            var (targetingAgent, attackAgent) = AgentFactory.CreateCombatNetworkAgents(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var (targetingAgent, attackAgent) = AgentFactory.CreateCombatNetworkClientComponents(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(targetingAgent);
             Assert.NotNull(attackAgent);
-            Assert.IsType<TargetingNetworkAgent>(targetingAgent);
-            Assert.IsType<AttackNetworkAgent>(attackAgent);
+            Assert.IsType<TargetingNetworkClientComponent>(targetingAgent);
+            Assert.IsType<AttackNetworkClientComponent>(attackAgent);
         }
 
         [Fact]
-        public void CreateCombatNetworkAgents_WithoutLoggerFactory_ReturnsBothAgents()
+        public void CreateCombatNetworkClientComponents_WithoutLoggerFactory_ReturnsBothAgents()
         {
             // Act
-            var (targetingAgent, attackAgent) = AgentFactory.CreateCombatNetworkAgents(_mockWorldClient.Object, null);
+            var (targetingAgent, attackAgent) = AgentFactory.CreateCombatNetworkClientComponents(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(targetingAgent);
             Assert.NotNull(attackAgent);
-            Assert.IsType<TargetingNetworkAgent>(targetingAgent);
-            Assert.IsType<AttackNetworkAgent>(attackAgent);
+            Assert.IsType<TargetingNetworkClientComponent>(targetingAgent);
+            Assert.IsType<AttackNetworkClientComponent>(attackAgent);
         }
 
         #endregion
@@ -634,10 +671,10 @@ namespace WoWSharpClient.Tests.Agent
         #region Network Agent Factory Tests
 
         [Fact]
-        public void CreateNetworkAgentFactory_WithValidParameters_ReturnsFactory()
+        public void CreateNetworkClientComponentFactory_WithValidParameters_ReturnsFactory()
         {
             // Act
-            var factory = AgentFactory.CreateNetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var factory = AgentFactory.CreateNetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(factory);
@@ -645,34 +682,86 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void CreateNetworkAgentFactory_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateNetworkClientComponentFactory_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateNetworkAgentFactory(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateNetworkClientComponentFactory(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateNetworkAgentFactory_WithNullLoggerFactory_ThrowsArgumentNullException()
+        public void CreateNetworkClientComponentFactory_WithNullLoggerFactory_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateNetworkAgentFactory(_mockWorldClient.Object, null!));
+                AgentFactory.CreateNetworkClientComponentFactory(_mockWorldClient.Object, null!));
         }
 
         [Fact]
-        public void CreateNetworkAgentFactory_WithIndividualAgents_ReturnsFactory()
+        public void CreateNetworkClientComponentFactory_WithIndividualAgents_ReturnsFactory()
         {
             // Arrange
-            var mockTargetingAgent = new Mock<ITargetingNetworkAgent>();
-            var mockAttackAgent = new Mock<IAttackNetworkAgent>();
-            var mockQuestAgent = new Mock<IQuestNetworkAgent>();
-            var mockLootingAgent = new Mock<ILootingNetworkAgent>();
-            var mockGameObjectAgent = new Mock<IGameObjectNetworkAgent>();
-            var mockLogger = new Mock<ILogger<NetworkAgentFactory>>();
+            var mockTargetingAgent = new Mock<ITargetingNetworkClientComponent>();
+            var mockAttackAgent = new Mock<IAttackNetworkClientComponent>();
+            var mockQuestAgent = new Mock<IQuestNetworkClientComponent>();
+            var mockLootingAgent = new Mock<ILootingNetworkClientComponent>();
+            var mockGameObjectAgent = new Mock<IGameObjectNetworkClientComponent>();
+            var mockLogger = new Mock<ILogger<NetworkClientComponentFactory>>();
+
+            // Setup mock observables to prevent null reference exceptions
+            var mockTargetingObservable = new Mock<IObservable<TargetingData>>();
+            var mockAttackStateObservable = new Mock<IObservable<AttackStateData>>();
+            var mockAttackErrorObservable = new Mock<IObservable<AttackErrorData>>();
+            var mockQuestOfferedObservable = new Mock<IObservable<QuestData>>();
+            var mockQuestAcceptedObservable = new Mock<IObservable<QuestData>>();
+            var mockQuestCompletedObservable = new Mock<IObservable<QuestData>>();
+            var mockQuestErrorObservable = new Mock<IObservable<QuestErrorData>>();
+            var mockLootWindowOpenedObservable = new Mock<IObservable<LootWindowData>>();
+            var mockLootWindowClosedObservable = new Mock<IObservable<LootWindowData>>();
+            var mockItemLootObservable = new Mock<IObservable<LootData>>();
+            var mockMoneyLootObservable = new Mock<IObservable<MoneyLootData>>();
+            var mockLootErrorObservable = new Mock<IObservable<LootErrorData>>();
+
+            // Setup observable properties for targeting agent
+            mockTargetingAgent.Setup(x => x.TargetChanges).Returns(mockTargetingObservable.Object);
+
+            // Setup observable properties for attack agent
+            mockAttackAgent.Setup(x => x.AttackStateChanges).Returns(mockAttackStateObservable.Object);
+            mockAttackAgent.Setup(x => x.AttackErrors).Returns(mockAttackErrorObservable.Object);
+
+            // Setup observable properties for quest agent
+            mockQuestAgent.Setup(x => x.QuestOffered).Returns(mockQuestOfferedObservable.Object);
+            mockQuestAgent.Setup(x => x.QuestAccepted).Returns(mockQuestAcceptedObservable.Object);
+            mockQuestAgent.Setup(x => x.QuestCompleted).Returns(mockQuestCompletedObservable.Object);
+            mockQuestAgent.Setup(x => x.QuestErrors).Returns(mockQuestErrorObservable.Object);
+
+            // Setup observable properties for looting agent
+            mockLootingAgent.Setup(x => x.LootWindowOpened).Returns(mockLootWindowOpenedObservable.Object);
+            mockLootingAgent.Setup(x => x.LootWindowClosed).Returns(mockLootWindowClosedObservable.Object);
+            mockLootingAgent.Setup(x => x.ItemLoot).Returns(mockItemLootObservable.Object);
+            mockLootingAgent.Setup(x => x.MoneyLoot). Returns(mockMoneyLootObservable.Object);
+            mockLootingAgent.Setup(x => x.LootErrors).Returns(mockLootErrorObservable.Object);
+
+            // Setup mock Subscribe methods to return disposables (to prevent null reference)
+            var mockDisposable = new Mock<IDisposable>();
+            mockTargetingObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<TargetingData>>())).Returns(mockDisposable.Object);
+            mockAttackStateObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<AttackStateData>>())).Returns(mockDisposable.Object);
+            mockAttackErrorObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<AttackErrorData>>())).Returns(mockDisposable.Object);
+            mockQuestOfferedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<QuestData>>())).Returns(mockDisposable.Object);
+            mockQuestAcceptedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<QuestData>>())).Returns(mockDisposable.Object);
+            mockQuestCompletedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<QuestData>>())).Returns(mockDisposable.Object);
+            mockQuestErrorObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<QuestErrorData>>())).Returns(mockDisposable.Object);
+            mockLootWindowOpenedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<LootWindowData>>())).Returns(mockDisposable.Object);
+            mockLootWindowClosedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<LootWindowData>>())).Returns(mockDisposable.Object);
+            mockItemLootObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<LootData>>())).Returns(mockDisposable.Object);
+            mockMoneyLootObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<MoneyLootData>>())).Returns(mockDisposable.Object);
+            mockLootErrorObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<LootErrorData>>())).Returns(mockDisposable.Object);
+
+            // Also set up the extension method Subscribe(Action<T>) calls by setting up the overload that extension methods use
+            // The extension method Subscribe(Action<T>) internally calls Subscribe(IObserver<T>) so our setup above should cover it
 
             // Act
-            var factory = AgentFactory.CreateNetworkAgentFactory(
+            var factory = AgentFactory.CreateNetworkClientComponentFactory(
                 mockTargetingAgent.Object,
                 mockAttackAgent.Object,
                 mockQuestAgent.Object,
@@ -695,115 +784,115 @@ namespace WoWSharpClient.Tests.Agent
         #region Null Parameter Tests
 
         [Fact]
-        public void CreateTargetingNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateTargetingNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateTargetingNetworkAgent(null!, _mockTargetingLogger.Object));
+                AgentFactory.CreateTargetingNetworkClientComponent(null!, _mockTargetingLogger.Object));
         }
 
         [Fact]
-        public void CreateTargetingNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateTargetingNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateTargetingNetworkAgent(_mockWorldClient.Object, (ILogger<TargetingNetworkAgent>)null!));
+                AgentFactory.CreateTargetingNetworkClientComponent(_mockWorldClient.Object, (ILogger<TargetingNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateAttackNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateAttackNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateAttackNetworkAgent(null!, _mockAttackLogger.Object));
+                AgentFactory.CreateAttackNetworkClientComponent(null!, _mockAttackLogger.Object));
         }
 
         [Fact]
-        public void CreateAttackNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateAttackNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateAttackNetworkAgent(_mockWorldClient.Object, (ILogger<AttackNetworkAgent>)null!));
+                AgentFactory.CreateAttackNetworkClientComponent(_mockWorldClient.Object, (ILogger<AttackNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateQuestNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateQuestNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateQuestNetworkAgent(null!, _mockQuestLogger.Object));
+                AgentFactory.CreateQuestNetworkClientComponent(null!, _mockQuestLogger.Object));
         }
 
         [Fact]
-        public void CreateQuestNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateQuestNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateQuestNetworkAgent(_mockWorldClient.Object, (ILogger<QuestNetworkAgent>)null!));
+                AgentFactory.CreateQuestNetworkClientComponent(_mockWorldClient.Object, (ILogger<QuestNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateLootingNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateLootingNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateLootingNetworkAgent(null!, _mockLootingLogger.Object));
+                AgentFactory.CreateLootingNetworkClientComponent(null!, _mockLootingLogger.Object));
         }
 
         [Fact]
-        public void CreateLootingNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateLootingNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateLootingNetworkAgent(_mockWorldClient.Object, (ILogger<LootingNetworkAgent>)null!));
+                AgentFactory.CreateLootingNetworkClientComponent(_mockWorldClient.Object, (ILogger<LootingNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateGameObjectNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateGameObjectNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateGameObjectNetworkAgent(null!, _mockGameObjectLogger.Object));
+                AgentFactory.CreateGameObjectNetworkClientComponent(null!, _mockGameObjectLogger.Object));
         }
 
         [Fact]
-        public void CreateGameObjectNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateGameObjectNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateGameObjectNetworkAgent(_mockWorldClient.Object, (ILogger<GameObjectNetworkAgent>)null!));
+                AgentFactory.CreateGameObjectNetworkClientComponent(_mockWorldClient.Object, (ILogger<GameObjectNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateVendorNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateVendorNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateVendorNetworkAgent(null!, _mockVendorLogger.Object));
+                AgentFactory.CreateVendorNetworkClientComponent(null!, _mockVendorLogger.Object));
         }
 
         [Fact]
-        public void CreateVendorNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateVendorNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateVendorNetworkAgent(_mockWorldClient.Object, (ILogger<VendorNetworkAgent>)null!));
+                AgentFactory.CreateVendorNetworkClientComponent(_mockWorldClient.Object, (ILogger<VendorNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateFlightMasterNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateFlightMasterNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateFlightMasterNetworkAgent(null!, _mockFlightMasterLogger.Object));
+                AgentFactory.CreateFlightMasterNetworkClientComponent(null!, _mockFlightMasterLogger.Object));
         }
 
         [Fact]
-        public void CreateFlightMasterNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateFlightMasterNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateFlightMasterNetworkAgent(_mockWorldClient.Object, (ILogger<FlightMasterNetworkAgent>)null!));
+                AgentFactory.CreateFlightMasterNetworkClientComponent(_mockWorldClient.Object, (ILogger<FlightMasterNetworkClientComponent>)null!));
         }
 
         [Fact]
@@ -819,63 +908,63 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateDeadActorAgent(_mockWorldClient.Object, (ILogger<DeadActorAgent>)null!));
+                AgentFactory.CreateDeadActorAgent(_mockWorldClient.Object, (ILogger<DeadActorClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateTargetingNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateTargetingNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateTargetingNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateTargetingNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateAttackNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateAttackNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateAttackNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateAttackNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateQuestNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateQuestNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateQuestNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateQuestNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateLootingNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateLootingNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateLootingNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateLootingNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateGameObjectNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateGameObjectNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateGameObjectNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateGameObjectNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateVendorNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateVendorNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateVendorNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateVendorNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateFlightMasterNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateFlightMasterNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateFlightMasterNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateFlightMasterNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
@@ -887,67 +976,67 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void CreateAllNetworkAgents_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateAllNetworkClientComponents_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateAllNetworkAgents(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateAllNetworkClientComponents(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateCombatNetworkAgents_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateCombatNetworkClientComponents_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateCombatNetworkAgents(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateCombatNetworkClientComponents(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateMailNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateMailNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateMailNetworkAgent(null!, _mockMailLogger.Object));
+                AgentFactory.CreateMailNetworkClientComponent(null!, _mockMailLogger.Object));
         }
 
         [Fact]
-        public void CreateMailNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateMailNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateMailNetworkAgent(_mockWorldClient.Object, (ILogger<MailNetworkAgent>)null!));
+                AgentFactory.CreateMailNetworkClientComponent(_mockWorldClient.Object, (ILogger<MailNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateMailNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateMailNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateMailNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateMailNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateGuildNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateGuildNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateGuildNetworkAgent(null!, _mockGuildLogger.Object));
+                AgentFactory.CreateGuildNetworkClientComponent(null!, _mockGuildLogger.Object));
         }
 
         [Fact]
-        public void CreateGuildNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateGuildNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateGuildNetworkAgent(_mockWorldClient.Object, (ILogger<GuildNetworkAgent>)null!));
+                AgentFactory.CreateGuildNetworkClientComponent(_mockWorldClient.Object, (ILogger<GuildNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateGuildNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateGuildNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateGuildNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateGuildNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         #endregion
@@ -955,71 +1044,71 @@ namespace WoWSharpClient.Tests.Agent
         #region Party Network Agent Tests
 
         [Fact]
-        public void CreatePartyNetworkAgent_WithLogger_ReturnsPartyNetworkAgent()
+        public void CreatePartyNetworkClientComponent_WithLogger_ReturnsPartyNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreatePartyNetworkAgent(_mockWorldClient.Object, _mockPartyLogger.Object);
+            var agent = AgentFactory.CreatePartyNetworkClientComponent(_mockWorldClient.Object, _mockPartyLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<PartyNetworkAgent>(agent);
+            Assert.IsType<PartyNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreatePartyNetworkAgent_WithLoggerFactory_ReturnsPartyNetworkAgent()
+        public void CreatePartyNetworkClientComponent_WithLoggerFactory_ReturnsPartyNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreatePartyNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreatePartyNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<PartyNetworkAgent>(agent);
+            Assert.IsType<PartyNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreatePartyNetworkAgentForClient_WithLoggerFactory_ReturnsPartyNetworkAgent()
+        public void CreatePartyNetworkClientComponentForClient_WithLoggerFactory_ReturnsPartyNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreatePartyNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreatePartyNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<PartyNetworkAgent>(agent);
+            Assert.IsType<PartyNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreatePartyNetworkAgentForClient_WithoutLoggerFactory_ReturnsPartyNetworkAgent()
+        public void CreatePartyNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsPartyNetworkClientComponent()
         {
             // Act
-            var agent = AgentFactory.CreatePartyNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreatePartyNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<PartyNetworkAgent>(agent);
+            Assert.IsType<PartyNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreatePartyNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreatePartyNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreatePartyNetworkAgent(null!, _mockPartyLogger.Object));
+                AgentFactory.CreatePartyNetworkClientComponent(null!, _mockPartyLogger.Object));
         }
 
         [Fact]
-        public void CreatePartyNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreatePartyNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreatePartyNetworkAgent(_mockWorldClient.Object, (ILogger<PartyNetworkAgent>)null!));
+                AgentFactory.CreatePartyNetworkClientComponent(_mockWorldClient.Object, (ILogger<PartyNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreatePartyNetworkAgentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreatePartyNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreatePartyNetworkAgentForClient(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreatePartyNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         #endregion
@@ -1027,71 +1116,215 @@ namespace WoWSharpClient.Tests.Agent
         #region Trainer Network Agent Tests
 
         [Fact]
-        public void CreateTrainerNetworkAgent_WithLoggerFactory_ReturnsAgent()
+        public void CreateTrainerNetworkClientComponent_WithLoggerFactory_ReturnsAgent()
         {
             // Act
-            var agent = AgentFactory.CreateTrainerNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateTrainerNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TrainerNetworkAgent>(agent);
+            Assert.IsType<TrainerNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateTrainerNetworkAgent_WithLogger_ReturnsAgent()
+        public void CreateTrainerNetworkClientComponent_WithLogger_ReturnsAgent()
         {
             // Act
-            var agent = AgentFactory.CreateTrainerNetworkAgent(_mockWorldClient.Object, _mockLoggerFactory.Object.CreateLogger<TrainerNetworkAgent>());
+            var agent = AgentFactory.CreateTrainerNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object.CreateLogger<TrainerNetworkClientComponent>());
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TrainerNetworkAgent>(agent);
+            Assert.IsType<TrainerNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateTrainerNetworkAgent_WithNullWorldClient_ThrowsArgumentNullException()
+        public void CreateTrainerNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateTrainerNetworkAgent(null!, _mockLoggerFactory.Object));
+                AgentFactory.CreateTrainerNetworkClientComponent(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
-        public void CreateTrainerNetworkAgent_WithNullLoggerFactory_ThrowsArgumentNullException()
+        public void CreateTrainerNetworkClientComponent_WithNullLoggerFactory_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateTrainerNetworkAgent(_mockWorldClient.Object, (ILoggerFactory)null!));
+                AgentFactory.CreateTrainerNetworkClientComponent(_mockWorldClient.Object, (ILoggerFactory)null!));
         }
 
         [Fact]
-        public void CreateTrainerNetworkAgent_WithNullLogger_ThrowsArgumentNullException()
+        public void CreateTrainerNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                AgentFactory.CreateTrainerNetworkAgent(_mockWorldClient.Object, (ILogger<TrainerNetworkAgent>)null!));
+                AgentFactory.CreateTrainerNetworkClientComponent(_mockWorldClient.Object, (ILogger<TrainerNetworkClientComponent>)null!));
         }
 
         [Fact]
-        public void CreateTrainerNetworkAgentForClient_WithLoggerFactory_ReturnsAgent()
+        public void CreateTrainerNetworkClientComponentForClient_WithLoggerFactory_ReturnsAgent()
         {
             // Act
-            var agent = AgentFactory.CreateTrainerNetworkAgentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var agent = AgentFactory.CreateTrainerNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TrainerNetworkAgent>(agent);
+            Assert.IsType<TrainerNetworkClientComponent>(agent);
         }
 
         [Fact]
-        public void CreateTrainerNetworkAgentForClient_WithoutLoggerFactory_ReturnsAgent()
+        public void CreateTrainerNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsAgent()
         {
             // Act
-            var agent = AgentFactory.CreateTrainerNetworkAgentForClient(_mockWorldClient.Object, null);
+            var agent = AgentFactory.CreateTrainerNetworkClientComponentForClient(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TrainerNetworkAgent>(agent);
+            Assert.IsType<TrainerNetworkClientComponent>(agent);
+        }
+
+        #endregion
+
+        #region Professions Network Agent Tests
+
+        [Fact]
+        public void CreateProfessionsNetworkClientComponent_WithLogger_ReturnsProfessionsNetworkClientComponent()
+        {
+            // Act
+            var agent = AgentFactory.CreateProfessionsNetworkClientComponent(_mockWorldClient.Object, _mockProfessionsLogger.Object);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<ProfessionsNetworkClientComponent>(agent);
+        }
+
+        [Fact]
+        public void CreateProfessionsNetworkClientComponent_WithLoggerFactory_ReturnsProfessionsNetworkClientComponent()
+        {
+            // Act
+            var agent = AgentFactory.CreateProfessionsNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<ProfessionsNetworkClientComponent>(agent);
+        }
+
+        [Fact]
+        public void CreateProfessionsNetworkClientComponentForClient_WithLoggerFactory_ReturnsProfessionsNetworkClientComponent()
+        {
+            // Act
+            var agent = AgentFactory.CreateProfessionsNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<ProfessionsNetworkClientComponent>(agent);
+        }
+
+        [Fact]
+        public void CreateProfessionsNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsProfessionsNetworkClientComponent()
+        {
+            // Act
+            var agent = AgentFactory.CreateProfessionsNetworkClientComponentForClient(_mockWorldClient.Object, null);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<ProfessionsNetworkClientComponent>(agent);
+        }
+
+        [Fact]
+        public void CreateProfessionsNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateProfessionsNetworkClientComponent(null!, _mockProfessionsLogger.Object));
+        }
+
+        [Fact]
+        public void CreateProfessionsNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateProfessionsNetworkClientComponent(_mockWorldClient.Object, (ILogger<ProfessionsNetworkClientComponent>)null!));
+        }
+
+        [Fact]
+        public void CreateProfessionsNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateProfessionsNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
+        }
+
+        #endregion
+
+        #region Emote Network Agent Tests
+
+        [Fact]
+        public void CreateEmoteNetworkClientComponent_WithLogger_ReturnsEmoteNetworkClientComponent()
+        {
+            // Act
+            var agent = AgentFactory.CreateEmoteNetworkClientComponent(_mockWorldClient.Object, _mockEmoteLogger.Object);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<EmoteNetworkClientComponent>(agent);
+        }
+
+        [Fact]
+        public void CreateEmoteNetworkClientComponent_WithLoggerFactory_ReturnsEmoteNetworkClientComponent()
+        {
+            // Act
+            var agent = AgentFactory.CreateEmoteNetworkClientComponent(_mockWorldClient.Object, _mockLoggerFactory.Object);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<EmoteNetworkClientComponent>(agent);
+        }
+
+        [Fact]
+        public void CreateEmoteNetworkClientComponentForClient_WithLoggerFactory_ReturnsEmoteNetworkClientComponent()
+        {
+            // Act
+            var agent = AgentFactory.CreateEmoteNetworkClientComponentForClient(_mockWorldClient.Object, _mockLoggerFactory.Object);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<EmoteNetworkClientComponent>(agent);
+        }
+
+        [Fact]
+        public void CreateEmoteNetworkClientComponentForClient_WithoutLoggerFactory_ReturnsEmoteNetworkClientComponent()
+        {
+            // Act
+            var agent = AgentFactory.CreateEmoteNetworkClientComponentForClient(_mockWorldClient.Object, null);
+
+            // Assert
+            Assert.NotNull(agent);
+            Assert.IsType<EmoteNetworkClientComponent>(agent);
+        }
+
+        [Fact]
+        public void CreateEmoteNetworkClientComponent_WithNullWorldClient_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateEmoteNetworkClientComponent(null!, _mockEmoteLogger.Object));
+        }
+
+        [Fact]
+        public void CreateEmoteNetworkClientComponent_WithNullLogger_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateEmoteNetworkClientComponent(_mockWorldClient.Object, (ILogger<EmoteNetworkClientComponent>)null!));
+        }
+
+        [Fact]
+        public void CreateEmoteNetworkClientComponentForClient_WithNullWorldClient_ThrowsArgumentNullException()
+        {
+            // Act & Assert
+            Assert.Throws<ArgumentNullException>(() =>
+                AgentFactory.CreateEmoteNetworkClientComponentForClient(null!, _mockLoggerFactory.Object));
         }
 
         #endregion

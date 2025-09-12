@@ -40,7 +40,7 @@ namespace WoWSharpClient.Client
         /// <summary>
         /// Gets the session key from the auth client.
         /// </summary>
-        public byte[] SessionKey => _authClient?.SessionKey ?? Array.Empty<byte>();
+        public byte[] SessionKey => _authClient?.SessionKey ?? [];
 
         /// <summary>
         /// Connects to the authentication server and performs login.
@@ -232,7 +232,7 @@ namespace WoWSharpClient.Client
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
 
-            await _worldClient.SendMovementAsync(opcode, movementInfo, cancellationToken);
+            await _worldClient.SendOpcodeAsync(opcode, movementInfo, cancellationToken);
         }
 
         /// <summary>

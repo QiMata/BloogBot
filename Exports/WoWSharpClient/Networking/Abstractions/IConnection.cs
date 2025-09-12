@@ -1,11 +1,12 @@
 using System;
+using System.Reactive;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace WoWSharpClient.Networking.Abstractions
 {
     /// <summary>
-    /// Represents a raw duplex byte connection with lifecycle management and events.
+    /// Represents a raw duplex byte connection with lifecycle management and reactive streams.
     /// </summary>
     public interface IConnection : IDisposable
     {
@@ -39,19 +40,19 @@ namespace WoWSharpClient.Networking.Abstractions
         Task SendAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Raised when the connection is successfully established.
+        /// Observable that fires when the connection is established.
         /// </summary>
-        event Action? Connected;
+        IObservable<System.Reactive.Unit> WhenConnected { get; }
 
         /// <summary>
-        /// Raised when the connection is disconnected. The exception parameter indicates 
-        /// the reason for disconnection (null for graceful disconnect).
+        /// Observable that fires when the connection is disconnected.
+        /// Exception is null for graceful disconnects.
         /// </summary>
-        event Action<Exception?>? Disconnected;
+        IObservable<Exception?> WhenDisconnected { get; }
 
         /// <summary>
-        /// Raised when bytes are received from the remote host.
+        /// Observable stream of bytes received from the remote host.
         /// </summary>
-        event Action<ReadOnlyMemory<byte>>? BytesReceived;
+        IObservable<ReadOnlyMemory<byte>> ReceivedBytes { get; }
     }
 }

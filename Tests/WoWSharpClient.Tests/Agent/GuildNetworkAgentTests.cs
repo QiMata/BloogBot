@@ -5,26 +5,26 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
-    public class GuildNetworkAgentTests
+    public class GuildNetworkClientComponentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<GuildNetworkAgent>> _mockLogger;
-        private readonly GuildNetworkAgent _guildAgent;
+        private readonly Mock<ILogger<GuildNetworkClientComponent>> _mockLogger;
+        private readonly GuildNetworkClientComponent _guildAgent;
 
-        public GuildNetworkAgentTests()
+        public GuildNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<GuildNetworkAgent>>();
-            _guildAgent = new GuildNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<GuildNetworkClientComponent>>();
+            _guildAgent = new GuildNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
-        private (IGuildNetworkAgent GuildAgent, Mock<IWorldClient> MockWorldClient, Mock<ILogger<GuildNetworkAgent>> MockLogger) CreateGuildNetworkAgent()
+        private (IGuildNetworkClientComponent GuildAgent, Mock<IWorldClient> MockWorldClient, Mock<ILogger<GuildNetworkClientComponent>> MockLogger) CreateGuildNetworkClientComponent()
         {
             return (_guildAgent, _mockWorldClient, _mockLogger);
         }
@@ -35,7 +35,7 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithValidParameters_ShouldInitializeCorrectly()
         {
             // Arrange & Act
-            var agent = new GuildNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            var agent = new GuildNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
@@ -48,7 +48,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GuildNetworkAgent(null!, _mockLogger.Object));
+                new GuildNetworkClientComponent(null!, _mockLogger.Object));
         }
 
         [Fact]
@@ -56,7 +56,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GuildNetworkAgent(_mockWorldClient.Object, null!));
+                new GuildNetworkClientComponent(_mockWorldClient.Object, null!));
         }
 
         #endregion
@@ -65,13 +65,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task AcceptGuildInviteAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.AcceptGuildInviteAsync();
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_ACCEPT, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -81,13 +81,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task DeclineGuildInviteAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.DeclineGuildInviteAsync();
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_DECLINE, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -97,14 +97,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task InvitePlayerToGuildAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
             const string playerName = "TestPlayer";
 
             // Act
             await guildAgent.InvitePlayerToGuildAsync(playerName);
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_INVITE, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -114,14 +114,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task RemovePlayerFromGuildAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
             const string playerName = "TestPlayer";
 
             // Act
             await guildAgent.RemovePlayerFromGuildAsync(playerName);
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_REMOVE, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -131,14 +131,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task PromoteGuildMemberAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
             const string playerName = "TestPlayer";
 
             // Act
             await guildAgent.PromoteGuildMemberAsync(playerName);
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_PROMOTE, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -148,14 +148,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task DemoteGuildMemberAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
             const string playerName = "TestPlayer";
 
             // Act
             await guildAgent.DemoteGuildMemberAsync(playerName);
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_DEMOTE, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -165,13 +165,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task LeaveGuildAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.LeaveGuildAsync();
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_LEAVE, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -181,13 +181,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task DisbandGuildAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.DisbandGuildAsync();
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_DISBAND, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -197,14 +197,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task SetGuildMOTDAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
             const string motd = "Test MOTD";
 
             // Act
             await guildAgent.SetGuildMOTDAsync(motd);
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_MOTD, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -214,7 +214,7 @@ namespace WoWSharpClient.Tests.Agent
         public async Task SetGuildMemberNoteAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
             const string playerName = "TestPlayer";
             const string note = "Test note";
 
@@ -222,7 +222,7 @@ namespace WoWSharpClient.Tests.Agent
             await guildAgent.SetGuildMemberNoteAsync(playerName, note, false);
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_SET_PUBLIC_NOTE, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -232,13 +232,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task RequestGuildRosterAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.RequestGuildRosterAsync();
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_ROSTER, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -248,13 +248,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task RequestGuildInfoAsync_ShouldSendCorrectPacket()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.RequestGuildInfoAsync();
 
             // Assert
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GUILD_INFO, 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -264,13 +264,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task DepositItemToGuildBankAsync_ShouldNotSendPackets_WhenNotSupported()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.DepositItemToGuildBankAsync(0, 5, 1, 10);
 
             // Assert - Should not send any packets since not supported
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 It.IsAny<Opcode>(), 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Never);
@@ -280,13 +280,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task WithdrawItemFromGuildBankAsync_ShouldNotSendPackets_WhenNotSupported()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.WithdrawItemFromGuildBankAsync(1, 10);
 
             // Assert - Should not send any packets since not supported
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 It.IsAny<Opcode>(), 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Never);
@@ -296,13 +296,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task DepositMoneyToGuildBankAsync_ShouldNotSendPackets_WhenNotSupported()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.DepositMoneyToGuildBankAsync(10000);
 
             // Assert - Should not send any packets since not supported
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 It.IsAny<Opcode>(), 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Never);
@@ -312,13 +312,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task WithdrawMoneyFromGuildBankAsync_ShouldNotSendPackets_WhenNotSupported()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.WithdrawMoneyFromGuildBankAsync(5000);
 
             // Assert - Should not send any packets since not supported
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 It.IsAny<Opcode>(), 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Never);
@@ -328,13 +328,13 @@ namespace WoWSharpClient.Tests.Agent
         public async Task QueryGuildBankTabAsync_ShouldNotSendPackets_WhenNotSupported()
         {
             // Arrange
-            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkAgent();
+            var (guildAgent, mockWorldClient, _) = CreateGuildNetworkClientComponent();
 
             // Act
             await guildAgent.QueryGuildBankTabAsync(1);
 
             // Assert - Should not send any packets since not supported
-            mockWorldClient.Verify(x => x.SendMovementAsync(
+            mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 It.IsAny<Opcode>(), 
                 It.IsAny<byte[]>(), 
                 It.IsAny<CancellationToken>()), Times.Never);
@@ -344,12 +344,12 @@ namespace WoWSharpClient.Tests.Agent
         public void HandleServerResponse_ShouldProcessGuildInvite()
         {
             // Arrange
-            var (guildAgent, _, _) = CreateGuildNetworkAgent();
+            var (guildAgent, _, _) = CreateGuildNetworkClientComponent();
             var inviteReceived = false;
             string? inviterName = null;
             string? guildName = null;
 
-            ((GuildNetworkAgent)guildAgent).OnGuildInviteReceived += (inviter, guild) =>
+            ((GuildNetworkClientComponent)guildAgent).OnGuildInviteReceived += (inviter, guild) =>
             {
                 inviteReceived = true;
                 inviterName = inviter;
@@ -365,7 +365,7 @@ namespace WoWSharpClient.Tests.Agent
             guildBytes.CopyTo(data, 25); // Start guild name at position 25 to avoid overlap
 
             // Act
-            ((GuildNetworkAgent)guildAgent).HandleServerResponse(Opcode.SMSG_GUILD_INVITE, data);
+            ((GuildNetworkClientComponent)guildAgent).HandleServerResponse(Opcode.SMSG_GUILD_INVITE, data);
 
             // Assert
             Assert.True(inviteReceived);
@@ -375,7 +375,7 @@ namespace WoWSharpClient.Tests.Agent
         public void IsInGuild_ShouldReturnFalse_Initially()
         {
             // Arrange
-            var (guildAgent, _, _) = CreateGuildNetworkAgent();
+            var (guildAgent, _, _) = CreateGuildNetworkClientComponent();
 
             // Act & Assert
             Assert.False(guildAgent.IsInGuild);
@@ -386,13 +386,13 @@ namespace WoWSharpClient.Tests.Agent
         public void GuildInviteReceived_ShouldTriggerBothEvents()
         {
             // Arrange
-            var (guildAgent, _, _) = CreateGuildNetworkAgent();
+            var (guildAgent, _, _) = CreateGuildNetworkClientComponent();
             var standardEventFired = false;
             var backwardCompatEventFired = false;
 
             // Subscribe to both events
             guildAgent.GuildInviteReceived += (inviter, guild) => standardEventFired = true;
-            ((GuildNetworkAgent)guildAgent).OnGuildInviteReceived += (inviter, guild) => backwardCompatEventFired = true;
+            ((GuildNetworkClientComponent)guildAgent).OnGuildInviteReceived += (inviter, guild) => backwardCompatEventFired = true;
 
             // Create test data
             var data = new byte[50];
@@ -403,7 +403,7 @@ namespace WoWSharpClient.Tests.Agent
             guildBytes.CopyTo(data, 25);
 
             // Act
-            ((GuildNetworkAgent)guildAgent).HandleServerResponse(Opcode.SMSG_GUILD_INVITE, data);
+            ((GuildNetworkClientComponent)guildAgent).HandleServerResponse(Opcode.SMSG_GUILD_INVITE, data);
 
             // Assert
             Assert.True(standardEventFired);

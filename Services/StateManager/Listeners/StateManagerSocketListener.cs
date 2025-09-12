@@ -1,11 +1,12 @@
 ﻿using BotCommLayer;
 using Communication;
-using System.Reactive.Subjects;
+using System;
 
 namespace StateManager.Listeners
 {
     public class StateManagerSocketListener(string ipAddress, int port, ILogger<StateManagerSocketListener> logger) : ProtobufAsyncSocketServer<StateChangeResponse>(ipAddress, port, logger)
     {
-        public Subject<AsyncRequest> DataMessageSubject => _instanceObservable;
+        // Expose as IObservable rather than Subject to avoid direct Subject usage
+        public IObservable<AsyncRequest> DataMessageStream => _instanceObservable;
     }
 }

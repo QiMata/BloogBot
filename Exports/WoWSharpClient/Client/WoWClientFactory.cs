@@ -3,8 +3,8 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WoWSharpClient.Networking.Abstractions;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
 
@@ -46,7 +46,7 @@ namespace WoWSharpClient.Client
         }
 
         /// <summary>
-        /// Creates a new WoWClientOrchestrator with properly configured auth and world clients.
+        /// Creats a new WoWClientOrchestrator with properly configured auth and world clients.
         /// </summary>
         /// <returns>A configured WoWClientOrchestrator instance.</returns>
         public static WoWClientOrchestrator CreateOrchestrator()
@@ -162,9 +162,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending targeting packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging targeting operations.</param>
         /// <returns>A configured targeting network agent instance.</returns>
-        public static ITargetingNetworkAgent CreateTargetingNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static ITargetingNetworkClientComponent CreateTargetingNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateTargetingNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateTargetingNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -173,9 +173,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending targeting packets.</param>
         /// <param name="logger">The logger for targeting operations.</param>
         /// <returns>A configured targeting network agent instance.</returns>
-        public static ITargetingNetworkAgent CreateTargetingNetworkAgent(IWorldClient worldClient, ILogger<TargetingNetworkAgent> logger)
+        public static ITargetingNetworkClientComponent CreateTargetingNetworkClientComponent(IWorldClient worldClient, ILogger<TargetingNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateTargetingNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateTargetingNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -184,9 +184,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending attack packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging attack operations.</param>
         /// <returns>A configured attack network agent instance.</returns>
-        public static IAttackNetworkAgent CreateAttackNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IAttackNetworkClientComponent CreateAttackNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateAttackNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateAttackNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -195,9 +195,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending attack packets.</param>
         /// <param name="logger">The logger for attack operations.</param>
         /// <returns>A configured attack network agent instance.</returns>
-        public static IAttackNetworkAgent CreateAttackNetworkAgent(IWorldClient worldClient, ILogger<AttackNetworkAgent> logger)
+        public static IAttackNetworkClientComponent CreateAttackNetworkClientComponent(IWorldClient worldClient, ILogger<AttackNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateAttackNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateAttackNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -206,9 +206,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending quest packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging quest operations.</param>
         /// <returns>A configured quest network agent instance.</returns>
-        public static IQuestNetworkAgent CreateQuestNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IQuestNetworkClientComponent CreateQuestNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateQuestNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateQuestNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -217,9 +217,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending quest packets.</param>
         /// <param name="logger">The logger for quest operations.</param>
         /// <returns>A configured quest network agent instance.</returns>
-        public static IQuestNetworkAgent CreateQuestNetworkAgent(IWorldClient worldClient, ILogger<QuestNetworkAgent> logger)
+        public static IQuestNetworkClientComponent CreateQuestNetworkClientComponent(IWorldClient worldClient, ILogger<QuestNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateQuestNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateQuestNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -228,9 +228,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending looting packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging looting operations.</param>
         /// <returns>A configured looting network agent instance.</returns>
-        public static ILootingNetworkAgent CreateLootingNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static ILootingNetworkClientComponent CreateLootingNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateLootingNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateLootingNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -239,9 +239,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending looting packets.</param>
         /// <param name="logger">The logger for looting operations.</param>
         /// <returns>A configured looting network agent instance.</returns>
-        public static ILootingNetworkAgent CreateLootingNetworkAgent(IWorldClient worldClient, ILogger<LootingNetworkAgent> logger)
+        public static ILootingNetworkClientComponent CreateLootingNetworkClientComponent(IWorldClient worldClient, ILogger<LootingNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateLootingNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateLootingNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -250,9 +250,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending game object packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging game object operations.</param>
         /// <returns>A configured game object network agent instance.</returns>
-        public static IGameObjectNetworkAgent CreateGameObjectNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IGameObjectNetworkClientComponent CreateGameObjectNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateGameObjectNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateGameObjectNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -261,9 +261,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending game object packets.</param>
         /// <param name="logger">The logger for game object operations.</param>
         /// <returns>A configured game object network agent instance.</returns>
-        public static IGameObjectNetworkAgent CreateGameObjectNetworkAgent(IWorldClient worldClient, ILogger<GameObjectNetworkAgent> logger)
+        public static IGameObjectNetworkClientComponent CreateGameObjectNetworkClientComponent(IWorldClient worldClient, ILogger<GameObjectNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateGameObjectNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateGameObjectNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -272,9 +272,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending vendor packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging vendor operations.</param>
         /// <returns>A configured vendor network agent instance.</returns>
-        public static IVendorNetworkAgent CreateVendorNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IVendorNetworkClientComponent CreateVendorNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateVendorNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateVendorNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -283,9 +283,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending vendor packets.</param>
         /// <param name="logger">The logger for vendor operations.</param>
         /// <returns>A configured vendor network agent instance.</returns>
-        public static IVendorNetworkAgent CreateVendorNetworkAgent(IWorldClient worldClient, ILogger<VendorNetworkAgent> logger)
+        public static IVendorNetworkClientComponent CreateVendorNetworkClientComponent(IWorldClient worldClient, ILogger<VendorNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateVendorNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateVendorNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -294,9 +294,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending flight master packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging flight master operations.</param>
         /// <returns>A configured flight master network agent instance.</returns>
-        public static IFlightMasterNetworkAgent CreateFlightMasterNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IFlightMasterNetworkClientComponent CreateFlightMasterNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateFlightMasterNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateFlightMasterNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -305,9 +305,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending flight master packets.</param>
         /// <param name="logger">The logger for flight master operations.</param>
         /// <returns>A configured flight master network agent instance.</returns>
-        public static IFlightMasterNetworkAgent CreateFlightMasterNetworkAgent(IWorldClient worldClient, ILogger<FlightMasterNetworkAgent> logger)
+        public static IFlightMasterNetworkClientComponent CreateFlightMasterNetworkClientComponent(IWorldClient worldClient, ILogger<FlightMasterNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateFlightMasterNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateFlightMasterNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -316,7 +316,7 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending death/resurrection packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging death operations.</param>
         /// <returns>A configured dead actor agent instance.</returns>
-        public static IDeadActorAgent CreateDeadActorAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IDeadActorClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return AgentFactory.CreateDeadActorAgentForClient(worldClient, loggerFactory);
         }
@@ -327,7 +327,7 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending death/resurrection packets.</param>
         /// <param name="logger">The logger for death operations.</param>
         /// <returns>A configured dead actor agent instance.</returns>
-        public static IDeadActorAgent CreateDeadActorAgent(IWorldClient worldClient, ILogger<DeadActorAgent> logger)
+        public static IDeadActorClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILogger<DeadActorClientComponent> logger)
         {
             return AgentFactory.CreateDeadActorAgent(worldClient, logger);
         }
@@ -338,9 +338,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending inventory packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging inventory operations.</param>
         /// <returns>A configured inventory network agent instance.</returns>
-        public static IInventoryNetworkAgent CreateInventoryNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IInventoryNetworkClientComponent CreateInventoryNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateInventoryNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateInventoryNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -349,9 +349,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending inventory packets.</param>
         /// <param name="logger">The logger for inventory operations.</param>
         /// <returns>A configured inventory network agent instance.</returns>
-        public static IInventoryNetworkAgent CreateInventoryNetworkAgent(IWorldClient worldClient, ILogger<InventoryNetworkAgent> logger)
+        public static IInventoryNetworkClientComponent CreateInventoryNetworkClientComponent(IWorldClient worldClient, ILogger<InventoryNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateInventoryNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateInventoryNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -360,9 +360,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending item use packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging item use operations.</param>
         /// <returns>A configured item use network agent instance.</returns>
-        public static IItemUseNetworkAgent CreateItemUseNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IItemUseNetworkClientComponent CreateItemUseNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateItemUseNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateItemUseNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -371,9 +371,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending item use packets.</param>
         /// <param name="logger">The logger for item use operations.</param>
         /// <returns>A configured item use network agent instance.</returns>
-        public static IItemUseNetworkAgent CreateItemUseNetworkAgent(IWorldClient worldClient, ILogger<ItemUseNetworkAgent> logger)
+        public static IItemUseNetworkClientComponent CreateItemUseNetworkClientComponent(IWorldClient worldClient, ILogger<ItemUseNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateItemUseNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateItemUseNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -382,9 +382,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending equipment packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging equipment operations.</param>
         /// <returns>A configured equipment network agent instance.</returns>
-        public static IEquipmentNetworkAgent CreateEquipmentNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IEquipmentNetworkClientComponent CreateEquipmentNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateEquipmentNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateEquipmentNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -393,9 +393,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending equipment packets.</param>
         /// <param name="logger">The logger for equipment operations.</param>
         /// <returns>A configured equipment network agent instance.</returns>
-        public static IEquipmentNetworkAgent CreateEquipmentNetworkAgent(IWorldClient worldClient, ILogger<EquipmentNetworkAgent> logger)
+        public static IEquipmentNetworkClientComponent CreateEquipmentNetworkClientComponent(IWorldClient worldClient, ILogger<EquipmentNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateEquipmentNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateEquipmentNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -404,9 +404,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending spell casting packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging spell casting operations.</param>
         /// <returns>A configured spell casting network agent instance.</returns>
-        public static ISpellCastingNetworkAgent CreateSpellCastingNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static ISpellCastingNetworkClientComponent CreateSpellCastingNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateSpellCastingNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateSpellCastingNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -415,9 +415,31 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending spell casting packets.</param>
         /// <param name="logger">The logger for spell casting operations.</param>
         /// <returns>A configured spell casting network agent instance.</returns>
-        public static ISpellCastingNetworkAgent CreateSpellCastingNetworkAgent(IWorldClient worldClient, ILogger<SpellCastingNetworkAgent> logger)
+        public static ISpellCastingNetworkClientComponent CreateSpellCastingNetworkClientComponent(IWorldClient worldClient, ILogger<SpellCastingNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateSpellCastingNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateSpellCastingNetworkClientComponent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a professions network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending profession packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging profession operations.</param>
+        /// <returns>A configured professions network agent instance.</returns>
+        public static IProfessionsNetworkClientComponent CreateProfessionsNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateProfessionsNetworkClientComponentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a professions network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending profession packets.</param>
+        /// <param name="logger">The logger for profession operations.</param>
+        /// <returns>A configured professions network agent instance.</returns>
+        public static IProfessionsNetworkClientComponent CreateProfessionsNetworkClientComponent(IWorldClient worldClient, ILogger<ProfessionsNetworkClientComponent> logger)
+        {
+            return AgentFactory.CreateProfessionsNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -428,27 +450,30 @@ namespace WoWSharpClient.Client
         /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
         /// <returns>A tuple containing all network agents.</returns>
         public static (
-            ITargetingNetworkAgent TargetingAgent,
-            IAttackNetworkAgent AttackAgent,
-            IQuestNetworkAgent QuestAgent,
-            ILootingNetworkAgent LootingAgent,
-            IGameObjectNetworkAgent GameObjectAgent,
-            IVendorNetworkAgent VendorAgent,
-            IFlightMasterNetworkAgent FlightMasterAgent,
-            IDeadActorAgent DeadActorAgent,
-            IInventoryNetworkAgent InventoryAgent,
-            IItemUseNetworkAgent ItemUseAgent,
-            IEquipmentNetworkAgent EquipmentAgent,
-            ISpellCastingNetworkAgent SpellCastingAgent,
-            IAuctionHouseNetworkAgent AuctionHouseAgent,
-            IBankNetworkAgent BankAgent,
-            IMailNetworkAgent MailAgent,
-            IGuildNetworkAgent GuildAgent,
-            IPartyNetworkAgent PartyAgent,
-            ITrainerNetworkAgent TrainerAgent
-        ) CreateAllNetworkAgents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+            ITargetingNetworkClientComponent TargetingAgent,
+            IAttackNetworkClientComponent AttackAgent,
+            IQuestNetworkClientComponent QuestAgent,
+            ILootingNetworkClientComponent LootingAgent,
+            IGameObjectNetworkClientComponent GameObjectAgent,
+            IVendorNetworkClientComponent VendorAgent,
+            IFlightMasterNetworkClientComponent FlightMasterAgent,
+            IDeadActorClientComponent DeadActorAgent,
+            IInventoryNetworkClientComponent InventoryAgent,
+            IItemUseNetworkClientComponent ItemUseAgent,
+            IEquipmentNetworkClientComponent EquipmentAgent,
+            ISpellCastingNetworkClientComponent SpellCastingAgent,
+            IAuctionHouseNetworkClientComponent AuctionHouseAgent,
+            IBankNetworkClientComponent BankAgent,
+            IMailNetworkClientComponent MailAgent,
+            IGuildNetworkClientComponent GuildAgent,
+            IPartyNetworkClientComponent PartyAgent,
+            ITrainerNetworkClientComponent TrainerAgent,
+            ITalentNetworkClientComponent TalentAgent,
+            IProfessionsNetworkClientComponent ProfessionsAgent,
+            IEmoteNetworkClientComponent EmoteAgent
+        ) CreateAllNetworkClientComponents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateAllNetworkAgents(worldClient, loggerFactory);
+            return AgentFactory.CreateAllNetworkClientComponents(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -458,11 +483,11 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
         /// <returns>A tuple containing both the targeting agent and attack agent.</returns>
-        public static (ITargetingNetworkAgent TargetingAgent, IAttackNetworkAgent AttackAgent) CreateCombatNetworkAgents(
+        public static (ITargetingNetworkClientComponent TargetingAgent, IAttackNetworkClientComponent AttackAgent) CreateCombatNetworkClientComponents(
             IWorldClient worldClient,
             ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateCombatNetworkAgents(worldClient, loggerFactory);
+            return AgentFactory.CreateCombatNetworkClientComponents(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -471,9 +496,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client for network communication.</param>
         /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
         /// <returns>A configured Network Agent Factory instance.</returns>
-        public static IAgentFactory CreateNetworkAgentFactory(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IAgentFactory CreateNetworkClientComponentFactory(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateNetworkAgentFactory(worldClient, loggerFactory ?? new NullLoggerFactory());
+            return AgentFactory.CreateNetworkClientComponentFactory(worldClient, loggerFactory ?? new NullLoggerFactory());
         }
 
         /// <summary>
@@ -487,15 +512,15 @@ namespace WoWSharpClient.Client
         /// <param name="gameObjectAgent">The game object network agent.</param>
         /// <param name="logger">Logger instance.</param>
         /// <returns>A configured Network Agent Factory instance.</returns>
-        public static IAgentFactory CreateNetworkAgentFactory(
-            ITargetingNetworkAgent targetingAgent,
-            IAttackNetworkAgent attackAgent,
-            IQuestNetworkAgent questAgent,
-            ILootingNetworkAgent lootingAgent,
-            IGameObjectNetworkAgent gameObjectAgent,
-            ILogger<NetworkAgentFactory> logger)
+        public static IAgentFactory CreateNetworkClientComponentFactory(
+            ITargetingNetworkClientComponent targetingAgent,
+            IAttackNetworkClientComponent attackAgent,
+            IQuestNetworkClientComponent questAgent,
+            ILootingNetworkClientComponent lootingAgent,
+            IGameObjectNetworkClientComponent gameObjectAgent,
+            ILogger<NetworkClientComponentFactory> logger)
         {
-            return AgentFactory.CreateNetworkAgentFactory(targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, logger);
+            return AgentFactory.CreateNetworkClientComponentFactory(targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, logger);
         }
 
         /// <summary>
@@ -504,9 +529,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending auction house packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging auction house operations.</param>
         /// <returns>A configured auction house network agent instance.</returns>
-        public static IAuctionHouseNetworkAgent CreateAuctionHouseNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IAuctionHouseNetworkClientComponent CreateAuctionHouseNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateAuctionHouseNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateAuctionHouseNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -515,9 +540,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging operations.</param>
         /// <returns>A configured bank network agent.</returns>
-        public static IBankNetworkAgent CreateBankNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IBankNetworkClientComponent CreateBankNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateBankNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateBankNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -526,9 +551,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending mail packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging mail operations.</param>
         /// <returns>A configured mail network agent instance.</returns>
-        public static IMailNetworkAgent CreateMailNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IMailNetworkClientComponent CreateMailNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateMailNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateMailNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -537,9 +562,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending mail packets.</param>
         /// <param name="logger">The logger for mail operations.</param>
         /// <returns>A configured mail network agent instance.</returns>
-        public static IMailNetworkAgent CreateMailNetworkAgent(IWorldClient worldClient, ILogger<MailNetworkAgent> logger)
+        public static IMailNetworkClientComponent CreateMailNetworkClientComponent(IWorldClient worldClient, ILogger<MailNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateMailNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateMailNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -548,9 +573,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending guild packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging guild operations.</param>
         /// <returns>A configured guild network agent instance.</returns>
-        public static IGuildNetworkAgent CreateGuildNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IGuildNetworkClientComponent CreateGuildNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateGuildNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateGuildNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -559,9 +584,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending guild packets.</param>
         /// <param name="logger">The logger for guild operations.</param>
         /// <returns>A configured guild network agent instance.</returns>
-        public static IGuildNetworkAgent CreateGuildNetworkAgent(IWorldClient worldClient, ILogger<GuildNetworkAgent> logger)
+        public static IGuildNetworkClientComponent CreateGuildNetworkClientComponent(IWorldClient worldClient, ILogger<GuildNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateGuildNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateGuildNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -570,9 +595,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending party packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging party operations.</param>
         /// <returns>A configured party network agent instance.</returns>
-        public static IPartyNetworkAgent CreatePartyNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IPartyNetworkClientComponent CreatePartyNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreatePartyNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreatePartyNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -581,9 +606,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending party packets.</param>
         /// <param name="logger">The logger for party operations.</param>
         /// <returns>A configured party network agent instance.</returns>
-        public static IPartyNetworkAgent CreatePartyNetworkAgent(IWorldClient worldClient, ILogger<PartyNetworkAgent> logger)
+        public static IPartyNetworkClientComponent CreatePartyNetworkClientComponent(IWorldClient worldClient, ILogger<PartyNetworkClientComponent> logger)
         {
-            return AgentFactory.CreatePartyNetworkAgent(worldClient, logger);
+            return AgentFactory.CreatePartyNetworkClientComponent(worldClient, logger);
         }
 
         /// <summary>
@@ -592,9 +617,9 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending trainer packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging trainer operations.</param>
         /// <returns>A configured trainer network agent instance.</returns>
-        public static ITrainerNetworkAgent CreateTrainerNetworkAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static ITrainerNetworkClientComponent CreateTrainerNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
-            return AgentFactory.CreateTrainerNetworkAgentForClient(worldClient, loggerFactory);
+            return AgentFactory.CreateTrainerNetworkClientComponentForClient(worldClient, loggerFactory);
         }
 
         /// <summary>
@@ -603,9 +628,53 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending trainer packets.</param>
         /// <param name="logger">The logger for trainer operations.</param>
         /// <returns>A configured trainer network agent instance.</returns>
-        public static ITrainerNetworkAgent CreateTrainerNetworkAgent(IWorldClient worldClient, ILogger<TrainerNetworkAgent> logger)
+        public static ITrainerNetworkClientComponent CreateTrainerNetworkClientComponent(IWorldClient worldClient, ILogger<TrainerNetworkClientComponent> logger)
         {
-            return AgentFactory.CreateTrainerNetworkAgent(worldClient, logger);
+            return AgentFactory.CreateTrainerNetworkClientComponent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates a talent network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending talent packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging talent operations.</param>
+        /// <returns>A configured talent network agent instance.</returns>
+        public static ITalentNetworkClientComponent CreateTalentNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateTalentNetworkClientComponentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates a talent network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending talent packets.</param>
+        /// <param name="logger">The logger for talent operations.</param>
+        /// <returns>A configured talent network agent instance.</returns>
+        public static ITalentNetworkClientComponent CreateTalentNetworkClientComponent(IWorldClient worldClient, ILogger<TalentNetworkClientComponent> logger)
+        {
+            return AgentFactory.CreateTalentNetworkClientComponent(worldClient, logger);
+        }
+
+        /// <summary>
+        /// Creates an emote network agent for the specified world client.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending emote packets.</param>
+        /// <param name="loggerFactory">Optional logger factory for logging emote operations.</param>
+        /// <returns>A configured emote network agent instance.</returns>
+        public static IEmoteNetworkClientComponent CreateEmoteNetworkClientComponent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            return AgentFactory.CreateEmoteNetworkClientComponentForClient(worldClient, loggerFactory);
+        }
+
+        /// <summary>
+        /// Creates an emote network agent with a specific logger.
+        /// </summary>
+        /// <param name="worldClient">The world client to use for sending emote packets.</param>
+        /// <param name="logger">The logger for emote operations.</param>
+        /// <returns>A configured emote network agent instance.</returns>
+        public static IEmoteNetworkClientComponent CreateEmoteNetworkClientComponent(IWorldClient worldClient, ILogger<EmoteNetworkClientComponent> logger)
+        {
+            return AgentFactory.CreateEmoteNetworkClientComponent(worldClient, logger);
         }
     }
 }

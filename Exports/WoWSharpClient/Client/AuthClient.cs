@@ -31,7 +31,7 @@ namespace WoWSharpClient.Client
         private string _password = string.Empty;
         private SrpClient? _srpClient;
         private SrpClientChallenge? _srpClientChallenge;
-        private byte[] _serverProof = Array.Empty<byte>();
+        private byte[] _serverProof = [];
         private bool _disposed;
         
         // For handling async realm list requests
@@ -78,12 +78,22 @@ namespace WoWSharpClient.Client
         /// <summary>
         /// Gets the session key for world server authentication.
         /// </summary>
-        public byte[] SessionKey => _srpClient?.SessionKey ?? Array.Empty<byte>();
+        public byte[] SessionKey => _srpClient?.SessionKey ?? [];
 
         /// <summary>
         /// Gets a value indicating whether the client is connected.
         /// </summary>
         public bool IsConnected => _pipeline.IsConnected;
+
+        /// <summary>
+        /// Reactive observable for connection established.
+        /// </summary>
+        public IObservable<System.Reactive.Unit> WhenConnected => _pipeline.WhenConnected;
+
+        /// <summary>
+        /// Reactive observable for disconnection events. Exception is null for graceful disconnects.
+        /// </summary>
+        public IObservable<Exception?> WhenDisconnected => _pipeline.WhenDisconnected;
 
         /// <summary>
         /// Connects to the authentication server.
@@ -203,7 +213,7 @@ namespace WoWSharpClient.Client
             catch (OperationCanceledException)
             {
                 Console.WriteLine("[AuthClient] Realm list request timed out");
-                return new List<Realm>();
+                return [];
             }
             finally
             {
@@ -220,9 +230,9 @@ namespace WoWSharpClient.Client
             // might need special handling or custom framing
             _pipeline.RegisterHandler(Opcode.SMSG_AUTH_CHALLENGE, HandleAuthChallenge);
             _pipeline.RegisterHandler(Opcode.SMSG_AUTH_RESPONSE, HandleAuthResponse);
-            
-            // Subscribe to raw connection events for auth server packets
-            _connection.BytesReceived += HandleRawAuthPackets;
+
+            // Use ReceivedBytes observable instead of BytesReceived event
+            _connection.ReceivedBytes.Subscribe(HandleRawAuthPackets);
         }
 
         private async void HandleRawAuthPackets(ReadOnlyMemory<byte> data)
@@ -430,7 +440,7 @@ namespace WoWSharpClient.Client
             catch (Exception ex)
             {
                 Console.WriteLine($"[AuthClient] Error handling realm list response: {ex}");
-                _realmListCompletionSource?.TrySetResult(new List<Realm>());
+                _realmListCompletionSource?.TrySetResult([]);
             }
 
             await Task.CompletedTask;
@@ -440,7 +450,7 @@ namespace WoWSharpClient.Client
         {
             if (!_disposed)
             {
-                _connection.BytesReceived -= HandleRawAuthPackets;
+                // No event to detach; pipeline and connection will be disposed by owners as needed
                 _pipeline?.Dispose();
                 _disposed = true;
             }

@@ -4,6 +4,7 @@ using StateManager.Clients;
 using StateManager.Listeners;
 using StateManager.Repository;
 using StateManager.Settings;
+using System; // for IObservable
 
 namespace StateManager
 {
@@ -51,7 +52,8 @@ namespace StateManager
 
             _logger.LogInformation($"Started StateManagerListener| {configuration["StateManagerListener:IpAddress"]}:{configuration["StateManagerListener:Port"]}");
 
-            _worldStateManagerSocketListener.DataMessageSubject.Subscribe(OnWorldStateUpdate);
+            // Updated to new IObservable-based API
+            _worldStateManagerSocketListener.DataMessageStream.Subscribe(OnWorldStateUpdate);
         }
 
         public void StartBackgroundBotWorker(string accountName)

@@ -2,26 +2,26 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
     /// <summary>
-    /// Tests for the PartyNetworkAgent class.
+    /// Tests for the PartyNetworkClientComponent class.
     /// </summary>
-    public class PartyNetworkAgentTests
+    public class PartyNetworkClientComponentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<PartyNetworkAgent>> _mockLogger;
-        private readonly PartyNetworkAgent _partyAgent;
+        private readonly Mock<ILogger<PartyNetworkClientComponent>> _mockLogger;
+        private readonly PartyNetworkClientComponent _partyAgent;
 
-        public PartyNetworkAgentTests()
+        public PartyNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<PartyNetworkAgent>>();
-            _partyAgent = new PartyNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<PartyNetworkClientComponent>>();
+            _partyAgent = new PartyNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         #region Constructor Tests
@@ -30,7 +30,7 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
-            var agent = new PartyNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            var agent = new PartyNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
 
             // Assert
             Assert.NotNull(agent);
@@ -45,14 +45,14 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new PartyNetworkAgent(null!, _mockLogger.Object));
+            Assert.Throws<ArgumentNullException>(() => new PartyNetworkClientComponent(null!, _mockLogger.Object));
         }
 
         [Fact]
         public void Constructor_WithNullLogger_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new PartyNetworkAgent(_mockWorldClient.Object, null!));
+            Assert.Throws<ArgumentNullException>(() => new PartyNetworkClientComponent(_mockWorldClient.Object, null!));
         }
 
         #endregion
@@ -64,14 +64,14 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             const string playerName = "TestPlayer";
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Act
             await _partyAgent.InvitePlayerAsync(playerName);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_INVITE,
                 It.Is<byte[]>(data => data.Length == playerName.Length + 1 && data[data.Length - 1] == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -102,14 +102,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task AcceptInviteAsync_SendsCorrectPacket()
         {
             // Arrange
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Act
             await _partyAgent.AcceptInviteAsync();
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_ACCEPT,
                 It.Is<byte[]>(data => data.Length == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -120,14 +120,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task DeclineInviteAsync_SendsCorrectPacket()
         {
             // Arrange
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Act
             await _partyAgent.DeclineInviteAsync();
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_DECLINE,
                 It.Is<byte[]>(data => data.Length == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -138,14 +138,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task CancelInviteAsync_SendsCorrectPacket()
         {
             // Arrange
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Act
             await _partyAgent.CancelInviteAsync();
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_CANCEL,
                 It.Is<byte[]>(data => data.Length == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -160,14 +160,14 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             const string playerName = "TestPlayer";
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Act
             await _partyAgent.KickPlayerAsync(playerName);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_UNINVITE,
                 It.Is<byte[]>(data => data.Length == playerName.Length + 1 && data[data.Length - 1] == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -178,14 +178,14 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             const ulong playerGuid = 0x123456789ABCDEF0;
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Act
             await _partyAgent.KickPlayerAsync(playerGuid);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_UNINVITE_GUID,
                 It.Is<byte[]>(data => data.Length == 8),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -209,14 +209,14 @@ namespace WoWSharpClient.Tests.Agent
         public async Task LeaveGroupAsync_SendsCorrectPacket()
         {
             // Arrange
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Act
             await _partyAgent.LeaveGroupAsync();
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_DISBAND,
                 It.Is<byte[]>(data => data.Length == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -231,18 +231,18 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             const string playerName = "TestPlayer";
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Use reflection to set IsGroupLeader to true for this test
-            var isGroupLeaderProperty = typeof(PartyNetworkAgent).GetProperty("IsGroupLeader");
+            var isGroupLeaderProperty = typeof(PartyNetworkClientComponent).GetProperty("IsGroupLeader");
             isGroupLeaderProperty?.SetValue(_partyAgent, true);
 
             // Act
             await _partyAgent.PromoteToLeaderAsync(playerName);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_SET_LEADER,
                 It.Is<byte[]>(data => data.Length == playerName.Length + 1 && data[data.Length - 1] == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -276,18 +276,18 @@ namespace WoWSharpClient.Tests.Agent
         public async Task ConvertToRaidAsync_WhenGroupLeader_SendsCorrectPacket()
         {
             // Arrange
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Use reflection to set IsGroupLeader to true for this test
-            var isGroupLeaderProperty = typeof(PartyNetworkAgent).GetProperty("IsGroupLeader");
+            var isGroupLeaderProperty = typeof(PartyNetworkClientComponent).GetProperty("IsGroupLeader");
             isGroupLeaderProperty?.SetValue(_partyAgent, true);
 
             // Act
             await _partyAgent.ConvertToRaidAsync();
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_GROUP_RAID_CONVERT,
                 It.Is<byte[]>(data => data.Length == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -308,18 +308,18 @@ namespace WoWSharpClient.Tests.Agent
         public async Task SetLootMethodAsync_WhenGroupLeader_SendsCorrectPacket()
         {
             // Arrange
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                            .Returns(Task.CompletedTask);
 
             // Use reflection to set IsGroupLeader to true for this test
-            var isGroupLeaderProperty = typeof(PartyNetworkAgent).GetProperty("IsGroupLeader");
+            var isGroupLeaderProperty = typeof(PartyNetworkClientComponent).GetProperty("IsGroupLeader");
             isGroupLeaderProperty?.SetValue(_partyAgent, true);
 
             // Act
             await _partyAgent.SetLootMethodAsync(LootMethod.GroupLoot, null, LootQuality.Rare);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 Opcode.CMSG_LOOT_METHOD,
                 It.Is<byte[]>(data => data.Length == 17),
                 It.IsAny<CancellationToken>()), Times.Once);

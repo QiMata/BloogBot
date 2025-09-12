@@ -3,8 +3,8 @@ using BotRunner.Clients;
 using PromptHandlingService;
 using WoWSharpClient;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BackgroundBotRunner
 {
@@ -22,27 +22,28 @@ namespace BackgroundBotRunner
         
         // Use all network agents through the allAgents pattern
         private readonly (
-            ITargetingNetworkAgent TargetingAgent,
-            IAttackNetworkAgent AttackAgent,
-            IQuestNetworkAgent QuestAgent,
-            ILootingNetworkAgent LootingAgent,
-            IGameObjectNetworkAgent GameObjectAgent,
-            IVendorNetworkAgent VendorAgent,
-            IFlightMasterNetworkAgent FlightMasterAgent,
-            IDeadActorAgent DeadActorAgent,
-            IInventoryNetworkAgent InventoryAgent,
-            IItemUseNetworkAgent ItemUseAgent,
-            IEquipmentNetworkAgent EquipmentAgent,
-            ISpellCastingNetworkAgent SpellCastingAgent,
-            IAuctionHouseNetworkAgent AuctionHouseAgent,
-            IBankNetworkAgent BankAgent,
-            IMailNetworkAgent MailAgent,
-            IGuildNetworkAgent GuildAgent,
-            IPartyNetworkAgent PartyAgent,
-            ITrainerNetworkAgent TrainerAgent
+            ITargetingNetworkClientComponent TargetingAgent,
+            IAttackNetworkClientComponent AttackAgent,
+            IQuestNetworkClientComponent QuestAgent,
+            ILootingNetworkClientComponent LootingAgent,
+            IGameObjectNetworkClientComponent GameObjectAgent,
+            IVendorNetworkClientComponent VendorAgent,
+            IFlightMasterNetworkClientComponent FlightMasterAgent,
+            IDeadActorClientComponent DeadActorAgent,
+            IInventoryNetworkClientComponent InventoryAgent,
+            IItemUseNetworkClientComponent ItemUseAgent,
+            IEquipmentNetworkClientComponent EquipmentAgent,
+            ISpellCastingNetworkClientComponent SpellCastingAgent,
+            IAuctionHouseNetworkClientComponent AuctionHouseAgent,
+            IBankNetworkClientComponent BankAgent,
+            IMailNetworkClientComponent MailAgent,
+            IGuildNetworkClientComponent GuildAgent,
+            IPartyNetworkClientComponent PartyAgent,
+            ITrainerNetworkClientComponent TrainerAgent,
+            ITalentNetworkClientComponent TalentAgent,
+            IProfessionsNetworkClientComponent ProfessionsAgent,
+            IEmoteNetworkClientComponent EmoteAgent
         ) _allAgents;
-        
-        private readonly CombatIntegrationExample _combatExample;
 
         private CancellationToken _stoppingToken;
 
@@ -61,8 +62,7 @@ namespace BackgroundBotRunner
             
             // Initialize all network agents including the new ones
             var worldClient = WoWClientFactory.CreateWorldClient();
-            _allAgents = WoWClientFactory.CreateAllNetworkAgents(worldClient, loggerFactory);
-            _combatExample = new CombatIntegrationExample(worldClient, loggerFactory);
+            _allAgents = WoWClientFactory.CreateAllNetworkClientComponents(worldClient, loggerFactory);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -109,6 +109,9 @@ namespace BackgroundBotRunner
                         // var guildAgent = _allAgents.GuildAgent;
                         // var partyAgent = _allAgents.PartyAgent; // Accessing the party agent
                         // var trainerAgent = _allAgents.TrainerAgent; // Accessing the trainer agent
+                        // var talentAgent = _allAgents.TalentAgent; // Accessing the talent agent
+                        // var professionsAgent = _allAgents.ProfessionsAgent; // Accessing the professions agent
+                        // var emoteAgent = _allAgents.EmoteAgent; // Accessing the emote agent
                     }
 
                     await Task.Delay(100, stoppingToken);

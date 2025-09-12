@@ -1,16 +1,14 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Reactive;
+using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.Abstractions;
 
 namespace WoWSharpClient.Networking.Implementation
 {
-    /// <summary>
-    /// In-memory connection implementation for testing purposes.
-    /// Allows direct byte injection without network I/O.
-    /// </summary>
     public sealed class InMemoryConnection : IConnection
     {
         private readonly ConcurrentQueue<byte[]> _incomingData = new();
@@ -20,32 +18,17 @@ namespace WoWSharpClient.Networking.Implementation
         private bool _shouldFailConnections;
         private Exception? _connectionFailureException;
 
-        /// <summary>
-        /// Gets a value indicating whether the connection is connected.
-        /// </summary>
+        // Use Subjects from System.Reactive
+        private readonly Subject<Unit> _whenConnected = new();
+        private readonly Subject<Exception?> _whenDisconnected = new();
+        private readonly Subject<ReadOnlyMemory<byte>> _receivedBytes = new();
+
         public bool IsConnected => _isConnected;
 
-        /// <summary>
-        /// Fired when the connection is established.
-        /// </summary>
-        public event Action? Connected;
+        public IObservable<Unit> WhenConnected => _whenConnected;
+        public IObservable<Exception?> WhenDisconnected => _whenDisconnected;
+        public IObservable<ReadOnlyMemory<byte>> ReceivedBytes => _receivedBytes;
 
-        /// <summary>
-        /// Fired when the connection is lost.
-        /// </summary>
-        public event Action<Exception?>? Disconnected;
-
-        /// <summary>
-        /// Fired when bytes are received.
-        /// </summary>
-        public event Action<ReadOnlyMemory<byte>>? BytesReceived;
-
-        /// <summary>
-        /// Simulates connecting to a host.
-        /// </summary>
-        /// <param name="host">The host (ignored for in-memory connection).</param>
-        /// <param name="port">The port (ignored for in-memory connection).</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public Task ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
         {
             if (_disposed)
@@ -57,30 +40,22 @@ namespace WoWSharpClient.Networking.Implementation
             }
 
             _isConnected = true;
-            Connected?.Invoke();
+            _whenConnected.OnNext(Unit.Default);
             return Task.CompletedTask;
         }
 
-        /// <summary>
-        /// Simulates disconnecting from the host.
-        /// </summary>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public Task DisconnectAsync(CancellationToken cancellationToken = default)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(InMemoryConnection));
 
             _isConnected = false;
-            _shouldFailConnections = false; // Reset failure state on manual disconnect
-            Disconnected?.Invoke(null);
+            _shouldFailConnections = false;
+            _connectionFailureException = null;
+            _whenDisconnected.OnNext(null);
             return Task.CompletedTask;
         }
 
-        /// <summary>
-        /// Simulates sending data. The data is queued for retrieval via GetSentData().
-        /// </summary>
-        /// <param name="data">The data to send.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public Task SendAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
         {
             if (_disposed)
@@ -93,100 +68,70 @@ namespace WoWSharpClient.Networking.Implementation
             return Task.CompletedTask;
         }
 
-        /// <summary>
-        /// Injects incoming data into the connection, triggering BytesReceived event.
-        /// </summary>
-        /// <param name="data">The data to inject.</param>
         public void InjectIncomingData(ReadOnlyMemory<byte> data)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(InMemoryConnection));
-
             if (!_isConnected)
                 throw new InvalidOperationException("Connection is not connected");
 
             _incomingData.Enqueue(data.ToArray());
-            BytesReceived?.Invoke(data);
+            _receivedBytes.OnNext(data);
         }
 
-        /// <summary>
-        /// Retrieves all data that was sent through SendAsync.
-        /// </summary>
-        /// <returns>Array of byte arrays representing sent data in order.</returns>
         public byte[][] GetSentData()
         {
             var result = new List<byte[]>();
             while (_outgoingData.TryDequeue(out var data))
-            {
                 result.Add(data);
-            }
             return result.ToArray();
         }
 
-        /// <summary>
-        /// Retrieves all data that was injected through InjectIncomingData.
-        /// </summary>
-        /// <returns>Array of byte arrays representing received data in order.</returns>
         public byte[][] GetReceivedData()
         {
             var result = new List<byte[]>();
             while (_incomingData.TryDequeue(out var data))
-            {
                 result.Add(data);
-            }
             return result.ToArray();
         }
 
         /// <summary>
-        /// Clears all sent and received data queues.
+        /// Test helper: simulates a connection error and optionally forces subsequent reconnection attempts to fail.
         /// </summary>
-        public void ClearData()
-        {
-            while (_outgoingData.TryDequeue(out _)) { }
-            while (_incomingData.TryDequeue(out _)) { }
-        }
-
-        /// <summary>
-        /// Simulates a connection error and disconnects.
-        /// </summary>
-        /// <param name="exception">The exception to report as the disconnection cause.</param>
-        /// <param name="shouldFailReconnections">If true, subsequent connection attempts will fail.</param>
-        public void SimulateConnectionError(Exception exception, bool shouldFailReconnections = true)
+        /// <param name="ex">The exception representing the connection error.</param>
+        /// <param name="shouldFailReconnections">If true, future ConnectAsync calls will fail with the provided exception.</param>
+        public void SimulateConnectionError(Exception ex, bool shouldFailReconnections = false)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(InMemoryConnection));
 
             _isConnected = false;
             _shouldFailConnections = shouldFailReconnections;
-            _connectionFailureException = exception;
-            Disconnected?.Invoke(exception);
+            _connectionFailureException = shouldFailReconnections ? ex : null;
+            _whenDisconnected.OnNext(ex);
         }
 
         /// <summary>
-        /// Allows connections to succeed again after a simulated failure.
+        /// Test helper: clears any buffered sent/received data in the in-memory queues.
         /// </summary>
-        public void RestoreConnectivity()
+        public void ClearData()
         {
-            _shouldFailConnections = false;
-            _connectionFailureException = null;
+            while (_incomingData.TryDequeue(out _)) { }
+            while (_outgoingData.TryDequeue(out _)) { }
         }
 
-        /// <summary>
-        /// Disposes the connection.
-        /// </summary>
         public void Dispose()
         {
-            if (!_disposed)
-            {
-                if (_isConnected)
-                {
-                    _isConnected = false;
-                    Disconnected?.Invoke(null);
-                }
+            if (_disposed) return;
+            _disposed = true;
 
-                ClearData();
-                _disposed = true;
-            }
+            _whenConnected.OnCompleted();
+            _whenDisconnected.OnCompleted();
+            _receivedBytes.OnCompleted();
+
+            _whenConnected.Dispose();
+            _whenDisconnected.Dispose();
+            _receivedBytes.Dispose();
         }
     }
 }

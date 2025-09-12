@@ -1,28 +1,28 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
     /// <summary>
-    /// Unit tests for the TrainerNetworkAgent class.
+    /// Unit tests for the TrainerNetworkClientComponent class.
     /// Tests all trainer-related operations including opening trainer windows,
     /// learning spells, and handling trainer responses.
     /// </summary>
-    public class TrainerNetworkAgentTests
+    public class TrainerNetworkClientComponentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<TrainerNetworkAgent>> _mockLogger;
-        private readonly TrainerNetworkAgent _trainerAgent;
+        private readonly Mock<ILogger<TrainerNetworkClientComponent>> _mockLogger;
+        private readonly TrainerNetworkClientComponent _trainerAgent;
 
-        public TrainerNetworkAgentTests()
+        public TrainerNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<TrainerNetworkAgent>>();
-            _trainerAgent = new TrainerNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<TrainerNetworkClientComponent>>();
+            _trainerAgent = new TrainerNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         #region Constructor Tests
@@ -40,14 +40,14 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new TrainerNetworkAgent(null!, _mockLogger.Object));
+            Assert.Throws<ArgumentNullException>(() => new TrainerNetworkClientComponent(null!, _mockLogger.Object));
         }
 
         [Fact]
         public void Constructor_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new TrainerNetworkAgent(_mockWorldClient.Object, null!));
+            Assert.Throws<ArgumentNullException>(() => new TrainerNetworkClientComponent(_mockWorldClient.Object, null!));
         }
 
         #endregion
@@ -66,7 +66,7 @@ namespace WoWSharpClient.Tests.Agent
             await _trainerAgent.OpenTrainerAsync(trainerGuid);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_GOSSIP_HELLO,
                 It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -77,7 +77,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             const ulong trainerGuid = 0x123456789ABCDEF0UL;
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<GameData.Core.Enums.Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<GameData.Core.Enums.Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new InvalidOperationException("Connection error"));
 
             // Act & Assert
@@ -100,7 +100,7 @@ namespace WoWSharpClient.Tests.Agent
             await _trainerAgent.RequestTrainerServicesAsync(trainerGuid);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_TRAINER_LIST,
                 It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -124,7 +124,7 @@ namespace WoWSharpClient.Tests.Agent
             await _trainerAgent.LearnSpellAsync(trainerGuid, spellId);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_TRAINER_BUY_SPELL,
                 It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -155,7 +155,7 @@ namespace WoWSharpClient.Tests.Agent
             await _trainerAgent.LearnSpellByIndexAsync(trainerGuid, serviceIndex);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_TRAINER_BUY_SPELL,
                 It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -172,7 +172,7 @@ namespace WoWSharpClient.Tests.Agent
             await _trainerAgent.LearnSpellByIndexAsync(trainerGuid, invalidIndex);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 It.IsAny<GameData.Core.Enums.Opcode>(),
                 It.IsAny<byte[]>(),
                 It.IsAny<CancellationToken>()), Times.Never);
@@ -193,17 +193,17 @@ namespace WoWSharpClient.Tests.Agent
             await _trainerAgent.QuickLearnSpellAsync(trainerGuid, spellId);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_GOSSIP_HELLO,
                 It.IsAny<byte[]>(),
                 It.IsAny<CancellationToken>()), Times.Once);
 
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_TRAINER_LIST,
                 It.IsAny<byte[]>(),
                 It.IsAny<CancellationToken>()), Times.Once);
 
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_TRAINER_BUY_SPELL,
                 It.IsAny<byte[]>(),
                 It.IsAny<CancellationToken>()), Times.Once);
@@ -220,17 +220,17 @@ namespace WoWSharpClient.Tests.Agent
             await _trainerAgent.LearnMultipleSpellsAsync(trainerGuid, spellIds);
 
             // Assert
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_GOSSIP_HELLO,
                 It.IsAny<byte[]>(),
                 It.IsAny<CancellationToken>()), Times.Once);
 
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_TRAINER_LIST,
                 It.IsAny<byte[]>(),
                 It.IsAny<CancellationToken>()), Times.Once);
 
-            _mockWorldClient.Verify(x => x.SendMovementAsync(
+            _mockWorldClient.Verify(x => x.SendOpcodeAsync(
                 GameData.Core.Enums.Opcode.CMSG_TRAINER_BUY_SPELL,
                 It.IsAny<byte[]>(),
                 It.IsAny<CancellationToken>()), Times.Exactly(3));

@@ -1,22 +1,22 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
+using WoWSharpClient.Networking.ClientComponents;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
-    public class FlightMasterNetworkAgentTests
+    public class FlightMasterNetworkClientComponentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<FlightMasterNetworkAgent>> _mockLogger;
-        private readonly FlightMasterNetworkAgent _flightMasterAgent;
+        private readonly Mock<ILogger<FlightMasterNetworkClientComponent>> _mockLogger;
+        private readonly FlightMasterNetworkClientComponent _flightMasterAgent;
 
-        public FlightMasterNetworkAgentTests()
+        public FlightMasterNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<FlightMasterNetworkAgent>>();
-            _flightMasterAgent = new FlightMasterNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<FlightMasterNetworkClientComponent>>();
+            _flightMasterAgent = new FlightMasterNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         [Fact]
@@ -32,14 +32,14 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new FlightMasterNetworkAgent(null!, _mockLogger.Object));
+            Assert.Throws<ArgumentNullException>(() => new FlightMasterNetworkClientComponent(null!, _mockLogger.Object));
         }
 
         [Fact]
         public void Constructor_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new FlightMasterNetworkAgent(_mockWorldClient.Object, null!));
+            Assert.Throws<ArgumentNullException>(() => new FlightMasterNetworkClientComponent(_mockWorldClient.Object, null!));
         }
 
         [Fact]
@@ -53,7 +53,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_GOSSIP_HELLO,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -71,7 +71,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_TAXINODE_STATUS_QUERY,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -91,7 +91,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_ACTIVATETAXI,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -106,7 +106,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_TAXISHOWNODES,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -263,7 +263,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_TAXICLEARALLNODES,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -281,7 +281,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_TAXIENABLENODE,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),

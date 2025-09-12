@@ -35,12 +35,21 @@ namespace WoWSharpClient.Client
         Task DisconnectAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Sends a movement packet with the specified opcode and movement data.
+        /// Sends a packet with the specified opcode and payload data to the world server.
+        /// This is a general-purpose method for sending any type of packet including movement,
+        /// combat, targeting, chat, and other game protocol messages.
         /// </summary>
-        /// <param name="opcode">The movement opcode.</param>
-        /// <param name="movementInfo">The movement information.</param>
+        /// <param name="opcode">The opcode identifying the type of packet to send (e.g., movement, combat, targeting).</param>
+        /// <param name="payload">The packet payload data. Can be movement information, combat data, or any other packet-specific data.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        Task SendMovementAsync(Opcode opcode, byte[] movementInfo, CancellationToken cancellationToken = default);
+        Task SendOpcodeAsync(Opcode opcode, byte[] payload, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Registers a handler to be invoked when the specified server opcode is received.
+        /// </summary>
+        /// <param name="opcode">The server opcode to handle.</param>
+        /// <param name="handler">The handler delegate receiving the raw payload bytes.</param>
+        void RegisterOpcodeHandler(Opcode opcode, Func<byte[], Task> handler);
 
         /// <summary>
         /// Sends a character enumeration request.

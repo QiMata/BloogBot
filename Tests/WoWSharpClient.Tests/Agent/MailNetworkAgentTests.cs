@@ -1,23 +1,22 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
-    public class MailNetworkAgentTests
+    public class MailNetworkClientComponentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
-        private readonly Mock<ILogger<MailNetworkAgent>> _mockLogger;
-        private readonly MailNetworkAgent _mailAgent;
+        private readonly Mock<ILogger<MailNetworkClientComponent>> _mockLogger;
+        private readonly MailNetworkClientComponent _mailAgent;
 
-        public MailNetworkAgentTests()
+        public MailNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
-            _mockLogger = new Mock<ILogger<MailNetworkAgent>>();
-            _mailAgent = new MailNetworkAgent(_mockWorldClient.Object, _mockLogger.Object);
+            _mockLogger = new Mock<ILogger<MailNetworkClientComponent>>();
+            _mailAgent = new MailNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
         #region Constructor Tests
@@ -34,14 +33,14 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new MailNetworkAgent(null!, _mockLogger.Object));
+            Assert.Throws<ArgumentNullException>(() => new MailNetworkClientComponent(null!, _mockLogger.Object));
         }
 
         [Fact]
         public void Constructor_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new MailNetworkAgent(_mockWorldClient.Object, null!));
+            Assert.Throws<ArgumentNullException>(() => new MailNetworkClientComponent(_mockWorldClient.Object, null!));
         }
 
         #endregion
@@ -81,7 +80,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_GOSSIP_HELLO,
                     It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                     It.IsAny<CancellationToken>()),
@@ -97,7 +96,7 @@ namespace WoWSharpClient.Tests.Agent
             string? capturedOperation = null;
             string? capturedError = null;
 
-            _mockWorldClient.Setup(x => x.SendMovementAsync(It.IsAny<GameData.Core.Enums.Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<GameData.Core.Enums.Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(exception);
 
             _mailAgent.MailError += (operation, error) =>
@@ -124,7 +123,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_GET_MAIL_LIST,
                     It.Is<byte[]>(payload => payload.Length == 0),
                     It.IsAny<CancellationToken>()),
@@ -148,7 +147,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_SEND_MAIL,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -169,7 +168,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_SEND_MAIL,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -191,7 +190,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_SEND_MAIL,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -214,7 +213,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_SEND_MAIL,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -237,7 +236,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_MAIL_TAKE_MONEY,
                     It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                     It.IsAny<CancellationToken>()),
@@ -260,7 +259,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_MAIL_TAKE_ITEM,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -283,7 +282,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_MAIL_MARK_AS_READ,
                     It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                     It.IsAny<CancellationToken>()),
@@ -306,7 +305,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_MAIL_DELETE,
                     It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                     It.IsAny<CancellationToken>()),
@@ -329,7 +328,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_MAIL_RETURN_TO_SENDER,
                     It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                     It.IsAny<CancellationToken>()),
@@ -352,7 +351,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_MAIL_CREATE_TEXT_ITEM,
                     It.Is<byte[]>(payload => payload.SequenceEqual(expectedPayload)),
                     It.IsAny<CancellationToken>()),
@@ -371,7 +370,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.MSG_QUERY_NEXT_MAIL_TIME,
                     It.Is<byte[]>(payload => payload.Length == 0),
                     It.IsAny<CancellationToken>()),
@@ -416,14 +415,14 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_GOSSIP_HELLO,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
 
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_GET_MAIL_LIST,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
@@ -444,14 +443,14 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_GOSSIP_HELLO,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
 
             _mockWorldClient.Verify(
-                x => x.SendMovementAsync(
+                x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_SEND_MAIL,
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),

@@ -1,59 +1,115 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.Agent;
-using WoWSharpClient.Networking.Agent.I;
+using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {
-    public class NetworkAgentFactoryTests
+    public class NetworkClientComponentFactoryTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
         private readonly Mock<ILoggerFactory> _mockLoggerFactory;
-        private readonly Mock<ILogger<NetworkAgentFactory>> _mockLogger;
-        private readonly Mock<ITargetingNetworkAgent> _mockTargetingAgent;
-        private readonly Mock<IAttackNetworkAgent> _mockAttackAgent;
-        private readonly Mock<IQuestNetworkAgent> _mockQuestAgent;
-        private readonly Mock<ILootingNetworkAgent> _mockLootingAgent;
-        private readonly Mock<IGameObjectNetworkAgent> _mockGameObjectAgent;
-        private readonly Mock<IVendorNetworkAgent> _mockVendorAgent;
-        private readonly Mock<IFlightMasterNetworkAgent> _mockFlightMasterAgent;
-        private readonly Mock<IDeadActorAgent> _mockDeadActorAgent;
-        private readonly NetworkAgentFactory _factory;
+        private readonly Mock<ILogger<NetworkClientComponentFactory>> _mockLogger;
+        private readonly Mock<ITargetingNetworkClientComponent> _mockTargetingAgent;
+        private readonly Mock<IAttackNetworkClientComponent> _mockAttackAgent;
+        private readonly Mock<IQuestNetworkClientComponent> _mockQuestAgent;
+        private readonly Mock<ILootingNetworkClientComponent> _mockLootingAgent;
+        private readonly Mock<IGameObjectNetworkClientComponent> _mockGameObjectAgent;
+        private readonly Mock<IVendorNetworkClientComponent> _mockVendorAgent;
+        private readonly Mock<IFlightMasterNetworkClientComponent> _mockFlightMasterAgent;
+        private readonly Mock<IDeadActorClientComponent> _mockDeadActorAgent;
+        private readonly NetworkClientComponentFactory _factory;
 
-        public NetworkAgentFactoryTests()
+        public NetworkClientComponentFactoryTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
             _mockLoggerFactory = new Mock<ILoggerFactory>();
-            _mockLogger = new Mock<ILogger<NetworkAgentFactory>>();
-            _mockTargetingAgent = new Mock<ITargetingNetworkAgent>();
-            _mockAttackAgent = new Mock<IAttackNetworkAgent>();
-            _mockQuestAgent = new Mock<IQuestNetworkAgent>();
-            _mockLootingAgent = new Mock<ILootingNetworkAgent>();
-            _mockGameObjectAgent = new Mock<IGameObjectNetworkAgent>();
-            _mockVendorAgent = new Mock<IVendorNetworkAgent>();
-            _mockFlightMasterAgent = new Mock<IFlightMasterNetworkAgent>();
-            _mockDeadActorAgent = new Mock<IDeadActorAgent>();
+            _mockLogger = new Mock<ILogger<NetworkClientComponentFactory>>();
+            _mockTargetingAgent = new Mock<ITargetingNetworkClientComponent>();
+            _mockAttackAgent = new Mock<IAttackNetworkClientComponent>();
+            _mockQuestAgent = new Mock<IQuestNetworkClientComponent>();
+            _mockLootingAgent = new Mock<ILootingNetworkClientComponent>();
+            _mockGameObjectAgent = new Mock<IGameObjectNetworkClientComponent>();
+            _mockVendorAgent = new Mock<IVendorNetworkClientComponent>();
+            _mockFlightMasterAgent = new Mock<IFlightMasterNetworkClientComponent>();
+            _mockDeadActorAgent = new Mock<IDeadActorClientComponent>();
 
             // Setup logger factory for lazy initialization tests
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(NetworkAgentFactory).FullName!)).Returns(_mockLogger.Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(TargetingNetworkAgent).FullName!)).Returns(new Mock<ILogger<TargetingNetworkAgent>>().Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(AttackNetworkAgent).FullName!)).Returns(new Mock<ILogger<AttackNetworkAgent>>().Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(QuestNetworkAgent).FullName!)).Returns(new Mock<ILogger<QuestNetworkAgent>>().Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(LootingNetworkAgent).FullName!)).Returns(new Mock<ILogger<LootingNetworkAgent>>().Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(GameObjectNetworkAgent).FullName!)).Returns(new Mock<ILogger<GameObjectNetworkAgent>>().Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(VendorNetworkAgent).FullName!)).Returns(new Mock<ILogger<VendorNetworkAgent>>().Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(FlightMasterNetworkAgent).FullName!)).Returns(new Mock<ILogger<FlightMasterNetworkAgent>>().Object);
-            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(DeadActorAgent).FullName!)).Returns(new Mock<ILogger<DeadActorAgent>>().Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(NetworkClientComponentFactory).FullName!)).Returns(_mockLogger.Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(TargetingNetworkClientComponent).FullName!)).Returns(new Mock<ILogger<TargetingNetworkClientComponent>>().Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(AttackNetworkClientComponent).FullName!)).Returns(new Mock<ILogger<AttackNetworkClientComponent>>().Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(QuestNetworkClientComponent).FullName!)).Returns(new Mock<ILogger<QuestNetworkClientComponent>>().Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(LootingNetworkClientComponent).FullName!)).Returns(new Mock<ILogger<LootingNetworkClientComponent>>().Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(GameObjectNetworkClientComponent).FullName!)).Returns(new Mock<ILogger<GameObjectNetworkClientComponent>>().Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(VendorNetworkClientComponent).FullName!)).Returns(new Mock<ILogger<VendorNetworkClientComponent>>().Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(FlightMasterNetworkClientComponent).FullName!)).Returns(new Mock<ILogger<FlightMasterNetworkClientComponent>>().Object);
+            _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(DeadActorClientComponent).FullName!)).Returns(new Mock<ILogger<DeadActorClientComponent>>().Object);
 
-            _factory = new NetworkAgentFactory(
+            // Setup mock observables to prevent null reference exceptions during SetupEventHandlers
+            SetupMockObservables();
+
+            _factory = new NetworkClientComponentFactory(
                 _mockTargetingAgent.Object,
                 _mockAttackAgent.Object,
                 _mockQuestAgent.Object,
                 _mockLootingAgent.Object,
                 _mockGameObjectAgent.Object,
                 _mockLogger.Object);
+        }
+
+        private void SetupMockObservables()
+        {
+            // Create mock observables
+            var mockTargetingObservable = new Mock<IObservable<TargetingData>>();
+            var mockAttackStateObservable = new Mock<IObservable<AttackStateData>>();
+            var mockAttackErrorObservable = new Mock<IObservable<AttackErrorData>>();
+            var mockQuestOfferedObservable = new Mock<IObservable<QuestData>>();
+            var mockQuestAcceptedObservable = new Mock<IObservable<QuestData>>();
+            var mockQuestCompletedObservable = new Mock<IObservable<QuestData>>();
+            var mockQuestErrorObservable = new Mock<IObservable<QuestErrorData>>();
+            var mockLootWindowOpenedObservable = new Mock<IObservable<LootWindowData>>();
+            var mockLootWindowClosedObservable = new Mock<IObservable<LootWindowData>>();
+            var mockItemLootObservable = new Mock<IObservable<LootData>>();
+            var mockMoneyLootObservable = new Mock<IObservable<MoneyLootData>>();
+            var mockLootErrorObservable = new Mock<IObservable<LootErrorData>>();
+
+            // Setup observable properties for targeting agent
+            _mockTargetingAgent.Setup(x => x.TargetChanges).Returns(mockTargetingObservable.Object);
+
+            // Setup observable properties for attack agent
+            _mockAttackAgent.Setup(x => x.AttackStateChanges).Returns(mockAttackStateObservable.Object);
+            _mockAttackAgent.Setup(x => x.AttackErrors).Returns(mockAttackErrorObservable.Object);
+
+            // Setup observable properties for quest agent
+            _mockQuestAgent.Setup(x => x.QuestOffered).Returns(mockQuestOfferedObservable.Object);
+            _mockQuestAgent.Setup(x => x.QuestAccepted).Returns(mockQuestAcceptedObservable.Object);
+            _mockQuestAgent.Setup(x => x.QuestCompleted).Returns(mockQuestCompletedObservable.Object);
+            _mockQuestAgent.Setup(x => x.QuestErrors).Returns(mockQuestErrorObservable.Object);
+
+            // Setup observable properties for looting agent
+            _mockLootingAgent.Setup(x => x.LootWindowOpened).Returns(mockLootWindowOpenedObservable.Object);
+            _mockLootingAgent.Setup(x => x.LootWindowClosed).Returns(mockLootWindowClosedObservable.Object);
+            _mockLootingAgent.Setup(x => x.ItemLoot).Returns(mockItemLootObservable.Object);
+            _mockLootingAgent.Setup(x => x.MoneyLoot).Returns(mockMoneyLootObservable.Object);
+            _mockLootingAgent.Setup(x => x.LootErrors).Returns(mockLootErrorObservable.Object);
+
+            // Setup mock Subscribe methods to return disposables
+            var mockDisposable = new Mock<IDisposable>();
+            mockTargetingObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<TargetingData>>())).Returns(mockDisposable.Object);
+            mockAttackStateObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<AttackStateData>>())).Returns(mockDisposable.Object);
+            mockAttackErrorObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<AttackErrorData>>())).Returns(mockDisposable.Object);
+            mockQuestOfferedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<QuestData>>())).Returns(mockDisposable.Object);
+            mockQuestAcceptedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<QuestData>>())).Returns(mockDisposable.Object);
+            mockQuestCompletedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<QuestData>>())).Returns(mockDisposable.Object);
+            mockQuestErrorObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<QuestErrorData>>())).Returns(mockDisposable.Object);
+            mockLootWindowOpenedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<LootWindowData>>())).Returns(mockDisposable.Object);
+            mockLootWindowClosedObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<LootWindowData>>())).Returns(mockDisposable.Object);
+            mockItemLootObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<LootData>>())).Returns(mockDisposable.Object);
+            mockMoneyLootObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<MoneyLootData>>())).Returns(mockDisposable.Object);
+            mockLootErrorObservable.Setup(x => x.Subscribe(It.IsAny<IObserver<LootErrorData>>())).Returns(mockDisposable.Object);
         }
 
         #region Constructor Tests
@@ -73,7 +129,7 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullTargetingAgent_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new NetworkAgentFactory(
+            Assert.Throws<ArgumentNullException>(() => new NetworkClientComponentFactory(
                 null!,
                 _mockAttackAgent.Object,
                 _mockQuestAgent.Object,
@@ -86,7 +142,7 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullLogger_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new NetworkAgentFactory(
+            Assert.Throws<ArgumentNullException>(() => new NetworkClientComponentFactory(
                 _mockTargetingAgent.Object,
                 _mockAttackAgent.Object,
                 _mockQuestAgent.Object,
@@ -99,7 +155,7 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithWorldClientAndLoggerFactory_InitializesCorrectly()
         {
             // Act
-            var factory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var factory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(factory);
@@ -110,7 +166,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => 
-                new NetworkAgentFactory(null!, _mockLoggerFactory.Object));
+                new NetworkClientComponentFactory(null!, _mockLoggerFactory.Object));
         }
 
         [Fact]
@@ -118,7 +174,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() => 
-                new NetworkAgentFactory(_mockWorldClient.Object, null!));
+                new NetworkClientComponentFactory(_mockWorldClient.Object, null!));
         }
 
         #endregion
@@ -183,112 +239,112 @@ namespace WoWSharpClient.Tests.Agent
         public void LazyConstructor_TargetingAgent_CreatesAgentOnFirstAccess()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent = lazyFactory.TargetingAgent;
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<TargetingNetworkAgent>(agent);
+            Assert.IsType<TargetingNetworkClientComponent>(agent);
         }
 
         [Fact]
         public void LazyConstructor_AttackAgent_CreatesAgentOnFirstAccess()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent = lazyFactory.AttackAgent;
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<AttackNetworkAgent>(agent);
+            Assert.IsType<AttackNetworkClientComponent>(agent);
         }
 
         [Fact]
         public void LazyConstructor_QuestAgent_CreatesAgentOnFirstAccess()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent = lazyFactory.QuestAgent;
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<QuestNetworkAgent>(agent);
+            Assert.IsType<QuestNetworkClientComponent>(agent);
         }
 
         [Fact]
         public void LazyConstructor_LootingAgent_CreatesAgentOnFirstAccess()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent = lazyFactory.LootingAgent;
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<LootingNetworkAgent>(agent);
+            Assert.IsType<LootingNetworkClientComponent>(agent);
         }
 
         [Fact]
         public void LazyConstructor_GameObjectAgent_CreatesAgentOnFirstAccess()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent = lazyFactory.GameObjectAgent;
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<GameObjectNetworkAgent>(agent);
+            Assert.IsType<GameObjectNetworkClientComponent>(agent);
         }
 
         [Fact]
         public void LazyConstructor_VendorAgent_CreatesAgentOnFirstAccess()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent = lazyFactory.VendorAgent;
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<VendorNetworkAgent>(agent);
+            Assert.IsType<VendorNetworkClientComponent>(agent);
         }
 
         [Fact]
         public void LazyConstructor_FlightMasterAgent_CreatesAgentOnFirstAccess()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent = lazyFactory.FlightMasterAgent;
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<FlightMasterNetworkAgent>(agent);
+            Assert.IsType<FlightMasterNetworkClientComponent>(agent);
         }
 
         [Fact]
         public void LazyConstructor_DeadActorAgent_CreatesAgentOnFirstAccess()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent = lazyFactory.DeadActorAgent;
 
             // Assert
             Assert.NotNull(agent);
-            Assert.IsType<DeadActorAgent>(agent);
+            Assert.IsType<DeadActorClientComponent>(agent);
         }
 
         #endregion
@@ -296,7 +352,7 @@ namespace WoWSharpClient.Tests.Agent
         #region Interface Compliance Tests
 
         [Fact]
-        public void NetworkAgentFactory_ImplementsIAgentFactory()
+        public void NetworkClientComponentFactory_ImplementsIAgentFactory()
         {
             // Assert
             Assert.IsAssignableFrom<IAgentFactory>(_factory);
@@ -320,7 +376,7 @@ namespace WoWSharpClient.Tests.Agent
         public void LazyFactory_AllAgents_AreAccessible()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act & Assert
             Assert.NotNull(lazyFactory.TargetingAgent);
@@ -337,7 +393,7 @@ namespace WoWSharpClient.Tests.Agent
         public void LazyFactory_MultipleAccess_ReturnsSameInstance()
         {
             // Arrange
-            var lazyFactory = new NetworkAgentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var lazyFactory = new NetworkClientComponentFactory(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Act
             var agent1 = lazyFactory.TargetingAgent;
