@@ -3,26 +3,33 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using System.Reactive.Linq;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Ignore list management over the WoW protocol.
     /// </summary>
-    public class IgnoreNetworkClientComponent : IIgnoreNetworkAgent
+    public class IgnoreNetworkClientComponent : NetworkClientComponent, IIgnoreNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<IgnoreNetworkClientComponent> _logger;
+
         private readonly List<string> _ignored = [];
         private readonly object _lock = new();
+        private bool _disposed;
 
         public IgnoreNetworkClientComponent(IWorldClient worldClient, ILogger<IgnoreNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-            // Subscribe to world client opcode handlers
-            _worldClient.RegisterOpcodeHandler(Opcode.SMSG_IGNORE_LIST, payload => { HandleServerResponse(Opcode.SMSG_IGNORE_LIST, payload); return Task.CompletedTask; });
+            // Subscribe to world client opcode stream (guard against null observable in tests/mocks)
+            var stream = _worldClient.RegisterOpcodeHandler(Opcode.SMSG_IGNORE_LIST);
+            if (stream is not null)
+            {
+                _ = stream.Subscribe(payload => HandleServerResponse(Opcode.SMSG_IGNORE_LIST, payload.ToArray()));
+            }
         }
 
         public IReadOnlyList<string> IgnoredPlayers
@@ -39,6 +46,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Requesting ignore list (via friend list refresh)");
                 // Classic protocol provides only CMSG_FRIEND_LIST; server answers both friend and ignore lists
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_FRIEND_LIST, [], cancellationToken);
@@ -48,6 +56,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to request ignore list");
                 IgnoreOperationFailed?.Invoke("RequestIgnoreList", ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -153,5 +165,26 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to parse ignore list payload of {Len} bytes", data.Length);
             }
         }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the ignore network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing IgnoreNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            IgnoreListUpdated = null;
+            IgnoreOperationFailed = null;
+
+            _disposed = true;
+            _logger.LogDebug("IgnoreNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

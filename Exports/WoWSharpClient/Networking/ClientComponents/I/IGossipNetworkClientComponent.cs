@@ -6,7 +6,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling gossip operations in World of Warcraft.
     /// Manages NPC dialogue, multi-step conversations, and service navigation.
     /// </summary>
-    public interface IGossipNetworkAgent
+    public interface IGossipNetworkClientComponent : INetworkClientComponent
     {
         #region Properties
 
@@ -14,11 +14,6 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Gets a value indicating whether a gossip window is currently open.
         /// </summary>
         bool IsGossipWindowOpen { get; }
-
-        /// <summary>
-        /// Gets the timestamp of the last gossip operation.
-        /// </summary>
-        DateTime? LastOperationTime { get; }
 
         /// <summary>
         /// Gets the currently active NPC GUID if in conversation.

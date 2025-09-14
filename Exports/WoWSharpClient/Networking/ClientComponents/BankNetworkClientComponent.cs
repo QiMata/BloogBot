@@ -9,21 +9,70 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of the bank network agent for handling personal bank operations.
     /// Manages depositing and withdrawing items or gold from the player's personal bank.
     /// </summary>
-    public class BankNetworkClientComponent : IBankNetworkAgent
+    public class BankNetworkClientComponent : IBankNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<BankNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
 
         // Bank state tracking
         private bool _isBankWindowOpen;
         private ulong? _currentBankerGuid;
         private uint _availableBankSlots;
         private uint _purchasedBankBagSlots;
+        private bool _isOperationInProgress;
+        private DateTime? _lastOperationTime;
+        private bool _disposed;
 
         // Constants for bank operations
         private const byte BANK_SLOT_COUNT = 24; // Standard bank slots
         private const byte MAX_BANK_BAG_SLOTS = 7; // Maximum purchasable bag slots
         private static readonly uint[] BankSlotCosts = [1000, 7500, 15000, 37500, 75000, 150000, 300000]; // Costs in copper
+
+        #region Constructor
+
+        /// <summary>
+        /// Initializes a new instance of the BankNetworkClientComponent class.
+        /// </summary>
+        /// <param name="worldClient">The world client for sending packets.</param>
+        /// <param name="logger">Logger instance for the bank agent.</param>
+        public BankNetworkClientComponent(IWorldClient worldClient, ILogger<BankNetworkClientComponent> logger)
+        {
+            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            _logger.LogDebug("BankNetworkClientComponent initialized");
+        }
+
+        #endregion
+
+        #region INetworkClientComponent Implementation
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
+        }
+
+        #endregion
 
         #region Properties
 
@@ -72,19 +121,18 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Constructor
+        #region Private Helper Methods
 
-        /// <summary>
-        /// Initializes a new instance of the BankNetworkClientComponent class.
-        /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance for the bank agent.</param>
-        public BankNetworkClientComponent(IWorldClient worldClient, ILogger<BankNetworkClientComponent> logger)
+        private void SetOperationInProgress(bool inProgress)
         {
-            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-            _logger.LogDebug("BankNetworkClientComponent initialized");
+            lock (_stateLock)
+            {
+                _isOperationInProgress = inProgress;
+                if (inProgress)
+                {
+                    _lastOperationTime = DateTime.UtcNow;
+                }
+            }
         }
 
         #endregion
@@ -98,6 +146,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // Send CMSG_BANKER_ACTIVATE to open the bank
                 var payload = new byte[8];
                 BitConverter.GetBytes(bankerGuid).CopyTo(payload, 0);
@@ -118,6 +168,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 BankOperationFailed?.Invoke(BankOperationType.OpenBank, ex.Message);
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -127,6 +181,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 if (_isBankWindowOpen)
                 {
                     _isBankWindowOpen = false;
@@ -141,6 +197,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to close bank window");
                 BankOperationFailed?.Invoke(BankOperationType.CloseBank, ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
 
             await Task.CompletedTask;
@@ -191,6 +251,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // Send item swap packet from inventory to bank using CMSG_SWAP_INV_ITEM
                 var payload = new byte[2];
                 payload[0] = (byte)(sourceBagId * 16 + sourceSlotId); // source slot
@@ -204,6 +266,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to deposit item from {BagId}:{SlotId} to bank slot {BankSlot}", sourceBagId, sourceSlotId, bankSlot);
                 BankOperationFailed?.Invoke(BankOperationType.DepositItem, ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -222,6 +288,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // Send item move packet from bank to first available inventory slot using CMSG_AUTOBANK_ITEM
                 var payload = new byte[1];
                 payload[0] = (byte)(BANK_SLOT_COUNT + bankSlot);
@@ -234,6 +302,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to withdraw item from bank slot {BankSlot}", bankSlot);
                 BankOperationFailed?.Invoke(BankOperationType.WithdrawItem, ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -253,6 +325,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // Send item swap packet from bank to specific inventory slot
                 var payload = new byte[2];
                 payload[0] = (byte)(BANK_SLOT_COUNT + bankSlot); // source bank slot
@@ -266,6 +340,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to withdraw item from bank slot {BankSlot} to {BagId}:{SlotId}", bankSlot, targetBagId, targetSlotId);
                 BankOperationFailed?.Invoke(BankOperationType.WithdrawItem, ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -284,6 +362,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // Send item swap packet between inventory and bank
                 var payload = new byte[2];
                 payload[0] = (byte)(inventoryBagId * 16 + inventorySlotId); // inventory slot
@@ -297,6 +377,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to swap item between {BagId}:{SlotId} and bank slot {BankSlot}", inventoryBagId, inventorySlotId, bankSlot);
                 BankOperationFailed?.Invoke(BankOperationType.SwapItem, ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -319,6 +403,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // For now, we'll log this as a placeholder since the specific packet structure may need more investigation
                 _logger.LogWarning("Gold deposit operation not fully implemented - packet structure needs verification");
                 BankOperationFailed?.Invoke(BankOperationType.DepositGold, "Gold operations not yet fully implemented");
@@ -330,6 +416,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to deposit {Amount} copper to bank", amount);
                 BankOperationFailed?.Invoke(BankOperationType.DepositGold, ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -348,6 +438,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // For now, we'll log this as a placeholder since the specific packet structure may need more investigation
                 _logger.LogWarning("Gold withdrawal operation not fully implemented - packet structure needs verification");
                 BankOperationFailed?.Invoke(BankOperationType.WithdrawGold, "Gold operations not yet fully implemented");
@@ -359,6 +451,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to withdraw {Amount} copper from bank", amount);
                 BankOperationFailed?.Invoke(BankOperationType.WithdrawGold, ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -389,6 +485,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // Send CMSG_BUY_BANK_SLOT
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_BANK_SLOT, [], cancellationToken);
 
@@ -405,6 +503,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 BankOperationFailed?.Invoke(BankOperationType.PurchaseSlot, ex.Message);
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -414,6 +516,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 // This would typically be handled by server responses when opening the bank
                 // For now, we'll simulate the response with default values
                 _availableBankSlots = BANK_SLOT_COUNT;
@@ -427,6 +531,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to request bank information");
                 BankOperationFailed?.Invoke(BankOperationType.RequestInfo, ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
 
             await Task.CompletedTask;
@@ -484,6 +592,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 if (!_isBankWindowOpen)
                 {
                     await OpenBankAsync(bankerGuid, cancellationToken);
@@ -499,6 +609,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Quick deposit failed for bag {BagId}:{SlotId}", bagId, slotId);
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -508,6 +622,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 if (!_isBankWindowOpen)
                 {
                     await OpenBankAsync(bankerGuid, cancellationToken);
@@ -523,6 +639,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Quick withdraw failed for bank slot {BankSlot}", bankSlot);
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -532,6 +652,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 if (!_isBankWindowOpen)
                 {
                     await OpenBankAsync(bankerGuid, cancellationToken);
@@ -547,6 +669,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Quick gold deposit failed for {Amount} copper", amount);
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -556,6 +682,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
+
                 if (!_isBankWindowOpen)
                 {
                     await OpenBankAsync(bankerGuid, cancellationToken);
@@ -570,6 +698,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Quick gold withdraw failed for {Amount} copper", amount);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -699,6 +831,35 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             BankOperationFailed?.Invoke(operation, errorMessage);
             _logger.LogWarning("Bank operation error handled: {Operation} - {Error}", operation, errorMessage);
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the bank network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing BankNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            BankWindowOpened = null;
+            BankWindowClosed = null;
+            ItemDeposited = null;
+            ItemWithdrawn = null;
+            ItemsSwapped = null;
+            GoldDeposited = null;
+            GoldWithdrawn = null;
+            BankSlotPurchased = null;
+            BankInfoUpdated = null;
+            BankOperationFailed = null;
+
+            _disposed = true;
+            _logger.LogDebug("BankNetworkClientComponent disposed");
         }
 
         #endregion

@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling mail system operations in World of Warcraft.
     /// Manages sending mail to other players, retrieving mail from mailboxes, and handling mail items.
     /// </summary>
-    public interface IMailNetworkAgent
+    public interface IMailNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether a mailbox window is currently open.

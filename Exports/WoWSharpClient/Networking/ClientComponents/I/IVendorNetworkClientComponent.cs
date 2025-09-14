@@ -7,7 +7,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Manages buying, selling, and repairing items with NPC vendors with enhanced functionality
     /// for bulk operations, junk selling, and special item handling.
     /// </summary>
-    public interface IVendorNetworkAgent
+    public interface IVendorNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether a vendor window is currently open.

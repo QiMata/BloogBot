@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling talent allocation and respec operations in World of Warcraft.
     /// Manages allocating talent points when leveling up and when respecing.
     /// </summary>
-    public interface ITalentNetworkAgent
+    public interface ITalentNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether the talent window is currently open.
@@ -272,12 +272,12 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     public class TalentPrerequisite
     {
         /// <summary>
-        /// Gets or sets the prerequisite talent ID.
+        /// Gets or sets the talent ID that is required.
         /// </summary>
         public uint TalentId { get; set; }
 
         /// <summary>
-        /// Gets or sets the required rank of the prerequisite talent.
+        /// Gets or sets the minimum rank required for the prerequisite talent.
         /// </summary>
         public uint RequiredRank { get; set; }
     }

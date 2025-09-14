@@ -6,7 +6,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling party/raid group management operations in World of Warcraft.
     /// Manages party invites, member management, loot settings, raid conversion, and leadership operations.
     /// </summary>
-    public interface IPartyNetworkAgent
+    public interface IPartyNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether the player is currently in a party or raid.
@@ -191,7 +191,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// <param name="lootMasterGuid">The GUID of the loot master (for master looter method).</param>
         /// <param name="lootThreshold">The loot quality threshold.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
-        Task SetLootMethodAsync(LootMethod lootMethod, ulong? lootMasterGuid = null, LootQuality lootThreshold = LootQuality.Uncommon, CancellationToken cancellationToken = default);
+        Task SetLootMethodAsync(LootMethod lootMethod, ulong? lootMasterGuid = null, ItemQuality lootThreshold = ItemQuality.Uncommon, CancellationToken cancellationToken = default);
 
         #endregion
 
@@ -342,72 +342,5 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Gets or sets the member's zone name.
         /// </summary>
         public string Zone { get; set; } = string.Empty;
-    }
-
-    /// <summary>
-    /// Enumeration of loot methods for groups.
-    /// </summary>
-    public enum LootMethod : byte
-    {
-        /// <summary>
-        /// Free for all looting.
-        /// </summary>
-        FreeForAll = 0,
-
-        /// <summary>
-        /// Round robin looting.
-        /// </summary>
-        RoundRobin = 1,
-
-        /// <summary>
-        /// Master looter system.
-        /// </summary>
-        MasterLooter = 2,
-
-        /// <summary>
-        /// Group loot system.
-        /// </summary>
-        GroupLoot = 3,
-
-        /// <summary>
-        /// Need before greed system.
-        /// </summary>
-        NeedBeforeGreed = 4
-    }
-
-    /// <summary>
-    /// Enumeration of loot quality thresholds.
-    /// </summary>
-    public enum LootQuality : byte
-    {
-        /// <summary>
-        /// Poor quality (gray).
-        /// </summary>
-        Poor = 0,
-
-        /// <summary>
-        /// Common quality (white).
-        /// </summary>
-        Common = 1,
-
-        /// <summary>
-        /// Uncommon quality (green).
-        /// </summary>
-        Uncommon = 2,
-
-        /// <summary>
-        /// Rare quality (blue).
-        /// </summary>
-        Rare = 3,
-
-        /// <summary>
-        /// Epic quality (purple).
-        /// </summary>
-        Epic = 4,
-
-        /// <summary>
-        /// Legendary quality (orange).
-        /// </summary>
-        Legendary = 5
     }
 }

@@ -12,11 +12,17 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of inventory network agent that handles inventory operations in World of Warcraft.
     /// Manages bag operations, item movement, and inventory state tracking using the Mangos protocol.
     /// </summary>
-    public class InventoryNetworkClientComponent : IInventoryNetworkClientComponent, IDisposable
+    public class InventoryNetworkClientComponent : NetworkClientComponent, IInventoryNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<InventoryNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
+
+        private readonly Dictionary<(byte Bag, byte Slot), InventoryItem?> _items = [];
+        private readonly Dictionary<byte, BagInfo> _bags = [];
+        private uint _currentMoney;
         private bool _isInventoryOpen;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the InventoryNetworkClientComponent class.
@@ -91,6 +97,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Moving item from bag {SourceBag} slot {SourceSlot} to bag {DestBag} slot {DestSlot}",
                     sourceBag, sourceSlot, destinationBag, destinationSlot);
 
@@ -110,6 +117,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 InventoryError?.Invoke($"Failed to move item: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -117,6 +128,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Swapping items between {FirstBag}:{FirstSlot} and {SecondBag}:{SecondSlot}",
                     firstBag, firstSlot, secondBag, secondSlot);
 
@@ -136,6 +148,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 InventoryError?.Invoke($"Failed to swap items: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -143,6 +159,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Splitting {Quantity} items from {SourceBag}:{SourceSlot} to {DestBag}:{DestSlot}",
                     quantity, sourceBag, sourceSlot, destinationBag, destinationSlot);
 
@@ -163,6 +180,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 InventoryError?.Invoke($"Failed to split item stack: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -170,6 +191,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Destroying {Quantity} items from bag {BagId} slot {SlotId}", quantity, bagId, slotId);
 
                 var payload = new byte[6];
@@ -187,6 +209,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 InventoryError?.Invoke($"Failed to destroy item: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -194,6 +220,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Sorting bag {BagId}", bagId);
 
                 var payload = new byte[1] { bagId };
@@ -207,6 +234,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 InventoryError?.Invoke($"Failed to sort bag: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -214,6 +245,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Opening bag {BagId}", bagId);
                 
                 _isInventoryOpen = true;
@@ -229,6 +261,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 InventoryError?.Invoke($"Failed to open bag: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -236,6 +272,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Closing bag {BagId}", bagId);
                 
                 _isInventoryOpen = false;
@@ -249,6 +286,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to close bag {BagId}", bagId);
                 InventoryError?.Invoke($"Failed to close bag: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -442,9 +483,21 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the inventory network client component and cleans up resources.
+        /// </summary>
         public void Dispose()
         {
-            // No subjects to dispose
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing InventoryNetworkClientComponent");
+
+            _disposed = true;
+            _logger.LogDebug("InventoryNetworkClientComponent disposed");
         }
+
+        #endregion
     }
 }

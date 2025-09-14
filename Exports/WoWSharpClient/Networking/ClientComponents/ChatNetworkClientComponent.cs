@@ -15,12 +15,13 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Provides specialized channels, commands, and reactive observables for chat events.
     /// Uses reactive observables instead of traditional events for better composability and filtering.
     /// </summary>
-    public class ChatNetworkClientComponent : IChatNetworkClientComponent, IDisposable
+    public class ChatNetworkClientComponent : NetworkClientComponent, IChatNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<ChatNetworkClientComponent> _logger;
+        private readonly object _stateLock = new();
         
-        // Operation state tracking
+        // Operation state tracking (chat-specific extras)
         private bool _isChatOperationInProgress;
         private DateTime? _lastChatOperationTime;
         
@@ -63,7 +64,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         };
         
         // Thread safety
-        private readonly object _stateLock = new();
         private bool _disposed = false;
 
         #region Constructor
@@ -195,7 +195,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
-                SetOperationInProgress(true);
+                SetChatOperationInProgress(true);
                 
                 _logger.LogDebug("Sending {ChatType} message: '{Message}' to '{Destination}'", chatType, message, destination ?? "default");
 
@@ -224,7 +224,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                SetOperationInProgress(false);
+                SetChatOperationInProgress(false);
             }
         }
 
@@ -294,7 +294,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
-                SetOperationInProgress(true);
+                SetChatOperationInProgress(true);
                 
                 _logger.LogDebug("Joining channel: {ChannelName}", channelName);
                 
@@ -312,7 +312,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                SetOperationInProgress(false);
+                SetChatOperationInProgress(false);
             }
         }
 
@@ -324,7 +324,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
-                SetOperationInProgress(true);
+                SetChatOperationInProgress(true);
                 
                 _logger.LogDebug("Leaving channel: {ChannelName}", channelName);
                 
@@ -339,7 +339,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                SetOperationInProgress(false);
+                SetChatOperationInProgress(false);
             }
         }
 
@@ -351,7 +351,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
-                SetOperationInProgress(true);
+                SetChatOperationInProgress(true);
                 
                 _logger.LogDebug("Listing channel: {ChannelName}", channelName);
                 
@@ -366,7 +366,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                SetOperationInProgress(false);
+                SetChatOperationInProgress(false);
             }
         }
 
@@ -379,7 +379,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                SetOperationInProgress(true);
+                SetChatOperationInProgress(true);
                 
                 if (string.IsNullOrWhiteSpace(afkMessage))
                 {
@@ -421,7 +421,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                SetOperationInProgress(false);
+                SetChatOperationInProgress(false);
             }
         }
 
@@ -430,7 +430,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                SetOperationInProgress(true);
+                SetChatOperationInProgress(true);
                 
                 if (string.IsNullOrWhiteSpace(dndMessage))
                 {
@@ -472,7 +472,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                SetOperationInProgress(false);
+                SetChatOperationInProgress(false);
             }
         }
 
@@ -488,7 +488,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
-                SetOperationInProgress(true);
+                SetChatOperationInProgress(true);
                 
                 // Build command string
                 var commandBuilder = new StringBuilder();
@@ -524,7 +524,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                SetOperationInProgress(false);
+                SetChatOperationInProgress(false);
             }
         }
 
@@ -671,8 +671,12 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #region Private Helper Methods
 
-        private void SetOperationInProgress(bool inProgress)
+        private void SetChatOperationInProgress(bool inProgress)
         {
+            // Update base operation state
+            SetOperationInProgress(inProgress);
+
+            // Update chat-specific state
             lock (_stateLock)
             {
                 _isChatOperationInProgress = inProgress;

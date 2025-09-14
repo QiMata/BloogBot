@@ -6,7 +6,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling equipment operations in World of Warcraft.
     /// Manages equipping, unequipping, and equipment state tracking.
     /// </summary>
-    public interface IEquipmentNetworkAgent
+    public interface IEquipmentNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Event fired when an item is successfully equipped.

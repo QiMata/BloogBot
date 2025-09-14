@@ -2,18 +2,26 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Implementation of professions network agent that handles profession operations in World of Warcraft.
-    /// Manages profession skill training, crafting, and gathering interactions using the Mangos protocol.
+    /// Manages crafting, gathering, profession training, and profession state tracking using the Mangos protocol.
     /// </summary>
-    public class ProfessionsNetworkClientComponent : IProfessionsNetworkClientComponent
+    public class ProfessionsNetworkClientComponent : NetworkClientComponent, IProfessionsNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<ProfessionsNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
+
+        private readonly Dictionary<ProfessionType, ProfessionInfo> _professions = [];
+        private readonly List<RecipeInfo> _knownRecipes = [];
         private readonly List<ProfessionService> _availableServices = [];
+        private bool _isCrafting;
+        private uint? _currentCraftingSpellId;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the ProfessionsNetworkClientComponent class.
@@ -25,6 +33,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
+
+        #region INetworkClientComponent Implementation
+
+        // IsOperationInProgress and LastOperationTime provided by base class
+
+        #endregion
 
         /// <inheritdoc />
         public bool IsTrainerWindowOpen { get; private set; }
@@ -530,5 +544,32 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _ => 0
             };
         }
+
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            // Delegate to base class implementation which manages state safely
+            base.SetOperationInProgress(inProgress);
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the professions network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing ProfessionsNetworkClientComponent");
+
+            _disposed = true;
+            _logger.LogDebug("ProfessionsNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

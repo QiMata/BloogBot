@@ -6,7 +6,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for managing the in-game friends list via network packets.
     /// Supports requesting the list, adding and removing friends, and handling friend status updates.
     /// </summary>
-    public interface IFriendNetworkAgent
+    public interface IFriendNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a readonly snapshot of the current friends list.

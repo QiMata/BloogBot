@@ -9,10 +9,11 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of talent network agent that handles talent allocation and respec operations in World of Warcraft.
     /// Manages allocating talent points when leveling up and when respecing using the Mangos protocol.
     /// </summary>
-    public class TalentNetworkClientComponent : ITalentNetworkClientComponent
+    public class TalentNetworkClientComponent : ITalentNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<TalentNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
 
         private bool _isTalentWindowOpen;
         private uint _availableTalentPoints;
@@ -21,6 +22,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly List<TalentTreeInfo> _talentTrees;
         private readonly Dictionary<uint, TalentInfo> _talentCache;
         private bool _awaitingRespecConfirmation;
+        private bool _isOperationInProgress;
+        private DateTime? _lastOperationTime;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the TalentNetworkClientComponent class.
@@ -34,6 +38,34 @@ namespace WoWSharpClient.Networking.ClientComponents
             _talentTrees = [];
             _talentCache = new Dictionary<uint, TalentInfo>();
         }
+
+        #region INetworkClientComponent Implementation
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
+        }
+
+        #endregion
 
         /// <inheritdoc />
         public bool IsTalentWindowOpen => _isTalentWindowOpen;
@@ -64,6 +96,22 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <inheritdoc />
         public event Action<string>? TalentError;
+
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            lock (_stateLock)
+            {
+                _isOperationInProgress = inProgress;
+                if (inProgress)
+                {
+                    _lastOperationTime = DateTime.UtcNow;
+                }
+            }
+        }
+
+        #endregion
 
         /// <inheritdoc />
         public async Task OpenTalentWindowAsync(CancellationToken cancellationToken = default)
@@ -563,5 +611,30 @@ namespace WoWSharpClient.Networking.ClientComponents
             _availableTalentPoints = availablePoints;
             _logger.LogDebug("Available talent points updated: {AvailablePoints}", availablePoints);
         }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the talent network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing TalentNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            TalentWindowOpened = null;
+            TalentWindowClosed = null;
+            TalentLearned = null;
+            TalentsUnlearned = null;
+            TalentInfoReceived = null;
+            TalentError = null;
+
+            _disposed = true;
+            _logger.LogDebug("TalentNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

@@ -7,7 +7,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Focuses solely on target selection without combat functionality.
     /// Uses reactive observables for better composability and filtering.
     /// </summary>
-    public interface ITargetingNetworkAgent
+    public interface ITargetingNetworkClientComponent : INetworkClientComponent
     {
         #region Properties
 
@@ -15,16 +15,6 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Gets the currently targeted unit's GUID.
         /// </summary>
         ulong? CurrentTarget { get; }
-
-        /// <summary>
-        /// Gets a value indicating whether a targeting operation is currently in progress.
-        /// </summary>
-        bool IsOperationInProgress { get; }
-
-        /// <summary>
-        /// Gets the timestamp of the last targeting operation.
-        /// </summary>
-        DateTime? LastOperationTime { get; }
 
         #endregion
 

@@ -9,10 +9,12 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of game object network agent that handles game object interactions in World of Warcraft.
     /// Manages interactions with chests, gathering nodes, doors, and other game objects using the Mangos protocol.
     /// </summary>
-    public class GameObjectNetworkClientComponent : IGameObjectNetworkClientComponent
+    public class GameObjectNetworkClientComponent : NetworkClientComponent, IGameObjectNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<GameObjectNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the GameObjectNetworkClientComponent class.
@@ -45,6 +47,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Interacting with game object: {GameObjectGuid:X}", gameObjectGuid);
 
                 var payload = new byte[8];
@@ -58,6 +61,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Failed to interact with game object: {GameObjectGuid:X}", gameObjectGuid);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -173,14 +180,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public bool CanInteractWith(ulong gameObjectGuid, GameObjectInteractionType interactionType)
         {
-            // This would typically check game state, distance, requirements, etc.
-            // For now, we'll return true as a basic implementation
-            // In a full implementation, this would check:
-            // - Distance to object
-            // - Object state (e.g., already looted, requires key, etc.)
-            // - Player state (e.g., has required tools for gathering)
-            // - Line of sight
-            
             _logger.LogDebug("Checking interaction capability for {GameObjectGuid:X} with type {InteractionType}", 
                 gameObjectGuid, interactionType);
 
@@ -260,8 +259,31 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogDebug("Game object {GameObjectGuid:X} state updated to: {NewState}", 
                 gameObjectGuid, newState);
 
-            // Here you could maintain a cache of object states for optimization
-            // For example, tracking which chests are already looted, which nodes are depleted, etc.
+            // Placeholder for state cache.
         }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the game object network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing GameObjectNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            GameObjectInteracted = null;
+            GameObjectInteractionFailed = null;
+            ChestOpened = null;
+            NodeHarvested = null;
+            GatheringFailed = null;
+
+            _disposed = true;
+            _logger.LogDebug("GameObjectNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

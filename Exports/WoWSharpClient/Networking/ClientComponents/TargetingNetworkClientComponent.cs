@@ -14,13 +14,11 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// This agent focuses solely on targeting without combat functionality.
     /// Uses reactive observables for better composability and filtering.
     /// </summary>
-    public class TargetingNetworkClientComponent : ITargetingNetworkClientComponent, IDisposable
+    public class TargetingNetworkClientComponent : NetworkClientComponent, ITargetingNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<TargetingNetworkClientComponent> _logger;
         private ulong? _currentTarget;
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
 
         // Reactive observables
         private readonly Subject<TargetingData> _targetChanges = new();
@@ -48,12 +46,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public ulong? CurrentTarget => _currentTarget;
 
-        /// <inheritdoc />
-        public bool IsOperationInProgress => _isOperationInProgress;
-
-        /// <inheritdoc />
-        public DateTime? LastOperationTime => _lastOperationTime;
-
         #endregion
 
         #region Reactive Observables
@@ -76,7 +68,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(TargetingNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Setting target to GUID: {TargetGuid:X}", targetGuid);
@@ -91,7 +83,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // Update internal state
                 var previousTarget = _currentTarget;
                 _currentTarget = targetGuid == 0 ? null : targetGuid;
-                _lastOperationTime = DateTime.UtcNow;
 
                 // Fire events if target actually changed
                 if (previousTarget != _currentTarget)
@@ -117,7 +108,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -132,7 +123,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(TargetingNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Assisting player: {PlayerGuid:X}", playerGuid);
@@ -148,7 +139,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // This is handled server-side in Mangos when we target a friendly player
                 
                 _logger.LogInformation("Assist command sent for player: {PlayerGuid:X}", playerGuid);
-                _lastOperationTime = DateTime.UtcNow;
 
                 var assistData = new AssistData(playerGuid, _currentTarget, DateTime.UtcNow);
                 _assistOperations.OnNext(assistData);
@@ -164,7 +154,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 

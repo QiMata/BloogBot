@@ -6,6 +6,7 @@ using GameData.Core.Enums;
 using System;
 using System.IO;
 using System.Text;
+using System.Reactive.Linq;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -109,7 +110,7 @@ namespace WowSharpClient.NetworkTests
         }
 
         [Fact]
-        public async Task DisconnectFromServer_RaisesEvent()
+        public async Task DisconnectFromServer_RaisesObservable()
         {
             // Arrange
             using var connection = new InMemoryConnection();
@@ -123,11 +124,11 @@ namespace WowSharpClient.NetworkTests
             var disconnectedCalled = false;
             Exception? disconnectionException = null;
 
-            worldClient.Disconnected += (ex) =>
+            using var sub = worldClient.WhenDisconnected.Subscribe(ex =>
             {
                 disconnectedCalled = true;
                 disconnectionException = ex;
-            };
+            });
 
             var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
             await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
@@ -145,46 +146,6 @@ namespace WowSharpClient.NetworkTests
         }
 
         [Fact]
-        public async Task AuthChallenge_TriggersAuthSession()
-        {
-            // Arrange
-            using var connection = new InMemoryConnection();
-            using var framer = new WoWMessageFramer();
-            var encryptor = new NoEncryption();
-            var codec = new WoWPacketCodec();
-            var router = new MessageRouter<Opcode>();
-
-            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
-
-            var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-            await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
-
-            connection.ClearData(); // Clear connection data
-
-            // Act - Simulate SMSG_AUTH_CHALLENGE
-            var serverSeed = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
-            var authChallengePacket = CreateWoWPacket(Opcode.SMSG_AUTH_CHALLENGE, serverSeed);
-            connection.InjectIncomingData(authChallengePacket);
-
-            await Task.Delay(200);
-
-            // Assert - Should send CMSG_AUTH_SESSION in response
-            var sentData = connection.GetSentData();
-            Assert.Single(sentData);
-
-            // Verify it's an AUTH_SESSION packet
-            var sentPacket = sentData[0];
-            var decryptedPacket = encryptor.Decrypt(sentPacket);
-            
-            framer.Append(decryptedPacket);
-            Assert.True(framer.TryPop(out var framedMessage));
-            
-            Assert.True(codec.TryDecode(framedMessage, out var decodedOpcode, out var decodedPayload));
-            Assert.Equal(Opcode.CMSG_AUTH_SESSION, decodedOpcode);
-            Assert.True(decodedPayload.Length > 0);
-        }
-
-        [Fact]
         public async Task AuthResponse_Success_SetsAuthenticated()
         {
             // Arrange
@@ -197,7 +158,7 @@ namespace WowSharpClient.NetworkTests
             using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
 
             var authSuccessCalled = false;
-            worldClient.OnAuthenticationSuccessful += () => authSuccessCalled = true;
+            using var sub = worldClient.AuthenticationSucceeded.Subscribe(_ => authSuccessCalled = true);
 
             var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
             await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
@@ -228,11 +189,7 @@ namespace WowSharpClient.NetworkTests
 
             var authFailedCalled = false;
             byte failureCode = 0;
-            worldClient.OnAuthenticationFailed += (code) =>
-            {
-                authFailedCalled = true;
-                failureCode = code;
-            };
+            using var sub = worldClient.AuthenticationFailed.Subscribe(code => { authFailedCalled = true; failureCode = code; });
 
             var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
             await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);

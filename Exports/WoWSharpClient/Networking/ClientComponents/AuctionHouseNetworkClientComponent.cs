@@ -1,3 +1,5 @@
+using System.Reactive.Linq;
+using System.Reactive;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -9,13 +11,20 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of auction house network agent that handles auction house operations in World of Warcraft.
     /// Manages browsing auctions, placing bids, posting auctions, and collecting sold items using the Mangos protocol.
     /// </summary>
-    public class AuctionHouseNetworkClientComponent : IAuctionHouseNetworkAgent
+    public class AuctionHouseNetworkClientComponent : IAuctionHouseNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<AuctionHouseNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
 
         private bool _isAuctionHouseOpen;
         private ulong? _currentAuctioneerGuid;
+        private readonly List<AuctionData> _currentAuctions = [];
+        private readonly List<AuctionData> _ownedAuctions = [];
+        private readonly List<AuctionData> _bidderAuctions = [];
+        private bool _isOperationInProgress;
+        private DateTime? _lastOperationTime;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the AuctionHouseNetworkClientComponent class.
@@ -28,41 +37,118 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
+        #region INetworkClientComponent Implementation
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
+        }
+
+        #endregion
+
         /// <inheritdoc />
         public bool IsAuctionHouseOpen => _isAuctionHouseOpen;
 
-        /// <inheritdoc />
+        #region Legacy events (backwards compatibility)
         public event Action<ulong>? AuctionHouseOpened;
-
-        /// <inheritdoc />
         public event Action? AuctionHouseClosed;
-
-        /// <inheritdoc />
         public event Action<IReadOnlyList<AuctionData>>? AuctionSearchResults;
-
-        /// <inheritdoc />
         public event Action<IReadOnlyList<AuctionData>>? OwnedAuctionResults;
-
-        /// <inheritdoc />
         public event Action<IReadOnlyList<AuctionData>>? BidderAuctionResults;
-
-        /// <inheritdoc />
         public event Action<AuctionOperationType, uint>? AuctionOperationCompleted;
-
-        /// <inheritdoc />
         public event Action<AuctionOperationType, string>? AuctionOperationFailed;
-
-        /// <inheritdoc />
         public event Action<uint, uint>? BidPlaced;
-
-        /// <inheritdoc />
         public event Action<uint, uint, uint, uint>? AuctionPosted;
-
-        /// <inheritdoc />
         public event Action<uint>? AuctionCancelled;
-
-        /// <inheritdoc />
         public event Action<AuctionNotificationType, uint, uint>? AuctionNotification;
+        #endregion
+
+        #region Reactive Observables (derived from events)
+        public IObservable<ulong> AuctionHouseOpenedStream =>
+            Observable.FromEvent<Action<ulong>, ulong>(
+                h => (guid) => h(guid),
+                h => AuctionHouseOpened += h,
+                h => AuctionHouseOpened -= h);
+
+        public IObservable<Unit> AuctionHouseClosedStream =>
+            Observable.FromEvent<Action, Unit>(
+                    h => () => h(Unit.Default),
+                    h => AuctionHouseClosed += h,
+                    h => AuctionHouseClosed -= h);
+
+        public IObservable<IReadOnlyList<AuctionData>> AuctionSearchResultsStream =>
+            Observable.FromEvent<Action<IReadOnlyList<AuctionData>>, IReadOnlyList<AuctionData>>(
+                h => results => h(results),
+                h => AuctionSearchResults += h,
+                h => AuctionSearchResults -= h);
+
+        public IObservable<IReadOnlyList<AuctionData>> OwnedAuctionResultsStream =>
+            Observable.FromEvent<Action<IReadOnlyList<AuctionData>>, IReadOnlyList<AuctionData>>(
+                h => results => h(results),
+                h => OwnedAuctionResults += h,
+                h => OwnedAuctionResults -= h);
+
+        public IObservable<IReadOnlyList<AuctionData>> BidderAuctionResultsStream =>
+            Observable.FromEvent<Action<IReadOnlyList<AuctionData>>, IReadOnlyList<AuctionData>>(
+                h => results => h(results),
+                h => BidderAuctionResults += h,
+                h => BidderAuctionResults -= h);
+
+        public IObservable<AuctionOperationResult> AuctionOperationCompletedStream =>
+            Observable.FromEvent<Action<AuctionOperationType, uint>, AuctionOperationResult>(
+                h => (op, id) => h(new AuctionOperationResult(op, id)),
+                h => AuctionOperationCompleted += h,
+                h => AuctionOperationCompleted -= h);
+
+        public IObservable<AuctionOperationError> AuctionOperationFailedStream =>
+            Observable.FromEvent<Action<AuctionOperationType, string>, AuctionOperationError>(
+                h => (op, err) => h(new AuctionOperationError(op, err)),
+                h => AuctionOperationFailed += h,
+                h => AuctionOperationFailed -= h);
+
+        public IObservable<BidPlacedData> BidPlacedStream =>
+            Observable.FromEvent<Action<uint, uint>, BidPlacedData>(
+                h => (id, amount) => h(new BidPlacedData(id, amount)),
+                h => BidPlaced += h,
+                h => BidPlaced -= h);
+
+        public IObservable<AuctionPostedData> AuctionPostedStream =>
+            Observable.FromEvent<Action<uint, uint, uint, uint>, AuctionPostedData>(
+                h => (itemId, startBid, buyout, duration) => h(new AuctionPostedData(itemId, startBid, buyout, duration)),
+                h => AuctionPosted += h,
+                h => AuctionPosted -= h);
+
+        public IObservable<uint> AuctionCancelledStream =>
+            Observable.FromEvent<Action<uint>, uint>(
+                h => id => h(id),
+                h => AuctionCancelled += h,
+                h => AuctionCancelled -= h);
+
+        public IObservable<AuctionNotificationData> AuctionNotificationStream =>
+            Observable.FromEvent<Action<AuctionNotificationType, uint, uint>, AuctionNotificationData>(
+                h => (type, auctionId, itemId) => h(new AuctionNotificationData(type, auctionId, itemId)),
+                h => AuctionNotification += h,
+                h => AuctionNotification -= h);
+        #endregion
 
         /// <inheritdoc />
         public async Task OpenAuctionHouseAsync(ulong auctioneerGuid, CancellationToken cancellationToken = default)
@@ -93,8 +179,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Closing auction house window");
 
-                // Auction house windows typically close automatically when moving away
-                // But we can update our internal state
                 _isAuctionHouseOpen = false;
                 _currentAuctioneerGuid = null;
                 AuctionHouseClosed?.Invoke();
@@ -421,11 +505,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <summary>
-        /// Handles server responses for auction house window opening.
-        /// This method should be called when auction house list responses are received.
-        /// </summary>
-        /// <param name="auctioneerGuid">The GUID of the auctioneer.</param>
+        #region Server Response Handlers
         public void HandleAuctionHouseOpened(ulong auctioneerGuid)
         {
             _isAuctionHouseOpen = true;
@@ -434,83 +514,42 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogDebug("Auction house opened for auctioneer: {AuctioneerGuid:X}", auctioneerGuid);
         }
 
-        /// <summary>
-        /// Handles server responses for auction search results.
-        /// This method should be called when SMSG_AUCTION_LIST_RESULT is received.
-        /// </summary>
-        /// <param name="auctions">The list of auction data received.</param>
         public void HandleAuctionSearchResults(IReadOnlyList<AuctionData> auctions)
         {
             AuctionSearchResults?.Invoke(auctions);
             _logger.LogDebug("Received {Count} auction search results", auctions.Count);
         }
 
-        /// <summary>
-        /// Handles server responses for owned auction results.
-        /// This method should be called when SMSG_AUCTION_OWNER_LIST_RESULT is received.
-        /// </summary>
-        /// <param name="auctions">The list of owned auction data.</param>
         public void HandleOwnedAuctionResults(IReadOnlyList<AuctionData> auctions)
         {
             OwnedAuctionResults?.Invoke(auctions);
             _logger.LogDebug("Received {Count} owned auction results", auctions.Count);
         }
 
-        /// <summary>
-        /// Handles server responses for bidder auction results.
-        /// This method should be called when SMSG_AUCTION_BIDDER_LIST_RESULT is received.
-        /// </summary>
-        /// <param name="auctions">The list of bidder auction data.</param>
         public void HandleBidderAuctionResults(IReadOnlyList<AuctionData> auctions)
         {
             BidderAuctionResults?.Invoke(auctions);
             _logger.LogDebug("Received {Count} bidder auction results", auctions.Count);
         }
 
-        /// <summary>
-        /// Handles server responses for successful auction operations.
-        /// This method should be called when SMSG_AUCTION_COMMAND_RESULT indicates success.
-        /// </summary>
-        /// <param name="operation">The type of operation that completed.</param>
-        /// <param name="auctionId">The auction ID that was affected.</param>
         public void HandleAuctionOperationCompleted(AuctionOperationType operation, uint auctionId)
         {
             AuctionOperationCompleted?.Invoke(operation, auctionId);
             _logger.LogDebug("Auction operation {Operation} completed for auction {AuctionId}", operation, auctionId);
         }
 
-        /// <summary>
-        /// Handles server responses for auction operation failures.
-        /// This method should be called when SMSG_AUCTION_COMMAND_RESULT indicates failure.
-        /// </summary>
-        /// <param name="operation">The type of operation that failed.</param>
-        /// <param name="errorReason">The reason for the failure.</param>
         public void HandleAuctionOperationFailed(AuctionOperationType operation, string errorReason)
         {
             AuctionOperationFailed?.Invoke(operation, errorReason);
             _logger.LogWarning("Auction operation {Operation} failed: {Error}", operation, errorReason);
         }
 
-        /// <summary>
-        /// Handles server responses for successful bid placement.
-        /// This method should be called when a bid is successfully placed.
-        /// </summary>
-        /// <param name="auctionId">The auction ID that was bid on.</param>
-        /// <param name="bidAmount">The amount of the bid in copper.</param>
         public void HandleBidPlaced(uint auctionId, uint bidAmount)
         {
             BidPlaced?.Invoke(auctionId, bidAmount);
             _logger.LogDebug("Bid of {BidAmount} copper placed on auction {AuctionId}", bidAmount, auctionId);
         }
 
-        /// <summary>
-        /// Handles server responses for successful auction posting.
-        /// This method should be called when an auction is successfully posted.
-        /// </summary>
-        /// <param name="itemId">The item ID that was posted.</param>
-        /// <param name="startBid">The starting bid in copper.</param>
-        /// <param name="buyoutPrice">The buyout price in copper.</param>
-        /// <param name="duration">The auction duration in hours.</param>
         public void HandleAuctionPosted(uint itemId, uint startBid, uint buyoutPrice, uint duration)
         {
             AuctionPosted?.Invoke(itemId, startBid, buyoutPrice, duration);
@@ -518,29 +557,51 @@ namespace WoWSharpClient.Networking.ClientComponents
                 itemId, startBid, buyoutPrice, duration);
         }
 
-        /// <summary>
-        /// Handles server responses for successful auction cancellation.
-        /// This method should be called when an auction is successfully cancelled.
-        /// </summary>
-        /// <param name="auctionId">The auction ID that was cancelled.</param>
         public void HandleAuctionCancelled(uint auctionId)
         {
             AuctionCancelled?.Invoke(auctionId);
             _logger.LogDebug("Auction {AuctionId} cancelled", auctionId);
         }
 
-        /// <summary>
-        /// Handles server responses for auction house notifications.
-        /// This method should be called for auction notifications (outbid, won, etc.).
-        /// </summary>
-        /// <param name="notificationType">The type of notification.</param>
-        /// <param name="auctionId">The auction ID related to the notification.</param>
-        /// <param name="itemId">The item ID related to the notification.</param>
         public void HandleAuctionNotification(AuctionNotificationType notificationType, uint auctionId, uint itemId)
         {
             AuctionNotification?.Invoke(notificationType, auctionId, itemId);
             _logger.LogDebug("Auction notification: {NotificationType} for auction {AuctionId} (item {ItemId})",
                 notificationType, auctionId, itemId);
         }
+        #endregion
+
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            lock (_stateLock)
+            {
+                _isOperationInProgress = inProgress;
+                if (inProgress)
+                {
+                    _lastOperationTime = DateTime.UtcNow;
+                }
+            }
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the auction house network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing AuctionHouseNetworkClientComponent");
+
+            _disposed = true;
+            _logger.LogDebug("AuctionHouseNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

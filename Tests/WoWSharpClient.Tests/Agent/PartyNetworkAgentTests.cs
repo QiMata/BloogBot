@@ -316,7 +316,7 @@ namespace WoWSharpClient.Tests.Agent
             isGroupLeaderProperty?.SetValue(_partyAgent, true);
 
             // Act
-            await _partyAgent.SetLootMethodAsync(LootMethod.GroupLoot, null, LootQuality.Rare);
+            await _partyAgent.SetLootMethodAsync(LootMethod.GroupLoot, null, ItemQuality.Rare);
 
             // Assert
             _mockWorldClient.Verify(x => x.SendOpcodeAsync(

@@ -1,87 +1,74 @@
+using System.Reactive;
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
     /// Interface for handling auction house operations in World of Warcraft.
     /// Manages browsing auctions, placing bids, posting auctions, and collecting sold items.
+    /// Uses reactive observables for better composability and filtering.
     /// </summary>
-    public interface IAuctionHouseNetworkAgent
+    public interface IAuctionHouseNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether an auction house window is currently open.
         /// </summary>
         bool IsAuctionHouseOpen { get; }
 
+        #region Reactive Observables
         /// <summary>
-        /// Event fired when an auction house window is opened.
+        /// Observable stream fired when an auction house window is opened. Carries the auctioneer GUID.
         /// </summary>
-        event Action<ulong>? AuctionHouseOpened;
+        IObservable<ulong> AuctionHouseOpenedStream { get; }
 
         /// <summary>
-        /// Event fired when an auction house window is closed.
+        /// Observable stream fired when an auction house window is closed.
         /// </summary>
-        event Action? AuctionHouseClosed;
+        IObservable<Unit> AuctionHouseClosedStream { get; }
 
         /// <summary>
-        /// Event fired when auction search results are received.
+        /// Observable stream fired when auction search results are received.
         /// </summary>
-        /// <param name="auctions">List of auction data received.</param>
-        event Action<IReadOnlyList<AuctionData>>? AuctionSearchResults;
+        IObservable<IReadOnlyList<AuctionData>> AuctionSearchResultsStream { get; }
 
         /// <summary>
-        /// Event fired when owned auction results are received.
+        /// Observable stream fired when owned auction results are received.
         /// </summary>
-        /// <param name="auctions">List of owned auction data.</param>
-        event Action<IReadOnlyList<AuctionData>>? OwnedAuctionResults;
+        IObservable<IReadOnlyList<AuctionData>> OwnedAuctionResultsStream { get; }
 
         /// <summary>
-        /// Event fired when bidder auction results are received.
+        /// Observable stream fired when bidder auction results are received.
         /// </summary>
-        /// <param name="auctions">List of auction data where the player has placed bids.</param>
-        event Action<IReadOnlyList<AuctionData>>? BidderAuctionResults;
+        IObservable<IReadOnlyList<AuctionData>> BidderAuctionResultsStream { get; }
 
         /// <summary>
-        /// Event fired when an auction operation completes successfully.
+        /// Observable stream fired when an auction operation completes successfully.
         /// </summary>
-        /// <param name="operation">The type of operation that completed.</param>
-        /// <param name="auctionId">The auction ID that was affected.</param>
-        event Action<AuctionOperationType, uint>? AuctionOperationCompleted;
+        IObservable<AuctionOperationResult> AuctionOperationCompletedStream { get; }
 
         /// <summary>
-        /// Event fired when an auction operation fails.
+        /// Observable stream fired when an auction operation fails.
         /// </summary>
-        /// <param name="operation">The type of operation that failed.</param>
-        /// <param name="errorReason">The reason for the failure.</param>
-        event Action<AuctionOperationType, string>? AuctionOperationFailed;
+        IObservable<AuctionOperationError> AuctionOperationFailedStream { get; }
 
         /// <summary>
-        /// Event fired when a bid is successfully placed.
+        /// Observable stream fired when a bid is successfully placed.
         /// </summary>
-        /// <param name="auctionId">The auction ID that was bid on.</param>
-        /// <param name="bidAmount">The amount of the bid in copper.</param>
-        event Action<uint, uint>? BidPlaced;
+        IObservable<BidPlacedData> BidPlacedStream { get; }
 
         /// <summary>
-        /// Event fired when an auction is successfully posted.
+        /// Observable stream fired when an auction is successfully posted.
         /// </summary>
-        /// <param name="itemId">The item ID that was posted.</param>
-        /// <param name="startBid">The starting bid in copper.</param>
-        /// <param name="buyoutPrice">The buyout price in copper.</param>
-        /// <param name="duration">The auction duration in hours.</param>
-        event Action<uint, uint, uint, uint>? AuctionPosted;
+        IObservable<AuctionPostedData> AuctionPostedStream { get; }
 
         /// <summary>
-        /// Event fired when an auction is successfully cancelled.
+        /// Observable stream fired when an auction is successfully cancelled. Carries the auction ID.
         /// </summary>
-        /// <param name="auctionId">The auction ID that was cancelled.</param>
-        event Action<uint>? AuctionCancelled;
+        IObservable<uint> AuctionCancelledStream { get; }
 
         /// <summary>
-        /// Event fired when receiving auction house notifications (outbid, won, etc.).
+        /// Observable stream fired when receiving auction house notifications (outbid, won, etc.).
         /// </summary>
-        /// <param name="notificationType">The type of notification.</param>
-        /// <param name="auctionId">The auction ID related to the notification.</param>
-        /// <param name="itemId">The item ID related to the notification.</param>
-        event Action<AuctionNotificationType, uint, uint>? AuctionNotification;
+        IObservable<AuctionNotificationData> AuctionNotificationStream { get; }
+        #endregion
 
         /// <summary>
         /// Opens the auction house window by greeting the specified auctioneer NPC.
@@ -300,4 +287,29 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         Epic = 5,
         Legendary = 6
     }
+
+    /// <summary>
+    /// Data for a successful auction operation completion.
+    /// </summary>
+    public record AuctionOperationResult(AuctionOperationType Operation, uint AuctionId);
+
+    /// <summary>
+    /// Data for a failed auction operation.
+    /// </summary>
+    public record AuctionOperationError(AuctionOperationType Operation, string ErrorReason);
+
+    /// <summary>
+    /// Data for a successful bid placement.
+    /// </summary>
+    public record BidPlacedData(uint AuctionId, uint BidAmount);
+
+    /// <summary>
+    /// Data for a successful auction post.
+    /// </summary>
+    public record AuctionPostedData(uint ItemId, uint StartBid, uint BuyoutPrice, uint Duration);
+
+    /// <summary>
+    /// Data for auction notifications.
+    /// </summary>
+    public record AuctionNotificationData(AuctionNotificationType NotificationType, uint AuctionId, uint ItemId);
 }

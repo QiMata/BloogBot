@@ -316,7 +316,7 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending death/resurrection packets.</param>
         /// <param name="loggerFactory">Optional logger factory for logging death operations.</param>
         /// <returns>A configured dead actor agent instance.</returns>
-        public static IDeadActorClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IDeadActorNetworkClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return AgentFactory.CreateDeadActorAgentForClient(worldClient, loggerFactory);
         }
@@ -327,7 +327,7 @@ namespace WoWSharpClient.Client
         /// <param name="worldClient">The world client to use for sending death/resurrection packets.</param>
         /// <param name="logger">The logger for death operations.</param>
         /// <returns>A configured dead actor agent instance.</returns>
-        public static IDeadActorClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILogger<DeadActorClientComponent> logger)
+        public static IDeadActorNetworkClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILogger<DeadActorClientComponent> logger)
         {
             return AgentFactory.CreateDeadActorAgent(worldClient, logger);
         }
@@ -457,7 +457,7 @@ namespace WoWSharpClient.Client
             IGameObjectNetworkClientComponent GameObjectAgent,
             IVendorNetworkClientComponent VendorAgent,
             IFlightMasterNetworkClientComponent FlightMasterAgent,
-            IDeadActorClientComponent DeadActorAgent,
+            IDeadActorNetworkClientComponent DeadActorAgent,
             IInventoryNetworkClientComponent InventoryAgent,
             IItemUseNetworkClientComponent ItemUseAgent,
             IEquipmentNetworkClientComponent EquipmentAgent,

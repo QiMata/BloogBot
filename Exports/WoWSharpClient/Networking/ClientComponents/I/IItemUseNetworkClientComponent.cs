@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling item usage operations in World of Warcraft.
     /// Manages using consumables, activating items, and handling item interactions.
     /// </summary>
-    public interface IItemUseNetworkAgent
+    public interface IItemUseNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether an item use operation is currently in progress.

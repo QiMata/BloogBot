@@ -7,7 +7,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Focuses solely on combat actions like starting and stopping auto-attack.
     /// Uses reactive observables for better composability and filtering.
     /// </summary>
-    public interface IAttackNetworkAgent
+    public interface IAttackNetworkClientComponent : INetworkClientComponent
     {
         #region Properties
 
@@ -15,16 +15,6 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Gets whether the character is currently in auto-attack mode.
         /// </summary>
         bool IsAttacking { get; }
-
-        /// <summary>
-        /// Gets a value indicating whether an attack operation is currently in progress.
-        /// </summary>
-        bool IsOperationInProgress { get; }
-
-        /// <summary>
-        /// Gets the timestamp of the last attack operation.
-        /// </summary>
-        DateTime? LastOperationTime { get; }
 
         /// <summary>
         /// Gets the current victim's GUID if attacking.
@@ -81,7 +71,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// <param name="targetingAgent">The targeting agent to use for target selection.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        Task AttackTargetAsync(ulong targetGuid, ITargetingNetworkAgent targetingAgent, CancellationToken cancellationToken = default);
+        Task AttackTargetAsync(ulong targetGuid, ITargetingNetworkClientComponent targetingAgent, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Toggles auto-attack state. If attacking, stops. If not attacking, starts.
@@ -90,63 +80,6 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// <returns>A task representing the asynchronous operation.</returns>
         /// <exception cref="InvalidOperationException">Thrown when trying to start attack with no target selected.</exception>
         Task ToggleAttackAsync(CancellationToken cancellationToken = default);
-
-        #endregion
-
-        #region Server Response Handling
-
-        /// <summary>
-        /// Handles attack state change notification from the server.
-        /// This method should be called by the packet handler when attack state changes.
-        /// </summary>
-        /// <param name="isAttacking">Whether attacking started or stopped.</param>
-        /// <param name="attackerGuid">The attacker's GUID.</param>
-        /// <param name="victimGuid">The victim's GUID.</param>
-        void HandleAttackStateChanged(bool isAttacking, ulong attackerGuid, ulong victimGuid);
-
-        /// <summary>
-        /// Handles weapon swing data from the server.
-        /// </summary>
-        /// <param name="attackerGuid">The attacker's GUID.</param>
-        /// <param name="victimGuid">The victim's GUID.</param>
-        /// <param name="damage">The damage dealt.</param>
-        /// <param name="isCritical">Whether the hit was critical.</param>
-        void HandleWeaponSwing(ulong attackerGuid, ulong victimGuid, uint damage, bool isCritical);
-
-        /// <summary>
-        /// Handles attack error from the server.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="targetGuid">The target that caused the error.</param>
-        void HandleAttackError(string errorMessage, ulong? targetGuid = null);
-
-        #endregion
-
-        #region Legacy Callback Support (for backwards compatibility)
-
-        /// <summary>
-        /// Sets the callback function to be invoked when auto-attack starts.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function that receives the victim's GUID.</param>
-        [Obsolete("Use AttackStateChanges observable instead")]
-        void SetAttackStartedCallback(Action<ulong>? callback);
-
-        /// <summary>
-        /// Sets the callback function to be invoked when auto-attack stops.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function to invoke when attack stops.</param>
-        [Obsolete("Use AttackStateChanges observable instead")]
-        void SetAttackStoppedCallback(Action? callback);
-
-        /// <summary>
-        /// Sets the callback function to be invoked when an attack error occurs.
-        /// This is provided for backwards compatibility. Use reactive observables instead.
-        /// </summary>
-        /// <param name="callback">Callback function that receives the error message.</param>
-        [Obsolete("Use AttackErrors observable instead")]
-        void SetAttackErrorCallback(Action<string>? callback);
 
         #endregion
     }

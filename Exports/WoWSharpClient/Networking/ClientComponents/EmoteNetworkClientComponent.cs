@@ -15,7 +15,11 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private readonly IWorldClient _worldClient;
         private readonly ILogger<EmoteNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
         private volatile bool _isEmoting;
+        private bool _isOperationInProgress;
+        private DateTime? _lastOperationTime;
+        private bool _disposed;
 
         #endregion
 
@@ -30,6 +34,34 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        #endregion
+
+        #region INetworkClientComponent Implementation
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
         }
 
         #endregion
@@ -84,6 +116,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
                 _isEmoting = true;
                 _logger.LogDebug("Performing emote: {Emote}", emote);
 
@@ -109,6 +142,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
+                SetOperationInProgress(false);
                 _isEmoting = false;
             }
         }
@@ -126,6 +160,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
                 _isEmoting = true;
                 _logger.LogDebug("Performing text emote: {TextEmote} on target: {Target}", textEmote, targetGuid?.ToString("X") ?? "none");
 
@@ -153,6 +188,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
+                SetOperationInProgress(false);
                 _isEmoting = false;
             }
         }
@@ -318,6 +354,46 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Error handling received text emote from {PlayerGuid:X}", sourceGuid);
             }
+        }
+
+        #endregion
+
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            lock (_stateLock)
+            {
+                _isOperationInProgress = inProgress;
+                if (inProgress)
+                {
+                    _lastOperationTime = DateTime.UtcNow;
+                }
+            }
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the emote network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing EmoteNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            EmotePerformed = null;
+            TextEmotePerformed = null;
+            EmoteError = null;
+            EmoteReceived = null;
+            TextEmoteReceived = null;
+
+            _disposed = true;
+            _logger.LogDebug("EmoteNetworkClientComponent disposed");
         }
 
         #endregion

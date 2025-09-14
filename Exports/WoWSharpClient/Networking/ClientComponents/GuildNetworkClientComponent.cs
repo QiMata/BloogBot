@@ -3,6 +3,7 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -10,17 +11,16 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of guild network agent that handles guild-related operations in World of Warcraft.
     /// Manages guild invites, guild bank interactions, member management, and guild settings using the Mangos protocol.
     /// </summary>
-    public class GuildNetworkClientComponent : IGuildNetworkClientComponent
+    public class GuildNetworkClientComponent : NetworkClientComponent, IGuildNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<GuildNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
 
-        private bool _isInGuild;
-        private uint? _currentGuildId;
+        private GuildInfo? _guildInfo;
+        private readonly List<GuildMember> _guildMembers = [];
         private bool _isGuildWindowOpen;
-        private bool _isGuildBankWindowOpen;
-        private ulong? _currentGuildBankGuid;
-        private uint? _currentGuildRank;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the GuildNetworkClientComponent class.
@@ -32,6 +32,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
+
+        #region INetworkClientComponent Implementation
+
+        // IsOperationInProgress and LastOperationTime provided by base class
+
+        #endregion
 
         /// <inheritdoc />
         public event Action<string, string>? OnGuildOperationFailed;
@@ -446,7 +452,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             // Guild bank operations are not supported in this client version
             _logger.LogWarning("Guild bank operations are not supported in this client version");
-            GuildOperationFailed?.Invoke("QueryGuildBankTab", "Guild bank operations are not supported in this client version");
+            GuildOperationFailed?.Invoke("QueryGuildBankTab", "Guild bank operations are notsupported in this client version");
         }
 
         /// <inheritdoc />
@@ -655,6 +661,33 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Error handling guild command result");
             }
+        }
+
+        #endregion
+
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            // Delegate to base class implementation which manages state safely
+            base.SetOperationInProgress(inProgress);
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the guild network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing GuildNetworkClientComponent");
+
+            _disposed = true;
+            _logger.LogDebug("GuildNetworkClientComponent disposed");
         }
 
         #endregion

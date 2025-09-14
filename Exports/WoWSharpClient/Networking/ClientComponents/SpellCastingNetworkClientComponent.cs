@@ -9,16 +9,21 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of spell casting network agent that handles spell operations in World of Warcraft.
     /// Manages spell casting, channeling, and spell state tracking using the Mangos protocol.
     /// </summary>
-    public class SpellCastingNetworkClientComponent : ISpellCastingNetworkClientComponent
+    public class SpellCastingNetworkClientComponent : ISpellCastingNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<SpellCastingNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
+
         private bool _isCasting;
         private bool _isChanneling;
         private uint? _currentSpellId;
         private ulong? _currentSpellTarget;
         private uint _remainingCastTime;
         private readonly Dictionary<uint, uint> _spellCooldowns;
+        private bool _isOperationInProgress;
+        private DateTime? _lastOperationTime;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the SpellCastingNetworkClientComponent class.
@@ -31,6 +36,34 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _spellCooldowns = new Dictionary<uint, uint>();
         }
+
+        #region INetworkClientComponent Implementation
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
+        }
+
+        #endregion
 
         /// <inheritdoc />
         public bool IsCasting => _isCasting;
@@ -68,11 +101,28 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public event Action<uint, ulong, uint?, uint?>? SpellHit;
 
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            lock (_stateLock)
+            {
+                _isOperationInProgress = inProgress;
+                if (inProgress)
+                {
+                    _lastOperationTime = DateTime.UtcNow;
+                }
+            }
+        }
+
+        #endregion
+
         /// <inheritdoc />
         public async Task CastSpellAsync(uint spellId, CancellationToken cancellationToken = default)
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Casting spell {SpellId}", spellId);
 
                 var payload = BitConverter.GetBytes(spellId);
@@ -91,6 +141,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to cast spell {SpellId}", spellId);
                 SpellCastFailed?.Invoke(spellId, $"Failed to cast spell: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -456,5 +510,31 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogDebug("Spell {SpellId} cooldown updated: {CooldownTime}ms", spellId, cooldownTime);
             SpellCooldownStarted?.Invoke(spellId, cooldownTime);
         }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the spell casting network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing SpellCastingNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            SpellCastStarted = null;
+            SpellCastCompleted = null;
+            SpellCastFailed = null;
+            ChannelingStarted = null;
+            ChannelingEnded = null;
+            SpellCooldownStarted = null;
+            SpellHit = null;
+
+            _disposed = true;
+            _logger.LogDebug("SpellCastingNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

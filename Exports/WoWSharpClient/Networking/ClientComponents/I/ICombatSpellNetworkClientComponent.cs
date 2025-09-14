@@ -6,7 +6,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for the enhanced Combat/Spell Network Agent that provides comprehensive combat functionality.
     /// Coordinates spell casting, pet control, aura/buff tracking, and item usage in combat scenarios.
     /// </summary>
-    public interface ICombatSpellNetworkAgent
+    public interface ICombatSpellNetworkClientComponent : INetworkClientComponent
     {
         #region Reactive Observables
 

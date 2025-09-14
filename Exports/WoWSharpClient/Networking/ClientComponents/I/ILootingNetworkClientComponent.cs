@@ -8,7 +8,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Manages loot containers, automatic looting, and item collection.
     /// Uses reactive observables for better composability and filtering.
     /// </summary>
-    public interface ILootingNetworkAgent
+    public interface ILootingNetworkClientComponent : INetworkClientComponent
     {
         #region Properties
 
@@ -16,16 +16,6 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Gets whether a loot window is currently open.
         /// </summary>
         bool IsLootWindowOpen { get; }
-
-        /// <summary>
-        /// Gets a value indicating whether a loot operation is currently in progress.
-        /// </summary>
-        bool IsOperationInProgress { get; }
-
-        /// <summary>
-        /// Gets the timestamp of the last loot operation.
-        /// </summary>
-        DateTime? LastOperationTime { get; }
 
         /// <summary>
         /// Gets the current loot target GUID if loot window is open.

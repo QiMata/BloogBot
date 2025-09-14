@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling profession operations in World of Warcraft.
     /// Manages profession skill training, crafting, and gathering interactions.
     /// </summary>
-    public interface IProfessionsNetworkAgent
+    public interface IProfessionsNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether a profession trainer window is currently open.

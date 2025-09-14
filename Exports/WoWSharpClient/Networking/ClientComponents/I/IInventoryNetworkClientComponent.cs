@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling inventory operations in World of Warcraft.
     /// Manages bag operations, item movement, and inventory state tracking.
     /// </summary>
-    public interface IInventoryNetworkAgent
+    public interface IInventoryNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether the inventory window is currently open.

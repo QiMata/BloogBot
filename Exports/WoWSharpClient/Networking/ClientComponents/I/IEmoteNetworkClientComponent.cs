@@ -3,10 +3,10 @@ using GameData.Core.Enums;
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
-    /// Interface for the Emote Network Agent that handles emote operations via network packets.
-    /// Supports both animated emotes (like /wave, /dance) and text-based emotes with optional targeting.
+    /// Interface for handling emote operations in World of Warcraft.
+    /// Manages character animations, expressions, and social interactions.
     /// </summary>
-    public interface IEmoteNetworkAgent
+    public interface IEmoteNetworkClientComponent : INetworkClientComponent
     {
         #region Events
 

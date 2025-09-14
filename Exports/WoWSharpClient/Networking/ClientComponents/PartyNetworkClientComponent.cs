@@ -10,13 +10,15 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of party network agent that handles party/raid group management operations in World of Warcraft.
     /// Manages party invites, member management, loot settings, raid conversion, and leadership operations using the Mangos protocol.
     /// </summary>
-    public class PartyNetworkClientComponent : IPartyNetworkClientComponent
+    public class PartyNetworkClientComponent : NetworkClientComponent, IPartyNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<PartyNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
 
         private readonly List<GroupMember> _groupMembers = [];
         private readonly object _groupLock = new object();
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the PartyNetworkClientComponent class.
@@ -28,6 +30,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
+
+        #region INetworkClientComponent Implementation
+
+        // IsOperationInProgress and LastOperationTime provided by base class
+
+        #endregion
 
         /// <inheritdoc />
         public bool IsInGroup { get; private set; }
@@ -74,6 +82,16 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public event Action<string, string>? PartyOperationFailed;
 
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            // Delegate to base class implementation which manages state safely
+            base.SetOperationInProgress(inProgress);
+        }
+
+        #endregion
+
         #region Party Invite Operations
 
         /// <inheritdoc />
@@ -81,6 +99,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 ArgumentException.ThrowIfNullOrWhiteSpace(playerName);
 
                 _logger.LogDebug("Inviting player to group: {PlayerName}", playerName);
@@ -99,6 +118,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to invite player to group: {PlayerName}", playerName);
                 PartyOperationFailed?.Invoke("InvitePlayer", ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -346,7 +369,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         #region Loot Settings
 
         /// <inheritdoc />
-        public async Task SetLootMethodAsync(LootMethod lootMethod, ulong? lootMasterGuid = null, LootQuality lootThreshold = LootQuality.Uncommon, CancellationToken cancellationToken = default)
+        public async Task SetLootMethodAsync(LootMethod lootMethod, ulong? lootMasterGuid = null, ItemQuality lootThreshold = ItemQuality.Uncommon, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -850,6 +873,34 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Error handling raid group only");
             }
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the party network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing PartyNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            PartyInviteReceived = null;
+            GroupJoined = null;
+            GroupLeft = null;
+            MemberJoined = null;
+            MemberLeft = null;
+            LeadershipChanged = null;
+            LootMethodChanged = null;
+            GroupConverted = null;
+            PartyOperationFailed = null;
+
+            _disposed = true;
+            _logger.LogDebug("PartyNetworkClientComponent disposed");
         }
 
         #endregion

@@ -140,9 +140,9 @@ namespace WoWSharpClient.Tests.Agent
 
             var services = new[]
             {
-                new TrainerService { ServiceIndex = 0, SpellId = 11111, CanLearn = true },
-                new TrainerService { ServiceIndex = 1, SpellId = spellId, CanLearn = true },
-                new TrainerService { ServiceIndex = 2, SpellId = 33333, CanLearn = true }
+                new TrainerServiceData { ServiceIndex = 0, SpellId = 11111, CanLearn = true },
+                new TrainerServiceData { ServiceIndex = 1, SpellId = spellId, CanLearn = true },
+                new TrainerServiceData { ServiceIndex = 2, SpellId = 33333, CanLearn = true }
             };
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
@@ -249,8 +249,8 @@ namespace WoWSharpClient.Tests.Agent
 
             var services = new[]
             {
-                new TrainerService { SpellId = spellId, CanLearn = true },
-                new TrainerService { SpellId = 23456, CanLearn = false }
+                new TrainerServiceData { SpellId = spellId, CanLearn = true },
+                new TrainerServiceData { SpellId = 23456, CanLearn = false }
             };
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
@@ -271,8 +271,8 @@ namespace WoWSharpClient.Tests.Agent
 
             var services = new[]
             {
-                new TrainerService { SpellId = spellId, CanLearn = false },
-                new TrainerService { SpellId = 23456, CanLearn = true }
+                new TrainerServiceData { SpellId = spellId, CanLearn = false },
+                new TrainerServiceData { SpellId = 23456, CanLearn = true }
             };
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
@@ -294,7 +294,7 @@ namespace WoWSharpClient.Tests.Agent
 
             var services = new[]
             {
-                new TrainerService { SpellId = spellId, Cost = expectedCost, CanLearn = true }
+                new TrainerServiceData { SpellId = spellId, Cost = expectedCost, CanLearn = true }
             };
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
@@ -315,7 +315,7 @@ namespace WoWSharpClient.Tests.Agent
 
             var services = new[]
             {
-                new TrainerService { SpellId = 12345, Cost = 5000, CanLearn = true }
+                new TrainerServiceData { SpellId = 12345, Cost = 5000, CanLearn = true }
             };
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
@@ -335,9 +335,9 @@ namespace WoWSharpClient.Tests.Agent
 
             var services = new[]
             {
-                new TrainerService { SpellId = 12345, CanLearn = true },
-                new TrainerService { SpellId = 23456, CanLearn = false },
-                new TrainerService { SpellId = 34567, CanLearn = true }
+                new TrainerServiceData { SpellId = 12345, CanLearn = true },
+                new TrainerServiceData { SpellId = 23456, CanLearn = false },
+                new TrainerServiceData { SpellId = 34567, CanLearn = true }
             };
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
@@ -359,9 +359,9 @@ namespace WoWSharpClient.Tests.Agent
 
             var services = new[]
             {
-                new TrainerService { SpellId = 12345, Cost = 5000, CanLearn = true },
-                new TrainerService { SpellId = 23456, Cost = 15000, CanLearn = true },
-                new TrainerService { SpellId = 34567, Cost = 8000, CanLearn = true }
+                new TrainerServiceData { SpellId = 12345, Cost = 5000, CanLearn = true },
+                new TrainerServiceData { SpellId = 23456, Cost = 15000, CanLearn = true },
+                new TrainerServiceData { SpellId = 34567, Cost = 8000, CanLearn = true }
             };
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
@@ -383,7 +383,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             const ulong trainerGuid = 0x123456789ABCDEF0UL;
-            var services = new TrainerService[0];
+            var services = new TrainerServiceData[0];
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
 
@@ -402,7 +402,7 @@ namespace WoWSharpClient.Tests.Agent
             // Arrange
             const ulong trainerGuid = 0x123456789ABCDEF0UL;
             const ulong wrongGuid = 0xFEDCBA9876543210UL;
-            var services = new TrainerService[0];
+            var services = new TrainerServiceData[0];
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
 
@@ -420,7 +420,7 @@ namespace WoWSharpClient.Tests.Agent
             const ulong trainerGuid = 0x123456789ABCDEF0UL;
             var services = new[]
             {
-                new TrainerService { SpellId = 12345, CanLearn = true }
+                new TrainerServiceData { SpellId = 12345, CanLearn = true }
             };
 
             _trainerAgent.HandleTrainerWindowOpened(trainerGuid, services);
@@ -445,11 +445,11 @@ namespace WoWSharpClient.Tests.Agent
             const ulong trainerGuid = 0x123456789ABCDEF0UL;
             var services = new[]
             {
-                new TrainerService { SpellId = 12345, CanLearn = true }
+                new TrainerServiceData { SpellId = 12345, CanLearn = true }
             };
 
             ulong? eventTrainerGuid = null;
-            TrainerService[]? eventServices = null;
+            TrainerServiceData[]? eventServices = null;
 
             _trainerAgent.TrainerWindowOpened += (guid) => eventTrainerGuid = guid;
             _trainerAgent.TrainerServicesReceived += (receivedServices) => eventServices = receivedServices;
@@ -528,16 +528,16 @@ namespace WoWSharpClient.Tests.Agent
             // Arrange
             var initialServices = new[]
             {
-                new TrainerService { SpellId = 12345, CanLearn = true }
+                new TrainerServiceData { SpellId = 12345, CanLearn = true }
             };
 
             var updatedServices = new[]
             {
-                new TrainerService { SpellId = 23456, CanLearn = true },
-                new TrainerService { SpellId = 34567, CanLearn = false }
+                new TrainerServiceData { SpellId = 23456, CanLearn = true },
+                new TrainerServiceData { SpellId = 34567, CanLearn = false }
             };
 
-            TrainerService[]? eventServices = null;
+            TrainerServiceData[]? eventServices = null;
             _trainerAgent.TrainerServicesReceived += (services) => eventServices = services;
 
             // Set initial services

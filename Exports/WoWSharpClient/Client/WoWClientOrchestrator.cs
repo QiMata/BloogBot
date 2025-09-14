@@ -8,6 +8,7 @@ using GameData.Core.Models;
 using WoWSharpClient.Networking.Abstractions;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
+using System.Reactive;
 
 namespace WoWSharpClient.Client
 {
@@ -21,6 +22,10 @@ namespace WoWSharpClient.Client
         private WorldClient? _worldClient;
         private bool _disposed;
         private uint _pingCounter = 0;
+
+        // Keep track of subscriptions for event forwarding
+        private readonly Dictionary<Action, IDisposable> _worldConnectedSubs = new();
+        private readonly Dictionary<Action<Exception?>, IDisposable> _worldDisconnectedSubs = new();
 
         /// <summary>
         /// Gets a value indicating whether the auth client is connected.
@@ -96,6 +101,11 @@ namespace WoWSharpClient.Client
             if (_worldClient != null)
             {
                 _worldClient.Dispose();
+                // dispose any previous subscriptions
+                foreach (var kvp in _worldConnectedSubs) kvp.Value.Dispose();
+                _worldConnectedSubs.Clear();
+                foreach (var kvp in _worldDisconnectedSubs) kvp.Value.Dispose();
+                _worldDisconnectedSubs.Clear();
             }
 
             // Create world client with networking stack
@@ -271,7 +281,7 @@ namespace WoWSharpClient.Client
             _worldClient.UpdateEncryptor(newEncryptor);
         }
 
-        // Event exposure
+        // Event exposure (for backward compatibility) - wired to observables
 
         /// <summary>
         /// Exposes world client connection events.
@@ -280,13 +290,21 @@ namespace WoWSharpClient.Client
         {
             add
             {
+                if (value == null) return;
                 if (_worldClient != null)
-                    _worldClient.Connected += value;
+                {
+                    var disp = _worldClient.WhenConnected.Subscribe(_ => value());
+                    _worldConnectedSubs[value] = disp;
+                }
             }
             remove
             {
-                if (_worldClient != null)
-                    _worldClient.Connected -= value;
+                if (value == null) return;
+                if (_worldConnectedSubs.TryGetValue(value, out var disp))
+                {
+                    disp.Dispose();
+                    _worldConnectedSubs.Remove(value);
+                }
             }
         }
 
@@ -297,13 +315,21 @@ namespace WoWSharpClient.Client
         {
             add
             {
+                if (value == null) return;
                 if (_worldClient != null)
-                    _worldClient.Disconnected += value;
+                {
+                    var disp = _worldClient.WhenDisconnected.Subscribe(ex => value(ex));
+                    _worldDisconnectedSubs[value] = disp;
+                }
             }
             remove
             {
-                if (_worldClient != null)
-                    _worldClient.Disconnected -= value;
+                if (value == null) return;
+                if (_worldDisconnectedSubs.TryGetValue(value, out var disp))
+                {
+                    disp.Dispose();
+                    _worldDisconnectedSubs.Remove(value);
+                }
             }
         }
 
@@ -313,6 +339,10 @@ namespace WoWSharpClient.Client
             {
                 _authClient?.Dispose();
                 _worldClient?.Dispose();
+                foreach (var kvp in _worldConnectedSubs) kvp.Value.Dispose();
+                foreach (var kvp in _worldDisconnectedSubs) kvp.Value.Dispose();
+                _worldConnectedSubs.Clear();
+                _worldDisconnectedSubs.Clear();
                 _disposed = true;
             }
         }

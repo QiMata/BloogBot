@@ -8,6 +8,9 @@ using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
 using System.IO;
 using System.Text;
+using System.Reactive;
+using System.Reactive.Subjects;
+using System.Reactive.Linq;
 
 namespace WoWSharpClient.Client
 {
@@ -28,6 +31,16 @@ namespace WoWSharpClient.Client
         private byte[] _sessionKey = [];
         private bool _isAuthenticated = false;
 
+        // Reactive subjects
+        private readonly Subject<Unit> _authenticationSucceeded = new();
+        private readonly Subject<byte> _authenticationFailed = new();
+        private readonly Subject<(ulong Guid, string Name, byte Race, byte Class, byte Gender)> _characterFound = new();
+        private readonly Subject<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)> _attackStateChanged = new();
+        private readonly Subject<string> _attackErrors = new();
+
+        // Dynamic opcode subjects registry
+        private readonly ConcurrentDictionary<Opcode, ISubject<ReadOnlyMemory<byte>>> _opcodeStreams = new();
+
         public WorldClient(
             IConnection connection,
             IMessageFramer framer,
@@ -46,8 +59,17 @@ namespace WoWSharpClient.Client
         public bool IsConnected => _pipeline.IsConnected;
         public bool IsAuthenticated => _isAuthenticated;
 
-        public void RegisterOpcodeHandler(Opcode opcode, Func<byte[], Task> handler)
-            => _pipeline.RegisterHandler(opcode, payload => handler(payload.ToArray()));
+        // Reactive opcode registration: returns an observable stream per opcode
+        public IObservable<ReadOnlyMemory<byte>> RegisterOpcodeHandler(Opcode opcode)
+        {
+            var subject = (ISubject<ReadOnlyMemory<byte>>)_opcodeStreams.GetOrAdd(opcode, _ => new Subject<ReadOnlyMemory<byte>>());
+            _pipeline.RegisterHandler(opcode, payload =>
+            {
+                subject.OnNext(payload);
+                return Task.CompletedTask;
+            });
+            return subject.AsObservable();
+        }
 
         public async Task ConnectAsync(string username, string host, byte[] sessionKey, int port = 8085, CancellationToken cancellationToken = default)
         {
@@ -177,52 +199,14 @@ namespace WoWSharpClient.Client
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_CANT_ATTACK, HandleAttackSwingCantAttack);
         }
 
-        public event Action? Connected
-        {
-            add { _pipeline.WhenConnected.Subscribe(_ => value?.Invoke()); }
-            remove { }
-        }
-
-        public event Action<Exception?>? Disconnected
-        {
-            add { _pipeline.WhenDisconnected.Subscribe(ex => value?.Invoke(ex)); }
-            remove { }
-        }
-
-        /// <summary>
-        /// Fired when world server authentication succeeds.
-        /// </summary>
-        public event Action? OnAuthenticationSuccessful;
-
-        /// <summary>
-        /// Fired when world server authentication fails.
-        /// </summary>
-        /// <param name="errorCode">The authentication error code.</param>
-        public event Action<byte>? OnAuthenticationFailed;
-
-        /// <summary>
-        /// Fired when a character is found during character enumeration.
-        /// </summary>
-        /// <param name="guid">Character GUID.</param>
-        /// <param name="name">Character name.</param>
-        /// <param name="race">Character race.</param>
-        /// <param name="characterClass">Character class.</param>
-        /// <param name="gender">Character gender.</param>
-        public event Action<ulong, string, byte, byte, byte>? OnCharacterFound;
-
-        /// <summary>
-        /// Fired when attack state changes (start/stop).
-        /// </summary>
-        /// <param name="isAttacking">Whether attacking started or stopped.</param>
-        /// <param name="attackerGuid">The attacker's GUID.</param>
-        /// <param name="victimGuid">The victim's GUID.</param>
-        public event Action<bool, ulong, ulong>? OnAttackStateChanged;
-
-        /// <summary>
-        /// Fired when an attack error occurs (not in range, bad facing, etc.).
-        /// </summary>
-        /// <param name="errorMessage">The error message describing why the attack failed.</param>
-        public event Action<string>? OnAttackError;
+        // Reactive IWorldClient streams (forward or expose)
+        public IObservable<Unit> WhenConnected => _pipeline.WhenConnected;
+        public IObservable<Exception?> WhenDisconnected => _pipeline.WhenDisconnected;
+        public IObservable<Unit> AuthenticationSucceeded => _authenticationSucceeded;
+        public IObservable<byte> AuthenticationFailed => _authenticationFailed;
+        public IObservable<(ulong Guid, string Name, byte Race, byte Class, byte Gender)> CharacterFound => _characterFound;
+        public IObservable<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)> AttackStateChanged => _attackStateChanged;
+        public IObservable<string> AttackErrors => _attackErrors;
 
         // --- Handlers ---
         private async Task HandleAuthChallenge(ReadOnlyMemory<byte> payload)
@@ -295,27 +279,32 @@ namespace WoWSharpClient.Client
                 {
                     _isAuthenticated = true;
                     Console.WriteLine("[NewWorldClient] World authentication successful!");
-                    OnAuthenticationSuccessful?.Invoke();
+                    _authenticationSucceeded.OnNext(Unit.Default);
                 }
                 else
                 {
                     _isAuthenticated = false;
                     Console.WriteLine($"[NewWorldClient] World authentication failed with code: {result:X2}");
-                    OnAuthenticationFailed?.Invoke(result);
+                    _authenticationFailed.OnNext(result);
                 }
             }
             else
             {
                 _isAuthenticated = false;
                 Console.WriteLine("[NewWorldClient] Received empty SMSG_AUTH_RESPONSE");
-                OnAuthenticationFailed?.Invoke(0xFF);
+                _authenticationFailed.OnNext(0xFF);
             }
 
             return Task.CompletedTask;
         }
 
         // --- Minimal handler stubs for the rest ---
-        private Task HandleCharEnum(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+        private Task HandleCharEnum(ReadOnlyMemory<byte> payload)
+        {
+            // TODO: Parse character list entries and push to _characterFound
+            return Task.CompletedTask;
+        }
+
         private Task HandlePong(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
         private Task HandleQueryTimeResponse(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
         private Task HandleLoginVerifyWorld(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
@@ -324,19 +313,96 @@ namespace WoWSharpClient.Client
         private Task HandleCharacterLoginFailed(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
         private Task HandleMessageChat(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
         private Task HandleNameQueryResponse(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleAttackStart(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleAttackStop(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleAttackSwingNotInRange(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleAttackSwingNotStanding(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleAttackSwingDeadTarget(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleAttackSwingCantAttack(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+
+        private Task HandleAttackStart(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                if (payload.Length >= 16)
+                {
+                    var attacker = BitConverter.ToUInt64(payload.Span[0..8]);
+                    var victim = BitConverter.ToUInt64(payload.Span[8..16]);
+                    _attackStateChanged.OnNext((true, attacker, victim));
+                }
+                else
+                {
+                    _attackStateChanged.OnNext((true, 0, 0));
+                }
+            }
+            catch (Exception ex)
+            {
+                _attackErrors.OnNext($"Error parsing ATTACKSTART: {ex.Message}");
+            }
+            return Task.CompletedTask;
+        }
+
+        private Task HandleAttackStop(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                if (payload.Length >= 16)
+                {
+                    var attacker = BitConverter.ToUInt64(payload.Span[0..8]);
+                    var victim = BitConverter.ToUInt64(payload.Span[8..16]);
+                    _attackStateChanged.OnNext((false, attacker, victim));
+                }
+                else
+                {
+                    _attackStateChanged.OnNext((false, 0, 0));
+                }
+            }
+            catch (Exception ex)
+            {
+                _attackErrors.OnNext($"Error parsing ATTACKSTOP: {ex.Message}");
+            }
+            return Task.CompletedTask;
+        }
+
+        private Task HandleAttackSwingNotInRange(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Not in range.");
+            return Task.CompletedTask;
+        }
+        private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Bad facing.");
+            return Task.CompletedTask;
+        }
+        private Task HandleAttackSwingNotStanding(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Not standing.");
+            return Task.CompletedTask;
+        }
+        private Task HandleAttackSwingDeadTarget(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Target is dead.");
+            return Task.CompletedTask;
+        }
+        private Task HandleAttackSwingCantAttack(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Can't attack.");
+            return Task.CompletedTask;
+        }
 
         public void Dispose()
         {
             if (!_disposed)
             {
                 _pipeline?.Dispose();
+                _authenticationSucceeded.OnCompleted();
+                _authenticationFailed.OnCompleted();
+                _characterFound.OnCompleted();
+                _attackStateChanged.OnCompleted();
+                _attackErrors.OnCompleted();
+                foreach (var kv in _opcodeStreams)
+                {
+                    kv.Value.OnCompleted();
+                }
+                _authenticationSucceeded.Dispose();
+                _authenticationFailed.Dispose();
+                _characterFound.Dispose();
+                _attackStateChanged.Dispose();
+                _attackErrors.Dispose();
                 _disposed = true;
             }
         }

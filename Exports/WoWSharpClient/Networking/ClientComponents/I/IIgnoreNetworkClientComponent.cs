@@ -6,7 +6,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for managing the in-game ignore list via network packets.
     /// Supports requesting the list, adding and removing ignored players.
     /// </summary>
-    public interface IIgnoreNetworkAgent
+    public interface IIgnoreNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a readonly snapshot of the current ignore list.

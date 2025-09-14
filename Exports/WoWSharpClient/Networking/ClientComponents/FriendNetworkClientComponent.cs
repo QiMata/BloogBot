@@ -3,27 +3,39 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using System.Reactive.Linq;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Friend list management over the WoW protocol.
     /// </summary>
-    public class FriendNetworkClientComponent : IFriendNetworkAgent
+    public class FriendNetworkClientComponent : NetworkClientComponent, IFriendNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<FriendNetworkClientComponent> _logger;
         private readonly List<FriendEntry> _friends = [];
         private readonly object _lock = new();
 
+        private bool _disposed;
+
         public FriendNetworkClientComponent(IWorldClient worldClient, ILogger<FriendNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-            // Subscribe to world client handlers directly
-            _worldClient.RegisterOpcodeHandler(Opcode.SMSG_FRIEND_LIST, payload => { HandleServerResponse(Opcode.SMSG_FRIEND_LIST, payload); return Task.CompletedTask; });
-            _worldClient.RegisterOpcodeHandler(Opcode.SMSG_FRIEND_STATUS, payload => { HandleServerResponse(Opcode.SMSG_FRIEND_STATUS, payload); return Task.CompletedTask; });
+            // Subscribe to world client handlers directly (guard against null observable in tests/mocks)
+            var listStream = _worldClient.RegisterOpcodeHandler(Opcode.SMSG_FRIEND_LIST);
+            if (listStream is not null)
+            {
+                _ = listStream.Subscribe(payload => HandleServerResponse(Opcode.SMSG_FRIEND_LIST, payload.ToArray()));
+            }
+
+            var statusStream = _worldClient.RegisterOpcodeHandler(Opcode.SMSG_FRIEND_STATUS);
+            if (statusStream is not null)
+            {
+                _ = statusStream.Subscribe(payload => HandleServerResponse(Opcode.SMSG_FRIEND_STATUS, payload.ToArray()));
+            }
         }
 
         public IReadOnlyList<FriendEntry> Friends
@@ -247,5 +259,22 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to parse friend status payload of {Len} bytes", data.Length);
             }
         }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the friend network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing FriendNetworkClientComponent");
+
+            _disposed = true;
+            _logger.LogDebug("FriendNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

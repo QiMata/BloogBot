@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling personal bank operations in World of Warcraft.
     /// Manages depositing and withdrawing items or gold from the player's personal bank.
     /// </summary>
-    public interface IBankNetworkAgent
+    public interface IBankNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether a bank window is currently open.

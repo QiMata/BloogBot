@@ -6,7 +6,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling game object interactions in World of Warcraft.
     /// Manages interactions with chests, gathering nodes, doors, and other game objects.
     /// </summary>
-    public interface IGameObjectNetworkAgent
+    public interface IGameObjectNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Event fired when a game object interaction succeeds.

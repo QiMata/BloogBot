@@ -9,14 +9,15 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of trainer network agent that handles trainer operations in World of Warcraft.
     /// Manages learning spells, abilities, and skills from NPC trainers using the Mangos protocol.
     /// </summary>
-    public class TrainerNetworkClientComponent : ITrainerNetworkClientComponent
+    public class TrainerNetworkClientComponent : NetworkClientComponent, ITrainerNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<TrainerNetworkClientComponent> _logger;
 
         private bool _isTrainerWindowOpen;
         private ulong? _currentTrainerGuid;
-        private readonly List<TrainerService> _availableServices;
+        private readonly List<TrainerServiceData> _availableServices;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the TrainerNetworkClientComponent class.
@@ -29,6 +30,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _availableServices = [];
         }
+
+        #region ITrainerNetworkClientComponent Implementation
 
         /// <inheritdoc />
         public bool IsTrainerWindowOpen => _isTrainerWindowOpen;
@@ -46,7 +49,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public event Action<uint, uint>? SpellLearned;
 
         /// <inheritdoc />
-        public event Action<TrainerService[]>? TrainerServicesReceived;
+        public event Action<TrainerServiceData[]>? TrainerServicesReceived;
 
         /// <inheritdoc />
         public event Action<string>? TrainerError;
@@ -56,12 +59,17 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Opening trainer interaction with: {TrainerGuid:X}", trainerGuid);
 
                 var payload = new byte[8];
                 BitConverter.GetBytes(trainerGuid).CopyTo(payload, 0);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_GOSSIP_HELLO, payload, cancellationToken);
+
+                // Optimistically set current trainer context so subsequent calls can proceed
+                _currentTrainerGuid = trainerGuid;
+                _isTrainerWindowOpen = true;
 
                 _logger.LogInformation("Trainer interaction initiated with: {TrainerGuid:X}", trainerGuid);
             }
@@ -71,6 +79,45 @@ namespace WoWSharpClient.Networking.ClientComponents
                 TrainerError?.Invoke($"Failed to open trainer: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task GetTrainerServicesAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_currentTrainerGuid.HasValue)
+            {
+                var error = "No trainer is currently open";
+                _logger.LogWarning(error);
+                TrainerError?.Invoke(error);
+                return;
+            }
+
+            try
+            {
+                SetOperationInProgress(true);
+                _logger.LogDebug("Requesting trainer services from: {TrainerGuid:X}", _currentTrainerGuid.Value);
+
+                var payload = new byte[8];
+                BitConverter.GetBytes(_currentTrainerGuid.Value).CopyTo(payload, 0);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_TRAINER_LIST, payload, cancellationToken);
+
+                _logger.LogInformation("Trainer services request sent to: {TrainerGuid:X}", _currentTrainerGuid.Value);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to request trainer services from: {TrainerGuid:X}", _currentTrainerGuid);
+                TrainerError?.Invoke($"Failed to request trainer services: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -78,6 +125,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Requesting trainer services from: {TrainerGuid:X}", trainerGuid);
 
                 var payload = new byte[8];
@@ -93,6 +141,46 @@ namespace WoWSharpClient.Networking.ClientComponents
                 TrainerError?.Invoke($"Failed to request trainer services: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task LearnSpellAsync(uint spellId, CancellationToken cancellationToken = default)
+        {
+            if (!_currentTrainerGuid.HasValue)
+            {
+                var error = "No trainer is currently open";
+                _logger.LogWarning(error);
+                TrainerError?.Invoke(error);
+                return;
+            }
+
+            try
+            {
+                SetOperationInProgress(true);
+                _logger.LogDebug("Learning spell {SpellId} from trainer: {TrainerGuid:X}", spellId, _currentTrainerGuid.Value);
+
+                var payload = new byte[12];
+                BitConverter.GetBytes(_currentTrainerGuid.Value).CopyTo(payload, 0);
+                BitConverter.GetBytes(spellId).CopyTo(payload, 8);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_TRAINER_BUY_SPELL, payload, cancellationToken);
+
+                _logger.LogInformation("Learn spell request sent for spell {SpellId} from trainer: {TrainerGuid:X}", spellId, _currentTrainerGuid.Value);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to learn spell {SpellId} from trainer: {TrainerGuid:X}", spellId, _currentTrainerGuid);
+                TrainerError?.Invoke($"Failed to learn spell: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -100,6 +188,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Learning spell {SpellId} from trainer: {TrainerGuid:X}", spellId, trainerGuid);
 
                 var payload = new byte[12];
@@ -116,6 +205,71 @@ namespace WoWSharpClient.Networking.ClientComponents
                 TrainerError?.Invoke($"Failed to learn spell: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task CloseTrainerAsync(CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                SetOperationInProgress(true);
+                _logger.LogDebug("Closing trainer window");
+
+                // Trainer windows typically close automatically when moving away
+                // But we can update our internal state
+                _isTrainerWindowOpen = false;
+                _currentTrainerGuid = null;
+                _availableServices.Clear();
+                TrainerWindowClosed?.Invoke();
+
+                _logger.LogInformation("Trainer window closed");
+                await Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to close trainer window");
+                TrainerError?.Invoke($"Failed to close trainer: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public TrainerServiceData[] GetAvailableServices()
+        {
+            return _availableServices.Where(s => s.CanLearn).ToArray();
+        }
+
+        /// <inheritdoc />
+        public TrainerServiceData[] GetAffordableServices(uint currentMoney)
+        {
+            return _availableServices.Where(s => s.CanLearn && s.Cost <= currentMoney).ToArray();
+        }
+
+        /// <inheritdoc />
+        public bool IsSpellAvailable(uint spellId)
+        {
+            return _availableServices.Any(s => s.SpellId == spellId && s.CanLearn);
+        }
+
+        /// <inheritdoc />
+        public uint? GetSpellCost(uint spellId)
+        {
+            var service = _availableServices.FirstOrDefault(s => s.SpellId == spellId);
+            return service?.Cost;
+        }
+
+        /// <inheritdoc />
+        public bool IsTrainerOpen(ulong trainerGuid)
+        {
+            return _isTrainerWindowOpen && _currentTrainerGuid == trainerGuid;
         }
 
         /// <inheritdoc />
@@ -123,6 +277,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Learning spell by index {ServiceIndex} from trainer: {TrainerGuid:X}", serviceIndex, trainerGuid);
 
                 // Find the spell ID for this index
@@ -143,37 +298,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 TrainerError?.Invoke($"Failed to learn spell by index: {ex.Message}");
                 throw;
             }
-        }
-
-        /// <inheritdoc />
-        public async Task CloseTrainerAsync(CancellationToken cancellationToken = default)
-        {
-            try
+            finally
             {
-                _logger.LogDebug("Closing trainer window");
-
-                // Trainer windows typically close automatically when moving away
-                // But we can update our internal state
-                _isTrainerWindowOpen = false;
-                _currentTrainerGuid = null;
-                _availableServices.Clear();
-                TrainerWindowClosed?.Invoke();
-
-                _logger.LogInformation("Trainer window closed");
-                await Task.CompletedTask;
+                SetOperationInProgress(false);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to close trainer window");
-                TrainerError?.Invoke($"Failed to close trainer: {ex.Message}");
-                throw;
-            }
-        }
-
-        /// <inheritdoc />
-        public bool IsTrainerOpen(ulong trainerGuid)
-        {
-            return _isTrainerWindowOpen && _currentTrainerGuid == trainerGuid;
         }
 
         /// <inheritdoc />
@@ -181,6 +309,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing quick learn of spell {SpellId} from trainer: {TrainerGuid:X}", spellId, trainerGuid);
 
                 await OpenTrainerAsync(trainerGuid, cancellationToken);
@@ -189,7 +318,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // Small delay to allow trainer window to open and services to load
                 await Task.Delay(200, cancellationToken);
                 
-                await LearnSpellAsync(trainerGuid, spellId, cancellationToken);
+                await LearnSpellAsync(spellId, cancellationToken);
                 
                 // Small delay to allow learning to complete
                 await Task.Delay(100, cancellationToken);
@@ -204,6 +333,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 TrainerError?.Invoke($"Quick learn failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -211,6 +344,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Learning multiple spells from trainer: {TrainerGuid:X}. Spells: [{SpellIds}]", 
                     trainerGuid, string.Join(", ", spellIds));
 
@@ -224,7 +358,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     try
                     {
-                        await LearnSpellAsync(trainerGuid, spellId, cancellationToken);
+                        await LearnSpellAsync(spellId, cancellationToken);
                         
                         // Small delay between spell learning attempts
                         await Task.Delay(100, cancellationToken);
@@ -246,32 +380,24 @@ namespace WoWSharpClient.Networking.ClientComponents
                 TrainerError?.Invoke($"Multiple spell learning failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
-        public bool IsSpellAvailable(uint spellId)
+        public void UpdateTrainerServices(TrainerServiceData[] services)
         {
-            return _availableServices.Any(s => s.SpellId == spellId && s.CanLearn);
+            _availableServices.Clear();
+            _availableServices.AddRange(services);
+            TrainerServicesReceived?.Invoke(services);
+            _logger.LogDebug("Trainer services updated: {ServiceCount} services", services.Length);
         }
 
-        /// <inheritdoc />
-        public uint? GetSpellCost(uint spellId)
-        {
-            var service = _availableServices.FirstOrDefault(s => s.SpellId == spellId);
-            return service?.Cost;
-        }
+        #endregion
 
-        /// <inheritdoc />
-        public TrainerService[] GetAvailableServices()
-        {
-            return _availableServices.Where(s => s.CanLearn).ToArray();
-        }
-
-        /// <inheritdoc />
-        public TrainerService[] GetAffordableServices(uint currentMoney)
-        {
-            return _availableServices.Where(s => s.CanLearn && s.Cost <= currentMoney).ToArray();
-        }
+        #region Server Response Handlers
 
         /// <summary>
         /// Handles server responses for trainer window opening.
@@ -279,7 +405,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// </summary>
         /// <param name="trainerGuid">The GUID of the trainer.</param>
         /// <param name="services">The available trainer services.</param>
-        public void HandleTrainerWindowOpened(ulong trainerGuid, TrainerService[] services)
+        public void HandleTrainerWindowOpened(ulong trainerGuid, TrainerServiceData[] services)
         {
             _isTrainerWindowOpen = true;
             _currentTrainerGuid = trainerGuid;
@@ -316,18 +442,30 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogWarning("Trainer operation failed: {Error}", errorMessage);
         }
 
+        #endregion
+
+        #region IDisposable Implementation
+
         /// <summary>
-        /// Updates the trainer services list with new information.
-        /// This can be called when the server sends updated trainer information.
+        /// Disposes of the trainer network client component and cleans up resources.
         /// </summary>
-        /// <param name="services">The updated trainer services.</param>
-        public void UpdateTrainerServices(TrainerService[] services)
+        public void Dispose()
         {
-            _availableServices.Clear();
-            _availableServices.AddRange(services);
-            TrainerServicesReceived?.Invoke(services);
-            
-            _logger.LogDebug("Trainer services updated: {ServiceCount} services available", services.Length);
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing TrainerNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            TrainerWindowOpened = null;
+            TrainerWindowClosed = null;
+            SpellLearned = null;
+            TrainerServicesReceived = null;
+            TrainerError = null;
+
+            _disposed = true;
+            _logger.LogDebug("TrainerNetworkClientComponent disposed");
         }
+
+        #endregion
     }
 }

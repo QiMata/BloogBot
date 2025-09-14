@@ -16,6 +16,8 @@ namespace WoWSharpClient.Networking.ClientComponents
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<GossipNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
+
         private bool _isGossipWindowOpen;
         private DateTime? _lastOperationTime;
         private ulong? _currentNpcGuid;
@@ -33,6 +35,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private IObservable<GossipMenuData>? _gossipMenuClosed;
 
         private bool _disposed;
+        private bool _isOperationInProgress;
 
         /// <summary>
         /// Initializes a new instance of the GossipNetworkClientComponent class.
@@ -52,13 +55,34 @@ namespace WoWSharpClient.Networking.ClientComponents
         public bool IsGossipWindowOpen => _isGossipWindowOpen;
 
         /// <inheritdoc />
-        public DateTime? LastOperationTime => _lastOperationTime;
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
+        }
 
         /// <inheritdoc />
         public ulong? CurrentNpcGuid => _currentNpcGuid;
 
         /// <inheritdoc />
         public GossipMenuState MenuState => _menuState;
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
+        }
 
         #endregion
 
@@ -104,7 +128,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_GOSSIP_HELLO, payload, cancellationToken);
 
                 _currentNpcGuid = npcGuid;
-                _lastOperationTime = DateTime.UtcNow;
+                SetOperationInProgress(true);
                 _logger.LogInformation("Gossip hello sent to NPC: {NpcGuid:X}", npcGuid);
             }
             catch (Exception ex)
@@ -116,6 +140,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _gossipErrors.OnNext(errorData);
 
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -147,7 +175,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     _selectedOptions.OnNext(selectedOption);
                 }
 
-                _lastOperationTime = DateTime.UtcNow;
+                SetOperationInProgress(true);
                 _logger.LogInformation("Gossip option {OptionIndex} selected for NPC: {NpcGuid:X}", optionIndex, _currentNpcGuid);
             }
             catch (Exception ex)
@@ -159,6 +187,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _gossipErrors.OnNext(errorData);
 
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -686,6 +718,18 @@ namespace WoWSharpClient.Networking.ClientComponents
         #endregion
 
         #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            lock (_stateLock)
+            {
+                _isOperationInProgress = inProgress;
+                if (inProgress)
+                {
+                    _lastOperationTime = DateTime.UtcNow;
+                }
+            }
+        }
 
         private async Task FindAndNavigateToQuestsAsync(CancellationToken cancellationToken)
         {

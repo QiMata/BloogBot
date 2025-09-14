@@ -1,3 +1,5 @@
+using System;
+using System.Reactive;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.Abstractions;
 
@@ -45,11 +47,12 @@ namespace WoWSharpClient.Client
         Task SendOpcodeAsync(Opcode opcode, byte[] payload, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Registers a handler to be invoked when the specified server opcode is received.
+        /// Creates an observable stream for the specified server opcode. Each incoming packet payload
+        /// for that opcode will be pushed to subscribers.
         /// </summary>
-        /// <param name="opcode">The server opcode to handle.</param>
-        /// <param name="handler">The handler delegate receiving the raw payload bytes.</param>
-        void RegisterOpcodeHandler(Opcode opcode, Func<byte[], Task> handler);
+        /// <param name="opcode">The server opcode to observe.</param>
+        /// <returns>An observable of raw payloads for the opcode.</returns>
+        IObservable<ReadOnlyMemory<byte>> RegisterOpcodeHandler(Opcode opcode);
 
         /// <summary>
         /// Sends a character enumeration request.
@@ -113,49 +116,41 @@ namespace WoWSharpClient.Client
         /// <param name="newEncryptor">The new encryptor to use.</param>
         void UpdateEncryptor(IEncryptor newEncryptor);
 
-        /// <summary>
-        /// Exposes connection events.
-        /// </summary>
-        event Action? Connected;
+        // Reactive streams
 
         /// <summary>
-        /// Exposes disconnection events.
+        /// Stream that fires when the underlying connection is established.
         /// </summary>
-        event Action<Exception?>? Disconnected;
+        IObservable<Unit> WhenConnected { get; }
+
+        /// <summary>
+        /// Stream that fires when the underlying connection is disconnected.
+        /// </summary>
+        IObservable<Exception?> WhenDisconnected { get; }
 
         /// <summary>
         /// Fired when world server authentication succeeds.
         /// </summary>
-        event Action? OnAuthenticationSuccessful;
+        IObservable<Unit> AuthenticationSucceeded { get; }
 
         /// <summary>
-        /// Fired when world server authentication fails.
+        /// Fired when world server authentication fails (emits error code).
         /// </summary>
-        /// <param name="errorCode">The authentication error code.</param>
-        event Action<byte>? OnAuthenticationFailed;
+        IObservable<byte> AuthenticationFailed { get; }
 
         /// <summary>
-        /// Fired when a character is found during character enumeration.
+        /// Stream of character enumeration results.
         /// </summary>
-        /// <param name="guid">Character GUID.</param>
-        /// <param name="name">Character name.</param>
-        /// <param name="race">Character race.</param>
-        /// <param name="characterClass">Character class.</param>
-        /// <param name="gender">Character gender.</param>
-        event Action<ulong, string, byte, byte, byte>? OnCharacterFound;
+        IObservable<(ulong Guid, string Name, byte Race, byte Class, byte Gender)> CharacterFound { get; }
 
         /// <summary>
-        /// Fired when attack state changes (start/stop).
+        /// Stream of attack state changes.
         /// </summary>
-        /// <param name="isAttacking">Whether attacking started or stopped.</param>
-        /// <param name="attackerGuid">The attacker's GUID.</param>
-        /// <param name="victimGuid">The victim's GUID.</param>
-        event Action<bool, ulong, ulong>? OnAttackStateChanged;
+        IObservable<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)> AttackStateChanged { get; }
 
         /// <summary>
-        /// Fired when an attack error occurs (not in range, bad facing, etc.).
+        /// Stream of attack errors (e.g., not in range, bad facing).
         /// </summary>
-        /// <param name="errorMessage">The error message describing why the attack failed.</param>
-        event Action<string>? OnAttackError;
+        IObservable<string> AttackErrors { get; }
     }
 }

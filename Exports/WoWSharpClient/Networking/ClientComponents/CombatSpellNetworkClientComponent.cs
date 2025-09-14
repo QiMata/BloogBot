@@ -12,7 +12,7 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// including spell casting, pet control, aura/buff tracking, and item usage in combat.
     /// This agent coordinates multiple combat-related operations for a complete combat experience.
     /// </summary>
-    public class CombatSpellNetworkClientComponent : ICombatSpellNetworkClientComponent
+    public class CombatSpellNetworkClientComponent : ICombatSpellNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<CombatSpellNetworkClientComponent> _logger;
@@ -32,6 +32,10 @@ namespace WoWSharpClient.Networking.ClientComponents
         // Combat state
         private bool _isInCombat;
         private ulong? _currentCombatTarget;
+        private readonly object _stateLock = new object();
+        private bool _isOperationInProgress;
+        private DateTime? _lastOperationTime;
+        private bool _disposed;
 
         // Reactive observables for enhanced event handling (Subjects)
         private readonly Subject<CombatStateData> _combatStateChanges = new();
@@ -733,6 +737,51 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogInformation("Combat state changed: {InCombat}, Target: {TargetGuid:X}", 
                     inCombat, _currentCombatTarget);
             }
+        }
+
+        #endregion
+
+        #region INetworkClientComponent Implementation
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the combat spell network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing CombatSpellNetworkClientComponent");
+
+            _disposed = true;
+            _logger.LogDebug("CombatSpellNetworkClientComponent disposed");
         }
 
         #endregion

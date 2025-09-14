@@ -8,7 +8,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Provides specialized channels, commands, and reactive observables for chat events.
     /// Uses reactive observables instead of traditional events for better composability and filtering.
     /// </summary>
-    public interface IChatNetworkAgent
+    public interface IChatNetworkClientComponent : INetworkClientComponent
     {
         #region Properties
 

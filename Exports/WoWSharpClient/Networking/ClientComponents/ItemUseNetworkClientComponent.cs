@@ -13,9 +13,14 @@ namespace WoWSharpClient.Networking.ClientComponents
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<ItemUseNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
+        
         private bool _isUsingItem;
         private ulong? _currentItemInUse;
         private readonly Dictionary<uint, uint> _itemCooldowns;
+        private bool _isOperationInProgress;
+        private DateTime? _lastOperationTime;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the ItemUseNetworkClientComponent class.
@@ -28,6 +33,34 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _itemCooldowns = new Dictionary<uint, uint>();
         }
+
+        #region INetworkClientComponent Implementation
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
+        }
+
+        /// <inheritdoc />
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
+        }
+
+        #endregion
 
         /// <inheritdoc />
         public bool IsUsingItem => _isUsingItem;
@@ -50,11 +83,28 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public event Action<uint, uint>? ConsumableEffectApplied;
 
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            lock (_stateLock)
+            {
+                _isOperationInProgress = inProgress;
+                if (inProgress)
+                {
+                    _lastOperationTime = DateTime.UtcNow;
+                }
+            }
+        }
+
+        #endregion
+
         /// <inheritdoc />
         public async Task UseItemAsync(byte bagId, byte slotId, CancellationToken cancellationToken = default)
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Using item from bag {BagId} slot {SlotId}", bagId, slotId);
 
                 var payload = new byte[2];
@@ -73,6 +123,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 ItemUseFailed?.Invoke(0, $"Failed to use item: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -80,6 +134,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Using item from bag {BagId} slot {SlotId} on target {Target:X}", 
                     bagId, slotId, targetGuid);
 
@@ -101,6 +156,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 ItemUseFailed?.Invoke(0, $"Failed to use item on target: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -108,6 +167,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Using item from bag {BagId} slot {SlotId} at location ({X}, {Y}, {Z})", 
                     bagId, slotId, x, y, z);
 
@@ -131,6 +191,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 ItemUseFailed?.Invoke(0, $"Failed to use item at location: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -138,6 +202,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Activating item {ItemGuid:X}", itemGuid);
 
                 var payload = BitConverter.GetBytes(itemGuid);
@@ -156,6 +221,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 ItemUseFailed?.Invoke(itemGuid, $"Failed to activate item: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -163,6 +232,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Using consumable from bag {BagId} slot {SlotId}", bagId, slotId);
 
                 // Consumables use the same mechanism as regular items
@@ -175,6 +245,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to use consumable from bag {BagId} slot {SlotId}", bagId, slotId);
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -182,6 +256,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Opening container from bag {BagId} slot {SlotId}", bagId, slotId);
 
                 await UseItemAsync(bagId, slotId, cancellationToken);
@@ -193,6 +268,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to open container from bag {BagId} slot {SlotId}", bagId, slotId);
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -200,6 +279,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Using tool from bag {BagId} slot {SlotId} with target {Target:X}", 
                     bagId, slotId, targetGuid ?? 0);
 
@@ -219,6 +299,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to use tool from bag {BagId} slot {SlotId}", bagId, slotId);
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -226,6 +310,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Canceling current item use");
 
                 var payload = new byte[4]; // Empty payload for cancel
@@ -239,6 +324,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Failed to cancel item use");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -287,6 +376,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Finding and using item {ItemId}", itemId);
 
                 // This would typically search through the inventory for the item
@@ -307,7 +397,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to find and use item {ItemId}", itemId);
                 return false;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
+
+        #region Private Helper Methods
 
         /// <summary>
         /// Finds an item in the inventory by its ID.
@@ -373,6 +469,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             return true;
         }
 
+        #endregion
+
+        #region Server Response Handlers
+
         /// <summary>
         /// Updates item use state based on server response.
         /// This should be called when receiving item use confirmation packets.
@@ -417,6 +517,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             
             _logger.LogDebug("Item {ItemId} cooldown updated: {CooldownTime}ms", itemId, cooldownTime);
         }
+
+        #endregion
+
+        #region Enhanced Features
 
         /// <summary>
         /// Enhanced reagent tracking for spells and abilities.
@@ -486,5 +590,31 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             return true;
         }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the item use network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing ItemUseNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            ItemUsed = null;
+            ItemUseStarted = null;
+            ItemUseCompleted = null;
+            ItemUseFailed = null;
+            ConsumableEffectApplied = null;
+
+            _disposed = true;
+            _logger.LogDebug("ItemUseNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

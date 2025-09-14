@@ -9,14 +9,14 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of flight master network agent that handles flight operations in World of Warcraft.
     /// Manages taxi node interactions, flight path queries, and flight activation using the Mangos protocol.
     /// </summary>
-    public class FlightMasterNetworkClientComponent : IFlightMasterNetworkClientComponent
+    public class FlightMasterNetworkClientComponent : NetworkClientComponent, IFlightMasterNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<FlightMasterNetworkClientComponent> _logger;
-
         private bool _isTaxiMapOpen;
         private readonly List<uint> _availableTaxiNodes = [];
         private readonly Dictionary<uint, uint> _flightCosts = new();
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the FlightMasterNetworkClientComponent class.
@@ -55,6 +55,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Initiating conversation with flight master: {FlightMasterGuid:X}", flightMasterGuid);
 
                 var payload = new byte[8];
@@ -70,6 +71,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 FlightMasterError?.Invoke($"Failed to interact with flight master: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -77,6 +82,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Querying taxi node status from flight master: {FlightMasterGuid:X}", flightMasterGuid);
 
                 var payload = new byte[8];
@@ -92,6 +98,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 FlightMasterError?.Invoke($"Failed to query taxi node status: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -99,6 +109,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Querying available taxi nodes from flight master: {FlightMasterGuid:X}", flightMasterGuid);
 
                 var payload = new byte[8];
@@ -113,6 +124,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to query available taxi nodes from flight master: {FlightMasterGuid:X}", flightMasterGuid);
                 FlightMasterError?.Invoke($"Failed to query available nodes: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -402,5 +417,29 @@ namespace WoWSharpClient.Networking.ClientComponents
             FlightMasterError?.Invoke(errorMessage);
             _logger.LogWarning("Flight master operation failed: {Error}", errorMessage);
         }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the flight master network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing FlightMasterNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            TaxiMapOpened = null;
+            TaxiMapClosed = null;
+            FlightActivated = null;
+            TaxiNodeStatusReceived = null;
+            FlightMasterError = null;
+
+            _disposed = true;
+            _logger.LogDebug("FlightMasterNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

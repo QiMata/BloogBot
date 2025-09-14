@@ -6,7 +6,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for player-to-player trading operations over the network.
     /// Supports initiating trades, offering items/money, and accepting/canceling trades.
     /// </summary>
-    public interface ITradeNetworkAgent
+    public interface ITradeNetworkClientComponent : INetworkClientComponent
     {
         bool IsTradeOpen { get; }
         ulong? TradingWithGuid { get; }

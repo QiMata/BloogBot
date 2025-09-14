@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling guild-related operations in World of Warcraft.
     /// Manages guild invites, guild bank interactions, member management, and guild settings.
     /// </summary>
-    public interface IGuildNetworkAgent
+    public interface IGuildNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether the player is currently in a guild.

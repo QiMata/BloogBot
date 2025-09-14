@@ -245,14 +245,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         }
 
         // Dead Actor Agent
-        public static IDeadActorClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILogger<DeadActorClientComponent> logger)
+        public static IDeadActorNetworkClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILogger<DeadActorClientComponent> logger)
         {
             ArgumentNullException.ThrowIfNull(worldClient);
             ArgumentNullException.ThrowIfNull(logger);
             return new DeadActorClientComponent(worldClient, logger);
         }
 
-        public static IDeadActorClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILoggerFactory loggerFactory)
+        public static IDeadActorNetworkClientComponent CreateDeadActorAgent(IWorldClient worldClient, ILoggerFactory loggerFactory)
         {
             ArgumentNullException.ThrowIfNull(worldClient);
             ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -260,7 +260,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             return new DeadActorClientComponent(worldClient, logger);
         }
 
-        public static IDeadActorClientComponent CreateDeadActorAgentForClient(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        public static IDeadActorNetworkClientComponent CreateDeadActorAgentForClient(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             ArgumentNullException.ThrowIfNull(worldClient);
             if (loggerFactory != null)
@@ -684,7 +684,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             IGameObjectNetworkClientComponent GameObjectAgent,
             IVendorNetworkClientComponent VendorAgent,
             IFlightMasterNetworkClientComponent FlightMasterAgent,
-            IDeadActorClientComponent DeadActorAgent,
+            IDeadActorNetworkClientComponent DeadActorAgent,
             IInventoryNetworkClientComponent InventoryAgent,
             IItemUseNetworkClientComponent ItemUseAgent,
             IEquipmentNetworkClientComponent EquipmentAgent,

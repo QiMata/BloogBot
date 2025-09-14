@@ -7,19 +7,9 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Manages quest interaction, acceptance, completion, and reward selection.
     /// Uses reactive observables for better composability and filtering.
     /// </summary>
-    public interface IQuestNetworkAgent
+    public interface IQuestNetworkClientComponent : INetworkClientComponent
     {
         #region Properties
-
-        /// <summary>
-        /// Gets a value indicating whether a quest operation is currently in progress.
-        /// </summary>
-        bool IsOperationInProgress { get; }
-
-        /// <summary>
-        /// Gets the timestamp of the last quest operation.
-        /// </summary>
-        DateTime? LastOperationTime { get; }
 
         /// <summary>
         /// Gets the currently active quest giver GUID if in conversation.

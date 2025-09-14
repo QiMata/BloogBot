@@ -3,20 +3,23 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
-    /// Implementation of mail network agent that handles mail system operations in World of Warcraft.
-    /// Manages sending mail to other players, retrieving mail from mailboxes, and handling mail items using the Mangos protocol.
+    /// Implementation of mail network agent that handles mail operations in World of Warcraft.
+    /// Manages sending mail, receiving mail, mail attachments, and mail state tracking using the Mangos protocol.
     /// </summary>
-    public class MailNetworkClientComponent : IMailNetworkClientComponent
+    public class MailNetworkClientComponent : NetworkClientComponent, IMailNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<MailNetworkClientComponent> _logger;
+        private readonly object _stateLock = new object();
 
-        private bool _isMailboxWindowOpen;
-        private ulong? _currentMailboxGuid;
+        private readonly List<MailInfo> _mailbox = [];
+        private bool _isMailboxOpen;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the MailNetworkClientComponent class.
@@ -29,8 +32,14 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
+        #region INetworkClientComponent Implementation
+
+        // IsOperationInProgress and LastOperationTime provided by base class
+
+        #endregion
+
         /// <inheritdoc />
-        public bool IsMailboxWindowOpen => _isMailboxWindowOpen;
+        public bool IsMailboxWindowOpen => _isMailboxOpen;
 
         /// <inheritdoc />
         public event Action<ulong>? MailboxWindowOpened;
@@ -67,6 +76,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Opening mailbox interaction with: {MailboxGuid:X}", mailboxGuid);
 
                 var payload = new byte[8];
@@ -82,6 +92,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("OpenMailbox", $"Failed to open mailbox: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -89,6 +103,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Requesting mail list from server");
 
                 // CMSG_GET_MAIL_LIST has no payload data
@@ -101,6 +116,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to request mail list");
                 MailError?.Invoke("GetMailList", $"Failed to get mail list: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -139,6 +158,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Taking money from mail: {MailId}", mailId);
 
                 var payload = new byte[4];
@@ -154,6 +174,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("TakeMoney", $"Failed to take money from mail: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -161,6 +185,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Taking item from mail: {MailId}, item: {ItemGuid:X}", mailId, itemGuid);
 
                 var payload = new byte[12];
@@ -177,6 +202,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("TakeItem", $"Failed to take item from mail: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -184,6 +213,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Marking mail as read: {MailId}", mailId);
 
                 var payload = new byte[4];
@@ -199,6 +229,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("MarkAsRead", $"Failed to mark mail as read: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -206,6 +240,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Deleting mail: {MailId}", mailId);
 
                 var payload = new byte[4];
@@ -221,6 +256,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("DeleteMail", $"Failed to delete mail: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -228,6 +267,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Returning mail to sender: {MailId}", mailId);
 
                 var payload = new byte[4];
@@ -243,6 +283,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("ReturnToSender", $"Failed to return mail to sender: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -250,6 +294,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Creating text item from mail: {MailId}", mailId);
 
                 var payload = new byte[4];
@@ -265,6 +310,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("CreateTextItem", $"Failed to create text item: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -272,6 +321,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Querying next mail time");
 
                 // MSG_QUERY_NEXT_MAIL_TIME has no payload data
@@ -285,6 +335,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("QueryNextMailTime", $"Failed to query next mail time: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -292,12 +346,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Closing mailbox window");
 
                 // Mailbox windows typically close automatically when moving away
                 // But we can update our internal state
-                _isMailboxWindowOpen = false;
-                _currentMailboxGuid = null;
+                _isMailboxOpen = false;
                 MailboxWindowClosed?.Invoke();
 
                 _logger.LogInformation("Mailbox window closed");
@@ -309,12 +363,16 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("CloseMailbox", $"Failed to close mailbox: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
         public bool IsMailboxOpen(ulong mailboxGuid)
         {
-            return _isMailboxWindowOpen && _currentMailboxGuid == mailboxGuid;
+            return _isMailboxOpen;
         }
 
         /// <inheritdoc />
@@ -322,6 +380,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing quick mail check with mailbox: {MailboxGuid:X}", mailboxGuid);
 
                 await OpenMailboxAsync(mailboxGuid, cancellationToken);
@@ -344,6 +403,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("QuickCheck", $"Quick mail check failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -351,6 +414,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing quick collect all mail with mailbox: {MailboxGuid:X}", mailboxGuid);
 
                 await OpenMailboxAsync(mailboxGuid, cancellationToken);
@@ -378,6 +442,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("QuickCollectAll", $"Quick collect all mail failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -385,6 +453,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing quick send mail to {Recipient} with mailbox: {MailboxGuid:X}", recipient, mailboxGuid);
 
                 await OpenMailboxAsync(mailboxGuid, cancellationToken);
@@ -407,7 +476,17 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("QuickSend", $"Quick send mail failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
+
+        #region Private Helper Methods
+
+        // SetOperationInProgress provided by base class
+
+        #endregion
 
         /// <summary>
         /// Internal method for sending mail with various combinations of attachments.
@@ -425,6 +504,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Sending mail to {Recipient}: '{Subject}'", recipient, subject);
 
                 // Convert strings to UTF-8 bytes
@@ -496,6 +576,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 MailError?.Invoke("SendMail", $"Failed to send mail: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <summary>
@@ -505,8 +589,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <param name="mailboxGuid">The GUID of the mailbox.</param>
         public void HandleMailboxWindowOpened(ulong mailboxGuid)
         {
-            _isMailboxWindowOpen = true;
-            _currentMailboxGuid = mailboxGuid;
+            _isMailboxOpen = true;
             MailboxWindowOpened?.Invoke(mailboxGuid);
             _logger.LogDebug("Mailbox window opened for: {MailboxGuid:X}", mailboxGuid);
         }
@@ -603,5 +686,22 @@ namespace WoWSharpClient.Networking.ClientComponents
             MailError?.Invoke(operation, errorMessage);
             _logger.LogWarning("Mail operation failed - {Operation}: {Error}", operation, errorMessage);
         }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the mail network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing MailNetworkClientComponent");
+
+            _disposed = true;
+            _logger.LogDebug("MailNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

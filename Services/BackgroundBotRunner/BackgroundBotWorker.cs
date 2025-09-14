@@ -29,7 +29,7 @@ namespace BackgroundBotRunner
             IGameObjectNetworkClientComponent GameObjectAgent,
             IVendorNetworkClientComponent VendorAgent,
             IFlightMasterNetworkClientComponent FlightMasterAgent,
-            IDeadActorClientComponent DeadActorAgent,
+            IDeadActorNetworkClientComponent DeadActorAgent,
             IInventoryNetworkClientComponent InventoryAgent,
             IItemUseNetworkClientComponent ItemUseAgent,
             IEquipmentNetworkClientComponent EquipmentAgent,

@@ -12,13 +12,13 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Manages buying, selling, and repairing items with NPC vendors using the Mangos protocol with
     /// advanced features for bulk operations, junk selling, and soulbound item handling.
     /// </summary>
-    public class VendorNetworkClientComponent : IVendorNetworkClientComponent
+    public class VendorNetworkClientComponent : NetworkClientComponent, IVendorNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<VendorNetworkClientComponent> _logger;
 
         private VendorInfo? _currentVendor;
-        private DateTime? _lastOperationTime;
+        private bool _disposed;
         private readonly ConcurrentQueue<SoulboundConfirmation> _pendingSoulboundConfirmations = new();
 
         // Item lists for junk detection - these could be loaded from configuration
@@ -46,9 +46,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <inheritdoc />
         public VendorInfo? CurrentVendor => _currentVendor;
-
-        /// <inheritdoc />
-        public DateTime? LastOperationTime => _lastOperationTime;
 
         /// <inheritdoc />
         public event Action<VendorInfo>? VendorWindowOpened;
@@ -79,13 +76,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Opening vendor interaction with: {VendorGuid:X}", vendorGuid);
 
                 var payload = new byte[8];
                 BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_GOSSIP_HELLO, payload, cancellationToken);
-                _lastOperationTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Vendor interaction initiated with: {VendorGuid:X}", vendorGuid);
             }
@@ -95,6 +92,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to open vendor: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -102,13 +103,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Requesting vendor inventory from: {VendorGuid:X}", vendorGuid);
 
                 var payload = new byte[8];
                 BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_LIST_INVENTORY, payload, cancellationToken);
-                _lastOperationTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Vendor inventory request sent to: {VendorGuid:X}", vendorGuid);
             }
@@ -118,6 +119,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to request inventory: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -125,6 +130,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 if (!CanPurchaseItem(itemId, quantity))
                 {
                     throw new InvalidOperationException($"Cannot purchase item {itemId} (quantity: {quantity})");
@@ -138,7 +144,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 BitConverter.GetBytes(quantity).CopyTo(payload, 12);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_ITEM, payload, cancellationToken);
-                _lastOperationTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Purchase request sent for item {ItemId} (quantity: {Quantity}) from vendor: {VendorGuid:X}", itemId, quantity, vendorGuid);
             }
@@ -148,6 +153,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to buy item: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -155,6 +164,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Buying item from vendor slot {VendorSlot} (quantity: {Quantity}) from vendor: {VendorGuid:X}", vendorSlot, quantity, vendorGuid);
 
                 var payload = new byte[13];
@@ -163,7 +173,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 BitConverter.GetBytes(quantity).CopyTo(payload, 9);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_ITEM, payload, cancellationToken);
-                _lastOperationTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Purchase request sent for vendor slot {VendorSlot} (quantity: {Quantity}) from vendor: {VendorGuid:X}", vendorSlot, quantity, vendorGuid);
             }
@@ -172,6 +181,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to buy item from vendor slot {VendorSlot} from vendor: {VendorGuid:X}", vendorSlot, vendorGuid);
                 VendorError?.Invoke($"Failed to buy item from slot: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -183,6 +196,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Starting bulk purchase of item {ItemId} (total quantity: {TotalQuantity}) from vendor: {VendorGuid:X}", itemId, totalQuantity, vendorGuid);
 
                 var vendorItem = FindVendorItem(itemId);
@@ -249,6 +263,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Bulk purchase failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -256,6 +274,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Buying item {ItemId} (quantity: {Quantity}) into bag {BagId} slot {SlotId} from vendor: {VendorGuid:X}", itemId, quantity, bagId, slotId, vendorGuid);
 
                 var payload = new byte[18];
@@ -266,7 +285,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 payload[17] = slotId;
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_ITEM_IN_SLOT, payload, cancellationToken);
-                _lastOperationTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Purchase request sent for item {ItemId} (quantity: {Quantity}) into bag {BagId} slot {SlotId} from vendor: {VendorGuid:X}", itemId, quantity, bagId, slotId, vendorGuid);
             }
@@ -276,6 +294,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to buy item into slot: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -283,6 +305,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 if (!CanSellItem(bagId, slotId, quantity))
                 {
                     throw new InvalidOperationException($"Cannot sell item from bag {bagId} slot {slotId} (quantity: {quantity})");
@@ -297,7 +320,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 BitConverter.GetBytes(quantity).CopyTo(payload, 10);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_SELL_ITEM, payload, cancellationToken);
-                _lastOperationTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Sell request sent for item from bag {BagId} slot {SlotId} (quantity: {Quantity}) to vendor: {VendorGuid:X}", bagId, slotId, quantity, vendorGuid);
             }
@@ -306,6 +328,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to sell item from bag {BagId} slot {SlotId} to vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
                 VendorError?.Invoke($"Failed to sell item: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -316,6 +342,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Starting to sell all junk items to vendor: {VendorGuid:X}", vendorGuid);
 
                 var junkItems = await GetJunkItemsAsync(options);
@@ -326,6 +353,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to sell all junk to vendor: {VendorGuid:X}", vendorGuid);
                 VendorError?.Invoke($"Failed to sell all junk: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -338,6 +369,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
                 var itemList = junkItems.ToList();
                 _logger.LogDebug("Starting to sell {ItemCount} items to vendor: {VendorGuid:X}", itemList.Count, vendorGuid);
 
@@ -395,6 +427,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to sell items: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -402,6 +438,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Repairing item from bag {BagId} slot {SlotId} with vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
 
                 var payload = new byte[10];
@@ -410,7 +447,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 payload[9] = slotId;
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_REPAIR_ITEM, payload, cancellationToken);
-                _lastOperationTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Repair request sent for item from bag {BagId} slot {SlotId} with vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
             }
@@ -420,6 +456,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to repair item: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -427,6 +467,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 if (_currentVendor != null && !_currentVendor.CanRepair)
                 {
                     throw new InvalidOperationException("Current vendor cannot repair items");
@@ -441,7 +482,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 payload[9] = 0xFF;
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_REPAIR_ITEM, payload, cancellationToken);
-                _lastOperationTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Repair all request sent with vendor: {VendorGuid:X}", vendorGuid);
             }
@@ -451,6 +491,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to repair all items: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -458,6 +502,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Requesting repair cost from vendor: {VendorGuid:X}", vendorGuid);
 
                 // This would typically involve querying game state or sending a specific packet
@@ -471,6 +516,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to get repair cost: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -478,6 +527,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Closing vendor window");
 
                 // Vendor windows typically close automatically when moving away
@@ -489,8 +539,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 }
 
                 VendorWindowClosed?.Invoke();
-                _lastOperationTime = DateTime.UtcNow;
-
                 _logger.LogInformation("Vendor window closed");
                 await Task.CompletedTask;
             }
@@ -499,6 +547,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to close vendor window");
                 VendorError?.Invoke($"Failed to close vendor: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -580,6 +632,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Responding to soulbound confirmation for item {ItemId}: {Accept}", confirmation.ItemId, accept);
 
                 if (accept)
@@ -601,6 +654,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Failed to respond to soulbound confirmation: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -608,6 +665,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing quick buy of item {ItemId} (quantity: {Quantity}) from vendor: {VendorGuid:X}", itemId, quantity, vendorGuid);
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
@@ -631,6 +689,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Quick buy failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -638,6 +700,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing quick sell of item from bag {BagId} slot {SlotId} (quantity: {Quantity}) to vendor: {VendorGuid:X}", bagId, slotId, quantity, vendorGuid);
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
@@ -660,6 +723,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Quick sell failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -667,6 +734,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing quick repair all with vendor: {VendorGuid:X}", vendorGuid);
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
@@ -689,6 +757,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Quick repair all failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -696,6 +768,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing quick sell all junk with vendor: {VendorGuid:X}", vendorGuid);
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
@@ -719,6 +792,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 VendorError?.Invoke($"Quick sell all junk failed: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -728,6 +805,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Performing comprehensive vendor visit with vendor: {VendorGuid:X}", vendorGuid);
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
@@ -788,6 +866,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Comprehensive vendor visit failed with vendor: {VendorGuid:X}", vendorGuid);
                 VendorError?.Invoke($"Vendor visit failed: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -866,5 +948,32 @@ namespace WoWSharpClient.Networking.ClientComponents
             var lowerName = itemName.ToLowerInvariant();
             return JunkItemNames.Any(pattern => lowerName.Contains(pattern));
         }
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the vendor network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing VendorNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            VendorWindowOpened = null;
+            VendorWindowClosed = null;
+            ItemPurchased = null;
+            ItemSold = null;
+            ItemsRepaired = null;
+            VendorError = null;
+            SoulboundConfirmationRequired = null;
+            BulkOperationProgress = null;
+
+            _disposed = true;
+            _logger.LogDebug("VendorNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

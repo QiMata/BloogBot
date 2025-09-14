@@ -50,7 +50,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// <summary>
         /// Gets the dead actor agent for death and resurrection operations.
         /// </summary>
-        IDeadActorClientComponent DeadActorAgent { get; }
+        IDeadActorNetworkClientComponent DeadActorAgent { get; }
 
         /// <summary>
         /// Gets the inventory network agent for inventory management operations.

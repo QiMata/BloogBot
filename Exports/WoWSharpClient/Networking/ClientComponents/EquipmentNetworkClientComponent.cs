@@ -2,19 +2,25 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Implementation of equipment network agent that handles equipment operations in World of Warcraft.
-    /// Manages equipping, unequipping, and equipment state tracking using the Mangos protocol.
+    /// Manages equipping and unequipping items, changing equipment slots, and tracking equipment state using the Mangos protocol.
     /// </summary>
-    public class EquipmentNetworkClientComponent : IEquipmentNetworkClientComponent
+    public class EquipmentNetworkClientComponent : IEquipmentNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<EquipmentNetworkClientComponent> _logger;
-        private readonly Dictionary<EquipmentSlot, ulong?> _equippedItems;
-        private readonly Dictionary<EquipmentSlot, (uint Current, uint Maximum)> _itemDurability;
+        private readonly object _stateLock = new object();
+
+        private readonly Dictionary<EquipmentSlot, EquippedItem?> _equippedItems = [];
+        private readonly Dictionary<EquipmentSlot, ItemDurability> _itemDurability = [];
+        private bool _isOperationInProgress;
+        private DateTime? _lastOperationTime;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of the EquipmentNetworkClientComponent class.
@@ -25,23 +31,61 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _equippedItems = new Dictionary<EquipmentSlot, ulong?>();
-            _itemDurability = new Dictionary<EquipmentSlot, (uint Current, uint Maximum)>();
+        }
+
+        #region INetworkClientComponent Implementation
+
+        /// <inheritdoc />
+        public bool IsOperationInProgress
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _isOperationInProgress;
+                }
+            }
         }
 
         /// <inheritdoc />
+        public DateTime? LastOperationTime
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return _lastOperationTime;
+                }
+            }
+        }
+
+        #endregion
+
+        #region IEquipmentNetworkClientComponent Members
+
+        /// <summary>
+        /// Event triggered when an item is equipped.
+        /// </summary>
         public event Action<ulong, EquipmentSlot>? ItemEquipped;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Event triggered when an item is unequipped.
+        /// </summary>
         public event Action<ulong, EquipmentSlot>? ItemUnequipped;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Event triggered when equipment is swapped between slots.
+        /// </summary>
         public event Action<ulong, EquipmentSlot, ulong, EquipmentSlot>? EquipmentSwapped;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Event triggered on equipment-related errors.
+        /// </summary>
         public event Action<string>? EquipmentError;
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Event triggered when item durability changes.
+        /// </summary>
         public event Action<EquipmentSlot, uint, uint>? DurabilityChanged;
 
         /// <inheritdoc />
@@ -299,22 +343,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public bool IsSlotEquipped(EquipmentSlot slot)
         {
-            return _equippedItems.TryGetValue(slot, out var itemGuid) && itemGuid.HasValue;
+            return _equippedItems.TryGetValue(slot, out var item) && item != null;
         }
 
         /// <inheritdoc />
         public ulong? GetEquippedItem(EquipmentSlot slot)
         {
-            _equippedItems.TryGetValue(slot, out var itemGuid);
-            return itemGuid;
+            return _equippedItems.TryGetValue(slot, out var item) ? item?.ItemGuid : null;
         }
 
         /// <inheritdoc />
         public uint? GetEquippedItemId(EquipmentSlot slot)
         {
-            // This would typically query the item database based on the item GUID
-            // For now, return null as placeholder
-            return null;
+            return _equippedItems.TryGetValue(slot, out var item) ? item?.ItemId : null;
         }
 
         /// <inheritdoc />
@@ -322,7 +363,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_itemDurability.TryGetValue(slot, out var durability))
             {
-                return durability;
+                return (durability.Current, durability.Maximum);
             }
             return null;
         }
@@ -330,14 +371,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public bool HasDamagedEquipment()
         {
-            return _itemDurability.Values.Any(d => d.Current < d.Maximum);
+            return _itemDurability.Values.Any(d => d.NeedsRepair);
         }
 
         /// <inheritdoc />
         public IEnumerable<EquipmentSlot> GetDamagedEquipmentSlots()
         {
             return _itemDurability
-                .Where(kvp => kvp.Value.Current < kvp.Value.Maximum)
+                .Where(kvp => kvp.Value.NeedsRepair)
                 .Select(kvp => kvp.Key);
         }
 
@@ -346,22 +387,22 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// This should be called when receiving equipment update packets.
         /// </summary>
         /// <param name="slot">The equipment slot.</param>
-        /// <param name="itemGuid">The GUID of the equipped item, or null if unequipped.</param>
-        public void UpdateEquippedItem(EquipmentSlot slot, ulong? itemGuid)
+        /// <param name="item">The equipped item, or null if unequipped.</param>
+        public void UpdateEquippedItem(EquipmentSlot slot, EquippedItem? item)
         {
             var previousItem = _equippedItems.TryGetValue(slot, out var prev) ? prev : null;
-            _equippedItems[slot] = itemGuid;
+            _equippedItems[slot] = item;
 
-            _logger.LogDebug("Equipment slot {Slot} updated: {PreviousItem:X} -> {NewItem:X}",
-                slot, previousItem ?? 0, itemGuid ?? 0);
+            _logger.LogDebug("Equipment slot {Slot} updated: {PreviousItem} -> {NewItem}",
+                slot, previousItem?.ItemGuid ?? 0, item?.ItemGuid ?? 0);
 
-            if (itemGuid.HasValue && itemGuid != previousItem)
+            if (item != null && item != previousItem)
             {
-                ItemEquipped?.Invoke(itemGuid.Value, slot);
+                ItemEquipped?.Invoke(item.ItemGuid, slot);
             }
-            else if (!itemGuid.HasValue && previousItem.HasValue)
+            else if (item == null && previousItem != null)
             {
-                ItemUnequipped?.Invoke(previousItem.Value, slot);
+                ItemUnequipped?.Invoke(previousItem.ItemGuid, slot);
             }
         }
 
@@ -374,12 +415,54 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <param name="maxDurability">The maximum durability.</param>
         public void UpdateItemDurability(EquipmentSlot slot, uint currentDurability, uint maxDurability)
         {
-            _itemDurability[slot] = (currentDurability, maxDurability);
+            _itemDurability[slot] = new ItemDurability(currentDurability, maxDurability);
             
             _logger.LogDebug("Durability updated for slot {Slot}: {Current}/{Max}",
                 slot, currentDurability, maxDurability);
             
             DurabilityChanged?.Invoke(slot, currentDurability, maxDurability);
         }
+
+        #endregion
+
+        #region Private Helper Methods
+
+        private void SetOperationInProgress(bool inProgress)
+        {
+            lock (_stateLock)
+            {
+                _isOperationInProgress = inProgress;
+                if (inProgress)
+                {
+                    _lastOperationTime = DateTime.UtcNow;
+                }
+            }
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        /// <summary>
+        /// Disposes of the equipment network client component and cleans up resources.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _logger.LogDebug("Disposing EquipmentNetworkClientComponent");
+
+            // Clear events to prevent memory leaks
+            ItemEquipped = null;
+            ItemUnequipped = null;
+            EquipmentSwapped = null;
+            EquipmentError = null;
+            DurabilityChanged = null;
+
+            _disposed = true;
+            _logger.LogDebug("EquipmentNetworkClientComponent disposed");
+        }
+
+        #endregion
     }
 }

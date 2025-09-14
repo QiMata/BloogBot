@@ -20,7 +20,6 @@ namespace WoWSharpClient.Tests.Agent
         private readonly Mock<IGameObjectNetworkClientComponent> _mockGameObjectAgent;
         private readonly Mock<IVendorNetworkClientComponent> _mockVendorAgent;
         private readonly Mock<IFlightMasterNetworkClientComponent> _mockFlightMasterAgent;
-        private readonly Mock<IDeadActorClientComponent> _mockDeadActorAgent;
         private readonly NetworkClientComponentFactory _factory;
 
         public NetworkClientComponentFactoryTests()
@@ -35,7 +34,6 @@ namespace WoWSharpClient.Tests.Agent
             _mockGameObjectAgent = new Mock<IGameObjectNetworkClientComponent>();
             _mockVendorAgent = new Mock<IVendorNetworkClientComponent>();
             _mockFlightMasterAgent = new Mock<IFlightMasterNetworkClientComponent>();
-            _mockDeadActorAgent = new Mock<IDeadActorClientComponent>();
 
             // Setup logger factory for lazy initialization tests
             _mockLoggerFactory.Setup(x => x.CreateLogger(typeof(NetworkClientComponentFactory).FullName!)).Returns(_mockLogger.Object);

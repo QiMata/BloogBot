@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling flight master operations in World of Warcraft.
     /// Manages taxi node interactions, flight path queries, and flight activation.
     /// </summary>
-    public interface IFlightMasterNetworkAgent
+    public interface IFlightMasterNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether the taxi map is currently open.

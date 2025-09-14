@@ -4,7 +4,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling death and resurrection operations in World of Warcraft.
     /// Manages spirit release, corpse resurrection, and spirit healer interactions.
     /// </summary>
-    public interface IDeadActorAgent
+    public interface IDeadActorNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether the character is currently dead.
@@ -187,5 +187,27 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// <param name="y">Y coordinate of the corpse.</param>
         /// <param name="z">Z coordinate of the corpse.</param>
         void UpdateCorpseLocation(float x, float y, float z);
+
+        /// <summary>
+        /// Handles a resurrection request from another player or NPC.
+        /// This method should be called when a resurrection request is received from the server.
+        /// </summary>
+        /// <param name="resurrectorGuid">The GUID of the player or NPC offering resurrection.</param>
+        /// <param name="resurrectorName">The name of the resurrector.</param>
+        void HandleResurrectionRequest(ulong resurrectorGuid, string resurrectorName);
+
+        /// <summary>
+        /// Handles spirit healer resurrection timing information.
+        /// This method should be called when spirit healer time data is received from the server.
+        /// </summary>
+        /// <param name="timeSpan">The time until resurrection becomes available.</param>
+        void HandleSpiritHealerTime(TimeSpan timeSpan);
+
+        /// <summary>
+        /// Handles death-related error messages.
+        /// This method should be called when death/resurrection operations fail.
+        /// </summary>
+        /// <param name="errorMessage">The error message.</param>
+        void HandleDeathError(string errorMessage);
     }
 }

@@ -13,13 +13,11 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Works in coordination with the targeting agent for target selection.
     /// Uses reactive observables for better composability and filtering.
     /// </summary>
-    public class AttackNetworkClientComponent : IAttackNetworkAgent, IDisposable
+    public class AttackNetworkClientComponent : NetworkClientComponent, IAttackNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<AttackNetworkClientComponent> _logger;
         private bool _isAttacking;
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
         private ulong? _currentVictim;
 
         // Reactive observables
@@ -51,12 +49,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         public bool IsAttacking => _isAttacking;
 
         /// <inheritdoc />
-        public bool IsOperationInProgress => _isOperationInProgress;
-
-        /// <inheritdoc />
-        public DateTime? LastOperationTime => _lastOperationTime;
-
-        /// <inheritdoc />
         public ulong? CurrentVictim => _currentVictim;
 
         #endregion
@@ -81,15 +73,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(AttackNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Starting auto-attack");
 
                 // CMSG_ATTACKSWING has no payload for auto-attack
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_ATTACKSWING, [], cancellationToken);
-
-                _lastOperationTime = DateTime.UtcNow;
 
                 // Note: We don't immediately set _isAttacking = true here because we want to wait
                 // for server confirmation via SMSG_ATTACKSTART. The HandleAttackStateChanged method
@@ -108,7 +98,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -117,15 +107,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(AttackNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Stopping auto-attack");
 
                 // CMSG_ATTACKSTOP has no payload
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_ATTACKSTOP, [], cancellationToken);
-
-                _lastOperationTime = DateTime.UtcNow;
 
                 // Note: We don't immediately set _isAttacking = false here because we want to wait
                 // for server confirmation via SMSG_ATTACKSTOP. The HandleAttackStateChanged method
@@ -144,18 +132,18 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
         /// <inheritdoc />
-        public async Task AttackTargetAsync(ulong targetGuid, ITargetingNetworkAgent targetingAgent, CancellationToken cancellationToken = default)
+        public async Task AttackTargetAsync(ulong targetGuid, ITargetingNetworkClientComponent targetingAgent, CancellationToken cancellationToken = default)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(AttackNetworkClientComponent));
 
             ArgumentNullException.ThrowIfNull(targetingAgent);
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Setting target and starting attack on: {TargetGuid:X}", targetGuid);
@@ -221,7 +209,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -334,7 +322,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes the attack network agent and completes all observables.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
 
@@ -348,7 +336,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             _weaponSwings.Dispose();
             _attackErrors.Dispose();
 
-            GC.SuppressFinalize(this);
+            base.Dispose();
         }
 
         #endregion

@@ -30,7 +30,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// Interface for handling spell casting operations in World of Warcraft.
     /// Manages spell casting, channeling, and spell state tracking.
     /// </summary>
-    public interface ISpellCastingNetworkAgent
+    public interface ISpellCastingNetworkClientComponent : INetworkClientComponent
     {
         /// <summary>
         /// Gets a value indicating whether a spell is currently being cast.
