@@ -6,6 +6,7 @@ using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
 using Xunit;
+using System.Reactive.Subjects;
 
 namespace WoWSharpClient.Tests.Agent
 {
@@ -15,10 +16,21 @@ namespace WoWSharpClient.Tests.Agent
         private readonly Mock<ILogger<AttackNetworkClientComponent>> _mockLogger;
         private readonly AttackNetworkClientComponent _attackClientComponent;
 
+        // Reactive test streams
+        private readonly Subject<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)> _attackStateSubject = new();
+        private readonly Subject<string> _attackErrorsSubject = new();
+        private readonly Subject<ReadOnlyMemory<byte>> _weaponSwingSubject = new();
+
         public AttackNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
             _mockLogger = new Mock<ILogger<AttackNetworkClientComponent>>();
+
+            // Wire reactive streams
+            _mockWorldClient.SetupGet(x => x.AttackStateChanged).Returns(_attackStateSubject);
+            _mockWorldClient.SetupGet(x => x.AttackErrors).Returns(_attackErrorsSubject);
+            _mockWorldClient.Setup(x => x.RegisterOpcodeHandler(Opcode.SMSG_ATTACKERSTATEUPDATE)).Returns(_weaponSwingSubject);
+
             _attackClientComponent = new AttackNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
@@ -102,8 +114,8 @@ namespace WoWSharpClient.Tests.Agent
                 .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
-            // Set attacking state to true via HandleAttackStateChanged
-            _attackClientComponent.HandleAttackStateChanged(true, 0x12345678, 0x87654321);
+            // Set attacking state to true via stream
+            _attackStateSubject.OnNext((true, 0x12345678, 0x87654321));
 
             // Act
             await _attackClientComponent.ToggleAttackAsync();
@@ -156,7 +168,7 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleAttackStateChanged_FromFalseToTrue_RaisesAttackStateChangesObservable()
+        public void AttackState_FromFalseToTrue_RaisesAttackStateChangesObservable()
         {
             // Arrange
             ulong attackerGuid = 0x12345678;
@@ -172,7 +184,7 @@ namespace WoWSharpClient.Tests.Agent
             });
 
             // Act
-            _attackClientComponent.HandleAttackStateChanged(true, attackerGuid, victimGuid);
+            _attackStateSubject.OnNext((true, attackerGuid, victimGuid));
 
             // Assert
             Assert.True(_attackClientComponent.IsAttacking);
@@ -183,14 +195,14 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleAttackStateChanged_FromTrueToFalse_RaisesAttackStateChangesObservable()
+        public void AttackState_FromTrueToFalse_RaisesAttackStateChangesObservable()
         {
             // Arrange
             AttackStateData? receivedData = null;
             bool observableTriggered = false;
 
             // Set initial attacking state
-            _attackClientComponent.HandleAttackStateChanged(true, 0x12345678, 0x87654321);
+            _attackStateSubject.OnNext((true, 0x12345678, 0x87654321));
 
             // Subscribe to the reactive observable
             _attackClientComponent.AttackStateChanges.Subscribe(data =>
@@ -200,7 +212,7 @@ namespace WoWSharpClient.Tests.Agent
             });
 
             // Act
-            _attackClientComponent.HandleAttackStateChanged(false, 0x12345678, 0x87654321);
+            _attackStateSubject.OnNext((false, 0x12345678, 0x87654321));
 
             // Assert
             Assert.False(_attackClientComponent.IsAttacking);
@@ -210,7 +222,7 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleAttackStateChanged_SameState_DoesNotTriggerObservable()
+        public void AttackState_SameState_DoesNotTriggerObservable()
         {
             // Arrange
             int observableCount = 0;
@@ -219,15 +231,15 @@ namespace WoWSharpClient.Tests.Agent
             _attackClientComponent.AttackStateChanges.Subscribe(data => observableCount++);
 
             // Act
-            _attackClientComponent.HandleAttackStateChanged(false, 0x12345678, 0x87654321); // Initial state is already false
-            _attackClientComponent.HandleAttackStateChanged(false, 0x12345678, 0x87654321); // Same state again
+            _attackStateSubject.OnNext((false, 0x12345678, 0x87654321)); // Initial state is already false
+            _attackStateSubject.OnNext((false, 0x12345678, 0x87654321)); // Same state again
 
             // Assert
             Assert.Equal(0, observableCount); // No observables should be triggered since state didn't change
         }
 
         [Fact]
-        public void HandleAttackError_RaisesAttackErrorObservable()
+        public void AttackError_RaisesAttackErrorObservable()
         {
             // Arrange
             string errorMessage = "Target not in range";
@@ -242,7 +254,7 @@ namespace WoWSharpClient.Tests.Agent
             });
 
             // Act
-            _attackClientComponent.HandleAttackError(errorMessage);
+            _attackErrorsSubject.OnNext(errorMessage);
 
             // Assert
             Assert.True(observableTriggered);
@@ -260,8 +272,8 @@ namespace WoWSharpClient.Tests.Agent
             _attackClientComponent.AttackStateChanges.Subscribe(data => receivedData.Add(data));
 
             // Act
-            _attackClientComponent.HandleAttackStateChanged(true, 0x12345678, 0x87654321);
-            _attackClientComponent.HandleAttackStateChanged(false, 0x12345678, 0x87654321);
+            _attackStateSubject.OnNext((true, 0x12345678, 0x87654321));
+            _attackStateSubject.OnNext((false, 0x12345678, 0x87654321));
 
             // Assert
             Assert.Equal(2, receivedData.Count);
@@ -313,7 +325,7 @@ namespace WoWSharpClient.Tests.Agent
             // Arrange
             if (initialState)
             {
-                _attackClientComponent.HandleAttackStateChanged(true, 0x12345678, 0x87654321);
+                _attackStateSubject.OnNext((true, 0x12345678, 0x87654321));
             }
 
             _mockWorldClient
@@ -341,14 +353,14 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleAttackStateChanged_WithoutVictimGuid_DoesNotRaiseObservable()
+        public void AttackState_WithoutVictimGuid_TriggersObservable()
         {
             // Arrange
             bool observableTriggered = false;
             _attackClientComponent.AttackStateChanges.Subscribe(data => observableTriggered = true);
 
-            // Act - Start attacking but without specific victim context in our test
-            _attackClientComponent.HandleAttackStateChanged(true, 0x12345678, 0x87654321);
+            // Act - Start attacking
+            _attackStateSubject.OnNext((true, 0x12345678, 0x87654321));
 
             // Assert
             Assert.True(_attackClientComponent.IsAttacking);
@@ -356,7 +368,7 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleWeaponSwing_RaisesWeaponSwingObservable()
+        public void WeaponSwing_RaisesWeaponSwingObservable()
         {
             // Arrange
             ulong attackerGuid = 0x12345678;
@@ -373,8 +385,15 @@ namespace WoWSharpClient.Tests.Agent
                 observableTriggered = true;
             });
 
+            // Build payload according to parser expectations
+            var payload = new byte[21];
+            BitConverter.GetBytes(attackerGuid).CopyTo(payload, 0);
+            BitConverter.GetBytes(victimGuid).CopyTo(payload, 8);
+            BitConverter.GetBytes(damage).CopyTo(payload, 16);
+            payload[20] = (byte)(isCritical ? 1 : 0);
+
             // Act
-            _attackClientComponent.HandleWeaponSwing(attackerGuid, victimGuid, damage, isCritical);
+            _weaponSwingSubject.OnNext(new ReadOnlyMemory<byte>(payload));
 
             // Assert
             Assert.True(observableTriggered);

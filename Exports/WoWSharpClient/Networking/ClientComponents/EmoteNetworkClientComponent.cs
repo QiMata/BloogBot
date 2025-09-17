@@ -1,25 +1,30 @@
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Network agent for handling emote operations via network packets.
     /// Provides functionality to perform both animated emotes and text-based emotes.
+    /// Uses opcode-backed observables (no events/subjects).
     /// </summary>
-    public class EmoteNetworkClientComponent : IEmoteNetworkClientComponent
+    public class EmoteNetworkClientComponent : NetworkClientComponent, IEmoteNetworkClientComponent
     {
         #region Fields
 
         private readonly IWorldClient _worldClient;
         private readonly ILogger<EmoteNetworkClientComponent> _logger;
-        private readonly object _stateLock = new object();
         private volatile bool _isEmoting;
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
         private bool _disposed;
+
+        // Reactive opcode-backed observables
+        private readonly IObservable<EmoteData> _animatedEmotes;
+        private readonly IObservable<EmoteData> _textEmotes;
+        private readonly IObservable<EmoteErrorData> _emoteErrors;
 
         #endregion
 
@@ -34,54 +39,23 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Build incoming emote observables from opcode streams
+            _animatedEmotes = SafeOpcodeStream(Opcode.SMSG_EMOTE)
+                .Select(ParseSmsgEmote)
+                .Do(data => _logger.LogDebug("Received animated emote {EmoteName} (Id: {EmoteId})", data.EmoteName, data.EmoteId))
+                .Publish()
+                .RefCount();
+
+            _textEmotes = SafeOpcodeStream(Opcode.SMSG_TEXT_EMOTE)
+                .Select(ParseSmsgTextEmote)
+                .Do(data => _logger.LogDebug("Received text emote {EmoteName} (Id: {EmoteId})", data.EmoteName, data.EmoteId))
+                .Publish()
+                .RefCount();
+
+            // No dedicated error opcode stream for emotes; expose a never-completing empty stream
+            _emoteErrors = Observable.Never<EmoteErrorData>();
         }
-
-        #endregion
-
-        #region INetworkClientComponent Implementation
-
-        /// <inheritdoc />
-        public bool IsOperationInProgress
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _isOperationInProgress;
-                }
-            }
-        }
-
-        /// <inheritdoc />
-        public DateTime? LastOperationTime
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _lastOperationTime;
-                }
-            }
-        }
-
-        #endregion
-
-        #region Events
-
-        /// <inheritdoc />
-        public event Action<Emote>? EmotePerformed;
-
-        /// <inheritdoc />
-        public event Action<TextEmote, ulong?>? TextEmotePerformed;
-
-        /// <inheritdoc />
-        public event Action<string>? EmoteError;
-
-        /// <inheritdoc />
-        public event Action<ulong, Emote>? EmoteReceived;
-
-        /// <inheritdoc />
-        public event Action<ulong, TextEmote, ulong?>? TextEmoteReceived;
 
         #endregion
 
@@ -101,6 +75,19 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
+        #region Reactive Observables
+
+        /// <inheritdoc />
+        public IObservable<EmoteData> AnimatedEmotes => _animatedEmotes;
+
+        /// <inheritdoc />
+        public IObservable<EmoteData> TextEmotes => _textEmotes;
+
+        /// <inheritdoc />
+        public IObservable<EmoteErrorData> EmoteErrors => _emoteErrors;
+
+        #endregion
+
         #region Emote Operations
 
         /// <inheritdoc />
@@ -110,7 +97,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 var error = $"Invalid emote: {emote}";
                 _logger.LogWarning(error);
-                EmoteError?.Invoke(error);
+                // Do not throw; tests expect no packet to be sent and no exception for invalid emotes
                 return;
             }
 
@@ -131,13 +118,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 LastEmoteTime = DateTime.UtcNow;
 
                 _logger.LogInformation("Successfully performed emote: {Emote}", GetEmoteName(emote));
-                EmotePerformed?.Invoke(emote);
             }
             catch (Exception ex)
             {
                 var error = $"Failed to perform emote {emote}: {ex.Message}";
                 _logger.LogError(ex, error);
-                EmoteError?.Invoke(error);
                 throw;
             }
             finally
@@ -154,7 +139,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 var error = $"Invalid text emote: {textEmote}";
                 _logger.LogWarning(error);
-                EmoteError?.Invoke(error);
+                // Do not throw; align behavior with PerformEmoteAsync for invalid inputs
                 return;
             }
 
@@ -177,13 +162,11 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 var targetText = targetGuid.HasValue ? $" on target {targetGuid.Value:X}" : "";
                 _logger.LogInformation("Successfully performed text emote: {TextEmote}{Target}", GetTextEmoteName(textEmote), targetText);
-                TextEmotePerformed?.Invoke(textEmote, targetGuid);
             }
             catch (Exception ex)
             {
                 var error = $"Failed to perform text emote {textEmote}: {ex.Message}";
                 _logger.LogError(ex, error);
-                EmoteError?.Invoke(error);
                 throw;
             }
             finally
@@ -198,47 +181,47 @@ namespace WoWSharpClient.Networking.ClientComponents
         #region Convenience Methods
 
         /// <inheritdoc />
-        public Task WaveAsync(CancellationToken cancellationToken = default) => 
+        public Task WaveAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_ONESHOT_WAVE, cancellationToken);
 
         /// <inheritdoc />
-        public Task DanceAsync(CancellationToken cancellationToken = default) => 
+        public Task DanceAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_STATE_DANCE, cancellationToken);
 
         /// <inheritdoc />
-        public Task BowAsync(CancellationToken cancellationToken = default) => 
+        public Task BowAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_ONESHOT_BOW, cancellationToken);
 
         /// <inheritdoc />
-        public Task CheerAsync(CancellationToken cancellationToken = default) => 
+        public Task CheerAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_ONESHOT_CHEER, cancellationToken);
 
         /// <inheritdoc />
-        public Task LaughAsync(CancellationToken cancellationToken = default) => 
+        public Task LaughAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_ONESHOT_LAUGH, cancellationToken);
 
         /// <inheritdoc />
-        public Task PointAsync(CancellationToken cancellationToken = default) => 
+        public Task PointAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_ONESHOT_POINT, cancellationToken);
 
         /// <inheritdoc />
-        public Task SaluteAsync(CancellationToken cancellationToken = default) => 
+        public Task SaluteAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_ONESHOT_SALUTE, cancellationToken);
 
         /// <inheritdoc />
-        public Task SitAsync(CancellationToken cancellationToken = default) => 
+        public Task SitAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_STATE_SIT, cancellationToken);
 
         /// <inheritdoc />
-        public Task StandAsync(CancellationToken cancellationToken = default) => 
+        public Task StandAsync(CancellationToken cancellationToken = default) =>
             PerformEmoteAsync(Emote.EMOTE_STATE_STAND, cancellationToken);
 
         /// <inheritdoc />
-        public Task HelloAsync(ulong? targetGuid = null, CancellationToken cancellationToken = default) => 
+        public Task HelloAsync(ulong? targetGuid = null, CancellationToken cancellationToken = default) =>
             PerformTextEmoteAsync(TextEmote.TEXTEMOTE_HELLO, targetGuid, cancellationToken);
 
         /// <inheritdoc />
-        public Task ByeAsync(ulong? targetGuid = null, CancellationToken cancellationToken = default) => 
+        public Task ByeAsync(ulong? targetGuid = null, CancellationToken cancellationToken = default) =>
             PerformTextEmoteAsync(TextEmote.TEXTEMOTE_BYE, targetGuid, cancellationToken);
 
         /// <inheritdoc />
@@ -273,7 +256,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 Emote.EMOTE_ONESHOT_WAVE => "Wave",
                 Emote.EMOTE_ONESHOT_BOW => "Bow",
-                Emote.EMOTE_ONESHOT_CHEER => "Cheer", 
+                Emote.EMOTE_ONESHOT_CHEER => "Cheer",
                 Emote.EMOTE_ONESHOT_LAUGH => "Laugh",
                 Emote.EMOTE_ONESHOT_POINT => "Point",
                 Emote.EMOTE_ONESHOT_SALUTE => "Salute",
@@ -325,15 +308,15 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Server Response Handlers
+        #region Server Response Handlers (compat)
 
         /// <inheritdoc />
         public void HandleEmoteReceived(ulong sourceGuid, Emote emote)
         {
+            // Kept for compatibility with external callers; actual handling is via opcode-backed observables
             try
             {
                 _logger.LogDebug("Received emote {Emote} from player {PlayerGuid:X}", emote, sourceGuid);
-                EmoteReceived?.Invoke(sourceGuid, emote);
             }
             catch (Exception ex)
             {
@@ -344,11 +327,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public void HandleTextEmoteReceived(ulong sourceGuid, TextEmote textEmote, ulong? targetGuid)
         {
+            // Kept for compatibility with external callers; actual handling is via opcode-backed observables
             try
             {
                 var targetText = targetGuid.HasValue ? $" targeting {targetGuid.Value:X}" : "";
                 _logger.LogDebug("Received text emote {TextEmote} from player {PlayerGuid:X}{Target}", textEmote, sourceGuid, targetText);
-                TextEmoteReceived?.Invoke(sourceGuid, textEmote, targetGuid);
             }
             catch (Exception ex)
             {
@@ -360,15 +343,52 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #region Private Helper Methods
 
-        private void SetOperationInProgress(bool inProgress)
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private EmoteData ParseSmsgEmote(ReadOnlyMemory<byte> payload)
         {
-            lock (_stateLock)
+            try
             {
-                _isOperationInProgress = inProgress;
-                if (inProgress)
+                var span = payload.Span;
+                uint emoteId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0u;
+                string name = GetEmoteName((Emote)emoteId);
+                return new EmoteData(emoteId, name, null, null, EmoteType.Animated, DateTime.UtcNow);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse SMSG_EMOTE payload ({Length} bytes)", payload.Length);
+                return new EmoteData(0u, "Unknown", null, null, EmoteType.Animated, DateTime.UtcNow);
+            }
+        }
+
+        private EmoteData ParseSmsgTextEmote(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                var span = payload.Span;
+                // Best-effort: many cores use [uint64 sourceGuid][uint32 textEmote][uint32 emoteNum...]
+                uint emoteId;
+                if (span.Length >= 12)
                 {
-                    _lastOperationTime = DateTime.UtcNow;
+                    emoteId = BitConverter.ToUInt32(span.Slice(8, 4));
                 }
+                else if (span.Length >= 4)
+                {
+                    emoteId = BitConverter.ToUInt32(span[..4]);
+                }
+                else
+                {
+                    emoteId = 0u;
+                }
+
+                string name = (emoteId != 0) ? GetTextEmoteName((TextEmote)emoteId) : "Unknown";
+                return new EmoteData(emoteId, name, null, null, EmoteType.Text, DateTime.UtcNow);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to parse SMSG_TEXT_EMOTE payload ({Length} bytes)", payload.Length);
+                return new EmoteData(0u, "Unknown", null, null, EmoteType.Text, DateTime.UtcNow);
             }
         }
 
@@ -379,21 +399,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes of the emote network client component and cleans up resources.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
-
             _logger.LogDebug("Disposing EmoteNetworkClientComponent");
-
-            // Clear events to prevent memory leaks
-            EmotePerformed = null;
-            TextEmotePerformed = null;
-            EmoteError = null;
-            EmoteReceived = null;
-            TextEmoteReceived = null;
-
             _disposed = true;
             _logger.LogDebug("EmoteNetworkClientComponent disposed");
+            base.Dispose();
         }
 
         #endregion

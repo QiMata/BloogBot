@@ -1,13 +1,17 @@
+using System;
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Implementation of dead actor agent that handles death and resurrection operations in World of Warcraft.
     /// Manages spirit release, corpse resurrection, and spirit healer interactions using the Mangos protocol.
+    /// Uses opcode-backed observables (no events/subjects).
     /// </summary>
     public class DeadActorClientComponent : NetworkClientComponent, IDeadActorNetworkClientComponent, IDisposable
     {
@@ -21,6 +25,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         private DateTime? _spiritHealerResurrectionTime;
         private bool _disposed;
 
+        // Reactive opcode-backed streams (keep conservative defaults until protocol wiring is implemented)
+        private readonly IObservable<DeathData> _deathEvents;
+        private readonly IObservable<ResurrectionData> _resurrectionNotifications;
+        private readonly IObservable<DeathErrorData> _deathErrors;
+
         /// <summary>
         /// Initializes a new instance of the DeadActorAgent class.
         /// </summary>
@@ -30,6 +39,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Expose opcode-backed observables. If no server streams exist yet, expose never-ending streams.
+            // Integrators can wire specific SMSG_* opcodes here once available (e.g., SMSG_RESURRECT_REQUEST, etc.).
+            _deathEvents = Observable.Never<DeathData>();
+            _resurrectionNotifications = Observable.Never<ResurrectionData>();
+            _deathErrors = Observable.Never<DeathErrorData>();
         }
 
         /// <inheritdoc />
@@ -45,22 +60,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         public (float X, float Y, float Z)? CorpseLocation => _corpseLocation;
 
         /// <inheritdoc />
-        public event Action? OnDeath;
+        public IObservable<DeathData> DeathEvents => _deathEvents;
 
         /// <inheritdoc />
-        public event Action? OnSpiritReleased;
+        public IObservable<ResurrectionData> ResurrectionNotifications => _resurrectionNotifications;
 
         /// <inheritdoc />
-        public event Action? OnResurrected;
-
-        /// <inheritdoc />
-        public event Action<ulong, string>? OnResurrectionRequest;
-
-        /// <inheritdoc />
-        public event Action<float, float, float>? OnCorpseLocationUpdated;
-
-        /// <inheritdoc />
-        public event Action<string>? OnDeathError;
+        public IObservable<DeathErrorData> DeathErrors => _deathErrors;
 
         /// <inheritdoc />
         public async Task ReleaseSpiritAsync(CancellationToken cancellationToken = default)
@@ -70,14 +76,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Releasing spirit");
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_REPOP_REQUEST, [], cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_REPOP_REQUEST, Array.Empty<byte>(), cancellationToken);
 
                 _logger.LogInformation("Spirit release request sent");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to release spirit");
-                OnDeathError?.Invoke($"Failed to release spirit: {ex.Message}");
                 throw;
             }
             finally
@@ -94,14 +99,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Attempting to resurrect at corpse");
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_RECLAIM_CORPSE, [], cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_RECLAIM_CORPSE, Array.Empty<byte>(), cancellationToken);
 
                 _logger.LogInformation("Corpse resurrection request sent");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to resurrect at corpse");
-                OnDeathError?.Invoke($"Failed to resurrect at corpse: {ex.Message}");
                 throw;
             }
             finally
@@ -129,7 +133,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to accept resurrection");
-                OnDeathError?.Invoke($"Failed to accept resurrection: {ex.Message}");
                 throw;
             }
             finally
@@ -157,7 +160,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to decline resurrection");
-                OnDeathError?.Invoke($"Failed to decline resurrection: {ex.Message}");
                 throw;
             }
             finally
@@ -184,7 +186,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to resurrect with spirit healer: {SpiritHealerGuid:X}", spiritHealerGuid);
-                OnDeathError?.Invoke($"Failed to resurrect with spirit healer: {ex.Message}");
                 throw;
             }
             finally
@@ -201,14 +202,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Querying corpse location");
 
-                await _worldClient.SendOpcodeAsync(Opcode.MSG_CORPSE_QUERY, [], cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.MSG_CORPSE_QUERY, Array.Empty<byte>(), cancellationToken);
 
                 _logger.LogInformation("Corpse location query sent");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to query corpse location");
-                OnDeathError?.Invoke($"Failed to query corpse location: {ex.Message}");
                 throw;
             }
             finally
@@ -225,14 +225,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Querying area spirit healers");
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AREA_SPIRIT_HEALER_QUERY, [], cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AREA_SPIRIT_HEALER_QUERY, Array.Empty<byte>(), cancellationToken);
 
                 _logger.LogInformation("Area spirit healer query sent");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to query area spirit healers");
-                OnDeathError?.Invoke($"Failed to query area spirit healers: {ex.Message}");
                 throw;
             }
             finally
@@ -259,7 +258,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to queue for spirit healer: {SpiritHealerGuid:X}", spiritHealerGuid);
-                OnDeathError?.Invoke($"Failed to queue for spirit healer: {ex.Message}");
                 throw;
             }
             finally
@@ -276,14 +274,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Attempting self-resurrection");
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SELF_RES, [], cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SELF_RES, Array.Empty<byte>(), cancellationToken);
 
                 _logger.LogInformation("Self-resurrection request sent");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to self-resurrect");
-                OnDeathError?.Invoke($"Failed to self-resurrect: {ex.Message}");
                 throw;
             }
             finally
@@ -342,16 +339,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     _logger.LogDebug("Releasing spirit as part of auto death handling");
                     await ReleaseSpiritAsync(cancellationToken);
-                    
-                    // Wait for spirit release to complete
                     await Task.Delay(2000, cancellationToken);
                 }
 
                 // Step 2: Query corpse location
                 _logger.LogDebug("Querying corpse location");
                 await QueryCorpseLocationAsync(cancellationToken);
-                
-                // Wait for corpse location response
                 await Task.Delay(1000, cancellationToken);
 
                 // Step 3: Try to resurrect at corpse
@@ -359,8 +352,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     _logger.LogDebug("Attempting resurrection at corpse");
                     await ResurrectAtCorpseAsync(cancellationToken);
-                    
-                    // Wait to see if resurrection succeeds
                     await Task.Delay(2000, cancellationToken);
                 }
 
@@ -369,13 +360,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     _logger.LogDebug("Corpse resurrection failed, querying for spirit healers");
                     await QueryAreaSpiritHealersAsync(cancellationToken);
-                    
-                    // Wait for spirit healer response
                     await Task.Delay(1000, cancellationToken);
-                    
-                    // Note: In a real implementation, you'd need to get the actual spirit healer GUID
-                    // This is just a placeholder - the actual GUID would come from the server response
-                    // await ResurrectWithSpiritHealerAsync(spiritHealerGuid, cancellationToken);
                 }
 
                 _logger.LogInformation("Automatic death handling completed");
@@ -383,7 +368,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Auto death handling failed");
-                OnDeathError?.Invoke($"Auto death handling failed: {ex.Message}");
                 throw;
             }
             finally
@@ -395,32 +379,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public void UpdateDeathState(bool isDead, bool isGhost)
         {
-            var wasAlive = !_isDead;
-            var becameGhost = !_isGhost && isGhost;
-            var wasResurrected = _isDead && !isDead;
-
             _isDead = isDead;
             _isGhost = isGhost;
-
-            if (wasAlive && isDead)
+            if (!isDead)
             {
-                _logger.LogInformation("Character died");
-                OnDeath?.Invoke();
-            }
-
-            if (becameGhost)
-            {
-                _logger.LogInformation("Character became a ghost (spirit released)");
-                OnSpiritReleased?.Invoke();
-            }
-
-            if (wasResurrected)
-            {
-                _logger.LogInformation("Character was resurrected");
                 _corpseLocation = null; // Clear corpse location on resurrection
-                OnResurrected?.Invoke();
             }
-
             _logger.LogDebug("Death state updated: IsDead={IsDead}, IsGhost={IsGhost}", isDead, isGhost);
         }
 
@@ -428,7 +392,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void UpdateCorpseLocation(float x, float y, float z)
         {
             _corpseLocation = (x, y, z);
-            OnCorpseLocationUpdated?.Invoke(x, y, z);
             _logger.LogDebug("Corpse location updated: ({X:F2}, {Y:F2}, {Z:F2})", x, y, z);
         }
 
@@ -436,7 +399,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void HandleResurrectionRequest(ulong resurrectorGuid, string resurrectorName)
         {
             _hasResurrectionRequest = true;
-            OnResurrectionRequest?.Invoke(resurrectorGuid, resurrectorName);
             _logger.LogDebug("Resurrection request received from: {ResurrectorName} ({ResurrectorGuid:X})", resurrectorName, resurrectorGuid);
         }
 
@@ -450,7 +412,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public void HandleDeathError(string errorMessage)
         {
-            OnDeathError?.Invoke(errorMessage);
             _logger.LogWarning("Death operation error: {Error}", errorMessage);
         }
 
@@ -459,19 +420,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes of the dead actor agent and cleans up resources.
         /// </summary>
-        public new void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
 
             _logger.LogDebug("Disposing DeadActorClientComponent");
-
-            // Clear events to prevent memory leaks
-            OnDeath = null;
-            OnSpiritReleased = null;
-            OnResurrected = null;
-            OnResurrectionRequest = null;
-            OnCorpseLocationUpdated = null;
-            OnDeathError = null;
 
             _disposed = true;
             _logger.LogDebug("DeadActorClientComponent disposed");
@@ -479,6 +432,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             base.Dispose();
         }
 
+        #endregion
+
+        #region Helpers
+        private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
         #endregion
     }
 }

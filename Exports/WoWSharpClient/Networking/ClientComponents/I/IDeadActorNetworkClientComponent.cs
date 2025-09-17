@@ -26,41 +26,23 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         (float X, float Y, float Z)? CorpseLocation { get; }
 
+        // Reactive opcode-backed streams (no events/subjects)
         /// <summary>
-        /// Event fired when the character dies.
+        /// Stream of death-related events derived from world opcodes
+        /// (CharacterDied, SpiritReleased, CharacterResurrected, CorpseLocationUpdated).
         /// </summary>
-        event Action? OnDeath;
+        IObservable<WoWSharpClient.Networking.ClientComponents.Models.DeathData> DeathEvents { get; }
 
         /// <summary>
-        /// Event fired when the character's spirit is released.
+        /// Stream of resurrection notifications derived from world opcodes
+        /// (player/NPC resurrection requests, confirmations, etc.).
         /// </summary>
-        event Action? OnSpiritReleased;
+        IObservable<WoWSharpClient.Networking.ClientComponents.Models.ResurrectionData> ResurrectionNotifications { get; }
 
         /// <summary>
-        /// Event fired when the character is resurrected.
+        /// Stream of death/resurrection related errors.
         /// </summary>
-        event Action? OnResurrected;
-
-        /// <summary>
-        /// Event fired when a resurrection request is received.
-        /// </summary>
-        /// <param name="resurrectorGuid">The GUID of the player or NPC offering resurrection.</param>
-        /// <param name="resurrectorName">The name of the resurrector.</param>
-        event Action<ulong, string>? OnResurrectionRequest;
-
-        /// <summary>
-        /// Event fired when corpse location is updated.
-        /// </summary>
-        /// <param name="x">X coordinate of the corpse.</param>
-        /// <param name="y">Y coordinate of the corpse.</param>
-        /// <param name="z">Z coordinate of the corpse.</param>
-        event Action<float, float, float>? OnCorpseLocationUpdated;
-
-        /// <summary>
-        /// Event fired when a death/resurrection operation fails.
-        /// </summary>
-        /// <param name="error">The error message.</param>
-        event Action<string>? OnDeathError;
+        IObservable<WoWSharpClient.Networking.ClientComponents.Models.DeathErrorData> DeathErrors { get; }
 
         /// <summary>
         /// Releases the character's spirit, becoming a ghost.

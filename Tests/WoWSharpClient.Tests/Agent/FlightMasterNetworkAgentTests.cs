@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
 using Xunit;
@@ -140,24 +142,31 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleTaxiMapOpened_ValidData_UpdatesState()
+        public void TaxiMapOpened_OpcodeStream_UpdatesStateAndEmits()
         {
             // Arrange
             const ulong flightMasterGuid = 0x123456789ABCDEF0;
             var availableNodes = new List<uint> { 1, 2, 3 };
-            var eventFired = false;
-            ulong? receivedGuid = null;
-            IReadOnlyList<uint>? receivedNodes = null;
 
-            _flightMasterAgent.TaxiMapOpened += (guid, nodes) =>
-            {
-                eventFired = true;
-                receivedGuid = guid;
-                receivedNodes = nodes;
-            };
+            var subject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_SHOWTAXINODES))
+                .Returns(subject.AsObservable());
+
+            (ulong FlightMasterGuid, IReadOnlyList<uint> Nodes)? received = null;
+            var subscription = ((WoWSharpClient.Networking.ClientComponents.I.IFlightMasterNetworkClientComponent)_flightMasterAgent)
+                .TaxiMapOpened
+                .Subscribe(tuple => received = tuple);
+
+            // Build payload: GUID (8 bytes) + count (4 bytes) + nodes (uint each)
+            var payload = new byte[8 + 4 + 3 * 4];
+            BitConverter.GetBytes(flightMasterGuid).CopyTo(payload, 0);
+            BitConverter.GetBytes((uint)availableNodes.Count).CopyTo(payload, 8);
+            BitConverter.GetBytes(availableNodes[0]).CopyTo(payload, 12);
+            BitConverter.GetBytes(availableNodes[1]).CopyTo(payload, 16);
+            BitConverter.GetBytes(availableNodes[2]).CopyTo(payload, 20);
 
             // Act
-            _flightMasterAgent.HandleTaxiMapOpened(flightMasterGuid, availableNodes);
+            subject.OnNext(payload);
 
             // Assert
             Assert.True(_flightMasterAgent.IsTaxiMapOpen);
@@ -165,39 +174,46 @@ namespace WoWSharpClient.Tests.Agent
             Assert.True(_flightMasterAgent.IsNodeAvailable(1));
             Assert.True(_flightMasterAgent.IsNodeAvailable(2));
             Assert.True(_flightMasterAgent.IsNodeAvailable(3));
-            Assert.True(eventFired);
-            Assert.Equal(flightMasterGuid, receivedGuid);
-            Assert.Equal(availableNodes, receivedNodes);
+            Assert.NotNull(received);
+            Assert.Equal(flightMasterGuid, received.Value.FlightMasterGuid);
+            Assert.Equal(availableNodes, received.Value.Nodes);
+
+            subscription.Dispose();
         }
 
         [Fact]
-        public void HandleFlightActivated_ValidData_FiresEvent()
+        public void FlightActivated_OpcodeStream_Emits()
         {
             // Arrange
             const uint sourceNodeId = 1;
             const uint destinationNodeId = 2;
             const uint cost = 500;
-            var eventFired = false;
-            uint? receivedSource = null;
-            uint? receivedDestination = null;
-            uint? receivedCost = null;
 
-            _flightMasterAgent.FlightActivated += (source, dest, c) =>
-            {
-                eventFired = true;
-                receivedSource = source;
-                receivedDestination = dest;
-                receivedCost = c;
-            };
+            var subject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_ACTIVATETAXIREPLY))
+                .Returns(subject.AsObservable());
+
+            (uint Source, uint Dest, uint Cost)? received = null;
+            var subscription = ((WoWSharpClient.Networking.ClientComponents.I.IFlightMasterNetworkClientComponent)_flightMasterAgent)
+                .FlightActivated
+                .Subscribe(tuple => received = tuple);
+
+            // Build payload: src(4), dst(4), cost(4)
+            var payload = new byte[12];
+            BitConverter.GetBytes(sourceNodeId).CopyTo(payload, 0);
+            BitConverter.GetBytes(destinationNodeId).CopyTo(payload, 4);
+            BitConverter.GetBytes(cost).CopyTo(payload, 8);
 
             // Act
-            _flightMasterAgent.HandleFlightActivated(sourceNodeId, destinationNodeId, cost);
+            subject.OnNext(payload);
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(sourceNodeId, receivedSource);
-            Assert.Equal(destinationNodeId, receivedDestination);
-            Assert.Equal(cost, receivedCost);
+            Assert.NotNull(received);
+            Assert.Equal(sourceNodeId, received.Value.Source);
+            Assert.Equal(destinationNodeId, received.Value.Dest);
+            Assert.Equal(cost, received.Value.Cost);
+
+            subscription.Dispose();
         }
 
         [Fact]
@@ -215,36 +231,21 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleFlightMasterError_ValidMessage_FiresEvent()
+        public void HandleFlightMasterError_NoThrow()
         {
             // Arrange
             const string errorMessage = "Invalid destination";
-            var eventFired = false;
-            string? receivedError = null;
 
-            _flightMasterAgent.FlightMasterError += (error) =>
-            {
-                eventFired = true;
-                receivedError = error;
-            };
-
-            // Act
+            // Act & Assert
             _flightMasterAgent.HandleFlightMasterError(errorMessage);
-
-            // Assert
-            Assert.True(eventFired);
-            Assert.Equal(errorMessage, receivedError);
         }
 
         [Fact]
         public async Task CloseTaxiMapAsync_WhenOpen_UpdatesState()
         {
-            // Arrange
+            // Arrange: open via compat method
             var availableNodes = new List<uint> { 1, 2, 3 };
             _flightMasterAgent.HandleTaxiMapOpened(0x123, availableNodes);
-            var eventFired = false;
-
-            _flightMasterAgent.TaxiMapClosed += () => eventFired = true;
 
             // Act
             await _flightMasterAgent.CloseTaxiMapAsync();
@@ -252,7 +253,6 @@ namespace WoWSharpClient.Tests.Agent
             // Assert
             Assert.False(_flightMasterAgent.IsTaxiMapOpen);
             Assert.Empty(_flightMasterAgent.AvailableTaxiNodes);
-            Assert.True(eventFired);
         }
 
         [Fact]
@@ -286,6 +286,32 @@ namespace WoWSharpClient.Tests.Agent
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
+        }
+
+        [Fact]
+        public void TaxiMapClosed_OnDisconnect_UpdatesStateAndEmits()
+        {
+            // Arrange
+            var disconnectSubject = new Subject<Exception?>();
+            _mockWorldClient.Setup(x => x.WhenDisconnected).Returns(disconnectSubject.AsObservable());
+
+            bool closedEmitted = false;
+            var subscription = ((WoWSharpClient.Networking.ClientComponents.I.IFlightMasterNetworkClientComponent)_flightMasterAgent)
+                .TaxiMapClosed
+                .Subscribe(_ => closedEmitted = true);
+
+            // Open state
+            _flightMasterAgent.HandleTaxiMapOpened(0x123, new List<uint> { 1 });
+
+            // Act
+            disconnectSubject.OnNext(null);
+
+            // Assert
+            Assert.True(closedEmitted);
+            Assert.False(_flightMasterAgent.IsTaxiMapOpen);
+            Assert.Empty(_flightMasterAgent.AvailableTaxiNodes);
+
+            subscription.Dispose();
         }
     }
 }

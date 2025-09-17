@@ -1,4 +1,4 @@
-using System.Reactive.Subjects;
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -12,7 +12,7 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// including spell casting, pet control, aura/buff tracking, and item usage in combat.
     /// This agent coordinates multiple combat-related operations for a complete combat experience.
     /// </summary>
-    public class CombatSpellNetworkClientComponent : ICombatSpellNetworkClientComponent, IDisposable
+    public class CombatSpellNetworkClientComponent : NetworkClientComponent, ICombatSpellNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<CombatSpellNetworkClientComponent> _logger;
@@ -32,17 +32,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         // Combat state
         private bool _isInCombat;
         private ulong? _currentCombatTarget;
-        private readonly object _stateLock = new object();
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
         private bool _disposed;
 
-        // Reactive observables for enhanced event handling (Subjects)
-        private readonly Subject<CombatStateData> _combatStateChanges = new();
-        private readonly Subject<PetCommandData> _petCommands = new();
-        private readonly Subject<AuraUpdateData> _auraUpdates = new();
-        private readonly Subject<CombatItemUseData> _combatItemUsage = new();
-        private readonly Subject<CombatErrorData> _combatErrors = new();
+        // Opcode-backed observables (no Subjects or events)
+        private readonly IObservable<CombatStateData> _combatStateChanges;
+        private readonly IObservable<PetCommandData> _petCommands;
+        private readonly IObservable<AuraUpdateData> _auraUpdates;
+        private readonly IObservable<CombatItemUseData> _combatItemUsage;
+        private readonly IObservable<CombatErrorData> _combatErrors;
 
         #region Public Properties
 
@@ -124,6 +121,67 @@ namespace WoWSharpClient.Networking.ClientComponents
             _spellCastingAgent = spellCastingAgent ?? throw new ArgumentNullException(nameof(spellCastingAgent));
             _itemUseAgent = itemUseAgent ?? throw new ArgumentNullException(nameof(itemUseAgent));
 
+            // Build observables from IWorldClient streams/opcodes (no Subjects)
+            _combatStateChanges = (_worldClient.AttackStateChanged ?? Observable.Empty<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)>())
+                .Select(tuple => new CombatStateData(
+                    IsInCombat: tuple.IsAttacking,
+                    TargetGuid: tuple.IsAttacking ? tuple.VictimGuid : null,
+                    Strategy: CombatStrategy.Auto,
+                    Timestamp: DateTime.UtcNow
+                ))
+                .Do(state =>
+                {
+                    _isInCombat = state.IsInCombat;
+                    _currentCombatTarget = state.TargetGuid;
+                })
+                .Publish()
+                .RefCount();
+
+            // Auras from server opcode stream. Best-effort parsing.
+            _auraUpdates = Observable.Merge(
+                    SafeStream(Opcode.SMSG_UPDATE_AURA_DURATION),
+                    SafeStream(Opcode.SMSG_INIT_EXTRA_AURA_INFO),
+                    SafeStream(Opcode.SMSG_SET_EXTRA_AURA_INFO),
+                    SafeStream(Opcode.SMSG_SET_EXTRA_AURA_INFO_NEED_UPDATE)
+                )
+                .Select(ParseAuraUpdate)
+                .Do(update =>
+                {
+                    if (update.IsActive)
+                    {
+                        _activeAuras[update.AuraId] = new AuraData(
+                            AuraId: update.AuraId,
+                            CasterGuid: update.CasterGuid,
+                            Duration: update.Duration,
+                            AppliedTime: DateTime.UtcNow,
+                            IsActive: true
+                        );
+                    }
+                    else
+                    {
+                        _activeAuras.Remove(update.AuraId);
+                    }
+                })
+                .Publish()
+                .RefCount();
+
+            // Pet command feedback stream - if a specific opcode exists, wire it here. Otherwise expose a never stream.
+            _petCommands = Observable.Never<PetCommandData>();
+
+            // Combat item usage is typically client-driven; expose a never stream (can be wired to opcodes if available)
+            _combatItemUsage = Observable.Never<CombatItemUseData>();
+
+            // Combat errors from IWorldClient attack errors stream (plus other sources if needed)
+            _combatErrors = (_worldClient.AttackErrors ?? Observable.Empty<string>())
+                .Select(msg => new CombatErrorData(
+                    Operation: "Attack",
+                    ErrorMessage: msg,
+                    TargetGuid: _currentCombatTarget,
+                    Timestamp: DateTime.UtcNow
+                ))
+                .Publish()
+                .RefCount();
+
             SetupEventCoordination();
         }
 
@@ -143,23 +201,20 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogInformation("Engaging combat with target: {TargetGuid:X} using strategy: {Strategy}", targetGuid, combatStrategy);
 
+                SetOperationInProgress(true);
+
                 // Set target first
                 await _targetingAgent.SetTargetAsync(targetGuid, cancellationToken);
                 
-                // Update combat state
+                // Update combat state locally (server will confirm via streams)
                 _isInCombat = true;
                 _currentCombatTarget = targetGuid;
-                
-                // Emit combat state change
-                _combatStateChanges.OnNext(new CombatStateData(
-                    IsInCombat: true,
-                    TargetGuid: targetGuid,
-                    Strategy: combatStrategy,
-                    Timestamp: DateTime.UtcNow
-                ));
 
-                // Start auto-attack
-                await _attackAgent.StartAttackAsync(cancellationToken);
+                // Start auto-attack via attack agent convenience method if available
+                if (_attackAgent is not null)
+                {
+                    await _attackAgent.AttackTargetAsync(targetGuid, _targetingAgent, cancellationToken);
+                }
 
                 // Apply combat strategy
                 await ApplyCombatStrategyAsync(combatStrategy, targetGuid, cancellationToken);
@@ -169,8 +224,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to engage combat with target: {TargetGuid:X}", targetGuid);
-                await ReportCombatErrorAsync("Combat engagement failed", ex.Message);
+                // Errors will be surfaced by _combatErrors stream if server emits; also log here.
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -184,32 +243,28 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogInformation("Disengaging from combat");
 
+                SetOperationInProgress(true);
+
                 // Stop auto-attack
                 await _attackAgent.StopAttackAsync(cancellationToken);
                 
                 // Clear target
                 await _targetingAgent.ClearTargetAsync(cancellationToken);
                 
-                // Update combat state
-                var previousTarget = _currentCombatTarget;
+                // Update local combat state (server will confirm via streams)
                 _isInCombat = false;
                 _currentCombatTarget = null;
-                
-                // Emit combat state change
-                _combatStateChanges.OnNext(new CombatStateData(
-                    IsInCombat: false,
-                    TargetGuid: null,
-                    Strategy: CombatStrategy.None,
-                    Timestamp: DateTime.UtcNow
-                ));
 
                 _logger.LogInformation("Combat disengagement completed");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to disengage from combat");
-                await ReportCombatErrorAsync("Combat disengagement failed", ex.Message);
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -251,7 +306,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to cast spell {SpellId} on target {TargetGuid:X}", spellId, targetGuid);
-                await ReportCombatErrorAsync("Spell casting failed", $"Spell {spellId}: {ex.Message}");
                 throw;
             }
         }
@@ -260,27 +314,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// Casts a spell by name with enhanced targeting and condition checking.
         /// This is a convenience method that would require spell name to ID mapping.
         /// </summary>
-        /// <param name="spellName">The name of the spell to cast.</param>
-        /// <param name="targetGuid">Optional target GUID (uses current target if null).</param>
-        /// <param name="forceTarget">Whether to force target the specified GUID before casting.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public async Task CastSpellByNameAsync(string spellName, ulong? targetGuid = null, bool forceTarget = false, CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogDebug("Casting spell '{SpellName}' on target {TargetGuid:X}", spellName, targetGuid);
 
-                // This would require a spell name to ID mapping system
-                // For now, we'll use smart casting which handles target selection
-                var spellId = GetSpellIdFromName(spellName); // This would need to be implemented
+                var spellId = GetSpellIdFromName(spellName); // Placeholder mapping
                 
-                // Handle targeting if needed
                 if (targetGuid.HasValue && forceTarget)
                 {
                     await _targetingAgent.SetTargetAsync(targetGuid.Value, cancellationToken);
                 }
 
-                // Use the smart casting method which handles target selection
                 await _spellCastingAgent.SmartCastSpellAsync(spellId, cancellationToken);
 
                 _logger.LogDebug("Spell cast by name initiated successfully: '{SpellName}'", spellName);
@@ -288,7 +334,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to cast spell '{SpellName}' on target {TargetGuid:X}", spellName, targetGuid);
-                await ReportCombatErrorAsync("Spell casting failed", $"Spell '{spellName}': {ex.Message}");
                 throw;
             }
         }
@@ -300,8 +345,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Commands the current pet to attack a target.
         /// </summary>
-        /// <param name="targetGuid">The GUID of the target for the pet to attack.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public async Task PetAttackAsync(ulong targetGuid, CancellationToken cancellationToken = default)
         {
             if (!_currentPetGuid.HasValue)
@@ -316,20 +359,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 var payload = CreatePetCommandPayload(_currentPetGuid.Value, PetCommand.Attack, targetGuid);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_PET_ACTION, payload, cancellationToken);
 
-                // Emit pet command event
-                _petCommands.OnNext(new PetCommandData(
-                    PetGuid: _currentPetGuid.Value,
-                    Command: PetCommand.Attack,
-                    TargetGuid: targetGuid,
-                    Timestamp: DateTime.UtcNow
-                ));
-
                 _logger.LogInformation("Pet attack command sent successfully");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send pet attack command");
-                await ReportCombatErrorAsync("Pet command failed", $"Pet attack: {ex.Message}");
                 throw;
             }
         }
@@ -337,7 +371,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Commands the current pet to follow the player.
         /// </summary>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public async Task PetFollowAsync(CancellationToken cancellationToken = default)
         {
             if (!_currentPetGuid.HasValue)
@@ -352,20 +385,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 var payload = CreatePetCommandPayload(_currentPetGuid.Value, PetCommand.Follow);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_PET_ACTION, payload, cancellationToken);
 
-                // Emit pet command event
-                _petCommands.OnNext(new PetCommandData(
-                    PetGuid: _currentPetGuid.Value,
-                    Command: PetCommand.Follow,
-                    TargetGuid: null,
-                    Timestamp: DateTime.UtcNow
-                ));
-
                 _logger.LogInformation("Pet follow command sent successfully");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send pet follow command");
-                await ReportCombatErrorAsync("Pet command failed", $"Pet follow: {ex.Message}");
                 throw;
             }
         }
@@ -373,9 +397,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Commands the current pet to use a specific ability.
         /// </summary>
-        /// <param name="abilityId">The ID of the ability for the pet to use.</param>
-        /// <param name="targetGuid">Optional target for the ability.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public async Task PetUseAbilityAsync(uint abilityId, ulong? targetGuid = null, CancellationToken cancellationToken = default)
         {
             if (!_currentPetGuid.HasValue)
@@ -391,21 +412,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 var payload = CreatePetAbilityPayload(_currentPetGuid.Value, abilityId, targetGuid);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_PET_ACTION, payload, cancellationToken);
 
-                // Emit pet command event
-                _petCommands.OnNext(new PetCommandData(
-                    PetGuid: _currentPetGuid.Value,
-                    Command: PetCommand.UseAbility,
-                    TargetGuid: targetGuid,
-                    AbilityId: abilityId,
-                    Timestamp: DateTime.UtcNow
-                ));
-
                 _logger.LogInformation("Pet ability command sent successfully");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send pet ability command");
-                await ReportCombatErrorAsync("Pet command failed", $"Pet ability {abilityId}: {ex.Message}");
                 throw;
             }
         }
@@ -417,10 +428,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Updates aura information based on server packets.
         /// </summary>
-        /// <param name="auraId">The ID of the aura.</param>
-        /// <param name="isActive">Whether the aura is active or was removed.</param>
-        /// <param name="duration">The duration of the aura in milliseconds.</param>
-        /// <param name="casterGuid">The GUID of the caster.</param>
         public void UpdateAura(uint auraId, bool isActive, uint? duration = null, ulong? casterGuid = null)
         {
             try
@@ -443,15 +450,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                     _activeAuras.Remove(auraId);
                     _logger.LogDebug("Aura removed: {AuraId}", auraId);
                 }
-
-                // Emit aura update event
-                _auraUpdates.OnNext(new AuraUpdateData(
-                    AuraId: auraId,
-                    IsActive: isActive,
-                    CasterGuid: casterGuid,
-                    Duration: duration,
-                    Timestamp: DateTime.UtcNow
-                ));
             }
             catch (Exception ex)
             {
@@ -462,8 +460,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Checks if a specific aura is currently active.
         /// </summary>
-        /// <param name="auraId">The ID of the aura to check.</param>
-        /// <returns>True if the aura is active, false otherwise.</returns>
         public bool HasAura(uint auraId)
         {
             return _activeAuras.ContainsKey(auraId);
@@ -472,8 +468,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Gets the remaining duration of an active aura.
         /// </summary>
-        /// <param name="auraId">The ID of the aura.</param>
-        /// <returns>The remaining duration in milliseconds, or null if aura is not active.</returns>
         public uint? GetAuraRemainingDuration(uint auraId)
         {
             if (_activeAuras.TryGetValue(auraId, out var aura) && aura.Duration.HasValue)
@@ -492,11 +486,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Uses an item in combat context with enhanced targeting and timing.
         /// </summary>
-        /// <param name="bagId">The bag ID where the item is located.</param>
-        /// <param name="slotId">The slot ID where the item is located.</param>
-        /// <param name="targetGuid">Optional target for the item.</param>
-        /// <param name="forceTarget">Whether to force target before using the item.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public async Task UseCombatItemAsync(byte bagId, byte slotId, ulong? targetGuid = null, bool forceTarget = false, CancellationToken cancellationToken = default)
         {
             try
@@ -519,20 +508,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                     await _itemUseAgent.UseItemAsync(bagId, slotId, cancellationToken);
                 }
 
-                // Emit combat item usage event
-                _combatItemUsage.OnNext(new CombatItemUseData(
-                    ItemGuid: 0, // We don't have the GUID from bag/slot, would need inventory lookup
-                    TargetGuid: targetGuid,
-                    UsageType: CombatItemUsageType.Manual,
-                    Timestamp: DateTime.UtcNow
-                ));
-
                 _logger.LogInformation("Combat item used successfully: {BagId}:{SlotId}", bagId, slotId);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to use combat item {BagId}:{SlotId}", bagId, slotId);
-                await ReportCombatErrorAsync("Combat item usage failed", $"Item {bagId}:{slotId}: {ex.Message}");
                 throw;
             }
         }
@@ -540,32 +520,18 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Uses a health potion automatically based on health percentage.
         /// </summary>
-        /// <param name="healthPercentageThreshold">The health percentage threshold to trigger potion use.</param>
-        /// <param name="cancellationToken">Cancellation token.</param>
         public async Task AutoUseHealthPotionAsync(float healthPercentageThreshold = 0.3f, CancellationToken cancellationToken = default)
         {
             try
             {
-                // This would typically check current health percentage from game state
-                // For now, we'll simulate finding and using a health potion
-                
                 _logger.LogDebug("Auto-using health potion (threshold: {Threshold}%)", healthPercentageThreshold * 100);
 
-                // Find a health potion in inventory (this would be implemented with actual inventory checking)
+                // Find a health potion in inventory (placeholder)
                 var healthPotionLocation = FindHealthPotionInInventory();
                 
                 if (healthPotionLocation.HasValue)
                 {
                     await _itemUseAgent.UseConsumableAsync(healthPotionLocation.Value.BagId, healthPotionLocation.Value.SlotId, cancellationToken);
-                    
-                    // Emit combat item usage event
-                    _combatItemUsage.OnNext(new CombatItemUseData(
-                        ItemGuid: 0, // We don't have the GUID from bag/slot, would need inventory lookup
-                        TargetGuid: null,
-                        UsageType: CombatItemUsageType.AutomaticHealing,
-                        Timestamp: DateTime.UtcNow
-                    ));
-
                     _logger.LogInformation("Health potion used automatically: {BagId}:{SlotId}", healthPotionLocation.Value.BagId, healthPotionLocation.Value.SlotId);
                 }
                 else
@@ -576,7 +542,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to auto-use health potion");
-                await ReportCombatErrorAsync("Auto health potion failed", ex.Message);
                 throw;
             }
         }
@@ -590,24 +555,21 @@ namespace WoWSharpClient.Networking.ClientComponents
             switch (strategy)
             {
                 case CombatStrategy.Aggressive:
-                    // Could implement aggressive strategy with immediate ability usage
                     _logger.LogDebug("Applying aggressive combat strategy");
                     break;
                 case CombatStrategy.Defensive:
-                    // Could implement defensive strategy with emphasis on survival
                     _logger.LogDebug("Applying defensive combat strategy");
                     break;
                 case CombatStrategy.Auto:
                 default:
-                    // Default auto strategy
                     _logger.LogDebug("Applying automatic combat strategy");
                     break;
             }
+            await Task.CompletedTask;
         }
 
         private byte[] CreatePetCommandPayload(ulong petGuid, PetCommand command, ulong? targetGuid = null)
         {
-            // Create the payload for pet commands according to the WoW protocol
             var payload = new List<byte>();
             payload.AddRange(BitConverter.GetBytes(petGuid));
             payload.AddRange(BitConverter.GetBytes((uint)command));
@@ -622,7 +584,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private byte[] CreatePetAbilityPayload(ulong petGuid, uint abilityId, ulong? targetGuid = null)
         {
-            // Create the payload for pet ability usage according to the WoW protocol
             var payload = new List<byte>();
             payload.AddRange(BitConverter.GetBytes(petGuid));
             payload.AddRange(BitConverter.GetBytes(abilityId));
@@ -637,36 +598,21 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private (byte BagId, byte SlotId)? FindHealthPotionInInventory()
         {
-            // This would be implemented to actually search the inventory for health potions
-            // For now, returning null as a placeholder
-            // In a real implementation, this would:
-            // 1. Access the inventory system
-            // 2. Search for items with healing properties
-            // 3. Return the bag and slot location of the first found potion
             return null;
         }
 
         private uint GetSpellIdFromName(string spellName)
         {
-            // This would be implemented with a spell database or lookup system
-            // For now, returning a placeholder value
-            // In a real implementation, this would:
-            // 1. Access a spell database
-            // 2. Look up the spell ID by name
-            // 3. Handle localization if needed
             return 0; // Placeholder
         }
 
         private void SetupEventCoordination()
         {
-            // Coordinate with other agents through their reactive observables
-            
-            // Monitor attack state changes to update combat state
+            // Monitor attack state changes to update local combat flags (already handled by _combatStateChanges Do but keep logs)
             _attackAgent.AttackStateChanges.Subscribe(attackData =>
             {
                 if (!attackData.IsAttacking && _isInCombat)
                 {
-                    // Combat might be ending, could trigger cleanup
                     _logger.LogDebug("Attack stopped during combat, monitoring for combat end");
                 }
             });
@@ -682,14 +628,44 @@ namespace WoWSharpClient.Networking.ClientComponents
             });
         }
 
+        private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private AuraUpdateData ParseAuraUpdate(ReadOnlyMemory<byte> payload)
+        {
+            // Best-effort parse: assume [auraId:uint][isActive:byte][duration:uint?][casterGuid:ulong?]
+            try
+            {
+                var span = payload.Span;
+                uint auraId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0u;
+                bool isActive = span.Length >= 5 ? span[4] != 0 : true;
+                uint? duration = span.Length >= 9 ? BitConverter.ToUInt32(span.Slice(5, 4)) : null;
+                ulong? caster = span.Length >= 17 ? BitConverter.ToUInt64(span.Slice(9, 8)) : null;
+                return new AuraUpdateData(
+                    AuraId: auraId,
+                    IsActive: isActive,
+                    CasterGuid: caster,
+                    Duration: duration,
+                    Timestamp: DateTime.UtcNow
+                );
+            }
+            catch
+            {
+                // Fallback minimal update
+                return new AuraUpdateData(
+                    AuraId: 0,
+                    IsActive: true,
+                    CasterGuid: null,
+                    Duration: null,
+                    Timestamp: DateTime.UtcNow
+                );
+            }
+        }
+
         private async Task ReportCombatErrorAsync(string operation, string errorMessage)
         {
-            _combatErrors.OnNext(new CombatErrorData(
-                Operation: operation,
-                ErrorMessage: errorMessage,
-                TargetGuid: _currentCombatTarget,
-                Timestamp: DateTime.UtcNow
-            ));
+            // Intentionally no Subject push; errors surface via opcode-backed streams.
+            await Task.CompletedTask;
         }
 
         #endregion
@@ -699,7 +675,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Updates the current pet GUID based on server information.
         /// </summary>
-        /// <param name="petGuid">The GUID of the current pet, or null if no pet.</param>
         public void UpdateCurrentPet(ulong? petGuid)
         {
             _currentPetGuid = petGuid;
@@ -709,11 +684,8 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Updates combat state based on server information.
         /// </summary>
-        /// <param name="inCombat">Whether the character is in combat.</param>
-        /// <param name="targetGuid">The current combat target.</param>
         public void UpdateCombatState(bool inCombat, ulong? targetGuid = null)
         {
-            var previousState = _isInCombat;
             _isInCombat = inCombat;
             
             if (targetGuid.HasValue)
@@ -725,46 +697,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _currentCombatTarget = null;
             }
 
-            if (previousState != inCombat)
-            {
-                _combatStateChanges.OnNext(new CombatStateData(
-                    IsInCombat: inCombat,
-                    TargetGuid: _currentCombatTarget,
-                    Strategy: CombatStrategy.Auto,
-                    Timestamp: DateTime.UtcNow
-                ));
-
-                _logger.LogInformation("Combat state changed: {InCombat}, Target: {TargetGuid:X}", 
-                    inCombat, _currentCombatTarget);
-            }
-        }
-
-        #endregion
-
-        #region INetworkClientComponent Implementation
-
-        /// <inheritdoc />
-        public bool IsOperationInProgress
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _isOperationInProgress;
-                }
-            }
-        }
-
-        /// <inheritdoc />
-        public DateTime? LastOperationTime
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _lastOperationTime;
-                }
-            }
+            _logger.LogInformation("Combat state changed: {InCombat}, Target: {TargetGuid:X}", 
+                inCombat, _currentCombatTarget);
         }
 
         #endregion
@@ -774,13 +708,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes of the combat spell network client component and cleans up resources.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
 
             _logger.LogDebug("Disposing CombatSpellNetworkClientComponent");
 
             _disposed = true;
+            base.Dispose();
             _logger.LogDebug("CombatSpellNetworkClientComponent disposed");
         }
 

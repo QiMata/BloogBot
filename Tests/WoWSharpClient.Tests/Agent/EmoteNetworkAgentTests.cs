@@ -1,4 +1,6 @@
 using System;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 using GameData.Core.Enums;
@@ -6,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.Models;
 using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
@@ -17,12 +20,23 @@ namespace WoWSharpClient.Tests.Agent
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
         private readonly Mock<ILogger<EmoteNetworkClientComponent>> _mockLogger;
+        private readonly Subject<ReadOnlyMemory<byte>> _smsgEmoteStream = new();
+        private readonly Subject<ReadOnlyMemory<byte>> _smsgTextEmoteStream = new();
         private readonly EmoteNetworkClientComponent _agent;
 
         public EmoteNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
             _mockLogger = new Mock<ILogger<EmoteNetworkClientComponent>>();
+
+            // Wire opcode streams before creating the agent so it subscribes to them
+            _mockWorldClient
+                .Setup(x => x.RegisterOpcodeHandler(Opcode.SMSG_EMOTE))
+                .Returns(_smsgEmoteStream.AsObservable());
+            _mockWorldClient
+                .Setup(x => x.RegisterOpcodeHandler(Opcode.SMSG_TEXT_EMOTE))
+                .Returns(_smsgTextEmoteStream.AsObservable());
+
             _agent = new EmoteNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
         }
 
@@ -307,142 +321,43 @@ namespace WoWSharpClient.Tests.Agent
 
         #endregion
 
-        #region Event Tests
+        #region Observable Tests
 
         [Fact]
-        public async Task PerformEmoteAsync_SuccessfulEmote_TriggersEmotePerformedEvent()
+        public void AnimatedEmotes_Emits_OnServerSendsSmsgEmote()
         {
             // Arrange
-            var emote = Emote.EMOTE_ONESHOT_WAVE;
-            var eventTriggered = false;
-            Emote? capturedEmote = null;
+            WoWSharpClient.Networking.ClientComponents.Models.EmoteData? received = null;
+            using var sub = _agent.AnimatedEmotes.Subscribe(e => received = e);
 
-            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.CompletedTask);
-
-            _agent.EmotePerformed += (e) =>
-            {
-                eventTriggered = true;
-                capturedEmote = e;
-            };
-
-            // Act
-            await _agent.PerformEmoteAsync(emote);
+            // Simulate server SMSG_EMOTE payload: [uint32 emoteId]
+            var payload = new byte[4];
+            BitConverter.GetBytes((uint)Emote.EMOTE_ONESHOT_WAVE).CopyTo(payload, 0);
+            _smsgEmoteStream.OnNext(payload);
 
             // Assert
-            Assert.True(eventTriggered);
-            Assert.Equal(emote, capturedEmote);
+            Assert.NotNull(received);
+            Assert.Equal((uint)Emote.EMOTE_ONESHOT_WAVE, received!.EmoteId);
+            Assert.Equal("Wave", received.EmoteName);
         }
 
         [Fact]
-        public async Task PerformTextEmoteAsync_SuccessfulTextEmote_TriggersTextEmotePerformedEvent()
+        public void TextEmotes_Emits_OnServerSendsSmsgTextEmote()
         {
             // Arrange
-            var textEmote = TextEmote.TEXTEMOTE_HELLO;
-            ulong? targetGuid = 0x12345678;
-            var eventTriggered = false;
-            TextEmote? capturedTextEmote = null;
-            ulong? capturedTargetGuid = null;
+            WoWSharpClient.Networking.ClientComponents.Models.EmoteData? received = null;
+            using var sub = _agent.TextEmotes.Subscribe(e => received = e);
 
-            _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.CompletedTask);
-
-            _agent.TextEmotePerformed += (te, tg) =>
-            {
-                eventTriggered = true;
-                capturedTextEmote = te;
-                capturedTargetGuid = tg;
-            };
-
-            // Act
-            await _agent.PerformTextEmoteAsync(textEmote, targetGuid);
+            // Simulate server SMSG_TEXT_EMOTE payload: [uint64 sourceGuid][uint32 textEmote]
+            var payload = new byte[12];
+            BitConverter.GetBytes(0x1111UL).CopyTo(payload, 0);
+            BitConverter.GetBytes((uint)TextEmote.TEXTEMOTE_HELLO).CopyTo(payload, 8);
+            _smsgTextEmoteStream.OnNext(payload);
 
             // Assert
-            Assert.True(eventTriggered);
-            Assert.Equal(textEmote, capturedTextEmote);
-            Assert.Equal(targetGuid, capturedTargetGuid);
-        }
-
-        [Fact]
-        public async Task PerformEmoteAsync_InvalidEmote_TriggersEmoteErrorEvent()
-        {
-            // Arrange
-            var invalidEmote = Emote.EMOTE_ONESHOT_NONE;
-            var eventTriggered = false;
-            string? capturedError = null;
-
-            _agent.EmoteError += (error) =>
-            {
-                eventTriggered = true;
-                capturedError = error;
-            };
-
-            // Act
-            await _agent.PerformEmoteAsync(invalidEmote);
-
-            // Assert
-            Assert.True(eventTriggered);
-            Assert.Contains("Invalid emote", capturedError);
-        }
-
-        #endregion
-
-        #region Server Response Handler Tests
-
-        [Fact]
-        public void HandleEmoteReceived_ValidParameters_TriggersEmoteReceivedEvent()
-        {
-            // Arrange
-            var sourceGuid = 0x12345678UL;
-            var emote = Emote.EMOTE_ONESHOT_WAVE;
-            var eventTriggered = false;
-            ulong capturedSourceGuid = 0;
-            Emote capturedEmote = default;
-
-            _agent.EmoteReceived += (sg, e) =>
-            {
-                eventTriggered = true;
-                capturedSourceGuid = sg;
-                capturedEmote = e;
-            };
-
-            // Act
-            _agent.HandleEmoteReceived(sourceGuid, emote);
-
-            // Assert
-            Assert.True(eventTriggered);
-            Assert.Equal(sourceGuid, capturedSourceGuid);
-            Assert.Equal(emote, capturedEmote);
-        }
-
-        [Fact]
-        public void HandleTextEmoteReceived_ValidParameters_TriggersTextEmoteReceivedEvent()
-        {
-            // Arrange
-            var sourceGuid = 0x12345678UL;
-            var textEmote = TextEmote.TEXTEMOTE_HELLO;
-            ulong? targetGuid = 0x87654321UL;
-            var eventTriggered = false;
-            ulong capturedSourceGuid = 0;
-            TextEmote capturedTextEmote = default;
-            ulong? capturedTargetGuid = null;
-
-            _agent.TextEmoteReceived += (sg, te, tg) =>
-            {
-                eventTriggered = true;
-                capturedSourceGuid = sg;
-                capturedTextEmote = te;
-                capturedTargetGuid = tg;
-            };
-
-            // Act
-            _agent.HandleTextEmoteReceived(sourceGuid, textEmote, targetGuid);
-
-            // Assert
-            Assert.True(eventTriggered);
-            Assert.Equal(sourceGuid, capturedSourceGuid);
-            Assert.Equal(textEmote, capturedTextEmote);
-            Assert.Equal(targetGuid, capturedTargetGuid);
+            Assert.NotNull(received);
+            Assert.Equal((uint)TextEmote.TEXTEMOTE_HELLO, received!.EmoteId);
+            Assert.Equal("Hello", received.EmoteName);
         }
 
         #endregion
@@ -450,54 +365,34 @@ namespace WoWSharpClient.Tests.Agent
         #region Error Handling Tests
 
         [Fact]
-        public async Task PerformEmoteAsync_WorldClientThrowsException_TriggersErrorEventAndRethrows()
+        public async Task PerformEmoteAsync_WorldClientThrowsException_RethrowsAndResetsState()
         {
             // Arrange
             var emote = Emote.EMOTE_ONESHOT_WAVE;
             var testException = new InvalidOperationException("Test exception");
-            var errorEventTriggered = false;
-            string? capturedError = null;
 
             _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(testException);
-
-            _agent.EmoteError += (error) =>
-            {
-                errorEventTriggered = true;
-                capturedError = error;
-            };
 
             // Act & Assert
             var thrownException = await Assert.ThrowsAsync<InvalidOperationException>(() => _agent.PerformEmoteAsync(emote));
             Assert.Same(testException, thrownException);
-            Assert.True(errorEventTriggered);
-            Assert.Contains("Failed to perform emote", capturedError);
             Assert.False(_agent.IsEmoting);
         }
 
         [Fact]
-        public async Task PerformTextEmoteAsync_WorldClientThrowsException_TriggersErrorEventAndRethrows()
+        public async Task PerformTextEmoteAsync_WorldClientThrowsException_RethrowsAndResetsState()
         {
             // Arrange
             var textEmote = TextEmote.TEXTEMOTE_HELLO;
             var testException = new InvalidOperationException("Test exception");
-            var errorEventTriggered = false;
-            string? capturedError = null;
 
             _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(testException);
 
-            _agent.EmoteError += (error) =>
-            {
-                errorEventTriggered = true;
-                capturedError = error;
-            };
-
             // Act & Assert
             var thrownException = await Assert.ThrowsAsync<InvalidOperationException>(() => _agent.PerformTextEmoteAsync(textEmote));
             Assert.Same(testException, thrownException);
-            Assert.True(errorEventTriggered);
-            Assert.Contains("Failed to perform text emote", capturedError);
             Assert.False(_agent.IsEmoting);
         }
 

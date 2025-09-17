@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -9,8 +10,9 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// <summary>
     /// Implementation of equipment network agent that handles equipment operations in World of Warcraft.
     /// Manages equipping and unequipping items, changing equipment slots, and tracking equipment state using the Mangos protocol.
+    /// Uses opcode-backed observables (no events/subjects exposed).
     /// </summary>
-    public class EquipmentNetworkClientComponent : IEquipmentNetworkClientComponent, IDisposable
+    public class EquipmentNetworkClientComponent : NetworkClientComponent, IEquipmentNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<EquipmentNetworkClientComponent> _logger;
@@ -18,9 +20,12 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private readonly Dictionary<EquipmentSlot, EquippedItem?> _equippedItems = [];
         private readonly Dictionary<EquipmentSlot, ItemDurability> _itemDurability = [];
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
         private bool _disposed;
+
+        // Reactive opcode-backed observables
+        private readonly IObservable<EquipmentOperationData> _equipmentOperations;
+        private readonly IObservable<EquipmentChangeData> _equipmentChanges;
+        private readonly IObservable<(EquipmentSlot Slot, uint Current, uint Maximum)> _durabilityChanges;
 
         /// <summary>
         /// Initializes a new instance of the EquipmentNetworkClientComponent class.
@@ -31,68 +36,42 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Operation results (failures primarily) from server
+            _equipmentOperations = SafeOpcodeStream(Opcode.SMSG_INVENTORY_CHANGE_FAILURE)
+                .Select(ParseInventoryChangeFailure)
+                .Do(op => _logger.LogDebug("Equipment op result: {Result} Item: {ItemGuid:X} Slot: {Slot}", op.Result, op.ItemGuid, op.Slot))
+                .Publish()
+                .RefCount();
+
+            // No direct opcode dedicated to equipment change confirmations here; expose a never-ending stream
+            _equipmentChanges = Observable.Never<EquipmentChangeData>();
+
+            // Durability changes are often implicit or sent via different channels; expose a never-ending stream
+            _durabilityChanges = Observable.Never<(EquipmentSlot Slot, uint Current, uint Maximum)>();
         }
 
-        #region INetworkClientComponent Implementation
+        #region Reactive Observables
 
         /// <inheritdoc />
-        public bool IsOperationInProgress
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _isOperationInProgress;
-                }
-            }
-        }
+        public IObservable<EquipmentOperationData> EquipmentOperations => _equipmentOperations;
 
         /// <inheritdoc />
-        public DateTime? LastOperationTime
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _lastOperationTime;
-                }
-            }
-        }
+        public IObservable<EquipmentChangeData> EquipmentChanges => _equipmentChanges;
+
+        /// <inheritdoc />
+        public IObservable<(EquipmentSlot Slot, uint Current, uint Maximum)> DurabilityChanges => _durabilityChanges;
 
         #endregion
 
-        #region IEquipmentNetworkClientComponent Members
-
-        /// <summary>
-        /// Event triggered when an item is equipped.
-        /// </summary>
-        public event Action<ulong, EquipmentSlot>? ItemEquipped;
-
-        /// <summary>
-        /// Event triggered when an item is unequipped.
-        /// </summary>
-        public event Action<ulong, EquipmentSlot>? ItemUnequipped;
-
-        /// <summary>
-        /// Event triggered when equipment is swapped between slots.
-        /// </summary>
-        public event Action<ulong, EquipmentSlot, ulong, EquipmentSlot>? EquipmentSwapped;
-
-        /// <summary>
-        /// Event triggered on equipment-related errors.
-        /// </summary>
-        public event Action<string>? EquipmentError;
-
-        /// <summary>
-        /// Event triggered when item durability changes.
-        /// </summary>
-        public event Action<EquipmentSlot, uint, uint>? DurabilityChanged;
+        #region Operations
 
         /// <inheritdoc />
         public async Task EquipItemAsync(byte bagId, byte slotId, EquipmentSlot equipSlot, CancellationToken cancellationToken = default)
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Equipping item from bag {BagId} slot {SlotId} to equipment slot {EquipSlot}",
                     bagId, slotId, equipSlot);
 
@@ -108,8 +87,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Failed to equip item from bag {BagId} slot {SlotId} to equipment slot {EquipSlot}",
                     bagId, slotId, equipSlot);
-                EquipmentError?.Invoke($"Failed to equip item: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -118,6 +100,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Auto-equipping item from bag {BagId} slot {SlotId}", bagId, slotId);
 
                 var payload = new byte[2];
@@ -130,8 +113,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to auto-equip item from bag {BagId} slot {SlotId}", bagId, slotId);
-                EquipmentError?.Invoke($"Failed to auto-equip item: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -140,6 +126,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Unequipping item from equipment slot {EquipSlot}", equipSlot);
 
                 var payload = new byte[2];
@@ -152,8 +139,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to unequip item from equipment slot {EquipSlot}", equipSlot);
-                EquipmentError?.Invoke($"Failed to unequip item: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -162,6 +152,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Unequipping item from equipment slot {EquipSlot} to bag {TargetBag} slot {TargetSlot}",
                     equipSlot, targetBag, targetSlot);
 
@@ -178,8 +169,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Failed to unequip item from equipment slot {EquipSlot} to bag {TargetBag} slot {TargetSlot}",
                     equipSlot, targetBag, targetSlot);
-                EquipmentError?.Invoke($"Failed to unequip item to slot: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -188,6 +182,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Swapping equipment between slots {FirstSlot} and {SecondSlot}", firstSlot, secondSlot);
 
                 var payload = new byte[4];
@@ -202,8 +197,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to swap equipment between slots {FirstSlot} and {SecondSlot}", firstSlot, secondSlot);
-                EquipmentError?.Invoke($"Failed to swap equipment: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -212,6 +210,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Swapping equipment slot {EquipSlot} with bag {BagId} slot {SlotId}",
                     equipSlot, bagId, slotId);
 
@@ -228,8 +227,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogError(ex, "Failed to swap equipment slot {EquipSlot} with bag {BagId} slot {SlotId}",
                     equipSlot, bagId, slotId);
-                EquipmentError?.Invoke($"Failed to swap equipment with inventory: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -238,6 +240,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Auto-equipping all available items with enhanced logic");
 
                 // Enhanced implementation that handles:
@@ -253,62 +256,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to auto-equip all items");
-                EquipmentError?.Invoke($"Failed to auto-equip all: {ex.Message}");
                 throw;
             }
-        }
-
-        /// <summary>
-        /// Processes inventory for auto-equipment with enhanced logic.
-        /// </summary>
-        private async Task ProcessInventoryForAutoEquip(CancellationToken cancellationToken)
-        {
-            // Enhanced auto-equip logic that would:
-            // 1. Scan all inventory slots for equippable items
-            // 2. Compare item stats with currently equipped items
-            // 3. Respect combat restrictions (no weapon swapping in combat)
-            // 4. Handle special equipment rules (rings, trinkets, weapons)
-            // 5. Batch operations to avoid server spam
-
-            _logger.LogDebug("Processing inventory for auto-equip with combat-aware logic");
-            
-            // Placeholder for actual implementation that would interface with
-            // WoW object manager and item database
-            await Task.Delay(10, cancellationToken); // Simulate processing time
-        }
-
-        /// <summary>
-        /// Enhanced equipment validation that checks combat state and item requirements.
-        /// </summary>
-        private bool CanEquipItem(byte bagId, byte slotId, EquipmentSlot targetSlot)
-        {
-            // Enhanced validation that checks:
-            // 1. Combat state restrictions
-            // 2. Item level and class requirements  
-            // 3. Two-handed weapon conflicts
-            // 4. Special equipment restrictions
-
-            _logger.LogDebug("Validating equipment operation for slot {TargetSlot} with combat awareness", targetSlot);
-
-            // Check for combat restrictions on weapon slots
-            if (IsWeaponSlot(targetSlot))
+            finally
             {
-                // In a real implementation, this would check if player is in combat
-                // and prevent weapon swapping during combat
-                _logger.LogDebug("Weapon slot detected - checking combat restrictions");
+                SetOperationInProgress(false);
             }
-
-            return true; // Placeholder - would return actual validation result
-        }
-
-        /// <summary>
-        /// Determines if an equipment slot is a weapon slot that has combat restrictions.
-        /// </summary>
-        private static bool IsWeaponSlot(EquipmentSlot slot)
-        {
-            return slot == EquipmentSlot.MainHand || 
-                   slot == EquipmentSlot.OffHand || 
-                   slot == EquipmentSlot.Ranged;
         }
 
         /// <inheritdoc />
@@ -316,6 +269,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Unequipping all equipment");
 
                 // Unequip all equipment slots that have items
@@ -324,7 +278,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     if (IsSlotEquipped(slot))
                     {
                         await UnequipItemAsync(slot, cancellationToken);
-                        
+
                         // Small delay between unequip operations to avoid overwhelming the server
                         await Task.Delay(100, cancellationToken);
                     }
@@ -335,10 +289,17 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to unequip all items");
-                EquipmentError?.Invoke($"Failed to unequip all: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
+
+        #endregion
+
+        #region Queries
 
         /// <inheritdoc />
         public bool IsSlotEquipped(EquipmentSlot slot)
@@ -382,6 +343,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Select(kvp => kvp.Key);
         }
 
+        #endregion
+
+        #region Public Methods for Server Response Handling (Compat)
+
         /// <summary>
         /// Updates equipped item state based on server response.
         /// This should be called when receiving equipment update packets.
@@ -395,15 +360,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _logger.LogDebug("Equipment slot {Slot} updated: {PreviousItem} -> {NewItem}",
                 slot, previousItem?.ItemGuid ?? 0, item?.ItemGuid ?? 0);
-
-            if (item != null && item != previousItem)
-            {
-                ItemEquipped?.Invoke(item.ItemGuid, slot);
-            }
-            else if (item == null && previousItem != null)
-            {
-                ItemUnequipped?.Invoke(previousItem.ItemGuid, slot);
-            }
         }
 
         /// <summary>
@@ -416,27 +372,57 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void UpdateItemDurability(EquipmentSlot slot, uint currentDurability, uint maxDurability)
         {
             _itemDurability[slot] = new ItemDurability(currentDurability, maxDurability);
-            
+
             _logger.LogDebug("Durability updated for slot {Slot}: {Current}/{Max}",
                 slot, currentDurability, maxDurability);
-            
-            DurabilityChanged?.Invoke(slot, currentDurability, maxDurability);
         }
 
         #endregion
 
         #region Private Helper Methods
 
-        private void SetOperationInProgress(bool inProgress)
+        private static IObservable<T> SafeStream<T>(IObservable<T>? source)
+            => source ?? Observable.Empty<T>();
+
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private static EquipmentOperationData ParseInventoryChangeFailure(ReadOnlyMemory<byte> payload)
         {
-            lock (_stateLock)
+            // Best-effort parsing placeholder; detailed parsing requires full packet schema
+            return new EquipmentOperationData
             {
-                _isOperationInProgress = inProgress;
-                if (inProgress)
-                {
-                    _lastOperationTime = DateTime.UtcNow;
-                }
+                Slot = default,
+                ItemGuid = 0,
+                Result = EquipmentResult.Unknown,
+                ErrorMessage = "Inventory change failed",
+                Timestamp = DateTime.UtcNow
+            };
+        }
+
+        private static bool IsWeaponSlot(EquipmentSlot slot)
+        {
+            return slot == EquipmentSlot.MainHand ||
+                   slot == EquipmentSlot.OffHand ||
+                   slot == EquipmentSlot.Ranged;
+        }
+
+        private async Task ProcessInventoryForAutoEquip(CancellationToken cancellationToken)
+        {
+            _logger.LogDebug("Processing inventory for auto-equip with combat-aware logic");
+            await Task.Delay(10, cancellationToken); // Simulate processing time
+        }
+
+        private bool CanEquipItem(byte bagId, byte slotId, EquipmentSlot targetSlot)
+        {
+            _logger.LogDebug("Validating equipment operation for slot {TargetSlot} with combat awareness", targetSlot);
+
+            if (IsWeaponSlot(targetSlot))
+            {
+                _logger.LogDebug("Weapon slot detected - checking combat restrictions");
             }
+
+            return true; // Placeholder
         }
 
         #endregion
@@ -446,21 +432,15 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes of the equipment network client component and cleans up resources.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
 
             _logger.LogDebug("Disposing EquipmentNetworkClientComponent");
 
-            // Clear events to prevent memory leaks
-            ItemEquipped = null;
-            ItemUnequipped = null;
-            EquipmentSwapped = null;
-            EquipmentError = null;
-            DurabilityChanged = null;
-
             _disposed = true;
             _logger.LogDebug("EquipmentNetworkClientComponent disposed");
+            base.Dispose();
         }
 
         #endregion

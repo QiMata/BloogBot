@@ -1,19 +1,19 @@
 using System.Collections.Concurrent;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
 using System.Text;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
+using WoWSharpClient.Utils;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Implementation of chat network agent that handles all chat operations in World of Warcraft.
     /// Provides specialized channels, commands, and reactive observables for chat events.
-    /// Uses reactive observables instead of traditional events for better composability and filtering.
+    /// Uses reactive observables from world client opcode streams (no Subjects or events).
     /// </summary>
     public class ChatNetworkClientComponent : NetworkClientComponent, IChatNetworkClientComponent, IDisposable
     {
@@ -31,14 +31,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         private string? _afkMessage;
         private string? _dndMessage;
         
-        // Active channels tracking
-        private readonly ConcurrentBag<string> _activeChannels = [];
+        // Active channels tracking (use dictionary as a set)
+        private readonly ConcurrentDictionary<string, byte> _activeChannels = new(StringComparer.OrdinalIgnoreCase);
         
-        // Reactive observables for chat events
-        private readonly Subject<ChatMessageData> _incomingMessages = new();
-        private readonly Subject<OutgoingChatMessageData> _outgoingMessages = new();
-        private readonly Subject<ChatNotificationData> _chatNotifications = new();
-        private readonly Subject<ChatCommandData> _executedCommands = new();
+        // Reactive observables for chat events (built from world client opcode streams)
+        private readonly IObservable<ChatMessageData> _incomingMessages;
+        private readonly IObservable<OutgoingChatMessageData> _outgoingMessages;
+        private readonly IObservable<ChatNotificationData> _chatNotifications;
+        private readonly IObservable<ChatCommandData> _executedCommands;
         
         // Filtered observables for specific chat types
         private readonly Lazy<IObservable<ChatMessageData>> _sayMessages;
@@ -78,6 +78,37 @@ namespace WoWSharpClient.Networking.ClientComponents
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+            // Build incoming message observable from world client opcode stream
+            var stream = _worldClient.RegisterOpcodeHandler(Opcode.SMSG_MESSAGECHAT);
+            if (stream is not null)
+            {
+                _incomingMessages = stream
+                    .Select(payload => ParseChatMessage(payload))
+                    .Do(msg =>
+                    {
+                        _logger.LogDebug("Received {ChatType} message from {SenderName}: '{Text}'", msg.ChatType, msg.SenderName, msg.Text);
+                        UpdateActiveChannels(msg.ChatType, msg.ChannelName);
+                    })
+                    .Publish()
+                    .RefCount();
+            }
+            else
+            {
+                _incomingMessages = Observable.Empty<ChatMessageData>();
+            }
+
+            // Notifications derived from incoming messages
+            _chatNotifications = _incomingMessages
+                .Select(TryMapToNotification)
+                .Where(n => n is not null)
+                .Select(n => n!);
+
+            // Outgoing messages: no Subjects/events; expose a never-ending stream (no pushes)
+            _outgoingMessages = Observable.Never<OutgoingChatMessageData>();
+
+            // Executed commands: no Subjects/events; expose a never-ending stream (no pushes)
+            _executedCommands = Observable.Never<ChatCommandData>();
+
             // Initialize filtered observables lazily for better performance
             _sayMessages = new Lazy<IObservable<ChatMessageData>>(() => 
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_SAY));
@@ -103,14 +134,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             _emoteMessages = new Lazy<IObservable<ChatMessageData>>(() => 
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_EMOTE || msg.ChatType == ChatMsg.CHAT_MSG_TEXT_EMOTE));
 
-            // Subscribe to global chat messages from the event emitter
-            WoWSharpEventEmitter.Instance.OnChatMessage += (sender, args) =>
-            {
-                HandleIncomingMessage(args.MsgType, args.Language, args.SenderGuid, args.TargetGuid,
-                    args.SenderName, args.ChannelName, args.PlayerRank, args.Text, args.PlayerChatTag);
-            };
-
-            _logger.LogDebug("ChatNetworkClientComponent initialized with reactive observables and global event integration");
+            _logger.LogDebug("ChatNetworkClientComponent initialized with opcode-backed observables");
         }
 
         #endregion
@@ -205,10 +229,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // Send the message via world client
                 await _worldClient.SendChatMessageAsync(chatType, language, destination ?? string.Empty, message, cancellationToken);
 
-                // Record the outgoing message
-                var outgoingMessage = new OutgoingChatMessageData(chatType, language, destination ?? string.Empty, message, DateTime.UtcNow);
-                _outgoingMessages.OnNext(outgoingMessage);
-
                 // Update last message time for rate limiting
                 lock (_stateLock)
                 {
@@ -300,8 +320,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 
                 await ExecuteCommandAsync("join", [channelName], cancellationToken);
                 
-                // Add to active channels (will be confirmed by server response)
-                _activeChannels.Add(channelName);
+                // Optimistically add to active channels (server response will confirm)
+                _activeChannels[channelName] = 0;
                 
                 _logger.LogInformation("Joined channel: {ChannelName}", channelName);
             }
@@ -404,14 +424,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
                 }
 
-                var notification = new ChatNotificationData(
-                    _isAfk ? ChatNotificationType.AfkMode : ChatNotificationType.AfkMode, 
-                    _isAfk ? $"AFK: {afkMessage}" : "No longer AFK", 
-                    null, 
-                    null, 
-                    DateTime.UtcNow);
-                _chatNotifications.OnNext(notification);
-                
                 _logger.LogInformation("AFK status updated: {IsAfk}", _isAfk);
             }
             catch (Exception ex)
@@ -455,14 +467,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
                 }
 
-                var notification = new ChatNotificationData(
-                    _isDnd ? ChatNotificationType.DndMode : ChatNotificationType.DndMode, 
-                    _isDnd ? $"DND: {dndMessage}" : "No longer DND", 
-                    null, 
-                    null, 
-                    DateTime.UtcNow);
-                _chatNotifications.OnNext(notification);
-                
                 _logger.LogInformation("DND status updated: {IsDnd}", _isDnd);
             }
             catch (Exception ex)
@@ -510,10 +514,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 // Send as a say message (commands are typically sent this way in WoW)
                 await _worldClient.SendChatMessageAsync(ChatMsg.CHAT_MSG_SAY, Language.Common, string.Empty, fullCommand, cancellationToken);
-
-                // Record the executed command
-                var commandData = new ChatCommandData(command, arguments ?? [], DateTime.UtcNow);
-                _executedCommands.OnNext(commandData);
 
                 _logger.LogInformation("Successfully executed command: {Command}", command);
             }
@@ -592,7 +592,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public IReadOnlyList<string> GetActiveChannels()
         {
-            return _activeChannels.ToList().AsReadOnly();
+            return _activeChannels.Keys.ToList().AsReadOnly();
         }
 
         #endregion
@@ -601,69 +601,49 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <summary>
         /// Handles an incoming chat message from the server.
-        /// This method should be called by the packet handler when a chat message is received.
+        /// This method remains for compatibility; incoming pipeline is opcode-backed.
         /// </summary>
-        /// <param name="chatType">The type of chat message.</param>
-        /// <param name="language">The language of the message.</param>
-        /// <param name="senderGuid">The sender's GUID.</param>
-        /// <param name="targetGuid">The target's GUID.</param>
-        /// <param name="senderName">The sender's name.</param>
-        /// <param name="channelName">The channel name (if applicable).</param>
-        /// <param name="playerRank">The player's rank.</param>
-        /// <param name="text">The message text.</param>
-        /// <param name="playerChatTag">The player's chat tag.</param>
         public void HandleIncomingMessage(ChatMsg chatType, Language language, ulong senderGuid, ulong targetGuid, 
             string senderName, string channelName, byte playerRank, string text, PlayerChatTag playerChatTag)
         {
             try
             {
-                var messageData = new ChatMessageData(
-                    chatType, language, senderGuid, targetGuid, senderName, channelName, 
-                    playerRank, text, playerChatTag, DateTime.UtcNow);
-
-                _incomingMessages.OnNext(messageData);
-
-                _logger.LogDebug("Received {ChatType} message from {SenderName}: '{Text}'", chatType, senderName, text);
-
-                // Handle special notifications
-                HandleChatNotifications(chatType, text, senderName, channelName);
+                _logger.LogDebug("Compat incoming {ChatType} from {SenderName}: '{Text}'", chatType, senderName, text);
+                UpdateActiveChannels(chatType, channelName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error handling incoming chat message");
-                _incomingMessages.OnError(ex);
+                _logger.LogError(ex, "Error in HandleIncomingMessage");
             }
         }
 
         /// <summary>
-        /// Handles chat notifications like channel joins, AFK mode changes, etc.
+        /// Map chat types to high-level notifications.
         /// </summary>
-        private void HandleChatNotifications(ChatMsg chatType, string text, string senderName, string channelName)
+        private static ChatNotificationData? TryMapToNotification(ChatMessageData msg)
         {
-            ChatNotificationData? notification = null;
+            return msg.ChatType switch
+            {
+                ChatMsg.CHAT_MSG_CHANNEL_JOIN => new ChatNotificationData(ChatNotificationType.ChannelJoined, msg.Text, msg.SenderName, msg.ChannelName, msg.Timestamp),
+                ChatMsg.CHAT_MSG_CHANNEL_LEAVE => new ChatNotificationData(ChatNotificationType.ChannelLeft, msg.Text, msg.SenderName, msg.ChannelName, msg.Timestamp),
+                ChatMsg.CHAT_MSG_AFK => new ChatNotificationData(ChatNotificationType.AfkMode, msg.Text, msg.SenderName, null, msg.Timestamp),
+                ChatMsg.CHAT_MSG_DND => new ChatNotificationData(ChatNotificationType.DndMode, msg.Text, msg.SenderName, null, msg.Timestamp),
+                _ => null
+            };
+        }
+
+        private void UpdateActiveChannels(ChatMsg chatType, string channelName)
+        {
+            if (string.IsNullOrWhiteSpace(channelName)) return;
 
             switch (chatType)
             {
                 case ChatMsg.CHAT_MSG_CHANNEL_JOIN:
-                    notification = new ChatNotificationData(ChatNotificationType.ChannelJoined, text, senderName, channelName, DateTime.UtcNow);
+                    _activeChannels[channelName] = 0;
                     break;
-
                 case ChatMsg.CHAT_MSG_CHANNEL_LEAVE:
-                    notification = new ChatNotificationData(ChatNotificationType.ChannelLeft, text, senderName, channelName, DateTime.UtcNow);
+                    _activeChannels.TryRemove(channelName, out _);
                     break;
-
-                case ChatMsg.CHAT_MSG_AFK:
-                    notification = new ChatNotificationData(ChatNotificationType.AfkMode, text, senderName, null, DateTime.UtcNow);
-                    break;
-
-                case ChatMsg.CHAT_MSG_DND:
-                    notification = new ChatNotificationData(ChatNotificationType.DndMode, text, senderName, null, DateTime.UtcNow);
-                    break;
-            }
-
-            if (notification != null)
-            {
-                _chatNotifications.OnNext(notification);
             }
         }
 
@@ -704,6 +684,80 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        private static ChatMessageData ParseChatMessage(ReadOnlyMemory<byte> payload)
+        {
+            using var reader = new BinaryReader(new MemoryStream(payload.ToArray()));
+
+            ChatMsg chatType = (ChatMsg)reader.ReadByte();
+            Language language = (Language)reader.ReadInt32();
+
+            string senderName = string.Empty;
+            string channelName = string.Empty;
+            ulong senderGuid = 0;
+            ulong targetGuid = 0;
+            byte playerRank = 0;
+
+            switch (chatType)
+            {
+                case ChatMsg.CHAT_MSG_MONSTER_WHISPER:
+                case ChatMsg.CHAT_MSG_RAID_BOSS_WHISPER:
+                case ChatMsg.CHAT_MSG_RAID_BOSS_EMOTE:
+                case ChatMsg.CHAT_MSG_MONSTER_EMOTE:
+                    reader.ReadUInt32(); // senderNameLength, discard
+                    senderName = ReaderUtils.ReadCString(reader);
+                    targetGuid = ReaderUtils.ReadPackedGuid(reader);
+                    break;
+
+                case ChatMsg.CHAT_MSG_SAY:
+                case ChatMsg.CHAT_MSG_PARTY:
+                case ChatMsg.CHAT_MSG_YELL:
+                    senderGuid = reader.ReadUInt64();
+                    reader.ReadUInt64(); // duplicate sender GUID, discard
+                    break;
+
+                case ChatMsg.CHAT_MSG_MONSTER_SAY:
+                case ChatMsg.CHAT_MSG_MONSTER_YELL:
+                    senderGuid = reader.ReadUInt64();
+                    reader.ReadUInt32(); // senderNameLength, discard
+                    senderName = ReaderUtils.ReadCString(reader);
+                    targetGuid = reader.ReadUInt64();
+                    break;
+
+                case ChatMsg.CHAT_MSG_CHANNEL:
+                    channelName = ReaderUtils.ReadCString(reader);
+                    playerRank = (byte)reader.ReadUInt32(); // raw uint to byte
+                    senderGuid = reader.ReadUInt64();
+                    break;
+
+                default:
+                    senderGuid = reader.ReadUInt64();
+                    break;
+            }
+
+            // Special case handling (e.g., swap sender/receiver for battleground messages)
+            if (chatType == ChatMsg.CHAT_MSG_BG_SYSTEM_ALLIANCE || chatType == ChatMsg.CHAT_MSG_BG_SYSTEM_HORDE)
+            {
+                (senderGuid, targetGuid) = (targetGuid, senderGuid);
+            }
+
+            uint textLength = reader.ReadUInt32();
+            string text = ReaderUtils.ReadString(reader, textLength);
+            PlayerChatTag playerChatTag = (PlayerChatTag)reader.ReadByte();
+
+            return new ChatMessageData(
+                chatType,
+                language,
+                senderGuid,
+                targetGuid,
+                senderName,
+                channelName,
+                playerRank,
+                text,
+                playerChatTag,
+                DateTime.UtcNow
+            );
+        }
+
         #endregion
 
         #region IDisposable
@@ -716,12 +770,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             if (_disposed) return;
 
             _logger.LogDebug("Disposing ChatNetworkClientComponent");
-
-            // Complete all observables
-            _incomingMessages.Dispose();
-            _outgoingMessages.Dispose();
-            _chatNotifications.Dispose();
-            _executedCommands.Dispose();
 
             _disposed = true;
             _logger.LogDebug("ChatNetworkClientComponent disposed");

@@ -1,8 +1,11 @@
+using System.Reactive;
+
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
     /// Interface for handling flight master operations in World of Warcraft.
     /// Manages taxi node interactions, flight path queries, and flight activation.
+    /// Uses reactive observables (no events/subjects exposed).
     /// </summary>
     public interface IFlightMasterNetworkClientComponent : INetworkClientComponent
     {
@@ -16,38 +19,37 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         IReadOnlyList<uint> AvailableTaxiNodes { get; }
 
-        /// <summary>
-        /// Event fired when the taxi map is opened and nodes are available.
-        /// </summary>
-        /// <param name="flightMasterGuid">The GUID of the flight master.</param>
-        /// <param name="availableNodes">List of available taxi node IDs.</param>
-        event Action<ulong, IReadOnlyList<uint>>? TaxiMapOpened;
+        #region Reactive Observables
 
         /// <summary>
-        /// Event fired when the taxi map is closed.
+        /// Observable stream emitted when the taxi map is opened and nodes are available (SMSG_SHOWTAXINODES).
+        /// Tuple contains the flight master GUID and the list of available node IDs.
         /// </summary>
-        event Action? TaxiMapClosed;
+        IObservable<(ulong FlightMasterGuid, IReadOnlyList<uint> Nodes)> TaxiMapOpened { get; }
 
         /// <summary>
-        /// Event fired when a flight is successfully activated.
+        /// Observable stream emitted when taxi context closes (best-effort; derived from disconnects or UI closure).
         /// </summary>
-        /// <param name="sourceNodeId">The source taxi node ID.</param>
-        /// <param name="destinationNodeId">The destination taxi node ID.</param>
-        /// <param name="cost">The flight cost in copper.</param>
-        event Action<uint, uint, uint>? FlightActivated;
+        IObservable<Unit> TaxiMapClosed { get; }
 
         /// <summary>
-        /// Event fired when taxi node status is received.
+        /// Observable stream emitted when a flight is activated (SMSG_ACTIVATETAXIREPLY).
+        /// Tuple contains source node, destination node, and cost in copper.
         /// </summary>
-        /// <param name="nodeId">The taxi node ID.</param>
-        /// <param name="status">The status of the node (available, unavailable, etc.).</param>
-        event Action<uint, byte>? TaxiNodeStatusReceived;
+        IObservable<(uint SourceNodeId, uint DestinationNodeId, uint Cost)> FlightActivated { get; }
 
         /// <summary>
-        /// Event fired when a flight master operation fails.
+        /// Observable stream of taxi node status updates (SMSG_TAXINODE_STATUS).
+        /// Tuple contains node id and status byte.
         /// </summary>
-        /// <param name="error">The error message.</param>
-        event Action<string>? FlightMasterError;
+        IObservable<(uint NodeId, byte Status)> TaxiNodeStatus { get; }
+
+        /// <summary>
+        /// Observable stream of flight master related errors (if any).
+        /// </summary>
+        IObservable<string> FlightMasterErrors { get; }
+
+        #endregion
 
         /// <summary>
         /// Initiates interaction with a flight master.

@@ -1,19 +1,23 @@
+using System.Buffers.Binary;
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
+using SpellSchool = WoWSharpClient.Networking.ClientComponents.I.SpellSchool;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Implementation of spell casting network agent that handles spell operations in World of Warcraft.
     /// Manages spell casting, channeling, and spell state tracking using the Mangos protocol.
+    /// Uses reactive observables like other components and inherits from NetworkClientComponent.
     /// </summary>
-    public class SpellCastingNetworkClientComponent : ISpellCastingNetworkClientComponent, IDisposable
+    public class SpellCastingNetworkClientComponent : NetworkClientComponent, ISpellCastingNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<SpellCastingNetworkClientComponent> _logger;
-        private readonly object _stateLock = new object();
 
         private bool _isCasting;
         private bool _isChanneling;
@@ -21,49 +25,110 @@ namespace WoWSharpClient.Networking.ClientComponents
         private ulong? _currentSpellTarget;
         private uint _remainingCastTime;
         private readonly Dictionary<uint, uint> _spellCooldowns;
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
         private bool _disposed;
+
+        // Reactive observable pipelines (wired to opcode handlers)
+        private readonly IObservable<SpellCastStartData> _spellCastStarts;
+        private readonly IObservable<SpellCastCompleteData> _spellCastCompletions;
+        private readonly IObservable<SpellCastErrorData> _spellCastErrors;
+        private readonly IObservable<ChannelingData> _channelingEvents;
+        private readonly IObservable<SpellCooldownData> _spellCooldownsStream;
+        private readonly IObservable<SpellHitData> _spellHits;
 
         /// <summary>
         /// Initializes a new instance of the SpellCastingNetworkClientComponent class.
         /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance.</param>
         public SpellCastingNetworkClientComponent(IWorldClient worldClient, ILogger<SpellCastingNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _spellCooldowns = new Dictionary<uint, uint>();
-        }
 
-        #region INetworkClientComponent Implementation
-
-        /// <inheritdoc />
-        public bool IsOperationInProgress
-        {
-            get
-            {
-                lock (_stateLock)
+            // Wire reactive pipelines to opcode streams. Parsing is best-effort and may use defaults if payloads differ.
+            _spellCastStarts = SafeStream(Opcode.SMSG_SPELL_START)
+                .Select(payload => ParseSpellStart(payload))
+                .Do(data =>
                 {
-                    return _isOperationInProgress;
-                }
-            }
-        }
+                    _isCasting = true;
+                    _currentSpellId = data.SpellId;
+                    _currentSpellTarget = data.TargetGuid;
+                    _remainingCastTime = data.CastTime;
+                });
 
-        /// <inheritdoc />
-        public DateTime? LastOperationTime
-        {
-            get
-            {
-                lock (_stateLock)
+            _spellCastCompletions = SafeStream(Opcode.SMSG_SPELL_GO)
+                .Select(payload => ParseSpellGo(payload))
+                .Do(data =>
                 {
-                    return _lastOperationTime;
-                }
-            }
+                    _isCasting = false;
+                    _currentSpellId = null;
+                    _currentSpellTarget = null;
+                    _remainingCastTime = 0;
+                });
+
+            _spellCastErrors = Observable.Merge(
+                    SafeStream(Opcode.SMSG_CAST_FAILED),
+                    SafeStream(Opcode.SMSG_SPELL_FAILURE),
+                    SafeStream(Opcode.SMSG_SPELL_FAILED_OTHER)
+                )
+                .Select(payload => ParseSpellError(payload))
+                .Do(err =>
+                {
+                    _isCasting = false;
+                    _remainingCastTime = 0;
+                    if (_currentSpellId == err.SpellId)
+                    {
+                        _currentSpellId = null;
+                        _currentSpellTarget = null;
+                    }
+                });
+
+            _channelingEvents = Observable.Merge(
+                    SafeStream(Opcode.MSG_CHANNEL_START),
+                    SafeStream(Opcode.MSG_CHANNEL_UPDATE)
+                )
+                .Select((payload, index) => ParseChannelEvent(payload, index == 0))
+                .Do(ch =>
+                {
+                    _isChanneling = ch.IsChanneling;
+                    if (!ch.IsChanneling)
+                    {
+                        _currentSpellId = null;
+                        _currentSpellTarget = null;
+                    }
+                });
+
+            _spellCooldownsStream = Observable.Merge(
+                    SafeStream(Opcode.SMSG_SPELL_COOLDOWN),
+                    SafeStream(Opcode.SMSG_COOLDOWN_EVENT),
+                    SafeStream(Opcode.SMSG_CLEAR_COOLDOWN)
+                )
+                .Select(payload => ParseCooldown(payload))
+                .Do(cd =>
+                {
+                    var end = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + cd.CooldownTime;
+                    _spellCooldowns[cd.SpellId] = end;
+                });
+
+            _spellHits = Observable.Merge(
+                    SafeStream(Opcode.SMSG_SPELLNONMELEEDAMAGELOG),
+                    SafeStream(Opcode.SMSG_SPELLHEALLOG),
+                    SafeStream(Opcode.SMSG_SPELLDAMAGESHIELD),
+                    SafeStream(Opcode.SMSG_SPELLLOGEXECUTE)
+                )
+                .Select(payload => ParseSpellHit(payload));
         }
 
-        #endregion
+        // Provides a non-null observable stream for an opcode.
+        private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        // Observable properties (reactive pattern like other components)
+        public IObservable<SpellCastStartData> SpellCastStarts => _spellCastStarts;
+        public IObservable<SpellCastCompleteData> SpellCastCompletions => _spellCastCompletions;
+        public IObservable<SpellCastErrorData> SpellCastErrors => _spellCastErrors;
+        public IObservable<ChannelingData> ChannelingEvents => _channelingEvents;
+        public IObservable<SpellCooldownData> SpellCooldowns => _spellCooldownsStream;
+        public IObservable<SpellHitData> SpellHits => _spellHits;
 
         /// <inheritdoc />
         public bool IsCasting => _isCasting;
@@ -80,42 +145,10 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public uint RemainingCastTime => _remainingCastTime;
 
-        /// <inheritdoc />
-        public event Action<uint, uint, ulong?>? SpellCastStarted;
-
-        /// <inheritdoc />
-        public event Action<uint, ulong?>? SpellCastCompleted;
-
-        /// <inheritdoc />
-        public event Action<uint, string>? SpellCastFailed;
-
-        /// <inheritdoc />
-        public event Action<uint, uint>? ChannelingStarted;
-
-        /// <inheritdoc />
-        public event Action<uint, bool>? ChannelingEnded;
-
-        /// <inheritdoc />
-        public event Action<uint, uint>? SpellCooldownStarted;
-
-        /// <inheritdoc />
-        public event Action<uint, ulong, uint?, uint?>? SpellHit;
-
-        #region Private Helper Methods
-
-        private void SetOperationInProgress(bool inProgress)
+        private void PublishSpellError(uint spellId, string message)
         {
-            lock (_stateLock)
-            {
-                _isOperationInProgress = inProgress;
-                if (inProgress)
-                {
-                    _lastOperationTime = DateTime.UtcNow;
-                }
-            }
+            _logger.LogWarning("Spell error for {SpellId}: {Message}", spellId, message);
         }
-
-        #endregion
 
         /// <inheritdoc />
         public async Task CastSpellAsync(uint spellId, CancellationToken cancellationToken = default)
@@ -139,7 +172,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _isCasting = false;
                 _currentSpellId = null;
                 _logger.LogError(ex, "Failed to cast spell {SpellId}", spellId);
-                SpellCastFailed?.Invoke(spellId, $"Failed to cast spell: {ex.Message}");
+                PublishSpellError(spellId, $"Failed to cast spell: {ex.Message}");
                 throw;
             }
             finally
@@ -172,7 +205,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _currentSpellId = null;
                 _currentSpellTarget = null;
                 _logger.LogError(ex, "Failed to cast spell {SpellId} on target {TargetGuid:X}", spellId, targetGuid);
-                SpellCastFailed?.Invoke(spellId, $"Failed to cast spell on target: {ex.Message}");
+                PublishSpellError(spellId, $"Failed to cast spell on target: {ex.Message}");
                 throw;
             }
         }
@@ -202,7 +235,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _isCasting = false;
                 _currentSpellId = null;
                 _logger.LogError(ex, "Failed to cast spell {SpellId} at location ({X}, {Y}, {Z})", spellId, x, y, z);
-                SpellCastFailed?.Invoke(spellId, $"Failed to cast spell at location: {ex.Message}");
+                PublishSpellError(spellId, $"Failed to cast spell at location: {ex.Message}");
                 throw;
             }
         }
@@ -277,7 +310,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to start auto-repeat for spell {SpellId}", spellId);
-                SpellCastFailed?.Invoke(spellId, $"Failed to start auto-repeat: {ex.Message}");
+                PublishSpellError(spellId, $"Failed to start auto-repeat: {ex.Message}");
                 throw;
             }
         }
@@ -327,12 +360,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Smart casting spell {SpellId}", spellId);
 
-                // Check if spell requires a target
                 if (SpellRequiresTarget(spellId))
                 {
-                    // This would typically check if a target is selected
-                    // and find an appropriate target if none is selected
-                    // For now, just cast the spell without target checks
                     await CastSpellAsync(spellId, cancellationToken);
                 }
                 else
@@ -345,6 +374,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to smart cast spell {SpellId}", spellId);
+                PublishSpellError(spellId, $"Failed to smart cast spell: {ex.Message}");
                 throw;
             }
         }
@@ -354,13 +384,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _logger.LogDebug("Checking if spell {SpellId} can be cast", spellId);
             
-            // Check if already casting
             if (_isCasting || _isChanneling)
             {
                 return false;
             }
             
-            // Check cooldown
             if (_spellCooldowns.TryGetValue(spellId, out uint cooldownEnd))
             {
                 uint currentTime = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -368,12 +396,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     return false;
                 }
-                
-                // Remove expired cooldown
                 _spellCooldowns.Remove(spellId);
             }
-            
-            // Additional checks would go here (mana, reagents, etc.)
             return true;
         }
 
@@ -387,154 +411,159 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     return cooldownEnd - currentTime;
                 }
-                
-                // Remove expired cooldown
                 _spellCooldowns.Remove(spellId);
             }
-            
             return 0;
         }
 
         /// <inheritdoc />
-        public uint GetSpellManaCost(uint spellId)
-        {
-            // This would typically query spell data
-            // Return placeholder value
-            return 50;
-        }
+        public uint GetSpellManaCost(uint spellId) => 50;
 
         /// <inheritdoc />
-        public uint GetSpellCastTime(uint spellId)
-        {
-            // This would typically query spell data
-            // Return placeholder value (3 seconds)
-            return 3000;
-        }
+        public uint GetSpellCastTime(uint spellId) => 3000;
 
         /// <inheritdoc />
-        public float GetSpellRange(uint spellId)
-        {
-            // This would typically query spell data
-            // Return placeholder value (30 yards)
-            return 30.0f;
-        }
+        public float GetSpellRange(uint spellId) => 30.0f;
 
         /// <inheritdoc />
-        public bool SpellRequiresTarget(uint spellId)
-        {
-            // This would typically query spell data
-            // Return placeholder value
-            return true;
-        }
+        public bool SpellRequiresTarget(uint spellId) => true;
 
         /// <inheritdoc />
-        public SpellSchool GetSpellSchool(uint spellId)
-        {
-            // This would typically query spell data
-            // Return placeholder value
-            return SpellSchool.Normal;
-        }
+        public SpellSchool GetSpellSchool(uint spellId) => SpellSchool.Normal;
 
         /// <inheritdoc />
-        public bool KnowsSpell(uint spellId)
-        {
-            // This would typically check the player's spellbook
-            // Return placeholder value
-            return true;
-        }
+        public bool KnowsSpell(uint spellId) => true;
 
-        /// <summary>
-        /// Updates spell cast state based on server response.
-        /// This should be called when receiving spell cast start packets.
-        /// </summary>
-        /// <param name="spellId">The ID of the spell being cast.</param>
-        /// <param name="castTime">The cast time in milliseconds.</param>
-        /// <param name="targetGuid">The target GUID if applicable.</param>
+        // Server-driven state updates (optional manual calls)
         public void UpdateSpellCastStarted(uint spellId, uint castTime, ulong? targetGuid = null)
         {
             _logger.LogDebug("Server confirmed spell {SpellId} cast started with cast time {CastTime}ms", spellId, castTime);
-            
             _isCasting = true;
             _currentSpellId = spellId;
             _currentSpellTarget = targetGuid;
             _remainingCastTime = castTime;
-            
-            SpellCastStarted?.Invoke(spellId, castTime, targetGuid);
         }
 
-        /// <summary>
-        /// Updates spell cast completion state based on server response.
-        /// This should be called when receiving spell cast completion packets.
-        /// </summary>
-        /// <param name="spellId">The ID of the spell that was cast.</param>
-        /// <param name="targetGuid">The target GUID if applicable.</param>
         public void UpdateSpellCastCompleted(uint spellId, ulong? targetGuid = null)
         {
             _logger.LogDebug("Server confirmed spell {SpellId} cast completed", spellId);
-            
             _isCasting = false;
             _currentSpellId = null;
             _currentSpellTarget = null;
             _remainingCastTime = 0;
-            
-            SpellCastCompleted?.Invoke(spellId, targetGuid);
         }
 
-        /// <summary>
-        /// Updates channeling state based on server response.
-        /// This should be called when receiving channeling start packets.
-        /// </summary>
-        /// <param name="spellId">The ID of the channeled spell.</param>
-        /// <param name="duration">The channel duration in milliseconds.</param>
         public void UpdateChannelingStarted(uint spellId, uint duration)
         {
             _logger.LogDebug("Server confirmed channeling started for spell {SpellId} with duration {Duration}ms", spellId, duration);
-            
             _isChanneling = true;
             _currentSpellId = spellId;
-            
-            ChannelingStarted?.Invoke(spellId, duration);
         }
 
-        /// <summary>
-        /// Updates spell cooldown based on server response.
-        /// This should be called when receiving spell cooldown packets.
-        /// </summary>
-        /// <param name="spellId">The ID of the spell on cooldown.</param>
-        /// <param name="cooldownTime">The cooldown duration in milliseconds.</param>
         public void UpdateSpellCooldown(uint spellId, uint cooldownTime)
         {
             uint cooldownEnd = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + cooldownTime;
             _spellCooldowns[spellId] = cooldownEnd;
-            
             _logger.LogDebug("Spell {SpellId} cooldown updated: {CooldownTime}ms", spellId, cooldownTime);
-            SpellCooldownStarted?.Invoke(spellId, cooldownTime);
         }
 
-        #region IDisposable Implementation
-
-        /// <summary>
-        /// Disposes of the spell casting network client component and cleans up resources.
-        /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
-
-            _logger.LogDebug("Disposing SpellCastingNetworkClientComponent");
-
-            // Clear events to prevent memory leaks
-            SpellCastStarted = null;
-            SpellCastCompleted = null;
-            SpellCastFailed = null;
-            ChannelingStarted = null;
-            ChannelingEnded = null;
-            SpellCooldownStarted = null;
-            SpellHit = null;
-
             _disposed = true;
-            _logger.LogDebug("SpellCastingNetworkClientComponent disposed");
+            base.Dispose();
         }
 
+        #region Parsing helpers (best-effort)
+        private static uint ReadUInt32(ReadOnlySpan<byte> span, int offset)
+        {
+            return (uint)(span.Length >= offset + 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)) : 0u);
+        }
+        private static ulong ReadUInt64(ReadOnlySpan<byte> span, int offset)
+        {
+            return span.Length >= offset + 8 ? BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset, 8)) : 0UL;
+        }
+
+        private SpellCastStartData ParseSpellStart(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            // Typical packet contains caster guid(s), spellId, cast time. We attempt to read spellId and cast time safely.
+            uint spellId = ReadUInt32(span, 0);
+            uint castTime = ReadUInt32(span, 4);
+            ulong? target = span.Length >= 16 ? ReadUInt64(span, 8) : null;
+            return new SpellCastStartData(
+                SpellId: spellId,
+                CastTime: castTime,
+                TargetGuid: target,
+                CastType: I.SpellCastType.Normal,
+                Timestamp: DateTime.UtcNow
+            );
+        }
+
+        private SpellCastCompleteData ParseSpellGo(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint spellId = ReadUInt32(span, 0);
+            ulong? target = span.Length >= 16 ? ReadUInt64(span, 8) : null;
+            return new SpellCastCompleteData(
+                SpellId: spellId,
+                TargetGuid: target,
+                Timestamp: DateTime.UtcNow
+            );
+        }
+
+        private SpellCastErrorData ParseSpellError(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint spellId = ReadUInt32(span, 0);
+            string message = "Spell cast failed";
+            return new SpellCastErrorData(
+                ErrorMessage: message,
+                SpellId: spellId,
+                TargetGuid: _currentSpellTarget,
+                Timestamp: DateTime.UtcNow
+            );
+        }
+
+        private ChannelingData ParseChannelEvent(ReadOnlyMemory<byte> payload, bool isStart)
+        {
+            var span = payload.Span;
+            uint spellId = ReadUInt32(span, 0);
+            uint? duration = isStart ? ReadUInt32(span, 4) : (uint?)null;
+            return new ChannelingData(
+                SpellId: spellId,
+                IsChanneling: isStart,
+                Duration: duration,
+                Timestamp: DateTime.UtcNow
+            );
+        }
+
+        private SpellCooldownData ParseCooldown(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint spellId = ReadUInt32(span, 0);
+            uint cooldownMs = ReadUInt32(span, 4);
+            return new SpellCooldownData(
+                SpellId: spellId,
+                CooldownTime: cooldownMs,
+                Timestamp: DateTime.UtcNow
+            );
+        }
+
+        private SpellHitData ParseSpellHit(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint spellId = ReadUInt32(span, 0);
+            ulong target = span.Length >= 16 ? ReadUInt64(span, 8) : 0UL;
+            uint? dmg = span.Length >= 20 ? ReadUInt32(span, 16) : null;
+            return new SpellHitData(
+                SpellId: spellId,
+                TargetGuid: target,
+                Damage: dmg,
+                Heal: null,
+                Timestamp: DateTime.UtcNow
+            );
+        }
         #endregion
     }
 }

@@ -1,3 +1,5 @@
+using WoWSharpClient.Networking.ClientComponents.Models;
+
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
@@ -29,6 +31,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// <summary>
     /// Interface for handling spell casting operations in World of Warcraft.
     /// Manages spell casting, channeling, and spell state tracking.
+    /// Uses reactive observables for event streams.
     /// </summary>
     public interface ISpellCastingNetworkClientComponent : INetworkClientComponent
     {
@@ -57,57 +60,37 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         uint RemainingCastTime { get; }
 
+        #region Reactive Observables
         /// <summary>
-        /// Event fired when a spell cast starts.
+        /// Observable stream for spell cast start events.
         /// </summary>
-        /// <param name="spellId">The ID of the spell being cast.</param>
-        /// <param name="castTime">The total cast time in milliseconds.</param>
-        /// <param name="targetGuid">The target GUID, if any.</param>
-        event Action<uint, uint, ulong?>? SpellCastStarted;
+        IObservable<SpellCastStartData> SpellCastStarts { get; }
 
         /// <summary>
-        /// Event fired when a spell cast is completed successfully.
+        /// Observable stream for spell cast completion events.
         /// </summary>
-        /// <param name="spellId">The ID of the spell that was cast.</param>
-        /// <param name="targetGuid">The target GUID, if any.</param>
-        event Action<uint, ulong?>? SpellCastCompleted;
+        IObservable<SpellCastCompleteData> SpellCastCompletions { get; }
 
         /// <summary>
-        /// Event fired when a spell cast is interrupted or fails.
+        /// Observable stream for spell cast errors/failures.
         /// </summary>
-        /// <param name="spellId">The ID of the spell that failed.</param>
-        /// <param name="reason">The reason for the failure.</param>
-        event Action<uint, string>? SpellCastFailed;
+        IObservable<SpellCastErrorData> SpellCastErrors { get; }
 
         /// <summary>
-        /// Event fired when a channeled spell starts.
+        /// Observable stream for channeling start/stop events.
         /// </summary>
-        /// <param name="spellId">The ID of the channeled spell.</param>
-        /// <param name="duration">The channel duration in milliseconds.</param>
-        event Action<uint, uint>? ChannelingStarted;
+        IObservable<ChannelingData> ChannelingEvents { get; }
 
         /// <summary>
-        /// Event fired when a channeled spell ends.
+        /// Observable stream for spell cooldown updates.
         /// </summary>
-        /// <param name="spellId">The ID of the channeled spell.</param>
-        /// <param name="completed">True if the channel completed naturally, false if interrupted.</param>
-        event Action<uint, bool>? ChannelingEnded;
+        IObservable<SpellCooldownData> SpellCooldowns { get; }
 
         /// <summary>
-        /// Event fired when spell cooldown starts.
+        /// Observable stream for spell hit results (damage/heal).
         /// </summary>
-        /// <param name="spellId">The ID of the spell on cooldown.</param>
-        /// <param name="cooldownTime">The cooldown duration in milliseconds.</param>
-        event Action<uint, uint>? SpellCooldownStarted;
-
-        /// <summary>
-        /// Event fired when a spell hits its target(s).
-        /// </summary>
-        /// <param name="spellId">The ID of the spell.</param>
-        /// <param name="targetGuid">The GUID of the target hit.</param>
-        /// <param name="damage">The damage dealt, if applicable.</param>
-        /// <param name="healed">The healing done, if applicable.</param>
-        event Action<uint, ulong, uint?, uint?>? SpellHit;
+        IObservable<SpellHitData> SpellHits { get; }
+        #endregion
 
         /// <summary>
         /// Casts a spell without a target.

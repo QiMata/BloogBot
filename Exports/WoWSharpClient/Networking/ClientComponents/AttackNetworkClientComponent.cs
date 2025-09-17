@@ -1,9 +1,11 @@
-using System.Reactive.Subjects;
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
+using System.Reactive.Subjects; // Added for Subject
+using System.Reactive.Disposables; // Added for CompositeDisposable
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -19,18 +21,16 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly ILogger<AttackNetworkClientComponent> _logger;
         private bool _isAttacking;
         private ulong? _currentVictim;
-
-        // Reactive observables
-        private readonly Subject<AttackStateData> _attackStateChanges = new();
-        private readonly Subject<WeaponSwingData> _weaponSwings = new();
-        private readonly Subject<AttackErrorData> _attackErrors = new();
-
-        // Legacy callback fields for backwards compatibility
-        private Action<ulong>? _attackStartedCallback;
-        private Action? _attackStoppedCallback;
-        private Action<string>? _attackErrorCallback;
-
         private bool _disposed;
+
+        // Reactive observable pipelines (wired to world client streams/opcodes)
+        private readonly IObservable<AttackStateData> _attackStateChanges;
+        private readonly IObservable<WeaponSwingData> _weaponSwings;
+        private readonly IObservable<AttackErrorData> _attackErrors;
+
+        // Internal subjects & disposables for eager subscription so we don't miss early events
+        private readonly Subject<AttackStateData> _attackStateSubject = new();
+        private readonly CompositeDisposable _disposables = new();
 
         /// <summary>
         /// Initializes a new instance of the AttackNetworkClientComponent class.
@@ -41,6 +41,46 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Eagerly subscribe to attack state changes so state transitions occurring before external subscriptions aren't lost
+            bool lastState = _isAttacking; // initial false
+            var attackStateSubscription = SafeStream(_worldClient.AttackStateChanged)
+                .Subscribe(tuple =>
+                {
+                    var (isAttacking, attackerGuid, victimGuid) = tuple;
+
+                    // Only emit when state actually changes
+                    if (lastState != isAttacking)
+                    {
+                        _isAttacking = isAttacking;
+                        _currentVictim = isAttacking ? victimGuid : null;
+                        lastState = isAttacking;
+
+                        if (isAttacking)
+                        {
+                            _logger.LogDebug("Server confirmed attack started on: {VictimGuid:X}", victimGuid);
+                        }
+                        else
+                        {
+                            _logger.LogDebug("Server confirmed attack stopped");
+                        }
+
+                        _attackStateSubject.OnNext(new AttackStateData(isAttacking, _currentVictim, DateTime.UtcNow));
+                    }
+                }, ex => _logger.LogError(ex, "Attack state stream faulted"));
+            _disposables.Add(attackStateSubscription);
+
+            _attackStateChanges = _attackStateSubject.AsObservable();
+
+            // Attack errors from the world client stream
+            _attackErrors = SafeStream(_worldClient.AttackErrors)
+                .Select(errMsg => new AttackErrorData(errMsg, _currentVictim, DateTime.UtcNow))
+                .Do(err => _logger.LogWarning("Attack error: {ErrorMessage} (Target: {TargetGuid:X})", err.ErrorMessage, err.TargetGuid ?? 0));
+            _disposables.Add(_attackErrors.Subscribe(_ => { }, ex => _logger.LogError(ex, "Attack error stream faulted"))); // ensure side-effects, keep hot
+
+            // Weapon swings via opcode stream (best-effort parsing)
+            _weaponSwings = SafeOpcodeStream(Opcode.SMSG_ATTACKERSTATEUPDATE)
+                .Select(ParseWeaponSwing);
         }
 
         #region Properties
@@ -81,19 +121,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // CMSG_ATTACKSWING has no payload for auto-attack
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_ATTACKSWING, [], cancellationToken);
 
-                // Note: We don't immediately set _isAttacking = true here because we want to wait
-                // for server confirmation via SMSG_ATTACKSTART. The HandleAttackStateChanged method
-                // will be called when the server responds.
-                
                 _logger.LogInformation("Auto-attack command sent to server");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to start attack");
-
-                var errorData = new AttackErrorData(ex.Message, _currentVictim, DateTime.UtcNow);
-                _attackErrors.OnNext(errorData);
-
                 throw;
             }
             finally
@@ -115,19 +147,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // CMSG_ATTACKSTOP has no payload
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_ATTACKSTOP, [], cancellationToken);
 
-                // Note: We don't immediately set _isAttacking = false here because we want to wait
-                // for server confirmation via SMSG_ATTACKSTOP. The HandleAttackStateChanged method
-                // will be called when the server responds.
-                
                 _logger.LogInformation("Stop attack command sent to server");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to stop attack");
-
-                var errorData = new AttackErrorData(ex.Message, _currentVictim, DateTime.UtcNow);
-                _attackErrors.OnNext(errorData);
-
                 throw;
             }
             finally
@@ -148,11 +172,9 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Setting target and starting attack on: {TargetGuid:X}", targetGuid);
 
-                // Set up a task completion source to wait for target confirmation
                 var targetCompletionSource = new TaskCompletionSource<bool>();
                 var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                
-                // Use reactive observable to wait for target change
+
                 IDisposable? subscription = null;
                 if (targetingAgent.TargetChanges != null)
                 {
@@ -167,7 +189,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 try
                 {
-                    // Set target first using the targeting agent
                     await targetingAgent.SetTargetAsync(targetGuid, cancellationToken);
 
                     // Wait for target confirmation with timeout (max 1000ms)
@@ -176,7 +197,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     var timeoutTask = Task.Delay(-1, timeoutCts.Token);
 
                     var completedTask = await Task.WhenAny(targetSetTask, timeoutTask);
-                    
+
                     if (completedTask == timeoutTask)
                     {
                         _logger.LogWarning("Target setting timed out, proceeding with attack anyway for: {TargetGuid:X}", targetGuid);
@@ -188,12 +209,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 }
                 finally
                 {
-                    // Remove the subscription
                     subscription?.Dispose();
                     timeoutCts.Dispose();
                 }
 
-                // Start auto-attack
                 await StartAttackAsync(cancellationToken);
 
                 _logger.LogInformation("Successfully set target and started attack on: {TargetGuid:X}", targetGuid);
@@ -201,10 +220,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to attack target: {TargetGuid:X}", targetGuid);
-
-                var errorData = new AttackErrorData(ex.Message, targetGuid, DateTime.UtcNow);
-                _attackErrors.OnNext(errorData);
-
                 throw;
             }
             finally
@@ -228,183 +243,37 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Server Response Handling
+        #region Helpers
+        // Provides a non-null observable (fallback to empty) for different source types
+        private static IObservable<T> SafeStream<T>(IObservable<T>? source)
+            => source ?? Observable.Empty<T>();
 
-        /// <inheritdoc />
-        public void HandleAttackStateChanged(bool isAttacking, ulong attackerGuid, ulong victimGuid)
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private WeaponSwingData ParseWeaponSwing(ReadOnlyMemory<byte> payload)
         {
-            if (_disposed) return;
+            var span = payload.Span;
 
-            if (_isAttacking != isAttacking)
-            {
-                _isAttacking = isAttacking;
-                _currentVictim = isAttacking ? victimGuid : null;
-                
-                if (isAttacking)
-                {
-                    _logger.LogDebug("Server confirmed attack started on: {VictimGuid:X}", victimGuid);
-                }
-                else
-                {
-                    _logger.LogDebug("Server confirmed attack stopped");
-                }
+            ulong attacker = span.Length >= 8 ? BitConverter.ToUInt64(span[..8]) : 0UL;
+            ulong victim = span.Length >= 16 ? BitConverter.ToUInt64(span.Slice(8, 8)) : 0UL;
+            uint damage = span.Length >= 20 ? BitConverter.ToUInt32(span.Slice(16, 4)) : 0u;
+            bool isCritical = span.Length >= 21 && span[20] != 0;
 
-                var attackStateData = new AttackStateData(isAttacking, _currentVictim, DateTime.UtcNow);
-                _attackStateChanges.OnNext(attackStateData);
-
-                // Legacy callback support
-                if (isAttacking)
-                {
-                    _attackStartedCallback?.Invoke(victimGuid);
-                }
-                else
-                {
-                    _attackStoppedCallback?.Invoke();
-                }
-            }
+            _logger.LogDebug("Weapon swing: {AttackerGuid:X} -> {VictimGuid:X}, Damage: {Damage}, Critical: {IsCritical}", attacker, victim, damage, isCritical);
+            return new WeaponSwingData(attacker, victim, damage, isCritical, DateTime.UtcNow);
         }
-
-        /// <inheritdoc />
-        public void HandleWeaponSwing(ulong attackerGuid, ulong victimGuid, uint damage, bool isCritical)
-        {
-            if (_disposed) return;
-
-            _logger.LogDebug("Weapon swing: {AttackerGuid:X} -> {VictimGuid:X}, Damage: {Damage}, Critical: {IsCritical}", 
-                attackerGuid, victimGuid, damage, isCritical);
-
-            var swingData = new WeaponSwingData(attackerGuid, victimGuid, damage, isCritical, DateTime.UtcNow);
-            _weaponSwings.OnNext(swingData);
-        }
-
-        /// <inheritdoc />
-        public void HandleAttackError(string errorMessage, ulong? targetGuid = null)
-        {
-            if (_disposed) return;
-
-            _logger.LogWarning("Attack error: {ErrorMessage} (Target: {TargetGuid:X})", errorMessage, targetGuid ?? 0);
-
-            var errorData = new AttackErrorData(errorMessage, targetGuid, DateTime.UtcNow);
-            _attackErrors.OnNext(errorData);
-
-            // Legacy callback support
-            _attackErrorCallback?.Invoke(errorMessage);
-        }
-
-        #endregion
-
-        #region Legacy Callback Support
-
-        /// <inheritdoc />
-        [Obsolete("Use AttackStateChanges observable instead")]
-        public void SetAttackStartedCallback(Action<ulong>? callback)
-        {
-            _attackStartedCallback = callback;
-        }
-
-        /// <inheritdoc />
-        [Obsolete("Use AttackStateChanges observable instead")]
-        public void SetAttackStoppedCallback(Action? callback)
-        {
-            _attackStoppedCallback = callback;
-        }
-
-        /// <inheritdoc />
-        [Obsolete("Use AttackErrors observable instead")]
-        public void SetAttackErrorCallback(Action<string>? callback)
-        {
-            _attackErrorCallback = callback;
-        }
-
         #endregion
 
         #region IDisposable
-
-        /// <summary>
-        /// Disposes the attack network agent and completes all observables.
-        /// </summary>
         public override void Dispose()
         {
             if (_disposed) return;
-
             _disposed = true;
-
-            _attackStateChanges.OnCompleted();
-            _weaponSwings.OnCompleted();
-            _attackErrors.OnCompleted();
-
-            _attackStateChanges.Dispose();
-            _weaponSwings.Dispose();
-            _attackErrors.Dispose();
-
+            _disposables.Dispose();
+            _attackStateSubject.Dispose();
             base.Dispose();
         }
-
-        #endregion
-
-        #region Legacy Server Response Methods (for backwards compatibility)
-
-        /// <summary>
-        /// Updates the attacking state based on server response.
-        /// This should be called when receiving SMSG_ATTACKSTART or SMSG_ATTACKSTOP.
-        /// Use HandleAttackStateChanged instead.
-        /// </summary>
-        /// <param name="isAttacking">Whether the character is now attacking.</param>
-        /// <param name="attackerGuid">The attacker's GUID (optional).</param>
-        /// <param name="victimGuid">The victim's GUID (optional).</param>
-        [Obsolete("Use HandleAttackStateChanged instead")]
-        public void UpdateAttackingState(bool isAttacking, ulong? attackerGuid = null, ulong? victimGuid = null)
-        {
-            if (_disposed) return;
-
-            if (_isAttacking != isAttacking)
-            {
-                _isAttacking = isAttacking;
-                _currentVictim = isAttacking ? victimGuid : null;
-                
-                if (isAttacking && victimGuid.HasValue)
-                {
-                    _logger.LogDebug("Server confirmed attack started on: {VictimGuid:X}", victimGuid.Value);
-                    
-                    var attackStateData = new AttackStateData(isAttacking, _currentVictim, DateTime.UtcNow);
-                    _attackStateChanges.OnNext(attackStateData);
-                    
-                    // Legacy callback support - only invoke if we have victim GUID
-                    _attackStartedCallback?.Invoke(victimGuid.Value);
-                }
-                else if (isAttacking && !victimGuid.HasValue)
-                {
-                    _logger.LogDebug("Server confirmed attack started (no victim GUID provided)");
-                    
-                    var attackStateData = new AttackStateData(isAttacking, _currentVictim, DateTime.UtcNow);
-                    _attackStateChanges.OnNext(attackStateData);
-                    
-                    // Don't invoke callback when no victim GUID is provided
-                }
-                else if (!isAttacking)
-                {
-                    _logger.LogDebug("Server confirmed attack stopped");
-                    
-                    var attackStateData = new AttackStateData(isAttacking, _currentVictim, DateTime.UtcNow);
-                    _attackStateChanges.OnNext(attackStateData);
-                    
-                    // Legacy callback support
-                    _attackStoppedCallback?.Invoke();
-                }
-            }
-        }
-
-        /// <summary>
-        /// Reports an attack error based on server response.
-        /// This should be called when receiving attack error packets.
-        /// Use HandleAttackError instead.
-        /// </summary>
-        /// <param name="errorMessage">The error message describing why the attack failed.</param>
-        [Obsolete("Use HandleAttackError instead")]
-        public void ReportAttackError(string errorMessage)
-        {
-            HandleAttackError(errorMessage);
-        }
-
         #endregion
     }
 }

@@ -1,3 +1,5 @@
+using System.Reactive;
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -8,8 +10,9 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// <summary>
     /// Implementation of the bank network agent for handling personal bank operations.
     /// Manages depositing and withdrawing items or gold from the player's personal bank.
+    /// Uses opcode-driven observables instead of events.
     /// </summary>
-    public class BankNetworkClientComponent : IBankNetworkClientComponent
+    public class BankNetworkClientComponent : NetworkClientComponent, IBankNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<BankNetworkClientComponent> _logger;
@@ -20,8 +23,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private ulong? _currentBankerGuid;
         private uint _availableBankSlots;
         private uint _purchasedBankBagSlots;
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
         private bool _disposed;
 
         // Constants for bank operations
@@ -46,34 +47,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region INetworkClientComponent Implementation
-
-        /// <inheritdoc />
-        public bool IsOperationInProgress
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _isOperationInProgress;
-                }
-            }
-        }
-
-        /// <inheritdoc />
-        public DateTime? LastOperationTime
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _lastOperationTime;
-                }
-            }
-        }
-
-        #endregion
-
         #region Properties
 
         /// <inheritdoc />
@@ -87,54 +60,75 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Events
-
-        /// <inheritdoc />
-        public event Action<ulong>? BankWindowOpened;
-
-        /// <inheritdoc />
-        public event Action? BankWindowClosed;
-
-        /// <inheritdoc />
-        public event Action<ulong, uint, uint, byte>? ItemDeposited;
-
-        /// <inheritdoc />
-        public event Action<ulong, uint, uint, byte>? ItemWithdrawn;
-
-        /// <inheritdoc />
-        public event Action<ulong, ulong>? ItemsSwapped;
-
-        /// <inheritdoc />
-        public event Action<uint>? GoldDeposited;
-
-        /// <inheritdoc />
-        public event Action<uint>? GoldWithdrawn;
-
-        /// <inheritdoc />
-        public event Action<byte, uint>? BankSlotPurchased;
-
-        /// <inheritdoc />
-        public event Action<uint, uint>? BankInfoUpdated;
-
-        /// <inheritdoc />
-        public event Action<BankOperationType, string>? BankOperationFailed;
-
-        #endregion
-
-        #region Private Helper Methods
-
-        private void SetOperationInProgress(bool inProgress)
-        {
-            lock (_stateLock)
-            {
-                _isOperationInProgress = inProgress;
-                if (inProgress)
+        #region Reactive Observables (lazy, opcode-driven)
+        public IObservable<ulong> BankWindowOpenedStream => Observable.Defer(() =>
+            SafeStream(Opcode.SMSG_SHOW_BANK)
+                .Select(_ =>
                 {
-                    _lastOperationTime = DateTime.UtcNow;
-                }
-            }
-        }
+                    // When server shows bank, mark open state
+                    _isBankWindowOpen = true;
+                    return _currentBankerGuid;
+                })
+                .Where(g => g.HasValue)
+                .Select(g => g!.Value)
+        );
 
+        public IObservable<Unit> BankWindowClosedStream => Observable.Defer(() =>
+            (_worldClient.WhenDisconnected ?? Observable.Empty<Exception?>()).Select(_ => Unit.Default)
+        );
+
+        public IObservable<ItemMovementData> ItemDepositedStream => Observable.Defer(() =>
+            SafeStream(Opcode.SMSG_ITEM_PUSH_RESULT)
+                .Select(payload => ParseItemMovement(payload))
+                .Where(m => m != null)
+                .Select(m => m!)
+        );
+
+        public IObservable<ItemMovementData> ItemWithdrawnStream => Observable.Defer(() =>
+            SafeStream(Opcode.SMSG_ITEM_PUSH_RESULT)
+                .Select(payload => ParseItemMovement(payload))
+                .Where(m => m != null)
+                .Select(m => m!)
+        );
+
+        public IObservable<ItemsSwappedData> ItemsSwappedStream => Observable.Defer(() =>
+            Observable.Empty<ItemsSwappedData>() // No dedicated opcode available; integrators can extend parsing
+        );
+
+        public IObservable<uint> GoldDepositedStream => Observable.Empty<uint>();
+
+        public IObservable<uint> GoldWithdrawnStream => Observable.Empty<uint>();
+
+        public IObservable<BankSlotPurchaseData> BankSlotPurchasedStream => Observable.Defer(() =>
+            SafeStream(Opcode.SMSG_BUY_BANK_SLOT_RESULT)
+                .Select(ParseBuyBankSlotResult)
+                .Where(r => r.Success)
+                .Select(_ =>
+                {
+                    var slotIndex = (byte)_purchasedBankBagSlots;
+                    var cost = BankSlotCosts[Math.Min(_purchasedBankBagSlots, (uint)BankSlotCosts.Length - 1)];
+                    _purchasedBankBagSlots = Math.Min(_purchasedBankBagSlots + 1, MAX_BANK_BAG_SLOTS);
+                    return new BankSlotPurchaseData(slotIndex, cost);
+                })
+        );
+
+        public IObservable<BankInfoData> BankInfoUpdatedStream => Observable.Defer(() =>
+            SafeStream(Opcode.SMSG_SHOW_BANK)
+                .Select(_ =>
+                {
+                    // Default behavior: server shows bank; set baseline values if unset
+                    if (_availableBankSlots == 0)
+                        _availableBankSlots = BANK_SLOT_COUNT;
+                    return new BankInfoData(_availableBankSlots, _purchasedBankBagSlots);
+                })
+        );
+
+        public IObservable<BankOperationErrorData> BankOperationFailedStream => Observable.Defer(() =>
+            SafeStream(Opcode.SMSG_BUY_BANK_SLOT_RESULT)
+                .Select(ParseBuyBankSlotResult)
+                .Where(r => !r.Success)
+                .Select(r => new BankOperationErrorData(BankOperationType.PurchaseSlot, r.ErrorMessage ?? "Unknown error"))
+        );
         #endregion
 
         #region Core Bank Operations
@@ -156,16 +150,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _currentBankerGuid = bankerGuid;
                 _isBankWindowOpen = true;
 
-                // Request bank information to update slot counts
+                // Request bank information to update slot counts (best-effort)
                 await RequestBankInfoAsync(cancellationToken);
 
-                BankWindowOpened?.Invoke(bankerGuid);
                 _logger.LogInformation("Bank window opened with banker: {BankerGuid:X}", bankerGuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to open bank with banker: {BankerGuid:X}", bankerGuid);
-                BankOperationFailed?.Invoke(BankOperationType.OpenBank, ex.Message);
                 throw;
             }
             finally
@@ -187,15 +179,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     _isBankWindowOpen = false;
                     _currentBankerGuid = null;
-
-                    BankWindowClosed?.Invoke();
                     _logger.LogInformation("Bank window closed");
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to close bank window");
-                BankOperationFailed?.Invoke(BankOperationType.CloseBank, ex.Message);
                 throw;
             }
             finally
@@ -217,18 +206,14 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             if (!_isBankWindowOpen)
             {
-                var error = "Bank window is not open";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.DepositItem, error);
+                _logger.LogWarning("Bank window is not open");
                 return;
             }
 
             var emptySlot = FindEmptyBankSlot();
             if (!emptySlot.HasValue)
             {
-                var error = "No empty bank slots available";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.DepositItem, error);
+                _logger.LogWarning("No empty bank slots available");
                 return;
             }
 
@@ -243,9 +228,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             if (!_isBankWindowOpen)
             {
-                var error = "Bank window is not open";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.DepositItem, error);
+                _logger.LogWarning("Bank window is not open");
                 return;
             }
 
@@ -264,7 +247,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to deposit item from {BagId}:{SlotId} to bank slot {BankSlot}", sourceBagId, sourceSlotId, bankSlot);
-                BankOperationFailed?.Invoke(BankOperationType.DepositItem, ex.Message);
                 throw;
             }
             finally
@@ -280,9 +262,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             if (!_isBankWindowOpen)
             {
-                var error = "Bank window is not open";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.WithdrawItem, error);
+                _logger.LogWarning("Bank window is not open");
                 return;
             }
 
@@ -300,7 +280,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to withdraw item from bank slot {BankSlot}", bankSlot);
-                BankOperationFailed?.Invoke(BankOperationType.WithdrawItem, ex.Message);
                 throw;
             }
             finally
@@ -317,9 +296,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             if (!_isBankWindowOpen)
             {
-                var error = "Bank window is not open";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.WithdrawItem, error);
+                _logger.LogWarning("Bank window is not open");
                 return;
             }
 
@@ -338,7 +315,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to withdraw item from bank slot {BankSlot} to {BagId}:{SlotId}", bankSlot, targetBagId, targetSlotId);
-                BankOperationFailed?.Invoke(BankOperationType.WithdrawItem, ex.Message);
                 throw;
             }
             finally
@@ -354,9 +330,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             if (!_isBankWindowOpen)
             {
-                var error = "Bank window is not open";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.SwapItem, error);
+                _logger.LogWarning("Bank window is not open");
                 return;
             }
 
@@ -375,7 +349,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to swap item between {BagId}:{SlotId} and bank slot {BankSlot}", inventoryBagId, inventorySlotId, bankSlot);
-                BankOperationFailed?.Invoke(BankOperationType.SwapItem, ex.Message);
                 throw;
             }
             finally
@@ -395,9 +368,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             if (!_isBankWindowOpen)
             {
-                var error = "Bank window is not open";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.DepositGold, error);
+                _logger.LogWarning("Bank window is not open");
                 return;
             }
 
@@ -405,16 +376,13 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
 
-                // For now, we'll log this as a placeholder since the specific packet structure may need more investigation
+                // Not implemented - protocol needs clarification
                 _logger.LogWarning("Gold deposit operation not fully implemented - packet structure needs verification");
-                BankOperationFailed?.Invoke(BankOperationType.DepositGold, "Gold operations not yet fully implemented");
-
                 await Task.CompletedTask;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to deposit {Amount} copper to bank", amount);
-                BankOperationFailed?.Invoke(BankOperationType.DepositGold, ex.Message);
                 throw;
             }
             finally
@@ -430,9 +398,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             if (!_isBankWindowOpen)
             {
-                var error = "Bank window is not open";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.WithdrawGold, error);
+                _logger.LogWarning("Bank window is not open");
                 return;
             }
 
@@ -440,16 +406,13 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
 
-                // For now, we'll log this as a placeholder since the specific packet structure may need more investigation
+                // Not implemented - protocol needs clarification
                 _logger.LogWarning("Gold withdrawal operation not fully implemented - packet structure needs verification");
-                BankOperationFailed?.Invoke(BankOperationType.WithdrawGold, "Gold operations not yet fully implemented");
-
                 await Task.CompletedTask;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to withdraw {Amount} copper from bank", amount);
-                BankOperationFailed?.Invoke(BankOperationType.WithdrawGold, ex.Message);
                 throw;
             }
             finally
@@ -469,17 +432,13 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             if (!_isBankWindowOpen)
             {
-                var error = "Bank window is not open";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.PurchaseSlot, error);
+                _logger.LogWarning("Bank window is not open");
                 return;
             }
 
             if (_purchasedBankBagSlots >= MAX_BANK_BAG_SLOTS)
             {
-                var error = "Maximum bank bag slots already purchased";
-                _logger.LogWarning(error);
-                BankOperationFailed?.Invoke(BankOperationType.PurchaseSlot, error);
+                _logger.LogWarning("Maximum bank bag slots already purchased");
                 return;
             }
 
@@ -490,17 +449,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // Send CMSG_BUY_BANK_SLOT
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_BANK_SLOT, [], cancellationToken);
 
-                var slotIndex = (byte)_purchasedBankBagSlots;
-                var cost = BankSlotCosts[_purchasedBankBagSlots];
-                _purchasedBankBagSlots++;
-
-                BankSlotPurchased?.Invoke(slotIndex, cost);
-                _logger.LogInformation("Purchased bank bag slot {SlotIndex} for {Cost} copper", slotIndex, cost);
+                _logger.LogInformation("Purchase bank bag slot command sent");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to purchase bank bag slot");
-                BankOperationFailed?.Invoke(BankOperationType.PurchaseSlot, ex.Message);
                 throw;
             }
             finally
@@ -518,18 +471,14 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
 
-                // This would typically be handled by server responses when opening the bank
-                // For now, we'll simulate the response with default values
+                // Typically handled by server responses when opening the bank
                 _availableBankSlots = BANK_SLOT_COUNT;
-                
-                BankInfoUpdated?.Invoke(_availableBankSlots, _purchasedBankBagSlots);
                 _logger.LogDebug("Bank info updated - Available slots: {Available}, Purchased bag slots: {Purchased}", 
                     _availableBankSlots, _purchasedBankBagSlots);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to request bank information");
-                BankOperationFailed?.Invoke(BankOperationType.RequestInfo, ex.Message);
                 throw;
             }
             finally
@@ -553,11 +502,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public byte? FindEmptyBankSlot()
         {
-            // This would typically query the actual bank state from the client
-            // For now, we'll return the first slot as a placeholder
             if (HasBankSpace())
             {
-                return 0; // Return first available slot
+                return 0; // Return first available slot (placeholder)
             }
             return null;
         }
@@ -576,8 +523,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public bool HasBankSpace(uint requiredSlots = 1)
         {
-            // This would typically check the actual bank state
-            // For now, we'll assume there's space if we have available slots
             return _availableBankSlots >= requiredSlots;
         }
 
@@ -707,7 +652,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Server Response Handlers
+        #region Server Response Handlers (state updates only)
 
         /// <summary>
         /// Handles bank window opened response from the server.
@@ -717,8 +662,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _currentBankerGuid = bankerGuid;
             _isBankWindowOpen = true;
-            
-            BankWindowOpened?.Invoke(bankerGuid);
             _logger.LogDebug("Bank window opened event handled for banker: {BankerGuid:X}", bankerGuid);
         }
 
@@ -729,82 +672,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _isBankWindowOpen = false;
             _currentBankerGuid = null;
-            
-            BankWindowClosed?.Invoke();
             _logger.LogDebug("Bank window closed event handled");
-        }
-
-        /// <summary>
-        /// Handles item deposited response from the server.
-        /// </summary>
-        /// <param name="itemGuid">The GUID of the deposited item.</param>
-        /// <param name="itemId">The ID of the deposited item.</param>
-        /// <param name="quantity">The quantity deposited.</param>
-        /// <param name="bankSlot">The bank slot where the item was deposited.</param>
-        public void HandleItemDeposited(ulong itemGuid, uint itemId, uint quantity, byte bankSlot)
-        {
-            ItemDeposited?.Invoke(itemGuid, itemId, quantity, bankSlot);
-            _logger.LogDebug("Item deposited event handled: {ItemId} (GUID: {ItemGuid:X}), Quantity: {Quantity}, Bank Slot: {BankSlot}", 
-                itemId, itemGuid, quantity, bankSlot);
-        }
-
-        /// <summary>
-        /// Handles item withdrawn response from the server.
-        /// </summary>
-        /// <param name="itemGuid">The GUID of the withdrawn item.</param>
-        /// <param name="itemId">The ID of the withdrawn item.</param>
-        /// <param name="quantity">The quantity withdrawn.</param>
-        /// <param name="bagSlot">The bag slot where the item was placed.</param>
-        public void HandleItemWithdrawn(ulong itemGuid, uint itemId, uint quantity, byte bagSlot)
-        {
-            ItemWithdrawn?.Invoke(itemGuid, itemId, quantity, bagSlot);
-            _logger.LogDebug("Item withdrawn event handled: {ItemId} (GUID: {ItemGuid:X}), Quantity: {Quantity}, Bag Slot: {BagSlot}", 
-                itemId, itemGuid, quantity, bagSlot);
-        }
-
-        /// <summary>
-        /// Handles items swapped response from the server.
-        /// </summary>
-        /// <param name="inventoryItemGuid">The GUID of the inventory item.</param>
-        /// <param name="bankItemGuid">The GUID of the bank item.</param>
-        public void HandleItemsSwapped(ulong inventoryItemGuid, ulong bankItemGuid)
-        {
-            ItemsSwapped?.Invoke(inventoryItemGuid, bankItemGuid);
-            _logger.LogDebug("Items swapped event handled: Inventory {InventoryGuid:X} <-> Bank {BankGuid:X}", 
-                inventoryItemGuid, bankItemGuid);
-        }
-
-        /// <summary>
-        /// Handles gold deposited response from the server.
-        /// </summary>
-        /// <param name="amount">The amount of gold deposited in copper.</param>
-        public void HandleGoldDeposited(uint amount)
-        {
-            GoldDeposited?.Invoke(amount);
-            _logger.LogDebug("Gold deposited event handled: {Amount} copper", amount);
-        }
-
-        /// <summary>
-        /// Handles gold withdrawn response from the server.
-        /// </summary>
-        /// <param name="amount">The amount of gold withdrawn in copper.</param>
-        public void HandleGoldWithdrawn(uint amount)
-        {
-            GoldWithdrawn?.Invoke(amount);
-            _logger.LogDebug("Gold withdrawn event handled: {Amount} copper", amount);
-        }
-
-        /// <summary>
-        /// Handles bank slot purchased response from the server.
-        /// </summary>
-        /// <param name="slotIndex">The index of the purchased slot.</param>
-        /// <param name="cost">The cost paid in copper.</param>
-        public void HandleBankSlotPurchased(byte slotIndex, uint cost)
-        {
-            _purchasedBankBagSlots = Math.Max(_purchasedBankBagSlots, (uint)(slotIndex + 1));
-            
-            BankSlotPurchased?.Invoke(slotIndex, cost);
-            _logger.LogDebug("Bank slot purchased event handled: Slot {SlotIndex}, Cost: {Cost} copper", slotIndex, cost);
         }
 
         /// <summary>
@@ -816,21 +684,8 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _availableBankSlots = availableSlots;
             _purchasedBankBagSlots = purchasedBagSlots;
-            
-            BankInfoUpdated?.Invoke(availableSlots, purchasedBagSlots);
             _logger.LogDebug("Bank info updated event handled: Available: {Available}, Purchased: {Purchased}", 
                 availableSlots, purchasedBagSlots);
-        }
-
-        /// <summary>
-        /// Handles bank operation error from the server.
-        /// </summary>
-        /// <param name="operation">The type of operation that failed.</param>
-        /// <param name="errorMessage">The error message.</param>
-        public void HandleBankOperationError(BankOperationType operation, string errorMessage)
-        {
-            BankOperationFailed?.Invoke(operation, errorMessage);
-            _logger.LogWarning("Bank operation error handled: {Operation} - {Error}", operation, errorMessage);
         }
 
         #endregion
@@ -840,28 +695,48 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes of the bank network client component and cleans up resources.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
-
-            _logger.LogDebug("Disposing BankNetworkClientComponent");
-
-            // Clear events to prevent memory leaks
-            BankWindowOpened = null;
-            BankWindowClosed = null;
-            ItemDeposited = null;
-            ItemWithdrawn = null;
-            ItemsSwapped = null;
-            GoldDeposited = null;
-            GoldWithdrawn = null;
-            BankSlotPurchased = null;
-            BankInfoUpdated = null;
-            BankOperationFailed = null;
-
             _disposed = true;
             _logger.LogDebug("BankNetworkClientComponent disposed");
+            base.Dispose();
         }
 
+        #endregion
+
+        #region Parsing helpers and SafeStream
+        private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private ItemMovementData? ParseItemMovement(ReadOnlyMemory<byte> payload)
+        {
+            // Heuristic parsing: [itemGuid(8)][itemId(4)][quantity(4)][slot(1)]
+            var span = payload.Span;
+            if (span.Length < 17) return null;
+            ulong itemGuid = BitConverter.ToUInt64(span.Slice(0, 8));
+            uint itemId = BitConverter.ToUInt32(span.Slice(8, 4));
+            uint qty = BitConverter.ToUInt32(span.Slice(12, 4));
+            byte slot = span[16];
+            return new ItemMovementData(itemGuid, itemId, qty, slot);
+        }
+
+        private (bool Success, BuyBankSlotResult Result, string? ErrorMessage) ParseBuyBankSlotResult(ReadOnlyMemory<byte> payload)
+        {
+            // Heuristic parsing: first byte is result
+            var span = payload.Span;
+            if (span.Length == 0) return (false, BuyBankSlotResult.ERR_BANKSLOT_FAILED_TOO_MANY, "Malformed payload");
+            var result = (BuyBankSlotResult)span[0];
+            bool success = result == BuyBankSlotResult.ERR_BANKSLOT_OK;
+            string? error = success ? null : result switch
+            {
+                BuyBankSlotResult.ERR_BANKSLOT_FAILED_TOO_MANY => "Too many bank slots",
+                BuyBankSlotResult.ERR_BANKSLOT_INSUFFICIENT_FUNDS => "Insufficient funds",
+                BuyBankSlotResult.ERR_BANKSLOT_NOTBANKER => "Not a banker",
+                _ => "Unknown error"
+            };
+            return (success, result, error);
+        }
         #endregion
     }
 }

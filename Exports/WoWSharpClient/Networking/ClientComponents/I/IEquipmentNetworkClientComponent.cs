@@ -1,49 +1,36 @@
 using GameData.Core.Enums;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
     /// Interface for handling equipment operations in World of Warcraft.
     /// Manages equipping, unequipping, and equipment state tracking.
+    /// Uses reactive observables (no events).
     /// </summary>
     public interface IEquipmentNetworkClientComponent : INetworkClientComponent
     {
-        /// <summary>
-        /// Event fired when an item is successfully equipped.
-        /// </summary>
-        /// <param name="itemGuid">The GUID of the equipped item.</param>
-        /// <param name="slot">The equipment slot where the item was equipped.</param>
-        event Action<ulong, EquipmentSlot>? ItemEquipped;
+        #region Reactive Observables
 
         /// <summary>
-        /// Event fired when an item is successfully unequipped.
+        /// Observable stream of equipment operations (success/failure details when available).
+        /// Typically sourced from opcode streams such as SMSG_INVENTORY_CHANGE_FAILURE.
         /// </summary>
-        /// <param name="itemGuid">The GUID of the unequipped item.</param>
-        /// <param name="slot">The equipment slot from which the item was unequipped.</param>
-        event Action<ulong, EquipmentSlot>? ItemUnequipped;
+        IObservable<EquipmentOperationData> EquipmentOperations { get; }
 
         /// <summary>
-        /// Event fired when equipment items are swapped between slots.
+        /// Observable stream of equipment change notifications (slot -> item changes).
         /// </summary>
-        /// <param name="firstItemGuid">The GUID of the first item.</param>
-        /// <param name="firstSlot">The first equipment slot.</param>
-        /// <param name="secondItemGuid">The GUID of the second item.</param>
-        /// <param name="secondSlot">The second equipment slot.</param>
-        event Action<ulong, EquipmentSlot, ulong, EquipmentSlot>? EquipmentSwapped;
+        IObservable<EquipmentChangeData> EquipmentChanges { get; }
 
         /// <summary>
-        /// Event fired when an equipment operation fails.
+        /// Observable stream of durability updates for equipped items.
         /// </summary>
-        /// <param name="error">The error message.</param>
-        event Action<string>? EquipmentError;
+        IObservable<(EquipmentSlot Slot, uint Current, uint Maximum)> DurabilityChanges { get; }
 
-        /// <summary>
-        /// Event fired when equipment durability changes.
-        /// </summary>
-        /// <param name="slot">The equipment slot.</param>
-        /// <param name="currentDurability">The current durability.</param>
-        /// <param name="maxDurability">The maximum durability.</param>
-        event Action<EquipmentSlot, uint, uint>? DurabilityChanged;
+        #endregion
+
+        #region Operations
 
         /// <summary>
         /// Equips an item from the inventory to a specific equipment slot.
@@ -123,6 +110,10 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// <returns>A task representing the asynchronous operation.</returns>
         Task UnequipAllAsync(CancellationToken cancellationToken = default);
 
+        #endregion
+
+        #region Queries
+
         /// <summary>
         /// Checks if an equipment slot is currently occupied.
         /// </summary>
@@ -162,5 +153,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         /// <returns>An enumerable of equipment slots with damaged items.</returns>
         IEnumerable<EquipmentSlot> GetDamagedEquipmentSlots();
+
+        #endregion
     }
 }

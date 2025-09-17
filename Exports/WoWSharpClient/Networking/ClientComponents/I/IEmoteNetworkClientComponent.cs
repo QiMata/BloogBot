@@ -1,46 +1,19 @@
 using GameData.Core.Enums;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
     /// Interface for handling emote operations in World of Warcraft.
     /// Manages character animations, expressions, and social interactions.
+    /// Uses reactive observables (no events).
     /// </summary>
     public interface IEmoteNetworkClientComponent : INetworkClientComponent
     {
-        #region Events
-
-        /// <summary>
-        /// Triggered when an emote is successfully performed.
-        /// </summary>
-        event Action<Emote> EmotePerformed;
-
-        /// <summary>
-        /// Triggered when a text emote is successfully performed.
-        /// </summary>
-        event Action<TextEmote, ulong?> TextEmotePerformed;
-
-        /// <summary>
-        /// Triggered when an emote operation fails.
-        /// </summary>
-        event Action<string> EmoteError;
-
-        /// <summary>
-        /// Triggered when another player performs an emote that we can see.
-        /// </summary>
-        event Action<ulong, Emote> EmoteReceived;
-
-        /// <summary>
-        /// Triggered when another player performs a text emote that we can see.
-        /// </summary>
-        event Action<ulong, TextEmote, ulong?> TextEmoteReceived;
-
-        #endregion
-
         #region Properties
 
         /// <summary>
-        /// Gets the last emote that was performed by this character.
+        /// Gets the last animated emote that was performed by this character.
         /// </summary>
         Emote? LastEmote { get; }
 
@@ -58,6 +31,25 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Gets whether an emote operation is currently in progress.
         /// </summary>
         bool IsEmoting { get; }
+
+        #endregion
+
+        #region Reactive Observables
+
+        /// <summary>
+        /// Observable stream of animated emotes received from the server (SMSG_EMOTE).
+        /// </summary>
+        IObservable<EmoteData> AnimatedEmotes { get; }
+
+        /// <summary>
+        /// Observable stream of text emotes received from the server (SMSG_TEXT_EMOTE).
+        /// </summary>
+        IObservable<EmoteData> TextEmotes { get; }
+
+        /// <summary>
+        /// Observable stream of emote errors.
+        /// </summary>
+        IObservable<EmoteErrorData> EmoteErrors { get; }
 
         #endregion
 
@@ -208,16 +200,14 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         #region Server Response Handlers
 
         /// <summary>
-        /// Handles incoming emote packets from the server.
-        /// This method should be called when SMSG_EMOTE is received.
+        /// Handles incoming emote packets from the server (compat method; main flow uses observables).
         /// </summary>
         /// <param name="sourceGuid">The GUID of the player performing the emote.</param>
         /// <param name="emote">The emote being performed.</param>
         void HandleEmoteReceived(ulong sourceGuid, Emote emote);
 
         /// <summary>
-        /// Handles incoming text emote packets from the server.
-        /// This method should be called when SMSG_TEXT_EMOTE is received.
+        /// Handles incoming text emote packets from the server (compat method; main flow uses observables).
         /// </summary>
         /// <param name="sourceGuid">The GUID of the player performing the text emote.</param>
         /// <param name="textEmote">The text emote being performed.</param>

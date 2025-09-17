@@ -163,44 +163,33 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void UpdateDeathState_BecomesDead_FiresOnDeathEvent()
+        public void UpdateDeathState_BecomesDead_UpdatesState()
         {
-            // Arrange
-            var eventFired = false;
-            _deadActorAgent.OnDeath += () => eventFired = true;
-
             // Act
             _deadActorAgent.UpdateDeathState(isDead: true, isGhost: false);
 
             // Assert
             Assert.True(_deadActorAgent.IsDead);
             Assert.False(_deadActorAgent.IsGhost);
-            Assert.True(eventFired);
         }
 
         [Fact]
-        public void UpdateDeathState_BecomesGhost_FiresOnSpiritReleasedEvent()
+        public void UpdateDeathState_BecomesGhost_UpdatesState()
         {
-            // Arrange
-            var eventFired = false;
-            _deadActorAgent.OnSpiritReleased += () => eventFired = true;
-
             // Act
             _deadActorAgent.UpdateDeathState(isDead: true, isGhost: true);
 
             // Assert
             Assert.True(_deadActorAgent.IsDead);
             Assert.True(_deadActorAgent.IsGhost);
-            Assert.True(eventFired);
         }
 
         [Fact]
-        public void UpdateDeathState_BecomesAlive_FiresOnResurrectedEvent()
+        public void UpdateDeathState_BecomesAlive_ClearsCorpseLocation()
         {
             // Arrange
             _deadActorAgent.UpdateDeathState(isDead: true, isGhost: true);
-            var eventFired = false;
-            _deadActorAgent.OnResurrected += () => eventFired = true;
+            _deadActorAgent.UpdateCorpseLocation(1, 2, 3);
 
             // Act
             _deadActorAgent.UpdateDeathState(isDead: false, isGhost: false);
@@ -208,27 +197,16 @@ namespace WoWSharpClient.Tests.Agent
             // Assert
             Assert.False(_deadActorAgent.IsDead);
             Assert.False(_deadActorAgent.IsGhost);
-            Assert.True(eventFired);
             Assert.Null(_deadActorAgent.CorpseLocation);
         }
 
         [Fact]
-        public void UpdateCorpseLocation_ValidCoordinates_UpdatesLocationAndFiresEvent()
+        public void UpdateCorpseLocation_ValidCoordinates_UpdatesLocation()
         {
             // Arrange
             const float x = 100.0f;
             const float y = 200.0f;
             const float z = 300.0f;
-            var eventFired = false;
-            float? receivedX = null, receivedY = null, receivedZ = null;
-
-            _deadActorAgent.OnCorpseLocationUpdated += (ex, why, zee) =>
-            {
-                eventFired = true;
-                receivedX = ex;
-                receivedY = why;
-                receivedZ = zee;
-            };
 
             // Act
             _deadActorAgent.UpdateCorpseLocation(x, y, z);
@@ -236,10 +214,6 @@ namespace WoWSharpClient.Tests.Agent
             // Assert
             Assert.NotNull(_deadActorAgent.CorpseLocation);
             Assert.Equal((x, y, z), _deadActorAgent.CorpseLocation.Value);
-            Assert.True(eventFired);
-            Assert.Equal(x, receivedX);
-            Assert.Equal(y, receivedY);
-            Assert.Equal(z, receivedZ);
         }
 
         [Fact]
@@ -319,30 +293,17 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleResurrectionRequest_ValidData_UpdatesStateAndFiresEvent()
+        public void HandleResurrectionRequest_ValidData_UpdatesState()
         {
             // Arrange
             const ulong resurrectorGuid = 0x123456789ABCDEF0;
             const string resurrectorName = "TestPlayer";
-            var eventFired = false;
-            ulong? receivedGuid = null;
-            string? receivedName = null;
-
-            _deadActorAgent.OnResurrectionRequest += (guid, name) =>
-            {
-                eventFired = true;
-                receivedGuid = guid;
-                receivedName = name;
-            };
 
             // Act
             _deadActorAgent.HandleResurrectionRequest(resurrectorGuid, resurrectorName);
 
             // Assert
             Assert.True(_deadActorAgent.HasResurrectionRequest);
-            Assert.True(eventFired);
-            Assert.Equal(resurrectorGuid, receivedGuid);
-            Assert.Equal(resurrectorName, receivedName);
         }
 
         [Fact]
@@ -361,25 +322,16 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleDeathError_ValidMessage_FiresEvent()
+        public void HandleDeathError_ValidMessage_DoesNotThrow()
         {
             // Arrange
             const string errorMessage = "Cannot resurrect here";
-            var eventFired = false;
-            string? receivedError = null;
-
-            _deadActorAgent.OnDeathError += (error) =>
-            {
-                eventFired = true;
-                receivedError = error;
-            };
 
             // Act
-            _deadActorAgent.HandleDeathError(errorMessage);
+            var exception = Record.Exception(() => _deadActorAgent.HandleDeathError(errorMessage));
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(errorMessage, receivedError);
+            Assert.Null(exception);
         }
     }
 }

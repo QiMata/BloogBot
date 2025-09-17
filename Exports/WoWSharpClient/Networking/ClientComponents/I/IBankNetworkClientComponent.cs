@@ -1,8 +1,11 @@
+using System.Reactive;
+
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
     /// Interface for handling personal bank operations in World of Warcraft.
     /// Manages depositing and withdrawing items or gold from the player's personal bank.
+    /// Uses reactive observables for better composability and filtering.
     /// </summary>
     public interface IBankNetworkClientComponent : INetworkClientComponent
     {
@@ -21,73 +24,57 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         uint PurchasedBankBagSlots { get; }
 
+        #region Reactive Observables
         /// <summary>
-        /// Event fired when a bank window is opened.
+        /// Observable stream fired when a bank window is opened. Carries the banker GUID.
         /// </summary>
-        event Action<ulong>? BankWindowOpened;
+        IObservable<ulong> BankWindowOpenedStream { get; }
 
         /// <summary>
-        /// Event fired when a bank window is closed.
+        /// Observable stream fired when a bank window is closed.
         /// </summary>
-        event Action? BankWindowClosed;
+        IObservable<Unit> BankWindowClosedStream { get; }
 
         /// <summary>
-        /// Event fired when an item is successfully deposited to the bank.
+        /// Observable stream fired when an item is deposited into the bank.
         /// </summary>
-        /// <param name="itemGuid">The GUID of the deposited item.</param>
-        /// <param name="itemId">The ID of the deposited item.</param>
-        /// <param name="quantity">The quantity deposited.</param>
-        /// <param name="bankSlot">The bank slot where the item was deposited.</param>
-        event Action<ulong, uint, uint, byte>? ItemDeposited;
+        IObservable<ItemMovementData> ItemDepositedStream { get; }
 
         /// <summary>
-        /// Event fired when an item is successfully withdrawn from the bank.
+        /// Observable stream fired when an item is withdrawn from the bank.
         /// </summary>
-        /// <param name="itemGuid">The GUID of the withdrawn item.</param>
-        /// <param name="itemId">The ID of the withdrawn item.</param>
-        /// <param name="quantity">The quantity withdrawn.</param>
-        /// <param name="bagSlot">The bag slot where the item was placed.</param>
-        event Action<ulong, uint, uint, byte>? ItemWithdrawn;
+        IObservable<ItemMovementData> ItemWithdrawnStream { get; }
 
         /// <summary>
-        /// Event fired when items are swapped between inventory and bank.
+        /// Observable stream fired when items are swapped between inventory and bank.
         /// </summary>
-        /// <param name="inventoryItemGuid">The GUID of the inventory item.</param>
-        /// <param name="bankItemGuid">The GUID of the bank item.</param>
-        event Action<ulong, ulong>? ItemsSwapped;
+        IObservable<ItemsSwappedData> ItemsSwappedStream { get; }
 
         /// <summary>
-        /// Event fired when gold is deposited to the bank.
+        /// Observable stream fired when gold is deposited to the bank.
         /// </summary>
-        /// <param name="amount">The amount of gold deposited in copper.</param>
-        event Action<uint>? GoldDeposited;
+        IObservable<uint> GoldDepositedStream { get; }
 
         /// <summary>
-        /// Event fired when gold is withdrawn from the bank.
+        /// Observable stream fired when gold is withdrawn from the bank.
         /// </summary>
-        /// <param name="amount">The amount of gold withdrawn in copper.</param>
-        event Action<uint>? GoldWithdrawn;
+        IObservable<uint> GoldWithdrawnStream { get; }
 
         /// <summary>
-        /// Event fired when a bank bag slot is purchased.
+        /// Observable stream fired when a bank bag slot is purchased.
         /// </summary>
-        /// <param name="slotIndex">The index of the purchased slot.</param>
-        /// <param name="cost">The cost paid in copper.</param>
-        event Action<byte, uint>? BankSlotPurchased;
+        IObservable<BankSlotPurchaseData> BankSlotPurchasedStream { get; }
 
         /// <summary>
-        /// Event fired when bank information is updated.
+        /// Observable stream fired when bank information is updated.
         /// </summary>
-        /// <param name="availableSlots">Number of available bank slots.</param>
-        /// <param name="purchasedBagSlots">Number of purchased bag slots.</param>
-        event Action<uint, uint>? BankInfoUpdated;
+        IObservable<BankInfoData> BankInfoUpdatedStream { get; }
 
         /// <summary>
-        /// Event fired when a bank operation fails.
+        /// Observable stream fired when a bank operation fails.
         /// </summary>
-        /// <param name="operation">The type of operation that failed.</param>
-        /// <param name="error">The error message.</param>
-        event Action<BankOperationType, string>? BankOperationFailed;
+        IObservable<BankOperationErrorData> BankOperationFailedStream { get; }
+        #endregion
 
         /// <summary>
         /// Opens the bank window by greeting the specified banker NPC.
@@ -281,4 +268,29 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         PurchaseSlot,
         RequestInfo
     }
+
+    /// <summary>
+    /// Data representing item movement to/from bank.
+    /// </summary>
+    public record ItemMovementData(ulong ItemGuid, uint ItemId, uint Quantity, byte Slot);
+
+    /// <summary>
+    /// Data representing a swap between inventory and bank items.
+    /// </summary>
+    public record ItemsSwappedData(ulong InventoryItemGuid, ulong BankItemGuid);
+
+    /// <summary>
+    /// Data representing a bank slot purchase.
+    /// </summary>
+    public record BankSlotPurchaseData(byte SlotIndex, uint Cost);
+
+    /// <summary>
+    /// Data representing bank info update.
+    /// </summary>
+    public record BankInfoData(uint AvailableSlots, uint PurchasedBagSlots);
+
+    /// <summary>
+    /// Data representing a bank operation failure.
+    /// </summary>
+    public record BankOperationErrorData(BankOperationType Operation, string ErrorMessage);
 }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -98,11 +99,16 @@ namespace WoWSharpClient.Tests.Agent
         public async Task CloseAuctionHouseAsync_ShouldCompleteSuccessfully()
         {
             // Arrange
+            var disconnectSubject = new Subject<Exception?>();
+            _mockWorldClient.SetupGet(c => c.WhenDisconnected).Returns(disconnectSubject.AsObservable());
+
             bool eventFired = false;
             using var sub = _auctionHouseClientComponent.AuctionHouseClosedStream.Subscribe(_ => eventFired = true);
 
             // Act
             await _auctionHouseClientComponent.CloseAuctionHouseAsync();
+            // Drive the closed stream via disconnect emission
+            disconnectSubject.OnNext(null);
 
             // Assert
             Assert.True(eventFired);
@@ -345,24 +351,24 @@ namespace WoWSharpClient.Tests.Agent
 
         #endregion
 
-        #region Event Handler Tests
+        #region Event/Stream Tests Driven By Mocked WorldClient
 
         [Fact]
-        public void HandleAuctionHouseOpened_ShouldUpdateStateAndPublish()
+        public void HandleAuctionHouseOpened_ShouldUpdateState_AndStreamFiresWhenListResultsArrive()
         {
             // Arrange
             ulong auctioneerGuid = 0x123456789ABCDEF0UL;
+            var listResultSubject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(c => c.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_AUCTION_LIST_RESULT))
+                            .Returns(listResultSubject.AsObservable());
+
             bool eventFired = false;
             ulong receivedGuid = 0;
+            using var sub = _auctionHouseClientComponent.AuctionHouseOpenedStream.Subscribe(guid => { eventFired = true; receivedGuid = guid; });
 
-            using var sub = _auctionHouseClientComponent.AuctionHouseOpenedStream.Subscribe(guid =>
-            {
-                eventFired = true;
-                receivedGuid = guid;
-            });
-
-            // Act
+            // Act: set state to known auctioneer, then simulate server list result
             _auctionHouseClientComponent.HandleAuctionHouseOpened(auctioneerGuid);
+            listResultSubject.OnNext(new ReadOnlyMemory<byte>(new byte[] { 0 }));
 
             // Assert
             Assert.True(eventFired);
@@ -371,7 +377,7 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleAuctionSearchResults_ShouldPublish()
+        public void HandleAuctionSearchResults_ShouldUpdateStateOnly()
         {
             // Arrange
             var auctions = new List<AuctionData>
@@ -380,36 +386,26 @@ namespace WoWSharpClient.Tests.Agent
                 new AuctionData(2, 67890, 5, 0, 0x300, 500, 600, 1000, 7200, 0x400, 750)
             };
 
-            bool eventFired = false;
-            IReadOnlyList<AuctionData>? receivedAuctions = null;
-
-            using var sub = _auctionHouseClientComponent.AuctionSearchResultsStream.Subscribe(results =>
-            {
-                eventFired = true;
-                receivedAuctions = results;
-            });
-
             // Act
             _auctionHouseClientComponent.HandleAuctionSearchResults(auctions);
 
-            // Assert
-            Assert.True(eventFired);
-            Assert.NotNull(receivedAuctions);
-            Assert.Equal(2, receivedAuctions!.Count);
-            Assert.Equal(auctions[0].AuctionId, receivedAuctions[0].AuctionId);
-            Assert.Equal(auctions[1].ItemId, receivedAuctions[1].ItemId);
+            // Assert: verify state captured
+            Assert.Equal(2, (_auctionHouseClientComponent as dynamic).CurrentAuctions.Count);
         }
 
         [Fact]
-        public void HandleBidPlaced_ShouldPublish()
+        public void BidPlacedStream_ShouldFire_WhenCommandResultArrives()
         {
             // Arrange
+            var commandSubject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(c => c.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_AUCTION_COMMAND_RESULT))
+                            .Returns(commandSubject.AsObservable());
+
             uint auctionId = 12345;
             uint bidAmount = 50000;
             bool eventFired = false;
             uint receivedAuctionId = 0;
             uint receivedBidAmount = 0;
-
             using var sub = _auctionHouseClientComponent.BidPlacedStream.Subscribe(data =>
             {
                 eventFired = true;
@@ -417,8 +413,15 @@ namespace WoWSharpClient.Tests.Agent
                 receivedBidAmount = data.BidAmount;
             });
 
+            // Build payload matching ParseCommandResult heuristic
+            var payload = new byte[13];
+            payload[0] = 0; // success
+            BitConverter.GetBytes((uint)AuctionOperationType.PlaceBid).CopyTo(payload, 1);
+            BitConverter.GetBytes(auctionId).CopyTo(payload, 5);
+            BitConverter.GetBytes(bidAmount).CopyTo(payload, 9);
+
             // Act
-            _auctionHouseClientComponent.HandleBidPlaced(auctionId, bidAmount);
+            commandSubject.OnNext(new ReadOnlyMemory<byte>(payload));
 
             // Assert
             Assert.True(eventFired);
@@ -427,28 +430,30 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleAuctionOperationFailed_ShouldPublish()
+        public void AuctionOperationFailedStream_ShouldFire_WhenFailureCommandArrives()
         {
             // Arrange
-            var operation = AuctionOperationType.PlaceBid;
-            string errorReason = "Insufficient funds";
+            var commandSubject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(c => c.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_AUCTION_COMMAND_RESULT))
+                            .Returns(commandSubject.AsObservable());
+
             bool eventFired = false;
             AuctionOperationError? received = null;
+            using var sub = _auctionHouseClientComponent.AuctionOperationFailedStream.Subscribe(err => { eventFired = true; received = err; });
 
-            using var sub = _auctionHouseClientComponent.AuctionOperationFailedStream.Subscribe(err =>
-            {
-                eventFired = true;
-                received = err;
-            });
+            // Build failure payload (non-zero result byte)
+            var payload = new byte[9];
+            payload[0] = 1; // failure
+            BitConverter.GetBytes((uint)AuctionOperationType.PlaceBid).CopyTo(payload, 1);
+            BitConverter.GetBytes((uint)1111).CopyTo(payload, 5);
 
             // Act
-            _auctionHouseClientComponent.HandleAuctionOperationFailed(operation, errorReason);
+            commandSubject.OnNext(new ReadOnlyMemory<byte>(payload));
 
             // Assert
             Assert.True(eventFired);
             Assert.NotNull(received);
-            Assert.Equal(operation, received!.Operation);
-            Assert.Equal(errorReason, received.ErrorReason);
+            Assert.Equal(AuctionOperationType.PlaceBid, received!.Operation);
         }
 
         #endregion

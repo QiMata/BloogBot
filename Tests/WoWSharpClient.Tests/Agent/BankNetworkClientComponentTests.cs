@@ -5,6 +5,9 @@ using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 using Xunit;
+using System.Reactive.Subjects;
+using System.Reactive;
+using System.Reactive.Linq;
 
 namespace WoWSharpClient.Tests.Agent
 {
@@ -288,127 +291,131 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void HandleBankWindowOpened_FiresEvent()
+        public void BankWindowOpenedStream_FiresOnShowBank()
         {
             // Arrange
             ulong bankerGuid = 0x12345678;
-            ulong? eventBankerGuid = null;
-            bool eventFired = false;
+            _bankClientComponent.HandleBankWindowOpened(bankerGuid); // set state for emission
 
-            _bankClientComponent.BankWindowOpened += (guid) =>
-            {
-                eventBankerGuid = guid;
-                eventFired = true;
-            };
+            var showBankSubject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(c => c.RegisterOpcodeHandler(Opcode.SMSG_SHOW_BANK))
+                            .Returns(showBankSubject.AsObservable());
+
+            bool fired = false;
+            ulong receivedGuid = 0;
+            using var sub = _bankClientComponent.BankWindowOpenedStream.Subscribe(g => { fired = true; receivedGuid = g; });
 
             // Act
-            _bankClientComponent.HandleBankWindowOpened(bankerGuid);
+            showBankSubject.OnNext(new ReadOnlyMemory<byte>(new byte[] { 0 }));
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(bankerGuid, eventBankerGuid);
-            Assert.True(_bankClientComponent.IsBankWindowOpen);
+            Assert.True(fired);
+            Assert.Equal(bankerGuid, receivedGuid);
         }
 
         [Fact]
-        public void HandleBankWindowClosed_FiresEvent()
+        public void BankWindowClosedStream_FiresOnDisconnect()
         {
             // Arrange
-            bool eventFired = false;
-            _bankClientComponent.BankWindowClosed += () => eventFired = true;
+            var disconnectSubject = new Subject<Exception?>();
+            _mockWorldClient.SetupGet(c => c.WhenDisconnected).Returns(disconnectSubject.AsObservable());
 
-            // Ensure bank is open first
-            _bankClientComponent.HandleBankWindowOpened(0x12345678);
+            bool fired = false;
+            using var sub = _bankClientComponent.BankWindowClosedStream.Subscribe(_ => fired = true);
 
             // Act
-            _bankClientComponent.HandleBankWindowClosed();
+            disconnectSubject.OnNext(null);
 
             // Assert
-            Assert.True(eventFired);
-            Assert.False(_bankClientComponent.IsBankWindowOpen);
+            Assert.True(fired);
         }
 
         [Fact]
-        public void HandleItemDeposited_FiresEvent()
+        public void BankSlotPurchasedStream_FiresOnSuccess()
         {
             // Arrange
-            ulong itemGuid = 0x11111111;
+            var resultSubject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(c => c.RegisterOpcodeHandler(Opcode.SMSG_BUY_BANK_SLOT_RESULT))
+                            .Returns(resultSubject.AsObservable());
+
+            // Ensure initial bag slots is 0
+            _bankClientComponent.HandleBankInfoUpdate(24, 0);
+
+            bool fired = false;
+            BankSlotPurchaseData? data = null;
+            using var sub = _bankClientComponent.BankSlotPurchasedStream.Subscribe(d => { fired = true; data = d; });
+
+            // Build success payload: first byte = ERR_BANKSLOT_OK (3)
+            var payload = new byte[] { 3 };
+
+            // Act
+            resultSubject.OnNext(new ReadOnlyMemory<byte>(payload));
+
+            // Assert
+            Assert.True(fired);
+            Assert.NotNull(data);
+            Assert.Equal((byte)0, data!.SlotIndex); // first purchased slot index
+            Assert.Equal(1000u, data.Cost); // first cost
+        }
+
+        [Fact]
+        public void BankOperationFailedStream_FiresOnFailure()
+        {
+            // Arrange
+            var resultSubject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(c => c.RegisterOpcodeHandler(Opcode.SMSG_BUY_BANK_SLOT_RESULT))
+                            .Returns(resultSubject.AsObservable());
+
+            bool fired = false;
+            BankOperationErrorData? error = null;
+            using var sub = _bankClientComponent.BankOperationFailedStream.Subscribe(e => { fired = true; error = e; });
+
+            // Build failure payload: first byte = ERR_BANKSLOT_INSUFFICIENT_FUNDS (1)
+            var payload = new byte[] { 1 };
+
+            // Act
+            resultSubject.OnNext(new ReadOnlyMemory<byte>(payload));
+
+            // Assert
+            Assert.True(fired);
+            Assert.NotNull(error);
+            Assert.Equal(BankOperationType.PurchaseSlot, error!.Operation);
+            Assert.False(string.IsNullOrWhiteSpace(error.ErrorMessage));
+        }
+
+        [Fact]
+        public void ItemDepositedStream_FiresOnItemPush()
+        {
+            // Arrange
+            var itemPushSubject = new Subject<ReadOnlyMemory<byte>>();
+            _mockWorldClient.Setup(c => c.RegisterOpcodeHandler(Opcode.SMSG_ITEM_PUSH_RESULT))
+                            .Returns(itemPushSubject.AsObservable());
+
+            bool fired = false;
+            ItemMovementData? moved = null;
+            using var sub = _bankClientComponent.ItemDepositedStream.Subscribe(m => { fired = true; moved = m; });
+
+            // Build heuristic payload: guid(8) id(4) qty(4) slot(1)
+            ulong itemGuid = 0x11111111UL;
             uint itemId = 12345;
-            uint quantity = 5;
-            byte bankSlot = 10;
-
-            bool eventFired = false;
-            ulong? eventItemGuid = null;
-            uint? eventItemId = null;
-            uint? eventQuantity = null;
-            byte? eventBankSlot = null;
-
-            _bankClientComponent.ItemDeposited += (guid, id, qty, slot) =>
-            {
-                eventItemGuid = guid;
-                eventItemId = id;
-                eventQuantity = qty;
-                eventBankSlot = slot;
-                eventFired = true;
-            };
+            uint qty = 5;
+            byte slot = 10;
+            var payload = new byte[17];
+            BitConverter.GetBytes(itemGuid).CopyTo(payload, 0);
+            BitConverter.GetBytes(itemId).CopyTo(payload, 8);
+            BitConverter.GetBytes(qty).CopyTo(payload, 12);
+            payload[16] = slot;
 
             // Act
-            _bankClientComponent.HandleItemDeposited(itemGuid, itemId, quantity, bankSlot);
+            itemPushSubject.OnNext(new ReadOnlyMemory<byte>(payload));
 
             // Assert
-            Assert.True(eventFired);
-            Assert.Equal(itemGuid, eventItemGuid);
-            Assert.Equal(itemId, eventItemId);
-            Assert.Equal(quantity, eventQuantity);
-            Assert.Equal(bankSlot, eventBankSlot);
-        }
-
-        [Fact]
-        public void HandleGoldDeposited_FiresEvent()
-        {
-            // Arrange
-            uint amount = 10000;
-            bool eventFired = false;
-            uint? eventAmount = null;
-
-            _bankClientComponent.GoldDeposited += (amt) =>
-            {
-                eventAmount = amt;
-                eventFired = true;
-            };
-
-            // Act
-            _bankClientComponent.HandleGoldDeposited(amount);
-
-            // Assert
-            Assert.True(eventFired);
-            Assert.Equal(amount, eventAmount);
-        }
-
-        [Fact]
-        public void HandleBankOperationError_FiresEvent()
-        {
-            // Arrange
-            var operation = BankOperationType.DepositItem;
-            string errorMessage = "Test error";
-            bool eventFired = false;
-            BankOperationType? eventOperation = null;
-            string? eventError = null;
-
-            _bankClientComponent.BankOperationFailed += (op, error) =>
-            {
-                eventOperation = op;
-                eventError = error;
-                eventFired = true;
-            };
-
-            // Act
-            _bankClientComponent.HandleBankOperationError(operation, errorMessage);
-
-            // Assert
-            Assert.True(eventFired);
-            Assert.Equal(operation, eventOperation);
-            Assert.Equal(errorMessage, eventError);
+            Assert.True(fired);
+            Assert.NotNull(moved);
+            Assert.Equal(itemGuid, moved!.ItemGuid);
+            Assert.Equal(itemId, moved.ItemId);
+            Assert.Equal(qty, moved.Quantity);
+            Assert.Equal(slot, moved.Slot);
         }
 
         [Fact]
