@@ -1,3 +1,6 @@
+using System;
+using System.Reactive;
+
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
@@ -11,68 +14,17 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         bool IsMailboxWindowOpen { get; }
 
-        /// <summary>
-        /// Event fired when a mailbox window is opened.
-        /// </summary>
-        event Action<ulong>? MailboxWindowOpened;
-
-        /// <summary>
-        /// Event fired when a mailbox window is closed.
-        /// </summary>
-        event Action? MailboxWindowClosed;
-
-        /// <summary>
-        /// Event fired when the mail list is received from the server.
-        /// </summary>
-        /// <param name="mailCount">The number of mails in the mailbox.</param>
-        event Action<uint>? MailListReceived;
-
-        /// <summary>
-        /// Event fired when mail is successfully sent.
-        /// </summary>
-        /// <param name="recipient">The recipient's name.</param>
-        /// <param name="subject">The mail subject.</param>
-        event Action<string, string>? MailSent;
-
-        /// <summary>
-        /// Event fired when money is taken from mail.
-        /// </summary>
-        /// <param name="mailId">The mail ID.</param>
-        /// <param name="amount">The amount of money taken in copper.</param>
-        event Action<uint, uint>? MoneyTakenFromMail;
-
-        /// <summary>
-        /// Event fired when an item is taken from mail.
-        /// </summary>
-        /// <param name="mailId">The mail ID.</param>
-        /// <param name="itemId">The item ID taken.</param>
-        /// <param name="quantity">The quantity taken.</param>
-        event Action<uint, uint, uint>? ItemTakenFromMail;
-
-        /// <summary>
-        /// Event fired when mail is marked as read.
-        /// </summary>
-        /// <param name="mailId">The mail ID.</param>
-        event Action<uint>? MailMarkedAsRead;
-
-        /// <summary>
-        /// Event fired when mail is deleted.
-        /// </summary>
-        /// <param name="mailId">The mail ID.</param>
-        event Action<uint>? MailDeleted;
-
-        /// <summary>
-        /// Event fired when mail is returned to sender.
-        /// </summary>
-        /// <param name="mailId">The mail ID.</param>
-        event Action<uint>? MailReturned;
-
-        /// <summary>
-        /// Event fired when a mail operation fails.
-        /// </summary>
-        /// <param name="operation">The failed operation.</param>
-        /// <param name="error">The error message.</param>
-        event Action<string, string>? MailError;
+        // Reactive streams (replace legacy events)
+        IObservable<ulong> MailboxWindowOpenings { get; }
+        IObservable<Unit> MailboxWindowClosings { get; }
+        IObservable<uint> MailListCounts { get; }
+        IObservable<(string Recipient, string Subject)> MailSentResults { get; }
+        IObservable<(uint MailId, uint Amount)> MoneyTakenResults { get; }
+        IObservable<(uint MailId, uint ItemId, uint Quantity)> ItemTakenResults { get; }
+        IObservable<uint> MailReadMarks { get; }
+        IObservable<uint> MailDeletes { get; }
+        IObservable<uint> MailReturns { get; }
+        IObservable<(string Operation, string Error)> MailErrors { get; }
 
         /// <summary>
         /// Opens a mailbox by interacting with a mailbox game object.

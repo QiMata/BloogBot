@@ -88,27 +88,17 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public async Task OpenMailboxAsync_WithException_RaisesMailErrorEvent()
+        public async Task OpenMailboxAsync_WithException_Throws()
         {
             // Arrange
             var mailboxGuid = 0x123456789ABCDEF0UL;
             var exception = new InvalidOperationException("Test exception");
-            string? capturedOperation = null;
-            string? capturedError = null;
 
             _mockWorldClient.Setup(x => x.SendOpcodeAsync(It.IsAny<GameData.Core.Enums.Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(exception);
 
-            _mailAgent.MailError += (operation, error) =>
-            {
-                capturedOperation = operation;
-                capturedError = error;
-            };
-
             // Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(() => _mailAgent.OpenMailboxAsync(mailboxGuid));
-            Assert.Equal("OpenMailbox", capturedOperation);
-            Assert.Contains("Failed to open mailbox", capturedError);
         }
 
         #endregion
@@ -382,14 +372,11 @@ namespace WoWSharpClient.Tests.Agent
         #region CloseMailboxAsync Tests
 
         [Fact]
-        public async Task CloseMailboxAsync_UpdatesStateAndRaisesEvent()
+        public async Task CloseMailboxAsync_UpdatesState()
         {
             // Arrange
-            var eventRaised = false;
-            _mailAgent.MailboxWindowClosed += () => eventRaised = true;
-
-            // Simulate mailbox being open
-            _mailAgent.HandleMailboxWindowOpened(123UL);
+            var mailboxGuid = 0x123456789ABCDEF0UL;
+            await _mailAgent.OpenMailboxAsync(mailboxGuid);
             Assert.True(_mailAgent.IsMailboxWindowOpen);
 
             // Act
@@ -397,7 +384,6 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.False(_mailAgent.IsMailboxWindowOpen);
-            Assert.True(eventRaised);
         }
 
         #endregion
@@ -455,164 +441,6 @@ namespace WoWSharpClient.Tests.Agent
                     It.IsAny<byte[]>(),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
-        }
-
-        #endregion
-
-        #region Event Handler Tests
-
-        [Fact]
-        public void HandleMailboxWindowOpened_UpdatesStateAndRaisesEvent()
-        {
-            // Arrange
-            var mailboxGuid = 0x123456789ABCDEF0UL;
-            var eventRaised = false;
-            ulong? capturedGuid = null;
-
-            _mailAgent.MailboxWindowOpened += (guid) =>
-            {
-                eventRaised = true;
-                capturedGuid = guid;
-            };
-
-            // Act
-            _mailAgent.HandleMailboxWindowOpened(mailboxGuid);
-
-            // Assert
-            Assert.True(_mailAgent.IsMailboxWindowOpen);
-            Assert.True(_mailAgent.IsMailboxOpen(mailboxGuid));
-            Assert.True(eventRaised);
-            Assert.Equal(mailboxGuid, capturedGuid);
-        }
-
-        [Fact]
-        public void HandleMailListReceived_RaisesEvent()
-        {
-            // Arrange
-            var mailCount = 5u;
-            var eventRaised = false;
-            uint? capturedCount = null;
-
-            _mailAgent.MailListReceived += (count) =>
-            {
-                eventRaised = true;
-                capturedCount = count;
-            };
-
-            // Act
-            _mailAgent.HandleMailListReceived(mailCount);
-
-            // Assert
-            Assert.True(eventRaised);
-            Assert.Equal(mailCount, capturedCount);
-        }
-
-        [Fact]
-        public void HandleMailSent_RaisesEvent()
-        {
-            // Arrange
-            var recipient = "TestPlayer";
-            var subject = "Test Subject";
-            var eventRaised = false;
-            string? capturedRecipient = null;
-            string? capturedSubject = null;
-
-            _mailAgent.MailSent += (r, s) =>
-            {
-                eventRaised = true;
-                capturedRecipient = r;
-                capturedSubject = s;
-            };
-
-            // Act
-            _mailAgent.HandleMailSent(recipient, subject);
-
-            // Assert
-            Assert.True(eventRaised);
-            Assert.Equal(recipient, capturedRecipient);
-            Assert.Equal(subject, capturedSubject);
-        }
-
-        [Fact]
-        public void HandleMoneyTakenFromMail_RaisesEvent()
-        {
-            // Arrange
-            var mailId = 123u;
-            var amount = 1000u;
-            var eventRaised = false;
-            uint? capturedMailId = null;
-            uint? capturedAmount = null;
-
-            _mailAgent.MoneyTakenFromMail += (id, amt) =>
-            {
-                eventRaised = true;
-                capturedMailId = id;
-                capturedAmount = amt;
-            };
-
-            // Act
-            _mailAgent.HandleMoneyTakenFromMail(mailId, amount);
-
-            // Assert
-            Assert.True(eventRaised);
-            Assert.Equal(mailId, capturedMailId);
-            Assert.Equal(amount, capturedAmount);
-        }
-
-        [Fact]
-        public void HandleItemTakenFromMail_RaisesEvent()
-        {
-            // Arrange
-            var mailId = 123u;
-            var itemId = 456u;
-            var quantity = 2u;
-            var eventRaised = false;
-            uint? capturedMailId = null;
-            uint? capturedItemId = null;
-            uint? capturedQuantity = null;
-
-            _mailAgent.ItemTakenFromMail += (id, item, qty) =>
-            {
-                eventRaised = true;
-                capturedMailId = id;
-                capturedItemId = item;
-                capturedQuantity = qty;
-            };
-
-            // Act
-            _mailAgent.HandleItemTakenFromMail(mailId, itemId, quantity);
-
-            // Assert
-            Assert.True(eventRaised);
-            Assert.Equal(mailId, capturedMailId);
-            Assert.Equal(itemId, capturedItemId);
-            Assert.Equal(quantity, capturedQuantity);
-        }
-
-        [Fact]
-        public void HandleMailError_RaisesEvent()
-        {
-            // Arrange
-            var operation = "SendMail";
-            var errorMessage = "Test error";
-            var eventRaised = false;
-            string? capturedOperation = null;
-            string? capturedError = null;
-
-            _mailAgent.MailError += (op, err) =>
-            {
-                eventRaised = true;
-                capturedOperation = op;
-                capturedError = err;
-            };
-
-            // Act
-            _mailAgent.HandleMailError(operation, errorMessage);
-
-            // Assert
-            Assert.True(eventRaised);
-            Assert.Equal(operation, capturedOperation);
-            Assert.Equal(errorMessage, capturedError);
         }
 
         #endregion

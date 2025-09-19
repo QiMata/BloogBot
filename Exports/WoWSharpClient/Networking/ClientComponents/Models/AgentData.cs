@@ -253,15 +253,6 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         bool IsConsumable,
         DateTime Timestamp);
 
-    /// <summary>
-    /// Represents data for item use errors.
-    /// </summary>
-    public record ItemUseErrorData(
-        string ErrorMessage,
-        ulong ItemGuid,
-        uint ItemId,
-        DateTime Timestamp);
-
     // Equipment Agent Data Models
     /// <summary>
     /// Represents data for equipment operations.

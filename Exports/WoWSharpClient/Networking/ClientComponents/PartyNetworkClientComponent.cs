@@ -1,4 +1,6 @@
 using System.Text;
+using System.Reactive;
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -7,8 +9,8 @@ using WoWSharpClient.Networking.ClientComponents.I;
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
-    /// Implementation of party network agent that handles party/raid group management operations in World of Warcraft.
-    /// Manages party invites, member management, loot settings, raid conversion, and leadership operations using the Mangos protocol.
+    /// Reactive party/raid management over the Mangos protocol.
+    /// Exposes opcode-backed observables and maintains lightweight local state.
     /// </summary>
     public class PartyNetworkClientComponent : NetworkClientComponent, IPartyNetworkClientComponent, IDisposable
     {
@@ -20,81 +22,120 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly object _groupLock = new object();
         private bool _disposed;
 
-        /// <summary>
-        /// Initializes a new instance of the PartyNetworkClientComponent class.
-        /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance.</param>
+        // Reactive streams
+        private readonly IObservable<string> _partyInvites;
+        private readonly IObservable<(bool IsRaid, uint MemberCount)> _groupUpdates;
+        private readonly IObservable<string> _groupLeaves;
+        private readonly IObservable<(string NewLeaderName, ulong NewLeaderGuid)> _leadershipChanges;
+        private readonly IObservable<(string Operation, bool Success, uint ResultCode)> _partyCommandResults;
+        private readonly IObservable<(string Operation, string Error)> _partyErrors;
+        private readonly IObservable<Unit> _readyCheckRequests;
+        private readonly IObservable<Unit> _readyCheckResponses;
+
         public PartyNetworkClientComponent(IWorldClient worldClient, ILogger<PartyNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            _partyInvites = SafeOpcodeStream(Opcode.SMSG_GROUP_INVITE)
+                .Select(ParseGroupInvite)
+                .Do(inviter =>
+                {
+                    _logger.LogInformation("Group invite received from {Inviter}", inviter);
+                    HasPendingInvite = true;
+                })
+                .Publish().RefCount();
+
+            _groupUpdates = SafeOpcodeStream(Opcode.SMSG_GROUP_LIST)
+                .Select(ParseGroupList)
+                .Do(info =>
+                {
+                    lock (_groupLock)
+                    {
+                        IsInRaid = info.IsRaid;
+                        GroupSize = info.MemberCount;
+                        IsInGroup = info.MemberCount > 0;
+                    }
+                    _logger.LogInformation("Group list updated - Type: {Type}, Members: {Count}",
+                        info.IsRaid ? "Raid" : "Party", info.MemberCount);
+                })
+                .Publish().RefCount();
+
+            _groupLeaves = SafeOpcodeStream(Opcode.SMSG_GROUP_DESTROYED)
+                .Select(_ => "Group disbanded")
+                .Do(reason =>
+                {
+                    lock (_groupLock)
+                    {
+                        _groupMembers.Clear();
+                    }
+                    lock (_stateLock)
+                    {
+                        IsInGroup = false;
+                        IsInRaid = false;
+                        IsGroupLeader = false;
+                        GroupSize = 0;
+                    }
+                    _logger.LogInformation("{Reason}", reason);
+                })
+                .Publish().RefCount();
+
+            _leadershipChanges = SafeOpcodeStream(Opcode.SMSG_GROUP_SET_LEADER)
+                .Select(ParseGroupSetLeader)
+                .Do(change => _logger.LogInformation("Group leadership changed to: {Leader} ({LeaderGuid:X})", change.NewLeaderName, change.NewLeaderGuid))
+                .Publish().RefCount();
+
+            _partyCommandResults = SafeOpcodeStream(Opcode.SMSG_PARTY_COMMAND_RESULT)
+                .Select(ParsePartyCommandResult)
+                .Do(r =>
+                {
+                    if (r.Success) _logger.LogInformation("Party operation {Operation} succeeded", r.Operation);
+                    else _logger.LogWarning("Party operation {Operation} failed with result: {Code}", r.Operation, r.ResultCode);
+                })
+                .Publish().RefCount();
+
+            var raidGroupOnlyErrors = SafeOpcodeStream(Opcode.SMSG_RAID_GROUP_ONLY)
+                .Select(_ => (Operation: "InstanceEntry", Error: "This instance requires a raid group"))
+                .Do(_ => _logger.LogInformation("Instance requires raid group"));
+
+            _partyErrors = raidGroupOnlyErrors.Publish().RefCount();
+
+            _readyCheckRequests = SafeOpcodeStream(Opcode.MSG_RAID_READY_CHECK)
+                .Select(_ => Unit.Default)
+                .Do(_ => _logger.LogInformation("Ready check initiated"))
+                .Publish().RefCount();
+
+            _readyCheckResponses = SafeOpcodeStream(Opcode.MSG_RAID_READY_CHECK_CONFIRM)
+                .Select(_ => Unit.Default)
+                .Do(_ => _logger.LogDebug("Ready check response received"))
+                .Publish().RefCount();
         }
 
         #region INetworkClientComponent Implementation
-
         // IsOperationInProgress and LastOperationTime provided by base class
-
         #endregion
 
-        /// <inheritdoc />
+        #region State
         public bool IsInGroup { get; private set; }
-
-        /// <inheritdoc />
         public bool IsInRaid { get; private set; }
-
-        /// <inheritdoc />
         public bool IsGroupLeader { get; private set; }
-
-        /// <inheritdoc />
         public uint GroupSize { get; private set; }
-
-        /// <inheritdoc />
         public LootMethod CurrentLootMethod { get; private set; }
-
-        /// <inheritdoc />
         public bool HasPendingInvite { get; private set; }
+        #endregion
 
-        /// <inheritdoc />
-        public event Action<string>? PartyInviteReceived;
-
-        /// <inheritdoc />
-        public event Action<bool, uint>? GroupJoined;
-
-        /// <inheritdoc />
-        public event Action<string>? GroupLeft;
-
-        /// <inheritdoc />
-        public event Action<string, ulong>? MemberJoined;
-
-        /// <inheritdoc />
-        public event Action<string, ulong>? MemberLeft;
-
-        /// <inheritdoc />
-        public event Action<string, ulong>? LeadershipChanged;
-
-        /// <inheritdoc />
-        public event Action<LootMethod, ulong?>? LootMethodChanged;
-
-        /// <inheritdoc />
-        public event Action<bool>? GroupConverted;
-
-        /// <inheritdoc />
-        public event Action<string, string>? PartyOperationFailed;
-
-        #region Private Helper Methods
-
-        private void SetOperationInProgress(bool inProgress)
-        {
-            // Delegate to base class implementation which manages state safely
-            base.SetOperationInProgress(inProgress);
-        }
-
+        #region Reactive (public)
+        public IObservable<string> PartyInvites => _partyInvites;
+        public IObservable<(bool IsRaid, uint MemberCount)> GroupUpdates => _groupUpdates;
+        public IObservable<string> GroupLeaves => _groupLeaves;
+        public IObservable<(string NewLeaderName, ulong NewLeaderGuid)> LeadershipChanges => _leadershipChanges;
+        public IObservable<(string Operation, bool Success, uint ResultCode)> PartyCommandResults => _partyCommandResults;
+        public IObservable<(string Operation, string Error)> PartyErrors => _partyErrors;
+        public IObservable<Unit> ReadyCheckRequests => _readyCheckRequests;
+        public IObservable<Unit> ReadyCheckResponses => _readyCheckResponses;
         #endregion
 
         #region Party Invite Operations
-
-        /// <inheritdoc />
         public async Task InvitePlayerAsync(string playerName, CancellationToken cancellationToken = default)
         {
             try
@@ -116,7 +157,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to invite player to group: {PlayerName}", playerName);
-                PartyOperationFailed?.Invoke("InvitePlayer", ex.Message);
                 throw;
             }
             finally
@@ -125,7 +165,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task AcceptInviteAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -140,12 +179,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to accept group invite");
-                PartyOperationFailed?.Invoke("AcceptInvite", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task DeclineInviteAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -160,12 +197,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to decline group invite");
-                PartyOperationFailed?.Invoke("DeclineInvite", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task CancelInviteAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -179,16 +214,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to cancel group invite");
-                PartyOperationFailed?.Invoke("CancelInvite", ex.Message);
                 throw;
             }
         }
-
         #endregion
 
         #region Member Management
-
-        /// <inheritdoc />
         public async Task KickPlayerAsync(string playerName, CancellationToken cancellationToken = default)
         {
             try
@@ -209,12 +240,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to kick player from group: {PlayerName}", playerName);
-                PartyOperationFailed?.Invoke("KickPlayer", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task KickPlayerAsync(ulong playerGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -231,12 +260,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to kick player from group by GUID: {PlayerGuid:X}", playerGuid);
-                PartyOperationFailed?.Invoke("KickPlayerByGuid", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task LeaveGroupAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -250,12 +277,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to leave group");
-                PartyOperationFailed?.Invoke("LeaveGroup", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task DisbandGroupAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -274,16 +299,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to disband group");
-                PartyOperationFailed?.Invoke("DisbandGroup", ex.Message);
                 throw;
             }
         }
-
         #endregion
 
         #region Leadership Operations
-
-        /// <inheritdoc />
         public async Task PromoteToLeaderAsync(string playerName, CancellationToken cancellationToken = default)
         {
             try
@@ -309,12 +330,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to promote player to leader: {PlayerName}", playerName);
-                PartyOperationFailed?.Invoke("PromoteToLeader", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task PromoteToLeaderAsync(ulong playerGuid, CancellationToken cancellationToken = default)
         {
             var member = GetGroupMember(playerGuid);
@@ -328,7 +347,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task PromoteToAssistantAsync(string playerName, CancellationToken cancellationToken = default)
         {
             try
@@ -359,16 +377,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to promote player to assistant: {PlayerName}", playerName);
-                PartyOperationFailed?.Invoke("PromoteToAssistant", ex.Message);
                 throw;
             }
         }
-
         #endregion
 
         #region Loot Settings
-
-        /// <inheritdoc />
         public async Task SetLootMethodAsync(LootMethod lootMethod, ulong? lootMasterGuid = null, ItemQuality lootThreshold = ItemQuality.Uncommon, CancellationToken cancellationToken = default)
         {
             try
@@ -398,16 +412,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to set loot method: {LootMethod}", lootMethod);
-                PartyOperationFailed?.Invoke("SetLootMethod", ex.Message);
                 throw;
             }
         }
-
         #endregion
 
         #region Raid Operations
-
-        /// <inheritdoc />
         public async Task ConvertToRaidAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -431,12 +441,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to convert to raid");
-                PartyOperationFailed?.Invoke("ConvertToRaid", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task ChangeSubGroupAsync(string playerName, byte subGroup, CancellationToken cancellationToken = default)
         {
             try
@@ -468,12 +476,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to change player subgroup: {PlayerName} to {SubGroup}", playerName, subGroup);
-                PartyOperationFailed?.Invoke("ChangeSubGroup", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task SwapSubGroupsAsync(string playerName1, string playerName2, CancellationToken cancellationToken = default)
         {
             try
@@ -508,16 +514,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to swap subgroups: {Player1} <-> {Player2}", playerName1, playerName2);
-                PartyOperationFailed?.Invoke("SwapSubGroups", ex.Message);
                 throw;
             }
         }
-
         #endregion
 
         #region Information Requests
-
-        /// <inheritdoc />
         public async Task RequestPartyMemberStatsAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -531,12 +533,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to request party member stats");
-                PartyOperationFailed?.Invoke("RequestPartyMemberStats", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task InitiateReadyCheckAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -555,12 +555,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to initiate ready check");
-                PartyOperationFailed?.Invoke("InitiateReadyCheck", ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task RespondToReadyCheckAsync(bool isReady, CancellationToken cancellationToken = default)
         {
             try
@@ -577,16 +575,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to respond to ready check: {IsReady}", isReady);
-                PartyOperationFailed?.Invoke("RespondToReadyCheck", ex.Message);
                 throw;
             }
         }
-
         #endregion
 
         #region Utility Methods
-
-        /// <inheritdoc />
         public IReadOnlyList<GroupMember> GetGroupMembers()
         {
             lock (_groupLock)
@@ -595,7 +589,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public bool IsPlayerInGroup(string playerName)
         {
             lock (_groupLock)
@@ -604,7 +597,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public bool IsPlayerInGroup(ulong playerGuid)
         {
             lock (_groupLock)
@@ -613,7 +605,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public GroupMember? GetGroupMember(string playerName)
         {
             lock (_groupLock)
@@ -622,7 +613,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public GroupMember? GetGroupMember(ulong playerGuid)
         {
             lock (_groupLock)
@@ -630,188 +620,50 @@ namespace WoWSharpClient.Networking.ClientComponents
                 return _groupMembers.FirstOrDefault(m => m.Guid == playerGuid);
             }
         }
-
         #endregion
 
-        #region Server Response Handling
+        #region Parsing Helpers
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
-        /// <summary>
-        /// Handles server responses for party-related packets.
-        /// </summary>
-        /// <param name="opcode">The opcode of the received packet.</param>
-        /// <param name="data">The packet data.</param>
-        public void HandleServerResponse(Opcode opcode, byte[] data)
+        private string ParseGroupInvite(ReadOnlyMemory<byte> payload)
+        {
+            // Placeholder: actual parsing TBD
+            return "Unknown";
+        }
+
+        private (bool IsRaid, uint MemberCount) ParseGroupList(ReadOnlyMemory<byte> payload)
         {
             try
             {
-                switch (opcode)
-                {
-                    case Opcode.SMSG_GROUP_INVITE:
-                        HandleGroupInvite(data);
-                        break;
-                    case Opcode.SMSG_GROUP_LIST:
-                        HandleGroupList(data);
-                        break;
-                    case Opcode.SMSG_GROUP_DESTROYED:
-                        HandleGroupDestroyed(data);
-                        break;
-                    case Opcode.SMSG_GROUP_SET_LEADER:
-                        HandleGroupSetLeader(data);
-                        break;
-                    case Opcode.SMSG_PARTY_MEMBER_STATS:
-                    case Opcode.SMSG_PARTY_MEMBER_STATS_FULL:
-                        HandlePartyMemberStats(data);
-                        break;
-                    case Opcode.SMSG_PARTY_COMMAND_RESULT:
-                        HandlePartyCommandResult(data);
-                        break;
-                    case Opcode.MSG_RAID_READY_CHECK:
-                        HandleReadyCheck(data);
-                        break;
-                    case Opcode.MSG_RAID_READY_CHECK_CONFIRM:
-                        HandleReadyCheckResponse(data);
-                        break;
-                    case Opcode.SMSG_RAID_GROUP_ONLY:
-                        HandleRaidGroupOnly(data);
-                        break;
-                    default:
-                        _logger.LogDebug("Unhandled party-related opcode: {Opcode}", opcode);
-                        break;
-                }
+                var span = payload.Span;
+                if (span.Length < 5) return (IsInRaid, GroupSize);
+                var groupType = span[0];
+                var count = BitConverter.ToUInt32(span.Slice(1, 4));
+                return (groupType == 1, count);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error handling party server response for opcode: {Opcode}", opcode);
+                return (IsInRaid, GroupSize);
             }
         }
 
-        private void HandleGroupInvite(byte[] data)
+        private (string NewLeaderName, ulong NewLeaderGuid) ParseGroupSetLeader(ReadOnlyMemory<byte> payload)
         {
-            try
-            {
-                if (data.Length < 1)
-                {
-                    _logger.LogWarning("Invalid group invite data length: {Length}", data.Length);
-                    return;
-                }
-
-                // Parse group invite data (simplified)
-                var inviterName = "Unknown"; // Would parse from data in a real implementation
-
-                _logger.LogInformation("Group invite received from {Inviter}", inviterName);
-                HasPendingInvite = true;
-                PartyInviteReceived?.Invoke(inviterName);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling group invite");
-            }
+            var span = payload.Span;
+            ulong guid = span.Length >= 8 ? BitConverter.ToUInt64(span[..8]) : 0UL;
+            var name = "Unknown";
+            return (name, guid);
         }
 
-        private void HandleGroupList(byte[] data)
+        private (string Operation, bool Success, uint ResultCode) ParsePartyCommandResult(ReadOnlyMemory<byte> payload)
         {
             try
             {
-                if (data.Length < 5)
-                {
-                    _logger.LogWarning("Invalid group list data length: {Length}", data.Length);
-                    return;
-                }
-
-                lock (_groupLock)
-                {
-                    _groupMembers.Clear();
-
-                    // Parse group list data (simplified - real implementation would parse member data)
-                    var groupType = data[0]; // 0 = party, 1 = raid
-                    var memberCount = BitConverter.ToUInt32(data, 1);
-
-                    IsInGroup = memberCount > 0;
-                    IsInRaid = groupType == 1;
-                    GroupSize = memberCount;
-
-                    _logger.LogInformation("Group list updated - Type: {Type}, Members: {Count}", 
-                        IsInRaid ? "Raid" : "Party", memberCount);
-
-                    GroupJoined?.Invoke(IsInRaid, memberCount);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling group list");
-            }
-        }
-
-        private void HandleGroupDestroyed(byte[] data)
-        {
-            try
-            {
-                lock (_groupLock)
-                {
-                    _groupMembers.Clear();
-                    IsInGroup = false;
-                    IsInRaid = false;
-                    IsGroupLeader = false;
-                    GroupSize = 0;
-                }
-
-                _logger.LogInformation("Group disbanded");
-                GroupLeft?.Invoke("Group disbanded");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling group destroyed");
-            }
-        }
-
-        private void HandleGroupSetLeader(byte[] data)
-        {
-            try
-            {
-                if (data.Length < 8)
-                {
-                    _logger.LogWarning("Invalid group set leader data length: {Length}", data.Length);
-                    return;
-                }
-
-                var newLeaderGuid = BitConverter.ToUInt64(data, 0);
-                var newLeaderName = "Unknown"; // Would parse from data
-
-                _logger.LogInformation("Group leadership changed to: {Leader} ({LeaderGuid:X})", newLeaderName, newLeaderGuid);
-                LeadershipChanged?.Invoke(newLeaderName, newLeaderGuid);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling group set leader");
-            }
-        }
-
-        private void HandlePartyMemberStats(byte[] data)
-        {
-            try
-            {
-                // Parse party member stats (simplified)
-                _logger.LogDebug("Party member stats received");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling party member stats");
-            }
-        }
-
-        private void HandlePartyCommandResult(byte[] data)
-        {
-            try
-            {
-                if (data.Length < 8)
-                {
-                    _logger.LogWarning("Invalid party command result data length: {Length}", data.Length);
-                    return;
-                }
-
-                var operation = BitConverter.ToUInt32(data, 0);
-                var result = BitConverter.ToUInt32(data, 4);
-
+                var span = payload.Span;
+                if (span.Length < 8) return ("Unknown", false, 0xFFFFFFFF);
+                var operation = BitConverter.ToUInt32(span[..4]);
+                var result = BitConverter.ToUInt32(span.Slice(4, 4));
                 var operationName = operation switch
                 {
                     0x00 => "Invite",
@@ -821,88 +673,22 @@ namespace WoWSharpClient.Networking.ClientComponents
                     0x04 => "ChangeSubGroup",
                     _ => $"Unknown({operation:X})"
                 };
-
-                if (result == 0)
-                {
-                    _logger.LogInformation("Party operation {Operation} succeeded", operationName);
-                }
-                else
-                {
-                    _logger.LogWarning("Party operation {Operation} failed with result: {Result}", operationName, result);
-                    PartyOperationFailed?.Invoke(operationName, $"Operation failed with result: {result}");
-                }
+                return (operationName, result == 0, result);
             }
-            catch (Exception ex)
+            catch
             {
-                _logger.LogError(ex, "Error handling party command result");
+                return ("Unknown", false, 0xFFFFFFFF);
             }
         }
-
-        private void HandleReadyCheck(byte[] data)
-        {
-            try
-            {
-                _logger.LogInformation("Ready check initiated");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling ready check");
-            }
-        }
-
-        private void HandleReadyCheckResponse(byte[] data)
-        {
-            try
-            {
-                _logger.LogDebug("Ready check response received");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling ready check response");
-            }
-        }
-
-        private void HandleRaidGroupOnly(byte[] data)
-        {
-            try
-            {
-                _logger.LogInformation("Instance requires raid group");
-                PartyOperationFailed?.Invoke("InstanceEntry", "This instance requires a raid group");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling raid group only");
-            }
-        }
-
         #endregion
 
         #region IDisposable Implementation
-
-        /// <summary>
-        /// Disposes of the party network client component and cleans up resources.
-        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;
-
-            _logger.LogDebug("Disposing PartyNetworkClientComponent");
-
-            // Clear events to prevent memory leaks
-            PartyInviteReceived = null;
-            GroupJoined = null;
-            GroupLeft = null;
-            MemberJoined = null;
-            MemberLeft = null;
-            LeadershipChanged = null;
-            LootMethodChanged = null;
-            GroupConverted = null;
-            PartyOperationFailed = null;
-
             _disposed = true;
-            _logger.LogDebug("PartyNetworkClientComponent disposed");
+            _logger.LogDebug("Disposing PartyNetworkClientComponent");
         }
-
         #endregion
     }
 }

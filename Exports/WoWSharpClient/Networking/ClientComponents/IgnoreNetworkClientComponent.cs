@@ -8,7 +8,8 @@ using System.Reactive.Linq;
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
-    /// Ignore list management over the WoW protocol.
+    /// Ignore list management over the WoW protocol (reactive implementation).
+    /// Provides an observable stream of ignore list snapshots sourced from the world client's opcode stream.
     /// </summary>
     public class IgnoreNetworkClientComponent : NetworkClientComponent, IIgnoreNetworkClientComponent, IDisposable
     {
@@ -19,17 +20,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly object _lock = new();
         private bool _disposed;
 
+        // Reactive stream for ignore list updates
+        private readonly IObservable<IReadOnlyList<string>> _ignoreListUpdates;
+
         public IgnoreNetworkClientComponent(IWorldClient worldClient, ILogger<IgnoreNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-            // Subscribe to world client opcode stream (guard against null observable in tests/mocks)
-            var stream = _worldClient.RegisterOpcodeHandler(Opcode.SMSG_IGNORE_LIST);
-            if (stream is not null)
-            {
-                _ = stream.Subscribe(payload => HandleServerResponse(Opcode.SMSG_IGNORE_LIST, payload.ToArray()));
-            }
+            _ignoreListUpdates = SafeOpcodeStream(Opcode.SMSG_IGNORE_LIST)
+                .Select(ParseIgnoreList)
+                .Do(ApplyIgnoreList)
+                .Publish()
+                .RefCount();
         }
 
         public IReadOnlyList<string> IgnoredPlayers
@@ -39,8 +42,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public bool IsIgnoreListInitialized { get; private set; }
 
-        public event Action<IReadOnlyList<string>>? IgnoreListUpdated;
-        public event Action<string, string>? IgnoreOperationFailed;
+        /// <summary>
+        /// Stream of ignore list snapshots. Each emission is the full current list.
+        /// </summary>
+        public IObservable<IReadOnlyList<string>> IgnoreListUpdates => _ignoreListUpdates;
+
+        #region Legacy Event Interface (Not Supported)
+        event Action<IReadOnlyList<string>>? IIgnoreNetworkClientComponent.IgnoreListUpdated { add => ThrowEventsNotSupported(); remove { } }
+        event Action<string, string>? IIgnoreNetworkClientComponent.IgnoreOperationFailed { add => ThrowEventsNotSupported(); remove { } }
+        private void ThrowEventsNotSupported() => throw new NotSupportedException("Events are not supported; use reactive observables instead (IgnoreListUpdates).");
+        #endregion
 
         public async Task RequestIgnoreListAsync(CancellationToken cancellationToken = default)
         {
@@ -54,7 +65,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to request ignore list");
-                IgnoreOperationFailed?.Invoke("RequestIgnoreList", ex.Message);
                 throw;
             }
             finally
@@ -78,7 +88,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to add ignore: {Player}", playerName);
-                IgnoreOperationFailed?.Invoke("AddIgnore", ex.Message);
                 throw;
             }
         }
@@ -98,9 +107,47 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to remove ignore: {Player}", playerName);
-                IgnoreOperationFailed?.Invoke("RemoveIgnore", ex.Message);
                 throw;
             }
+        }
+
+        // Interface test hook compatibility
+        public void HandleServerResponse(Opcode opcode, byte[] data)
+        {
+            try
+            {
+                if (opcode == Opcode.SMSG_IGNORE_LIST)
+                {
+                    var list = ParseIgnoreList(data);
+                    ApplyIgnoreList(list);
+                }
+                else
+                {
+                    _logger.LogDebug("Unhandled ignore-related opcode: {Opcode}", opcode);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling ignore server response for opcode: {Opcode}", opcode);
+            }
+        }
+
+        #region Parsing & Reactive Helpers
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode) => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private static IReadOnlyList<string> ParseIgnoreList(ReadOnlyMemory<byte> payload)
+        {
+            using var br = new BinaryReader(new MemoryStream(payload.ToArray()));
+            uint count = 0;
+            if (br.BaseStream.Length - br.BaseStream.Position >= 4)
+                count = br.ReadUInt32();
+
+            var list = new List<string>((int)count);
+            for (int i = 0; i < count && br.BaseStream.Position < br.BaseStream.Length; i++)
+            {
+                list.Add(ReadCString(br));
+            }
+            return list.AsReadOnly();
         }
 
         private static string ReadCString(BinaryReader br)
@@ -114,77 +161,25 @@ namespace WoWSharpClient.Networking.ClientComponents
             return Encoding.UTF8.GetString(bytes.ToArray());
         }
 
-        public void HandleServerResponse(Opcode opcode, byte[] data)
+        private void ApplyIgnoreList(IReadOnlyList<string> list)
         {
-            try
+            lock (_lock)
             {
-                switch (opcode)
-                {
-                    case Opcode.SMSG_IGNORE_LIST:
-                        HandleIgnoreList(data);
-                        break;
-                    default:
-                        _logger.LogDebug("Unhandled ignore-related opcode: {Opcode}", opcode);
-                        break;
-                }
+                _ignored.Clear();
+                _ignored.AddRange(list);
+                IsIgnoreListInitialized = true;
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling ignore server response for opcode: {Opcode}", opcode);
-            }
+            _logger.LogInformation("Ignore list received (entries: {Count})", list.Count);
         }
-
-        private void HandleIgnoreList(byte[] data)
-        {
-            try
-            {
-                using var br = new BinaryReader(new MemoryStream(data));
-                uint count = 0;
-                if (br.BaseStream.Length - br.BaseStream.Position >= 4)
-                    count = br.ReadUInt32();
-
-                var list = new List<string>((int)count);
-                for (int i = 0; i < count && br.BaseStream.Position < br.BaseStream.Length; i++)
-                {
-                    var name = ReadCString(br);
-                    list.Add(name);
-                }
-
-                lock (_lock)
-                {
-                    _ignored.Clear();
-                    _ignored.AddRange(list);
-                    IsIgnoreListInitialized = true;
-                }
-
-                _logger.LogInformation("Ignore list received (entries: {Count})", list.Count);
-                IgnoreListUpdated?.Invoke(IgnoredPlayers);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to parse ignore list payload of {Len} bytes", data.Length);
-            }
-        }
+        #endregion
 
         #region IDisposable Implementation
-
-        /// <summary>
-        /// Disposes of the ignore network client component and cleans up resources.
-        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;
-
-            _logger.LogDebug("Disposing IgnoreNetworkClientComponent");
-
-            // Clear events to prevent memory leaks
-            IgnoreListUpdated = null;
-            IgnoreOperationFailed = null;
-
             _disposed = true;
-            _logger.LogDebug("IgnoreNetworkClientComponent disposed");
+            _logger.LogDebug("Disposing IgnoreNetworkClientComponent");
         }
-
         #endregion
     }
 }

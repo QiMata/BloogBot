@@ -2,47 +2,60 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using System.Reactive.Subjects;
+using System.Reactive.Linq;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
-    /// Implementation of game object network agent that handles game object interactions in World of Warcraft.
-    /// Manages interactions with chests, gathering nodes, doors, and other game objects using the Mangos protocol.
+    /// Reactive implementation of game object network agent that handles game object interactions.
+    /// Produces observable streams instead of C# events.
     /// </summary>
     public class GameObjectNetworkClientComponent : NetworkClientComponent, IGameObjectNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<GameObjectNetworkClientComponent> _logger;
-        private readonly object _stateLock = new object();
         private bool _disposed;
 
+        // Subjects (hot observables) for consumers to subscribe to
+        private readonly Subject<ulong> _gameObjectInteracted = new();
+        private readonly Subject<(ulong GameObjectGuid, string Reason)> _gameObjectInteractionFailed = new();
+        private readonly Subject<ulong> _chestOpened = new();
+        private readonly Subject<(ulong GameObjectGuid, uint ItemId)> _nodeHarvested = new();
+        private readonly Subject<(ulong GameObjectGuid, string Reason)> _gatheringFailed = new();
+
         /// <summary>
-        /// Initializes a new instance of the GameObjectNetworkClientComponent class.
+        /// Initializes a new instance of the <see cref="GameObjectNetworkClientComponent"/> class.
         /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance.</param>
         public GameObjectNetworkClientComponent(IWorldClient worldClient, ILogger<GameObjectNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        /// <inheritdoc />
-        public event Action<ulong>? GameObjectInteracted;
+        #region Observable Streams
+        /// <summary>
+        /// Stream of successful generic interactions (includes chests/nodes after specialized emissions).
+        /// </summary>
+        public IObservable<ulong> GameObjectInteracted => _gameObjectInteracted.AsObservable();
+        /// <summary>
+        /// Stream of failed generic interactions (guid, reason).
+        /// </summary>
+        public IObservable<(ulong GameObjectGuid, string Reason)> GameObjectInteractionFailed => _gameObjectInteractionFailed.AsObservable();
+        /// <summary>
+        /// Stream when a chest is opened (guid).
+        /// </summary>
+        public IObservable<ulong> ChestOpened => _chestOpened.AsObservable();
+        /// <summary>
+        /// Stream when a gathering node is harvested (guid, itemId).
+        /// </summary>
+        public IObservable<(ulong GameObjectGuid, uint ItemId)> NodeHarvested => _nodeHarvested.AsObservable();
+        /// <summary>
+        /// Stream when gathering fails (guid, reason).
+        /// </summary>
+        public IObservable<(ulong GameObjectGuid, string Reason)> GatheringFailed => _gatheringFailed.AsObservable();
+        #endregion
 
-        /// <inheritdoc />
-        public event Action<ulong, string>? GameObjectInteractionFailed;
-
-        /// <inheritdoc />
-        public event Action<ulong>? ChestOpened;
-
-        /// <inheritdoc />
-        public event Action<ulong, uint>? NodeHarvested;
-
-        /// <inheritdoc />
-        public event Action<ulong, string>? GatheringFailed;
-
-        /// <inheritdoc />
         public async Task InteractWithGameObjectAsync(ulong gameObjectGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -68,15 +81,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task OpenChestAsync(ulong chestGuid, CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogDebug("Opening chest: {ChestGuid:X}", chestGuid);
-
                 await InteractWithGameObjectAsync(chestGuid, cancellationToken);
-
                 _logger.LogInformation("Chest open command sent for: {ChestGuid:X}", chestGuid);
             }
             catch (Exception ex)
@@ -86,15 +96,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task GatherFromNodeAsync(ulong nodeGuid, CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogDebug("Gathering from node: {NodeGuid:X}", nodeGuid);
-
                 await InteractWithGameObjectAsync(nodeGuid, cancellationToken);
-
                 _logger.LogInformation("Gather command sent for node: {NodeGuid:X}", nodeGuid);
             }
             catch (Exception ex)
@@ -104,15 +111,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task UseDoorAsync(ulong doorGuid, CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogDebug("Using door: {DoorGuid:X}", doorGuid);
-
                 await InteractWithGameObjectAsync(doorGuid, cancellationToken);
-
                 _logger.LogInformation("Door use command sent for: {DoorGuid:X}", doorGuid);
             }
             catch (Exception ex)
@@ -122,15 +126,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task ActivateButtonAsync(ulong buttonGuid, CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogDebug("Activating button: {ButtonGuid:X}", buttonGuid);
-
                 await InteractWithGameObjectAsync(buttonGuid, cancellationToken);
-
                 _logger.LogInformation("Button activation sent for: {ButtonGuid:X}", buttonGuid);
             }
             catch (Exception ex)
@@ -140,21 +141,18 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task SmartInteractAsync(ulong gameObjectGuid, GameObjectType? gameObjectType = null, CancellationToken cancellationToken = default)
         {
             try
             {
-                _logger.LogDebug("Smart interacting with game object: {GameObjectGuid:X}, Type: {ObjectType}", 
-                    gameObjectGuid, gameObjectType);
+                _logger.LogDebug("Smart interacting with game object: {GameObjectGuid:X}, Type: {ObjectType}", gameObjectGuid, gameObjectType);
 
-                // Use the provided type or default to generic interaction
                 switch (gameObjectType)
                 {
                     case GameObjectType.Chest:
                         await OpenChestAsync(gameObjectGuid, cancellationToken);
                         break;
-                    case GameObjectType.Goober: // Often used for gathering nodes
+                    case GameObjectType.Goober: // gathering node
                         await GatherFromNodeAsync(gameObjectGuid, cancellationToken);
                         break;
                     case GameObjectType.Door:
@@ -177,70 +175,59 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public bool CanInteractWith(ulong gameObjectGuid, GameObjectInteractionType interactionType)
         {
-            _logger.LogDebug("Checking interaction capability for {GameObjectGuid:X} with type {InteractionType}", 
-                gameObjectGuid, interactionType);
-
-            return true; // Simplified implementation
+            _logger.LogDebug("Checking interaction capability for {GameObjectGuid:X} with type {InteractionType}", gameObjectGuid, interactionType);
+            return true; // Placeholder logic
         }
 
-        /// <inheritdoc />
         public float GetInteractionDistance(GameObjectType gameObjectType)
         {
-            // Return appropriate interaction distances based on object type
             return gameObjectType switch
             {
                 GameObjectType.Chest => 3.0f,
-                GameObjectType.Goober => 3.5f, // Gathering nodes
+                GameObjectType.Goober => 3.5f,
                 GameObjectType.Door => 2.5f,
                 GameObjectType.Button => 2.0f,
                 GameObjectType.QuestGiver => 4.0f,
                 GameObjectType.Mailbox => 3.0f,
                 GameObjectType.AuctionHouse => 4.0f,
                 GameObjectType.SpellCaster => 4.0f,
-                _ => 3.0f // Default interaction distance
+                _ => 3.0f
             };
         }
 
         /// <summary>
-        /// Reports a game object interaction event based on server response.
-        /// This should be called when receiving game object-related packets.
+        /// Called by higher-level packet handler to translate server responses into reactive emissions.
         /// </summary>
-        /// <param name="eventType">The type of interaction event.</param>
-        /// <param name="gameObjectGuid">The GUID of the game object.</param>
-        /// <param name="itemId">Optional item ID for gathering events.</param>
-        /// <param name="message">Optional message for error events.</param>
         public void ReportInteractionEvent(string eventType, ulong gameObjectGuid, uint? itemId = null, string? message = null)
         {
-            _logger.LogInformation("Game object interaction event: {EventType} for object {GameObjectGuid:X}", 
-                eventType, gameObjectGuid);
+            if (string.IsNullOrWhiteSpace(eventType)) return;
+
+            _logger.LogInformation("Game object interaction event: {EventType} for object {GameObjectGuid:X}", eventType, gameObjectGuid);
 
             switch (eventType.ToLowerInvariant())
             {
                 case "success":
                 case "interacted":
-                    GameObjectInteracted?.Invoke(gameObjectGuid);
+                    _gameObjectInteracted.OnNext(gameObjectGuid);
                     break;
                 case "chest_opened":
-                    ChestOpened?.Invoke(gameObjectGuid);
-                    GameObjectInteracted?.Invoke(gameObjectGuid);
+                    _chestOpened.OnNext(gameObjectGuid);
+                    _gameObjectInteracted.OnNext(gameObjectGuid);
                     break;
                 case "node_harvested":
                 case "gathered":
                     if (itemId.HasValue)
-                    {
-                        NodeHarvested?.Invoke(gameObjectGuid, itemId.Value);
-                    }
-                    GameObjectInteracted?.Invoke(gameObjectGuid);
+                        _nodeHarvested.OnNext((gameObjectGuid, itemId.Value));
+                    _gameObjectInteracted.OnNext(gameObjectGuid);
                     break;
                 case "gathering_failed":
-                    GatheringFailed?.Invoke(gameObjectGuid, message ?? "Gathering failed");
+                    _gatheringFailed.OnNext((gameObjectGuid, message ?? "Gathering failed"));
                     break;
                 case "interaction_failed":
                 case "failed":
-                    GameObjectInteractionFailed?.Invoke(gameObjectGuid, message ?? "Interaction failed");
+                    _gameObjectInteractionFailed.OnNext((gameObjectGuid, message ?? "Interaction failed"));
                     break;
                 default:
                     _logger.LogWarning("Unknown game object interaction event type: {EventType}", eventType);
@@ -249,41 +236,36 @@ namespace WoWSharpClient.Networking.ClientComponents
         }
 
         /// <summary>
-        /// Updates the state of a game object based on server response.
-        /// This can be used to track object states for optimization.
+        /// Placeholder for storing updated object state (e.g., caching to avoid duplicate attempts).
         /// </summary>
-        /// <param name="gameObjectGuid">The GUID of the game object.</param>
-        /// <param name="newState">The new state of the object.</param>
         public void UpdateGameObjectState(ulong gameObjectGuid, string newState)
         {
-            _logger.LogDebug("Game object {GameObjectGuid:X} state updated to: {NewState}", 
-                gameObjectGuid, newState);
-
-            // Placeholder for state cache.
+            _logger.LogDebug("Game object {GameObjectGuid:X} state updated to: {NewState}", gameObjectGuid, newState);
+            // Extend with state tracking if needed.
         }
 
-        #region IDisposable Implementation
-
-        /// <summary>
-        /// Disposes of the game object network client component and cleans up resources.
-        /// </summary>
+        #region IDisposable
         public void Dispose()
         {
             if (_disposed) return;
-
+            _disposed = true;
             _logger.LogDebug("Disposing GameObjectNetworkClientComponent");
 
-            // Clear events to prevent memory leaks
-            GameObjectInteracted = null;
-            GameObjectInteractionFailed = null;
-            ChestOpened = null;
-            NodeHarvested = null;
-            GatheringFailed = null;
+            // Complete and dispose subjects
+            _gameObjectInteracted.OnCompleted();
+            _gameObjectInteractionFailed.OnCompleted();
+            _chestOpened.OnCompleted();
+            _nodeHarvested.OnCompleted();
+            _gatheringFailed.OnCompleted();
 
-            _disposed = true;
+            _gameObjectInteracted.Dispose();
+            _gameObjectInteractionFailed.Dispose();
+            _chestOpened.Dispose();
+            _nodeHarvested.Dispose();
+            _gatheringFailed.Dispose();
+
             _logger.LogDebug("GameObjectNetworkClientComponent disposed");
         }
-
         #endregion
     }
 }

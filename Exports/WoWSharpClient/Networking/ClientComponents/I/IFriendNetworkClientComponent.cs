@@ -1,10 +1,14 @@
 using GameData.Core.Enums;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
     /// Interface for managing the in-game friends list via network packets.
-    /// Supports requesting the list, adding and removing friends, and handling friend status updates.
+    /// Exposes reactive streams instead of events.
     /// </summary>
     public interface IFriendNetworkClientComponent : INetworkClientComponent
     {
@@ -19,23 +23,20 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         bool IsFriendListInitialized { get; }
 
         /// <summary>
-        /// Raised when the full friend list is received or refreshed.
+        /// Stream of full friend list refreshes (after parsing SMSG_FRIEND_LIST).
+        /// Emits the current cached snapshot each time.
         /// </summary>
-        event Action<IReadOnlyList<FriendEntry>>? FriendListUpdated;
+        IObservable<IReadOnlyList<FriendEntry>> FriendListUpdates { get; }
 
         /// <summary>
-        /// Raised when the status of a single friend changes (online/offline/area/etc.).
+        /// Stream of individual friend status changes (after parsing SMSG_FRIEND_STATUS).
+        /// Emits the updated FriendEntry snapshot (for removals emits the removed entry with IsOnline=false).
         /// </summary>
-        event Action<FriendEntry>? FriendStatusChanged;
-
-        /// <summary>
-        /// Raised when an operation fails.
-        /// </summary>
-        event Action<string, string>? FriendOperationFailed;
+        IObservable<FriendEntry> FriendStatusUpdates { get; }
 
         /// <summary>
         /// Requests the friends list from the server (CMSG_FRIEND_LIST).
-        /// The result should come in via SMSG_FRIEND_LIST and will update the cache.
+        /// The result will arrive via FriendListUpdates.
         /// </summary>
         Task RequestFriendListAsync(CancellationToken cancellationToken = default);
 
@@ -48,12 +49,6 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Removes a friend by player name (CMSG_DEL_FRIEND).
         /// </summary>
         Task RemoveFriendAsync(string playerName, CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// Processes server responses for friend-related opcodes.
-        /// Should be called by the world client dispatch when SMSG_FRIEND_LIST or SMSG_FRIEND_STATUS are received.
-        /// </summary>
-        void HandleServerResponse(Opcode opcode, byte[] data);
     }
 
     /// <summary>
@@ -65,27 +60,22 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Friend character name.
         /// </summary>
         public string Name { get; set; } = string.Empty;
-
         /// <summary>
         /// GUID if known (may be null until status update provides it).
         /// </summary>
         public ulong? Guid { get; set; }
-
         /// <summary>
         /// Online status.
         /// </summary>
         public bool IsOnline { get; set; }
-
         /// <summary>
         /// Friend level when online (if provided by server).
         /// </summary>
         public uint Level { get; set; }
-
         /// <summary>
         /// Friend class when online (if provided by server).
         /// </summary>
         public Class Class { get; set; }
-
         /// <summary>
         /// Area/zone name (if provided by server when online).
         /// </summary>

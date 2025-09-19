@@ -1,3 +1,4 @@
+using System.Reactive.Subjects;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -9,19 +10,43 @@ using Xunit;
 namespace WoWSharpClient.Tests.Agent
 {
     /// <summary>
-    /// Tests for the PartyNetworkClientComponent class.
+    /// Tests for the PartyNetworkClientComponent class (reactive variant).
     /// </summary>
     public class PartyNetworkClientComponentTests
     {
         private readonly Mock<IWorldClient> _mockWorldClient;
         private readonly Mock<ILogger<PartyNetworkClientComponent>> _mockLogger;
-        private readonly PartyNetworkClientComponent _partyAgent;
+        private readonly Dictionary<Opcode, Subject<ReadOnlyMemory<byte>>> _opcodeSubjects = new();
+        private PartyNetworkClientComponent _partyAgent;
 
         public PartyNetworkClientComponentTests()
         {
             _mockWorldClient = new Mock<IWorldClient>();
             _mockLogger = new Mock<ILogger<PartyNetworkClientComponent>>();
+
+            _mockWorldClient
+                .Setup(x => x.RegisterOpcodeHandler(It.IsAny<Opcode>()))
+                .Returns((Opcode op) =>
+                {
+                    if (!_opcodeSubjects.TryGetValue(op, out var subj))
+                    {
+                        subj = new Subject<ReadOnlyMemory<byte>>();
+                        _opcodeSubjects[op] = subj;
+                    }
+                    return subj;
+                });
+
             _partyAgent = new PartyNetworkClientComponent(_mockWorldClient.Object, _mockLogger.Object);
+        }
+
+        private Subject<ReadOnlyMemory<byte>> GetSubject(Opcode op)
+        {
+            if (!_opcodeSubjects.TryGetValue(op, out var subj))
+            {
+                subj = new Subject<ReadOnlyMemory<byte>>();
+                _opcodeSubjects[op] = subj;
+            }
+            return subj;
         }
 
         #region Constructor Tests
@@ -390,94 +415,91 @@ namespace WoWSharpClient.Tests.Agent
 
         #endregion
 
-        #region Event Firing Tests
+        #region Reactive Stream Tests
 
         [Fact]
-        public void PartyInviteReceived_Event_CanBeSubscribedAndFired()
+        public void PartyInvites_Stream_EmitsOnInvite()
         {
             // Arrange
-            string? receivedInviterName = null;
-            _partyAgent.PartyInviteReceived += (inviterName) => receivedInviterName = inviterName;
+            string? inviter = null;
+            using var sub = _partyAgent.PartyInvites.Subscribe(name => inviter = name);
 
             // Act
-            var data = new byte[] { 0x01 }; // Simple test data
-            _partyAgent.HandleServerResponse(Opcode.SMSG_GROUP_INVITE, data);
+            GetSubject(Opcode.SMSG_GROUP_INVITE).OnNext(new ReadOnlyMemory<byte>(new byte[] { 0x01 }));
 
             // Assert
-            Assert.NotNull(receivedInviterName);
+            Assert.NotNull(inviter);
+            Assert.True(_partyAgent.HasPendingInvite);
         }
 
         [Fact]
-        public void GroupJoined_Event_CanBeSubscribedAndFired()
+        public void GroupUpdates_Stream_EmitsOnGroupList()
         {
             // Arrange
             bool? isRaid = null;
-            uint? memberCount = null;
-            _partyAgent.GroupJoined += (raid, count) => { isRaid = raid; memberCount = count; };
+            uint? count = null;
+            using var sub = _partyAgent.GroupUpdates.Subscribe(t => { isRaid = t.IsRaid; count = t.MemberCount; });
 
-            // Act
-            var data = new byte[] { 0x00, 0x02, 0x00, 0x00, 0x00 }; // Party with 2 members
-            _partyAgent.HandleServerResponse(Opcode.SMSG_GROUP_LIST, data);
+            // Act (party with 2 members)
+            GetSubject(Opcode.SMSG_GROUP_LIST).OnNext(new ReadOnlyMemory<byte>(new byte[] { 0x00, 0x02, 0x00, 0x00, 0x00 }));
 
             // Assert
             Assert.NotNull(isRaid);
-            Assert.NotNull(memberCount);
+            Assert.NotNull(count);
+            Assert.Equal(2u, count!.Value);
+            Assert.False(isRaid!.Value);
         }
 
         [Fact]
-        public void GroupLeft_Event_CanBeSubscribedAndFired()
+        public void GroupLeaves_Stream_EmitsOnGroupDestroyed()
         {
             // Arrange
-            string? leftReason = null;
-            _partyAgent.GroupLeft += (reason) => leftReason = reason;
+            string? reason = null;
+            using var sub = _partyAgent.GroupLeaves.Subscribe(r => reason = r);
 
             // Act
-            var data = new byte[] { 0x01 }; // Simple test data
-            _partyAgent.HandleServerResponse(Opcode.SMSG_GROUP_DESTROYED, data);
+            GetSubject(Opcode.SMSG_GROUP_DESTROYED).OnNext(new ReadOnlyMemory<byte>(new byte[] { 0x01 }));
 
             // Assert
-            Assert.NotNull(leftReason);
+            Assert.NotNull(reason);
+            Assert.False(_partyAgent.IsInGroup);
         }
 
         [Fact]
-        public void PartyOperationFailed_Event_CanBeSubscribedAndFired()
+        public void PartyCommandResults_Stream_EmitsFailure()
         {
             // Arrange
-            string? operation = null;
-            string? error = null;
-            _partyAgent.PartyOperationFailed += (op, err) => { operation = op; error = err; };
+            (string Operation, bool Success, uint ResultCode)? res = null;
+            using var sub = _partyAgent.PartyCommandResults.Subscribe(r => res = r);
 
-            // Act
-            var data = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 }; // Operation 0, Result 1 (failure)
-            _partyAgent.HandleServerResponse(Opcode.SMSG_PARTY_COMMAND_RESULT, data);
+            // Act: operation 0 (Invite), result 1 (failure)
+            GetSubject(Opcode.SMSG_PARTY_COMMAND_RESULT).OnNext(new ReadOnlyMemory<byte>(new byte[] { 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 }));
 
             // Assert
-            Assert.NotNull(operation);
-            Assert.NotNull(error);
-        }
-
-        #endregion
-
-        #region Server Response Handling Tests
-
-        [Fact]
-        public void HandleServerResponse_WithUnknownOpcode_DoesNotThrow()
-        {
-            // Arrange
-            var data = new byte[] { 0x01, 0x02, 0x03 };
-
-            // Act & Assert (should not throw)
-            _partyAgent.HandleServerResponse(Opcode.SMSG_AUTH_CHALLENGE, data);
+            Assert.NotNull(res);
+            Assert.False(res!.Value.Success);
+            Assert.Equal(1u, res!.Value.ResultCode);
         }
 
         [Fact]
-        public void HandleServerResponse_WithInvalidData_DoesNotThrow()
+        public void Streams_HandleInvalidPayload_Gracefully()
         {
             // Arrange
-            var data = new byte[] { }; // Empty data
+            Exception? thrown = null;
+            using var sub1 = _partyAgent.PartyInvites.Subscribe(_ => { });
+            using var sub2 = _partyAgent.GroupUpdates.Subscribe(_ => { });
 
-            // Act & Assert (should not throw)
-            _partyAgent.HandleServerResponse(Opcode.SMSG_GROUP_INVITE, data);
+            try
+            {
+                GetSubject(Opcode.SMSG_GROUP_INVITE).OnNext(ReadOnlyMemory<byte>.Empty);
+                GetSubject(Opcode.SMSG_GROUP_LIST).OnNext(ReadOnlyMemory<byte>.Empty);
+            }
+            catch (Exception ex)
+            {
+                thrown = ex;
+            }
+
+            Assert.Null(thrown);
         }
 
         #endregion

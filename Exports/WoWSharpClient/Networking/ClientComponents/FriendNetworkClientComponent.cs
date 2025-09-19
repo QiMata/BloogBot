@@ -4,11 +4,12 @@ using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
-    /// Friend list management over the WoW protocol.
+    /// Friend list management over the WoW protocol (reactive variant).
     /// </summary>
     public class FriendNetworkClientComponent : NetworkClientComponent, IFriendNetworkClientComponent, IDisposable
     {
@@ -16,6 +17,8 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly ILogger<FriendNetworkClientComponent> _logger;
         private readonly List<FriendEntry> _friends = [];
         private readonly object _lock = new();
+        private readonly Subject<IReadOnlyList<FriendEntry>> _friendListUpdates = new();
+        private readonly Subject<FriendEntry> _friendStatusUpdates = new();
 
         private bool _disposed;
 
@@ -45,9 +48,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public bool IsFriendListInitialized { get; private set; }
 
-        public event Action<IReadOnlyList<FriendEntry>>? FriendListUpdated;
-        public event Action<FriendEntry>? FriendStatusChanged;
-        public event Action<string, string>? FriendOperationFailed;
+        public IObservable<IReadOnlyList<FriendEntry>> FriendListUpdates => _friendListUpdates.AsObservable();
+        public IObservable<FriendEntry> FriendStatusUpdates => _friendStatusUpdates.AsObservable();
 
         public async Task RequestFriendListAsync(CancellationToken cancellationToken = default)
         {
@@ -59,7 +61,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to request friend list");
-                FriendOperationFailed?.Invoke("RequestFriendList", ex.Message);
                 throw;
             }
         }
@@ -79,7 +80,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to add friend: {Player}", playerName);
-                FriendOperationFailed?.Invoke("AddFriend", ex.Message);
                 throw;
             }
         }
@@ -99,7 +99,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to remove friend: {Player}", playerName);
-                FriendOperationFailed?.Invoke("RemoveFriend", ex.Message);
                 throw;
             }
         }
@@ -196,7 +195,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 }
 
                 _logger.LogInformation("Friend list received (entries: {Count})", list.Count);
-                FriendListUpdated?.Invoke(Friends);
+                _friendListUpdates.OnNext(Friends);
             }
             catch (Exception ex)
             {
@@ -237,6 +236,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                             break;
                         case FriendStatusCode.Removed:
                             _friends.RemoveAll(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                            entry.IsOnline = false; // emit a final offline snapshot
                             break;
                         case FriendStatusCode.Online:
                             entry.IsOnline = true;
@@ -252,7 +252,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
                 }
 
-                FriendStatusChanged?.Invoke(entry);
+                _friendStatusUpdates.OnNext(entry);
             }
             catch (Exception ex)
             {
@@ -261,20 +261,16 @@ namespace WoWSharpClient.Networking.ClientComponents
         }
 
         #region IDisposable Implementation
-
-        /// <summary>
-        /// Disposes of the friend network client component and cleans up resources.
-        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;
-
-            _logger.LogDebug("Disposing FriendNetworkClientComponent");
-
             _disposed = true;
-            _logger.LogDebug("FriendNetworkClientComponent disposed");
+            _logger.LogDebug("Disposing FriendNetworkClientComponent");
+            _friendListUpdates.OnCompleted();
+            _friendStatusUpdates.OnCompleted();
+            _friendListUpdates.Dispose();
+            _friendStatusUpdates.Dispose();
         }
-
         #endregion
     }
 }

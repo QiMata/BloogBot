@@ -5,6 +5,8 @@ using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 using Xunit;
+using System; // for IDisposable
+using System.Reactive.Linq; // for Subscribe overloads
 
 namespace WoWSharpClient.Tests.Agent
 {
@@ -228,18 +230,13 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void ReportInteractionEvent_Success_FiresGameObjectInteractedEvent()
+        public void ReportInteractionEvent_Success_EmitsGameObjectInteracted()
         {
             // Arrange
             ulong gameObjectGuid = 0x77777777;
             ulong? eventGameObjectGuid = null;
             bool eventFired = false;
-
-            _gameObjectAgent.GameObjectInteracted += (guid) =>
-            {
-                eventGameObjectGuid = guid;
-                eventFired = true;
-            };
+            using var sub = _gameObjectAgent.GameObjectInteracted.Subscribe(guid => { eventGameObjectGuid = guid; eventFired = true; });
 
             // Act
             _gameObjectAgent.ReportInteractionEvent("success", gameObjectGuid);
@@ -250,24 +247,15 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void ReportInteractionEvent_ChestOpened_FiresChestOpenedEvent()
+        public void ReportInteractionEvent_ChestOpened_EmitsChestOpenedAndInteracted()
         {
             // Arrange
             ulong chestGuid = 0x88888888;
             ulong? eventChestGuid = null;
             bool chestEventFired = false;
             bool interactedEventFired = false;
-
-            _gameObjectAgent.ChestOpened += (guid) =>
-            {
-                eventChestGuid = guid;
-                chestEventFired = true;
-            };
-
-            _gameObjectAgent.GameObjectInteracted += (guid) =>
-            {
-                interactedEventFired = true;
-            };
+            using var sub1 = _gameObjectAgent.ChestOpened.Subscribe(guid => { eventChestGuid = guid; chestEventFired = true; });
+            using var sub2 = _gameObjectAgent.GameObjectInteracted.Subscribe(_ => interactedEventFired = true);
 
             // Act
             _gameObjectAgent.ReportInteractionEvent("chest_opened", chestGuid);
@@ -279,27 +267,17 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void ReportInteractionEvent_NodeHarvested_FiresNodeHarvestedEvent()
+        public void ReportInteractionEvent_NodeHarvested_EmitsNodeHarvestedAndInteracted()
         {
             // Arrange
             ulong nodeGuid = 0x99999999;
-            uint itemId = 2447; // Peacebloom
+            uint itemId = 2447;
             ulong? eventNodeGuid = null;
             uint? eventItemId = null;
             bool nodeEventFired = false;
             bool interactedEventFired = false;
-
-            _gameObjectAgent.NodeHarvested += (guid, id) =>
-            {
-                eventNodeGuid = guid;
-                eventItemId = id;
-                nodeEventFired = true;
-            };
-
-            _gameObjectAgent.GameObjectInteracted += (guid) =>
-            {
-                interactedEventFired = true;
-            };
+            using var sub1 = _gameObjectAgent.NodeHarvested.Subscribe(t => { eventNodeGuid = t.GameObjectGuid; eventItemId = t.ItemId; nodeEventFired = true; });
+            using var sub2 = _gameObjectAgent.GameObjectInteracted.Subscribe(_ => interactedEventFired = true);
 
             // Act
             _gameObjectAgent.ReportInteractionEvent("node_harvested", nodeGuid, itemId);
@@ -312,7 +290,7 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void ReportInteractionEvent_GatheringFailed_FiresGatheringFailedEvent()
+        public void ReportInteractionEvent_GatheringFailed_EmitsGatheringFailed()
         {
             // Arrange
             ulong nodeGuid = 0xAAAAAAAA;
@@ -320,13 +298,7 @@ namespace WoWSharpClient.Tests.Agent
             ulong? eventNodeGuid = null;
             string? eventErrorMessage = null;
             bool eventFired = false;
-
-            _gameObjectAgent.GatheringFailed += (guid, error) =>
-            {
-                eventNodeGuid = guid;
-                eventErrorMessage = error;
-                eventFired = true;
-            };
+            using var sub = _gameObjectAgent.GatheringFailed.Subscribe(t => { eventNodeGuid = t.GameObjectGuid; eventErrorMessage = t.Reason; eventFired = true; });
 
             // Act
             _gameObjectAgent.ReportInteractionEvent("gathering_failed", nodeGuid, null, errorMessage);
@@ -338,21 +310,15 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
-        public void ReportInteractionEvent_InteractionFailed_FiresGameObjectInteractionFailedEvent()
+        public void ReportInteractionEvent_InteractionFailed_EmitsInteractionFailed()
         {
             // Arrange
             ulong gameObjectGuid = 0xBBBBBBBB;
             string errorMessage = "You cannot use that";
-            ulong? eventGameObjectGuid = null;
+            ulong? eventGameObjectGuid = 0;
             string? eventErrorMessage = null;
             bool eventFired = false;
-
-            _gameObjectAgent.GameObjectInteractionFailed += (guid, error) =>
-            {
-                eventGameObjectGuid = guid;
-                eventErrorMessage = error;
-                eventFired = true;
-            };
+            using var sub = _gameObjectAgent.GameObjectInteractionFailed.Subscribe(t => { eventGameObjectGuid = t.GameObjectGuid; eventErrorMessage = t.Reason; eventFired = true; });
 
             // Act
             _gameObjectAgent.ReportInteractionEvent("interaction_failed", gameObjectGuid, null, errorMessage);
@@ -399,18 +365,16 @@ namespace WoWSharpClient.Tests.Agent
         [InlineData("gathering_failed")]
         [InlineData("interaction_failed")]
         [InlineData("failed")]
-        public void ReportInteractionEvent_VariousEventTypes_HandledCorrectly(string eventType)
+        public void ReportInteractionEvent_VariousEventTypes_Emits(string eventType)
         {
             // Arrange
             ulong gameObjectGuid = 0x12345678;
             bool eventFired = false;
-
-            // Subscribe to all events
-            _gameObjectAgent.GameObjectInteracted += (guid) => eventFired = true;
-            _gameObjectAgent.ChestOpened += (guid) => eventFired = true;
-            _gameObjectAgent.NodeHarvested += (guid, itemId) => eventFired = true;
-            _gameObjectAgent.GatheringFailed += (guid, error) => eventFired = true;
-            _gameObjectAgent.GameObjectInteractionFailed += (guid, error) => eventFired = true;
+            using var s1 = _gameObjectAgent.GameObjectInteracted.Subscribe(_ => eventFired = true);
+            using var s2 = _gameObjectAgent.ChestOpened.Subscribe(_ => eventFired = true);
+            using var s3 = _gameObjectAgent.NodeHarvested.Subscribe(_ => eventFired = true);
+            using var s4 = _gameObjectAgent.GatheringFailed.Subscribe(_ => eventFired = true);
+            using var s5 = _gameObjectAgent.GameObjectInteractionFailed.Subscribe(_ => eventFired = true);
 
             // Act
             _gameObjectAgent.ReportInteractionEvent(eventType, gameObjectGuid, 1234, "Test message");

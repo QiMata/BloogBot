@@ -1,26 +1,32 @@
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
-    /// Implementation of item use network agent that handles item usage operations in World of Warcraft.
-    /// Manages using consumables, activating items, and handling item interactions using the Mangos protocol.
+    /// Item use network client component that handles item usage operations.
+    /// Follows the reactive pattern used by other client components (no events/subjects).
     /// </summary>
-    public class ItemUseNetworkClientComponent : IItemUseNetworkClientComponent
+    public class ItemUseNetworkClientComponent : NetworkClientComponent, IItemUseNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<ItemUseNetworkClientComponent> _logger;
-        private readonly object _stateLock = new object();
-        
+        private readonly object _stateLock = new();
+
         private bool _isUsingItem;
         private ulong? _currentItemInUse;
         private readonly Dictionary<uint, uint> _itemCooldowns;
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
         private bool _disposed;
+
+        // Opcode-backed streams (no Subject/event usage)
+        private readonly IObservable<ItemUseStartedData> _itemUseStarted;
+        private readonly IObservable<ItemUseCompletedData> _itemUseCompleted;
+        private readonly IObservable<ItemUseErrorData> _itemUseFailed;
+        private readonly IObservable<ConsumableEffectData> _consumableEffectApplied;
 
         /// <summary>
         /// Initializes a new instance of the ItemUseNetworkClientComponent class.
@@ -32,74 +38,77 @@ namespace WoWSharpClient.Networking.ClientComponents
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _itemCooldowns = new Dictionary<uint, uint>();
-        }
 
-        #region INetworkClientComponent Implementation
-
-        /// <inheritdoc />
-        public bool IsOperationInProgress
-        {
-            get
-            {
-                lock (_stateLock)
+            // Wire opcode streams similar to SpellCastingNetworkClientComponent.
+            // Best-effort parsing based on SMSG_SPELL_* messages that also carry item-use spells.
+            _itemUseStarted = SafeStream(Opcode.SMSG_SPELL_START)
+                .Select(ParseItemUseStart)
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Do(s =>
                 {
-                    return _isOperationInProgress;
-                }
-            }
-        }
+                    lock (_stateLock)
+                    {
+                        _isUsingItem = true;
+                        _currentItemInUse = s.ItemGuid;
+                    }
+                })
+                .Publish()
+                .RefCount();
 
-        /// <inheritdoc />
-        public DateTime? LastOperationTime
-        {
-            get
-            {
-                lock (_stateLock)
+            _itemUseCompleted = SafeStream(Opcode.SMSG_SPELL_GO)
+                .Select(ParseItemUseComplete)
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .Do(c =>
                 {
-                    return _lastOperationTime;
-                }
-            }
+                    lock (_stateLock)
+                    {
+                        _isUsingItem = false;
+                        _currentItemInUse = null;
+                    }
+                })
+                .Publish()
+                .RefCount();
+
+            _itemUseFailed = Observable.Merge(
+                    SafeStream(Opcode.SMSG_CAST_FAILED),
+                    SafeStream(Opcode.SMSG_SPELL_FAILURE)
+                )
+                .Select(ParseItemUseError)
+                .Where(e => e.HasValue)
+                .Select(e => e!.Value)
+                .Do(_ =>
+                {
+                    lock (_stateLock)
+                    {
+                        _isUsingItem = false;
+                        _currentItemInUse = null;
+                    }
+                })
+                .Publish()
+                .RefCount();
+
+            // If server sends effect/cooldown updates over specific item/consumable opcodes, wire them here.
+            // Until then, expose a never stream for consumers to compose with.
+            _consumableEffectApplied = Observable.Never<ConsumableEffectData>();
         }
 
-        #endregion
+        // Safe retrieval of opcode stream (never null)
+        private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
-        /// <inheritdoc />
+        #region IItemUseNetworkClientComponent state
         public bool IsUsingItem => _isUsingItem;
-
-        /// <inheritdoc />
         public ulong? CurrentItemInUse => _currentItemInUse;
 
-        /// <inheritdoc />
-        public event Action<ulong, uint, ulong?>? ItemUsed;
-
-        /// <inheritdoc />
-        public event Action<ulong, uint>? ItemUseStarted;
-
-        /// <inheritdoc />
-        public event Action<ulong>? ItemUseCompleted;
-
-        /// <inheritdoc />
-        public event Action<ulong, string>? ItemUseFailed;
-
-        /// <inheritdoc />
-        public event Action<uint, uint>? ConsumableEffectApplied;
-
-        #region Private Helper Methods
-
-        private void SetOperationInProgress(bool inProgress)
-        {
-            lock (_stateLock)
-            {
-                _isOperationInProgress = inProgress;
-                if (inProgress)
-                {
-                    _lastOperationTime = DateTime.UtcNow;
-                }
-            }
-        }
-
+        public IObservable<ItemUseStartedData> ItemUseStarted => _itemUseStarted;
+        public IObservable<ItemUseCompletedData> ItemUseCompleted => _itemUseCompleted;
+        public IObservable<ItemUseErrorData> ItemUseFailed => _itemUseFailed;
+        public IObservable<ConsumableEffectData> ConsumableEffectApplied => _consumableEffectApplied;
         #endregion
 
-        /// <inheritdoc />
+        #region Outbound operations
         public async Task UseItemAsync(byte bagId, byte slotId, CancellationToken cancellationToken = default)
         {
             try
@@ -111,16 +120,15 @@ namespace WoWSharpClient.Networking.ClientComponents
                 payload[0] = bagId;
                 payload[1] = slotId;
 
-                _isUsingItem = true;
+                lock (_stateLock) _isUsingItem = true;
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
-                
+
                 _logger.LogInformation("Item use command sent successfully");
             }
             catch (Exception ex)
             {
-                _isUsingItem = false;
+                lock (_stateLock) _isUsingItem = false;
                 _logger.LogError(ex, "Failed to use item from bag {BagId} slot {SlotId}", bagId, slotId);
-                ItemUseFailed?.Invoke(0, $"Failed to use item: {ex.Message}");
                 throw;
             }
             finally
@@ -129,13 +137,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task UseItemOnTargetAsync(byte bagId, byte slotId, ulong targetGuid, CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Using item from bag {BagId} slot {SlotId} on target {Target:X}", 
+                _logger.LogDebug("Using item from bag {BagId} slot {SlotId} on target {Target:X}",
                     bagId, slotId, targetGuid);
 
                 var payload = new byte[10];
@@ -143,17 +150,16 @@ namespace WoWSharpClient.Networking.ClientComponents
                 payload[1] = slotId;
                 BitConverter.GetBytes(targetGuid).CopyTo(payload, 2);
 
-                _isUsingItem = true;
+                lock (_stateLock) _isUsingItem = true;
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
-                
+
                 _logger.LogInformation("Item use on target command sent successfully");
             }
             catch (Exception ex)
             {
-                _isUsingItem = false;
-                _logger.LogError(ex, "Failed to use item from bag {BagId} slot {SlotId} on target {Target:X}", 
+                lock (_stateLock) _isUsingItem = false;
+                _logger.LogError(ex, "Failed to use item from bag {BagId} slot {SlotId} on target {Target:X}",
                     bagId, slotId, targetGuid);
-                ItemUseFailed?.Invoke(0, $"Failed to use item on target: {ex.Message}");
                 throw;
             }
             finally
@@ -162,13 +168,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task UseItemAtLocationAsync(byte bagId, byte slotId, float x, float y, float z, CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Using item from bag {BagId} slot {SlotId} at location ({X}, {Y}, {Z})", 
+                _logger.LogDebug("Using item from bag {BagId} slot {SlotId} at location ({X}, {Y}, {Z})",
                     bagId, slotId, x, y, z);
 
                 var payload = new byte[14];
@@ -178,17 +183,16 @@ namespace WoWSharpClient.Networking.ClientComponents
                 BitConverter.GetBytes(y).CopyTo(payload, 6);
                 BitConverter.GetBytes(z).CopyTo(payload, 10);
 
-                _isUsingItem = true;
+                lock (_stateLock) _isUsingItem = true;
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
-                
+
                 _logger.LogInformation("Item use at location command sent successfully");
             }
             catch (Exception ex)
             {
-                _isUsingItem = false;
-                _logger.LogError(ex, "Failed to use item from bag {BagId} slot {SlotId} at location ({X}, {Y}, {Z})", 
+                lock (_stateLock) _isUsingItem = false;
+                _logger.LogError(ex, "Failed to use item from bag {BagId} slot {SlotId} at location ({X}, {Y}, {Z})",
                     bagId, slotId, x, y, z);
-                ItemUseFailed?.Invoke(0, $"Failed to use item at location: {ex.Message}");
                 throw;
             }
             finally
@@ -197,7 +201,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task ActivateItemAsync(ulong itemGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -206,19 +209,24 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Activating item {ItemGuid:X}", itemGuid);
 
                 var payload = BitConverter.GetBytes(itemGuid);
-                
-                _isUsingItem = true;
-                _currentItemInUse = itemGuid;
+
+                lock (_stateLock)
+                {
+                    _isUsingItem = true;
+                    _currentItemInUse = itemGuid;
+                }
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
-                
+
                 _logger.LogInformation("Item activation command sent successfully");
             }
             catch (Exception ex)
             {
-                _isUsingItem = false;
-                _currentItemInUse = null;
+                lock (_stateLock)
+                {
+                    _isUsingItem = false;
+                    _currentItemInUse = null;
+                }
                 _logger.LogError(ex, "Failed to activate item {ItemGuid:X}", itemGuid);
-                ItemUseFailed?.Invoke(itemGuid, $"Failed to activate item: {ex.Message}");
                 throw;
             }
             finally
@@ -227,7 +235,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task UseConsumableAsync(byte bagId, byte slotId, CancellationToken cancellationToken = default)
         {
             try
@@ -235,9 +242,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Using consumable from bag {BagId} slot {SlotId}", bagId, slotId);
 
-                // Consumables use the same mechanism as regular items
                 await UseItemAsync(bagId, slotId, cancellationToken);
-                
+
                 _logger.LogInformation("Consumable use command sent successfully");
             }
             catch (Exception ex)
@@ -251,7 +257,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task OpenContainerAsync(byte bagId, byte slotId, CancellationToken cancellationToken = default)
         {
             try
@@ -260,7 +265,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Opening container from bag {BagId} slot {SlotId}", bagId, slotId);
 
                 await UseItemAsync(bagId, slotId, cancellationToken);
-                
+
                 _logger.LogInformation("Container open command sent successfully");
             }
             catch (Exception ex)
@@ -274,13 +279,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task UseToolAsync(byte bagId, byte slotId, ulong? targetGuid = null, CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Using tool from bag {BagId} slot {SlotId} with target {Target:X}", 
+                _logger.LogDebug("Using tool from bag {BagId} slot {SlotId} with target {Target:X}",
                     bagId, slotId, targetGuid ?? 0);
 
                 if (targetGuid.HasValue)
@@ -291,7 +295,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     await UseItemAsync(bagId, slotId, cancellationToken);
                 }
-                
+
                 _logger.LogInformation("Tool use command sent successfully");
             }
             catch (Exception ex)
@@ -305,7 +309,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task CancelItemUseAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -315,9 +318,12 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 var payload = new byte[4]; // Empty payload for cancel
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_CAST, payload, cancellationToken);
-                
-                _isUsingItem = false;
-                _currentItemInUse = null;
+
+                lock (_stateLock)
+                {
+                    _isUsingItem = false;
+                    _currentItemInUse = null;
+                }
                 _logger.LogInformation("Item use canceled successfully");
             }
             catch (Exception ex)
@@ -330,13 +336,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(false);
             }
         }
+        #endregion
 
-        /// <inheritdoc />
+        #region Cooldowns / Capabilities
         public bool CanUseItem(uint itemId)
         {
             _logger.LogDebug("Checking if item {ItemId} can be used", itemId);
-            
-            // Check if item is on cooldown
+
             if (_itemCooldowns.TryGetValue(itemId, out uint cooldownEnd))
             {
                 uint currentTime = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -344,16 +350,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     return false;
                 }
-                
-                // Remove expired cooldown
                 _itemCooldowns.Remove(itemId);
             }
-            
-            // Additional checks would go here (mana, level requirements, etc.)
-            return !_isUsingItem;
+
+            lock (_stateLock) return !_isUsingItem;
         }
 
-        /// <inheritdoc />
         public uint GetItemCooldown(uint itemId)
         {
             if (_itemCooldowns.TryGetValue(itemId, out uint cooldownEnd))
@@ -363,15 +365,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     return cooldownEnd - currentTime;
                 }
-                
-                // Remove expired cooldown
                 _itemCooldowns.Remove(itemId);
             }
-            
+
             return 0;
         }
+        #endregion
 
-        /// <inheritdoc />
+        #region Convenience
         public async Task<bool> FindAndUseItemAsync(uint itemId, CancellationToken cancellationToken = default)
         {
             try
@@ -379,16 +380,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Finding and using item {ItemId}", itemId);
 
-                // This would typically search through the inventory for the item
-                // For now, assume it's in bag 0, slot 0 as a placeholder
                 var foundLocation = FindItemInInventory(itemId);
-                
                 if (foundLocation.HasValue)
                 {
                     await UseItemAsync(foundLocation.Value.BagId, foundLocation.Value.SlotId, cancellationToken);
                     return true;
                 }
-                
+
                 _logger.LogWarning("Item {ItemId} not found in inventory", itemId);
                 return false;
             }
@@ -403,218 +401,126 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        #region Private Helper Methods
-
-        /// <summary>
-        /// Finds an item in the inventory by its ID.
-        /// This is a placeholder implementation that would need to interface with the game client.
-        /// </summary>
-        /// <param name="itemId">The item ID to find.</param>
-        /// <returns>The bag and slot location if found, null otherwise.</returns>
         private (byte BagId, byte SlotId)? FindItemInInventory(uint itemId)
         {
-            // Enhanced implementation that would interface with actual game state
-            // In a real implementation, this would:
-            // 1. Query the WoW object manager for inventory items
-            // 2. Check all bag slots systematically
-            // 3. Return the first found location
-            // 4. Handle partial stacks and preferences for consumables
-            
             _logger.LogDebug("Enhanced item search for itemId {ItemId} - checking all inventory locations", itemId);
-            
-            // Priority search: consumables bag first, then main inventory
+
             for (byte bagId = 0; bagId < 5; bagId++)
             {
                 byte maxSlots = bagId == 0 ? (byte)16 : (byte)16; // Simplified - would be dynamic
                 for (byte slotId = 0; slotId < maxSlots; slotId++)
                 {
-                    // Placeholder for actual inventory state checking
-                    // This would interface with the WoW client's object manager
-                    // to get real inventory data
+                    // Placeholder for actual inventory state checking from object manager
                 }
             }
-            
-            return null; // Placeholder - would return actual found location
+
+            return null;
         }
 
-        /// <summary>
-        /// Validates that an item can be used based on current game state.
-        /// Includes enhanced checks for combat restrictions, mana requirements, etc.
-        /// </summary>
-        /// <param name="itemId">The item ID to validate.</param>
-        /// <returns>True if the item can be used, false otherwise.</returns>
         private bool ValidateItemUsage(uint itemId)
         {
-            // Enhanced validation logic
-            if (_isUsingItem)
+            lock (_stateLock)
             {
-                _logger.LogDebug("Cannot use item {ItemId} - already using an item", itemId);
-                return false;
+                if (_isUsingItem)
+                {
+                    _logger.LogDebug("Cannot use item {ItemId} - already using an item", itemId);
+                    return false;
+                }
             }
 
-            // Check cooldowns
             if (!CanUseItem(itemId))
             {
                 _logger.LogDebug("Cannot use item {ItemId} - on cooldown", itemId);
                 return false;
             }
 
-            // Additional checks would include:
-            // - Combat state restrictions
-            // - Character level requirements
-            // - Class restrictions
-            // - Mana/energy requirements
-            // - Location restrictions (indoor/outdoor)
-            
             return true;
         }
-
         #endregion
 
-        #region Server Response Handlers
-
-        /// <summary>
-        /// Updates item use state based on server response.
-        /// This should be called when receiving item use confirmation packets.
-        /// </summary>
-        /// <param name="itemGuid">The GUID of the used item.</param>
-        /// <param name="itemId">The ID of the used item.</param>
-        /// <param name="targetGuid">The target GUID if applicable.</param>
+        #region Server-driven state helpers
         public void UpdateItemUsed(ulong itemGuid, uint itemId, ulong? targetGuid = null)
         {
             _logger.LogDebug("Server confirmed item {ItemGuid:X} (ID: {ItemId}) used", itemGuid, itemId);
-            
-            _isUsingItem = false;
-            _currentItemInUse = null;
-            ItemUsed?.Invoke(itemGuid, itemId, targetGuid);
+            lock (_stateLock)
+            {
+                _isUsingItem = false;
+                _currentItemInUse = null;
+            }
         }
 
-        /// <summary>
-        /// Updates item use started state based on server response.
-        /// This should be called when receiving item use start packets.
-        /// </summary>
-        /// <param name="itemGuid">The GUID of the item being used.</param>
-        /// <param name="castTime">The cast time in milliseconds.</param>
         public void UpdateItemUseStarted(ulong itemGuid, uint castTime)
         {
             _logger.LogDebug("Server confirmed item {ItemGuid:X} use started with cast time {CastTime}ms", itemGuid, castTime);
-            
-            _isUsingItem = true;
-            _currentItemInUse = itemGuid;
-            ItemUseStarted?.Invoke(itemGuid, castTime);
+            lock (_stateLock)
+            {
+                _isUsingItem = true;
+                _currentItemInUse = itemGuid;
+            }
         }
 
-        /// <summary>
-        /// Updates item cooldown state based on server response.
-        /// This should be called when receiving item cooldown packets.
-        /// </summary>
-        /// <param name="itemId">The item ID on cooldown.</param>
-        /// <param name="cooldownTime">The cooldown duration in milliseconds.</param>
         public void UpdateItemCooldown(uint itemId, uint cooldownTime)
         {
             uint cooldownEnd = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + cooldownTime;
             _itemCooldowns[itemId] = cooldownEnd;
-            
             _logger.LogDebug("Item {ItemId} cooldown updated: {CooldownTime}ms", itemId, cooldownTime);
         }
-
         #endregion
 
-        #region Enhanced Features
-
-        /// <summary>
-        /// Enhanced reagent tracking for spells and abilities.
-        /// </summary>
-        private readonly Dictionary<uint, List<uint>> _reagentRequirements = new();
-        private readonly Dictionary<uint, uint> _reagentCounts = new();
-
-        /// <summary>
-        /// Enhanced projectile and reagent management.
-        /// </summary>
-        /// <param name="itemId">The item ID that consumes reagents.</param>
-        /// <param name="reagentsConsumed">List of reagent item IDs consumed.</param>
-        public void UpdateReagentConsumption(uint itemId, List<uint> reagentsConsumed)
+        #region Parsing helpers (best-effort)
+        private ItemUseStartedData? ParseItemUseStart(ReadOnlyMemory<byte> payload)
         {
-            _logger.LogDebug("Updating reagent consumption for item {ItemId}: {Reagents}", 
-                itemId, string.Join(", ", reagentsConsumed));
-
-            foreach (var reagentId in reagentsConsumed)
+            try
             {
-                if (_reagentCounts.TryGetValue(reagentId, out var currentCount))
-                {
-                    if (currentCount > 0)
-                    {
-                        _reagentCounts[reagentId] = currentCount - 1;
-                        _logger.LogDebug("Reagent {ReagentId} count reduced to {Count}", reagentId, currentCount - 1);
-                    }
-                }
+                var span = payload.Span;
+                // Heuristic: [0..3]=spellId, [4..7]=castTime, [8..15]=guid if present
+                uint spellId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0u;
+                uint castTime = span.Length >= 8 ? BitConverter.ToUInt32(span.Slice(4, 4)) : 0u;
+                ulong itemGuid = span.Length >= 16 ? BitConverter.ToUInt64(span.Slice(8, 8)) : 0UL;
+                return new ItemUseStartedData(itemGuid == 0 ? null : itemGuid, spellId, castTime, DateTime.UtcNow);
+            }
+            catch
+            {
+                return null;
             }
         }
 
-        /// <summary>
-        /// Enhanced projectile tracking for ranged weapons.
-        /// </summary>
-        /// <param name="projectileType">The type of projectile (arrows, bullets, etc.)</param>
-        /// <param name="amountConsumed">Number of projectiles consumed.</param>
-        public void UpdateProjectileConsumption(uint projectileType, uint amountConsumed)
+        private ItemUseCompletedData? ParseItemUseComplete(ReadOnlyMemory<byte> payload)
         {
-            _logger.LogDebug("Updating projectile consumption: {ProjectileType} x{Amount}", 
-                projectileType, amountConsumed);
-
-            if (_reagentCounts.TryGetValue(projectileType, out var currentCount))
+            try
             {
-                var newCount = currentCount >= amountConsumed ? currentCount - amountConsumed : 0;
-                _reagentCounts[projectileType] = newCount;
-                _logger.LogDebug("Projectile {ProjectileType} count updated to {Count}", projectileType, newCount);
+                var span = payload.Span;
+                uint spellId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0u;
+                ulong targetGuid = span.Length >= 16 ? BitConverter.ToUInt64(span.Slice(8, 8)) : 0UL;
+                return new ItemUseCompletedData(null, 0u, targetGuid == 0 ? null : targetGuid, spellId, DateTime.UtcNow);
+            }
+            catch
+            {
+                return null;
             }
         }
 
-        /// <summary>
-        /// Checks if sufficient reagents are available for item usage.
-        /// </summary>
-        private bool CheckReagentRequirements(uint itemId)
+        private ItemUseErrorData? ParseItemUseError(ReadOnlyMemory<byte> payload)
         {
-            if (!_reagentRequirements.TryGetValue(itemId, out var requiredReagents))
+            try
             {
-                return true; // No reagents required
+                // Without concrete layout, emit a generic error
+                return new ItemUseErrorData(null, "Item use failed", DateTime.UtcNow);
             }
-
-            foreach (var reagentId in requiredReagents)
+            catch
             {
-                if (!_reagentCounts.TryGetValue(reagentId, out var available) || available == 0)
-                {
-                    _logger.LogDebug("Insufficient reagent {ReagentId} for item {ItemId}", reagentId, itemId);
-                    return false;
-                }
+                return null;
             }
-
-            return true;
         }
-
         #endregion
 
-        #region IDisposable Implementation
-
-        /// <summary>
-        /// Disposes of the item use network client component and cleans up resources.
-        /// </summary>
-        public void Dispose()
+        #region IDisposable
+        public override void Dispose()
         {
             if (_disposed) return;
-
-            _logger.LogDebug("Disposing ItemUseNetworkClientComponent");
-
-            // Clear events to prevent memory leaks
-            ItemUsed = null;
-            ItemUseStarted = null;
-            ItemUseCompleted = null;
-            ItemUseFailed = null;
-            ConsumableEffectApplied = null;
-
             _disposed = true;
-            _logger.LogDebug("ItemUseNetworkClientComponent disposed");
+            base.Dispose();
         }
-
         #endregion
     }
 }
