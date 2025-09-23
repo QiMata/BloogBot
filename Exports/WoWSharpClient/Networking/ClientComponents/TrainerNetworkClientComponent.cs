@@ -2,6 +2,9 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using System.Reactive;
+using System.Reactive.Linq;
+using System.Buffers.Binary;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -19,6 +22,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly List<TrainerServiceData> _availableServices;
         private bool _disposed;
 
+        // Opcode-backed reactive streams
+        private readonly IObservable<(ulong TrainerGuid, TrainerServiceData[] Services)> _trainerWindowsOpened;
+        private readonly IObservable<Unit> _trainerWindowsClosed;
+        private readonly IObservable<(uint SpellId, uint Cost)> _spellsLearned;
+        private readonly IObservable<TrainerServiceData[]> _trainerServicesUpdated;
+        private readonly IObservable<string> _trainerErrors;
+
         /// <summary>
         /// Initializes a new instance of the TrainerNetworkClientComponent class.
         /// </summary>
@@ -29,6 +39,130 @@ namespace WoWSharpClient.Networking.ClientComponents
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _availableServices = [];
+
+            // Wire opcode streams -> observables
+            _trainerWindowsOpened = SafeOpcodeStream(Opcode.SMSG_TRAINER_LIST)
+                .Select(ParseTrainerList)
+                .Do(tuple =>
+                {
+                    _isTrainerWindowOpen = true;
+                    _currentTrainerGuid = tuple.TrainerGuid;
+                    _availableServices.Clear();
+                    _availableServices.AddRange(tuple.Services);
+
+                    TrainerWindowOpened?.Invoke(tuple.TrainerGuid);
+                    TrainerServicesReceived?.Invoke(tuple.Services);
+
+                    _logger.LogDebug("Trainer window opened for: {TrainerGuid:X} with {ServiceCount} services",
+                        tuple.TrainerGuid, tuple.Services.Length);
+                })
+                .Publish()
+                .RefCount();
+
+            // Close stream derived from server-side close indicators (best-effort)
+            _trainerWindowsClosed = Observable.Merge(
+                    SafeOpcodeStream(Opcode.SMSG_GOSSIP_COMPLETE),
+                    Observable.Empty<ReadOnlyMemory<byte>>()
+                )
+                .Select(_ => Unit.Default)
+                .Do(_ =>
+                {
+                    _isTrainerWindowOpen = false;
+                    _currentTrainerGuid = null;
+                    _availableServices.Clear();
+                    TrainerWindowClosed?.Invoke();
+                    _logger.LogDebug("Trainer window closed by server");
+                })
+                .Publish()
+                .RefCount();
+
+            _spellsLearned = SafeOpcodeStream(Opcode.SMSG_TRAINER_BUY_SUCCEEDED)
+                .Select(ParseTrainerBuySucceeded)
+                .Do(tuple =>
+                {
+                    SpellLearned?.Invoke(tuple.SpellId, tuple.Cost);
+                    _logger.LogDebug("Spell learned: {SpellId} (cost: {Cost})", tuple.SpellId, tuple.Cost);
+                })
+                .Publish()
+                .RefCount();
+
+            _trainerServicesUpdated = _trainerWindowsOpened
+                .Select(t => t.Services)
+                .Do(services =>
+                {
+                    TrainerServicesReceived?.Invoke(services);
+                    _logger.LogDebug("Trainer services updated: {ServiceCount} services", services.Length);
+                })
+                .Publish()
+                .RefCount();
+
+            _trainerErrors = SafeOpcodeStream(Opcode.SMSG_TRAINER_BUY_FAILED)
+                .Select(ParseTrainerBuyFailed)
+                .Do(err =>
+                {
+                    TrainerError?.Invoke(err);
+                    _logger.LogWarning("Trainer operation failed: {Error}", err);
+                })
+                .Publish()
+                .RefCount();
+        }
+
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private static uint ReadUInt32(ReadOnlySpan<byte> span, int offset)
+            => (uint)(span.Length >= offset + 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)) : 0u);
+
+        private static ulong ReadUInt64(ReadOnlySpan<byte> span, int offset)
+            => span.Length >= offset + 8 ? BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset, 8)) : 0UL;
+
+        private (ulong TrainerGuid, TrainerServiceData[] Services) ParseTrainerList(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            ulong trainerGuid = ReadUInt64(span, 0);
+            var services = new List<TrainerServiceData>();
+
+            // Best-effort parsing: if a count exists at offset 8 (common), read minimal entries
+            int offset = 8;
+            uint count = span.Length >= offset + 4 ? ReadUInt32(span, offset) : 0u;
+            offset += span.Length >= 12 ? 4 : 0; // advance if count read
+
+            int recordMinSize = 12; // index(4) + spellId(4) + cost(4)
+            for (int i = 0; i < count && span.Length >= offset + recordMinSize; i++)
+            {
+                var service = new TrainerServiceData
+                {
+                    ServiceIndex = ReadUInt32(span, offset + 0),
+                    SpellId = ReadUInt32(span, offset + 4),
+                    Cost = ReadUInt32(span, offset + 8),
+                    RequiredLevel = span.Length >= offset + 16 ? ReadUInt32(span, offset + 12) : 0,
+                    RequiredSkill = span.Length >= offset + 20 ? ReadUInt32(span, offset + 16) : 0,
+                    RequiredSkillLevel = span.Length >= offset + 24 ? ReadUInt32(span, offset + 20) : 0,
+                    CanLearn = true,
+                    Name = string.Empty
+                };
+
+                services.Add(service);
+                offset += recordMinSize; // conservative advance
+            }
+
+            return (trainerGuid, services.ToArray());
+        }
+
+        private (uint SpellId, uint Cost) ParseTrainerBuySucceeded(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint spellId = ReadUInt32(span, 0);
+            uint cost = span.Length >= 8 ? ReadUInt32(span, 4) : 0u;
+            return (spellId, cost);
+        }
+
+        private string ParseTrainerBuyFailed(ReadOnlyMemory<byte> payload)
+        {
+            // Best-effort: if an error code exists, map to message; else generic
+            var span = payload.Span;
+            uint error = ReadUInt32(span, 0);
+            return $"Trainer buy failed (code {error})";
         }
 
         #region ITrainerNetworkClientComponent Implementation
@@ -53,6 +187,13 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <inheritdoc />
         public event Action<string>? TrainerError;
+
+        // Reactive observable properties
+        public IObservable<(ulong TrainerGuid, TrainerServiceData[] Services)> TrainerWindowsOpened => _trainerWindowsOpened;
+        public IObservable<Unit> TrainerWindowsClosed => _trainerWindowsClosed;
+        public IObservable<(uint SpellId, uint Cost)> SpellsLearned => _spellsLearned;
+        public IObservable<TrainerServiceData[]> TrainerServicesUpdated => _trainerServicesUpdated;
+        public IObservable<string> TrainerErrors => _trainerErrors;
 
         /// <inheritdoc />
         public async Task OpenTrainerAsync(ulong trainerGuid, CancellationToken cancellationToken = default)
@@ -449,7 +590,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes of the trainer network client component and cleans up resources.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
 
@@ -464,6 +605,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _disposed = true;
             _logger.LogDebug("TrainerNetworkClientComponent disposed");
+            base.Dispose();
         }
 
         #endregion

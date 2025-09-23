@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -9,7 +10,7 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of talent network agent that handles talent allocation and respec operations in World of Warcraft.
     /// Manages allocating talent points when leveling up and when respecing using the Mangos protocol.
     /// </summary>
-    public class TalentNetworkClientComponent : ITalentNetworkClientComponent, IDisposable
+    public class TalentNetworkClientComponent : NetworkClientComponent, ITalentNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<TalentNetworkClientComponent> _logger;
@@ -22,9 +23,10 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly List<TalentTreeInfo> _talentTrees;
         private readonly Dictionary<uint, TalentInfo> _talentCache;
         private bool _awaitingRespecConfirmation;
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
         private bool _disposed;
+
+        // Reactive opcode-backed streams (publish/refcount like other components)
+        private readonly IObservable<uint> _respecConfirmations;
 
         /// <summary>
         /// Initializes a new instance of the TalentNetworkClientComponent class.
@@ -37,35 +39,19 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _talentTrees = [];
             _talentCache = new Dictionary<uint, TalentInfo>();
+
+            // Wire server respec confirmation (MSG_TALENT_WIPE_CONFIRM) => cost in copper
+            _respecConfirmations = SafeOpcodeStream(Opcode.MSG_TALENT_WIPE_CONFIRM)
+                .Select(ParseRespecConfirm)
+                .Do(HandleRespecConfirmationRequest)
+                .Publish()
+                .RefCount();
         }
 
-        #region INetworkClientComponent Implementation
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? System.Reactive.Linq.Observable.Empty<ReadOnlyMemory<byte>>();
 
-        /// <inheritdoc />
-        public bool IsOperationInProgress
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _isOperationInProgress;
-                }
-            }
-        }
-
-        /// <inheritdoc />
-        public DateTime? LastOperationTime
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return _lastOperationTime;
-                }
-            }
-        }
-
-        #endregion
+        #region INetworkClientComponent-derived state
 
         /// <inheritdoc />
         public bool IsTalentWindowOpen => _isTalentWindowOpen;
@@ -97,17 +83,21 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public event Action<string>? TalentError;
 
+        #endregion
+
         #region Private Helper Methods
 
-        private void SetOperationInProgress(bool inProgress)
+        private uint ParseRespecConfirm(ReadOnlyMemory<byte> payload)
         {
-            lock (_stateLock)
+            try
             {
-                _isOperationInProgress = inProgress;
-                if (inProgress)
-                {
-                    _lastOperationTime = DateTime.UtcNow;
-                }
+                var span = payload.Span;
+                // Best-effort: read first 4 bytes as cost (uint)
+                return span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0u;
+            }
+            catch
+            {
+                return 0u;
             }
         }
 
@@ -118,10 +108,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Opening talent window");
 
-                // Send packet to open talent frame (this might be handled by UI or through specific interaction)
-                // For now, we'll mark as opened and request talent info
                 _isTalentWindowOpen = true;
                 TalentWindowOpened?.Invoke();
 
@@ -134,6 +123,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 TalentError?.Invoke($"Failed to open talent window: {ex.Message}");
                 throw;
             }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
         }
 
         /// <inheritdoc />
@@ -141,6 +134,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Closing talent window");
 
                 _isTalentWindowOpen = false;
@@ -154,6 +148,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to close talent window");
                 TalentError?.Invoke($"Failed to close talent window: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -236,6 +234,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                SetOperationInProgress(true);
                 _logger.LogDebug("Requesting talent respec");
 
                 _awaitingRespecConfirmation = true;
@@ -251,6 +250,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to request talent respec");
                 TalentError?.Invoke($"Failed to request talent respec: {ex.Message}");
                 throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
             }
         }
 
@@ -326,7 +329,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                         {
                             await LearnTalentAsync(allocation.TalentId, cancellationToken);
                             pointsUsed++;
-                            
+
                             // Small delay between talent learning
                             await Task.Delay(100, cancellationToken);
                         }
@@ -338,7 +341,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
                 }
 
-                _logger.LogInformation("Talent build application completed: {BuildName}. Used {PointsUsed} points", 
+                _logger.LogInformation("Talent build application completed: {BuildName}. Used {PointsUsed} points",
                     talentBuild.Name, pointsUsed);
             }
             catch (Exception ex)
@@ -433,7 +436,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 var currentRank = GetTalentRank(allocation.TalentId);
                 var pointsNeeded = allocation.TargetRank - currentRank;
-                
+
                 if (pointsNeeded < 0)
                 {
                     result.Warnings.Add($"Talent {allocation.TalentId} already exceeds target rank");
@@ -441,7 +444,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 }
 
                 totalPointsNeeded += pointsNeeded;
-                
+
                 if (!treePointCounts.ContainsKey(talent.TabIndex))
                     treePointCounts[talent.TabIndex] = 0;
                 treePointCounts[talent.TabIndex] += pointsNeeded;
@@ -463,7 +466,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     // Check tree point requirements
                     var futureTreePoints = treePointCounts.GetValueOrDefault(talent.TabIndex, (uint)0);
                     var currentTreePoints = GetPointsInTree(talent.TabIndex);
-                    
+
                     if (currentTreePoints + futureTreePoints < talent.RequiredTreePoints)
                     {
                         result.Errors.Add($"Talent {allocation.TalentId} requires {talent.RequiredTreePoints} points in tree {talent.TabIndex}");
@@ -475,7 +478,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     {
                         var prereqAllocation = talentBuild.Allocations.FirstOrDefault(a => a.TalentId == prerequisite.TalentId);
                         var futurePrereqRank = prereqAllocation?.TargetRank ?? GetTalentRank(prerequisite.TalentId);
-                        
+
                         if (futurePrereqRank < prerequisite.RequiredRank)
                         {
                             result.Errors.Add($"Talent {allocation.TalentId} requires talent {prerequisite.TalentId} at rank {prerequisite.RequiredRank}");
@@ -499,10 +502,10 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _availableTalentPoints = availablePoints;
             _totalTalentPointsSpent = spentPoints;
-            
+
             _talentTrees.Clear();
             _talentTrees.AddRange(talentTrees);
-            
+
             _talentCache.Clear();
             foreach (var tree in talentTrees)
             {
@@ -513,8 +516,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
 
             TalentInfoReceived?.Invoke(talentTrees);
-            
-            _logger.LogDebug("Talent info received: {AvailablePoints} available, {SpentPoints} spent, {TreeCount} trees", 
+
+            _logger.LogDebug("Talent info received: {AvailablePoints} available, {SpentPoints} spent, {TreeCount} trees",
                 availablePoints, spentPoints, talentTrees.Length);
         }
 
@@ -529,7 +532,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             if (_talentCache.TryGetValue(talentId, out var talent))
             {
                 talent.CurrentRank = currentRank;
-                
+
                 // Update tree points spent
                 var tree = _talentTrees.FirstOrDefault(t => t.TabIndex == talent.TabIndex);
                 if (tree != null)
@@ -545,7 +548,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
 
             TalentLearned?.Invoke(talentId, currentRank, _availableTalentPoints);
-            _logger.LogDebug("Talent learned: {TalentId} (rank: {CurrentRank}), {AvailablePoints} points remaining", 
+            _logger.LogDebug("Talent learned: {TalentId} (rank: {CurrentRank}), {AvailablePoints} points remaining",
                 talentId, currentRank, _availableTalentPoints);
         }
 
@@ -558,7 +561,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _respecCost = cost;
             _awaitingRespecConfirmation = true;
-            
+
             _logger.LogDebug("Talent respec confirmation requested: {Cost} copper", cost);
         }
 
@@ -617,7 +620,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes of the talent network client component and cleans up resources.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
 
@@ -633,6 +636,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _disposed = true;
             _logger.LogDebug("TalentNetworkClientComponent disposed");
+            base.Dispose();
         }
 
         #endregion

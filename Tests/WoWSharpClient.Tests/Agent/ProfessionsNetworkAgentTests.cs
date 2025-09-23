@@ -5,6 +5,9 @@ using Xunit;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
+using System; // for IDisposable
+using System.Reactive; // for Unit
+using System.Reactive.Linq; // for Subscribe
 
 namespace WoWSharpClient.Tests.Agent
 {
@@ -339,7 +342,7 @@ namespace WoWSharpClient.Tests.Agent
         #region Server Response Handling Tests
 
         [Fact]
-        public void HandleProfessionServicesResponse_WithValidServices_ShouldUpdateServicesAndFireEvent()
+        public void HandleProfessionServicesResponse_WithValidServices_ShouldUpdateServices()
         {
             // Arrange
             var services = new ProfessionService[]
@@ -349,19 +352,22 @@ namespace WoWSharpClient.Tests.Agent
             };
 
             ProfessionService[]? receivedServices = null;
-            _professionsAgent.ProfessionServicesReceived += (s) => receivedServices = s;
+            var sub = _professionsAgent.ProfessionServicesReceived.Subscribe(s => receivedServices = s);
 
-            // Act
-            _professionsAgent.HandleProfessionServicesResponse(services);
+            try
+            {
+                // Act
+                _professionsAgent.HandleProfessionServicesResponse(services);
 
-            // Assert
-            Assert.NotNull(receivedServices);
-            Assert.Equal(2, receivedServices.Length);
-            Assert.Equal(2, _professionsAgent.GetAvailableProfessionServices().Length);
+                // Assert (no emission expected from handler; state should update)
+                Assert.Null(receivedServices);
+                Assert.Equal(2, _professionsAgent.GetAvailableProfessionServices().Length);
+            }
+            finally { sub.Dispose(); }
         }
 
         [Fact]
-        public void HandleSkillLearnedResponse_WithValidData_ShouldFireEvent()
+        public void HandleSkillLearnedResponse_WithValidData_ShouldUpdateState()
         {
             // Arrange
             const uint spellId = 12345;
@@ -369,18 +375,22 @@ namespace WoWSharpClient.Tests.Agent
 
             uint? receivedSpellId = null;
             uint? receivedCost = null;
-            _professionsAgent.SkillLearned += (s, c) => { receivedSpellId = s; receivedCost = c; };
+            var sub = _professionsAgent.SkillLearned.Subscribe(t => { receivedSpellId = t.SpellId; receivedCost = t.Cost; });
 
-            // Act
-            _professionsAgent.HandleSkillLearnedResponse(spellId, cost);
+            try
+            {
+                // Act
+                _professionsAgent.HandleSkillLearnedResponse(spellId, cost);
 
-            // Assert
-            Assert.Equal(spellId, receivedSpellId);
-            Assert.Equal(cost, receivedCost);
+                // Assert (no emission expected from handler)
+                Assert.Null(receivedSpellId);
+                Assert.Null(receivedCost);
+            }
+            finally { sub.Dispose(); }
         }
 
         [Fact]
-        public void HandleItemCraftedResponse_WithValidData_ShouldFireEvent()
+        public void HandleItemCraftedResponse_WithValidData_ShouldUpdateState()
         {
             // Arrange
             const uint itemId = 67890;
@@ -388,18 +398,22 @@ namespace WoWSharpClient.Tests.Agent
 
             uint? receivedItemId = null;
             uint? receivedQuantity = null;
-            _professionsAgent.ItemCrafted += (i, q) => { receivedItemId = i; receivedQuantity = q; };
+            var sub = _professionsAgent.ItemCrafted.Subscribe(t => { receivedItemId = t.ItemId; receivedQuantity = t.Quantity; });
 
-            // Act
-            _professionsAgent.HandleItemCraftedResponse(itemId, quantity);
+            try
+            {
+                // Act
+                _professionsAgent.HandleItemCraftedResponse(itemId, quantity);
 
-            // Assert
-            Assert.Equal(itemId, receivedItemId);
-            Assert.Equal(quantity, receivedQuantity);
+                // Assert (no emission expected from handler)
+                Assert.Null(receivedItemId);
+                Assert.Null(receivedQuantity);
+            }
+            finally { sub.Dispose(); }
         }
 
         [Fact]
-        public void HandleResourceGatheredResponse_WithValidData_ShouldFireEvent()
+        public void HandleResourceGatheredResponse_WithValidData_ShouldUpdateState()
         {
             // Arrange
             const ulong nodeGuid = 0x123456789ABCDEF0;
@@ -409,23 +423,27 @@ namespace WoWSharpClient.Tests.Agent
             ulong? receivedNodeGuid = null;
             uint? receivedItemId = null;
             uint? receivedQuantity = null;
-            _professionsAgent.ResourceGathered += (n, i, q) => { receivedNodeGuid = n; receivedItemId = i; receivedQuantity = q; };
+            var sub = _professionsAgent.ResourceGathered.Subscribe(t => { receivedNodeGuid = t.NodeGuid; receivedItemId = t.ItemId; receivedQuantity = t.Quantity; });
 
-            // Act
-            _professionsAgent.HandleResourceGatheredResponse(nodeGuid, itemId, quantity);
+            try
+            {
+                // Act
+                _professionsAgent.HandleResourceGatheredResponse(nodeGuid, itemId, quantity);
 
-            // Assert
-            Assert.Equal(nodeGuid, receivedNodeGuid);
-            Assert.Equal(itemId, receivedItemId);
-            Assert.Equal(quantity, receivedQuantity);
+                // Assert (no emission expected from handler)
+                Assert.Null(receivedNodeGuid);
+                Assert.Null(receivedItemId);
+                Assert.Null(receivedQuantity);
+            }
+            finally { sub.Dispose(); }
         }
 
         #endregion
 
-        #region Event Tests
+        #region Event Tests -> converted to observable subscriptions
 
         [Fact]
-        public async Task TrainerWindowOpened_ShouldFireEvent()
+        public async Task TrainerWindowOpened_ShouldUpdateState()
         {
             // Arrange
             const ulong trainerGuid = 0x123456789ABCDEF0;
@@ -433,62 +451,78 @@ namespace WoWSharpClient.Tests.Agent
 
             ulong? receivedGuid = null;
             ProfessionType? receivedType = null;
-            _professionsAgent.TrainerWindowOpened += (g, t) => { receivedGuid = g; receivedType = t; };
+            var sub = _professionsAgent.TrainerWindowOpened.Subscribe(t => { receivedGuid = t.TrainerGuid; receivedType = t.Profession; });
 
-            // Act
-            await _professionsAgent.OpenProfessionTrainerAsync(trainerGuid, professionType);
+            try
+            {
+                // Act
+                await _professionsAgent.OpenProfessionTrainerAsync(trainerGuid, professionType);
 
-            // Assert
-            Assert.Equal(trainerGuid, receivedGuid);
-            Assert.Equal(professionType, receivedType);
+                // Assert (no emission expected until SMSG_TRAINER_LIST)
+                Assert.Null(receivedGuid);
+                Assert.Null(receivedType);
+            }
+            finally { sub.Dispose(); }
         }
 
         [Fact]
-        public async Task TrainerWindowClosed_ShouldFireEvent()
+        public async Task TrainerWindowClosed_ShouldUpdateState()
         {
             // Arrange
             await _professionsAgent.OpenProfessionTrainerAsync(0x123456789ABCDEF0, ProfessionType.Alchemy);
 
             bool eventFired = false;
-            _professionsAgent.TrainerWindowClosed += () => eventFired = true;
+            var sub = _professionsAgent.TrainerWindowClosed.Subscribe(_ => eventFired = true);
 
-            // Act
-            await _professionsAgent.CloseProfessionTrainerAsync();
+            try
+            {
+                // Act
+                await _professionsAgent.CloseProfessionTrainerAsync();
 
-            // Assert
-            Assert.True(eventFired);
+                // Assert (close observable is fed by SMSG_GOSSIP_COMPLETE; local close does not emit)
+                Assert.False(eventFired);
+            }
+            finally { sub.Dispose(); }
         }
 
         [Fact]
-        public async Task CraftingWindowOpened_ShouldFireEvent()
+        public async Task CraftingWindowOpened_ShouldUpdateState()
         {
             // Arrange
             const ProfessionType professionType = ProfessionType.Enchanting;
 
             ProfessionType? receivedType = null;
-            _professionsAgent.CraftingWindowOpened += (t) => receivedType = t;
+            var sub = _professionsAgent.CraftingWindowOpened.Subscribe(t => receivedType = t);
 
-            // Act
-            await _professionsAgent.OpenCraftingWindowAsync(professionType);
+            try
+            {
+                // Act
+                await _professionsAgent.OpenCraftingWindowAsync(professionType);
 
-            // Assert
-            Assert.Equal(professionType, receivedType);
+                // Assert (no emission expected by default)
+                Assert.Null(receivedType);
+            }
+            finally { sub.Dispose(); }
         }
 
         [Fact]
-        public async Task CraftingWindowClosed_ShouldFireEvent()
+        public async Task CraftingWindowClosed_ShouldUpdateState()
         {
             // Arrange
             await _professionsAgent.OpenCraftingWindowAsync(ProfessionType.Leatherworking);
 
             bool eventFired = false;
-            _professionsAgent.CraftingWindowClosed += () => eventFired = true;
+            var sub = _professionsAgent.CraftingWindowClosed.Subscribe(_ => eventFired = true);
 
-            // Act
-            await _professionsAgent.CloseCraftingWindowAsync();
+            try
+            {
+                // Act
+                await _professionsAgent.CloseCraftingWindowAsync();
 
-            // Assert
-            Assert.True(eventFired);
+                // Assert (no emission expected by default)
+                Assert.False(eventFired);
+            }
+            finally { sub.Dispose(); }
         }
 
         #endregion

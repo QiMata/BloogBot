@@ -1,3 +1,7 @@
+using System.IO;
+using System.Reactive;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Text;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
@@ -37,6 +41,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         private bool _theyAccepted;
         private bool _disposed;
 
+        // Reactive subjects for local (client) events
+        private readonly Subject<(int TradeWindowSlot, TradeSlots Slot)> _localTradeItemSlotChanged = new();
+        private readonly Subject<uint> _localMoneyOfferedChanged = new();
+        private readonly Subject<(string Operation, string Error)> _localTradeErrors = new();
+
+        // Reactive opcode-backed streams
+        private readonly IObservable<ulong> _tradeRequests;
+        private readonly IObservable<Unit> _tradesOpened;
+        private readonly IObservable<Unit> _tradesClosed;
+        private readonly IObservable<uint> _offeredMoneyChanges;
+        private readonly IObservable<(int TradeWindowSlot, TradeSlots Slot)> _tradeItemSlotsChanged;
+        private readonly IObservable<(string Operation, string Error)> _tradeErrors;
+
         /// <summary>
         /// Initializes a new instance of the TradeNetworkClientComponent class.
         /// </summary>
@@ -46,6 +63,147 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            var statusStream = SafeOpcodeStream(Opcode.SMSG_TRADE_STATUS);
+            var extendedStream = SafeOpcodeStream(Opcode.SMSG_TRADE_STATUS_EXTENDED);
+
+            _tradeRequests = statusStream
+                .Select(ParseTradeRequestGuid)
+                .Where(g => g.HasValue)
+                .Select(g => g!.Value)
+                .Do(guid =>
+                {
+                    _tradePartnerGuid = guid;
+                    TradeRequested?.Invoke(guid);
+                    _logger.LogDebug("Trade requested by player: {TraderGuid:X}", guid);
+                })
+                .Publish()
+                .RefCount();
+
+            _tradesOpened = Observable.Merge(
+                    statusStream.Where(IsOpenStatus),
+                    extendedStream.Where(_ => false) // placeholder if extended stream carries open
+                )
+                .Select(_ => Unit.Default)
+                .Do(_ =>
+                {
+                    _isTradeWindowOpen = true;
+                    TradeOpened?.Invoke();
+                    _logger.LogDebug("Trade window opened");
+                })
+                .Publish()
+                .RefCount();
+
+            _tradesClosed = Observable.Merge(
+                    statusStream.Where(IsCloseStatus),
+                    extendedStream.Where(_ => false) // placeholder
+                )
+                .Select(_ => Unit.Default)
+                .Do(_ =>
+                {
+                    _isTradeWindowOpen = false;
+                    _tradePartnerGuid = null;
+                    _ourMoneyOffer = 0;
+                    _theirMoneyOffer = 0;
+                    _weAccepted = false;
+                    _theyAccepted = false;
+                    TradeClosed?.Invoke();
+                    _logger.LogDebug("Trade window closed");
+                })
+                .Publish()
+                .RefCount();
+
+            _offeredMoneyChanges = Observable.Merge(
+                    statusStream.Select(ParseMoneyChange).Where(v => v.HasValue).Select(v => v!.Value),
+                    _localMoneyOfferedChanged
+                )
+                .Do(copper =>
+                {
+                    _ourMoneyOffer = copper;
+                    MoneyOfferedChanged?.Invoke(_ourMoneyOffer);
+                    _logger.LogDebug("Money offer changed to: {Copper} copper", copper);
+                })
+                .Publish()
+                .RefCount();
+
+            _tradeItemSlotsChanged = Observable.Merge(
+                    _localTradeItemSlotChanged,
+                    Observable.Empty<(int TradeWindowSlot, TradeSlots Slot)>()
+                )
+                .Do(tuple =>
+                {
+                    TradeItemSlotChanged?.Invoke(tuple.TradeWindowSlot, tuple.Slot);
+                    _logger.LogDebug("Trade item slot changed for slot {Slot}", tuple.TradeWindowSlot);
+                })
+                .Publish()
+                .RefCount();
+
+            _tradeErrors = Observable.Merge(
+                    _localTradeErrors,
+                    Observable.Empty<(string Operation, string Error)>()
+                )
+                .Do(err =>
+                {
+                    TradeOperationFailed?.Invoke(err.Operation, err.Error);
+                    _logger.LogWarning("Trade operation failed: {Operation} - {Error}", err.Operation, err.Error);
+                })
+                .Publish()
+                .RefCount();
+        }
+
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private static bool IsOpenStatus(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            if (span.Length >= 1)
+            {
+                var code = span[0];
+                if (code == 1) return true;
+            }
+            if (span.Length >= 4)
+            {
+                var status = BitConverter.ToUInt32(span[..4]);
+                return status == 1 || status == 2;
+            }
+            return false;
+        }
+
+        private static bool IsCloseStatus(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            if (span.Length >= 1)
+            {
+                var code = span[0];
+                if (code == 2) return true;
+            }
+            if (span.Length >= 4)
+            {
+                var status = BitConverter.ToUInt32(span[..4]);
+                return status == 3 || status == 6;
+            }
+            return false;
+        }
+
+        private static ulong? ParseTradeRequestGuid(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            if (span.Length >= 1 && span[0] == 0 && span.Length >= 9)
+            {
+                return BitConverter.ToUInt64(span[1..9]);
+            }
+            return null;
+        }
+
+        private static uint? ParseMoneyChange(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            if (span.Length >= 1 && span[0] == 3 && span.Length >= 5)
+            {
+                return BitConverter.ToUInt32(span[1..5]);
+            }
+            return null;
         }
 
         /// <inheritdoc />
@@ -75,6 +233,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public event Action<string, string>? TradeOperationFailed;
 
+        // Reactive observable properties
+        public IObservable<ulong> TradeRequests => _tradeRequests;
+        public IObservable<Unit> TradesOpened => _tradesOpened;
+        public IObservable<Unit> TradesClosed => _tradesClosed;
+        public IObservable<uint> OfferedMoneyChanges => _offeredMoneyChanges;
+        public IObservable<(int TradeWindowSlot, TradeSlots Slot)> TradeItemSlotsChanged => _tradeItemSlotsChanged;
+        public IObservable<(string Operation, string Error)> TradeErrors => _tradeErrors;
+
         /// <inheritdoc />
         public async Task InitiateTradeAsync(ulong playerGuid, CancellationToken cancellationToken = default)
         {
@@ -92,7 +258,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to initiate trade with player: {PlayerGuid:X}", playerGuid);
-                TradeOperationFailed?.Invoke("InitiateTrade", ex.Message);
+                _localTradeErrors.OnNext(("InitiateTrade", ex.Message));
                 throw;
             }
             finally
@@ -109,7 +275,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Accepting trade");
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_ACCEPT_TRADE, [], cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_ACCEPT_TRADE, Array.Empty<byte>(), cancellationToken);
 
                 _weAccepted = true;
                 _logger.LogInformation("Trade accepted");
@@ -117,7 +283,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to accept trade");
-                TradeOperationFailed?.Invoke("AcceptTrade", ex.Message);
+                _localTradeErrors.OnNext(("AcceptTrade", ex.Message));
                 throw;
             }
             finally
@@ -134,7 +300,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Unaccepting trade");
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_UNACCEPT_TRADE, [], cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_UNACCEPT_TRADE, Array.Empty<byte>(), cancellationToken);
 
                 _weAccepted = false;
                 _logger.LogInformation("Trade unaccepted");
@@ -142,7 +308,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to unaccept trade");
-                TradeOperationFailed?.Invoke("UnacceptTrade", ex.Message);
+                _localTradeErrors.OnNext(("UnacceptTrade", ex.Message));
                 throw;
             }
             finally
@@ -159,14 +325,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Canceling trade");
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_TRADE, [], cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_TRADE, Array.Empty<byte>(), cancellationToken);
 
                 _logger.LogInformation("Trade canceled");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to cancel trade");
-                TradeOperationFailed?.Invoke("CancelTrade", ex.Message);
+                _localTradeErrors.OnNext(("CancelTrade", ex.Message));
                 throw;
             }
             finally
@@ -187,13 +353,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_SET_TRADE_GOLD, payload, cancellationToken);
 
                 _ourMoneyOffer = copper;
-                MoneyOfferedChanged?.Invoke(_ourMoneyOffer);
+                _localMoneyOfferedChanged.OnNext(_ourMoneyOffer);
                 _logger.LogInformation("Offered {Copper} copper in trade", copper);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to offer money in trade: {Copper} copper", copper);
-                TradeOperationFailed?.Invoke("OfferMoney", ex.Message);
+                _localTradeErrors.OnNext(("OfferMoney", ex.Message));
                 throw;
             }
             finally
@@ -222,13 +388,13 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_SET_TRADE_ITEM, ms.ToArray(), cancellationToken);
 
-                TradeItemSlotChanged?.Invoke(tradeWindowSlot, (TradeSlots)tradeWindowSlot);
+                _localTradeItemSlotChanged.OnNext((tradeWindowSlot, (TradeSlots)tradeWindowSlot));
                 _logger.LogInformation("Item offered in trade window slot {TradeSlot}", tradeWindowSlot);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to offer item in trade");
-                TradeOperationFailed?.Invoke("OfferItem", ex.Message);
+                _localTradeErrors.OnNext(("OfferItem", ex.Message));
                 throw;
             }
             finally
@@ -249,13 +415,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 var payload = new byte[] { (byte)tradeWindowSlot };
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_CLEAR_TRADE_ITEM, payload, cancellationToken);
 
-                TradeItemSlotChanged?.Invoke(tradeWindowSlot, (TradeSlots)tradeWindowSlot);
+                _localTradeItemSlotChanged.OnNext((tradeWindowSlot, (TradeSlots)tradeWindowSlot));
                 _logger.LogInformation("Cleared item from trade window slot {TradeSlot}", tradeWindowSlot);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to clear item from trade");
-                TradeOperationFailed?.Invoke("ClearItem", ex.Message);
+                _localTradeErrors.OnNext(("ClearItem", ex.Message));
                 throw;
             }
             finally
@@ -285,7 +451,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error handling server response for opcode {Opcode}", opcode);
-                TradeOperationFailed?.Invoke("ServerResponse", ex.Message);
+                _localTradeErrors.OnNext(("ServerResponse", ex.Message));
             }
         }
 
@@ -411,11 +577,16 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes of the trade network client component and cleans up resources.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
 
             _logger.LogDebug("Disposing TradeNetworkClientComponent");
+
+            // Complete subjects
+            _localTradeItemSlotChanged.OnCompleted();
+            _localMoneyOfferedChanged.OnCompleted();
+            _localTradeErrors.OnCompleted();
 
             // Clear events to prevent memory leaks
             TradeRequested = null;
@@ -427,6 +598,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _disposed = true;
             _logger.LogDebug("TradeNetworkClientComponent disposed");
+            base.Dispose();
         }
 
         #endregion

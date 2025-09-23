@@ -1,3 +1,6 @@
+using System;
+using System.Reactive; // for Unit
+
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
@@ -44,6 +47,13 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         /// <param name="error">The error message.</param>
         event Action<string>? TrainerError;
+
+        // Reactive observables (preferred)
+        IObservable<(ulong TrainerGuid, TrainerServiceData[] Services)> TrainerWindowsOpened { get; }
+        IObservable<Unit> TrainerWindowsClosed { get; }
+        IObservable<(uint SpellId, uint Cost)> SpellsLearned { get; }
+        IObservable<TrainerServiceData[]> TrainerServicesUpdated { get; }
+        IObservable<string> TrainerErrors { get; }
 
         /// <summary>
         /// Opens the trainer window by greeting the specified trainer NPC.

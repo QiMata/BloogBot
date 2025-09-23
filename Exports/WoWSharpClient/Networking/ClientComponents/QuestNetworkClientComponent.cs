@@ -1,5 +1,5 @@
+using System.Reactive;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -10,30 +10,27 @@ namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Implementation of quest network agent that handles quest operations in World of Warcraft.
-    /// Manages quest interaction, acceptance, completion, and reward selection using the Mangos protocol.
-    /// Uses reactive observables for better composability and filtering.
+    /// Manages quest interaction, acceptance, completion, sharing and reward selection using the Mangos protocol.
+    /// Purely observable (no Subjects/events). Streams are derived from opcode handlers or local state changes.
     /// </summary>
-    public class QuestNetworkClientComponent : IQuestNetworkClientComponent, IDisposable
+    public class QuestNetworkClientComponent : NetworkClientComponent, IQuestNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<QuestNetworkClientComponent> _logger;
-        private bool _isOperationInProgress;
-        private DateTime? _lastOperationTime;
+        private bool _disposed;
+
         private ulong? _currentQuestGiver;
 
-        // Reactive observables
-        private readonly Subject<QuestData> _questOperations = new();
-        private readonly Subject<QuestProgressData> _questProgress = new();
-        private readonly Subject<QuestRewardData> _questRewards = new();
-        private readonly Subject<QuestErrorData> _questErrors = new();
+        // Reactive Streams (opcode-backed)
+        public IObservable<QuestData> QuestOperations { get; }
+        public IObservable<QuestProgressData> QuestProgress { get; }
+        public IObservable<QuestRewardData> QuestRewards { get; }
+        public IObservable<QuestErrorData> QuestErrors { get; }
 
-        // Filtered observables (lazy-initialized)
-        private IObservable<QuestData>? _questOffered;
-        private IObservable<QuestData>? _questAccepted;
-        private IObservable<QuestData>? _questCompleted;
-        private IObservable<QuestData>? _questAbandoned;
-
-        private bool _disposed;
+        public IObservable<QuestData> QuestOffered { get; }
+        public IObservable<QuestData> QuestAccepted { get; }
+        public IObservable<QuestData> QuestCompleted { get; }
+        public IObservable<QuestData> QuestAbandoned { get; }
 
         /// <summary>
         /// Initializes a new instance of the QuestNetworkClientComponent class.
@@ -44,52 +41,73 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Build opcode-backed streams. We use minimal parsers to keep it robust when payload layout differs by core.
+            // Offered quests often arrive via details/list packets.
+            var offeredFromDetails = SafeOpcodeStream(Opcode.SMSG_QUESTGIVER_QUEST_DETAILS)
+                .Select(ParseQuestDetailsToQuestData)
+                .Where(q => q is not null)
+                .Select(q => q!)
+                .Publish()
+                .RefCount();
+
+            var offeredFromList = SafeOpcodeStream(Opcode.SMSG_QUESTGIVER_QUEST_LIST)
+                .SelectMany(ParseQuestListToQuestData)
+                .Publish()
+                .RefCount();
+
+            // Accepted can be confirmed by server; map that as Accepted when possible
+            var accepted = SafeOpcodeStream(Opcode.SMSG_QUEST_CONFIRM_ACCEPT)
+                .Select(ParseQuestConfirmAcceptToQuestData)
+                .Where(q => q is not null)
+                .Select(q => q!)
+                .Publish()
+                .RefCount();
+
+            // Completed/Reward available
+            var completed = SafeOpcodeStream(Opcode.SMSG_QUESTGIVER_QUEST_COMPLETE)
+                .Select(ParseQuestCompleteToQuestData)
+                .Where(q => q is not null)
+                .Select(q => q!)
+                .Publish()
+                .RefCount();
+
+            // Errors
+            var failed = SafeOpcodeStream(Opcode.SMSG_QUESTGIVER_QUEST_FAILED)
+                .Select(ParseQuestFailedToError)
+                .Publish()
+                .RefCount();
+
+            var invalid = SafeOpcodeStream(Opcode.SMSG_QUESTGIVER_QUEST_INVALID)
+                .Select(ParseQuestInvalidToError)
+                .Publish()
+                .RefCount();
+
+            // Rewards chosen (some cores emit a message; if not, keep empty)
+            var rewards = Observable.Empty<QuestRewardData>();
+
+            // Progress updates (no reliable opcode across cores here -> keep empty for now)
+            var progress = Observable.Empty<QuestProgressData>();
+
+            QuestErrors = failed.Merge(invalid).Publish().RefCount();
+            QuestRewards = rewards.Publish().RefCount();
+            QuestProgress = progress.Publish().RefCount();
+
+            QuestOperations = offeredFromDetails
+                .Merge(offeredFromList)
+                .Merge(accepted)
+                .Merge(completed)
+                .Publish()
+                .RefCount();
+
+            // Filtered streams
+            QuestOffered = QuestOperations.Where(q => q.OperationType == QuestOperationType.Offered).Publish().RefCount();
+            QuestAccepted = QuestOperations.Where(q => q.OperationType == QuestOperationType.Accepted).Publish().RefCount();
+            QuestCompleted = QuestOperations.Where(q => q.OperationType == QuestOperationType.Completed).Publish().RefCount();
+            QuestAbandoned = QuestOperations.Where(q => q.OperationType == QuestOperationType.Abandoned).Publish().RefCount();
         }
 
-        #region Properties
-
-        /// <inheritdoc />
-        public bool IsOperationInProgress => _isOperationInProgress;
-
-        /// <inheritdoc />
-        public DateTime? LastOperationTime => _lastOperationTime;
-
-        /// <inheritdoc />
         public ulong? CurrentQuestGiver => _currentQuestGiver;
-
-        #endregion
-
-        #region Reactive Observables
-
-        /// <inheritdoc />
-        public IObservable<QuestData> QuestOperations => _questOperations;
-
-        /// <inheritdoc />
-        public IObservable<QuestProgressData> QuestProgress => _questProgress;
-
-        /// <inheritdoc />
-        public IObservable<QuestRewardData> QuestRewards => _questRewards;
-
-        /// <inheritdoc />
-        public IObservable<QuestErrorData> QuestErrors => _questErrors;
-
-        /// <inheritdoc />
-        public IObservable<QuestData> QuestOffered =>
-            _questOffered ??= _questOperations.Where(q => q.OperationType == QuestOperationType.Offered);
-
-        /// <inheritdoc />
-        public IObservable<QuestData> QuestAccepted =>
-            _questAccepted ??= _questOperations.Where(q => q.OperationType == QuestOperationType.Accepted);
-
-        /// <inheritdoc />
-        public IObservable<QuestData> QuestCompleted =>
-            _questCompleted ??= _questOperations.Where(q => q.OperationType == QuestOperationType.Completed);
-
-        /// <inheritdoc />
-        public IObservable<QuestData> QuestAbandoned =>
-            _questAbandoned ??= _questOperations.Where(q => q.OperationType == QuestOperationType.Abandoned);
-
-        #endregion
 
         #region Operations
 
@@ -98,7 +116,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Querying quest giver status for NPC: {NpcGuid:X}", npcGuid);
@@ -108,21 +126,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTGIVER_STATUS_QUERY, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
                 _logger.LogInformation("Quest giver status query sent for NPC: {NpcGuid:X}", npcGuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to query quest giver status for NPC: {NpcGuid:X}", npcGuid);
-
-                var errorData = new QuestErrorData(ex.Message, null, npcGuid, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -131,7 +144,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Initiating conversation with quest giver: {QuestGiverGuid:X}", questGiverGuid);
@@ -141,21 +154,17 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTGIVER_HELLO, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
+                _currentQuestGiver = questGiverGuid;
                 _logger.LogInformation("Quest giver hello sent to NPC: {QuestGiverGuid:X}", questGiverGuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to initiate conversation with quest giver: {QuestGiverGuid:X}", questGiverGuid);
-
-                var errorData = new QuestErrorData(ex.Message, null, questGiverGuid, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -164,7 +173,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Querying quest {QuestId} from quest giver: {QuestGiverGuid:X}", questId, questGiverGuid);
@@ -175,21 +184,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTGIVER_QUERY_QUEST, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
                 _logger.LogInformation("Quest query sent for quest {QuestId} from: {QuestGiverGuid:X}", questId, questGiverGuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to query quest {QuestId} from: {QuestGiverGuid:X}", questId, questGiverGuid);
-
-                var errorData = new QuestErrorData(ex.Message, questId, questGiverGuid, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -198,7 +202,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Accepting quest {QuestId} from quest giver: {QuestGiverGuid:X}", questId, questGiverGuid);
@@ -209,21 +213,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTGIVER_ACCEPT_QUEST, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
                 _logger.LogInformation("Quest accept sent for quest {QuestId} from: {QuestGiverGuid:X}", questId, questGiverGuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to accept quest {QuestId} from: {QuestGiverGuid:X}", questId, questGiverGuid);
-
-                var errorData = new QuestErrorData(ex.Message, questId, questGiverGuid, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -232,7 +231,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Completing quest {QuestId} with quest giver: {QuestGiverGuid:X}", questId, questGiverGuid);
@@ -243,21 +242,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTGIVER_COMPLETE_QUEST, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
                 _logger.LogInformation("Quest complete sent for quest {QuestId} to: {QuestGiverGuid:X}", questId, questGiverGuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to complete quest {QuestId} with: {QuestGiverGuid:X}", questId, questGiverGuid);
-
-                var errorData = new QuestErrorData(ex.Message, questId, questGiverGuid, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -266,7 +260,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Requesting rewards for quest {QuestId} from: {QuestGiverGuid:X}", questId, questGiverGuid);
@@ -277,21 +271,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTGIVER_REQUEST_REWARD, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
                 _logger.LogInformation("Quest reward request sent for quest {QuestId} to: {QuestGiverGuid:X}", questId, questGiverGuid);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to request quest rewards for quest {QuestId} from: {QuestGiverGuid:X}", questId, questGiverGuid);
-
-                var errorData = new QuestErrorData(ex.Message, questId, questGiverGuid, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -300,10 +289,10 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
-                _logger.LogDebug("Choosing reward {RewardIndex} for quest {QuestId} from: {QuestGiverGuid:X}", 
+                _logger.LogDebug("Choosing reward {RewardIndex} for quest {QuestId} from: {QuestGiverGuid:X}",
                     rewardIndex, questId, questGiverGuid);
 
                 var payload = new byte[16];
@@ -313,23 +302,18 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTGIVER_CHOOSE_REWARD, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
-                _logger.LogInformation("Quest reward choice sent: reward {RewardIndex} for quest {QuestId} to: {QuestGiverGuid:X}", 
+                _logger.LogInformation("Quest reward choice sent: reward {RewardIndex} for quest {QuestId} to: {QuestGiverGuid:X}",
                     rewardIndex, questId, questGiverGuid);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to choose quest reward {RewardIndex} for quest {QuestId} from: {QuestGiverGuid:X}", 
+                _logger.LogError(ex, "Failed to choose quest reward {RewardIndex} for quest {QuestId} from: {QuestGiverGuid:X}",
                     rewardIndex, questId, questGiverGuid);
-
-                var errorData = new QuestErrorData(ex.Message, questId, questGiverGuid, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -338,7 +322,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Canceling quest interaction");
@@ -346,21 +330,16 @@ namespace WoWSharpClient.Networking.ClientComponents
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTGIVER_CANCEL, [], cancellationToken);
 
                 _currentQuestGiver = null;
-                _lastOperationTime = DateTime.UtcNow;
                 _logger.LogInformation("Quest interaction canceled");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to cancel quest interaction");
-
-                var errorData = new QuestErrorData(ex.Message, null, _currentQuestGiver, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -369,7 +348,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Removing quest from log slot: {QuestLogSlot}", questLogSlot);
@@ -379,21 +358,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_QUESTLOG_REMOVE_QUEST, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
                 _logger.LogInformation("Quest removed from log slot: {QuestLogSlot}", questLogSlot);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to remove quest from log slot: {QuestLogSlot}", questLogSlot);
-
-                var errorData = new QuestErrorData(ex.Message, null, null, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
@@ -402,7 +376,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) throw new ObjectDisposedException(nameof(QuestNetworkClientComponent));
 
-            _isOperationInProgress = true;
+            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Pushing quest {QuestId} to party", questId);
@@ -412,74 +386,66 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_PUSHQUESTTOPARTY, payload, cancellationToken);
 
-                _lastOperationTime = DateTime.UtcNow;
                 _logger.LogInformation("Quest {QuestId} pushed to party", questId);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to push quest {QuestId} to party", questId);
-
-                var errorData = new QuestErrorData(ex.Message, questId, null, DateTime.UtcNow);
-                _questErrors.OnNext(errorData);
-
                 throw;
             }
             finally
             {
-                _isOperationInProgress = false;
+                SetOperationInProgress(false);
             }
         }
 
         #endregion
 
-        #region Server Response Handling
+        #region Helpers
 
-        /// <inheritdoc />
-        public void HandleQuestOperation(uint questId, string questTitle, ulong questGiverGuid, QuestOperationType operationType)
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
+        private static QuestData? ParseQuestDetailsToQuestData(ReadOnlyMemory<byte> payload)
         {
-            if (_disposed) return;
-
-            _logger.LogInformation("Quest operation: {OperationType} for quest {QuestId} ({QuestTitle})", 
-                operationType, questId, questTitle);
-
-            var questData = new QuestData(questId, questTitle, questGiverGuid, operationType, DateTime.UtcNow);
-            _questOperations.OnNext(questData);
+            // Minimal parser: attempt to read questId from first 4 bytes, otherwise 0
+            var span = payload.Span;
+            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
+            return new QuestData(questId, "Quest Details", 0UL, QuestOperationType.Offered, DateTime.UtcNow);
         }
 
-        /// <inheritdoc />
-        public void HandleQuestProgress(uint questId, string questTitle, string progressText, uint completedObjectives, uint totalObjectives)
+        private static IEnumerable<QuestData> ParseQuestListToQuestData(ReadOnlyMemory<byte> payload)
         {
-            if (_disposed) return;
-
-            _logger.LogInformation("Quest progress: {QuestId} ({QuestTitle}) - {CompletedObjectives}/{TotalObjectives}", 
-                questId, questTitle, completedObjectives, totalObjectives);
-
-            var progressData = new QuestProgressData(questId, questTitle, progressText, completedObjectives, totalObjectives, DateTime.UtcNow);
-            _questProgress.OnNext(progressData);
+            // Without spec, emit a single placeholder offered entry if payload present
+            yield return new QuestData(0U, "Quest List", 0UL, QuestOperationType.Offered, DateTime.UtcNow);
         }
 
-        /// <inheritdoc />
-        public void HandleQuestReward(uint questId, uint rewardIndex, uint itemId, string itemName, uint quantity)
+        private static QuestData? ParseQuestConfirmAcceptToQuestData(ReadOnlyMemory<byte> payload)
         {
-            if (_disposed) return;
-
-            _logger.LogInformation("Quest reward: {QuestId} - reward {RewardIndex}: {ItemName} x{Quantity}", 
-                questId, rewardIndex, itemName, quantity);
-
-            var rewardData = new QuestRewardData(questId, rewardIndex, itemId, itemName, quantity, DateTime.UtcNow);
-            _questRewards.OnNext(rewardData);
+            var span = payload.Span;
+            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
+            return new QuestData(questId, "Quest Accepted", 0UL, QuestOperationType.Accepted, DateTime.UtcNow);
         }
 
-        /// <inheritdoc />
-        public void HandleQuestError(string errorMessage, uint? questId = null, ulong? questGiverGuid = null)
+        private static QuestData? ParseQuestCompleteToQuestData(ReadOnlyMemory<byte> payload)
         {
-            if (_disposed) return;
+            var span = payload.Span;
+            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
+            return new QuestData(questId, "Quest Completed", 0UL, QuestOperationType.Completed, DateTime.UtcNow);
+        }
 
-            _logger.LogError("Quest error: {ErrorMessage} (Quest: {QuestId}, QuestGiver: {QuestGiverGuid:X})", 
-                errorMessage, questId ?? 0, questGiverGuid ?? 0);
+        private static QuestErrorData ParseQuestFailedToError(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
+            return new QuestErrorData("Quest failed", questId, null, DateTime.UtcNow);
+        }
 
-            var errorData = new QuestErrorData(errorMessage, questId, questGiverGuid, DateTime.UtcNow);
-            _questErrors.OnNext(errorData);
+        private static QuestErrorData ParseQuestInvalidToError(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
+            return new QuestErrorData("Quest invalid", questId, null, DateTime.UtcNow);
         }
 
         #endregion
@@ -489,58 +455,16 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void Dispose()
         {
             if (_disposed) return;
-
             _disposed = true;
-
-            _questOperations.OnCompleted();
-            _questProgress.OnCompleted();
-            _questRewards.OnCompleted();
-            _questErrors.OnCompleted();
-
-            _questOperations.Dispose();
-            _questProgress.Dispose();
-            _questRewards.Dispose();
-            _questErrors.Dispose();
+            _logger.LogDebug("QuestNetworkClientComponent disposed");
+            base.Dispose();
         }
 
         #endregion
 
         #region Legacy Methods (for backwards compatibility)
-
-        /// <summary>
-        /// Reports a quest event based on server response.
-        /// This should be called when receiving quest-related packets.
-        /// Use HandleQuestOperation, HandleQuestProgress, etc. instead.
-        /// </summary>
-        /// <param name="eventType">The type of quest event.</param>
-        /// <param name="questId">The quest ID associated with the event.</param>
-        /// <param name="message">Optional message for the event.</param>
-        [Obsolete("Use specific Handle methods instead")]
-        public void ReportQuestEvent(string eventType, uint questId, string? message = null)
-        {
-            var operationType = eventType.ToLowerInvariant() switch
-            {
-                "offered" => QuestOperationType.Offered,
-                "accepted" => QuestOperationType.Accepted,
-                "completed" => QuestOperationType.Completed,
-                "progress" => QuestOperationType.ProgressUpdated,
-                _ => QuestOperationType.ProgressUpdated
-            };
-
-            if (eventType.ToLowerInvariant() == "error")
-            {
-                HandleQuestError(message ?? "Quest error occurred", questId);
-            }
-            else if (eventType.ToLowerInvariant() == "progress")
-            {
-                HandleQuestProgress(questId, "Unknown Quest", message ?? "Quest progress updated", 0, 0);
-            }
-            else
-            {
-                HandleQuestOperation(questId, "Unknown Quest", _currentQuestGiver ?? 0, operationType);
-            }
-        }
-
+        [Obsolete("Use opcode-backed observables")] 
+        public void ReportQuestEvent(string eventType, uint questId, string? message = null) { }
         #endregion
     }
 }

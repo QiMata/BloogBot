@@ -160,47 +160,5 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         Task PushQuestToPartyAsync(uint questId, CancellationToken cancellationToken = default);
 
         #endregion
-
-        #region Server Response Handling
-
-        /// <summary>
-        /// Handles quest operation from the server.
-        /// This method should be called by the packet handler when quest events occur.
-        /// </summary>
-        /// <param name="questId">The quest ID.</param>
-        /// <param name="questTitle">The quest title.</param>
-        /// <param name="questGiverGuid">The quest giver GUID.</param>
-        /// <param name="operationType">The type of operation.</param>
-        void HandleQuestOperation(uint questId, string questTitle, ulong questGiverGuid, QuestOperationType operationType);
-
-        /// <summary>
-        /// Handles quest progress update from the server.
-        /// </summary>
-        /// <param name="questId">The quest ID.</param>
-        /// <param name="questTitle">The quest title.</param>
-        /// <param name="progressText">The progress description.</param>
-        /// <param name="completedObjectives">Number of completed objectives.</param>
-        /// <param name="totalObjectives">Total number of objectives.</param>
-        void HandleQuestProgress(uint questId, string questTitle, string progressText, uint completedObjectives, uint totalObjectives);
-
-        /// <summary>
-        /// Handles quest reward selection from the server.
-        /// </summary>
-        /// <param name="questId">The quest ID.</param>
-        /// <param name="rewardIndex">The reward index.</param>
-        /// <param name="itemId">The reward item ID.</param>
-        /// <param name="itemName">The reward item name.</param>
-        /// <param name="quantity">The reward quantity.</param>
-        void HandleQuestReward(uint questId, uint rewardIndex, uint itemId, string itemName, uint quantity);
-
-        /// <summary>
-        /// Handles quest error from the server.
-        /// </summary>
-        /// <param name="errorMessage">The error message.</param>
-        /// <param name="questId">The quest ID that caused the error.</param>
-        /// <param name="questGiverGuid">The quest giver GUID.</param>
-        void HandleQuestError(string errorMessage, uint? questId = null, ulong? questGiverGuid = null);
-
-        #endregion
     }
 }

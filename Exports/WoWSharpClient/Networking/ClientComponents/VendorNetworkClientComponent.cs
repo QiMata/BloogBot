@@ -1,4 +1,9 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Reactive;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
+using System.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -7,11 +12,6 @@ using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
-    /// <summary>
-    /// Enhanced implementation of vendor network agent that handles vendor operations in World of Warcraft.
-    /// Manages buying, selling, and repairing items with NPC vendors using the Mangos protocol with
-    /// advanced features for bulk operations, junk selling, and soulbound item handling.
-    /// </summary>
     public class VendorNetworkClientComponent : NetworkClientComponent, IVendorNetworkClientComponent
     {
         private readonly IWorldClient _worldClient;
@@ -21,57 +21,63 @@ namespace WoWSharpClient.Networking.ClientComponents
         private bool _disposed;
         private readonly ConcurrentQueue<SoulboundConfirmation> _pendingSoulboundConfirmations = new();
 
-        // Item lists for junk detection - these could be loaded from configuration
-        private static readonly HashSet<uint> SpecialItems =
-        [
-            6948 // Hearthstone
-        ];
+        private static readonly HashSet<uint> SpecialItems = [ 6948 ];
+        private static readonly HashSet<string> JunkItemNames = ["broken", "cracked", "damaged", "worn", "tattered", "frayed", "bent", "rusty"];
 
-        private static readonly HashSet<string> JunkItemNames =
-            ["broken", "cracked", "damaged", "worn", "tattered", "frayed", "bent", "rusty"];
+        // Subjects for observable API
+        private readonly Subject<VendorInfo> _vendorWindowsOpenedSubject = new();
+        private readonly Subject<Unit> _vendorWindowsClosedSubject = new();
+        private readonly Subject<VendorPurchaseData> _itemsPurchasedSubject = new();
+        private readonly Subject<VendorSaleData> _itemsSoldSubject = new();
+        private readonly Subject<VendorRepairData> _itemsRepairedSubject = new();
+        private readonly Subject<string> _vendorErrorsSubject = new();
+        private readonly Subject<SoulboundConfirmation> _soulboundConfirmationsSubject = new();
 
-        /// <summary>
-        /// Initializes a new instance of the VendorNetworkClientComponent class.
-        /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance.</param>
         public VendorNetworkClientComponent(IWorldClient worldClient, ILogger<VendorNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Wire opcode streams -> subjects. Best-effort parsing.
+            SafeOpcodeStream(Opcode.SMSG_LIST_INVENTORY)
+                .Subscribe(payload =>
+                {
+                    var info = ParseVendorList(payload);
+                    _currentVendor = info;
+                    _currentVendor.IsWindowOpen = true;
+                    _currentVendor.LastInventoryUpdate = DateTime.UtcNow;
+                    _logger.LogDebug("Vendor window opened for: {VendorGuid:X} ({VendorName})", info.VendorGuid, info.VendorName);
+                    _vendorWindowsOpenedSubject.OnNext(info);
+                });
+
+            SafeOpcodeStream(Opcode.SMSG_GOSSIP_COMPLETE)
+                .Subscribe(_ =>
+                {
+                    if (_currentVendor != null)
+                    {
+                        _currentVendor.IsWindowOpen = false;
+                        _currentVendor = null;
+                    }
+                    _logger.LogDebug("Vendor window closed by server");
+                    _vendorWindowsClosedSubject.OnNext(Unit.Default);
+                });
         }
 
-        /// <inheritdoc />
-        public bool IsVendorWindowOpen => _currentVendor?.IsWindowOpen ?? false;
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
-        /// <inheritdoc />
+        // Public observable properties
+        public IObservable<VendorInfo> VendorWindowsOpened => _vendorWindowsOpenedSubject.AsObservable();
+        public IObservable<Unit> VendorWindowsClosed => _vendorWindowsClosedSubject.AsObservable();
+        public IObservable<VendorPurchaseData> ItemsPurchased => _itemsPurchasedSubject.AsObservable();
+        public IObservable<VendorSaleData> ItemsSold => _itemsSoldSubject.AsObservable();
+        public IObservable<VendorRepairData> ItemsRepairEvents => _itemsRepairedSubject.AsObservable();
+        public IObservable<string> VendorErrors => _vendorErrorsSubject.AsObservable();
+        public IObservable<SoulboundConfirmation> SoulboundConfirmations => _soulboundConfirmationsSubject.AsObservable();
+
+        public bool IsVendorWindowOpen => _currentVendor?.IsWindowOpen ?? false;
         public VendorInfo? CurrentVendor => _currentVendor;
 
-        /// <inheritdoc />
-        public event Action<VendorInfo>? VendorWindowOpened;
-
-        /// <inheritdoc />
-        public event Action? VendorWindowClosed;
-
-        /// <inheritdoc />
-        public event Action<VendorPurchaseData>? ItemPurchased;
-
-        /// <inheritdoc />
-        public event Action<VendorSaleData>? ItemSold;
-
-        /// <inheritdoc />
-        public event Action<VendorRepairData>? ItemsRepaired;
-
-        /// <inheritdoc />
-        public event Action<string>? VendorError;
-
-        /// <inheritdoc />
-        public event Action<SoulboundConfirmation>? SoulboundConfirmationRequired;
-
-        /// <inheritdoc />
-        public event Action<string, int, int>? BulkOperationProgress;
-
-        /// <inheritdoc />
         public async Task OpenVendorAsync(ulong vendorGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -89,7 +95,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to open vendor interaction with: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Failed to open vendor: {ex.Message}");
                 throw;
             }
             finally
@@ -98,7 +103,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task RequestVendorInventoryAsync(ulong vendorGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -116,7 +120,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to request vendor inventory from: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Failed to request inventory: {ex.Message}");
                 throw;
             }
             finally
@@ -125,7 +128,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task BuyItemAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             try
@@ -150,7 +152,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to buy item {ItemId} from vendor: {VendorGuid:X}", itemId, vendorGuid);
-                VendorError?.Invoke($"Failed to buy item: {ex.Message}");
                 throw;
             }
             finally
@@ -159,7 +160,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task BuyItemBySlotAsync(ulong vendorGuid, byte vendorSlot, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             try
@@ -179,7 +179,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to buy item from vendor slot {VendorSlot} from vendor: {VendorGuid:X}", vendorSlot, vendorGuid);
-                VendorError?.Invoke($"Failed to buy item from slot: {ex.Message}");
                 throw;
             }
             finally
@@ -188,7 +187,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task BuyItemBulkAsync(ulong vendorGuid, uint itemId, uint totalQuantity, BulkVendorOptions? options = null, CancellationToken cancellationToken = default)
         {
             options ??= new BulkVendorOptions();
@@ -205,16 +203,15 @@ namespace WoWSharpClient.Networking.ClientComponents
                     throw new InvalidOperationException($"Item {itemId} not found in vendor inventory");
                 }
 
-                var stackSize = vendorItem.StackSize;
+                var stackSize = vendorItem.StackSize == 0 ? 1u : vendorItem.StackSize;
                 var fullStacks = totalQuantity / stackSize;
                 var remainingItems = totalQuantity % stackSize;
-                var totalOperations = fullStacks + (remainingItems > 0 ? 1 : 0);
+                var totalOperations = (int)(fullStacks + (remainingItems > 0 ? 1 : 0));
 
                 _logger.LogDebug("Bulk purchase plan: {FullStacks} full stacks of {StackSize}, {RemainingItems} remaining items", fullStacks, stackSize, remainingItems);
 
                 var operationCount = 0;
 
-                // Buy full stacks
                 for (uint i = 0; i < fullStacks; i++)
                 {
                     if (DateTime.UtcNow - startTime > options.MaxOperationTime)
@@ -227,7 +224,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                     {
                         await BuyItemAsync(vendorGuid, itemId, stackSize, cancellationToken);
                         operationCount++;
-                        BulkOperationProgress?.Invoke("Buying items", operationCount, (int)totalOperations);
 
                         if (options.DelayBetweenOperations > TimeSpan.Zero)
                         {
@@ -240,14 +236,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
                 }
 
-                // Buy remaining items
                 if (remainingItems > 0)
                 {
                     try
                     {
                         await BuyItemAsync(vendorGuid, itemId, remainingItems, cancellationToken);
                         operationCount++;
-                        BulkOperationProgress?.Invoke("Buying items", operationCount, (int)totalOperations);
                     }
                     catch (Exception ex) when (options.ContinueOnError)
                     {
@@ -260,7 +254,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Bulk purchase failed for item {ItemId} from vendor: {VendorGuid:X}", itemId, vendorGuid);
-                VendorError?.Invoke($"Bulk purchase failed: {ex.Message}");
                 throw;
             }
             finally
@@ -269,7 +262,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task BuyItemInSlotAsync(ulong vendorGuid, uint itemId, uint quantity, byte bagId, byte slotId, CancellationToken cancellationToken = default)
         {
             try
@@ -291,7 +283,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to buy item {ItemId} into slot from vendor: {VendorGuid:X}", itemId, vendorGuid);
-                VendorError?.Invoke($"Failed to buy item into slot: {ex.Message}");
                 throw;
             }
             finally
@@ -300,7 +291,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task SellItemAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             try
@@ -326,7 +316,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to sell item from bag {BagId} slot {SlotId} to vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
-                VendorError?.Invoke($"Failed to sell item: {ex.Message}");
                 throw;
             }
             finally
@@ -335,7 +324,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task<uint> SellAllJunkAsync(ulong vendorGuid, BulkVendorOptions? options = null, CancellationToken cancellationToken = default)
         {
             options ??= new BulkVendorOptions();
@@ -351,7 +339,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to sell all junk to vendor: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Failed to sell all junk: {ex.Message}");
                 throw;
             }
             finally
@@ -360,7 +347,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task<uint> SellItemsAsync(ulong vendorGuid, IEnumerable<JunkItem> junkItems, BulkVendorOptions? options = null, CancellationToken cancellationToken = default)
         {
             options ??= new BulkVendorOptions();
@@ -385,7 +371,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                     try
                     {
-                        // Check for soulbound confirmation if needed
                         if (junkItem.IsBound && !options.AutoConfirmSoulbound)
                         {
                             var confirmation = new SoulboundConfirmation
@@ -396,16 +381,15 @@ namespace WoWSharpClient.Networking.ClientComponents
                                 ContextData = junkItem
                             };
 
-                            SoulboundConfirmationRequired?.Invoke(confirmation);
                             _pendingSoulboundConfirmations.Enqueue(confirmation);
+                            _logger.LogDebug("Queued soulbound confirmation for item: {ItemName}", junkItem.ItemName);
+                            _soulboundConfirmationsSubject.OnNext(confirmation);
                             continue;
                         }
 
                         await SellItemAsync(vendorGuid, junkItem.BagId, junkItem.SlotId, junkItem.Quantity, cancellationToken);
                         totalValue += junkItem.EstimatedValue;
                         operationCount++;
-
-                        BulkOperationProgress?.Invoke("Selling junk items", operationCount, itemList.Count);
 
                         if (options.DelayBetweenOperations > TimeSpan.Zero)
                         {
@@ -424,7 +408,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to sell items to vendor: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Failed to sell items: {ex.Message}");
                 throw;
             }
             finally
@@ -433,7 +416,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task RepairItemAsync(ulong vendorGuid, byte bagId, byte slotId, CancellationToken cancellationToken = default)
         {
             try
@@ -453,7 +435,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to repair item from bag {BagId} slot {SlotId} with vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
-                VendorError?.Invoke($"Failed to repair item: {ex.Message}");
                 throw;
             }
             finally
@@ -462,7 +443,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -477,7 +457,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 var payload = new byte[10];
                 BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
-                // Special values to indicate "repair all"
                 payload[8] = 0xFF;
                 payload[9] = 0xFF;
 
@@ -488,7 +467,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to repair all items with vendor: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Failed to repair all items: {ex.Message}");
                 throw;
             }
             finally
@@ -497,7 +475,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task<uint> GetRepairCostAsync(ulong vendorGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -505,15 +482,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Requesting repair cost from vendor: {VendorGuid:X}", vendorGuid);
 
-                // This would typically involve querying game state or sending a specific packet
-                // For now, return 0 as this would need game state integration
                 await Task.CompletedTask;
                 return 0;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to get repair cost from vendor: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Failed to get repair cost: {ex.Message}");
                 throw;
             }
             finally
@@ -522,7 +496,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task CloseVendorAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -530,22 +503,19 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Closing vendor window");
 
-                // Vendor windows typically close automatically when moving away
-                // But we can update our internal state
                 if (_currentVendor != null)
                 {
                     _currentVendor.IsWindowOpen = false;
                     _currentVendor = null;
                 }
 
-                VendorWindowClosed?.Invoke();
                 _logger.LogInformation("Vendor window closed");
+                _vendorWindowsClosedSubject.OnNext(Unit.Default);
                 await Task.CompletedTask;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to close vendor window");
-                VendorError?.Invoke($"Failed to close vendor: {ex.Message}");
                 throw;
             }
             finally
@@ -554,25 +524,21 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public bool IsVendorOpen(ulong vendorGuid)
         {
             return _currentVendor?.IsWindowOpen == true && _currentVendor.VendorGuid == vendorGuid;
         }
 
-        /// <inheritdoc />
         public IReadOnlyList<VendorItem> GetAvailableItems()
         {
             return _currentVendor?.AvailableItems ?? [];
         }
 
-        /// <inheritdoc />
         public VendorItem? FindVendorItem(uint itemId)
         {
             return _currentVendor?.AvailableItems.FirstOrDefault(item => item.ItemId == itemId);
         }
 
-        /// <inheritdoc />
         public async Task<IReadOnlyList<JunkItem>> GetJunkItemsAsync(BulkVendorOptions? options = null)
         {
             options ??= new BulkVendorOptions();
@@ -580,8 +546,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
-                // This would typically integrate with the inventory system
-                // For now, return empty list as this needs game state integration
                 await Task.CompletedTask;
 
                 _logger.LogDebug("Found {JunkItemCount} junk items matching criteria", junkItems.Count);
@@ -594,7 +558,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public bool CanPurchaseItem(uint itemId, uint quantity = 1)
         {
             var vendorItem = FindVendorItem(itemId);
@@ -603,31 +566,24 @@ namespace WoWSharpClient.Networking.ClientComponents
                 return false;
             }
 
-            // Check availability
             if (vendorItem.AvailableQuantity >= 0 && vendorItem.AvailableQuantity < quantity)
             {
                 return false;
             }
 
-            // Check if player can use the item
             if (!vendorItem.CanUse)
             {
                 return false;
             }
 
-            // Additional checks could be added here (money, reputation, etc.)
             return true;
         }
 
-        /// <inheritdoc />
         public bool CanSellItem(byte bagId, byte slotId, uint quantity = 1)
         {
-            // This would typically check the item in the specified slot
-            // For now, assume it can be sold
             return true;
         }
 
-        /// <inheritdoc />
         public async Task RespondToSoulboundConfirmationAsync(SoulboundConfirmation confirmation, bool accept, CancellationToken cancellationToken = default)
         {
             try
@@ -637,8 +593,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 if (accept)
                 {
-                    // Send confirmation packet - this would depend on the specific confirmation type
-                    // For now, just log the acceptance
                     _logger.LogInformation("Accepted soulbound confirmation for item {ItemId}", confirmation.ItemId);
                 }
                 else
@@ -651,7 +605,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to respond to soulbound confirmation for item {ItemId}", confirmation.ItemId);
-                VendorError?.Invoke($"Failed to respond to soulbound confirmation: {ex.Message}");
                 throw;
             }
             finally
@@ -660,7 +613,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task QuickBuyAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             try
@@ -671,12 +623,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 await OpenVendorAsync(vendorGuid, cancellationToken);
                 await RequestVendorInventoryAsync(vendorGuid, cancellationToken);
 
-                // Small delay to allow vendor window to open
                 await Task.Delay(100, cancellationToken);
 
                 await BuyItemAsync(vendorGuid, itemId, quantity, cancellationToken);
 
-                // Small delay to allow purchase to complete
                 await Task.Delay(100, cancellationToken);
 
                 await CloseVendorAsync(cancellationToken);
@@ -686,7 +636,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Quick buy failed for item {ItemId} from vendor: {VendorGuid:X}", itemId, vendorGuid);
-                VendorError?.Invoke($"Quick buy failed: {ex.Message}");
                 throw;
             }
             finally
@@ -695,7 +644,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task QuickSellAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             try
@@ -705,12 +653,10 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
 
-                // Small delay to allow vendor window to open
                 await Task.Delay(100, cancellationToken);
 
                 await SellItemAsync(vendorGuid, bagId, slotId, quantity, cancellationToken);
 
-                // Small delay to allow sale to complete
                 await Task.Delay(100, cancellationToken);
 
                 await CloseVendorAsync(cancellationToken);
@@ -720,7 +666,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Quick sell failed for item from bag {BagId} slot {SlotId} to vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
-                VendorError?.Invoke($"Quick sell failed: {ex.Message}");
                 throw;
             }
             finally
@@ -729,7 +674,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task QuickRepairAllAsync(ulong vendorGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -739,12 +683,10 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
 
-                // Small delay to allow vendor window to open
                 await Task.Delay(100, cancellationToken);
 
                 await RepairAllItemsAsync(vendorGuid, cancellationToken);
 
-                // Small delay to allow repair to complete
                 await Task.Delay(100, cancellationToken);
 
                 await CloseVendorAsync(cancellationToken);
@@ -754,7 +696,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Quick repair all failed with vendor: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Quick repair all failed: {ex.Message}");
                 throw;
             }
             finally
@@ -763,7 +704,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task<uint> QuickSellAllJunkAsync(ulong vendorGuid, BulkVendorOptions? options = null, CancellationToken cancellationToken = default)
         {
             try
@@ -773,12 +713,10 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
 
-                // Small delay to allow vendor window to open
                 await Task.Delay(100, cancellationToken);
 
                 var totalValue = await SellAllJunkAsync(vendorGuid, options, cancellationToken);
 
-                // Small delay to allow sales to complete
                 await Task.Delay(100, cancellationToken);
 
                 await CloseVendorAsync(cancellationToken);
@@ -789,7 +727,6 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Quick sell all junk failed with vendor: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Quick sell all junk failed: {ex.Message}");
                 throw;
             }
             finally
@@ -798,73 +735,58 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <inheritdoc />
         public async Task QuickVendorVisitAsync(ulong vendorGuid, Dictionary<uint, uint>? itemsToBuy = null, BulkVendorOptions? options = null, CancellationToken cancellationToken = default)
         {
             options ??= new BulkVendorOptions();
-
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Performing comprehensive vendor visit with vendor: {VendorGuid:X}", vendorGuid);
+                _logger.LogDebug("Starting quick vendor visit to: {VendorGuid:X}", vendorGuid);
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
                 await RequestVendorInventoryAsync(vendorGuid, cancellationToken);
 
-                // Small delay to allow vendor window to open
-                await Task.Delay(200, cancellationToken);
-
-                // Step 1: Repair all items (if vendor can repair)
-                if (_currentVendor?.CanRepair == true)
+                if (options.DelayBetweenOperations > TimeSpan.Zero)
                 {
-                    try
-                    {
-                        await RepairAllItemsAsync(vendorGuid, cancellationToken);
-                        await Task.Delay(options.DelayBetweenOperations, cancellationToken);
-                    }
-                    catch (Exception ex) when (options.ContinueOnError)
-                    {
-                        _logger.LogWarning(ex, "Failed to repair items during vendor visit, continuing");
-                    }
-                }
-
-                // Step 2: Sell all junk items
-                try
-                {
-                    var junkValue = await SellAllJunkAsync(vendorGuid, options, cancellationToken);
-                    _logger.LogInformation("Sold junk items for {JunkValue} copper", junkValue);
                     await Task.Delay(options.DelayBetweenOperations, cancellationToken);
                 }
-                catch (Exception ex) when (options.ContinueOnError)
+
+                if (_currentVendor?.CanRepair == true)
                 {
-                    _logger.LogWarning(ex, "Failed to sell junk items during vendor visit, continuing");
+                    await RepairAllItemsAsync(vendorGuid, cancellationToken);
                 }
 
-                // Step 3: Buy specified items
-                if (itemsToBuy != null)
+                if (itemsToBuy != null && itemsToBuy.Count > 0)
                 {
-                    foreach (var (itemId, quantity) in itemsToBuy)
+                    foreach (var kvp in itemsToBuy)
                     {
-                        try
+                        var itemId = kvp.Key;
+                        var quantity = kvp.Value;
+
+                        if (CanPurchaseItem(itemId, quantity))
                         {
                             await BuyItemAsync(vendorGuid, itemId, quantity, cancellationToken);
+                        }
+
+                        if (options.DelayBetweenOperations > TimeSpan.Zero)
+                        {
                             await Task.Delay(options.DelayBetweenOperations, cancellationToken);
                         }
-                        catch (Exception ex) when (options.ContinueOnError)
-                        {
-                            _logger.LogWarning(ex, "Failed to buy item {ItemId} during vendor visit, continuing", itemId);
-                        }
                     }
+                }
+
+                if (options.DelayBetweenOperations > TimeSpan.Zero)
+                {
+                    await Task.Delay(options.DelayBetweenOperations, cancellationToken);
                 }
 
                 await CloseVendorAsync(cancellationToken);
 
-                _logger.LogInformation("Comprehensive vendor visit completed with vendor: {VendorGuid:X}", vendorGuid);
+                _logger.LogInformation("Quick vendor visit completed for: {VendorGuid:X}", vendorGuid);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Comprehensive vendor visit failed with vendor: {VendorGuid:X}", vendorGuid);
-                VendorError?.Invoke($"Vendor visit failed: {ex.Message}");
+                _logger.LogError(ex, "Quick vendor visit failed for: {VendorGuid:X}", vendorGuid);
                 throw;
             }
             finally
@@ -873,107 +795,188 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        // Server response handlers
-
-        /// <inheritdoc />
+        // Manual handlers to push into observables (used by tests)
         public void HandleVendorWindowOpened(VendorInfo vendorInfo)
         {
             _currentVendor = vendorInfo;
             _currentVendor.IsWindowOpen = true;
             _currentVendor.LastInventoryUpdate = DateTime.UtcNow;
-
-            VendorWindowOpened?.Invoke(vendorInfo);
             _logger.LogDebug("Vendor window opened for: {VendorGuid:X} ({VendorName})", vendorInfo.VendorGuid, vendorInfo.VendorName);
+            _vendorWindowsOpenedSubject.OnNext(vendorInfo);
         }
 
-        /// <inheritdoc />
         public void HandleItemPurchased(VendorPurchaseData purchaseData)
         {
-            ItemPurchased?.Invoke(purchaseData);
             _logger.LogDebug("Item purchased: {ItemName} (quantity: {Quantity}, cost: {Cost})", purchaseData.ItemName, purchaseData.Quantity, purchaseData.TotalCost);
+            _itemsPurchasedSubject.OnNext(purchaseData);
         }
 
-        /// <inheritdoc />
         public void HandleItemSold(VendorSaleData saleData)
         {
-            ItemSold?.Invoke(saleData);
             _logger.LogDebug("Item sold: {ItemName} (quantity: {Quantity}, value: {Value})", saleData.ItemName, saleData.Quantity, saleData.TotalValue);
+            _itemsSoldSubject.OnNext(saleData);
         }
 
-        /// <inheritdoc />
         public void HandleItemsRepaired(VendorRepairData repairData)
         {
-            ItemsRepaired?.Invoke(repairData);
             _logger.LogDebug("Items repaired (cost: {Cost})", repairData.TotalCost);
+            _itemsRepairedSubject.OnNext(repairData);
         }
 
-        /// <inheritdoc />
         public void HandleVendorError(string errorMessage)
         {
-            VendorError?.Invoke(errorMessage);
             _logger.LogWarning("Vendor operation failed: {Error}", errorMessage);
+            _vendorErrorsSubject.OnNext(errorMessage);
         }
 
-        /// <inheritdoc />
         public void HandleSoulboundConfirmationRequest(SoulboundConfirmation confirmation)
         {
-            SoulboundConfirmationRequired?.Invoke(confirmation);
             _pendingSoulboundConfirmations.Enqueue(confirmation);
             _logger.LogDebug("Soulbound confirmation required for item: {ItemName}", confirmation.ItemName);
+            _soulboundConfirmationsSubject.OnNext(confirmation);
         }
 
-        /// <summary>
-        /// Helper method to determine if an item is considered junk based on quality and name.
-        /// </summary>
-        /// <param name="itemId">The item ID.</param>
-        /// <param name="itemName">The item name.</param>
-        /// <param name="quality">The item quality.</param>
-        /// <param name="options">Options for junk determination.</param>
-        /// <returns>True if the item is considered junk, false otherwise.</returns>
         protected bool IsJunkItem(uint itemId, string itemName, ItemQuality quality, BulkVendorOptions options)
         {
-            // Never sell special items
             if (SpecialItems.Contains(itemId))
             {
                 return false;
             }
-
-            // Check quality range
             if (quality < options.MinimumJunkQuality || quality > options.MaximumJunkQuality)
             {
                 return false;
             }
-
-            // Check for junk item name patterns
             var lowerName = itemName.ToLowerInvariant();
             return JunkItemNames.Any(pattern => lowerName.Contains(pattern));
         }
 
-        #region IDisposable Implementation
+        #region Parsing helpers (best-effort)
+        private static uint ReadUInt32(ReadOnlySpan<byte> span, int offset)
+            => (uint)(span.Length >= offset + 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)) : 0u);
+        private static ulong ReadUInt64(ReadOnlySpan<byte> span, int offset)
+            => span.Length >= offset + 8 ? BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset, 8)) : 0UL;
 
-        /// <summary>
-        /// Disposes of the vendor network client component and cleans up resources.
-        /// </summary>
-        public void Dispose()
+        private VendorInfo ParseVendorList(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            ulong vendorGuid = ReadUInt64(span, 0);
+            int offset = 8;
+            uint count = span.Length >= offset + 4 ? ReadUInt32(span, offset) : 0u;
+            offset += span.Length >= 12 ? 4 : 0;
+
+            var info = new VendorInfo
+            {
+                VendorGuid = vendorGuid,
+                VendorName = string.Empty,
+                CanRepair = true,
+                IsWindowOpen = true,
+                AvailableItems = []
+            };
+
+            int recordMinSize = 16;
+            for (int i = 0; i < count && span.Length >= offset + recordMinSize; i++)
+            {
+                var item = new VendorItem
+                {
+                    VendorSlot = (byte)(ReadUInt32(span, offset + 0) & 0xFF),
+                    ItemId = ReadUInt32(span, offset + 4),
+                    Price = ReadUInt32(span, offset + 8),
+                    StackSize = ReadUInt32(span, offset + 12),
+                    AvailableQuantity = -1,
+                    MaxQuantity = -1,
+                    CanUse = true
+                };
+                info.AvailableItems.Add(item);
+                offset += recordMinSize;
+            }
+
+            return info;
+        }
+
+        private VendorPurchaseData ParsePurchaseSucceeded(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            var data = new VendorPurchaseData
+            {
+                VendorGuid = span.Length >= 8 ? ReadUInt64(span, 0) : 0UL,
+                ItemId = ReadUInt32(span, span.Length >= 12 ? 8 : 0),
+                Quantity = ReadUInt32(span, span.Length >= 16 ? 12 : 0),
+                TotalCost = ReadUInt32(span, span.Length >= 20 ? 16 : 0),
+                Result = VendorBuyResult.Success,
+                Timestamp = DateTime.UtcNow
+            };
+            return data;
+        }
+
+        private VendorSaleData ParseSellSucceeded(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            var data = new VendorSaleData
+            {
+                VendorGuid = span.Length >= 8 ? ReadUInt64(span, 0) : 0UL,
+                ItemId = ReadUInt32(span, span.Length >= 12 ? 8 : 0),
+                Quantity = ReadUInt32(span, span.Length >= 16 ? 12 : 0),
+                TotalValue = ReadUInt32(span, span.Length >= 20 ? 16 : 0),
+                Result = VendorSellResult.Success,
+                Timestamp = DateTime.UtcNow
+            };
+            return data;
+        }
+
+        private VendorRepairData ParseRepairResult(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            var data = new VendorRepairData
+            {
+                VendorGuid = span.Length >= 8 ? ReadUInt64(span, 0) : 0UL,
+                IsRepairAll = true,
+                TotalCost = ReadUInt32(span, span.Length >= 12 ? 8 : 0),
+                Result = VendorRepairResult.Success,
+                Timestamp = DateTime.UtcNow
+            };
+            return data;
+        }
+
+        private string ParseVendorError(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint code = ReadUInt32(span, 0);
+            return $"Vendor operation failed (code {code})";
+        }
+
+        private SoulboundConfirmation? ParseSoulboundConfirmation(ReadOnlyMemory<byte> payload)
+        {
+            return null;
+        }
+        #endregion
+
+        #region IDisposable Implementation
+        public override void Dispose()
         {
             if (_disposed) return;
 
             _logger.LogDebug("Disposing VendorNetworkClientComponent");
 
-            // Clear events to prevent memory leaks
-            VendorWindowOpened = null;
-            VendorWindowClosed = null;
-            ItemPurchased = null;
-            ItemSold = null;
-            ItemsRepaired = null;
-            VendorError = null;
-            SoulboundConfirmationRequired = null;
-            BulkOperationProgress = null;
+            _vendorWindowsOpenedSubject.OnCompleted();
+            _vendorWindowsClosedSubject.OnCompleted();
+            _itemsPurchasedSubject.OnCompleted();
+            _itemsSoldSubject.OnCompleted();
+            _itemsRepairedSubject.OnCompleted();
+            _vendorErrorsSubject.OnCompleted();
+            _soulboundConfirmationsSubject.OnCompleted();
+
+            _vendorWindowsOpenedSubject.Dispose();
+            _vendorWindowsClosedSubject.Dispose();
+            _itemsPurchasedSubject.Dispose();
+            _itemsSoldSubject.Dispose();
+            _itemsRepairedSubject.Dispose();
+            _vendorErrorsSubject.Dispose();
+            _soulboundConfirmationsSubject.Dispose();
 
             _disposed = true;
             _logger.LogDebug("VendorNetworkClientComponent disposed");
+            base.Dispose();
         }
-
         #endregion
     }
 }

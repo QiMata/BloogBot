@@ -45,7 +45,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             _spellCooldowns = new Dictionary<uint, uint>();
 
             // Wire reactive pipelines to opcode streams. Parsing is best-effort and may use defaults if payloads differ.
-            _spellCastStarts = SafeStream(Opcode.SMSG_SPELL_START)
+            _spellCastStarts = SafeOpcodeStream(Opcode.SMSG_SPELL_START)
                 .Select(payload => ParseSpellStart(payload))
                 .Do(data =>
                 {
@@ -53,9 +53,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                     _currentSpellId = data.SpellId;
                     _currentSpellTarget = data.TargetGuid;
                     _remainingCastTime = data.CastTime;
-                });
+                })
+                .Publish()
+                .RefCount();
 
-            _spellCastCompletions = SafeStream(Opcode.SMSG_SPELL_GO)
+            _spellCastCompletions = SafeOpcodeStream(Opcode.SMSG_SPELL_GO)
                 .Select(payload => ParseSpellGo(payload))
                 .Do(data =>
                 {
@@ -63,12 +65,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                     _currentSpellId = null;
                     _currentSpellTarget = null;
                     _remainingCastTime = 0;
-                });
+                })
+                .Publish()
+                .RefCount();
 
             _spellCastErrors = Observable.Merge(
-                    SafeStream(Opcode.SMSG_CAST_FAILED),
-                    SafeStream(Opcode.SMSG_SPELL_FAILURE),
-                    SafeStream(Opcode.SMSG_SPELL_FAILED_OTHER)
+                    SafeOpcodeStream(Opcode.SMSG_CAST_FAILED),
+                    SafeOpcodeStream(Opcode.SMSG_SPELL_FAILURE),
+                    SafeOpcodeStream(Opcode.SMSG_SPELL_FAILED_OTHER)
                 )
                 .Select(payload => ParseSpellError(payload))
                 .Do(err =>
@@ -80,11 +84,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                         _currentSpellId = null;
                         _currentSpellTarget = null;
                     }
-                });
+                })
+                .Publish()
+                .RefCount();
 
             _channelingEvents = Observable.Merge(
-                    SafeStream(Opcode.MSG_CHANNEL_START),
-                    SafeStream(Opcode.MSG_CHANNEL_UPDATE)
+                    SafeOpcodeStream(Opcode.MSG_CHANNEL_START),
+                    SafeOpcodeStream(Opcode.MSG_CHANNEL_UPDATE)
                 )
                 .Select((payload, index) => ParseChannelEvent(payload, index == 0))
                 .Do(ch =>
@@ -95,31 +101,37 @@ namespace WoWSharpClient.Networking.ClientComponents
                         _currentSpellId = null;
                         _currentSpellTarget = null;
                     }
-                });
+                })
+                .Publish()
+                .RefCount();
 
             _spellCooldownsStream = Observable.Merge(
-                    SafeStream(Opcode.SMSG_SPELL_COOLDOWN),
-                    SafeStream(Opcode.SMSG_COOLDOWN_EVENT),
-                    SafeStream(Opcode.SMSG_CLEAR_COOLDOWN)
+                    SafeOpcodeStream(Opcode.SMSG_SPELL_COOLDOWN),
+                    SafeOpcodeStream(Opcode.SMSG_COOLDOWN_EVENT),
+                    SafeOpcodeStream(Opcode.SMSG_CLEAR_COOLDOWN)
                 )
                 .Select(payload => ParseCooldown(payload))
                 .Do(cd =>
                 {
                     var end = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + cd.CooldownTime;
                     _spellCooldowns[cd.SpellId] = end;
-                });
+                })
+                .Publish()
+                .RefCount();
 
             _spellHits = Observable.Merge(
-                    SafeStream(Opcode.SMSG_SPELLNONMELEEDAMAGELOG),
-                    SafeStream(Opcode.SMSG_SPELLHEALLOG),
-                    SafeStream(Opcode.SMSG_SPELLDAMAGESHIELD),
-                    SafeStream(Opcode.SMSG_SPELLLOGEXECUTE)
+                    SafeOpcodeStream(Opcode.SMSG_SPELLNONMELEEDAMAGELOG),
+                    SafeOpcodeStream(Opcode.SMSG_SPELLHEALLOG),
+                    SafeOpcodeStream(Opcode.SMSG_SPELLDAMAGESHIELD),
+                    SafeOpcodeStream(Opcode.SMSG_SPELLLOGEXECUTE)
                 )
-                .Select(payload => ParseSpellHit(payload));
+                .Select(payload => ParseSpellHit(payload))
+                .Publish()
+                .RefCount();
         }
 
         // Provides a non-null observable stream for an opcode.
-        private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
             => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
         // Observable properties (reactive pattern like other components)

@@ -1,3 +1,5 @@
+using System.Reactive;
+using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -9,6 +11,7 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// <summary>
     /// Implementation of professions network agent that handles profession operations in World of Warcraft.
     /// Manages crafting, gathering, profession training, and profession state tracking using the Mangos protocol.
+    /// Purely observable (no Subjects/events). Streams are derived from opcode handlers or local state changes.
     /// </summary>
     public class ProfessionsNetworkClientComponent : NetworkClientComponent, IProfessionsNetworkClientComponent, IDisposable
     {
@@ -23,6 +26,25 @@ namespace WoWSharpClient.Networking.ClientComponents
         private uint? _currentCraftingSpellId;
         private bool _disposed;
 
+        // State properties
+        public bool IsTrainerWindowOpen { get; private set; }
+        public bool IsCraftingWindowOpen { get; private set; }
+        public ulong? CurrentTrainerGuid { get; private set; }
+        public ProfessionType? CurrentProfession { get; private set; }
+
+        // Reactive Streams (opcode-backed or local-state derived)
+        public IObservable<(ulong TrainerGuid, ProfessionType? Profession)> TrainerWindowOpened { get; }
+        public IObservable<Unit> TrainerWindowClosed { get; }
+        public IObservable<ProfessionType?> CraftingWindowOpened { get; }
+        public IObservable<Unit> CraftingWindowClosed { get; }
+        public IObservable<(uint SpellId, uint Cost)> SkillLearned { get; }
+        public IObservable<(uint ItemId, uint Quantity)> ItemCrafted { get; }
+        public IObservable<(uint RecipeId, string Reason)> CraftingFailed { get; }
+        public IObservable<ProfessionService[]> ProfessionServicesReceived { get; }
+        public IObservable<string> ProfessionErrors { get; }
+        public IObservable<(ulong NodeGuid, uint ItemId, uint Quantity)> ResourceGathered { get; }
+        public IObservable<(ulong NodeGuid, string Reason)> GatheringFailed { get; }
+
         /// <summary>
         /// Initializes a new instance of the ProfessionsNetworkClientComponent class.
         /// </summary>
@@ -32,60 +54,76 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Build opcode-backed streams where available. Many Classic/TBC opcodes exist; we expose observables using RegisterOpcodeHandler.
+            // Trainer list => list of services
+            var trainerList = SafeOpcodeStream(Opcode.SMSG_TRAINER_LIST)
+                .Select(ParseTrainerServices)
+                .Do(services =>
+                {
+                    lock (_stateLock)
+                    {
+                        _availableServices.Clear();
+                        _availableServices.AddRange(services);
+                    }
+                })
+                .Publish()
+                .RefCount();
+
+            ProfessionServicesReceived = trainerList;
+
+            // Learn result (success). Older cores use SMSG_TRAINER_BUY_SUCCEEDED - parse spellId and cost if present
+            SkillLearned = SafeOpcodeStream(Opcode.SMSG_TRAINER_BUY_SUCCEEDED)
+                .Select(ParseTrainerBuySucceeded)
+                .Publish()
+                .RefCount();
+
+            // Crafting success. There is not a single generic opcode; as placeholder, hook to SMSG_SPELL_GO and attempt to infer item result if encoded by server (implementation-specific).
+            ItemCrafted = SafeOpcodeStream(Opcode.SMSG_SPELL_GO)
+                .Select(ParseCraftResult)
+                .Where(r => r.ItemId != 0 && r.Quantity > 0)
+                .Publish()
+                .RefCount();
+
+            // Crafting failure. Hook to a set of failure opcodes if available; fallback empty
+            CraftingFailed = Observable.Empty<(uint RecipeId, string Reason)>();
+
+            // Trainer window lifecycle: approximate from receiving trainer list as open; close on SMSG_GOSSIP_COMPLETE when trainer active
+            var trainerOpenedLocal = trainerList
+                .Select(_ => (TrainerGuid: CurrentTrainerGuid ?? 0UL, Profession: CurrentProfession));
+
+            TrainerWindowOpened = trainerOpenedLocal.Do(_ => IsTrainerWindowOpen = true).Publish().RefCount();
+
+            TrainerWindowClosed = SafeOpcodeStream(Opcode.SMSG_GOSSIP_COMPLETE)
+                .Do(_ =>
+                {
+                    IsTrainerWindowOpen = false;
+                    CurrentTrainerGuid = null;
+                    CurrentProfession = null;
+                    lock (_stateLock) _availableServices.Clear();
+                })
+                .Select(_ => Unit.Default)
+                .Publish()
+                .RefCount();
+
+            // Crafting window lifecycle is local-only; we emit when Open/Close methods succeed
+            var craftingOpen = Observable.Never<ProfessionType?>();
+            CraftingWindowOpened = craftingOpen; // will be replaced by local emissions in methods via Observable.Return when invoked
+            CraftingWindowClosed = Observable.Never<Unit>();
+
+            // Gathering results: hook to loot opcodes for nodes? For now, expose empty and keep compatibility handlers updating local state
+            ResourceGathered = Observable.Empty<(ulong NodeGuid, uint ItemId, uint Quantity)>();
+            GatheringFailed = Observable.Empty<(ulong NodeGuid, string Reason)>();
+
+            // Generic error stream: empty for now; local methods do logging/throw. Could be mapped from specific SMSG_*_FAILED opcodes
+            ProfessionErrors = Observable.Empty<string>();
         }
 
-        #region INetworkClientComponent Implementation
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
-        // IsOperationInProgress and LastOperationTime provided by base class
+        #region IProfessionsNetworkClientComponent operations
 
-        #endregion
-
-        /// <inheritdoc />
-        public bool IsTrainerWindowOpen { get; private set; }
-
-        /// <inheritdoc />
-        public bool IsCraftingWindowOpen { get; private set; }
-
-        /// <inheritdoc />
-        public ulong? CurrentTrainerGuid { get; private set; }
-
-        /// <inheritdoc />
-        public ProfessionType? CurrentProfession { get; private set; }
-
-        /// <inheritdoc />
-        public event Action<ulong, ProfessionType>? TrainerWindowOpened;
-
-        /// <inheritdoc />
-        public event Action? TrainerWindowClosed;
-
-        /// <inheritdoc />
-        public event Action<ProfessionType>? CraftingWindowOpened;
-
-        /// <inheritdoc />
-        public event Action? CraftingWindowClosed;
-
-        /// <inheritdoc />
-        public event Action<uint, uint>? SkillLearned;
-
-        /// <inheritdoc />
-        public event Action<uint, uint>? ItemCrafted;
-
-        /// <inheritdoc />
-        public event Action<uint, string>? CraftingFailed;
-
-        /// <inheritdoc />
-        public event Action<ProfessionService[]>? ProfessionServicesReceived;
-
-        /// <inheritdoc />
-        public event Action<string>? ProfessionError;
-
-        /// <inheritdoc />
-        public event Action<ulong, uint, uint>? ResourceGathered;
-
-        /// <inheritdoc />
-        public event Action<ulong, string>? GatheringFailed;
-
-        /// <inheritdoc />
         public async Task OpenProfessionTrainerAsync(ulong trainerGuid, ProfessionType professionType, CancellationToken cancellationToken = default)
         {
             try
@@ -101,19 +139,15 @@ namespace WoWSharpClient.Networking.ClientComponents
                 CurrentProfession = professionType;
                 IsTrainerWindowOpen = true;
 
-                TrainerWindowOpened?.Invoke(trainerGuid, professionType);
-
                 _logger.LogInformation("Profession trainer opened: {TrainerGuid:X} for {ProfessionType}", trainerGuid, professionType);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to open profession trainer: {TrainerGuid:X}", trainerGuid);
-                ProfessionError?.Invoke($"Failed to open profession trainer: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task RequestProfessionServicesAsync(ulong trainerGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -130,12 +164,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to request profession services from trainer: {TrainerGuid:X}", trainerGuid);
-                ProfessionError?.Invoke($"Failed to request profession services: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task LearnProfessionSkillAsync(ulong trainerGuid, uint spellId, CancellationToken cancellationToken = default)
         {
             try
@@ -153,24 +185,20 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to learn profession skill: {SpellId} from trainer: {TrainerGuid:X}", spellId, trainerGuid);
-                ProfessionError?.Invoke($"Failed to learn profession skill {spellId}: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task LearnMultipleProfessionSkillsAsync(ulong trainerGuid, uint[] spellIds, CancellationToken cancellationToken = default)
         {
             try
             {
-                _logger.LogDebug("Learning multiple profession skills from trainer: {TrainerGuid:X}, Skills: [{SpellIds}]", 
+                _logger.LogDebug("Learning multiple profession skills from trainer: {TrainerGuid:X}, Skills: [{SpellIds}]",
                     trainerGuid, string.Join(", ", spellIds));
 
                 foreach (var spellId in spellIds)
                 {
                     await LearnProfessionSkillAsync(trainerGuid, spellId, cancellationToken);
-                    
-                    // Small delay between skill learning to respect rate limits
                     await Task.Delay(100, cancellationToken);
                 }
 
@@ -179,12 +207,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to learn multiple profession skills from trainer: {TrainerGuid:X}", trainerGuid);
-                ProfessionError?.Invoke($"Failed to learn multiple profession skills: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task CloseProfessionTrainerAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -200,30 +226,22 @@ namespace WoWSharpClient.Networking.ClientComponents
                 IsTrainerWindowOpen = false;
                 _availableServices.Clear();
 
-                TrainerWindowClosed?.Invoke();
-
                 _logger.LogInformation("Profession trainer closed: {TrainerGuid:X}", previousTrainerGuid ?? 0);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to close profession trainer");
-                ProfessionError?.Invoke($"Failed to close profession trainer: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task OpenCraftingWindowAsync(ProfessionType professionType, CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogDebug("Opening crafting window for profession: {ProfessionType}", professionType);
 
-                // For crafting, we would typically send a spell cast or use an action
-                // This is a simplified implementation - actual crafting window opening
-                // might require different opcodes based on the profession
                 var spellId = GetCraftingSpellId(professionType);
-                
                 var payload = new byte[4];
                 BitConverter.GetBytes(spellId).CopyTo(payload, 0);
 
@@ -232,19 +250,15 @@ namespace WoWSharpClient.Networking.ClientComponents
                 CurrentProfession = professionType;
                 IsCraftingWindowOpen = true;
 
-                CraftingWindowOpened?.Invoke(professionType);
-
                 _logger.LogInformation("Crafting window opened for profession: {ProfessionType}", professionType);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to open crafting window for profession: {ProfessionType}", professionType);
-                ProfessionError?.Invoke($"Failed to open crafting window: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task CraftItemAsync(uint recipeId, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             try
@@ -256,12 +270,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                     var payload = new byte[4];
                     BitConverter.GetBytes(recipeId).CopyTo(payload, 0);
 
-                    // Use spell cast for crafting the recipe
                     await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, payload, cancellationToken);
 
                     if (quantity > 1 && i < quantity - 1)
                     {
-                        // Small delay between crafting attempts
                         await Task.Delay(500, cancellationToken);
                     }
                 }
@@ -271,12 +283,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to craft item with recipe: {RecipeId}", recipeId);
-                CraftingFailed?.Invoke(recipeId, ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task CraftMultipleItemsAsync(CraftingRequest[] craftingQueue, CancellationToken cancellationToken = default)
         {
             try
@@ -288,8 +298,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 foreach (var request in sortedQueue)
                 {
                     await CraftItemAsync(request.RecipeId, request.Quantity, cancellationToken);
-                    
-                    // Delay between different recipes
                     await Task.Delay(200, cancellationToken);
                 }
 
@@ -298,36 +306,28 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to craft multiple items from queue");
-                ProfessionError?.Invoke($"Failed to craft multiple items: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task CloseCraftingWindowAsync(CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogDebug("Closing crafting window for profession: {ProfessionType}", CurrentProfession);
 
-                // Simply clear the state - crafting windows typically close automatically
-                // or require UI interaction which isn't available through network packets
                 CurrentProfession = null;
                 IsCraftingWindowOpen = false;
-
-                CraftingWindowClosed?.Invoke();
 
                 _logger.LogInformation("Crafting window closed");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to close crafting window");
-                ProfessionError?.Invoke($"Failed to close crafting window: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task GatherResourceAsync(ulong nodeGuid, GatheringType gatheringType, CancellationToken cancellationToken = default)
         {
             try
@@ -337,7 +337,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 var payload = new byte[8];
                 BitConverter.GetBytes(nodeGuid).CopyTo(payload, 0);
 
-                // Use game object interaction for gathering
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_GAMEOBJ_USE, payload, cancellationToken);
 
                 _logger.LogInformation("Resource gathering initiated from node: {NodeGuid:X}, Type: {GatheringType}", nodeGuid, gatheringType);
@@ -345,31 +344,22 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to gather resource from node: {NodeGuid:X}", nodeGuid);
-                GatheringFailed?.Invoke(nodeGuid, ex.Message);
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public async Task QuickTrainProfessionSkillsAsync(ulong trainerGuid, ProfessionType professionType, uint[] skillIds, CancellationToken cancellationToken = default)
         {
             try
             {
-                _logger.LogDebug("Quick training profession skills from trainer: {TrainerGuid:X}, Profession: {ProfessionType}", 
+                _logger.LogDebug("Quick training profession skills from trainer: {TrainerGuid:X}, Profession: {ProfessionType}",
                     trainerGuid, professionType);
 
                 await OpenProfessionTrainerAsync(trainerGuid, professionType, cancellationToken);
-                
-                // Small delay to allow trainer window to open
                 await Task.Delay(200, cancellationToken);
-                
                 await RequestProfessionServicesAsync(trainerGuid, cancellationToken);
-                
-                // Small delay to allow services to load
                 await Task.Delay(200, cancellationToken);
-                
                 await LearnMultipleProfessionSkillsAsync(trainerGuid, skillIds, cancellationToken);
-                
                 await CloseProfessionTrainerAsync(cancellationToken);
 
                 _logger.LogInformation("Quick profession training completed for trainer: {TrainerGuid:X}", trainerGuid);
@@ -377,199 +367,128 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to quick train profession skills from trainer: {TrainerGuid:X}", trainerGuid);
-                ProfessionError?.Invoke($"Failed to quick train profession skills: {ex.Message}");
                 throw;
             }
         }
 
-        /// <inheritdoc />
         public ProfessionService[] GetAvailableProfessionServices()
         {
-            return _availableServices.Where(s => s.IsAvailable).ToArray();
+            lock (_stateLock)
+            {
+                return _availableServices.Where(s => s.IsAvailable).ToArray();
+            }
         }
 
-        /// <inheritdoc />
         public ProfessionService[] GetAffordableProfessionServices(uint availableMoney)
         {
-            return _availableServices.Where(s => s.IsAvailable && s.Cost <= availableMoney).ToArray();
+            lock (_stateLock)
+            {
+                return _availableServices.Where(s => s.IsAvailable && s.Cost <= availableMoney).ToArray();
+            }
         }
 
-        /// <inheritdoc />
         public bool IsProfessionSkillAvailable(uint spellId)
         {
-            return _availableServices.Any(s => s.SpellId == spellId && s.IsAvailable);
+            lock (_stateLock)
+            {
+                return _availableServices.Any(s => s.SpellId == spellId && s.IsAvailable);
+            }
         }
 
-        /// <inheritdoc />
         public uint GetProfessionSkillCost(uint spellId)
         {
-            var service = _availableServices.FirstOrDefault(s => s.SpellId == spellId);
-            return service?.Cost ?? 0;
+            lock (_stateLock)
+            {
+                var service = _availableServices.FirstOrDefault(s => s.SpellId == spellId);
+                return service?.Cost ?? 0;
+            }
         }
 
-        /// <inheritdoc />
-        public bool CanCraftRecipe(uint recipeId)
-        {
-            // This would require checking inventory for materials
-            // For now, return true as a simplified implementation
-            // In a real implementation, this would check the player's inventory
-            // against the recipe requirements
-            return true;
-        }
+        public bool CanCraftRecipe(uint recipeId) => true;
+        public RecipeMaterial[] GetRecipeMaterials(uint recipeId) => Array.Empty<RecipeMaterial>();
 
-        /// <inheritdoc />
-        public RecipeMaterial[] GetRecipeMaterials(uint recipeId)
-        {
-            // This would require recipe data and inventory checking
-            // For now, return empty array as a simplified implementation
-            // In a real implementation, this would return the actual materials needed
-            return [];
-        }
+        #endregion
 
-        /// <summary>
-        /// Handles server response for profession trainer services.
-        /// This method should be called by the packet handler when SMSG_TRAINER_LIST is received.
-        /// </summary>
-        /// <param name="services">The list of profession services from the server.</param>
+        #region Server response compatibility handlers -> update local state only
+
         public void HandleProfessionServicesResponse(ProfessionService[] services)
         {
             try
             {
                 _logger.LogDebug("Received profession services response with {Count} services", services.Length);
-
-                _availableServices.Clear();
-                _availableServices.AddRange(services);
-
-                ProfessionServicesReceived?.Invoke(services);
-
+                lock (_stateLock)
+                {
+                    _availableServices.Clear();
+                    _availableServices.AddRange(services);
+                }
                 _logger.LogInformation("Profession services updated: {Count} services available", services.Length);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to handle profession services response");
-                ProfessionError?.Invoke($"Failed to process profession services: {ex.Message}");
             }
         }
 
-        /// <summary>
-        /// Handles server response for profession skill learning.
-        /// This method should be called by the packet handler when SMSG_TRAINER_BUY_SUCCEEDED is received.
-        /// </summary>
-        /// <param name="spellId">The spell ID that was learned.</param>
-        /// <param name="cost">The cost that was paid.</param>
         public void HandleSkillLearnedResponse(uint spellId, uint cost)
         {
-            try
-            {
-                _logger.LogDebug("Profession skill learned: {SpellId}, Cost: {Cost}", spellId, cost);
-
-                SkillLearned?.Invoke(spellId, cost);
-
-                _logger.LogInformation("Profession skill learned successfully: {SpellId} for {Cost} copper", spellId, cost);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to handle skill learned response for spell: {SpellId}", spellId);
-                ProfessionError?.Invoke($"Failed to process skill learned response: {ex.Message}");
-            }
+            _logger.LogDebug("Profession skill learned: {SpellId}, Cost: {Cost}", spellId, cost);
         }
 
-        /// <summary>
-        /// Handles server response for crafting operations.
-        /// This method should be called by the packet handler when crafting succeeds.
-        /// </summary>
-        /// <param name="itemId">The item ID that was crafted.</param>
-        /// <param name="quantity">The quantity that was crafted.</param>
         public void HandleItemCraftedResponse(uint itemId, uint quantity)
         {
-            try
-            {
-                _logger.LogDebug("Item crafted: {ItemId}, Quantity: {Quantity}", itemId, quantity);
-
-                ItemCrafted?.Invoke(itemId, quantity);
-
-                _logger.LogInformation("Item crafted successfully: {ItemId} x{Quantity}", itemId, quantity);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to handle item crafted response for item: {ItemId}", itemId);
-                ProfessionError?.Invoke($"Failed to process item crafted response: {ex.Message}");
-            }
+            _logger.LogDebug("Item crafted: {ItemId}, Quantity: {Quantity}", itemId, quantity);
         }
 
-        /// <summary>
-        /// Handles server response for gathering operations.
-        /// This method should be called by the packet handler when gathering succeeds.
-        /// </summary>
-        /// <param name="nodeGuid">The node GUID that was gathered from.</param>
-        /// <param name="itemId">The item ID that was gathered.</param>
-        /// <param name="quantity">The quantity that was gathered.</param>
         public void HandleResourceGatheredResponse(ulong nodeGuid, uint itemId, uint quantity)
         {
-            try
-            {
-                _logger.LogDebug("Resource gathered from node: {NodeGuid:X}, Item: {ItemId}, Quantity: {Quantity}", 
-                    nodeGuid, itemId, quantity);
-
-                ResourceGathered?.Invoke(nodeGuid, itemId, quantity);
-
-                _logger.LogInformation("Resource gathered successfully from node: {NodeGuid:X}, Item: {ItemId} x{Quantity}", 
-                    nodeGuid, itemId, quantity);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to handle resource gathered response for node: {NodeGuid:X}", nodeGuid);
-                ProfessionError?.Invoke($"Failed to process resource gathered response: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Gets the crafting spell ID for a profession type.
-        /// This is used to open the crafting window for the specified profession.
-        /// </summary>
-        /// <param name="professionType">The profession type.</param>
-        /// <returns>The spell ID used to open crafting for the profession.</returns>
-        private static uint GetCraftingSpellId(ProfessionType professionType)
-        {
-            return professionType switch
-            {
-                ProfessionType.Alchemy => 2259,        // Alchemy
-                ProfessionType.Blacksmithing => 2018,  // Blacksmithing
-                ProfessionType.Enchanting => 7411,     // Enchanting
-                ProfessionType.Engineering => 4036,    // Engineering
-                ProfessionType.Leatherworking => 2108, // Leatherworking
-                ProfessionType.Tailoring => 3908,      // Tailoring
-                ProfessionType.Cooking => 2550,        // Cooking
-                ProfessionType.FirstAid => 3273,       // First Aid
-                _ => 0
-            };
-        }
-
-        #region Private Helper Methods
-
-        private void SetOperationInProgress(bool inProgress)
-        {
-            // Delegate to base class implementation which manages state safely
-            base.SetOperationInProgress(inProgress);
+            _logger.LogDebug("Resource gathered from node: {NodeGuid:X}, Item: {ItemId}, Quantity: {Quantity}", nodeGuid, itemId, quantity);
         }
 
         #endregion
 
-        #region IDisposable Implementation
+        private static uint GetCraftingSpellId(ProfessionType professionType)
+        {
+            return professionType switch
+            {
+                ProfessionType.Alchemy => 2259,
+                ProfessionType.Blacksmithing => 2018,
+                ProfessionType.Enchanting => 7411,
+                ProfessionType.Engineering => 4036,
+                ProfessionType.Leatherworking => 2108,
+                ProfessionType.Tailoring => 3908,
+                ProfessionType.Cooking => 2550,
+                ProfessionType.FirstAid => 3273,
+                _ => 0
+            };
+        }
 
-        /// <summary>
-        /// Disposes of the professions network client component and cleans up resources.
-        /// </summary>
+        private static (uint SpellId, uint Cost) ParseTrainerBuySucceeded(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            uint spell = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
+            uint cost = span.Length >= 8 ? BitConverter.ToUInt32(span.Slice(4, 4)) : 0U;
+            return (spell, cost);
+        }
+
+        private static ProfessionService[] ParseTrainerServices(ReadOnlyMemory<byte> payload)
+        {
+            // Placeholder parser: without full spec, return empty list to avoid crashes
+            return Array.Empty<ProfessionService>();
+        }
+
+        private static (uint ItemId, uint Quantity) ParseCraftResult(ReadOnlyMemory<byte> payload)
+        {
+            // Placeholder: we do not parse SMSG_SPELL_GO here. Return zeros.
+            return (0U, 0U);
+        }
+
+        #region IDisposable Implementation
         public void Dispose()
         {
             if (_disposed) return;
-
-            _logger.LogDebug("Disposing ProfessionsNetworkClientComponent");
-
             _disposed = true;
             _logger.LogDebug("ProfessionsNetworkClientComponent disposed");
         }
-
         #endregion
     }
 }

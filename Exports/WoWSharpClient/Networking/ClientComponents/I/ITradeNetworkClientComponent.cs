@@ -1,4 +1,8 @@
 using GameData.Core.Enums;
+using System;
+using System.Reactive; // for Unit
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
@@ -8,17 +12,20 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// </summary>
     public interface ITradeNetworkClientComponent : INetworkClientComponent
     {
+        // State
         bool IsTradeOpen { get; }
         ulong? TradingWithGuid { get; }
         uint OfferedCopper { get; }
 
-        event Action<ulong>? TradeRequested; // someone requested a trade with us
-        event Action? TradeOpened;
-        event Action? TradeClosed;
-        event Action<uint>? MoneyOfferedChanged;
-        event Action<int, TradeSlots>? TradeItemSlotChanged; // index, slot
-        event Action<string, string>? TradeOperationFailed;
+        // Reactive observables (preferred)
+        IObservable<ulong> TradeRequests { get; }
+        IObservable<Unit> TradesOpened { get; }
+        IObservable<Unit> TradesClosed { get; }
+        IObservable<uint> OfferedMoneyChanges { get; }
+        IObservable<(int TradeWindowSlot, TradeSlots Slot)> TradeItemSlotsChanged { get; }
+        IObservable<(string Operation, string Error)> TradeErrors { get; }
 
+        // Operations
         Task InitiateTradeAsync(ulong playerGuid, CancellationToken cancellationToken = default);
         Task AcceptTradeAsync(CancellationToken cancellationToken = default);
         Task UnacceptTradeAsync(CancellationToken cancellationToken = default);

@@ -472,11 +472,11 @@ namespace WoWSharpClient.Tests.Agent
             var eventFired = false;
             VendorInfo? receivedVendorInfo = null;
 
-            _vendorAgent.VendorWindowOpened += (info) =>
+            using var sub = _vendorAgent.VendorWindowsOpened.Subscribe(new ActionObserver<VendorInfo>(info =>
             {
                 eventFired = true;
                 receivedVendorInfo = info;
-            };
+            }));
 
             // Act
             _vendorAgent.HandleVendorWindowOpened(vendorInfo);
@@ -507,11 +507,11 @@ namespace WoWSharpClient.Tests.Agent
             var eventFired = false;
             VendorPurchaseData? receivedData = null;
 
-            _vendorAgent.ItemPurchased += (data) =>
+            using var sub = _vendorAgent.ItemsPurchased.Subscribe(new ActionObserver<VendorPurchaseData>(data =>
             {
                 eventFired = true;
                 receivedData = data;
-            };
+            }));
 
             // Act
             _vendorAgent.HandleItemPurchased(purchaseData);
@@ -540,11 +540,11 @@ namespace WoWSharpClient.Tests.Agent
             var eventFired = false;
             VendorSaleData? receivedData = null;
 
-            _vendorAgent.ItemSold += (data) =>
+            using var sub = _vendorAgent.ItemsSold.Subscribe(new ActionObserver<VendorSaleData>(data =>
             {
                 eventFired = true;
                 receivedData = data;
-            };
+            }));
 
             // Act
             _vendorAgent.HandleItemSold(saleData);
@@ -569,11 +569,11 @@ namespace WoWSharpClient.Tests.Agent
             var eventFired = false;
             VendorRepairData? receivedData = null;
 
-            _vendorAgent.ItemsRepaired += (data) =>
+            using var sub = _vendorAgent.ItemsRepairEvents.Subscribe(new ActionObserver<VendorRepairData>(data =>
             {
                 eventFired = true;
                 receivedData = data;
-            };
+            }));
 
             // Act
             _vendorAgent.HandleItemsRepaired(repairData);
@@ -597,11 +597,11 @@ namespace WoWSharpClient.Tests.Agent
             var eventFired = false;
             SoulboundConfirmation? receivedConfirmation = null;
 
-            _vendorAgent.SoulboundConfirmationRequired += (conf) =>
+            using var sub = _vendorAgent.SoulboundConfirmations.Subscribe(new ActionObserver<SoulboundConfirmation>(conf =>
             {
                 eventFired = true;
                 receivedConfirmation = conf;
-            };
+            }));
 
             // Act
             _vendorAgent.HandleSoulboundConfirmationRequest(confirmation);
@@ -619,11 +619,11 @@ namespace WoWSharpClient.Tests.Agent
             var eventFired = false;
             string? receivedError = null;
 
-            _vendorAgent.VendorError += (error) =>
+            using var sub = _vendorAgent.VendorErrors.Subscribe(new ActionObserver<string>(error =>
             {
                 eventFired = true;
                 receivedError = error;
-            };
+            }));
 
             // Act
             _vendorAgent.HandleVendorError(errorMessage);
@@ -818,6 +818,15 @@ namespace WoWSharpClient.Tests.Agent
             };
 
             _vendorAgent.HandleVendorWindowOpened(vendorInfo);
+        }
+
+        private sealed class ActionObserver<T> : IObserver<T>
+        {
+            private readonly Action<T> _onNext;
+            public ActionObserver(Action<T> onNext) => _onNext = onNext;
+            public void OnCompleted() { }
+            public void OnError(Exception error) { }
+            public void OnNext(T value) => _onNext(value);
         }
 
         #endregion

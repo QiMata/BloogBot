@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
@@ -20,10 +21,15 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly ILogger<TargetingNetworkClientComponent> _logger;
         private ulong? _currentTarget;
 
-        // Reactive observables
-        private readonly Subject<TargetingData> _targetChanges = new();
-        private readonly Subject<AssistData> _assistOperations = new();
-        private readonly Subject<TargetingErrorData> _targetingErrors = new();
+        // Local subjects for emitting events triggered by client-side actions/handlers
+        private readonly Subject<TargetingData> _localTargetChanges = new();
+        private readonly Subject<AssistData> _localAssistOperations = new();
+        private readonly Subject<TargetingErrorData> _localTargetingErrors = new();
+
+        // Exposed reactive observables (merged from opcode-backed streams and local subjects)
+        private readonly IObservable<TargetingData> _targetChanges;
+        private readonly IObservable<AssistData> _assistOperations;
+        private readonly IObservable<TargetingErrorData> _targetingErrors;
 
         // Legacy callback manager for backwards compatibility
         private readonly CallbackManager<ulong?> _targetChangedCallbackManager = new();
@@ -39,7 +45,29 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Server-driven streams (best-effort) built from opcode handlers
+            // Note: Protocols differ between cores; we conservatively parse 8-byte GUID from payload start when present.
+            var serverTargetUpdates = SafeOpcodeStream(Opcode.SMSG_CLIENT_CONTROL_UPDATE)
+                .Select(ParseServerTargetChanged)
+                .Do(UpdateTargetFromServer)
+                .Publish()
+                .RefCount();
+
+            // If there are specific server targeting error opcodes in your core, wire them here similarly.
+            var serverTargetErrors = Observable.Empty<TargetingErrorData>();
+
+            // If assist has a corresponding server opcode in your core, wire and parse it here.
+            var serverAssistOps = Observable.Empty<AssistData>();
+
+            // Merge server streams with local subjects and publish/refcount for multicast behavior consistent with other components
+            _targetChanges = Observable.Merge(serverTargetUpdates, _localTargetChanges).Publish().RefCount();
+            _assistOperations = Observable.Merge(serverAssistOps, _localAssistOperations).Publish().RefCount();
+            _targetingErrors = Observable.Merge(serverTargetErrors, _localTargetingErrors).Publish().RefCount();
         }
+
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
         #region Properties
 
@@ -80,18 +108,18 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // Send CMSG_SET_SELECTION packet
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_SET_SELECTION, payload, cancellationToken);
 
-                // Update internal state
+                // Update internal state optimistically; server stream will also update when confirmed
                 var previousTarget = _currentTarget;
                 _currentTarget = targetGuid == 0 ? null : targetGuid;
 
-                // Fire events if target actually changed
+                // Emit local change if target actually changed
                 if (previousTarget != _currentTarget)
                 {
-                    _logger.LogInformation("Target changed from {PreviousTarget:X} to {NewTarget:X}", 
+                    _logger.LogInformation("Target changed from {PreviousTarget:X} to {NewTarget:X}",
                         previousTarget ?? 0, _currentTarget ?? 0);
 
                     var targetingData = new TargetingData(previousTarget, _currentTarget, DateTime.UtcNow);
-                    _targetChanges.OnNext(targetingData);
+                    _localTargetChanges.OnNext(targetingData);
 
                     // Legacy callback support
                     _targetChangedCallbackManager.InvokeCallbacks(_currentTarget);
@@ -100,10 +128,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to set target to {TargetGuid:X}", targetGuid);
-                
+
                 var errorData = new TargetingErrorData(ex.Message, targetGuid, DateTime.UtcNow);
-                _targetingErrors.OnNext(errorData);
-                
+                _localTargetingErrors.OnNext(errorData);
+
                 throw;
             }
             finally
@@ -137,19 +165,19 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // The assist functionality works by targeting the player first,
                 // then the server will automatically switch our target to whatever they're targeting
                 // This is handled server-side in Mangos when we target a friendly player
-                
+
                 _logger.LogInformation("Assist command sent for player: {PlayerGuid:X}", playerGuid);
 
                 var assistData = new AssistData(playerGuid, _currentTarget, DateTime.UtcNow);
-                _assistOperations.OnNext(assistData);
+                _localAssistOperations.OnNext(assistData);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to assist player: {PlayerGuid:X}", playerGuid);
-                
+
                 var errorData = new TargetingErrorData(ex.Message, playerGuid, DateTime.UtcNow);
-                _targetingErrors.OnNext(errorData);
-                
+                _localTargetingErrors.OnNext(errorData);
+
                 throw;
             }
             finally
@@ -178,6 +206,40 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #region Server Response Handling
 
+        private TargetingData ParseServerTargetChanged(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                var span = payload.Span;
+                ulong newTargetGuid = span.Length >= 8 ? BitConverter.ToUInt64(span[..8]) : 0UL;
+                ulong? newTarget = newTargetGuid == 0 ? null : newTargetGuid;
+                var targetingData = new TargetingData(_currentTarget, newTarget, DateTime.UtcNow);
+                return targetingData;
+            }
+            catch
+            {
+                // If parsing fails, emit a no-op change (previous = current, new = current)
+                return new TargetingData(_currentTarget, _currentTarget, DateTime.UtcNow);
+            }
+        }
+
+        private void UpdateTargetFromServer(TargetingData targetingData)
+        {
+            if (_disposed) return;
+
+            if (_currentTarget != targetingData.CurrentTarget)
+            {
+                var previousTarget = _currentTarget;
+                _currentTarget = targetingData.CurrentTarget;
+
+                _logger.LogDebug("Server updated target from {PreviousTarget:X} to {NewTarget:X}",
+                    previousTarget ?? 0, _currentTarget ?? 0);
+
+                // Legacy callback support
+                _targetChangedCallbackManager.InvokeCallbacks(_currentTarget);
+            }
+        }
+
         /// <inheritdoc />
         public void HandleTargetChanged(ulong? newTarget)
         {
@@ -187,12 +249,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 var previousTarget = _currentTarget;
                 _currentTarget = newTarget;
-                
+
                 _logger.LogDebug("Server updated target from {PreviousTarget:X} to {NewTarget:X}",
                     previousTarget ?? 0, _currentTarget ?? 0);
 
                 var targetingData = new TargetingData(previousTarget, _currentTarget, DateTime.UtcNow);
-                _targetChanges.OnNext(targetingData);
+                _localTargetChanges.OnNext(targetingData);
 
                 // Legacy callback support
                 _targetChangedCallbackManager.InvokeCallbacks(_currentTarget);
@@ -205,9 +267,9 @@ namespace WoWSharpClient.Networking.ClientComponents
             if (_disposed) return;
 
             _logger.LogError("Targeting error: {ErrorMessage} (Target: {TargetGuid:X})", errorMessage, targetGuid ?? 0);
-            
+
             var errorData = new TargetingErrorData(errorMessage, targetGuid, DateTime.UtcNow);
-            _targetingErrors.OnNext(errorData);
+            _localTargetingErrors.OnNext(errorData);
         }
 
         #endregion
@@ -240,17 +302,16 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <summary>
         /// Disposes the targeting network agent and completes all observables.
         /// </summary>
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
-
             _disposed = true;
 
-            _targetChanges.OnCompleted();
-            _assistOperations.OnCompleted();
-            _targetingErrors.OnCompleted();
+            _localTargetChanges.OnCompleted();
+            _localAssistOperations.OnCompleted();
+            _localTargetingErrors.OnCompleted();
 
-            GC.SuppressFinalize(this);
+            base.Dispose();
         }
 
         #endregion
