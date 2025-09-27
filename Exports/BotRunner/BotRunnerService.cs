@@ -75,14 +75,12 @@ namespace BotRunner
 
                                                     //Console.WriteLine($"[BOT] Path received with {positions.Length} waypoints");
 
-                                                    if (positions.Length > 0)
+                                                    var nextWaypoint = ResolveNextWaypoint(positions, message => Console.WriteLine($"[BOT RUNNER] {message}"));
+
+                                                    if (nextWaypoint != null)
                                                     {
-                                                        //Console.WriteLine($"[BOT] Moving to waypoint[1]: ({positions[1].X:F2}, {positions[1].Y:F2}, {positions[1].Z:F2})");
-                                                        _objectManager.MoveToward(positions[1]);
-                                                    }
-                                                    else
-                                                    {
-                                                        //Console.WriteLine($"[BOT] ERROR: Path has no waypoints!");
+                                                        //Console.WriteLine($"[BOT] Moving to waypoint: ({nextWaypoint.X:F2}, {nextWaypoint.Y:F2}, {nextWaypoint.Z:F2})");
+                                                        _objectManager.MoveToward(nextWaypoint);
                                                     }
                                                 }
                                                 else if (!_objectManager.Player.IsFacing(woWUnit))
@@ -164,6 +162,23 @@ namespace BotRunner
                 }
                 await Task.Delay(100);
             }
+        }
+
+        internal static Position? ResolveNextWaypoint(Position[]? positions, Action<string>? logAction = null)
+        {
+            if (positions == null || positions.Length == 0)
+            {
+                logAction?.Invoke("Path contained no waypoints. Skipping movement.");
+                return null;
+            }
+
+            if (positions.Length == 1)
+            {
+                logAction?.Invoke("Path contained a single waypoint. Using waypoint[0].");
+                return positions[0];
+            }
+
+            return positions[1];
         }
 
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
