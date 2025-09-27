@@ -1,5 +1,7 @@
-﻿using Communication;
+using Communication;
+using Google.Protobuf;
 using System.Data.SQLite;
+using System.Threading;
 
 namespace DecisionEngineService
 {
@@ -51,16 +53,46 @@ namespace DecisionEngineService
 
         private static List<ActivitySnapshot> ReadBinFile(string filePath)
         {
-            List<ActivitySnapshot> snapshots = [];
-            using (var stream = new FileStream(filePath, FileMode.Open))
+            const int maxAttempts = 5;
+            const int delayBetweenAttemptsMs = 50;
+            Exception? lastError = null;
+
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
             {
-                while (stream.Position < stream.Length)
+                try
                 {
-                    ActivitySnapshot snapshot = ActivitySnapshot.Parser.ParseDelimitedFrom(stream);
-                    snapshots.Add(snapshot);
+                    using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    List<ActivitySnapshot> snapshots = [];
+
+                    while (stream.Position < stream.Length)
+                    {
+                        ActivitySnapshot snapshot = ActivitySnapshot.Parser.ParseDelimitedFrom(stream);
+                        if (snapshot is null)
+                        {
+                            break;
+                        }
+
+                        snapshots.Add(snapshot);
+                    }
+
+                    return snapshots;
+                }
+                catch (IOException ex)
+                {
+                    lastError = ex;
+                }
+                catch (InvalidProtocolBufferException ex)
+                {
+                    lastError = ex;
+                }
+
+                if (attempt < maxAttempts - 1)
+                {
+                    Thread.Sleep(delayBetweenAttemptsMs);
                 }
             }
-            return snapshots;
+
+            throw new IOException($"Unable to read {filePath} after {maxAttempts} attempts.", lastError);
         }
 
         private void SaveModelToDatabase()
