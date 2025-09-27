@@ -14,12 +14,14 @@ namespace WoWSharpClient.Client
     {
         private string _ipAddress = "127.0.0.1";
         private AuthClient? _authClient;
-        private WorldClient? _worldClient;
+        private IWorldClient? _worldClient;
         private bool _isLoggedIn;
         private uint _pingCounter = 0;
         private bool _disposed;
 
         public bool IsLoggedIn => _isLoggedIn;
+
+        public IWorldClient? WorldClient => _worldClient;
 
         public void Dispose()
         {
