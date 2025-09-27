@@ -63,6 +63,7 @@ namespace StateManager
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
+                    services.AddPromptHandlingServices(hostContext.Configuration);
                     services.AddHostedService<StateManagerWorker>();
                     services.AddHostedService<DecisionEngineWorker>();
                     services.AddHostedService<PromptHandlingServiceWorker>();
