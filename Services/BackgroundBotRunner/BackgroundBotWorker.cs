@@ -1,9 +1,10 @@
 using BotRunner;
 using BotRunner.Clients;
+using BotRunner.Combat;
+using BotRunner.Movement;
 using PromptHandlingService;
 using WoWSharpClient;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BackgroundBotRunner
@@ -19,31 +20,9 @@ namespace BackgroundBotRunner
         private readonly CharacterStateUpdateClient _characterStateUpdateClient;
 
         private readonly BotRunnerService _botRunner;
-        
-        // Use all network agents through the allAgents pattern
-        private readonly (
-            ITargetingNetworkClientComponent TargetingAgent,
-            IAttackNetworkClientComponent AttackAgent,
-            IQuestNetworkClientComponent QuestAgent,
-            ILootingNetworkClientComponent LootingAgent,
-            IGameObjectNetworkClientComponent GameObjectAgent,
-            IVendorNetworkClientComponent VendorAgent,
-            IFlightMasterNetworkClientComponent FlightMasterAgent,
-            IDeadActorNetworkClientComponent DeadActorAgent,
-            IInventoryNetworkClientComponent InventoryAgent,
-            IItemUseNetworkClientComponent ItemUseAgent,
-            IEquipmentNetworkClientComponent EquipmentAgent,
-            ISpellCastingNetworkClientComponent SpellCastingAgent,
-            IAuctionHouseNetworkClientComponent AuctionHouseAgent,
-            IBankNetworkClientComponent BankAgent,
-            IMailNetworkClientComponent MailAgent,
-            IGuildNetworkClientComponent GuildAgent,
-            IPartyNetworkClientComponent PartyAgent,
-            ITrainerNetworkClientComponent TrainerAgent,
-            ITalentNetworkClientComponent TalentAgent,
-            IProfessionsNetworkClientComponent ProfessionsAgent,
-            IEmoteNetworkClientComponent EmoteAgent
-        ) _allAgents;
+        private readonly IAgentFactory _agentFactory;
+        private readonly IWorldClient _worldClient;
+        private readonly BotCombatState _botCombatState;
 
         private CancellationToken _stoppingToken;
 
@@ -58,11 +37,15 @@ namespace BackgroundBotRunner
             _wowClient = new();
             _wowClient.SetIpAddress(configuration["RealmEndpoint:IpAddress"]);
             WoWSharpObjectManager.Instance.Initialize(_wowClient, _pathfindingClient, loggerFactory.CreateLogger<WoWSharpObjectManager>());
-            _botRunner = new BotRunnerService(WoWSharpObjectManager.Instance, _characterStateUpdateClient, _pathfindingClient);
-            
-            // Initialize all network agents including the new ones
-            var worldClient = WoWClientFactory.CreateWorldClient();
-            _allAgents = WoWClientFactory.CreateAllNetworkClientComponents(worldClient, loggerFactory);
+            _worldClient = WoWClientFactory.CreateWorldClient();
+            _agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(_worldClient, loggerFactory);
+            _botCombatState = new BotCombatState();
+            _botRunner = new BotRunnerService(
+                WoWSharpObjectManager.Instance,
+                _characterStateUpdateClient,
+                new TargetEngagementService(_agentFactory, _botCombatState),
+                new LootingService(_agentFactory, _botCombatState),
+                new TargetPositioningService(WoWSharpObjectManager.Instance, _pathfindingClient));
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)

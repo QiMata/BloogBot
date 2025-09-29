@@ -71,11 +71,19 @@ Creates dynamic behavior trees based on character actions and game state:
 ### Basic Setup
 
 ```csharp
+// Initialize combat helpers
+var combatState = new BotCombatState();
+var engagementService = new TargetEngagementService(agentFactory, combatState);
+var lootingService = new LootingService(agentFactory, combatState);
+var positioningService = new TargetPositioningService(objectManager, pathfindingClient);
+
 // Initialize the bot runner with required dependencies
 var botRunner = new BotRunnerService(
     objectManager,
     characterStateUpdateClient,
-    pathfindingClient
+    engagementService,
+    lootingService,
+    positioningService
 );
 
 // Start the bot
