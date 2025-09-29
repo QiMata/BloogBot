@@ -17,6 +17,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GameData.Core\GameData.Core.csproj" />
+    <ProjectReference Include="..\WoWSharpClient\WoWSharpClient.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Clients\PathfindingClient.cs" />
+    <Compile Remove="Clients\CharacterStateUpdateClient.cs" />
   </ItemGroup>
 
   <ItemGroup>
