@@ -542,11 +542,12 @@ namespace WoWSharpClient.Tests.Agent
         public void CreateAllNetworkClientComponents_WithLoggerFactory_ReturnsAllAgents()
         {
             // Act
-            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, _mockLoggerFactory.Object);
+            var (targetingAgent, attackAgent, chatAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent, gossipAgent, friendAgent, ignoreAgent, tradeAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, _mockLoggerFactory.Object);
 
             // Assert
             Assert.NotNull(targetingAgent);
             Assert.NotNull(attackAgent);
+            Assert.NotNull(chatAgent);
             Assert.NotNull(questAgent);
             Assert.NotNull(lootingAgent);
             Assert.NotNull(gameObjectAgent);
@@ -566,8 +567,13 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(talentAgent);
             Assert.NotNull(professionsAgent);
             Assert.NotNull(emoteAgent);
+            Assert.NotNull(gossipAgent);
+            Assert.NotNull(friendAgent);
+            Assert.NotNull(ignoreAgent);
+            Assert.NotNull(tradeAgent);
             Assert.IsType<TargetingNetworkClientComponent>(targetingAgent);
             Assert.IsType<AttackNetworkClientComponent>(attackAgent);
+            Assert.IsType<ChatNetworkClientComponent>(chatAgent);
             Assert.IsType<QuestNetworkClientComponent>(questAgent);
             Assert.IsType<LootingNetworkClientComponent>(lootingAgent);
             Assert.IsType<GameObjectNetworkClientComponent>(gameObjectAgent);
@@ -587,17 +593,22 @@ namespace WoWSharpClient.Tests.Agent
             Assert.IsType<TalentNetworkClientComponent>(talentAgent);
             Assert.IsType<ProfessionsNetworkClientComponent>(professionsAgent);
             Assert.IsType<EmoteNetworkClientComponent>(emoteAgent);
+            Assert.IsType<GossipNetworkClientComponent>(gossipAgent);
+            Assert.IsType<FriendNetworkClientComponent>(friendAgent);
+            Assert.IsType<IgnoreNetworkClientComponent>(ignoreAgent);
+            Assert.IsType<TradeNetworkClientComponent>(tradeAgent);
         }
 
         [Fact]
         public void CreateAllNetworkClientComponents_WithoutLoggerFactory_ReturnsAllAgents()
         {
             // Act
-            var (targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, null);
+            var (targetingAgent, attackAgent, chatAgent, questAgent, lootingAgent, gameObjectAgent, vendorAgent, flightMasterAgent, deadActorAgent, inventoryAgent, itemUseAgent, equipmentAgent, spellCastingAgent, auctionHouseAgent, bankAgent, mailAgent, guildAgent, partyAgent, trainerAgent, talentAgent, professionsAgent, emoteAgent, gossipAgent, friendAgent, ignoreAgent, tradeAgent) = AgentFactory.CreateAllNetworkClientComponents(_mockWorldClient.Object, null);
 
             // Assert
             Assert.NotNull(targetingAgent);
             Assert.NotNull(attackAgent);
+            Assert.NotNull(chatAgent);
             Assert.NotNull(questAgent);
             Assert.NotNull(lootingAgent);
             Assert.NotNull(gameObjectAgent);
@@ -617,8 +628,13 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(talentAgent);
             Assert.NotNull(professionsAgent);
             Assert.NotNull(emoteAgent);
+            Assert.NotNull(gossipAgent);
+            Assert.NotNull(friendAgent);
+            Assert.NotNull(ignoreAgent);
+            Assert.NotNull(tradeAgent);
             Assert.IsType<TargetingNetworkClientComponent>(targetingAgent);
             Assert.IsType<AttackNetworkClientComponent>(attackAgent);
+            Assert.IsType<ChatNetworkClientComponent>(chatAgent);
             Assert.IsType<QuestNetworkClientComponent>(questAgent);
             Assert.IsType<LootingNetworkClientComponent>(lootingAgent);
             Assert.IsType<GameObjectNetworkClientComponent>(gameObjectAgent);
@@ -638,6 +654,10 @@ namespace WoWSharpClient.Tests.Agent
             Assert.IsType<TalentNetworkClientComponent>(talentAgent);
             Assert.IsType<ProfessionsNetworkClientComponent>(professionsAgent);
             Assert.IsType<EmoteNetworkClientComponent>(emoteAgent);
+            Assert.IsType<GossipNetworkClientComponent>(gossipAgent);
+            Assert.IsType<FriendNetworkClientComponent>(friendAgent);
+            Assert.IsType<IgnoreNetworkClientComponent>(ignoreAgent);
+            Assert.IsType<TradeNetworkClientComponent>(tradeAgent);
         }
 
         [Fact]

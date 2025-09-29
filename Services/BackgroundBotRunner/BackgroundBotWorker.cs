@@ -21,10 +21,36 @@ namespace BackgroundBotRunner
         private readonly ILoggerFactory _loggerFactory;
 
         private readonly BotRunnerService _botRunner;
-
-        private IAgentFactory? _agentFactory;
-        private IDisposable? _worldDisconnectSubscription;
-        private IWorldClient? _activeWorldClient;
+        
+        // Use all network agents through the allAgents pattern
+        private readonly (
+            ITargetingNetworkClientComponent TargetingAgent,
+            IAttackNetworkClientComponent AttackAgent,
+            IChatNetworkClientComponent ChatAgent,
+            IQuestNetworkClientComponent QuestAgent,
+            ILootingNetworkClientComponent LootingAgent,
+            IGameObjectNetworkClientComponent GameObjectAgent,
+            IVendorNetworkClientComponent VendorAgent,
+            IFlightMasterNetworkClientComponent FlightMasterAgent,
+            IDeadActorNetworkClientComponent DeadActorAgent,
+            IInventoryNetworkClientComponent InventoryAgent,
+            IItemUseNetworkClientComponent ItemUseAgent,
+            IEquipmentNetworkClientComponent EquipmentAgent,
+            ISpellCastingNetworkClientComponent SpellCastingAgent,
+            IAuctionHouseNetworkClientComponent AuctionHouseAgent,
+            IBankNetworkClientComponent BankAgent,
+            IMailNetworkClientComponent MailAgent,
+            IGuildNetworkClientComponent GuildAgent,
+            IPartyNetworkClientComponent PartyAgent,
+            ITrainerNetworkClientComponent TrainerAgent,
+            ITalentNetworkClientComponent TalentAgent,
+            IProfessionsNetworkClientComponent ProfessionsAgent,
+            IEmoteNetworkClientComponent EmoteAgent,
+            IGossipNetworkClientComponent GossipAgent,
+            IFriendNetworkClientComponent FriendAgent,
+            IIgnoreNetworkClientComponent IgnoreAgent,
+            ITradeNetworkClientComponent TradeAgent
+        ) _allAgents;
 
         private CancellationToken _stoppingToken;
 
