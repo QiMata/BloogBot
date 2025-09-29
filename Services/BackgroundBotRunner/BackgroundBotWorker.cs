@@ -24,6 +24,7 @@ namespace BackgroundBotRunner
         private readonly (
             ITargetingNetworkClientComponent TargetingAgent,
             IAttackNetworkClientComponent AttackAgent,
+            IChatNetworkClientComponent ChatAgent,
             IQuestNetworkClientComponent QuestAgent,
             ILootingNetworkClientComponent LootingAgent,
             IGameObjectNetworkClientComponent GameObjectAgent,
@@ -42,7 +43,11 @@ namespace BackgroundBotRunner
             ITrainerNetworkClientComponent TrainerAgent,
             ITalentNetworkClientComponent TalentAgent,
             IProfessionsNetworkClientComponent ProfessionsAgent,
-            IEmoteNetworkClientComponent EmoteAgent
+            IEmoteNetworkClientComponent EmoteAgent,
+            IGossipNetworkClientComponent GossipAgent,
+            IFriendNetworkClientComponent FriendAgent,
+            IIgnoreNetworkClientComponent IgnoreAgent,
+            ITradeNetworkClientComponent TradeAgent
         ) _allAgents;
 
         private CancellationToken _stoppingToken;
