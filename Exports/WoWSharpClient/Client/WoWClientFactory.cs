@@ -452,6 +452,7 @@ namespace WoWSharpClient.Client
         public static (
             ITargetingNetworkClientComponent TargetingAgent,
             IAttackNetworkClientComponent AttackAgent,
+            IChatNetworkClientComponent ChatAgent,
             IQuestNetworkClientComponent QuestAgent,
             ILootingNetworkClientComponent LootingAgent,
             IGameObjectNetworkClientComponent GameObjectAgent,
@@ -470,7 +471,11 @@ namespace WoWSharpClient.Client
             ITrainerNetworkClientComponent TrainerAgent,
             ITalentNetworkClientComponent TalentAgent,
             IProfessionsNetworkClientComponent ProfessionsAgent,
-            IEmoteNetworkClientComponent EmoteAgent
+            IEmoteNetworkClientComponent EmoteAgent,
+            IGossipNetworkClientComponent GossipAgent,
+            IFriendNetworkClientComponent FriendAgent,
+            IIgnoreNetworkClientComponent IgnoreAgent,
+            ITradeNetworkClientComponent TradeAgent
         ) CreateAllNetworkClientComponents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return AgentFactory.CreateAllNetworkClientComponents(worldClient, loggerFactory);

@@ -1,3 +1,5 @@
+using System;
+using System.Reactive.Linq;
 using BotRunner;
 using BotRunner.Clients;
 using BotRunner.Combat;
@@ -18,6 +20,7 @@ namespace BackgroundBotRunner
         private readonly PathfindingClient _pathfindingClient;
         private readonly WoWClient _wowClient;
         private readonly CharacterStateUpdateClient _characterStateUpdateClient;
+        private readonly ILoggerFactory _loggerFactory;
 
         private readonly BotRunnerService _botRunner;
         private readonly IAgentFactory _agentFactory;
@@ -28,6 +31,7 @@ namespace BackgroundBotRunner
 
         public BackgroundBotWorker(ILoggerFactory loggerFactory, IConfiguration configuration)
         {
+            _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<BackgroundBotWorker>();
 
             _promptRunner = PromptRunnerFactory.GetOllamaPromptRunner(new Uri(configuration["Ollama:BaseUri"]), configuration["Ollama:Model"]);
@@ -58,12 +62,14 @@ namespace BackgroundBotRunner
 
                 while (!stoppingToken.IsCancellationRequested)
                 {
+                    MaintainAgentFactory();
+
                     // Example: Demonstrate agent functionality through internal logic
                     if (_wowClient.IsWorldConnected())
                     {
                         // This is where you would integrate targeting, attacking, questing, looting, game object interaction,
                         // vendor operations, flight master usage, and death handling with your bot logic
-                        
+
                         // Example usage (commented out to avoid actual actions):
                         // await _combatExample.EngageCombatAsync(enemyGuid);
                         // await InternalProcessQuestsAsync();
@@ -72,29 +78,29 @@ namespace BackgroundBotRunner
                         // await InternalBuySuppliesAsync();
                         // await InternalTakeFlight();
                         // await InternalHandleDeathAsync();
-                        
-                        // Access individual agents like this:
-                        // var targetingAgent = _allAgents.TargetingAgent;
-                        // var attackAgent = _allAgents.AttackAgent;
-                        // var questAgent = _allAgents.QuestAgent;
-                        // var lootingAgent = _allAgents.LootingAgent;
-                        // var gameObjectAgent = _allAgents.GameObjectAgent;
-                        // var vendorAgent = _allAgents.VendorAgent;
-                        // var flightMasterAgent = _allAgents.FlightMasterAgent;
-                        // var deadActorAgent = _allAgents.DeadActorAgent;
-                        // var inventoryAgent = _allAgents.InventoryAgent;
-                        // var itemUseAgent = _allAgents.ItemUseAgent;
-                        // var equipmentAgent = _allAgents.EquipmentAgent;
-                        // var spellCastingAgent = _allAgents.SpellCastingAgent;
-                        // var auctionHouseAgent = _allAgents.AuctionHouseAgent;
-                        // var bankAgent = _allAgents.BankAgent;
-                        // var mailAgent = _allAgents.MailAgent;
-                        // var guildAgent = _allAgents.GuildAgent;
-                        // var partyAgent = _allAgents.PartyAgent; // Accessing the party agent
-                        // var trainerAgent = _allAgents.TrainerAgent; // Accessing the trainer agent
-                        // var talentAgent = _allAgents.TalentAgent; // Accessing the talent agent
-                        // var professionsAgent = _allAgents.ProfessionsAgent; // Accessing the professions agent
-                        // var emoteAgent = _allAgents.EmoteAgent; // Accessing the emote agent
+
+                        // Access individual agents like this once the factory has been initialized:
+                        // var targetingAgent = _agentFactory?.TargetingAgent;
+                        // var attackAgent = _agentFactory?.AttackAgent;
+                        // var questAgent = _agentFactory?.QuestAgent;
+                        // var lootingAgent = _agentFactory?.LootingAgent;
+                        // var gameObjectAgent = _agentFactory?.GameObjectAgent;
+                        // var vendorAgent = _agentFactory?.VendorAgent;
+                        // var flightMasterAgent = _agentFactory?.FlightMasterAgent;
+                        // var deadActorAgent = _agentFactory?.DeadActorAgent;
+                        // var inventoryAgent = _agentFactory?.InventoryAgent;
+                        // var itemUseAgent = _agentFactory?.ItemUseAgent;
+                        // var equipmentAgent = _agentFactory?.EquipmentAgent;
+                        // var spellCastingAgent = _agentFactory?.SpellCastingAgent;
+                        // var auctionHouseAgent = _agentFactory?.AuctionHouseAgent;
+                        // var bankAgent = _agentFactory?.BankAgent;
+                        // var mailAgent = _agentFactory?.MailAgent;
+                        // var guildAgent = _agentFactory?.GuildAgent;
+                        // var partyAgent = _agentFactory?.PartyAgent; // Accessing the party agent
+                        // var trainerAgent = _agentFactory?.TrainerAgent; // Accessing the trainer agent
+                        // var talentAgent = _agentFactory?.TalentAgent; // Accessing the talent agent
+                        // var professionsAgent = _agentFactory?.ProfessionsAgent; // Accessing the professions agent
+                        // var emoteAgent = _agentFactory?.EmoteAgent; // Accessing the emote agent
                     }
 
                     await Task.Delay(100, stoppingToken);
@@ -104,6 +110,76 @@ namespace BackgroundBotRunner
             {
                 _logger.LogError(ex, "Error in BackgroundBotWorker");
             }
+        }
+
+        private void MaintainAgentFactory()
+        {
+            var worldClient = _wowClient.WorldClient;
+
+            if (worldClient?.IsConnected == true)
+            {
+                EnsureAgentFactory(worldClient);
+            }
+            else
+            {
+                ResetAgentFactory();
+            }
+        }
+
+        private void EnsureAgentFactory(IWorldClient worldClient)
+        {
+            if (_agentFactory != null && ReferenceEquals(worldClient, _activeWorldClient))
+            {
+                return;
+            }
+
+            ResetAgentFactory();
+
+            _agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(worldClient, _loggerFactory);
+            _activeWorldClient = worldClient;
+
+            try
+            {
+                _worldDisconnectSubscription = worldClient.WhenDisconnected?.Subscribe(_ =>
+                {
+                    _logger.LogInformation("World client disconnected. Resetting agent factory.");
+                    ResetAgentFactory();
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to subscribe to world client disconnection notifications.");
+            }
+
+            _logger.LogInformation("Initialized network client component factory using active world client.");
+        }
+
+        private void ResetAgentFactory()
+        {
+            if (_agentFactory == null && _worldDisconnectSubscription == null && _activeWorldClient == null)
+            {
+                return;
+            }
+
+            if (_agentFactory is IDisposable disposableFactory)
+            {
+                try
+                {
+                    disposableFactory.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error disposing agent factory.");
+                }
+            }
+
+            _agentFactory = null;
+            _activeWorldClient = null;
+
+            _worldDisconnectSubscription?.Dispose();
+            _worldDisconnectSubscription = null;
+
+            _logger.LogInformation("Cleared network client component factory state.");
         }
     }
 }

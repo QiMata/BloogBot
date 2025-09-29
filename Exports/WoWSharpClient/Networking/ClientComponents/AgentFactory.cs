@@ -679,6 +679,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public static (
             ITargetingNetworkClientComponent TargetingAgent,
             IAttackNetworkClientComponent AttackAgent,
+            IChatNetworkClientComponent ChatAgent,
             IQuestNetworkClientComponent QuestAgent,
             ILootingNetworkClientComponent LootingAgent,
             IGameObjectNetworkClientComponent GameObjectAgent,
@@ -697,12 +698,17 @@ namespace WoWSharpClient.Networking.ClientComponents
             ITrainerNetworkClientComponent TrainerAgent,
             ITalentNetworkClientComponent TalentAgent,
             IProfessionsNetworkClientComponent ProfessionsAgent,
-            IEmoteNetworkClientComponent EmoteAgent
+            IEmoteNetworkClientComponent EmoteAgent,
+            IGossipNetworkClientComponent GossipAgent,
+            IFriendNetworkClientComponent FriendAgent,
+            IIgnoreNetworkClientComponent IgnoreAgent,
+            ITradeNetworkClientComponent TradeAgent
         ) CreateAllNetworkClientComponents(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
         {
             return (
                 CreateTargetingNetworkClientComponentForClient(worldClient, loggerFactory),
                 CreateAttackNetworkClientComponentForClient(worldClient, loggerFactory),
+                CreateChatNetworkClientComponentForClient(worldClient, loggerFactory),
                 CreateQuestNetworkClientComponentForClient(worldClient, loggerFactory),
                 CreateLootingNetworkClientComponentForClient(worldClient, loggerFactory),
                 CreateGameObjectNetworkClientComponentForClient(worldClient, loggerFactory),
@@ -721,7 +727,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 CreateTrainerNetworkClientComponentForClient(worldClient, loggerFactory),
                 CreateTalentNetworkClientComponentForClient(worldClient, loggerFactory),
                 CreateProfessionsNetworkClientComponentForClient(worldClient, loggerFactory),
-                CreateEmoteNetworkClientComponentForClient(worldClient, loggerFactory)
+                CreateEmoteNetworkClientComponentForClient(worldClient, loggerFactory),
+                CreateGossipNetworkClientComponentForClient(worldClient, loggerFactory),
+                CreateFriendNetworkClientComponentForClient(worldClient, loggerFactory),
+                CreateIgnoreNetworkClientComponentForClient(worldClient, loggerFactory),
+                CreateTradeNetworkClientComponentForClient(worldClient, loggerFactory)
             );
         }
 
