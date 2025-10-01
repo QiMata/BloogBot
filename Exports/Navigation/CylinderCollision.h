@@ -106,6 +106,14 @@ namespace VMAP
             float& outHeight,
             G3D::Vector3& outNormal);
 
+        // Find the best step-up surface from a set of hits
+        static bool FindBestStepUpSurface(
+            const std::vector<CylinderSweepHit>& hits,
+            float currentHeight,
+            float maxStepUp,
+            float& outHeight,
+            G3D::Vector3& outNormal);
+
     private:
         // Helper: Project point onto line segment
         static G3D::Vector3 ClosestPointOnSegment(
@@ -160,37 +168,6 @@ namespace VMAP
             return normal.z >= 0.6428f; // cos(50°)
         }
 
-        // Step height validation (actively used)
-        enum StepResult {
-            STEP_BLOCKED,
-            STEP_UP,
-            STEP_DOWN,
-            STEP_FALL
-        };
-
-        inline StepResult CheckStepHeight(
-            float currentHeight,
-            float newHeight,
-            float stepUpMax = 2.3f,
-            float stepDownMax = 4.0f)
-        {
-            float heightDiff = newHeight - currentHeight;
-
-            if (heightDiff > 0) {
-                if (heightDiff <= stepUpMax)
-                    return STEP_UP;
-                else
-                    return STEP_BLOCKED;
-            }
-            else {
-                float dropDistance = -heightDiff;
-                if (dropDistance <= stepDownMax)
-                    return STEP_DOWN;
-                else
-                    return STEP_FALL;
-            }
-        }
-
         // Calculate triangle normal
         inline G3D::Vector3 CalculateTriangleNormal(
             const G3D::Vector3& v0,
@@ -206,30 +183,6 @@ namespace VMAP
                 normal /= length;
 
             return normal;
-        }
-
-        // Check if cylinder fits at a position (no collision)
-        inline bool CylinderFitsAtPosition(
-            const Cylinder& cyl,
-            const std::vector<CylinderSweepHit>& nearbyGeometry,
-            float tolerance = 0.05f)
-        {
-            // Check if cylinder collides with any non-walkable geometry
-            // This prevents walking through walls or obstacles
-            for (const auto& hit : nearbyGeometry) {
-                if (!hit.walkable) {
-                    // Check if this geometry blocks the cylinder
-                    float distToSurface = std::abs(hit.position.z - cyl.base.z);
-                    if (distToSurface < cyl.height + tolerance) {
-                        // Check horizontal distance
-                        float horizontalDist = (hit.position - cyl.base).magnitude();
-                        if (horizontalDist < cyl.radius + tolerance) {
-                            return false; // Collision detected
-                        }
-                    }
-                }
-            }
-            return true; // No collision
         }
     }
 }

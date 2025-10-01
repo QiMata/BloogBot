@@ -574,6 +574,32 @@ namespace VMAP
         return true;
     }
 
+    bool VMapManager2::CanCylinderMoveAtPosition(unsigned int pMapId, const Cylinder& worldCylinder, float tolerance) const
+    {
+        auto instanceTree = iInstanceMapTrees.find(pMapId);
+        if (instanceTree == iInstanceMapTrees.end())
+            return true; // no map collision system
+
+        // Movement check is looser: accept floor contact, only reject if a surface intrudes in upper body (ceiling) or side penetration.
+        Cylinder internal = ConvertCylinderToInternal(worldCylinder);
+        // Slight radius expansion for conservative side test
+        Cylinder expanded(internal.base, internal.axis, internal.radius + tolerance, internal.height);
+        CylinderIntersection inter = instanceTree->second->IntersectCylinder(expanded);
+        if (!inter.hit)
+            return true; // free space
+
+        float rel = inter.contactHeight - expanded.base.z;
+        const float HEAD_REGION_START = expanded.height * 0.7f; // upper 30% is head/shoulder region
+        // If contact is within a small band near the feet treat as acceptable support
+        if (rel >= -0.05f && rel <= 0.25f && inter.contactNormal.z >= 0.55f)
+            return true;
+        // If contact normal is mostly vertical and below head region treat as support (e.g., slope)
+        if (rel < HEAD_REGION_START && inter.contactNormal.z >= 0.70f)
+            return true;
+        // Otherwise treat as blocking (wall or low ceiling)
+        return false;
+    }
+
     // Original methods remain unchanged
     bool VMapManager2::isUnderModel(unsigned int pMapId, float x, float y, float z,
         float* outDist, float* inDist) const

@@ -82,6 +82,8 @@ namespace VMAP
             ModelInstance** outHitInstance = nullptr) const;
         bool CanCylinderFitAtPosition(unsigned int pMapId, const Cylinder& worldCylinder,
             float tolerance = 0.05f) const;
+        bool CanCylinderMoveAtPosition(unsigned int pMapId, const Cylinder& worldCylinder,
+            float tolerance = 0.05f) const;
 
         // Find walkable surface for cylinder movement
         bool FindCylinderWalkableSurface(unsigned int pMapId, const Cylinder& worldCylinder,

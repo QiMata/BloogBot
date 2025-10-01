@@ -439,17 +439,84 @@ namespace VMAP
     bool StaticMapTree::CanCylinderFitAtPosition(const Cylinder& cyl, float tolerance) const
     {
         if (!iTreeValues || iNTreeValues == 0)
+            return true;
+
+        // Parameters
+        const float FOOT_ALLOW = 0.20f;          // allowable floor penetration / contact band
+        const float HEAD_CLEAR_MARGIN = 0.30f;   // space required above head
+        const float WALKABLE_NORM_MIN_Z = 0.60f; // floor normal threshold
+
+        // First lightweight broad test (expanded radius only) to early accept empty space
+        Cylinder broad(cyl.base, cyl.axis, cyl.radius + tolerance, cyl.height);
+        CylinderIntersection quickHit = IntersectCylinder(broad);
+        if (!quickHit.hit)
+            return true;
+
+        // Perform vertical sweep to collect all walkable / blocking surfaces within cylinder span.
+        // Sweep from slightly above top downwards full height + small epsilon.
+        float sweepDist = cyl.height + FOOT_ALLOW + 0.10f;
+        Cylinder sweepCyl(G3D::Vector3(cyl.base.x, cyl.base.y, cyl.base.z + cyl.height + 0.05f), cyl.axis, cyl.radius + tolerance * 0.5f, cyl.height);
+        std::vector<CylinderSweepHit> hits = SweepCylinder(sweepCyl, G3D::Vector3(0,0,-1), sweepDist);
+
+        bool hasAcceptableFloor = false;
+        bool blockingCeiling = false;
+        float nearestCeilingRel = 9999.0f;
+        float baseZ = cyl.base.z;
+
+        for (const auto& h : hits)
         {
-            return true;  // No collision if no models
+            float rel = h.height - baseZ; // relative height inside desired standing cylinder
+            if (rel < -0.05f) continue;          // below cylinder base beyond tolerance
+            if (rel > cyl.height + 0.05f) continue; // above the cylinder top
+
+            if (rel <= FOOT_ALLOW && h.walkable && h.normal.z >= WALKABLE_NORM_MIN_Z)
+            {
+                hasAcceptableFloor = true; // acceptable supporting surface
+                continue;
+            }
+
+            // Potential ceiling / obstruction if inside head region
+            if (rel >= cyl.height - HEAD_CLEAR_MARGIN && h.normal.z <= 0.3f) // only treat mostly downward facing surfaces as ceiling
+            {
+                blockingCeiling = true;
+                nearestCeilingRel = std::min(nearestCeilingRel, rel);
+            }
         }
 
-        // Create slightly expanded cylinder for tolerance
-        Cylinder testCyl(cyl.base, cyl.axis, cyl.radius + tolerance, cyl.height);
+        // Fallback: if no explicit floor found but we have a quickHit with an upward normal somewhere below mid body, accept it as support.
+        if (!hasAcceptableFloor && quickHit.hit)
+        {
+            float qRel = quickHit.contactHeight - baseZ;
+            if (quickHit.contactNormal.z >= WALKABLE_NORM_MIN_Z && qRel >= -0.25f && qRel <= cyl.height * 0.6f)
+            {
+                hasAcceptableFloor = true; // treat as supporting (cliff edge / sparse geometry)
+            }
+            else if (qRel >= cyl.height - HEAD_CLEAR_MARGIN && quickHit.contactNormal.z <= 0.3f)
+            {
+                blockingCeiling = true;
+                nearestCeilingRel = std::min(nearestCeilingRel, qRel);
+            }
+        }
 
-        MapCylinderCallback callback(iTreeValues, testCyl);
-        iTree.intersectPoint(testCyl.getCenter(), callback);
+        // Final permissive fallback: standing over empty space (no floor, no ceiling) -> allow; movement code will handle gravity separately.
+        if (!hasAcceptableFloor && !blockingCeiling && hits.empty())
+        {
+            hasAcceptableFloor = true; // allow transition so player can start falling instead of being frozen
+        }
 
-        return !callback.bestIntersection.hit;
+        bool fit = hasAcceptableFloor && !blockingCeiling;
+
+        LOG_INFO("CanCylinderFitAtPosition SWEEP baseZ=" << baseZ
+            << " floor=" << (hasAcceptableFloor?1:0)
+            << " blockCeil=" << (blockingCeiling?1:0)
+            << " nearestCeilRel=" << (nearestCeilingRel==9999.0f? -1.0f:nearestCeilingRel)
+            << " h=" << cyl.height
+            << " r=" << cyl.radius
+            << " quickRel=" << (quickHit.hit ? (quickHit.contactHeight - baseZ) : -999.0f)
+            << " quickNz=" << (quickHit.hit ? quickHit.contactNormal.z : -1.0f)
+            << " hits=" << hits.size());
+
+        return fit;
     }
 
     bool StaticMapTree::FindCylinderWalkableSurface(const Cylinder& cyl,

@@ -1,5 +1,6 @@
 // CylinderCollision.cpp - Complete cylinder collision implementation
 #include "CylinderCollision.h"
+#include "VMapLog.h" // for PHYS_* logging
 #include <limits>
 
 namespace VMAP
@@ -353,6 +354,9 @@ namespace VMAP
             result = sideResult;
         }
 
+        if (result.hit) {
+            PHYS_TRACE(PHYS_CYL, "triangle hit contactZ=" << result.contactHeight << " normalZ=" << result.contactNormal.z << " pen=" << result.penetrationDepth);
+        }
         return result;
     }
 
@@ -374,14 +378,14 @@ namespace VMAP
         // Test each triangle
         size_t triangleCount = indices.size() / 3;
         for (size_t i = 0; i < triangleCount; ++i) {
-            const G3D::Vector3& v0 = vertices[indices[i * 3]];
-            const G3D::Vector3& v1 = vertices[indices[i * 3 + 1]];
-            const G3D::Vector3& v2 = vertices[indices[i * 3 + 2]];
+            const G3D::Vector3& v0ref = vertices[indices[i * 3]];
+            const G3D::Vector3& v1ref = vertices[indices[i * 3 + 1]];
+            const G3D::Vector3& v2ref = vertices[indices[i * 3 + 2]];
 
             // Quick bounds check
-            G3D::AABox triBounds(v0, v0);
-            triBounds.merge(v1);
-            triBounds.merge(v2);
+            G3D::AABox triBounds(v0ref, v0ref);
+            triBounds.merge(v1ref);
+            triBounds.merge(v2ref);
 
             if (!sweepBounds.intersects(triBounds)) {
                 continue;
@@ -394,7 +398,7 @@ namespace VMAP
                 Cylinder testCyl(cyl.base + sweepDir * (t * sweepDistance),
                     cyl.axis, cyl.radius, cyl.height);
 
-                CylinderIntersection intersection = IntersectCylinderTriangle(testCyl, v0, v1, v2);
+                CylinderIntersection intersection = IntersectCylinderTriangle(testCyl, v0ref, v1ref, v2ref);
 
                 if (intersection.hit) {
                     CylinderSweepHit hit;
@@ -402,7 +406,7 @@ namespace VMAP
                     hit.normal = intersection.contactNormal;
                     hit.position = intersection.contactPoint;
                     hit.walkable = CylinderHelpers::IsWalkableSurface(intersection.contactNormal);
-                    hit.triangleIndex = i;
+                    hit.triangleIndex = (uint32_t)i;
                     hits.push_back(hit);
                     break; // Found hit for this triangle, move to next
                 }
@@ -459,4 +463,37 @@ namespace VMAP
 
         return foundSurface;
     }
-}
+
+    // Find best step-up surface from a set of hits
+    bool CylinderCollision::FindBestStepUpSurface(
+        const std::vector<CylinderSweepHit>& hits,
+        float currentHeight,
+        float maxStepUp,
+        float& outHeight,
+        G3D::Vector3& outNormal)
+    {
+        float bestStepHeight = std::numeric_limits<float>::max();
+        bool foundSurface = false;
+
+        for (const auto& hit : hits) {
+            if (!hit.walkable) {
+                continue;
+            }
+
+            float heightDiff = hit.height - currentHeight;
+
+            // Check if it's a valid step up
+            if (heightDiff > 0.1f && heightDiff <= maxStepUp) {
+                // We want the lowest step-up surface
+                if (hit.height < bestStepHeight) {
+                    bestStepHeight = hit.height;
+                    outHeight = hit.height;
+                    outNormal = hit.normal;
+                    foundSurface = true;
+                }
+            }
+        }
+
+        return foundSurface;
+    }
+} // namespace VMAP

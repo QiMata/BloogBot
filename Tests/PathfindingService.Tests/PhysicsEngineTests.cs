@@ -106,11 +106,11 @@ namespace PathfindingService.Tests
         [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8949.95f, -139.49f, 83.23f)] // South facing
         [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8956.95f, -132.49f, 83.23f)] // West facing
         public void StepPhysics_ForwardMovement(
-    uint mapId,
-    float startX, float startY, float startZ,
-    float orientation,
-    Race race,
-    float expectedX, float expectedY, float expectedZ)
+            uint mapId,
+            float startX, float startY, float startZ,
+            float orientation,
+            Race race,
+            float expectedX, float expectedY, float expectedZ)
         {
             var (radius, height) = RaceDimensions.GetCapsuleForRace(race, Gender.Male);
             // Setup input with FORWARD movement flag
