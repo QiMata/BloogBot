@@ -39,7 +39,7 @@ namespace VMAP
         uint16_t adtId;
         uint32_t ID;
         G3D::Vector3 iPos;
-        G3D::Vector3 iRot;
+        G3D::Vector3 iRot; // spawn rotation euler (degrees)
         float iScale;
         G3D::AABox iBound;
         std::string name;
@@ -51,7 +51,8 @@ namespace VMAP
     class ModelInstance : public ModelSpawn
     {
     public:
-        G3D::Matrix3 iInvRot;
+        G3D::Matrix3 iInvRot; // world->model rotation
+        G3D::Matrix3 iRot;    // model->world rotation (cached)
         float iInvScale;
         std::shared_ptr<WorldModel> iModel;
 

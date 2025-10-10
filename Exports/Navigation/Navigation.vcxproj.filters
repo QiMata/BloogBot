@@ -70,6 +70,7 @@
     <ClCompile Include="CylinderCollision.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SceneQuery.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Navigation\MoveMap.h">
@@ -138,6 +139,7 @@
     <ClInclude Include="CylinderCollision.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SceneQuery.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Header Files">

@@ -52,6 +52,9 @@ public:
     template<typename IsectCallback>
     void intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback) const;
 
+    // AABB query: gather object indices whose leaves are visited by AABox query
+    bool QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32_t& outCount, uint32_t maxCount) const;
+
 private:
     void init_empty();
 };

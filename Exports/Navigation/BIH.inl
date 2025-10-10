@@ -1,4 +1,3 @@
-// BIH.inl - Updated with extensive logging
 #pragma once
 #include "VMapDefinitions.h"
 #include "VMapLog.h"
@@ -119,10 +118,18 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
                     }
 
                     // push back node
-                    stack[stackPos].node = back;
-                    stack[stackPos].tnear = (tb >= intervalMin) ? tb : intervalMin;
-                    stack[stackPos].tfar = intervalMax;
-                    ++stackPos;
+                    if (stackPos < MAX_STACK_SIZE)
+                    {
+                        stack[stackPos].node = back;
+                        stack[stackPos].tnear = (tb >= intervalMin) ? tb : intervalMin;
+                        stack[stackPos].tfar = intervalMax;
+                        ++stackPos;
+                    }
+                    else
+                    {
+                        // stack overflow protection
+                        return;
+                    }
 
                     // update ray interval for front node
                     intervalMax = (tf <= intervalMax) ? tf : intervalMax;
@@ -257,8 +264,15 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
                     }
 
                     // push back right node
-                    stack[stackPos].node = right;
-                    ++stackPos;
+                    if (stackPos < MAX_STACK_SIZE)
+                    {
+                        stack[stackPos].node = right;
+                        ++stackPos;
+                    }
+                    else
+                    {
+                        return; // overflow protection
+                    }
 
                     continue;
                 }
@@ -310,4 +324,120 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
         --stackPos;
         node = stack[stackPos].node;
     }
+}
+
+// AABB query implementation
+inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32_t& outCount, uint32_t maxCount) const
+{
+    outCount = 0;
+
+    // Validate inputs and early outs
+    if (tree.empty() || objects.empty())
+        return false;
+    if (!bounds.intersects(query))
+        return false;
+    if (maxCount == 0 || outIndices == nullptr)
+        return false;
+
+    // Traversal stack
+    StackNode stack[MAX_STACK_SIZE];
+    int stackPos = 0;
+    uint32_t node = 0;
+
+    while (true)
+    {
+        while (true)
+        {
+            uint32_t tn = tree[node];
+            uint32_t axis = (tn >> 30) & 3;
+            bool const BVH2 = tn & (1 << 29);
+            uint32_t offset = tn & ~(7u << 29);
+
+            if (!BVH2)
+            {
+                if (axis < 3)
+                {
+                    // interior node with clipping planes
+                    float tl = VMAP::intBitsToFloat(tree[node + 1]);
+                    float tr = VMAP::intBitsToFloat(tree[node + 2]);
+
+                    bool goLeft = query.low()[axis] <= tr;   // overlaps left if min <= right clip
+                    bool goRight = query.high()[axis] >= tl; // overlaps right if max >= left clip
+
+                    if (goLeft && goRight)
+                    {
+                        // visit both: push right, descend left
+                        uint32_t right = offset + 3;
+                        if (stackPos >= MAX_STACK_SIZE)
+                            return outCount > 0; // avoid overflow
+                        stack[stackPos++].node = right;
+                        node = offset; // left child at offset
+                        continue;
+                    }
+                    else if (goLeft)
+                    {
+                        node = offset; // only left
+                        continue;
+                    }
+                    else if (goRight)
+                    {
+                        node = offset + 3; // only right
+                        continue;
+                    }
+                    else
+                    {
+                        // no overlap with either child
+                        break;
+                    }
+                }
+                else
+                {
+                    // leaf
+                    uint32_t n = tree[node + 1];
+                    uint32_t off = offset;
+                    while (n > 0)
+                    {
+                        if (outCount < maxCount)
+                        {
+                            outIndices[outCount++] = objects[off];
+                        }
+                        else
+                        {
+                            // cap reached
+                            return true;
+                        }
+                        ++off;
+                        --n;
+                    }
+                    break; // done with this leaf
+                }
+            }
+            else
+            {
+                // BVH2 node: empty space cut from both sides, descend only if query spans between cuts
+                if (axis > 2)
+                    return outCount > 0;
+
+                float tl = VMAP::intBitsToFloat(tree[node + 1]);
+                float tr = VMAP::intBitsToFloat(tree[node + 2]);
+
+                if (query.low()[axis] <= tr && query.high()[axis] >= tl)
+                {
+                    node = offset; // descend
+                    continue;
+                }
+                else
+                {
+                    break; // no overlap, pop
+                }
+            }
+        }
+
+        // Pop
+        if (stackPos == 0)
+            break;
+        node = stack[--stackPos].node;
+    }
+
+    return outCount > 0;
 }

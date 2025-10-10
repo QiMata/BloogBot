@@ -10,6 +10,8 @@
 #include <cstring>
 #include <filesystem>
 #include "VMapLog.h"
+#include <vector>
+#include "CapsuleCollision.h"
 
 namespace VMAP
 {
@@ -32,6 +34,153 @@ namespace VMAP
         ModelInstance* prims;
         bool hit;
         bool los;
+    };
+
+    // Lightweight static mesh view that exposes triangles overlapping a world-space AABB
+    // using the map BIH for broad-phase and per-model mid-phase bounds queries.
+    class StaticMeshView : public CapsuleCollision::TriangleMeshView
+    {
+    public:
+        StaticMeshView(const BIH* tree, const ModelInstance* instances, uint32_t instanceCount)
+            : m_tree(tree), m_instances(instances), m_instanceCount(instanceCount)
+        {
+            m_cache.reserve(1024);
+        }
+
+        void query(const CapsuleCollision::AABB& box, int* outIndices, int& count, int maxCount) const override
+        {
+            count = 0;
+            m_cache.clear();
+            if (!m_tree || !m_instances || m_instanceCount == 0 || !outIndices || maxCount <= 0)
+                return;
+
+            // Build world-space query AABox from CapsuleCollision::AABB
+            G3D::Vector3 qlo(box.min.x, box.min.y, box.min.z);
+            G3D::Vector3 qhi(box.max.x, box.max.y, box.max.z);
+            G3D::AABox queryBox(qlo, qhi);
+
+            // Broad-phase: BIH AABB query to gather candidate instance indices
+            const uint32_t cap = std::min<uint32_t>(m_instanceCount, 16384);
+            std::vector<uint32_t> instIdx(cap);
+            uint32_t instCount = 0;
+            if (!m_tree->QueryAABB(queryBox, instIdx.data(), instCount, cap) || instCount == 0)
+                return;
+
+            // Visit each candidate instance
+            for (uint32_t k = 0; k < instCount; ++k)
+            {
+                uint32_t idx = instIdx[k];
+                if (idx >= m_instanceCount)
+                    continue;
+                const ModelInstance& inst = m_instances[idx];
+                if (!inst.iModel)
+                    continue;
+                // Extra cull with instance bound
+                if (!inst.iBound.intersects(queryBox))
+                    continue;
+
+                // Transform query box corners to model space using inverse transform
+                // p_model = iInvRot * ((p_world - iPos) * iInvScale)
+                G3D::Vector3 wLo = queryBox.low();
+                G3D::Vector3 wHi = queryBox.high();
+                G3D::Vector3 corners[8] = {
+                    G3D::Vector3(wLo.x, wLo.y, wLo.z),
+                    G3D::Vector3(wHi.x, wLo.y, wLo.z),
+                    G3D::Vector3(wLo.x, wHi.y, wLo.z),
+                    G3D::Vector3(wHi.x, wHi.y, wLo.z),
+                    G3D::Vector3(wLo.x, wLo.y, wHi.z),
+                    G3D::Vector3(wHi.x, wLo.y, wHi.z),
+                    G3D::Vector3(wLo.x, wHi.y, wHi.z),
+                    G3D::Vector3(wHi.x, wHi.y, wHi.z)
+                };
+                // Initialize model-space bounds with first corner
+                G3D::Vector3 c0 = inst.iInvRot * ((corners[0] - inst.iPos) * inst.iInvScale);
+                G3D::AABox modelBox(c0, c0);
+                for (int ci = 1; ci < 8; ++ci)
+                {
+                    G3D::Vector3 pm = inst.iInvRot * ((corners[ci] - inst.iPos) * inst.iInvScale);
+                    modelBox.merge(pm);
+                }
+
+                // Mid-phase: gather triangles from model within modelBox
+                std::vector<G3D::Vector3> vertices;
+                std::vector<uint32_t> indices;
+                bool haveBoundsData = inst.iModel->GetMeshDataInBounds(modelBox, vertices, indices);
+                if (!haveBoundsData)
+                {
+                    // Fallback: get all and cull manually
+                    if (!inst.iModel->GetAllMeshData(vertices, indices))
+                        continue;
+                }
+
+                // Emit triangles: transform to world space and push into cache/outIndices
+                auto emitTriangle = [&](const G3D::Vector3& a, const G3D::Vector3& b, const G3D::Vector3& c)
+                {
+                    // World = (model * iScale) * iInvRot + iPos
+                    G3D::Vector3 wa = (a * inst.iScale) * inst.iInvRot + inst.iPos;
+                    G3D::Vector3 wb = (b * inst.iScale) * inst.iInvRot + inst.iPos;
+                    G3D::Vector3 wc = (c * inst.iScale) * inst.iInvRot + inst.iPos;
+                    CapsuleCollision::Triangle T;
+                    T.a = { wa.x, wa.y, wa.z };
+                    T.b = { wb.x, wb.y, wb.z };
+                    T.c = { wc.x, wc.y, wc.z };
+                    T.doubleSided = false;
+                    int triIndex = (int)m_cache.size();
+                    m_cache.push_back(T);
+                    if (count < maxCount)
+                        outIndices[count++] = triIndex;
+                };
+
+                // Iterate index buffer by triplets
+                size_t triCount = indices.size() / 3;
+                for (size_t t = 0; t < triCount; ++t)
+                {
+                    uint32_t i0 = indices[t * 3 + 0];
+                    uint32_t i1 = indices[t * 3 + 1];
+                    uint32_t i2 = indices[t * 3 + 2];
+                    if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size())
+                        continue;
+                    const G3D::Vector3& a = vertices[i0];
+                    const G3D::Vector3& b = vertices[i1];
+                    const G3D::Vector3& c = vertices[i2];
+
+                    if (!haveBoundsData)
+                    {
+                        // Manual cull: compute tri AABB in model space and test against modelBox
+                        G3D::Vector3 lo = a.min(b).min(c);
+                        G3D::Vector3 hi = a.max(b).max(c);
+                        G3D::AABox triBox(lo, hi);
+                        if (!triBox.intersects(modelBox))
+                            continue;
+                    }
+
+                    // Emit transformed triangle
+                    emitTriangle(a, b, c);
+                    if (count >= maxCount)
+                        break;
+                }
+
+                if (count >= maxCount)
+                    break;
+            }
+        }
+
+        const CapsuleCollision::Triangle& tri(int idx) const override
+        {
+            // Assume idx is valid as provided via query output
+            return m_cache[idx];
+        }
+
+        int triangleCount() const override
+        {
+            return static_cast<int>(m_cache.size());
+        }
+
+    private:
+        const BIH* m_tree;
+        const ModelInstance* m_instances;
+        uint32_t m_instanceCount;
+        mutable std::vector<CapsuleCollision::Triangle> m_cache;
     };
 
     // Constructor
@@ -391,18 +540,31 @@ namespace VMAP
         Cylinder endCyl(cyl.base + sweepDir * sweepDistance, cyl.axis, cyl.radius, cyl.height);
         sweepBounds.merge(endCyl.getBounds());
 
-        // Use callback to gather all hits
+        // Gather candidate indices from BIH via AABB query
+        const uint32_t cap = std::min<uint32_t>(iNTreeValues, 8192);
+        std::vector<uint32_t> indices(cap);
+        uint32_t count = 0;
+        bool any = iTree.QueryAABB(sweepBounds, indices.data(), count, cap);
+        if (!any || count == 0)
+        {
+            return allHits;
+        }
+
+        // Use callback to gather all hits from candidates
         MapCylinderSweepCallback callback(iTreeValues, cyl, sweepDir, sweepDistance);
 
-        // Test multiple points along sweep path to ensure we catch all models
-        const int numSteps = std::max(1, static_cast<int>(sweepDistance / (cyl.radius * 2.0f)));
-        int step = 0;
-        while (step <= numSteps)
+        for (uint32_t i = 0; i < count; ++i)
         {
-            float t = static_cast<float>(step) / numSteps;
-            G3D::Vector3 testPos = cyl.base + sweepDir * (t * sweepDistance);
-            iTree.intersectPoint(testPos, callback);
-            ++step;
+            uint32_t idx = indices[i];
+            if (idx >= iNTreeValues)
+                continue; // index validation
+            if (!iTreeValues[idx].iModel)
+                continue; // skip unloaded
+            if (!iTreeValues[idx].getBounds().intersects(sweepBounds))
+                continue; // extra cull
+
+            // Invoke callback for this entry
+            callback(cyl.base, idx);
         }
 
         // Sort hits by height (highest first)
@@ -556,31 +718,28 @@ namespace VMAP
             return;
         }
 
-        // Callback to collect all model instances near cylinder
-        class CandidateCallback
+        // Use BIH AABB query directly around cylinder bounds
+        G3D::AABox bounds = cyl.getBounds();
+        const uint32_t cap = std::min<uint32_t>(iNTreeValues, 8192);
+        std::vector<uint32_t> indices(cap);
+        uint32_t count = 0;
+        bool any = iTree.QueryAABB(bounds, indices.data(), count, cap);
+        if (!any || count == 0)
+            return;
+
+        outInstances.reserve(count);
+        for (uint32_t i = 0; i < count; ++i)
         {
-        public:
-            CandidateCallback(ModelInstance* instances, const Cylinder& cylinder)
-                : prims(instances), cyl(cylinder) {
-            }
+            uint32_t idx = indices[i];
+            if (idx >= iNTreeValues)
+                continue; // index validation to avoid OOB
+            if (!iTreeValues[idx].iModel)
+                continue; // skip unloaded/missing
+            if (!iTreeValues[idx].getBounds().intersects(bounds))
+                continue; // extra cull using instance bounds
 
-            void operator()(const G3D::Vector3& point, uint32_t entry)
-            {
-                if (prims[entry].iModel && prims[entry].getBounds().intersects(cyl.getBounds()))
-                {
-                    candidates.push_back(&prims[entry]);
-                }
-            }
-
-            ModelInstance* prims;
-            const Cylinder& cyl;
-            std::vector<ModelInstance*> candidates;
-        };
-
-        CandidateCallback callback(iTreeValues, cyl);
-        iTree.intersectPoint(cyl.getCenter(), callback);
-
-        outInstances = std::move(callback.candidates);
+            outInstances.push_back(&iTreeValues[idx]);
+        }
     }
 
     // All original query methods remain the same with null checks

@@ -144,6 +144,11 @@ namespace VMAP
         bool isTiled() const;
         uint32_t numLoadedTiles() const;
 
+        // New lightweight accessors for query facade (read-only)
+        inline const BIH* GetBIHTree() const { return &iTree; }
+        inline const ModelInstance* GetInstancesPtr() const { return iTreeValues; }
+        inline uint32_t GetInstanceCount() const { return iNTreeValues; }
+
 #ifdef MMAP_GENERATOR
         void getModelInstances(ModelInstance*& models, uint32_t& count);
 #endif

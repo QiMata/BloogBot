@@ -90,11 +90,16 @@ namespace VMAP
     ModelInstance::ModelInstance(const ModelSpawn& spawn, std::shared_ptr<WorldModel> model)
         : ModelSpawn(spawn), iModel(model)
     {
+        // Compute world->model rotation from spawn Euler angles (degrees)
+        const G3D::Vector3& eulerDeg = this->ModelSpawn::iRot;
         iInvRot = G3D::Matrix3::fromEulerAnglesZYX(
-            G3D::pi() * iRot.y / 180.f,  // z rotation
-            G3D::pi() * iRot.x / 180.f,  // y rotation  
-            G3D::pi() * iRot.z / 180.f   // x rotation
+            G3D::pi() * eulerDeg.y / 180.f,  // z rotation
+            G3D::pi() * eulerDeg.x / 180.f,  // y rotation  
+            G3D::pi() * eulerDeg.z / 180.f   // x rotation
         ).inverse();
+        // Cache model->world rotation once
+        iRot = iInvRot.inverse();
+        // Precompute inverse scale
         iInvScale = 1.f / iScale;
     }
 
@@ -150,9 +155,7 @@ namespace VMAP
         if (iModel->IntersectPoint(pModel, zDirModel, zDist, info))
         {
             G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-            // Transform back to world space. Note that:
-            // Mat * vec == vec * Mat.transpose()
-            // and for rotation matrices: Mat.inverse() == Mat.transpose()
+            // Transform back to world space using the original right-multiply convention
             float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
             if (info.ground_Z < world_Z)
             {
@@ -236,8 +239,7 @@ namespace VMAP
     // Transform a vertex from model space to world space
     G3D::Vector3 ModelInstance::TransformToWorld(const G3D::Vector3& modelVertex) const
     {
-        // Apply scale, then rotation, then translation
-        // Note: iInvRot is the inverse rotation, so we need to transpose it (which equals inverse for rotation matrices)
+        // Apply scale, then rotation, then translation using original right-multiply convention
         return (modelVertex * iScale) * iInvRot + iPos;
     }
 
@@ -354,18 +356,13 @@ namespace VMAP
 
         // Transform each vertex from model space to world space
         // Transformation: scale -> rotate -> translate
-        // Since iInvRot is the inverse rotation matrix, we need to transpose it
-        // (which equals inverse for rotation matrices) to get the forward rotation
         auto vertIt = modelVertices.begin();
         while (vertIt != modelVertices.end())
         {
             // Apply scale
             G3D::Vector3 scaled = (*vertIt) * iScale;
 
-            // Apply rotation (iInvRot is inverse, so we transpose it back)
-            // For a rotation matrix, inverse = transpose, so to get original rotation
-            // from inverse, we transpose again
-            // Mat * vec == vec * Mat.transpose()
+            // Apply rotation using original right-multiply convention
             G3D::Vector3 rotated = scaled * iInvRot;
 
             // Apply translation

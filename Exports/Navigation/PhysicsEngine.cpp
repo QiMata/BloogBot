@@ -540,6 +540,10 @@ void PhysicsEngine::ProcessGroundMovementWithCylinder(const PhysicsInput& input,
         }
         st.x = newX; st.y = newY; return; // large drop beyond step-down
     }
+
+    // If no surface was found at the target location, still advance horizontally and let next frame resolve grounding
+    st.x = newX;
+    st.y = newY;
 }
 
 // =====================================================================================
