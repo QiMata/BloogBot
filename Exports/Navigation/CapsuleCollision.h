@@ -1,0 +1,694 @@
+// CapsuleCollision.h - Header-only C++17 capsule collision utilities (WickedEngine-style)
+// Standalone, no STL containers, only <cmath>. All functions inline.
+//
+// This module provides:
+//  - Basic math types (Vec3) and operations
+//  - Triangle helpers (closest points, plane)
+//  - AABB helpers and broad-phase utilities
+//  - Discrete intersection tests: Sphere-Triangle, Capsule-Triangle, Capsule-Capsule
+//  - Resolution helpers (slide and pop-out)
+//  - Simple scene query interface to integrate with an external mesh provider
+//
+// Notes:
+//  - Robustness: guard divides by zero, use small epsilons, normalizeSafe with fallback {0,1,0}
+//  - No heap allocations. No STL containers. No external libraries.
+//  - Intended for character controller capsule vs triangle meshes similar to WickedEngine approach.
+//
+// Usage:
+//  - Include this header in a translation unit. Implement your own TriangleMeshView.
+//  - Call sceneIntersectCapsuleDiscrete() to test discrete collisions, or moveCapsuleWithCCD() for simple CCD stepping.
+//
+#ifndef CAPSULE_COLLISION_H
+#define CAPSULE_COLLISION_H
+
+#include <cmath>
+#include "Vector3.h" // expose engine Vector3 in Wicked helpers
+
+namespace CapsuleCollision
+{
+    // Small constants for numerical stability
+    static const float EPSILON = 1e-6f;
+    static const float LARGE_EPS = 1e-4f;
+
+    // Basic math helpers without STL
+    inline float cc_min(float a, float b) { return a < b ? a : b; }
+    inline float cc_max(float a, float b) { return a > b ? a : b; }
+    inline float cc_clamp(float x, float a, float b) { return x < a ? a : (x > b ? b : x); }
+    inline float cc_abs(float x) { return x < 0.0f ? -x : x; }
+    inline float cc_sqrt(float x) { return x <= 0.0f ? 0.0f : (float)std::sqrt((double)x); }
+
+    struct Vec3
+    {
+        float x, y, z;
+
+        inline Vec3() : x(0), y(0), z(0) {}
+        inline Vec3(float X, float Y, float Z) : x(X), y(Y), z(Z) {}
+
+        inline Vec3 operator+(const Vec3& o) const { return Vec3(x + o.x, y + o.y, z + o.z); }
+        inline Vec3 operator-(const Vec3& o) const { return Vec3(x - o.x, y - o.y, z - o.z); }
+        inline Vec3 operator*(float s) const { return Vec3(x * s, y * s, z * s); }
+        inline Vec3 operator/(float s) const { float inv = cc_abs(s) > EPSILON ? (1.0f / s) : 0.0f; return Vec3(x * inv, y * inv, z * inv); }
+        inline Vec3& operator+=(const Vec3& o) { x += o.x; y += o.y; z += o.z; return *this; }
+        inline Vec3& operator-=(const Vec3& o) { x -= o.x; y -= o.y; z -= o.z; return *this; }
+
+        inline float length2() const { return x * x + y * y + z * z; }
+        inline float length() const { return cc_sqrt(length2()); }
+
+        static inline float dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+        static inline Vec3 cross(const Vec3& a, const Vec3& b) { return Vec3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
+
+        static inline Vec3 normalizeSafe(const Vec3& v, const Vec3& fallback = Vec3(0, 1, 0))
+        {
+            float l2 = v.length2();
+            if (l2 > EPSILON * EPSILON)
+            {
+                float invL = 1.0f / cc_sqrt(l2);
+                return Vec3(v.x * invL, v.y * invL, v.z * invL);
+            }
+            return fallback;
+        }
+    };
+
+    inline Vec3 operator*(float s, const Vec3& v) { return v * s; }
+
+    struct Capsule { Vec3 p0; Vec3 p1; float r; };
+    struct Triangle { Vec3 a, b, c; bool doubleSided = false; };
+    struct AABB { Vec3 min, max; };
+    struct Hit { bool hit = false; float depth = 0; Vec3 normal = Vec3(0, 1, 0); Vec3 point = Vec3(0, 0, 0); int triIndex = -1; };
+
+    // -- Geometry helpers --
+
+    // Closest point on segment AB from point P, returns the point and optionally tOut in [0,1]
+    inline Vec3 closestPointOnSegment(Vec3 a, Vec3 b, Vec3 p, float* tOut = nullptr)
+    {
+        Vec3 ab = b - a;
+        float ab2 = ab.length2();
+        float t = 0.0f;
+        if (ab2 > EPSILON)
+        {
+            t = Vec3::dot(p - a, ab) / ab2;
+            t = cc_clamp(t, 0.0f, 1.0f);
+        }
+        if (tOut) *tOut = t;
+        return a + ab * t;
+    }
+
+    // Compute triangle plane (normalized N) and plane constant d so that N·X + d = 0
+    inline void trianglePlane(const Triangle& T, Vec3& N, float& d)
+    {
+        Vec3 ab = T.b - T.a;
+        Vec3 ac = T.c - T.a;
+        Vec3 n = Vec3::cross(ab, ac);
+        float n2 = n.length2();
+        if (n2 <= EPSILON * EPSILON)
+        {
+            N = Vec3(0, 1, 0);
+            d = -Vec3::dot(N, T.a);
+            return;
+        }
+        N = Vec3::normalizeSafe(n);
+        d = -Vec3::dot(N, T.a);
+    }
+
+    inline float signedDistanceToPlane(const Vec3& p, const Vec3& N, float d)
+    {
+        return Vec3::dot(N, p) + d;
+    }
+
+    // Closest point on triangle ABC to point P using barycentric technique (Ericson 5.1.5)
+    inline Vec3 closestPointOnTriangle(const Triangle& T, const Vec3& p, float* u = nullptr, float* v = nullptr, float* w = nullptr)
+    {
+        const Vec3& a = T.a;
+        const Vec3& b = T.b;
+        const Vec3& c = T.c;
+        // Check vertex regions against A, B, C
+        Vec3 ab = b - a;
+        Vec3 ac = c - a;
+        Vec3 ap = p - a;
+        float d1 = Vec3::dot(ab, ap);
+        float d2 = Vec3::dot(ac, ap);
+        if (d1 <= 0.0f && d2 <= 0.0f)
+        {
+            if (u) *u = 1.0f; if (v) *v = 0.0f; if (w) *w = 0.0f; return a; // bary (1,0,0)
+        }
+
+        // Check vertex region B
+        Vec3 bp = p - b;
+        float d3 = Vec3::dot(ab, bp);
+        float d4 = Vec3::dot(ac, bp);
+        if (d3 >= 0.0f && d4 <= d3)
+        {
+            if (u) *u = 0.0f; if (v) *v = 1.0f; if (w) *w = 0.0f; return b; // bary (0,1,0)
+        }
+
+        // Check edge region AB
+        float vc = d1 * d4 - d3 * d2;
+        if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
+        {
+            float v_ab = d1 / (d1 - d3 + (cc_abs(d1 - d3) <= EPSILON ? EPSILON : 0.0f));
+            Vec3 q = a + ab * v_ab; // bary (1-v_ab, v_ab, 0)
+            if (u) *u = 1.0f - v_ab; if (v) *v = v_ab; if (w) *w = 0.0f;
+            return q;
+        }
+
+        // Check vertex region C
+        Vec3 cp = p - c;
+        float d5 = Vec3::dot(ab, cp);
+        float d6 = Vec3::dot(ac, cp);
+        if (d6 >= 0.0f && d5 <= d6)
+        {
+            if (u) *u = 0.0f; if (v) *v = 0.0f; if (w) *w = 1.0f; return c; // bary (0,0,1)
+        }
+
+        // Check edge region AC
+        float vb = d5 * d2 - d1 * d6;
+        if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
+        {
+            float denom_ac = (d2 - d6);
+            denom_ac = cc_abs(denom_ac) <= EPSILON ? (denom_ac < 0.0f ? -EPSILON : EPSILON) : denom_ac;
+            float w_ac = d2 / denom_ac;
+            Vec3 q = a + ac * w_ac; // bary (1-w_ac, 0, w_ac)
+            if (u) *u = 1.0f - w_ac; if (v) *v = 0.0f; if (w) *w = w_ac;
+            return q;
+        }
+
+        // Check edge region BC
+        Vec3 bc = c - b;
+        float va = d3 * d6 - d5 * d4;
+        if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
+        {
+            float denom_bc = (d4 - d3) + (d5 - d6);
+            denom_bc = cc_abs(denom_bc) <= EPSILON ? (denom_bc < 0.0f ? -EPSILON : EPSILON) : denom_bc;
+            float w_bc = (d4 - d3) / denom_bc;
+            Vec3 q = b + bc * w_bc; // bary (0, 1-w_bc, w_bc)
+            if (u) *u = 0.0f; if (v) *v = 1.0f - w_bc; if (w) *w = w_bc;
+            return q;
+        }
+
+        // Inside face region. Compute using barycentrics
+        float sum = va + vb + vc;
+        if (cc_abs(sum) <= EPSILON)
+        {
+            if (u) *u = 1.0f; if (v) *v = 0.0f; if (w) *w = 0.0f; return a; // fallback to A
+        }
+        float denom = 1.0f / sum;
+        float v_bary = vb * denom;
+        float w_bary = vc * denom;
+        float u_bary = 1.0f - v_bary - w_bary;
+        if (u) *u = u_bary; if (v) *v = v_bary; if (w) *w = w_bary;
+        return a * u_bary + b * v_bary + c * w_bary;
+    }
+
+    inline AABB aabbMerge(const AABB& A, const AABB& B)
+    {
+        AABB R;
+        R.min.x = cc_min(A.min.x, B.min.x);
+        R.min.y = cc_min(A.min.y, B.min.y);
+        R.min.z = cc_min(A.min.z, B.min.z);
+        R.max.x = cc_max(A.max.x, B.max.x);
+        R.max.y = cc_max(A.max.y, B.max.y);
+        R.max.z = cc_max(A.max.z, B.max.z);
+        return R;
+    }
+
+    inline bool aabbOverlaps(const AABB& A, const AABB& B)
+    {
+        if (A.max.x < B.min.x || A.min.x > B.max.x) return false;
+        if (A.max.y < B.min.y || A.min.y > B.max.y) return false;
+        if (A.max.z < B.min.z || A.min.z > B.max.z) return false;
+        return true;
+    }
+
+    inline AABB aabbFromCapsule(const Capsule& C)
+    {
+        AABB box;
+        box.min.x = cc_min(C.p0.x, C.p1.x) - C.r;
+        box.min.y = cc_min(C.p0.y, C.p1.y) - C.r;
+        box.min.z = cc_min(C.p0.z, C.p1.z) - C.r;
+        box.max.x = cc_max(C.p0.x, C.p1.x) + C.r;
+        box.max.y = cc_max(C.p0.y, C.p1.y) + C.r;
+        box.max.z = cc_max(C.p0.z, C.p1.z) + C.r;
+        return box;
+    }
+
+    // -- Primitive tests --
+
+    // Closest points between two segments P1(s) = p1 + s*(q1-p1), s in [0,1] and P2(t) = p2 + t*(q2-p2), t in [0,1]
+    inline void closestPointsBetweenSegments(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2,
+                                             float& sOut, float& tOut, Vec3& c1, Vec3& c2)
+    {
+        Vec3 d1 = q1 - p1; // Direction vector of segment S1
+        Vec3 d2 = q2 - p2; // Direction vector of segment S2
+        Vec3 r = p1 - p2;
+        float a = Vec3::dot(d1, d1); // Squared length of segment S1
+        float e = Vec3::dot(d2, d2); // Squared length of segment S2
+        float f = Vec3::dot(d2, r);
+
+        float s = 0.0f;
+        float t = 0.0f;
+
+        if (a <= EPSILON && e <= EPSILON)
+        {
+            // Both segments are points
+            s = 0.0f; t = 0.0f;
+            c1 = p1; c2 = p2;
+            sOut = s; tOut = t; return;
+        }
+        if (a <= EPSILON)
+        {
+            // First segment is a point
+            s = 0.0f;
+            if (e <= EPSILON)
+            {
+                t = 0.0f;
+            }
+            else
+            {
+                t = cc_clamp(f / e, 0.0f, 1.0f);
+            }
+        }
+        else
+        {
+            float c = Vec3::dot(d1, r);
+            if (e <= EPSILON)
+            {
+                // Second segment is a point
+                t = 0.0f;
+                s = cc_clamp(-c / a, 0.0f, 1.0f);
+            }
+            else
+            {
+                float b = Vec3::dot(d1, d2);
+                float denom = a * e - b * b;
+                if (cc_abs(denom) > EPSILON)
+                {
+                    s = cc_clamp((b * f - c * e) / denom, 0.0f, 1.0f);
+                }
+                else
+                {
+                    s = 0.0f; // Parallel, choose zero
+                }
+                t = (b * s + f) / e;
+                if (t < 0.0f)
+                {
+                    t = 0.0f; s = cc_clamp(-c / a, 0.0f, 1.0f);
+                }
+                else if (t > 1.0f)
+                {
+                    t = 1.0f; s = cc_clamp((b - c) / a, 0.0f, 1.0f);
+                }
+            }
+        }
+        c1 = p1 + d1 * s;
+        c2 = p2 + d2 * t;
+        sOut = s;
+        tOut = t;
+    }
+
+    // Sphere-triangle intersection via closest point on triangle
+    inline bool intersectSphereTriangle(const Vec3& center, float radius, const Triangle& T, Hit& out)
+    {
+        float u, v, w;
+        Vec3 q = closestPointOnTriangle(T, center, &u, &v, &w);
+        Vec3 d = center - q;
+        float dist2 = d.length2();
+        float r2 = radius * radius;
+        if (dist2 > r2)
+            return false;
+
+        float dist = cc_sqrt(dist2);
+        Vec3 Ntri; float dtri;
+        trianglePlane(T, Ntri, dtri);
+        Vec3 n = dist > EPSILON ? (d / (dist > EPSILON ? dist : 1.0f)) : Ntri;
+        if (T.doubleSided)
+        {
+            // Orient normal from triangle towards sphere center when double-sided
+            if (Vec3::dot(Ntri, n) < 0.0f) Ntri = Ntri * -1.0f;
+        }
+        // If very close, prefer triangle normal
+        if (dist <= LARGE_EPS)
+            n = Ntri;
+
+        out.hit = true;
+        out.depth = radius - dist;
+        out.normal = Vec3::normalizeSafe(n);
+        out.point = q;
+        return true;
+    }
+
+    // Compute closest points between a segment and a triangle; returns onSeg and onTri
+    inline bool closestPoints_Segment_Triangle(const Vec3& s0, const Vec3& s1, const Triangle& T, Vec3& onSeg, Vec3& onTri)
+    {
+        // 1) Check if segment intersects the triangle plane inside the triangle
+        Vec3 N; float d;
+        trianglePlane(T, N, d);
+        Vec3 dir = s1 - s0;
+        float denom = Vec3::dot(N, dir);
+        bool found = false;
+        float bestDist2 = 1e30f;
+
+        if (cc_abs(denom) > EPSILON)
+        {
+            float t = -(Vec3::dot(N, s0) + d) / denom; // param along segment
+            if (t >= 0.0f && t <= 1.0f)
+            {
+                Vec3 p = s0 + dir * t; // intersection point with plane
+                // Check if p is inside triangle via barycentric
+                float u, v, w;
+                Vec3 q = closestPointOnTriangle(T, p, &u, &v, &w);
+                // If p is inside, closest is zero distance on plane
+                Vec3 diff = p - q;
+                if (diff.length2() <= LARGE_EPS * LARGE_EPS)
+                {
+                    onSeg = p;
+                    onTri = q;
+                    return true;
+                }
+            }
+        }
+
+        // 2) Consider segment endpoints to triangle interior
+        Vec3 q0 = closestPointOnTriangle(T, s0);
+        Vec3 d0 = s0 - q0;
+        float dist2_0 = d0.length2();
+        if (dist2_0 < bestDist2)
+        {
+            bestDist2 = dist2_0;
+            onSeg = s0; onTri = q0; found = true;
+        }
+        Vec3 q1 = closestPointOnTriangle(T, s1);
+        Vec3 d1 = s1 - q1;
+        float dist2_1 = d1.length2();
+        if (dist2_1 < bestDist2)
+        {
+            bestDist2 = dist2_1; onSeg = s1; onTri = q1; found = true;
+        }
+
+        // 3) Segment to triangle edges distances
+        float s, t;
+        Vec3 c1, c2;
+        // Edge AB
+        closestPointsBetweenSegments(s0, s1, T.a, T.b, s, t, c1, c2);
+        Vec3 diff = c1 - c2; float d2 = diff.length2();
+        if (d2 < bestDist2)
+        {
+            bestDist2 = d2; onSeg = c1; onTri = c2; found = true;
+        }
+        // Edge BC
+        closestPointsBetweenSegments(s0, s1, T.b, T.c, s, t, c1, c2);
+        diff = c1 - c2; d2 = diff.length2();
+        if (d2 < bestDist2)
+        {
+            bestDist2 = d2; onSeg = c1; onTri = c2; found = true;
+        }
+        // Edge CA
+        closestPointsBetweenSegments(s0, s1, T.c, T.a, s, t, c1, c2);
+        diff = c1 - c2; d2 = diff.length2();
+        if (d2 < bestDist2)
+        {
+            bestDist2 = d2; onSeg = c1; onTri = c2; found = true;
+        }
+
+        return found;
+    }
+
+    // -- Capsule tests --
+
+    inline bool intersectCapsuleTriangle(const Capsule& C, const Triangle& T, Hit& out)
+    {
+        Vec3 onSeg, onTri;
+        if (!closestPoints_Segment_Triangle(C.p0, C.p1, T, onSeg, onTri))
+            return false;
+        Vec3 d = onSeg - onTri;
+        float dist2 = d.length2();
+        float r = C.r;
+        float r2 = r * r;
+        if (dist2 > r2)
+            return false;
+
+        float dist = cc_sqrt(dist2);
+        Vec3 n;
+        if (dist > EPSILON)
+        {
+            n = d / (dist > 0.0f ? dist : 1.0f);
+        }
+        else
+        {
+            // If extremely close, fall back to triangle normal
+            Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
+            n = Ntri;
+        }
+        // If double sided, make sure normal points from triangle towards capsule
+        if (T.doubleSided)
+        {
+            Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
+            if (Vec3::dot(n, Ntri) < 0.0f) n = n * -1.0f;
+        }
+
+        out.hit = true;
+        out.depth = r - dist;
+        out.normal = Vec3::normalizeSafe(n);
+        out.point = onTri; // Closest point on triangle
+        return true;
+    }
+
+    inline bool intersectCapsuleCapsule(const Capsule& A, const Capsule& B, Hit& out)
+    {
+        float s, t; Vec3 cA, cB;
+        closestPointsBetweenSegments(A.p0, A.p1, B.p0, B.p1, s, t, cA, cB);
+        Vec3 d = cA - cB;
+        float dist2 = d.length2();
+        float rsum = A.r + B.r;
+        if (dist2 > rsum * rsum)
+            return false;
+        float dist = cc_sqrt(dist2);
+        Vec3 n = dist > EPSILON ? (d / (dist > 0.0f ? dist : 1.0f)) : Vec3(0, 1, 0);
+        out.hit = true;
+        out.depth = rsum - dist;
+        out.normal = Vec3::normalizeSafe(n);
+        out.point = (cA + cB) * 0.5f;
+        return true;
+    }
+
+    // -- Resolution helpers --
+
+    struct ResolveConfig { float penetrationSlack = 1e-4f; float groundCosMin = 0.3f; Vec3 up = Vec3(0, 1, 0); };
+
+    inline Vec3 projectAndSlide(Vec3 v, Vec3 n)
+    {
+        // Project out the component along normal: v' = v - n*(v·n)
+        // Preserve original magnitude along the slide direction when possible
+        n = Vec3::normalizeSafe(n);
+        float vlen = v.length();
+        float vn = Vec3::dot(v, n);
+        Vec3 t = v - n * vn; // tangential component
+        float tlen2 = t.length2();
+        if (tlen2 > EPSILON * EPSILON && vlen > EPSILON)
+        {
+            float scale = vlen / cc_sqrt(tlen2);
+            return t * scale;
+        }
+        return Vec3(0, 0, 0);
+    }
+
+    inline bool resolveCapsuleHit(Capsule& C, const Hit& h, Vec3& inOutVelocity, const ResolveConfig& cfg)
+    {
+        if (!h.hit || h.depth <= 0.0f)
+            return false;
+        Vec3 n = Vec3::normalizeSafe(h.normal, cfg.up);
+        // Pop-out translation along normal by (depth + slack)
+        Vec3 correction = n * (h.depth + cfg.penetrationSlack);
+        C.p0 += correction;
+        C.p1 += correction;
+        // Slide velocity along contact plane
+        inOutVelocity = projectAndSlide(inOutVelocity, n);
+        return true;
+    }
+
+    // -- Mesh interface --
+
+    struct TriangleMeshView {
+        virtual void query(const AABB& box, int* outIndices, int& count, int maxCount) const = 0;
+        virtual const Triangle& tri(int idx) const = 0;
+        virtual int triangleCount() const = 0;
+        virtual ~TriangleMeshView() = default;
+    };
+
+    // -- Scene queries --
+
+    inline bool sceneIntersectCapsuleDiscrete(const Capsule& C, const TriangleMeshView& mesh, Hit& out, int* triScratch, int triCap)
+    {
+        out = Hit();
+        AABB box = aabbFromCapsule(C);
+        int count = 0;
+        mesh.query(box, triScratch, count, triCap);
+        bool any = false;
+        float bestDepth = -1.0f;
+        for (int i = 0; i < count; ++i)
+        {
+            int idx = triScratch[i];
+            const Triangle& T = mesh.tri(idx);
+            Hit h;
+            if (intersectCapsuleTriangle(C, T, h))
+            {
+                if (h.depth > bestDepth)
+                {
+                    bestDepth = h.depth;
+                    any = true;
+                    out = h;
+                    out.triIndex = idx;
+                }
+            }
+        }
+        return any;
+    }
+
+    inline bool moveCapsuleWithCCD(Capsule& C, Vec3& velocity, const TriangleMeshView& mesh, const ResolveConfig& cfg, int substeps)
+    {
+        if (substeps <= 0) substeps = 1;
+        Vec3 stepVel = velocity * (1.0f / (float)substeps);
+        bool collided = false;
+        const int kStackCap = 256;
+        int indices[kStackCap];
+        for (int s = 0; s < substeps; ++s)
+        {
+            // Keep previous pose for TOI search
+            Capsule Cprev = C;
+            Vec3 dv = stepVel;
+
+            // Try full integration for this substep
+            C.p0 += dv;
+            C.p1 += dv;
+
+            // Broad-phase: query AABB of moved capsule
+            AABB box = aabbFromCapsule(C);
+            int count = 0;
+            mesh.query(box, indices, count, kStackCap);
+
+            // Check overlap with any candidate triangle at end pose
+            bool overlapEnd = false;
+            Hit tmp; float bestDepthEnd = -1.0f;
+            for (int i = 0; i < count; ++i)
+            {
+                int idx = indices[i];
+                const Triangle& T = mesh.tri(idx);
+                Hit h;
+                if (intersectCapsuleTriangle(C, T, h))
+                {
+                    overlapEnd = true;
+                    if (h.depth > bestDepthEnd) { bestDepthEnd = h.depth; tmp = h; tmp.triIndex = idx; }
+                }
+            }
+
+            if (!overlapEnd)
+            {
+                // No collision at end of substep, continue
+                continue;
+            }
+
+            // Conservative advancement (binary search) to find earliest TOI in [0,1]
+            float tLow = 0.0f;
+            float tHigh = 1.0f;
+            const int kTOIIter = 6; // ~1/64 precision along substep
+            for (int it = 0; it < kTOIIter; ++it)
+            {
+                float tMid = 0.5f * (tLow + tHigh);
+                Capsule Cmid = Cprev;
+                Vec3 dvm = dv * tMid;
+                Cmid.p0 += dvm;
+                Cmid.p1 += dvm;
+
+                // Query at mid pose
+                AABB bmid = aabbFromCapsule(Cmid);
+                int cntMid = 0;
+                mesh.query(bmid, indices, cntMid, kStackCap);
+                bool overlapMid = false;
+                for (int i = 0; i < cntMid; ++i)
+                {
+                    const Triangle& T = mesh.tri(indices[i]);
+                    Hit h; if (intersectCapsuleTriangle(Cmid, T, h)) { overlapMid = true; break; }
+                }
+                if (overlapMid) tHigh = tMid; else tLow = tMid;
+            }
+
+            // Move capsule to earliest non-colliding pose (tLow)
+            C = Cprev;
+            Vec3 dvl = dv * tLow;
+            C.p0 += dvl;
+            C.p1 += dvl;
+
+            // Compute contact at slightly inside (tHigh)
+            Capsule Ccontact = Cprev;
+            Vec3 dvh = dv * tHigh;
+            Ccontact.p0 += dvh;
+            Ccontact.p1 += dvh;
+            AABB bcon = aabbFromCapsule(Ccontact);
+            int cntCon = 0;
+            mesh.query(bcon, indices, cntCon, kStackCap);
+            Hit bestHit; float bestDepth = -1.0f;
+            for (int i = 0; i < cntCon; ++i)
+            {
+                int idx = indices[i];
+                const Triangle& T = mesh.tri(idx);
+                Hit h; if (intersectCapsuleTriangle(Ccontact, T, h)) { if (h.depth > bestDepth) { bestDepth = h.depth; bestHit = h; bestHit.triIndex = idx; } }
+            }
+
+            if (bestDepth > 0.0f)
+            {
+                collided = true;
+                resolveCapsuleHit(C, bestHit, velocity, cfg);
+                // After resolving, also slide stepVel for subsequent substeps
+                stepVel = projectAndSlide(stepVel, bestHit.normal);
+            }
+
+            // Additional lightweight multi-contact iterations to resolve corners/edges
+            for (int iter = 0; iter < 3; ++iter)
+            {
+                Hit overlap;
+                if (sceneIntersectCapsuleDiscrete(C, mesh, overlap, indices, kStackCap))
+                {
+                    if (overlap.depth > LARGE_EPS)
+                    {
+                        collided = true;
+                        resolveCapsuleHit(C, overlap, velocity, cfg);
+                        stepVel = projectAndSlide(stepVel, overlap.normal);
+                        continue; // attempt next iteration
+                    }
+                }
+                break; // no meaningful overlap
+            }
+        }
+        // Optional: zero-out tiny velocities to avoid jitter post CCD
+        if (velocity.length2() < EPSILON * EPSILON)
+            velocity = Vec3(0,0,0);
+        return collided;
+    }
+
+    // BEGIN: Wicked helpers
+    using Vector3 = G3D::Vector3; // re-expose engine Vector3 without changing ABI
+
+    inline float Dot(const Vector3& a, const Vector3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+    inline Vector3 Cross(const Vector3& a, const Vector3& b)
+    {
+        return Vector3(
+            a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x
+        );
+    }
+    inline float LengthSq(const Vector3& v) { return Dot(v, v); }
+    inline float Length(const Vector3& v) { return cc_sqrt(LengthSq(v)); }
+    inline Vector3 NormalizeSafe(const Vector3& v, const Vector3& fallback = Vector3(0, 1, 0))
+    {
+        float l2 = LengthSq(v);
+        if (l2 > EPSILON * EPSILON)
+        {
+            float invL = 1.0f / cc_sqrt(l2);
+            return v * invL; // relies on Vector3::operator*(float)
+        }
+        return fallback;
+    }
+    // END: Wicked helpers
+}
+
+#endif // CAPSULE_COLLISION_H
