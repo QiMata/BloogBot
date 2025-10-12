@@ -93,11 +93,11 @@ namespace DecisionEngineService
 
                     return snapshots;
                 }
-                catch (IOException ex)
+                catch (InvalidProtocolBufferException ex)
                 {
                     lastError = ex;
                 }
-                catch (InvalidProtocolBufferException ex)
+                catch (IOException ex)
                 {
                     lastError = ex;
                 }

@@ -4,7 +4,7 @@ using SQLite;
 
 namespace PromptHandlingService.Cache
 {
-    internal class PromptCache : IDisposable
+    public class PromptCache : IDisposable
     {
         private readonly SQLiteConnection _conn;
         private readonly string _databasePath;
@@ -41,7 +41,7 @@ namespace PromptHandlingService.Cache
             });
         }
 
-        internal string DatabasePath => _databasePath;
+        public string DatabasePath => _databasePath;
 
         public void Dispose()
         {

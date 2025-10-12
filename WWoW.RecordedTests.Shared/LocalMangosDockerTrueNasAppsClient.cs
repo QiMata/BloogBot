@@ -51,7 +51,7 @@ public sealed class LocalMangosDockerTrueNasAppsClient : ITrueNasAppsClient
         return new TrueNasAppRelease(
             configuration.ReleaseName,
             isRunning,
-            isCheckedOut: false,
+            IsCheckedOut: false,
             Host: configuration.Host,
             Port: configuration.HostPort,
             Realm: configuration.Realm);

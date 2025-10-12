@@ -12,12 +12,12 @@ using WWoW.RecordedTests.Shared.Abstractions.I;
 
 public sealed class TrueNasAppServerAvailabilityChecker : IServerAvailabilityChecker
 {
-    private readonly ITrueNasAppsClient _client;
+    private readonly IMangosAppsClient _client;
     private readonly IReadOnlyList<Candidate> _candidates;
     private readonly TimeSpan _pollInterval;
     private readonly ITestLogger _logger;
 
-    public TrueNasAppServerAvailabilityChecker(ITrueNasAppsClient client, IEnumerable<string> serverDefinitions, TimeSpan? pollInterval = null, ITestLogger? logger = null)
+    public TrueNasAppServerAvailabilityChecker(IMangosAppsClient client, IEnumerable<string> serverDefinitions, TimeSpan? pollInterval = null, ITestLogger? logger = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         ArgumentNullException.ThrowIfNull(serverDefinitions);

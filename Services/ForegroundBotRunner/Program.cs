@@ -1,5 +1,5 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ForegroundBotRunner;
@@ -8,13 +8,11 @@ public static class Program
 {
     public static async Task Main(string[] args)
     {
-        using var host = Host.CreateDefaultBuilder(args)
-            .ConfigureServices(static services =>
-            {
-                services.AddHostedService<ForegroundBotHostedService>();
-            })
-            .Build();
+        // Run the hosted service without the generic host to avoid extra dependencies.
+        var service = new ForegroundBotHostedService(NullLogger<ForegroundBotHostedService>.Instance);
+        await service.StartAsync(CancellationToken.None);
 
-        await host.RunAsync();
+        // Keep the process alive.
+        await Task.Delay(Timeout.InfiniteTimeSpan);
     }
 }

@@ -76,14 +76,16 @@ namespace BackgroundBotRunner
 
         private (PathfindingClient PathfindingClient, CharacterStateUpdateClient CharacterStateUpdateClient, WoWClient WowClient, IAgentFactory AgentFactory, IWorldClient? InitialWorldClient, IObjectManager ObjectManager) InitializeInfrastructure(IConfiguration configuration)
         {
+            var pathfindingPort = ParseRequiredInt(configuration, "PathfindingService:Port");
             var pathfindingClient = new PathfindingClient(
                 GetRequiredSetting(configuration, "PathfindingService:IpAddress"),
-                configuration.GetValue<int>("PathfindingService:Port"),
+                pathfindingPort,
                 _loggerFactory.CreateLogger<PathfindingClient>());
 
+            var characterStateListenerPort = ParseRequiredInt(configuration, "CharacterStateListener:Port");
             var characterStateUpdateClient = new CharacterStateUpdateClient(
                 GetRequiredSetting(configuration, "CharacterStateListener:IpAddress"),
-                configuration.GetValue<int>("CharacterStateListener:Port"),
+                characterStateListenerPort,
                 _loggerFactory.CreateLogger<CharacterStateUpdateClient>());
 
             var wowClient = new WoWClient();
@@ -112,6 +114,17 @@ namespace BackgroundBotRunner
             }
 
             return value;
+        }
+
+        private static int ParseRequiredInt(IConfiguration configuration, string key)
+        {
+            var value = GetRequiredSetting(configuration, key);
+            if (!int.TryParse(value, out var result))
+            {
+                throw new InvalidOperationException($"Configuration value for '{key}' must be a valid integer.");
+            }
+
+            return result;
         }
 
         private void MaintainAgentFactory()

@@ -11,7 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using WWoW.RecordedTests.Shared.Abstractions.I;
 
-public sealed class TrueNasAppsClient : ITrueNasAppsClient
+public sealed class TrueNasAppsClient : IMangosAppsClient
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
