@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Exports\GameData.Core\GameData.Core.csproj" />
+    <ProjectReference Include="..\Services\BackgroundBotRunner\BackgroundBotRunner.csproj" />
+    <ProjectReference Include="..\Services\ForegroundBotRunner\ForegroundBotRunner.csproj" />
+  </ItemGroup>
+
+</Project>
