@@ -135,6 +135,32 @@ var worker = new BackgroundBotWorker(loggerFactory, configuration);
 await worker.StartAsync(CancellationToken.None);
 ```
 
+### Agent Factory Reference
+
+Once the worker has connected to the realm and established a world session the network
+client component factory exposes a rich catalog of agents for gameplay automation. The
+most commonly used agents include:
+
+| Category | Agents |
+|----------|--------|
+| Combat | `TargetingAgent`, `AttackAgent`, `SpellCastingAgent` |
+| Progression | `QuestAgent`, `TrainerAgent`, `TalentAgent`, `ProfessionsAgent` |
+| Economy | `LootingAgent`, `VendorAgent`, `AuctionHouseAgent`, `BankAgent` |
+| Social | `ChatAgent`, `GuildAgent`, `PartyAgent`, `MailAgent` |
+| Travel & Utility | `FlightMasterAgent`, `GameObjectAgent`, `InventoryAgent`, `ItemUseAgent`, `EquipmentAgent`, `EmoteAgent` |
+
+Each agent can be retrieved from the current `IAgentFactory` instance exposed inside the
+worker loop, for example:
+
+```csharp
+var targetingAgent = agentFactory.TargetingAgent;
+var vendorAgent = agentFactory.VendorAgent;
+var lootingAgent = agentFactory.LootingAgent;
+```
+
+These agents mirror the commented examples that previously lived in the worker source and
+serve as a quick reference for future feature work.
+
 ### Service Lifecycle
 
 The BackgroundBotWorker follows the standard .NET hosted service lifecycle:
