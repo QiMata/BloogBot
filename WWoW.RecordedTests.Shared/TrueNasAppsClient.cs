@@ -9,8 +9,9 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using WWoW.RecordedTests.Shared.Abstractions.I;
 
-public sealed class TrueNasAppsClient : IDisposable
+public sealed class TrueNasAppsClient : ITrueNasAppsClient
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
@@ -301,8 +302,4 @@ public sealed class TrueNasAppsClient : IDisposable
             || state.Equals("DEPLOYED", StringComparison.OrdinalIgnoreCase);
     }
 
-    public sealed record TrueNasAppRelease(string Name, bool IsRunning, bool IsCheckedOut, string? Host, int? Port, string? Realm)
-    {
-        public bool HasConnectionInfo => !string.IsNullOrWhiteSpace(Host) && Port.HasValue;
-    }
 }

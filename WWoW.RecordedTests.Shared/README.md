@@ -8,17 +8,19 @@
 - Polls TrueNAS Apps releases and automatically starts idle servers via `TrueNasAppServerAvailabilityChecker` (`ServerAvailability.cs`).
 - Minimal `ObsRecorderStub` that can be swapped for a real OBS/WebSocket integration.
 - Produces timestamped artifact folders for recorded test runs with simple sanitization helpers.
+- Optional `LocalMangosDockerTrueNasAppsClient` to spin up Mangos via Docker when TrueNAS is unavailable.
 
 ## Project Layout
 ```
 WWoW.RecordedTests.Shared/
   Abstractions/
     I/
-      IRecordedTestContext.cs
-      IScreenRecorder.cs
-      IServerAvailabilityChecker.cs
-      ITestDescription.cs
-      ITestLogger.cs
+    IRecordedTestContext.cs
+    IScreenRecorder.cs
+    IServerAvailabilityChecker.cs
+    ITestDescription.cs
+    ITestLogger.cs
+    ITrueNasAppsClient.cs
     NullTestLogger.cs
     OrchestrationOptions.cs
     OrchestrationResult.cs
@@ -31,6 +33,8 @@ WWoW.RecordedTests.Shared/
   RecordedTestOrchestrator.cs          # Orchestrates server wait + test execution
   ServerAvailability.cs                # TrueNasAppServerAvailabilityChecker implementation
   TrueNasAppsClient.cs                 # Thin HTTP client for TrueNAS Apps API
+  LocalMangosDockerTrueNasAppsClient.cs# Local Docker-backed TrueNAS client for Mangos
+  TrueNasAppRelease.cs                 # Shared record describing release state
   ObsRecorderStub.cs                   # Example screen recorder implementation
   WWoW.RecordedTests.Shared.csproj
   README.md
@@ -81,6 +85,29 @@ Console.WriteLine(result.Success
     : $"Test failed: {result.Message}");
 ```
 
+### Local Docker Mangos Example
+```csharp
+using System.Collections.Generic;
+using WWoW.RecordedTests.Shared;
+
+var dockerClient = new LocalMangosDockerTrueNasAppsClient(new[]
+{
+    new LocalMangosDockerConfiguration(
+        releaseName: "mangos-local",
+        image: "azerothcore/azerothcore-wotlk:latest",
+        hostPort: 3724,
+        containerPort: 3724,
+        environment: new Dictionary<string, string>
+        {
+            ["AC_WORLD__REALMLIST"] = "127.0.0.1"
+        })
+});
+
+var dockerBackedChecker = new TrueNasAppServerAvailabilityChecker(
+    dockerClient,
+    new[] { "mangos-local|127.0.0.1|3724" });
+```
+
 ### Server Discovery
 `TrueNasAppServerAvailabilityChecker` calls `TrueNasAppsClient.GetReleaseAsync` until it finds a release that is running, not checked out, and has connection info. If a release is idle it issues `StartReleaseAsync` and continues polling until `OrchestrationOptions.ServerAvailabilityTimeout` (default 5 minutes).
 
@@ -92,6 +119,9 @@ Definition format: `releaseName|host|port[|realm]`. Host/port act as fallbacks w
 ### Logging
 All orchestration components accept an `ITestLogger`. Default is `NullTestLogger`. Integrate with Serilog or `Microsoft.Extensions.Logging` by adapting to `ITestLogger`.
 
+## Automation Considerations
+- The README currently guides you through wiring up the orchestration primitives, but a fully automated workflow also needs a host process (CI pipeline, scheduled job, or orchestrator service) that executes `RecordedTestOrchestrator` on a cadence and manages required secrets (TrueNAS API key, recorder credentials) via environment variables or a vault. Without this automation hook the process remains manual.
+
 ## Extending
 - Replace `ObsRecorderStub` with OBS (obs-websocket), ShadowPlay, or ffmpeg-based recorder.
 - Add new `IBotRunner` roles (e.g., multi-character coordination, spectator).
@@ -99,11 +129,11 @@ All orchestration components accept an `ITestLogger`. Default is `NullTestLogger
 - Wrap `RecordedTestOrchestrator` in higher-level suite runner or scheduling framework.
 
 ## Key Abstractions (Summary)
-- `ITestDescription` – Creates runners/recorder & executes ordered test flow.
-- `IServerAvailabilityChecker` – Blocks until a suitable `ServerInfo` is available.
-- `IScreenRecorder` – Launch/configure/start/stop/move recording artifacts.
-- `IBotRunner` (external project) – Connects to server, prepares & resets state, executes test logic.
-- `OrchestrationOptions` – Timeouts, artifact root path, recorder safety flags.
+- `ITestDescription` â€“ Creates runners/recorder & executes ordered test flow.
+- `IServerAvailabilityChecker` â€“ Blocks until a suitable `ServerInfo` is available.
+- `IScreenRecorder` â€“ Launch/configure/start/stop/move recording artifacts.
+- `IBotRunner` (external project) â€“ Connects to server, prepares & resets state, executes test logic.
+- `OrchestrationOptions` â€“ Timeouts, artifact root path, recorder safety flags.
 
 ## Development Notes
 - Follows repository coding standards in `CODING_STANDARDS.md`.
