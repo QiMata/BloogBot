@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using BloogBot.AI.States;
 using GameData.Core.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -7,6 +9,36 @@ namespace BloogBot.AI.StateMachine;
 
 public sealed class BotActivityStateMachine
 {
+    private static readonly ActivityConfiguration[] ActivityConfigurations =
+    [
+        new(BotActivity.Resting, null, new[] { Trigger.HealthRestored }),
+        new(BotActivity.Questing, "Starting quest", new[] { Trigger.QuestComplete, Trigger.QuestFailed }),
+        new(BotActivity.Grinding, "Starting grind", new[] { Trigger.ProfessionLevelUp }),
+        new(BotActivity.Professions, "Starting professions", new[] { Trigger.ProfessionLevelUp }),
+        new(BotActivity.Talenting, "Starting talent management", new[] { Trigger.TalentPointsAttributed }),
+        new(BotActivity.Equipping, "Starting equipment management", new[] { Trigger.EquipmentChanged }),
+        new(BotActivity.Trading, "Starting trading", new[] { Trigger.TradeComplete }),
+        new(BotActivity.Guilding, "Starting guild activities", new[] { Trigger.GuildingEnded }),
+        new(BotActivity.Chatting, "Starting chat interaction", new[] { Trigger.ChattingEnded }),
+        new(BotActivity.Helping, "Starting helping activity", new[] { Trigger.HelpingEnded }),
+        new(BotActivity.Mailing, "Starting mail management", new[] { Trigger.MailingEnded }),
+        new(BotActivity.Partying, "Starting party activities", new[] { Trigger.PartyEnded }),
+        new(BotActivity.RolePlaying, "Starting roleplay", new[] { Trigger.RolePlayEnded }),
+        new(BotActivity.Combat, "Starting combat", new[] { Trigger.CombatEnded }),
+        new(BotActivity.Battlegrounding, "Starting battleground", new[] { Trigger.BattlegroundEnded }),
+        new(BotActivity.Dungeoning, "Starting dungeon", new[] { Trigger.DungeonEnded }),
+        new(BotActivity.Raiding, "Starting raid", new[] { Trigger.RaidEnded }),
+        new(BotActivity.WorldPvPing, "Starting world PvP", new[] { Trigger.PvPEnded }),
+        new(BotActivity.Camping, "Starting camping", new[] { Trigger.CampingEnded }),
+        new(BotActivity.Auction, "Starting auction house", new[] { Trigger.AuctionEnded }),
+        new(BotActivity.Banking, "Starting banking", new[] { Trigger.BankingEnded }),
+        new(BotActivity.Vending, "Starting vending", new[] { Trigger.VendingEnded }),
+        new(BotActivity.Exploring, "Starting exploration", new[] { Trigger.ExploringEnded }),
+        new(BotActivity.Traveling, "Starting travel", new[] { Trigger.TravelEnded }),
+        new(BotActivity.Escaping, "Starting escape", new[] { Trigger.EscapeSucceeded, Trigger.EscapeFailed }),
+        new(BotActivity.Eventing, "Starting event", new[] { Trigger.EventEnded })
+    ];
+
     private readonly StateMachine<BotActivity, Trigger> _sm;
     public BotActivity Current => _sm.State;
     public IObjectManager ObjectManager { get; private set; }
@@ -15,40 +47,14 @@ public sealed class BotActivityStateMachine
     public BotActivityStateMachine(
         ILoggerFactory loggerFactory,
         IObjectManager objectManager,
-        BotActivity initial = BotActivity.Resting
-    )
+        BotActivity initial = BotActivity.Resting)
     {
         Logger = loggerFactory.CreateLogger<BotActivityStateMachine>();
         ObjectManager = objectManager;
         _sm = new(initial);
 
         ConfigureGlobalTransitions();
-        ConfigureResting();
-        ConfigureQuesting();
-        ConfigureGrinding();
-        ConfigureProfessions();
-        ConfigureTalenting();
-        ConfigureEquipping();
-        ConfigureTrading();
-        ConfigureGuilding();
-        ConfigureChatting();
-        ConfigureHelping();
-        ConfigureMailing();
-        ConfigurePartying();
-        ConfigureRolePlaying();
-        ConfigureCombat();
-        ConfigureBattlegrounding();
-        ConfigureDungeoning();
-        ConfigureRaiding();
-        ConfigureWorldPvPing();
-        ConfigureCamping();
-        ConfigureAuction();
-        ConfigureBanking();
-        ConfigureVending();
-        ConfigureExploring();
-        ConfigureTraveling();
-        ConfigureEscaping();
-        ConfigureEventing();
+        ConfigureActivities();
         DecideNextActiveState();
     }
 
@@ -82,144 +88,116 @@ public sealed class BotActivityStateMachine
         }
     }
 
-    void ConfigureResting() =>
-        _sm.Configure(BotActivity.Resting)
-            .PermitDynamic(Trigger.HealthRestored, DecideNextActiveState);
+    void ConfigureActivities()
+    {
+        foreach (var configuration in ActivityConfigurations)
+        {
+            var state = _sm.Configure(configuration.Activity);
 
-    void ConfigureQuesting() =>
-        _sm.Configure(BotActivity.Questing)
-            .OnEntry(ctx => Logger.LogInformation("Starting quest"))
-            .PermitDynamic(Trigger.QuestComplete, DecideNextActiveState)
-            .PermitDynamic(Trigger.QuestFailed, DecideNextActiveState);
+            if (!string.IsNullOrWhiteSpace(configuration.EntryLogMessage))
+            {
+                state.OnEntry(_ => Logger.LogInformation(configuration.EntryLogMessage!));
+            }
 
-    void ConfigureGrinding() =>
-        _sm.Configure(BotActivity.Grinding)
-            .OnEntry(ctx => Logger.LogInformation("Starting grind"))
-            .PermitDynamic(Trigger.ProfessionLevelUp, DecideNextActiveState);
-
-    void ConfigureProfessions() =>
-        _sm.Configure(BotActivity.Professions)
-            .OnEntry(ctx => Logger.LogInformation("Starting professions"))
-            .PermitDynamic(Trigger.ProfessionLevelUp, DecideNextActiveState);
-
-    void ConfigureTalenting() =>
-        _sm.Configure(BotActivity.Talenting)
-            .OnEntry(ctx => Logger.LogInformation("Starting talent management"))
-            .PermitDynamic(Trigger.TalentPointsAttributed, DecideNextActiveState);
-
-    void ConfigureEquipping() =>
-        _sm.Configure(BotActivity.Equipping)
-            .OnEntry(ctx => Logger.LogInformation("Starting equipment management"))
-            .PermitDynamic(Trigger.EquipmentChanged, DecideNextActiveState);
-
-    void ConfigureTrading() =>
-        _sm.Configure(BotActivity.Trading)
-            .OnEntry(ctx => Logger.LogInformation("Starting trading"))
-            .PermitDynamic(Trigger.TradeComplete, DecideNextActiveState);
-
-    void ConfigureGuilding() =>
-        _sm.Configure(BotActivity.Guilding)
-            .OnEntry(ctx => Logger.LogInformation("Starting guild activities"))
-            .PermitDynamic(Trigger.GuildingEnded, DecideNextActiveState);
-
-    void ConfigureChatting() =>
-        _sm.Configure(BotActivity.Chatting)
-            .OnEntry(ctx => Logger.LogInformation("Starting chat interaction"))
-            .PermitDynamic(Trigger.ChattingEnded, DecideNextActiveState);
-
-    void ConfigureHelping() =>
-        _sm.Configure(BotActivity.Helping)
-            .OnEntry(ctx => Logger.LogInformation("Starting helping activity"))
-            .PermitDynamic(Trigger.HelpingEnded, DecideNextActiveState);
-
-    void ConfigureMailing() =>
-        _sm.Configure(BotActivity.Mailing)
-            .OnEntry(ctx => Logger.LogInformation("Starting mail management"))
-            .PermitDynamic(Trigger.MailingEnded, DecideNextActiveState);
-
-    void ConfigurePartying() =>
-        _sm.Configure(BotActivity.Partying)
-            .OnEntry(ctx => Logger.LogInformation("Starting party activities"))
-            .PermitDynamic(Trigger.PartyEnded, DecideNextActiveState);
-
-    void ConfigureRolePlaying() =>
-        _sm.Configure(BotActivity.RolePlaying)
-            .OnEntry(ctx => Logger.LogInformation("Starting roleplay"))
-            .PermitDynamic(Trigger.RolePlayEnded, DecideNextActiveState);
-
-    void ConfigureCombat() =>
-        _sm.Configure(BotActivity.Combat)
-            .OnEntry(ctx => Logger.LogInformation("Starting combat"))
-            .PermitDynamic(Trigger.CombatEnded, DecideNextActiveState);
-
-    void ConfigureBattlegrounding() =>
-        _sm.Configure(BotActivity.Battlegrounding)
-            .OnEntry(ctx => Logger.LogInformation("Starting battleground"))
-            .PermitDynamic(Trigger.BattlegroundEnded, DecideNextActiveState);
-
-    void ConfigureDungeoning() =>
-        _sm.Configure(BotActivity.Dungeoning)
-            .OnEntry(ctx => Logger.LogInformation("Starting dungeon"))
-            .PermitDynamic(Trigger.DungeonEnded, DecideNextActiveState);
-
-    void ConfigureRaiding() =>
-        _sm.Configure(BotActivity.Raiding)
-            .OnEntry(ctx => Logger.LogInformation("Starting raid"))
-            .PermitDynamic(Trigger.RaidEnded, DecideNextActiveState);
-
-    void ConfigureWorldPvPing() =>
-        _sm.Configure(BotActivity.WorldPvPing)
-            .OnEntry(ctx => Logger.LogInformation("Starting world PvP"))
-            .PermitDynamic(Trigger.PvPEnded, DecideNextActiveState);
-
-    void ConfigureCamping() =>
-        _sm.Configure(BotActivity.Camping)
-            .OnEntry(ctx => Logger.LogInformation("Starting camping"))
-            .PermitDynamic(Trigger.CampingEnded, DecideNextActiveState);
-
-    void ConfigureAuction() =>
-        _sm.Configure(BotActivity.Auction)
-            .OnEntry(ctx => Logger.LogInformation("Starting auction house"))
-            .PermitDynamic(Trigger.AuctionEnded, DecideNextActiveState);
-
-    void ConfigureBanking() =>
-        _sm.Configure(BotActivity.Banking)
-            .OnEntry(ctx => Logger.LogInformation("Starting banking"))
-            .PermitDynamic(Trigger.BankingEnded, DecideNextActiveState);
-
-    void ConfigureVending() =>
-        _sm.Configure(BotActivity.Vending)
-            .OnEntry(ctx => Logger.LogInformation("Starting vending"))
-            .PermitDynamic(Trigger.VendingEnded, DecideNextActiveState);
-
-    void ConfigureExploring() =>
-        _sm.Configure(BotActivity.Exploring)
-            .OnEntry(ctx => Logger.LogInformation("Starting exploration"))
-            .PermitDynamic(Trigger.ExploringEnded, DecideNextActiveState);
-
-    void ConfigureTraveling() =>
-        _sm.Configure(BotActivity.Traveling)
-            .OnEntry(ctx => Logger.LogInformation("Starting travel"))
-            .PermitDynamic(Trigger.TravelEnded, DecideNextActiveState);
-
-    void ConfigureEscaping() =>
-        _sm.Configure(BotActivity.Escaping)
-            .OnEntry(ctx => Logger.LogInformation("Starting escape"))
-            .PermitDynamic(Trigger.EscapeSucceeded, DecideNextActiveState)
-            .PermitDynamic(Trigger.EscapeFailed, DecideNextActiveState);
-
-    void ConfigureEventing() =>
-        _sm.Configure(BotActivity.Eventing)
-            .OnEntry(ctx => Logger.LogInformation("Starting event"))
-            .PermitDynamic(Trigger.EventEnded, DecideNextActiveState);
+            foreach (var trigger in configuration.ExitTriggers)
+            {
+                state.PermitDynamic(trigger, DecideNextActiveState);
+            }
+        }
+    }
 
     BotActivity DecideNextActiveState()
     {
-        // Logic to decide the next active state based on current conditions
-        // This could involve checking health, quests, inventory, etc.
-        // For now, we will just log and return Resting as a placeholder.
-        Logger.LogInformation($"Deciding next activity based on current state:{Current}");
+        if (ObjectManager == null || !ObjectManager.HasEnteredWorld)
+        {
+            Logger.LogInformation("No active world session. Defaulting to Resting.");
+            return BotActivity.Resting;
+        }
 
-        return BotActivity.Resting; // Temporary default fallback
+        var player = ObjectManager.Player;
+        if (player == null)
+        {
+            Logger.LogInformation("Player information unavailable. Defaulting to Resting.");
+            return BotActivity.Resting;
+        }
+
+        if (player.InGhostForm || player.HealthPercent < 40)
+        {
+            Logger.LogInformation("Player requires recovery. Switching to Resting state.");
+            return BotActivity.Resting;
+        }
+
+        if (ObjectManager.Aggressors.Any(a => a.TargetGuid == player.Guid))
+        {
+            Logger.LogInformation("Hostile units detected. Switching to Combat state.");
+            return BotActivity.Combat;
+        }
+
+        if (player.InBattleground)
+        {
+            Logger.LogInformation("Player is in a battleground. Switching to Battlegrounding state.");
+            return BotActivity.Battlegrounding;
+        }
+
+        if (ObjectManager.TradeFrame?.IsOpen ?? false)
+        {
+            Logger.LogInformation("Trade frame open. Switching to Trading state.");
+            return BotActivity.Trading;
+        }
+
+        if (ObjectManager.MerchantFrame?.IsOpen ?? false)
+        {
+            Logger.LogInformation("Merchant interaction detected. Switching to Vending state.");
+            return BotActivity.Vending;
+        }
+
+        if (ObjectManager.TalentFrame?.IsOpen ?? false)
+        {
+            Logger.LogInformation("Talent frame open. Switching to Talenting state.");
+            return BotActivity.Talenting;
+        }
+
+        if ((ObjectManager.TrainerFrame?.IsOpen ?? false) || (ObjectManager.CraftFrame?.IsOpen ?? false))
+        {
+            Logger.LogInformation("Trainer or crafting interaction detected. Switching to Professions state.");
+            return BotActivity.Professions;
+        }
+
+        if (ObjectManager.TaxiFrame?.IsOpen ?? false)
+        {
+            Logger.LogInformation("Taxi interface open. Switching to Traveling state.");
+            return BotActivity.Traveling;
+        }
+
+        var questGreeting = ObjectManager.QuestGreetingFrame;
+        if ((ObjectManager.QuestFrame?.IsOpen ?? false) || (questGreeting?.Quests?.Count > 0) || player.HasQuestTargets)
+        {
+            Logger.LogInformation("Quest context detected. Switching to Questing state.");
+            return BotActivity.Questing;
+        }
+
+        if (ObjectManager.GossipFrame?.IsOpen ?? false)
+        {
+            Logger.LogInformation("Gossip interaction detected. Switching to RolePlaying state.");
+            return BotActivity.RolePlaying;
+        }
+
+        var lootFrame = ObjectManager.LootFrame;
+        if (lootFrame != null && (lootFrame.IsOpen || lootFrame.LootCount > 0))
+        {
+            Logger.LogInformation("Loot available. Remaining in Combat context for cleanup.");
+            return BotActivity.Combat;
+        }
+
+        if (ObjectManager.PartyMembers.Skip(1).Any())
+        {
+            Logger.LogInformation("Party detected. Switching to Partying state.");
+            return BotActivity.Partying;
+        }
+
+        Logger.LogInformation("Defaulting to Grinding for progression.");
+        return BotActivity.Grinding;
     }
+
+    private sealed record ActivityConfiguration(BotActivity Activity, string? EntryLogMessage, IReadOnlyList<Trigger> ExitTriggers);
 }

@@ -1,10 +1,12 @@
 using System;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using BotRunner;
 using BotRunner.Clients;
 using BotRunner.Combat;
 using BotRunner.Movement;
-using PromptHandlingService;
+using GameData.Core.Interfaces;
 using WoWSharpClient;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -14,48 +16,47 @@ namespace BackgroundBotRunner
     public class BackgroundBotWorker : BackgroundService
     {
         private readonly ILogger<BackgroundBotWorker> _logger;
-
-        private readonly IPromptRunner _promptRunner;
-
-        private readonly PathfindingClient _pathfindingClient;
-        private readonly WoWClient _wowClient;
-        private readonly CharacterStateUpdateClient _characterStateUpdateClient;
         private readonly ILoggerFactory _loggerFactory;
-
-        private readonly BotRunnerService _botRunner;
-        private readonly IAgentFactory _agentFactory;
-        private readonly IWorldClient _worldClient;
+        private readonly PathfindingClient _pathfindingClient;
+        private readonly CharacterStateUpdateClient _characterStateUpdateClient;
+        private readonly WoWClient _wowClient;
         private readonly BotCombatState _botCombatState;
+        private readonly BotRunnerService _botRunner;
 
-        private CancellationToken _stoppingToken;
+        private IAgentFactory? _agentFactory;
+        private IWorldClient? _activeWorldClient;
+        private IDisposable? _worldDisconnectSubscription;
 
         public BackgroundBotWorker(ILoggerFactory loggerFactory, IConfiguration configuration)
         {
+            ArgumentNullException.ThrowIfNull(loggerFactory);
+            ArgumentNullException.ThrowIfNull(configuration);
+
             _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<BackgroundBotWorker>();
 
-            _promptRunner = PromptRunnerFactory.GetOllamaPromptRunner(new Uri(configuration["Ollama:BaseUri"]), configuration["Ollama:Model"]);
+            var infrastructure = InitializeInfrastructure(configuration);
 
-            _pathfindingClient = new PathfindingClient(configuration["PathfindingService:IpAddress"], int.Parse(configuration["PathfindingService:Port"]), loggerFactory.CreateLogger<PathfindingClient>());
-            _characterStateUpdateClient = new CharacterStateUpdateClient(configuration["CharacterStateListener:IpAddress"], int.Parse(configuration["CharacterStateListener:Port"]), loggerFactory.CreateLogger<CharacterStateUpdateClient>());
-            _wowClient = new();
-            _wowClient.SetIpAddress(configuration["RealmEndpoint:IpAddress"]);
-            WoWSharpObjectManager.Instance.Initialize(_wowClient, _pathfindingClient, loggerFactory.CreateLogger<WoWSharpObjectManager>());
-            _worldClient = WoWClientFactory.CreateWorldClient();
-            _agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(_worldClient, loggerFactory);
+            _pathfindingClient = infrastructure.PathfindingClient;
+            _characterStateUpdateClient = infrastructure.CharacterStateUpdateClient;
+            _wowClient = infrastructure.WowClient;
+
+            _agentFactory = infrastructure.AgentFactory;
+            _activeWorldClient = infrastructure.InitialWorldClient;
+
             _botCombatState = new BotCombatState();
+            var agentFactoryAccessor = new Func<IAgentFactory?>(() => _agentFactory);
+
             _botRunner = new BotRunnerService(
-                WoWSharpObjectManager.Instance,
+                infrastructure.ObjectManager,
                 _characterStateUpdateClient,
-                new TargetEngagementService(_agentFactory, _botCombatState),
-                new LootingService(_agentFactory, _botCombatState),
-                new TargetPositioningService(WoWSharpObjectManager.Instance, _pathfindingClient));
+                new DynamicTargetEngagementService(agentFactoryAccessor, _botCombatState),
+                new DynamicLootingService(agentFactoryAccessor, _botCombatState),
+                new TargetPositioningService(infrastructure.ObjectManager, _pathfindingClient));
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _stoppingToken = stoppingToken;
-
             try
             {
                 _botRunner.Start();
@@ -64,45 +65,6 @@ namespace BackgroundBotRunner
                 {
                     MaintainAgentFactory();
 
-                    // Example: Demonstrate agent functionality through internal logic
-                    if (_wowClient.IsWorldConnected())
-                    {
-                        // This is where you would integrate targeting, attacking, questing, looting, game object interaction,
-                        // vendor operations, flight master usage, and death handling with your bot logic
-
-                        // Example usage (commented out to avoid actual actions):
-                        // await _combatExample.EngageCombatAsync(enemyGuid);
-                        // await InternalProcessQuestsAsync();
-                        // await InternalLootNearbyBodiesAsync();
-                        // await InternalGatherFromNodesAsync();
-                        // await InternalBuySuppliesAsync();
-                        // await InternalTakeFlight();
-                        // await InternalHandleDeathAsync();
-
-                        // Access individual agents like this once the factory has been initialized:
-                        // var targetingAgent = _agentFactory?.TargetingAgent;
-                        // var attackAgent = _agentFactory?.AttackAgent;
-                        // var questAgent = _agentFactory?.QuestAgent;
-                        // var lootingAgent = _agentFactory?.LootingAgent;
-                        // var gameObjectAgent = _agentFactory?.GameObjectAgent;
-                        // var vendorAgent = _agentFactory?.VendorAgent;
-                        // var flightMasterAgent = _agentFactory?.FlightMasterAgent;
-                        // var deadActorAgent = _agentFactory?.DeadActorAgent;
-                        // var inventoryAgent = _agentFactory?.InventoryAgent;
-                        // var itemUseAgent = _agentFactory?.ItemUseAgent;
-                        // var equipmentAgent = _agentFactory?.EquipmentAgent;
-                        // var spellCastingAgent = _agentFactory?.SpellCastingAgent;
-                        // var auctionHouseAgent = _agentFactory?.AuctionHouseAgent;
-                        // var bankAgent = _agentFactory?.BankAgent;
-                        // var mailAgent = _agentFactory?.MailAgent;
-                        // var guildAgent = _agentFactory?.GuildAgent;
-                        // var partyAgent = _agentFactory?.PartyAgent; // Accessing the party agent
-                        // var trainerAgent = _agentFactory?.TrainerAgent; // Accessing the trainer agent
-                        // var talentAgent = _agentFactory?.TalentAgent; // Accessing the talent agent
-                        // var professionsAgent = _agentFactory?.ProfessionsAgent; // Accessing the professions agent
-                        // var emoteAgent = _agentFactory?.EmoteAgent; // Accessing the emote agent
-                    }
-
                     await Task.Delay(100, stoppingToken);
                 }
             }
@@ -110,6 +72,46 @@ namespace BackgroundBotRunner
             {
                 _logger.LogError(ex, "Error in BackgroundBotWorker");
             }
+        }
+
+        private (PathfindingClient PathfindingClient, CharacterStateUpdateClient CharacterStateUpdateClient, WoWClient WowClient, IAgentFactory AgentFactory, IWorldClient? InitialWorldClient, IObjectManager ObjectManager) InitializeInfrastructure(IConfiguration configuration)
+        {
+            var pathfindingClient = new PathfindingClient(
+                GetRequiredSetting(configuration, "PathfindingService:IpAddress"),
+                configuration.GetValue<int>("PathfindingService:Port"),
+                _loggerFactory.CreateLogger<PathfindingClient>());
+
+            var characterStateUpdateClient = new CharacterStateUpdateClient(
+                GetRequiredSetting(configuration, "CharacterStateListener:IpAddress"),
+                configuration.GetValue<int>("CharacterStateListener:Port"),
+                _loggerFactory.CreateLogger<CharacterStateUpdateClient>());
+
+            var wowClient = new WoWClient();
+            var realmIp = configuration["RealmEndpoint:IpAddress"];
+            if (!string.IsNullOrWhiteSpace(realmIp))
+            {
+                wowClient.SetIpAddress(realmIp);
+            }
+
+            var objectManager = WoWSharpObjectManager.Instance;
+            objectManager.Initialize(wowClient, pathfindingClient, _loggerFactory.CreateLogger<WoWSharpObjectManager>());
+
+            var initialWorldClient = WoWClientFactory.CreateWorldClient();
+            var agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(initialWorldClient, _loggerFactory);
+
+            return (pathfindingClient, characterStateUpdateClient, wowClient, agentFactory, initialWorldClient, objectManager);
+        }
+
+        private static string GetRequiredSetting(IConfiguration configuration, string key)
+        {
+            var value = configuration[key];
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException($"Missing required configuration value '{key}'.");
+            }
+
+            return value;
         }
 
         private void MaintainAgentFactory()
@@ -180,6 +182,65 @@ namespace BackgroundBotRunner
             _worldDisconnectSubscription = null;
 
             _logger.LogInformation("Cleared network client component factory state.");
+        }
+
+        private sealed class DynamicTargetEngagementService(Func<IAgentFactory?> factoryAccessor, BotCombatState combatState)
+            : ITargetEngagementService
+        {
+            private readonly Func<IAgentFactory?> _factoryAccessor = factoryAccessor;
+            private readonly BotCombatState _combatState = combatState;
+
+            public ulong? CurrentTargetGuid => _combatState.CurrentTargetGuid;
+
+            public async Task EngageAsync(IWoWUnit target, CancellationToken cancellationToken)
+            {
+                ArgumentNullException.ThrowIfNull(target);
+
+                var factory = _factoryAccessor() ?? throw new InvalidOperationException("Agent factory is not available.");
+                var targetGuid = target.Guid;
+
+                if (!factory.TargetingAgent.IsTargeted(targetGuid))
+                {
+                    await factory.AttackAgent.AttackTargetAsync(targetGuid, factory.TargetingAgent, cancellationToken);
+                }
+                else if (!factory.AttackAgent.IsAttacking)
+                {
+                    await factory.AttackAgent.StartAttackAsync(cancellationToken);
+                }
+
+                _combatState.SetCurrentTarget(targetGuid);
+            }
+        }
+
+        private sealed class DynamicLootingService(Func<IAgentFactory?> factoryAccessor, BotCombatState combatState)
+            : ILootingService
+        {
+            private readonly Func<IAgentFactory?> _factoryAccessor = factoryAccessor;
+            private readonly BotCombatState _combatState = combatState;
+
+            public async Task<bool> TryLootAsync(ulong targetGuid, CancellationToken cancellationToken)
+            {
+                if (targetGuid == 0 || _combatState.HasLooted(targetGuid))
+                {
+                    return false;
+                }
+
+                var factory = _factoryAccessor() ?? throw new InvalidOperationException("Agent factory is not available.");
+
+                await factory.LootingAgent.QuickLootAsync(targetGuid, cancellationToken);
+
+                if (factory.AttackAgent.IsAttacking)
+                {
+                    await factory.AttackAgent.StopAttackAsync(cancellationToken);
+                }
+
+                if (factory.TargetingAgent.HasTarget() && factory.TargetingAgent.IsTargeted(targetGuid))
+                {
+                    await factory.TargetingAgent.ClearTargetAsync(cancellationToken);
+                }
+
+                return _combatState.TryMarkLooted(targetGuid);
+            }
         }
     }
 }
