@@ -245,6 +245,7 @@
     <ClInclude Include="PhysicsBridge.h" />
     <ClInclude Include="PhysicsEngine.h" />
     <ClInclude Include="PhysicsMath.h" />
+    <ClInclude Include="QueryHit.h" />
     <ClInclude Include="Ray.h" />
     <ClInclude Include="SceneQuery.h" />
     <ClInclude Include="StaticMapTree.h" />

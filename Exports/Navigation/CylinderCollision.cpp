@@ -84,8 +84,9 @@ namespace VMAP
                 result.hit = true;
                 result.contactPoint = projectedPoint;
                 result.contactHeight = projectedPoint.z;
-                result.contactNormal = triNormal;
+                result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
                 result.penetrationDepth = std::abs(distToPlane);
+                PHYS_TRACE(PHYS_CYL, "capHit=bottom inTri=1 distToPlane=" << distToPlane << " nZ=" << result.contactNormal.z);
             }
         }
         else {
@@ -113,8 +114,9 @@ namespace VMAP
 
                 result.contactPoint = closestPoint;
                 result.contactHeight = closestPoint.z;
-                result.contactNormal = triNormal;
+                result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
                 result.penetrationDepth = cyl.radius - minDist;
+                PHYS_TRACE(PHYS_CYL, "capHit=bottom inTri=0 minEdgeDist=" << minDist << " nZ=" << result.contactNormal.z);
             }
         }
 
@@ -130,9 +132,10 @@ namespace VMAP
                 if (projectedPoint.z > result.contactHeight || !bottomHit) {
                     result.contactPoint = projectedPoint;
                     result.contactHeight = projectedPoint.z;
-                    result.contactNormal = triNormal;
+                    result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
                     result.penetrationDepth = std::abs(distToPlane);
                 }
+                PHYS_TRACE(PHYS_CYL, "capHit=top inTri=1 distToPlane=" << distToPlane << " nZ=" << result.contactNormal.z);
                 return true;
             }
         }
@@ -160,9 +163,10 @@ namespace VMAP
                 if (closestPoint.z > result.contactHeight || !bottomHit) {
                     result.contactPoint = closestPoint;
                     result.contactHeight = closestPoint.z;
-                    result.contactNormal = triNormal;
+                    result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
                     result.penetrationDepth = cyl.radius - minDist;
                 }
+                PHYS_TRACE(PHYS_CYL, "capHit=top inTri=0 minEdgeDist=" << minDist << " nZ=" << result.contactNormal.z);
                 return true;
             }
         }
@@ -230,6 +234,7 @@ namespace VMAP
             }
 
             result.penetrationDepth = cyl.radius - distance;
+            PHYS_TRACE(PHYS_CYL, "sideHit=edge axisToEdgeLen=" << toEdgeLength << " nZ=" << result.contactNormal.z);
             return true;
         }
 
@@ -301,9 +306,11 @@ namespace VMAP
                             result.hit = true;
                             result.contactPoint = intersectionPoint;
                             result.contactHeight = intersectionPoint.z;
-                            result.contactNormal = triNormal;
+                            // Ensure upward-facing for contact
+                            result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
                             result.penetrationDepth = 0; // Axis passes through
                             hit = true;
+                            PHYS_TRACE(PHYS_CYL, "sideHit=axisIntersect nZ=" << result.contactNormal.z);
                         }
                     }
                 }
@@ -322,8 +329,9 @@ namespace VMAP
     {
         CylinderIntersection result;
 
-        // Calculate triangle normal
-        G3D::Vector3 triNormal = CylinderHelpers::CalculateTriangleNormal(v0, v1, v2);
+        // Calculate triangle normal (use oriented strategy)
+        G3D::Vector3 triNormalRaw = CylinderHelpers::CalculateTriangleNormalRaw(v0, v1, v2);
+        G3D::Vector3 triNormal = CylinderHelpers::CalculateTriangleNormalOriented(v0, v1, v2);
 
         // Quick reject: Check if cylinder bounds intersect triangle bounds
         G3D::AABox cylBounds = cyl.getBounds();
@@ -344,18 +352,25 @@ namespace VMAP
         bool sideHit = IntersectCylinderSideWithTriangle(cyl, v0, v1, v2, triNormal, sideResult);
 
         // Return the best (highest) contact point
+        const char* src = "none";
         if (capsHit && sideHit) {
             result = (capsResult.contactHeight > sideResult.contactHeight) ? capsResult : sideResult;
+            src = (capsResult.contactHeight > sideResult.contactHeight) ? "caps" : "side";
         }
         else if (capsHit) {
             result = capsResult;
+            src = "caps";
         }
         else if (sideHit) {
             result = sideResult;
+            src = "side";
         }
 
         if (result.hit) {
-            PHYS_TRACE(PHYS_CYL, "triangle hit contactZ=" << result.contactHeight << " normalZ=" << result.contactNormal.z << " pen=" << result.penetrationDepth);
+            PHYS_TRACE(PHYS_CYL, "triangle hit src=" << src
+                << " contactZ=" << result.contactHeight
+                << " triN.z(raw/oriented)=" << triNormalRaw.z << "/" << triNormal.z
+                << " pen=" << result.penetrationDepth);
         }
         return result;
     }
@@ -391,30 +406,37 @@ namespace VMAP
                 continue;
             }
 
-            // Test multiple positions along sweep
+            // Conservative advancement along sweep to approximate TOI
             const int sweepSteps = std::max(1, (int)(sweepDistance / 0.5f));
-            for (int step = 0; step <= sweepSteps; ++step) {
-                float t = (float)step / sweepSteps;
-                Cylinder testCyl(cyl.base + sweepDir * (t * sweepDistance),
-                    cyl.axis, cyl.radius, cyl.height);
-
-                CylinderIntersection intersection = IntersectCylinderTriangle(testCyl, v0ref, v1ref, v2ref);
-
-                if (intersection.hit) {
-                    CylinderSweepHit hit;
-                    hit.height = intersection.contactHeight;
-                    hit.normal = intersection.contactNormal;
-                    hit.position = intersection.contactPoint;
-                    hit.walkable = CylinderHelpers::IsWalkableSurface(intersection.contactNormal);
-                    hit.triangleIndex = (uint32_t)i;
-                    hits.push_back(hit);
-                    break; // Found hit for this triangle, move to next
+            bool added = false;
+            // Note: We cannot compute exact TOI here without full CCD; reuse existing approximation region
+            for (int s = 0; s <= sweepSteps; ++s) {
+                float t = (sweepSteps == 0 ? 0.0f : (float)s / (float)sweepSteps);
+                Cylinder stepCyl(cyl.base + sweepDir * (t * sweepDistance), cyl.axis, cyl.radius, cyl.height);
+                CylinderIntersection inter = IntersectCylinderTriangle(stepCyl, v0ref, v1ref, v2ref);
+                if (inter.hit) {
+                    CylinderSweepHit h;
+                    h.q.hit = true;
+                    h.q.distance = t * sweepDistance;
+                    h.q.point = inter.contactPoint;
+                    h.q.normal = inter.contactNormal;
+                    h.height = inter.contactHeight;
+                    h.normal = inter.contactNormal;
+                    h.position = inter.contactPoint;
+                    h.walkable = CylinderHelpers::IsWalkableSurface(inter.contactNormal);
+                    h.triangleIndex = static_cast<uint32_t>(i);
+                    h.q.triIndex = h.triangleIndex;
+                    hits.push_back(h);
+                    added = true;
+                    // Emit diagnostic trace; instance id may be filled by caller later
+                    PHYS_TRACE(PHYS_CYL, "sweep hit tri=" << h.triangleIndex << " toi=" << h.q.distance
+                        << " h=" << h.height << " nZ=" << h.normal.z);
+                    break;
                 }
             }
-        }
 
-        // Sort hits by height (highest first)
-        std::sort(hits.begin(), hits.end());
+            (void)added;
+        }
 
         return hits;
     }
@@ -435,6 +457,7 @@ namespace VMAP
         for (const auto& hit : hits) {
             // Skip non-walkable surfaces
             if (!hit.walkable) {
+                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex << " nZ=" << hit.normal.z << " walkable=0");
                 continue;
             }
 
@@ -442,15 +465,14 @@ namespace VMAP
             float heightDiff = hit.height - currentHeight;
 
             if (heightDiff > maxStepUp) {
+                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex << " heightDiff=" << heightDiff << " > maxStepUp");
                 continue; // Too high to step up
             }
 
             if (heightDiff < -maxStepDown) {
+                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex << " heightDiff=" << heightDiff << " < -maxStepDown");
                 continue; // Too far to step down
             }
-
-            // Check if cylinder can fit at this height
-            // (Additional validation could go here)
 
             // Prefer the highest valid surface (most likely to be ground)
             if (hit.height > bestHeight) {
@@ -459,6 +481,10 @@ namespace VMAP
                 outNormal = hit.normal;
                 foundSurface = true;
             }
+        }
+
+        if (foundSurface) {
+            PHYS_TRACE(PHYS_SURF, "best walkable h=" << outHeight << " nZ=" << outNormal.z);
         }
 
         return foundSurface;
@@ -477,6 +503,7 @@ namespace VMAP
 
         for (const auto& hit : hits) {
             if (!hit.walkable) {
+                PHYS_TRACE(PHYS_SURF, "reject step tri=" << hit.triangleIndex << " walkable=0");
                 continue;
             }
 
@@ -492,6 +519,10 @@ namespace VMAP
                     foundSurface = true;
                 }
             }
+        }
+
+        if (foundSurface) {
+            PHYS_TRACE(PHYS_SURF, "best stepUp h=" << outHeight << " nZ=" << outNormal.z);
         }
 
         return foundSurface;

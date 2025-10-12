@@ -8,7 +8,28 @@ using namespace VMAP;
 
 namespace
 {
-    // Local mesh view for building triangle caches out of map tree
+    // World <-> internal space conversions (match VMapManager2::convertPositionToInternalRep)
+    static inline G3D::Vector3 WorldToInternal(const G3D::Vector3& w)
+    {
+        constexpr float MID = 0.5f * 64.0f * 533.33333333f;
+        return G3D::Vector3(MID - w.x, MID - w.y, w.z);
+    }
+    static inline G3D::Vector3 InternalToWorld(const G3D::Vector3& i)
+    {
+        constexpr float MID = 0.5f * 64.0f * 533.33333333f;
+        return G3D::Vector3(MID - i.x, MID - i.y, i.z);
+    }
+    // Direction/normal conversion: only invert X/Y
+    static inline G3D::Vector3 WorldDirToInternal(const G3D::Vector3& d)
+    {
+        return G3D::Vector3(-d.x, -d.y, d.z);
+    }
+    static inline G3D::Vector3 InternalDirToWorld(const G3D::Vector3& d)
+    {
+        return G3D::Vector3(-d.x, -d.y, d.z);
+    }
+
+    // Local mesh view for building triangle caches out of map tree (internal space)
     class MapMeshView : public CapsuleCollision::TriangleMeshView
     {
     public:
@@ -25,10 +46,15 @@ namespace
             if (!m_tree || !m_instances || m_instanceCount == 0 || !outIndices || maxCount <= 0)
                 return;
 
-            // Build world-space AABox
-            G3D::Vector3 qlo(box.min.x, box.min.y, box.min.z);
-            G3D::Vector3 qhi(box.max.x, box.max.y, box.max.z);
-            G3D::AABox queryBox(qlo, qhi);
+            // Build world-space AABox from input AABB and convert to internal map space
+            G3D::Vector3 wLo(box.min.x, box.min.y, box.min.z);
+            G3D::Vector3 wHi(box.max.x, box.max.y, box.max.z);
+            G3D::Vector3 iLo = WorldToInternal(wLo);
+            G3D::Vector3 iHi = WorldToInternal(wHi);
+            // Handle axis flip by reordering min/max after conversion
+            G3D::Vector3 qLo = iLo.min(iHi);
+            G3D::Vector3 qHi = iLo.max(iHi);
+            G3D::AABox queryBox(qLo, qHi);
 
             const uint32_t cap = (std::min<uint32_t>)(m_instanceCount, 16384);
             std::vector<uint32_t> instIdx(cap);
@@ -44,12 +70,12 @@ namespace
                 if (!inst.iModel) continue;
                 if (!inst.iBound.intersects(queryBox)) continue;
 
-                // Transform query box corners to model space and build model-space bounds
-                G3D::Vector3 wLo = queryBox.low();
-                G3D::Vector3 wHi = queryBox.high();
+                // Transform query box corners (internal) to model space
+                G3D::Vector3 wLoI = queryBox.low();
+                G3D::Vector3 wHiI = queryBox.high();
                 G3D::Vector3 corners[8] = {
-                    {wLo.x, wLo.y, wLo.z}, {wHi.x, wLo.y, wLo.z}, {wLo.x, wHi.y, wLo.z}, {wHi.x, wHi.y, wLo.z},
-                    {wLo.x, wLo.y, wHi.z}, {wHi.x, wLo.y, wHi.z}, {wLo.x, wHi.y, wHi.z}, {wHi.x, wHi.y, wHi.z}
+                    {wLoI.x, wLoI.y, wLoI.z}, {wHiI.x, wLoI.y, wLoI.z}, {wLoI.x, wHiI.y, wLoI.z}, {wHiI.x, wHiI.y, wLoI.z},
+                    {wLoI.x, wLoI.y, wHiI.z}, {wHiI.x, wLoI.y, wHiI.z}, {wLoI.x, wHiI.y, wHiI.z}, {wHiI.x, wHiI.y, wHiI.z}
                 };
                 G3D::Vector3 c0 = inst.iInvRot * ((corners[0] - inst.iPos) * inst.iInvScale);
                 G3D::AABox modelBox(c0, c0);
@@ -70,6 +96,7 @@ namespace
 
                 auto emitTri = [&](const G3D::Vector3& a, const G3D::Vector3& b, const G3D::Vector3& c)
                 {
+                    // Transform model-space triangle to internal world space
                     G3D::Vector3 wa = (a * inst.iScale) * inst.iInvRot + inst.iPos;
                     G3D::Vector3 wb = (b * inst.iScale) * inst.iInvRot + inst.iPos;
                     G3D::Vector3 wc = (c * inst.iScale) * inst.iInvRot + inst.iPos;
@@ -143,15 +170,18 @@ bool SceneQuery::RaycastSingle(const StaticMapTree& map,
 {
     outHit = SceneHit();
     float dist = maxDistance;
-    G3D::Ray ray = G3D::Ray::fromOriginAndDirection(origin, dir);
+    // Convert to internal space for map query
+    G3D::Vector3 iOrigin = WorldToInternal(origin);
+    G3D::Vector3 iDir = WorldDirToInternal(dir);
+    G3D::Ray ray = G3D::Ray::fromOriginAndDirection(iOrigin, iDir);
     bool hitAny = map.getIntersectionTime(ray, dist, true, false);
     if (!hitAny)
         return false;
 
     outHit.hit = true;
     outHit.distance = dist;
+    // Convert hit point back to world using original world origin/dir
     outHit.point = origin + dir * dist;
-    // Normal and instance info not available in existing per-call, keep defaults.
     return true;
 }
 
@@ -162,8 +192,6 @@ int SceneQuery::RaycastAll(const StaticMapTree& map,
                            std::vector<SceneHit>& outHits)
 {
     outHits.clear();
-    // Reuse single ray, but collect all by setting stopAtFirstHit=false and then we can't retrieve all intersections without per-instance ray support.
-    // For acceptance, mimic current behavior and just return first if any.
     SceneHit h;
     if (RaycastSingle(map, origin, dir, maxDistance, h))
     {
@@ -179,23 +207,33 @@ int SceneQuery::OverlapCapsule(const StaticMapTree& map,
 {
     outOverlaps.clear();
 
-    // Build mesh around capsule AABB
+    // Convert capsule to internal space
+    CapsuleCollision::Capsule C = capsule;
+    C.p0 = { WorldToInternal(G3D::Vector3(capsule.p0.x, capsule.p0.y, capsule.p0.z)).x,
+             WorldToInternal(G3D::Vector3(capsule.p0.x, capsule.p0.y, capsule.p0.z)).y,
+             WorldToInternal(G3D::Vector3(capsule.p0.x, capsule.p0.y, capsule.p0.z)).z };
+    C.p1 = { WorldToInternal(G3D::Vector3(capsule.p1.x, capsule.p1.y, capsule.p1.z)).x,
+             WorldToInternal(G3D::Vector3(capsule.p1.x, capsule.p1.y, capsule.p1.z)).y,
+             WorldToInternal(G3D::Vector3(capsule.p1.x, capsule.p1.y, capsule.p1.z)).z };
+
     MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount());
     int indices[512]; int count = 0;
-    CapsuleCollision::AABB box = CapsuleCollision::aabbFromCapsule(capsule);
-    view.query(box, indices, count, 512);
+    view.query(CapsuleCollision::aabbFromCapsule(C), indices, count, 512);
 
-    // Narrowphase using capsule-triangle
     for (int i = 0; i < count; ++i)
     {
         const auto& T = view.tri(indices[i]);
         CapsuleCollision::Hit ch;
-        if (CapsuleCollision::intersectCapsuleTriangle(capsule, T, ch))
+        if (CapsuleCollision::intersectCapsuleTriangle(C, T, ch))
         {
+            // Convert contact back to world
+            G3D::Vector3 iN(ch.normal.x, ch.normal.y, ch.normal.z);
+            G3D::Vector3 wN = InternalDirToWorld(iN);
+            G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
+            G3D::Vector3 wP = InternalToWorld(iP);
+
             SceneHit h; h.hit = true; h.distance = ch.depth; // use depth for overlap
-            h.normal = G3D::Vector3(ch.normal.x, ch.normal.y, ch.normal.z);
-            h.point = G3D::Vector3(ch.point.x, ch.point.y, ch.point.z);
-            h.triIndex = ch.triIndex;
+            h.normal = wN; h.point = wP; h.triIndex = ch.triIndex;
             outOverlaps.push_back(h);
         }
     }
@@ -212,8 +250,9 @@ int SceneQuery::OverlapSphere(const StaticMapTree& map,
 
     // Represent as tiny capsule with zero length for reuse
     CapsuleCollision::Capsule C;
-    C.p0 = { center.x, center.y, center.z };
-    C.p1 = { center.x, center.y, center.z };
+    G3D::Vector3 iC = WorldToInternal(center);
+    C.p0 = { iC.x, iC.y, iC.z };
+    C.p1 = { iC.x, iC.y, iC.z };
     C.r = radius;
 
     MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount());
@@ -226,8 +265,14 @@ int SceneQuery::OverlapSphere(const StaticMapTree& map,
         CapsuleCollision::Hit ch;
         if (CapsuleCollision::intersectSphereTriangle(C.p0, C.r, T, ch))
         {
-            SceneHit h; h.hit = true; h.distance = ch.depth; h.normal = { ch.normal.x, ch.normal.y, ch.normal.z };
-            h.point = { ch.point.x, ch.point.y, ch.point.z }; h.triIndex = ch.triIndex; outOverlaps.push_back(h);
+            // Convert contact back to world
+            G3D::Vector3 iN(ch.normal.x, ch.normal.y, ch.normal.z);
+            G3D::Vector3 wN = InternalDirToWorld(iN);
+            G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
+            G3D::Vector3 wP = InternalToWorld(iP);
+
+            SceneHit h; h.hit = true; h.distance = ch.depth; h.normal = wN;
+            h.point = wP; h.triIndex = ch.triIndex; outOverlaps.push_back(h);
         }
     }
 
@@ -256,20 +301,29 @@ bool SceneQuery::SweepCapsuleSingle(const StaticMapTree& map,
 {
     outHit = SceneHit();
 
-    // Use CCD mover to find TOI by binary search against triangles via mesh view
-    CapsuleCollision::ResolveConfig cfg; // defaults
+    // Convert capsule and sweep vector to internal space
     CapsuleCollision::Capsule C = capsuleStart;
-    CapsuleCollision::Vec3 v(dir.x * distance, dir.y * distance, dir.z * distance);
+    G3D::Vector3 wP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
+    G3D::Vector3 wP1(capsuleStart.p1.x, capsuleStart.p1.y, capsuleStart.p1.z);
+    G3D::Vector3 iP0 = WorldToInternal(wP0);
+    G3D::Vector3 iP1 = WorldToInternal(wP1);
+    C.p0 = { iP0.x, iP0.y, iP0.z };
+    C.p1 = { iP1.x, iP1.y, iP1.z };
+
+    G3D::Vector3 iDir = WorldDirToInternal(dir);
+    CapsuleCollision::Vec3 v(iDir.x * distance, iDir.y * distance, iDir.z * distance);
 
     MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount());
+    CapsuleCollision::ResolveConfig cfg; // defaults
     bool collided = CapsuleCollision::moveCapsuleWithCCD(C, v, view, cfg, 1);
     if (!collided)
         return false;
 
     float traveled = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     outHit.hit = true;
-    outHit.distance = distance - traveled; // TOI approximation
-    // We don't get exact contact normal/point from CCD helper; run a discrete overlap pass to fetch a contact
+    outHit.distance = distance - traveled; // TOI approximation in world units
+
+    // Fetch contact info via discrete overlap in internal space, then convert back to world
     int idx[256]; int cnt = 0;
     view.query(CapsuleCollision::aabbFromCapsule(C), idx, cnt, 256);
     float best = -1.0f;
@@ -282,8 +336,12 @@ bool SceneQuery::SweepCapsuleSingle(const StaticMapTree& map,
             if (ch.depth > best)
             {
                 best = ch.depth;
-                outHit.normal = { ch.normal.x, ch.normal.y, ch.normal.z };
-                outHit.point = { ch.point.x, ch.point.y, ch.point.z };
+                G3D::Vector3 iN(ch.normal.x, ch.normal.y, ch.normal.z);
+                G3D::Vector3 wN = InternalDirToWorld(iN);
+                G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
+                G3D::Vector3 wP = InternalToWorld(iP);
+                outHit.normal = wN;
+                outHit.point = wP;
                 outHit.triIndex = ch.triIndex;
             }
         }
@@ -300,7 +358,6 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
 {
     outHits.clear();
 
-    // For now, collect only the first impact similar to Single
     SceneHit h;
     if (SweepCapsuleSingle(map, capsuleStart, dir, distance, h))
     {

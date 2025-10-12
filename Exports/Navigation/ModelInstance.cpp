@@ -4,6 +4,7 @@
 #include "CylinderCollision.h"
 #include <iostream>
 #include <algorithm>
+#include "VMapLog.h"
 
 namespace VMAP
 {
@@ -281,33 +282,37 @@ namespace VMAP
         if (!iBound.intersects(worldCylinder.getBounds()))
             return result;
 
-        // For now, return a basic intersection based on bounds
-        // A full implementation would need to access the model's triangle data
-        // and perform proper cylinder-triangle intersection tests
+        // Transform cylinder into model space and perform precise triangle test
+        Cylinder modelCylinder = TransformCylinderToModel(worldCylinder);
+        CylinderIntersection modelHit = iModel->IntersectCylinder(modelCylinder);
 
-        // This is a simplified implementation - you would need to enhance WorldModel
-        // to expose its mesh data for proper cylinder collision
-        result.hit = iBound.intersects(worldCylinder.getBounds());
-        if (result.hit)
+        if (modelHit.hit)
         {
-            // Approximate contact point as closest point on bounds
-            G3D::Vector3 cylCenter = worldCylinder.getCenter();
-            result.contactPoint = ClosestPointOnAABox(iBound, cylCenter);
-            result.contactHeight = result.contactPoint.z;
+            // Transform contact point back to instance/world space
+            G3D::Vector3 worldPt = TransformToWorld(modelHit.contactPoint);
+            // Transform normal (direction only)
+            G3D::Vector3 worldN = modelHit.contactNormal * iInvRot; // matches right-multiply convention
+            float nLen = worldN.magnitude();
+            if (nLen > 0.0001f)
+                worldN /= nLen;
 
-            // Calculate and normalize contact normal
-            G3D::Vector3 normal = cylCenter - result.contactPoint;
-            float length = normal.magnitude();
-            if (length > 0.0001f)
-            {
-                result.contactNormal = normal / length;
-            }
-            else
-            {
-                result.contactNormal = G3D::Vector3(0, 0, 1);
-            }
+            result = modelHit;
+            result.contactPoint = worldPt;
+            result.contactHeight = worldPt.z;
+            result.contactNormal = worldN;
+            // Preserve instance id for diagnostics
+            result.instanceId = ID;
 
-            result.penetrationDepth = 0.0f;
+            LOG_INFO("[MI][IntersectCylinder] name='" << name << "' id=" << ID
+                << " adt=" << adtId << " hit=1 mesh=1 contactZ=" << result.contactHeight
+                << " nZ_model=" << modelHit.contactNormal.z << " nZ_world=" << result.contactNormal.z);
+        }
+        else
+        {
+            // No mesh hit; do NOT synthesize a side-normal from bounds here to avoid false wall normals (nZ=0)
+            // Leave as no-hit to let higher-level queries decide via sweeps/raycast.
+            LOG_DEBUG("[MI][IntersectCylinder] name='" << name << "' id=" << ID
+                << " adt=" << adtId << " hit=0 mesh=0 boundsIntersect=1");
         }
 
         return result;
@@ -332,9 +337,35 @@ namespace VMAP
         if (!iBound.intersects(sweepBounds))
             return hits;
 
-        // This would need full implementation with access to model's mesh data
-        // For now, return empty or implement simplified version
+        // Transform cylinder and sweep into model space
+        Cylinder modelCylinder = TransformCylinderToModel(worldCylinder);
+        G3D::Vector3 modelSweepDir = iInvRot * sweepDir; // rotate direction only
 
+        std::vector<CylinderSweepHit> modelHits = iModel->SweepCylinder(modelCylinder, modelSweepDir, sweepDistance);
+
+        // Transform results back to instance/world space
+        hits.reserve(modelHits.size());
+        auto it = modelHits.begin();
+        while (it != modelHits.end())
+        {
+            CylinderSweepHit h = *it;
+            // Position/height
+            G3D::Vector3 wpos = TransformToWorld(h.position);
+            h.position = wpos;
+            h.height = wpos.z;
+            // Normal
+            G3D::Vector3 wn = h.normal * iInvRot;
+            float nLen = wn.magnitude();
+            if (nLen > 0.0001f) wn /= nLen; else wn = G3D::Vector3(0,0,1);
+            h.normal = wn;
+            h.q.normal = wn;
+            // Stamp instance id for diagnostics
+            h.q.instanceId = ID;
+            hits.push_back(h);
+            ++it;
+        }
+
+        LOG_DEBUG("[MI][SweepCylinder] name='" << name << "' id=" << ID << " hits=" << hits.size());
         return hits;
     }
 
@@ -389,13 +420,26 @@ namespace VMAP
         // Transform cylinder to model space for testing
         Cylinder modelCylinder = TransformCylinderToModel(worldCylinder);
 
-        // This would need proper implementation with mesh data access
-        // For now, use bounds-based approximation
-        G3D::Vector3 cylCenter = worldCylinder.getCenter();
-        if (iBound.contains(cylCenter))
+        float ch = 0.0f; G3D::Vector3 n(0,0,1);
+        bool hit = iModel->CheckCylinderCollision(modelCylinder, ch, n);
+        if (hit)
         {
-            outContactHeight = iBound.high().z;
-            outContactNormal = G3D::Vector3(0, 0, 1);
+            // Transform normal back to instance/world space
+            G3D::Vector3 wn = n * iInvRot;
+            float nLen = wn.magnitude();
+            if (nLen > 0.0001f) wn /= nLen; else wn = G3D::Vector3(0,0,1);
+
+            // Transform contact height into world Z by lifting along normal to instance space
+            // We can reconstruct contact point approximately from baseZ + rel, but easier is to set height =
+            // (TransformToWorld of model-space contact point), however CheckCylinderCollision only provides height.
+            // Use model-space height directly as Z and transform along scale + translation (rotation does not affect Z if consistent).
+            float worldZ = (G3D::Vector3(0,0,ch) * iInvRot * iScale + iPos).z;
+
+            outContactHeight = worldZ;
+            outContactNormal = wn;
+
+            LOG_INFO("[MI][CheckCylinderCollision] name='" << name << "' id=" << ID
+                << " adt=" << adtId << " hit=1 ch=" << outContactHeight << " nZ=" << outContactNormal.z);
             return true;
         }
 
@@ -408,14 +452,18 @@ namespace VMAP
         if (!iModel)
             return true;  // No model = no collision
 
-        // Manually expand bounds by tolerance
-        G3D::AABox expandedCylBounds = worldCylinder.getBounds();
-        G3D::Vector3 expansion(tolerance, tolerance, tolerance);
-        G3D::AABox expandedBounds(
-            expandedCylBounds.low() - expansion,
-            expandedCylBounds.high() + expansion
-        );
+        // Manually expand cylinder radius by tolerance
+        Cylinder expanded = worldCylinder;
+        expanded.radius += tolerance;
 
-        return !iBound.intersects(expandedBounds);
+        // Quick bounds check
+        if (!iBound.intersects(expanded.getBounds()))
+            return true;
+
+        // Transform to model space and ask world model
+        Cylinder modelCylinder = TransformCylinderToModel(expanded);
+        bool ok = iModel->CanCylinderFitAtPosition(modelCylinder, 0.0f);
+        LOG_DEBUG("[MI][CanFit] name='" << name << "' id=" << ID << " ok=" << (ok?1:0));
+        return ok;
     }
 }

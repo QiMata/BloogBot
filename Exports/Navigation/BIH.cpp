@@ -15,6 +15,10 @@ void BIH::init_empty()
 {
     tree.clear();
     objects.clear();
+    bounds = G3D::AABox();
+    m_remap.clear();
+    m_useRemap = false;
+    m_primCountCached = 0;
     // create space for the first node
     tree.push_back(static_cast<uint32_t>(3 << 30)); // dummy leaf
     tree.insert(tree.end(), 2, 0);
@@ -73,5 +77,44 @@ bool BIH::readFromFile(FILE* rf)
         return false;
     }
 
+    // Build safety metadata: compute prim count as (maxId + 1), handle empty case.
+    uint32_t maxId = 0;
+    for (uint32_t v : objects)
+        if (v > maxId) maxId = v;
+
+    if (objects.empty())
+    {
+        m_primCountCached = 0;
+    }
+    else
+    {
+        // Ensure capacity for referenced indices. This avoids overflow when callers index iTreeValues.
+        // We do not compact here, we keep original IDs as the external space.
+        m_primCountCached = maxId + 1;
+    }
+
+    // Prepare identity remap so mapObjectIndex() can be used consistently and bounds-checked.
+    m_remap.assign(m_primCountCached == 0 ? 1u : m_primCountCached, 0xFFFFFFFFu);
+    for (uint32_t v : objects)
+    {
+        if (v < m_remap.size())
+            m_remap[v] = v; // identity by default
+    }
+    m_useRemap = false; // currently identity; can be toggled if a future format requires compacting
+
     return true;
+}
+
+uint32_t BIH::mapObjectIndex(uint32_t original) const
+{
+    if (!m_useRemap)
+    {
+        // Identity mapping with bounds check
+        return (original < m_primCountCached) ? original : 0xFFFFFFFFu;
+    }
+
+    if (original >= m_remap.size())
+        return 0xFFFFFFFFu;
+
+    return m_remap[original];
 }

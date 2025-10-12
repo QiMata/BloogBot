@@ -112,6 +112,12 @@ namespace PathfindingService.Tests
             Race race,
             float expectedX, float expectedY, float expectedZ)
         {
+
+            // Simulate 1 second of movement
+            float totalTime = 1.0f;
+            float dt = 0.05f; // 50ms ticks
+            int steps = (int)(totalTime / dt);
+
             var (radius, height) = RaceDimensions.GetCapsuleForRace(race, Gender.Male);
             // Setup input with FORWARD movement flag
             var input = new PhysicsInput
@@ -130,11 +136,6 @@ namespace PathfindingService.Tests
                 swimSpeed = 4.72f,
                 flightSpeed = 2.5f
             };
-
-            // Simulate 1 second of movement
-            float totalTime = 1.0f;
-            float dt = 0.05f; // 50ms ticks
-            int steps = (int)(totalTime / dt);
 
             PhysicsOutput output = new();
             for (int i = 0; i < steps; i++)

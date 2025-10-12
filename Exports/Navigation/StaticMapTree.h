@@ -29,6 +29,8 @@ namespace VMAP
             CylinderIntersection result = prims[entry].IntersectCylinder(cylinder);
             if (result.hit)
             {
+                // stamp instance id for diagnostics
+                result.instanceId = prims[entry].ID;
                 if (!bestIntersection.hit || result.contactHeight > bestIntersection.contactHeight)
                 {
                     bestIntersection = result;
@@ -63,6 +65,8 @@ namespace VMAP
             auto it = modelHits.begin();
             while (it != modelHits.end())
             {
+                // stamp instance id on unified query record for diagnostics
+                it->q.instanceId = prims[entry].ID;
                 allHits.push_back(*it);
                 ++it;
             }

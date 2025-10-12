@@ -144,13 +144,15 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
                     while (n > 0)
                     {
                         objectsTested++;
-                        uint32_t objIdx = objects[offset];
-
-                        bool hit = intersectCallback(r, objIdx, maxDist, stopAtFirstHit, ignoreM2Model);
-
-                        if (stopAtFirstHit && hit)
+                        uint32_t srcIdx = objects[offset];
+                        uint32_t objIdx = mapObjectIndex(srcIdx);
+                        if (objIdx != 0xFFFFFFFFu)
                         {
-                            return;
+                            bool hit = intersectCallback(r, objIdx, maxDist, stopAtFirstHit, ignoreM2Model);
+                            if (stopAtFirstHit && hit)
+                            {
+                                return;
+                            }
                         }
                         --n;
                         ++offset;
@@ -284,9 +286,12 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
                     while (n > 0)
                     {
                         objectsTested++;
-                        uint32_t objIdx = objects[offset];
-
-                        intersectCallback(p, objIdx);
+                        uint32_t srcIdx = objects[offset];
+                        uint32_t objIdx = mapObjectIndex(srcIdx);
+                        if (objIdx != 0xFFFFFFFFu)
+                        {
+                            intersectCallback(p, objIdx);
+                        }
 
                         --n;
                         ++offset;
@@ -397,14 +402,19 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
                     uint32_t off = offset;
                     while (n > 0)
                     {
-                        if (outCount < maxCount)
+                        uint32_t srcIdx = objects[off];
+                        uint32_t objIdx = mapObjectIndex(srcIdx);
+                        if (objIdx != 0xFFFFFFFFu)
                         {
-                            outIndices[outCount++] = objects[off];
-                        }
-                        else
-                        {
-                            // cap reached
-                            return true;
+                            if (outCount < maxCount)
+                            {
+                                outIndices[outCount++] = objIdx;
+                            }
+                            else
+                            {
+                                // cap reached
+                                return true;
+                            }
                         }
                         ++off;
                         --n;

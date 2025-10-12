@@ -140,6 +140,7 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SceneQuery.h" />
+    <ClInclude Include="QueryHit.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Header Files">

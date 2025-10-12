@@ -11,10 +11,52 @@
 #include <fstream>
 #include <algorithm>
 #include <unordered_map>
-#include "PhysicsEngine.h"
+#include "ModelInstance.h"
 
 namespace VMAP
 {
+    // Get height using cylinder for more accurate ground detection
+    float VMapManager2::GetCylinderHeight(unsigned int pMapId, float x, float y, float z,
+        float cylinderRadius, float cylinderHeight, float maxSearchDist)
+    {
+        auto instanceTree = iInstanceMapTrees.find(pMapId);
+        if (instanceTree == iInstanceMapTrees.end())
+            return PhysicsConstants::INVALID_HEIGHT;
+
+        // Build a cylinder centered around the query position and sweep downward
+        Cylinder worldCyl(G3D::Vector3(x, y, z + maxSearchDist * 0.5f),
+            G3D::Vector3(0, 0, 1), cylinderRadius, cylinderHeight);
+
+        std::vector<CylinderSweepHit> hits = SweepCylinder(
+            pMapId, worldCyl, G3D::Vector3(0, 0, -1), maxSearchDist);
+
+        if (!hits.empty())
+        {
+            for (const auto& h : hits)
+            {
+                if (h.walkable)
+                {
+                    return h.height;
+                }
+            }
+        }
+
+        // Fallback to regular height check
+        return getHeight(pMapId, x, y, z, maxSearchDist);
+    }
+
+    void VMapManager2::GetCylinderCollisionCandidates(unsigned int pMapId, const Cylinder& worldCylinder,
+        std::vector<ModelInstance*>& outInstances) const
+    {
+        outInstances.clear();
+        auto instanceTree = iInstanceMapTrees.find(pMapId);
+        if (instanceTree == iInstanceMapTrees.end())
+            return;
+
+        Cylinder internalCyl = ConvertCylinderToInternal(worldCylinder);
+        instanceTree->second->GetCylinderCollisionCandidates(internalCyl, outInstances);
+    }
+
     // Global model name to path mapping
     static std::unordered_map<std::string, std::string> modelNameToPath;
     static bool modelMappingLoaded = false;
@@ -421,17 +463,89 @@ namespace VMAP
         return false;
     }
 
+    static inline const char* ClassifyRegion(float rel, float headStart)
+    {
+        if (rel >= headStart) return "head";
+        if (rel <= 0.25f) return "feet";
+        return "body";
+    }
+
+    static inline const char* RejectReason(float rel, float headStart, float nZ)
+    {
+        // Mirror acceptance rules in both Fit and Move checks
+        const bool feetBand = (rel >= -0.05f && rel <= 0.25f);
+        const bool belowHead = (rel < headStart);
+        if (!belowHead && nZ >= 0.0f)
+            return "ceiling/head intrusion";
+        if (feetBand && nZ < 0.55f)
+            return "feet support band but slope too steep (nZ<0.55)";
+        if (belowHead && nZ < 0.70f)
+            return "side penetration or steep face (nZ<0.70)";
+        if (nZ < 0.0f)
+            return "underside/negative normal";
+        return "blocked (unspecified condition)";
+    }
+
     bool VMapManager2::CanCylinderFitAtPosition(unsigned int pMapId,
         const Cylinder& worldCylinder, float tolerance) const
     {
         auto instanceTree = iInstanceMapTrees.find(pMapId);
-        if (instanceTree != iInstanceMapTrees.end())
+        if (instanceTree == iInstanceMapTrees.end())
+            return true; // no map collision system
+
+        // Movement check is looser: accept floor contact, only reject if a surface intrudes in upper body (ceiling) or side penetration.
+        Cylinder internal = ConvertCylinderToInternal(worldCylinder);
+        // Slight radius expansion for conservative side test
+        Cylinder expanded(internal.base, internal.axis, internal.radius + tolerance, internal.height);
+        CylinderIntersection inter = instanceTree->second->IntersectCylinder(expanded);
+        if (!inter.hit)
+            return true; // free space
+
+        float rel = inter.contactHeight - expanded.base.z;
+        const float HEAD_REGION_START = expanded.height * 0.7f; // upper 30% is head/shoulder region
+        // If contact is within a small band near the feet treat as acceptable support
+        if (rel >= -0.05f && rel <= 0.25f && inter.contactNormal.z >= 0.55f)
+            return true;
+        // If contact normal is mostly vertical and below head region treat as support (e.g., slope)
+        if (rel < HEAD_REGION_START && inter.contactNormal.z >= 0.70f)
+            return true;
+
+        // Otherwise treat as blocking (wall or low ceiling) - emit diagnostics about nearby instances
+        LOG_INFO("[VMAP][FitReject] map=" << pMapId
+            << " base=(" << worldCylinder.base.x << "," << worldCylinder.base.y << "," << worldCylinder.base.z << ")"
+            << " h=" << worldCylinder.height << " r=" << worldCylinder.radius
+            << " tol=" << tolerance << " expR=" << (worldCylinder.radius + tolerance)
+            << " rel=" << rel << " nZ=" << inter.contactNormal.z
+            << " pen=" << inter.penetrationDepth << " tri=" << inter.triIndex
+            << " region=" << ClassifyRegion(rel, HEAD_REGION_START)
+            << " reason=" << RejectReason(rel, HEAD_REGION_START, inter.contactNormal.z)
+            << " cosMin=" << VMAP::CylinderHelpers::GetWalkableCosMin());
+
+        // Log exact blocking instance if available
+        float ch = 0.0f; G3D::Vector3 n(0,0,1); ModelInstance* hitInst = nullptr;
+        if (instanceTree->second->CheckCylinderCollision(expanded, ch, n, &hitInst) && hitInst)
         {
-            Cylinder internalCyl = ConvertCylinderToInternal(worldCylinder);
-            return instanceTree->second->CanCylinderFitAtPosition(internalCyl, tolerance);
+            std::string resolvedPath = ResolveModelPath(iBasePath, hitInst->name);
+            LOG_INFO("    blocking name='" << hitInst->name << "' id=" << hitInst->ID << " adt=" << hitInst->adtId
+                << " contactH=" << ch << " nZ=" << n.z);
+            if (!resolvedPath.empty())
+                LOG_INFO("    file='" << resolvedPath << "'");
         }
 
-        return true;  // No map = no collision
+        std::vector<ModelInstance*> nearby;
+        instanceTree->second->GetCylinderCollisionCandidates(expanded, nearby);
+        size_t cap = std::min<size_t>(nearby.size(), 6);
+        for (size_t i = 0; i < cap; ++i)
+        {
+            const ModelInstance* mi = nearby[i];
+            const auto& b = mi->getBounds();
+            auto lo = b.low(); auto hi = b.high();
+            LOG_INFO("    inst[" << i << "] name='" << mi->name << "' id=" << mi->ID << " adt=" << mi->adtId
+                << " boundsLo=(" << lo.x << "," << lo.y << "," << lo.z << ")"
+                << " hi=(" << hi.x << "," << hi.y << "," << hi.z << ")");
+        }
+
+        return false;
     }
 
     bool VMapManager2::FindCylinderWalkableSurface(unsigned int pMapId, const Cylinder& worldCylinder,
@@ -446,9 +560,31 @@ namespace VMAP
             bool found = instanceTree->second->FindCylinderWalkableSurface(
                 internalCyl, currentHeight, maxStepUp, maxStepDown, outHeight, outNormal);
 
+            LOG_DEBUG("[VMAP][Walkable] map=" << pMapId
+                << " base=(" << worldCylinder.base.x << "," << worldCylinder.base.y << "," << worldCylinder.base.z << ")"
+                << " curH=" << currentHeight << " up=" << maxStepUp << " down=" << maxStepDown
+                << " found=" << (found?1:0) << " h=" << outHeight << " nZ=" << outNormal.z
+                << " cosMin=" << VMAP::CylinderHelpers::GetWalkableCosMin());
+
+            if (!found)
+            {
+                std::vector<ModelInstance*> nearby;
+                instanceTree->second->GetCylinderCollisionCandidates(internalCyl, nearby);
+                size_t cap = std::min<size_t>(nearby.size(), 6);
+                for (size_t i = 0; i < cap; ++i)
+                {
+                    const ModelInstance* mi = nearby[i];
+                    const auto& b = mi->getBounds();
+                    auto lo = b.low(); auto hi = b.high();
+                    LOG_DEBUG("    inst[" << i << "] name='" << mi->name << "' id=" << mi->ID << " adt=" << mi->adtId
+                        << " boundsLo=(" << lo.x << "," << lo.y << "," << lo.z << ")"
+                        << " hi=(" << hi.x << "," << hi.y << "," << hi.z << ")");
+                }
+            }
+
             if (found)
             {
-                // Normal direction needs to be inverted for X and Y
+                // invert normal X/Y back to world orientation as done elsewhere
                 outNormal.x = -outNormal.x;
                 outNormal.y = -outNormal.y;
             }
@@ -457,121 +593,6 @@ namespace VMAP
         }
 
         return false;
-    }
-
-    float VMapManager2::GetCylinderHeight(unsigned int pMapId, float x, float y, float z,
-        float cylinderRadius, float cylinderHeight, float maxSearchDist)
-    {
-        if (!isHeightCalcEnabled())
-        {
-            return PhysicsConstants::INVALID_HEIGHT;
-        }
-
-        // Create a cylinder at the position and sweep downward
-        Cylinder worldCyl(G3D::Vector3(x, y, z + maxSearchDist * 0.5f),
-            G3D::Vector3(0, 0, 1), cylinderRadius, cylinderHeight);
-
-        std::vector<CylinderSweepHit> hits = SweepCylinder(
-            pMapId, worldCyl, G3D::Vector3(0, 0, -1), maxSearchDist);
-
-        if (!hits.empty())
-        {
-            // Return the highest walkable surface
-            auto hitIt = hits.begin();
-            while (hitIt != hits.end())
-            {
-                if (hitIt->walkable)
-                {
-                    return hitIt->height;
-                }
-                ++hitIt;
-            }
-        }
-
-        // Fall back to regular height check
-        return getHeight(pMapId, x, y, z, maxSearchDist);
-    }
-
-    bool VMapManager2::IsCylinderPathClear(unsigned int pMapId, const Cylinder& startCylinder,
-        const G3D::Vector3& endPos, float stepHeight) const
-    {
-        // Calculate movement direction and distance
-        G3D::Vector3 moveDir = endPos - startCylinder.base;
-        float moveDist = moveDir.magnitude();
-
-        if (moveDist < 0.001f)
-            return true;  // Not moving
-
-        moveDir /= moveDist;
-
-        // Sweep cylinder along path
-        std::vector<CylinderSweepHit> hits = SweepCylinder(pMapId, startCylinder, moveDir, moveDist);
-
-        // Check all hits to see if any block movement
-        auto hitIt = hits.begin();
-        while (hitIt != hits.end())
-        {
-            float heightDiff = hitIt->height - startCylinder.base.z;
-
-            // If surface is too high to step over, path is blocked
-            if (!hitIt->walkable || heightDiff > stepHeight)
-            {
-                return false;
-            }
-            ++hitIt;
-        }
-
-        return true;
-    }
-
-    void VMapManager2::GetCylinderCollisionCandidates(unsigned int pMapId,
-        const Cylinder& worldCylinder, std::vector<ModelInstance*>& outInstances) const
-    {
-        outInstances.clear();
-
-        auto instanceTree = iInstanceMapTrees.find(pMapId);
-        if (instanceTree != iInstanceMapTrees.end())
-        {
-            Cylinder internalCyl = ConvertCylinderToInternal(worldCylinder);
-            instanceTree->second->GetCylinderCollisionCandidates(internalCyl, outInstances);
-        }
-    }
-
-    CylinderIntersection VMapManager2::IntersectCylinderAllMaps(const Cylinder& worldCylinder) const
-    {
-        CylinderIntersection bestResult;
-
-        auto mapIt = iInstanceMapTrees.begin();
-        while (mapIt != iInstanceMapTrees.end())
-        {
-            CylinderIntersection mapResult = IntersectCylinder(mapIt->first, worldCylinder);
-
-            if (mapResult.hit)
-            {
-                if (!bestResult.hit || mapResult.contactHeight > bestResult.contactHeight)
-                {
-                    bestResult = mapResult;
-                }
-            }
-            ++mapIt;
-        }
-
-        return bestResult;
-    }
-
-    bool VMapManager2::CanCylinderFitAllMaps(const Cylinder& worldCylinder, float tolerance) const
-    {
-        auto mapIt = iInstanceMapTrees.begin();
-        while (mapIt != iInstanceMapTrees.end())
-        {
-            if (!CanCylinderFitAtPosition(mapIt->first, worldCylinder, tolerance))
-            {
-                return false;
-            }
-            ++mapIt;
-        }
-
-        return true;
     }
 
     bool VMapManager2::CanCylinderMoveAtPosition(unsigned int pMapId, const Cylinder& worldCylinder, float tolerance) const
@@ -597,6 +618,24 @@ namespace VMAP
         if (rel < HEAD_REGION_START && inter.contactNormal.z >= 0.70f)
             return true;
         // Otherwise treat as blocking (wall or low ceiling)
+
+        LOG_DEBUG("[VMAP][MoveReject] map=" << pMapId
+            << " base=(" << worldCylinder.base.x << "," << worldCylinder.base.y << "," << worldCylinder.base.z << ")"
+            << " h=" << worldCylinder.height << " r=" << worldCylinder.radius
+            << " tol=" << tolerance << " expR=" << (worldCylinder.radius + tolerance)
+            << " rel=" << rel << " nZ=" << inter.contactNormal.z
+            << " pen=" << inter.penetrationDepth << " tri=" << inter.triIndex
+            << " region=" << ClassifyRegion(rel, HEAD_REGION_START)
+            << " reason=" << RejectReason(rel, HEAD_REGION_START, inter.contactNormal.z)
+            << " cosMin=" << VMAP::CylinderHelpers::GetWalkableCosMin());
+
+        // Log exact blocking instance if available (debug-level to avoid spam)
+        float ch = 0.0f; G3D::Vector3 n(0,0,1); ModelInstance* hitInst = nullptr;
+        if (instanceTree->second->CheckCylinderCollision(expanded, ch, n, &hitInst) && hitInst)
+        {
+            LOG_DEBUG("    name='" << hitInst->name << "' id=" << hitInst->ID
+                << " adt=" << hitInst->adtId << " contactH=" << ch << " nZ=" << n.z);
+        }
         return false;
     }
 

@@ -12,6 +12,7 @@
 #include "VMapLog.h"
 #include <vector>
 #include "CapsuleCollision.h"
+#include "CylinderCollision.h" // for CylinderHelpers walkable config
 
 namespace VMAP
 {
@@ -21,6 +22,13 @@ namespace VMAP
         MapRayCallback(ModelInstance* val) : prims(val), hit(false) {}
         bool operator()(G3D::Ray const& ray, uint32_t entry, float& distance, bool pStopAtFirstHit = true, bool ignoreM2Model = false)
         {
+            // Guard invalid indices and unloaded models
+            if (!prims)
+                return false;
+            // We cannot know array length here, the caller ensures valid mapping via BIH, but also double-check model exists
+            if (!prims[entry].iModel)
+                return false;
+
             bool result = prims[entry].intersectRay(ray, distance, pStopAtFirstHit, ignoreM2Model);
             if (result)
                 hit = true;
@@ -259,19 +267,24 @@ namespace VMAP
                 if (fread(&referencedVal, sizeof(uint32_t), 1, rf) != 1)
                     break;
 
-                if (!iLoadedSpawns.count(referencedVal))
+                // Map file order index to ModelInstance index space if remap in BIH is used
+                uint32_t mapped = iTree.mapObjectIndex(referencedVal);
+                if (mapped == 0xFFFFFFFFu)
+                    continue;
+
+                if (!iLoadedSpawns.count(mapped))
                 {
-                    if (referencedVal > iNTreeValues)
+                    if (mapped >= iNTreeValues)
                     {
                         continue;
                     }
 
-                    iTreeValues[referencedVal] = ModelInstance(spawn, model);
-                    iLoadedSpawns[referencedVal] = 1;  // First reference
+                    iTreeValues[mapped] = ModelInstance(spawn, model);
+                    iLoadedSpawns[mapped] = 1;  // First reference
                 }
                 else
                 {
-                    ++iLoadedSpawns[referencedVal];
+                    ++iLoadedSpawns[mapped];
                 }
             }
         }
@@ -425,14 +438,22 @@ namespace VMAP
                         break;
                     }
 
-                    if (referencedVal >= iNTreeValues)
+                    // Map to BIH compact index space
+                    uint32_t mapped = iTree.mapObjectIndex(referencedVal);
+                    if (mapped == 0xFFFFFFFFu)
+                    {
+                        ++i;
+                        continue;  // Skip invalid
+                    }
+
+                    if (mapped >= iNTreeValues)
                     {
                         ++i;
                         continue;  // Skip but don't fail completely
                     }
 
                     // Check if already loaded
-                    if (!iLoadedSpawns.count(referencedVal))
+                    if (!iLoadedSpawns.count(mapped))
                     {
                         // First time loading this tree index
                         std::shared_ptr<WorldModel> model = nullptr;
@@ -447,12 +468,12 @@ namespace VMAP
                             }
                         }
 
-                        iTreeValues[referencedVal] = ModelInstance(spawn, model);
-                        iLoadedSpawns[referencedVal] = 1;  // First reference
+                        iTreeValues[mapped] = ModelInstance(spawn, model);
+                        iLoadedSpawns[mapped] = 1;  // First reference
                     }
                     else
                     {
-                        ++iLoadedSpawns[referencedVal];
+                        ++iLoadedSpawns[mapped];
                     }
 
                     ++i;
@@ -571,6 +592,7 @@ namespace VMAP
         allHits = std::move(callback.allHits);
         std::sort(allHits.begin(), allHits.end());
 
+        // Instance ids for diagnostics are already set on each hit's QueryHit by the callback
         return allHits;
     }
 
@@ -606,7 +628,7 @@ namespace VMAP
         // Parameters
         const float FOOT_ALLOW = 0.20f;          // allowable floor penetration / contact band
         const float HEAD_CLEAR_MARGIN = 0.30f;   // space required above head
-        const float WALKABLE_NORM_MIN_Z = 0.60f; // floor normal threshold
+        const float walkableCosMin = VMAP::CylinderHelpers::GetWalkableCosMin(); // floor normal threshold (configurable)
 
         // First lightweight broad test (expanded radius only) to early accept empty space
         Cylinder broad(cyl.base, cyl.axis, cyl.radius + tolerance, cyl.height);
@@ -631,7 +653,7 @@ namespace VMAP
             if (rel < -0.05f) continue;          // below cylinder base beyond tolerance
             if (rel > cyl.height + 0.05f) continue; // above the cylinder top
 
-            if (rel <= FOOT_ALLOW && h.walkable && h.normal.z >= WALKABLE_NORM_MIN_Z)
+            if (rel <= FOOT_ALLOW && h.walkable && h.normal.z >= walkableCosMin)
             {
                 hasAcceptableFloor = true; // acceptable supporting surface
                 continue;
@@ -649,7 +671,7 @@ namespace VMAP
         if (!hasAcceptableFloor && quickHit.hit)
         {
             float qRel = quickHit.contactHeight - baseZ;
-            if (quickHit.contactNormal.z >= WALKABLE_NORM_MIN_Z && qRel >= -0.25f && qRel <= cyl.height * 0.6f)
+            if (quickHit.contactNormal.z >= walkableCosMin && qRel >= -0.25f && qRel <= cyl.height * 0.6f)
             {
                 hasAcceptableFloor = true; // treat as supporting (cliff edge / sparse geometry)
             }
@@ -751,7 +773,6 @@ namespace VMAP
         }
 
         float maxDist = (pos2 - pos1).magnitude();
-
         if (maxDist < 0.001f)
         {
             return true;
@@ -845,6 +866,8 @@ namespace VMAP
 
             void operator()(const G3D::Vector3& point, uint32_t entry)
             {
+                if (!prims || !prims[entry].iModel)
+                    return;
                 prims[entry].intersectPoint(point, aInfo);
             }
 
@@ -883,7 +906,7 @@ namespace VMAP
 
             void operator()(const G3D::Vector3& point, uint32_t entry)
             {
-                if (!prims[entry].iModel)
+                if (!prims || !prims[entry].iModel)
                 {
                     return;
                 }

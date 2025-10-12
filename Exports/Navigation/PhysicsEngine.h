@@ -47,8 +47,8 @@ namespace PhysicsConstants
     constexpr float MAX_GROUND_SNAP_UP_SPEED = 9999.0f;
     constexpr float MAX_GROUND_SNAP_DOWN_SPEED = 9999.0f;
 
-    // Slope walkability threshold (cos 45° ? 0.7071) - reject anything steeper
-    constexpr float WALKABLE_MIN_NORMAL_Z = 0.7071f;
+    // Slope walkability threshold (cos 45° ? 0.7071) - kept only as documentation default; configurable at runtime
+    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.7071f;
 }
 
 class PhysicsEngine
@@ -64,6 +64,11 @@ public:
     // Main physics step - completely stateless
     PhysicsOutput Step(const PhysicsInput& input, float dt);
 
+    // Configuration: walkable slope threshold (cosine of max slope angle)
+    void SetWalkableCosMin(float cosMin);
+    void SetWalkableSlopeDegrees(float degrees);
+    float GetWalkableCosMin() const;
+
 private:
     PhysicsEngine();
     ~PhysicsEngine();
@@ -77,6 +82,9 @@ private:
     VMAP::VMapManager2* m_vmapManager;
     std::unique_ptr<MapLoader> m_mapLoader;
     bool m_initialized;
+
+    // Tunables
+    float m_walkableCosMin; // cosine of max slope angle considered walkable
 
     // Movement state (created fresh each Step call)
     struct MovementState
