@@ -1,4 +1,6 @@
-﻿using GameData.Core.Enums;
+using System.Linq;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Tests.Util;
 
@@ -12,6 +14,9 @@ namespace WoWSharpClient.Tests.Handlers
         public void ShouldDecompressAndParseAllCompressedUpdateObjectPackets()
         {
             var opcode = Opcode.SMSG_UPDATE_OBJECT;
+            var objectManager = WoWSharpObjectManager.Instance;
+            var initialCount = objectManager.Objects.Count();
+
             var directoryPath = Path.Combine(Directory.GetCurrentDirectory(), "Resources", opcode.ToString());
 
             var files = Directory.GetFiles(directoryPath, "20240815_*.bin")
@@ -27,6 +32,13 @@ namespace WoWSharpClient.Tests.Handlers
                 byte[] data = FileReader.ReadBinaryFile(filePath);
                 ObjectUpdateHandler.HandleUpdateObject(opcode, data);
             }
+
+            var objectsAfterUpdate = objectManager.Objects.ToList();
+
+            Assert.NotEmpty(objectsAfterUpdate);
+            Assert.True(objectsAfterUpdate.Count >= initialCount, "Update processing should not reduce the tracked object count.");
+            Assert.Contains(objectsAfterUpdate, o => o.Guid != 0);
+            Assert.Contains(objectsAfterUpdate.OfType<IWoWUnit>(), unit => unit.MaxHealth > 0);
         }
     }
 }

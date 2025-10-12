@@ -1,13 +1,20 @@
-﻿using BotRunner;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using System.Threading.Tasks;
 
-namespace ForegroundBotRunner
+namespace ForegroundBotRunner;
+
+public static class Program
 {
-    public class Program
+    public static async Task Main(string[] args)
     {
-        private static readonly BotRunnerService _botRunner;
-        public static void Main(string[] args)
-        {
+        using var host = Host.CreateDefaultBuilder(args)
+            .ConfigureServices(static services =>
+            {
+                services.AddHostedService<ForegroundBotHostedService>();
+            })
+            .Build();
 
-        }
+        await host.RunAsync();
     }
 }

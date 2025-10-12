@@ -1,9 +1,14 @@
+using System;
+using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using BotRunner;
 using BotRunner.Clients;
-using PromptHandlingService;
+using BotRunner.Combat;
+using BotRunner.Movement;
+using GameData.Core.Interfaces;
 using WoWSharpClient;
 using WoWSharpClient.Client;
-using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BackgroundBotRunner
@@ -11,108 +16,54 @@ namespace BackgroundBotRunner
     public class BackgroundBotWorker : BackgroundService
     {
         private readonly ILogger<BackgroundBotWorker> _logger;
-
-        private readonly IPromptRunner _promptRunner;
-
+        private readonly ILoggerFactory _loggerFactory;
         private readonly PathfindingClient _pathfindingClient;
-        private readonly WoWClient _wowClient;
         private readonly CharacterStateUpdateClient _characterStateUpdateClient;
-
+        private readonly WoWClient _wowClient;
+        private readonly BotCombatState _botCombatState;
         private readonly BotRunnerService _botRunner;
-        
-        // Use all network agents through the allAgents pattern
-        private readonly (
-            ITargetingNetworkClientComponent TargetingAgent,
-            IAttackNetworkClientComponent AttackAgent,
-            IQuestNetworkClientComponent QuestAgent,
-            ILootingNetworkClientComponent LootingAgent,
-            IGameObjectNetworkClientComponent GameObjectAgent,
-            IVendorNetworkClientComponent VendorAgent,
-            IFlightMasterNetworkClientComponent FlightMasterAgent,
-            IDeadActorNetworkClientComponent DeadActorAgent,
-            IInventoryNetworkClientComponent InventoryAgent,
-            IItemUseNetworkClientComponent ItemUseAgent,
-            IEquipmentNetworkClientComponent EquipmentAgent,
-            ISpellCastingNetworkClientComponent SpellCastingAgent,
-            IAuctionHouseNetworkClientComponent AuctionHouseAgent,
-            IBankNetworkClientComponent BankAgent,
-            IMailNetworkClientComponent MailAgent,
-            IGuildNetworkClientComponent GuildAgent,
-            IPartyNetworkClientComponent PartyAgent,
-            ITrainerNetworkClientComponent TrainerAgent,
-            ITalentNetworkClientComponent TalentAgent,
-            IProfessionsNetworkClientComponent ProfessionsAgent,
-            IEmoteNetworkClientComponent EmoteAgent
-        ) _allAgents;
 
-        private CancellationToken _stoppingToken;
+        private IAgentFactory? _agentFactory;
+        private IWorldClient? _activeWorldClient;
+        private IDisposable? _worldDisconnectSubscription;
 
         public BackgroundBotWorker(ILoggerFactory loggerFactory, IConfiguration configuration)
         {
+            ArgumentNullException.ThrowIfNull(loggerFactory);
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<BackgroundBotWorker>();
 
-            _promptRunner = PromptRunnerFactory.GetOllamaPromptRunner(new Uri(configuration["Ollama:BaseUri"]), configuration["Ollama:Model"]);
+            var infrastructure = InitializeInfrastructure(configuration);
 
-            _pathfindingClient = new PathfindingClient(configuration["PathfindingService:IpAddress"], int.Parse(configuration["PathfindingService:Port"]), loggerFactory.CreateLogger<PathfindingClient>());
-            _characterStateUpdateClient = new CharacterStateUpdateClient(configuration["CharacterStateListener:IpAddress"], int.Parse(configuration["CharacterStateListener:Port"]), loggerFactory.CreateLogger<CharacterStateUpdateClient>());
-            _wowClient = new();
-            _wowClient.SetIpAddress(configuration["RealmEndpoint:IpAddress"]);
-            WoWSharpObjectManager.Instance.Initialize(_wowClient, _pathfindingClient, loggerFactory.CreateLogger<WoWSharpObjectManager>());
-            _botRunner = new BotRunnerService(WoWSharpObjectManager.Instance, _characterStateUpdateClient, _pathfindingClient);
-            
-            // Initialize all network agents including the new ones
-            var worldClient = WoWClientFactory.CreateWorldClient();
-            _allAgents = WoWClientFactory.CreateAllNetworkClientComponents(worldClient, loggerFactory);
+            _pathfindingClient = infrastructure.PathfindingClient;
+            _characterStateUpdateClient = infrastructure.CharacterStateUpdateClient;
+            _wowClient = infrastructure.WowClient;
+
+            _agentFactory = infrastructure.AgentFactory;
+            _activeWorldClient = infrastructure.InitialWorldClient;
+
+            _botCombatState = new BotCombatState();
+            var agentFactoryAccessor = new Func<IAgentFactory?>(() => _agentFactory);
+
+            _botRunner = new BotRunnerService(
+                infrastructure.ObjectManager,
+                _characterStateUpdateClient,
+                new DynamicTargetEngagementService(agentFactoryAccessor, _botCombatState),
+                new DynamicLootingService(agentFactoryAccessor, _botCombatState),
+                new TargetPositioningService(infrastructure.ObjectManager, _pathfindingClient));
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _stoppingToken = stoppingToken;
-
             try
             {
                 _botRunner.Start();
 
                 while (!stoppingToken.IsCancellationRequested)
                 {
-                    // Example: Demonstrate agent functionality through internal logic
-                    if (_wowClient.IsWorldConnected())
-                    {
-                        // This is where you would integrate targeting, attacking, questing, looting, game object interaction,
-                        // vendor operations, flight master usage, and death handling with your bot logic
-                        
-                        // Example usage (commented out to avoid actual actions):
-                        // await _combatExample.EngageCombatAsync(enemyGuid);
-                        // await InternalProcessQuestsAsync();
-                        // await InternalLootNearbyBodiesAsync();
-                        // await InternalGatherFromNodesAsync();
-                        // await InternalBuySuppliesAsync();
-                        // await InternalTakeFlight();
-                        // await InternalHandleDeathAsync();
-                        
-                        // Access individual agents like this:
-                        // var targetingAgent = _allAgents.TargetingAgent;
-                        // var attackAgent = _allAgents.AttackAgent;
-                        // var questAgent = _allAgents.QuestAgent;
-                        // var lootingAgent = _allAgents.LootingAgent;
-                        // var gameObjectAgent = _allAgents.GameObjectAgent;
-                        // var vendorAgent = _allAgents.VendorAgent;
-                        // var flightMasterAgent = _allAgents.FlightMasterAgent;
-                        // var deadActorAgent = _allAgents.DeadActorAgent;
-                        // var inventoryAgent = _allAgents.InventoryAgent;
-                        // var itemUseAgent = _allAgents.ItemUseAgent;
-                        // var equipmentAgent = _allAgents.EquipmentAgent;
-                        // var spellCastingAgent = _allAgents.SpellCastingAgent;
-                        // var auctionHouseAgent = _allAgents.AuctionHouseAgent;
-                        // var bankAgent = _allAgents.BankAgent;
-                        // var mailAgent = _allAgents.MailAgent;
-                        // var guildAgent = _allAgents.GuildAgent;
-                        // var partyAgent = _allAgents.PartyAgent; // Accessing the party agent
-                        // var trainerAgent = _allAgents.TrainerAgent; // Accessing the trainer agent
-                        // var talentAgent = _allAgents.TalentAgent; // Accessing the talent agent
-                        // var professionsAgent = _allAgents.ProfessionsAgent; // Accessing the professions agent
-                        // var emoteAgent = _allAgents.EmoteAgent; // Accessing the emote agent
-                    }
+                    MaintainAgentFactory();
 
                     await Task.Delay(100, stoppingToken);
                 }
@@ -120,6 +71,175 @@ namespace BackgroundBotRunner
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in BackgroundBotWorker");
+            }
+        }
+
+        private (PathfindingClient PathfindingClient, CharacterStateUpdateClient CharacterStateUpdateClient, WoWClient WowClient, IAgentFactory AgentFactory, IWorldClient? InitialWorldClient, IObjectManager ObjectManager) InitializeInfrastructure(IConfiguration configuration)
+        {
+            var pathfindingClient = new PathfindingClient(
+                GetRequiredSetting(configuration, "PathfindingService:IpAddress"),
+                configuration.GetValue<int>("PathfindingService:Port"),
+                _loggerFactory.CreateLogger<PathfindingClient>());
+
+            var characterStateUpdateClient = new CharacterStateUpdateClient(
+                GetRequiredSetting(configuration, "CharacterStateListener:IpAddress"),
+                configuration.GetValue<int>("CharacterStateListener:Port"),
+                _loggerFactory.CreateLogger<CharacterStateUpdateClient>());
+
+            var wowClient = new WoWClient();
+            var realmIp = configuration["RealmEndpoint:IpAddress"];
+            if (!string.IsNullOrWhiteSpace(realmIp))
+            {
+                wowClient.SetIpAddress(realmIp);
+            }
+
+            var objectManager = WoWSharpObjectManager.Instance;
+            objectManager.Initialize(wowClient, pathfindingClient, _loggerFactory.CreateLogger<WoWSharpObjectManager>());
+
+            var initialWorldClient = WoWClientFactory.CreateWorldClient();
+            var agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(initialWorldClient, _loggerFactory);
+
+            return (pathfindingClient, characterStateUpdateClient, wowClient, agentFactory, initialWorldClient, objectManager);
+        }
+
+        private static string GetRequiredSetting(IConfiguration configuration, string key)
+        {
+            var value = configuration[key];
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException($"Missing required configuration value '{key}'.");
+            }
+
+            return value;
+        }
+
+        private void MaintainAgentFactory()
+        {
+            var worldClient = _wowClient.WorldClient;
+
+            if (worldClient?.IsConnected == true)
+            {
+                EnsureAgentFactory(worldClient);
+            }
+            else
+            {
+                ResetAgentFactory();
+            }
+        }
+
+        private void EnsureAgentFactory(IWorldClient worldClient)
+        {
+            if (_agentFactory != null && ReferenceEquals(worldClient, _activeWorldClient))
+            {
+                return;
+            }
+
+            ResetAgentFactory();
+
+            _agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(worldClient, _loggerFactory);
+            _activeWorldClient = worldClient;
+
+            try
+            {
+                _worldDisconnectSubscription = worldClient.WhenDisconnected?.Subscribe(_ =>
+                {
+                    _logger.LogInformation("World client disconnected. Resetting agent factory.");
+                    ResetAgentFactory();
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to subscribe to world client disconnection notifications.");
+            }
+
+            _logger.LogInformation("Initialized network client component factory using active world client.");
+        }
+
+        private void ResetAgentFactory()
+        {
+            if (_agentFactory == null && _worldDisconnectSubscription == null && _activeWorldClient == null)
+            {
+                return;
+            }
+
+            if (_agentFactory is IDisposable disposableFactory)
+            {
+                try
+                {
+                    disposableFactory.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error disposing agent factory.");
+                }
+            }
+
+            _agentFactory = null;
+            _activeWorldClient = null;
+
+            _worldDisconnectSubscription?.Dispose();
+            _worldDisconnectSubscription = null;
+
+            _logger.LogInformation("Cleared network client component factory state.");
+        }
+
+        private sealed class DynamicTargetEngagementService(Func<IAgentFactory?> factoryAccessor, BotCombatState combatState)
+            : ITargetEngagementService
+        {
+            private readonly Func<IAgentFactory?> _factoryAccessor = factoryAccessor;
+            private readonly BotCombatState _combatState = combatState;
+
+            public ulong? CurrentTargetGuid => _combatState.CurrentTargetGuid;
+
+            public async Task EngageAsync(IWoWUnit target, CancellationToken cancellationToken)
+            {
+                ArgumentNullException.ThrowIfNull(target);
+
+                var factory = _factoryAccessor() ?? throw new InvalidOperationException("Agent factory is not available.");
+                var targetGuid = target.Guid;
+
+                if (!factory.TargetingAgent.IsTargeted(targetGuid))
+                {
+                    await factory.AttackAgent.AttackTargetAsync(targetGuid, factory.TargetingAgent, cancellationToken);
+                }
+                else if (!factory.AttackAgent.IsAttacking)
+                {
+                    await factory.AttackAgent.StartAttackAsync(cancellationToken);
+                }
+
+                _combatState.SetCurrentTarget(targetGuid);
+            }
+        }
+
+        private sealed class DynamicLootingService(Func<IAgentFactory?> factoryAccessor, BotCombatState combatState)
+            : ILootingService
+        {
+            private readonly Func<IAgentFactory?> _factoryAccessor = factoryAccessor;
+            private readonly BotCombatState _combatState = combatState;
+
+            public async Task<bool> TryLootAsync(ulong targetGuid, CancellationToken cancellationToken)
+            {
+                if (targetGuid == 0 || _combatState.HasLooted(targetGuid))
+                {
+                    return false;
+                }
+
+                var factory = _factoryAccessor() ?? throw new InvalidOperationException("Agent factory is not available.");
+
+                await factory.LootingAgent.QuickLootAsync(targetGuid, cancellationToken);
+
+                if (factory.AttackAgent.IsAttacking)
+                {
+                    await factory.AttackAgent.StopAttackAsync(cancellationToken);
+                }
+
+                if (factory.TargetingAgent.HasTarget() && factory.TargetingAgent.IsTargeted(targetGuid))
+                {
+                    await factory.TargetingAgent.ClearTargetAsync(cancellationToken);
+                }
+
+                return _combatState.TryMarkLooted(targetGuid);
             }
         }
     }

@@ -20,7 +20,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BotCommLayer\BotCommLayer.csproj" />
-    <ProjectReference Include="..\BotRunner\BotRunner.csproj" />
     <ProjectReference Include="..\GameData.Core\GameData.Core.csproj" />
   </ItemGroup>
 
@@ -28,6 +27,11 @@
     <Reference Include="System.ComponentModel.Composition">
       <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8.1\System.ComponentModel.Composition.dll</HintPath>
     </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\BotRunner\Clients\PathfindingClient.cs" Link="Clients\PathfindingClient.cs" />
+    <Compile Include="..\BotRunner\Clients\CharacterStateUpdateClient.cs" Link="Clients\CharacterStateUpdateClient.cs" />
   </ItemGroup>
 
   <ItemGroup>

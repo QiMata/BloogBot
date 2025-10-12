@@ -1,47 +1,65 @@
-﻿using Communication;
+using Communication;
+using Google.Protobuf;
+using System.Collections.Generic;
 using System.Data.SQLite;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DecisionEngineService
 {
-    public class DecisionEngine
+    public class DecisionEngine : IDisposable
     {
         private readonly MLModel _model;
         private readonly SQLiteDatabase _db;
         private readonly string _binFileDirectory;
-        private FileSystemWatcher _fileWatcher;
+        private readonly FileSystemWatcher _fileWatcher;
+        private readonly CancellationTokenSource _watcherCts = new();
+        private bool _disposed;
 
         public DecisionEngine(string binFileDirectory, SQLiteDatabase db)
         {
             _binFileDirectory = binFileDirectory;
             _db = db;
             _model = LoadModelFromDatabase();
-            InitializeFileWatcher();
+            _fileWatcher = InitializeFileWatcher();
         }
 
-        private void InitializeFileWatcher()
+        private FileSystemWatcher InitializeFileWatcher()
         {
-            _fileWatcher = new FileSystemWatcher(_binFileDirectory, "*.bin")
+            var watcher = new FileSystemWatcher(_binFileDirectory, "*.bin")
             {
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
             };
-            _fileWatcher.Created += OnBinFileCreated;
-            _fileWatcher.EnableRaisingEvents = true;
+
+            watcher.Created += (_, e) => _ = ProcessBinFileAsync(e.FullPath, _watcherCts.Token);
+            watcher.EnableRaisingEvents = true;
+
+            return watcher;
         }
 
-        private void OnBinFileCreated(object sender, FileSystemEventArgs e)
+        private async Task ProcessBinFileAsync(string filePath, CancellationToken cancellationToken)
         {
-            ProcessBinFile(e.FullPath);
-        }
-
-        private void ProcessBinFile(string filePath)
-        {
-            var snapshots = ReadBinFile(filePath);
-            foreach (var snapshot in snapshots)
+            try
             {
-                _model.LearnFromSnapshot(snapshot);
+                var snapshots = await ReadBinFileAsync(filePath, cancellationToken).ConfigureAwait(false);
+                foreach (var snapshot in snapshots)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    _model.LearnFromSnapshot(snapshot);
+                }
+
+                SaveModelToDatabase();
+
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath); // Clean up after processing
+                }
             }
-            SaveModelToDatabase();
-            File.Delete(filePath); // Clean up after processing
+            catch (OperationCanceledException)
+            {
+                // shutting down, ignore
+            }
         }
 
         public static List<ActionMap> GetNextActions(ActivitySnapshot snapshot)
@@ -49,18 +67,48 @@ namespace DecisionEngineService
             return MLModel.Predict(snapshot);
         }
 
-        private static List<ActivitySnapshot> ReadBinFile(string filePath)
+        private static async Task<List<ActivitySnapshot>> ReadBinFileAsync(string filePath, CancellationToken cancellationToken)
         {
-            List<ActivitySnapshot> snapshots = [];
-            using (var stream = new FileStream(filePath, FileMode.Open))
+            const int maxAttempts = 5;
+            const int delayBetweenAttemptsMs = 50;
+            Exception? lastError = null;
+
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
             {
-                while (stream.Position < stream.Length)
+                try
                 {
-                    ActivitySnapshot snapshot = ActivitySnapshot.Parser.ParseDelimitedFrom(stream);
-                    snapshots.Add(snapshot);
+                    using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    List<ActivitySnapshot> snapshots = [];
+
+                    while (stream.Position < stream.Length)
+                    {
+                        ActivitySnapshot snapshot = ActivitySnapshot.Parser.ParseDelimitedFrom(stream);
+                        if (snapshot is null)
+                        {
+                            break;
+                        }
+
+                        snapshots.Add(snapshot);
+                    }
+
+                    return snapshots;
+                }
+                catch (IOException ex)
+                {
+                    lastError = ex;
+                }
+                catch (InvalidProtocolBufferException ex)
+                {
+                    lastError = ex;
+                }
+
+                if (attempt < maxAttempts - 1)
+                {
+                    await Task.Delay(delayBetweenAttemptsMs, cancellationToken).ConfigureAwait(false);
                 }
             }
-            return snapshots;
+
+            throw new IOException($"Unable to read {filePath} after {maxAttempts} attempts.", lastError);
         }
 
         private void SaveModelToDatabase()
@@ -73,98 +121,28 @@ namespace DecisionEngineService
             var weights = _db.LoadModelWeights();
             return new MLModel(weights);
         }
-    }
 
-    public class MLModel(List<float> initialWeights)
-    {
-        private readonly List<float> _weights = initialWeights;
-
-        public void LearnFromSnapshot(ActivitySnapshot snapshot)
+        protected virtual void Dispose(bool disposing)
         {
-            AdjustWeights(snapshot);
-        }
-
-        public static List<ActionMap> Predict(ActivitySnapshot snapshot)
-        {
-            return GenerateActionMap(snapshot);
-        }
-
-        public List<float> GetWeights()
-        {
-            return _weights;
-        }
-
-        private void AdjustWeights(ActivitySnapshot snapshot)
-        {
-            // Example learning: if currentAction succeeds, increase weights for similar actions
-            if (snapshot.CurrentAction.ActionResult == ResponseResult.Success)
+            if (_disposed)
             {
-                // Logic to increase weight for the current action type
-                _weights[(int)snapshot.CurrentAction.ActionType]++;
-            }
-            else if (snapshot.CurrentAction.ActionResult == ResponseResult.Failure)
-            {
-                // Decrease weight if the action failed
-                _weights[(int)snapshot.CurrentAction.ActionType]--;
-            }
-        }
-
-        private static List<ActionMap> GenerateActionMap(ActivitySnapshot snapshot)
-        {
-            List<ActionMap> actionMaps = [];
-
-            // Example decision-making logic: 
-            // If player's health is below 50%, add a heal action
-            if (snapshot.Player.Unit.Health < snapshot.Player.Unit.MaxHealth * 0.5)
-            {
-                actionMaps.Add(new ActionMap
-                {
-                    Actions = {
-                        new ActionMessage
-                        {
-                            ActionType = ActionType.CastSpell,
-                            Parameters = {
-                                new RequestParameter { IntParam = 12345 } // Healing Spell ID
-                            }
-                        }
-                    }
-                });
+                return;
             }
 
-            // If there are more than 2 nearby hostile units, suggest AoE attack
-            if (snapshot.NearbyUnits.Count(unit => unit.UnitFlags == 16 /* Hostile flag */) > 2)
+            if (disposing)
             {
-                actionMaps.Add(new ActionMap
-                {
-                    Actions = {
-                        new ActionMessage
-                        {
-                            ActionType = ActionType.CastSpell,
-                            Parameters = {
-                                new RequestParameter { IntParam = 6789 } // AoE Spell ID
-                            }
-                        }
-                    }
-                });
+                _watcherCts.Cancel();
+                _fileWatcher?.Dispose();
+                _watcherCts.Dispose();
             }
 
-            // Example logic for moving to a different location
-            actionMaps.Add(new ActionMap
-            {
-                Actions = {
-                    new ActionMessage
-                    {
-                        ActionType = ActionType.Goto,
-                        Parameters = {
-                            new RequestParameter { FloatParam = snapshot.Player.Unit.GameObject.Base.Position.X },
-                            new RequestParameter { FloatParam = snapshot.Player.Unit.GameObject.Base.Position.Y },
-                            new RequestParameter { FloatParam = snapshot.Player.Unit.GameObject.Base.Position.Z }
-                        }
-                    }
-                }
-            });
+            _disposed = true;
+        }
 
-            return actionMaps;
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 
@@ -177,7 +155,7 @@ namespace DecisionEngineService
             using var connection = new SQLiteConnection(_connectionString);
             connection.Open();
             using var cmd = new SQLiteCommand("INSERT INTO ModelWeights (weights) VALUES (@weights)", connection);
-            cmd.Parameters.AddWithValue("@weights", string.Join(",", weights));
+            cmd.Parameters.Add("@weights", System.Data.DbType.Binary).Value = ToBinary(weights);
             cmd.ExecuteNonQuery();
         }
 
@@ -191,9 +169,41 @@ namespace DecisionEngineService
                 var reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {
-                    string weightsStr = reader.GetString(0);
-                    weights = [.. weightsStr.Split(',').Select(float.Parse)];
+                    if (!reader.IsDBNull(0))
+                    {
+                        weights = FromBinary((byte[])reader["weights"]);
+                    }
                 }
+            }
+
+            return weights;
+        }
+
+        private static byte[] ToBinary(IReadOnlyList<float> weights)
+        {
+            using var stream = new MemoryStream();
+            using var writer = new BinaryWriter(stream);
+
+            writer.Write(weights.Count);
+            foreach (var weight in weights)
+            {
+                writer.Write(weight);
+            }
+
+            writer.Flush();
+            return stream.ToArray();
+        }
+
+        private static List<float> FromBinary(byte[] data)
+        {
+            using var stream = new MemoryStream(data);
+            using var reader = new BinaryReader(stream);
+
+            var count = reader.ReadInt32();
+            List<float> weights = new(count);
+            for (int i = 0; i < count && stream.Position < stream.Length; i++)
+            {
+                weights.Add(reader.ReadSingle());
             }
 
             return weights;
