@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using WWoW.RecordedTests.Shared.Abstractions.I;
 
-public sealed class LocalMangosDockerTrueNasAppsClient : ITrueNasAppsClient
+public sealed class LocalMangosDockerTrueNasAppsClient : IMangosAppsClient
 {
     private readonly IReadOnlyDictionary<string, LocalMangosDockerConfiguration> _configurations;
     private readonly IDockerCli _docker;
