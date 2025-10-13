@@ -20,7 +20,7 @@ WWoW.RecordedTests.Shared/
     IServerAvailabilityChecker.cs
     ITestDescription.cs
     ITestLogger.cs
-    ITrueNasAppsClient.cs
+    IMangosAppsClient.cs
     NullTestLogger.cs
     OrchestrationOptions.cs
     OrchestrationResult.cs
