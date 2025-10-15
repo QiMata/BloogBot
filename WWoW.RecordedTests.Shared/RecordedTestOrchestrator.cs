@@ -37,21 +37,49 @@ public sealed class RecordedTestOrchestrator
         }
 
         _logger.Info($"[Orchestrator] Server available at {server.Host}:{server.Port}. Delegating to test description '{test.Name}'.");
+
+        var startedAt = DateTimeOffset.UtcNow;
+        ArtifactPathHelper.ArtifactPathInfo artifactPaths;
         try
         {
-            return await test.ExecuteAsync(server, cancellationToken);
+            artifactPaths = ArtifactPathHelper.PrepareArtifactDirectories(_options.ArtifactsRootDirectory, test.Name, startedAt);
+        }
+        catch (Exception ex)
+        {
+            var msg = $"Failed to prepare artifact directories: {ex.Message}";
+            _logger.Error(msg, ex);
+            return new OrchestrationResult(false, msg);
+        }
+
+        _logger.Info($"[Orchestrator] Artifacts will be stored under '{artifactPaths.TestRunDirectory}'.");
+
+        var context = new RecordedTestContext(
+            test.Name,
+            artifactPaths.SanitizedTestName,
+            server,
+            startedAt,
+            artifactPaths.ArtifactsRootDirectory,
+            artifactPaths.TestRootDirectory,
+            artifactPaths.TestRunDirectory);
+
+        try
+        {
+            var result = await test.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
+            return string.IsNullOrEmpty(result.TestRunDirectory)
+                ? result with { TestRunDirectory = context.TestRunDirectory }
+                : result;
         }
         catch (OperationCanceledException)
         {
             var msg = "Orchestration canceled by caller.";
             _logger.Warn(msg);
-            return new OrchestrationResult(false, msg);
+            return new OrchestrationResult(false, msg, TestRunDirectory: context.TestRunDirectory);
         }
         catch (Exception ex)
         {
             var msg = $"Test execution failed: {ex.Message}";
             _logger.Error(msg, ex);
-            return new OrchestrationResult(false, msg);
+            return new OrchestrationResult(false, msg, TestRunDirectory: context.TestRunDirectory);
         }
     }
 }

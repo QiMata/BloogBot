@@ -1,6 +1,6 @@
 # BloogBot UI Layer
 
-A comprehensive suite of user interface components and orchestration tools for the BloogBot World of Warcraft automation ecosystem. The UI layer provides desktop management interfaces, containerized development environments, and shared service infrastructure for monitoring and controlling bot operations.
+A comprehensive suite of user interface components and orchestration tools for the BloogBot World of Warcraft automation ecosystem. The UI layer provides desktop management interfaces, containerized development environments, and shared service infrastructure for monitoring and controlling bot operations. Review the root [Documentation Map](../README.md#documentation-map) for context on how these UI pieces pair with services, exports, and recorded testing utilities.
 
 ## Overview
 

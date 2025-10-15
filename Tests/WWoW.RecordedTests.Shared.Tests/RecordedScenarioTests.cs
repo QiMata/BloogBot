@@ -34,7 +34,7 @@ public sealed class RecordedScenarioTests
         var foregroundRunners = new List<ScriptedBotRunner>();
         var backgroundRunners = new List<ScriptedBotRunner>();
 
-        Func<IBotRunner> createForeground = () =>
+        IBotRunnerFactory createForegroundFactory = new DelegateBotRunnerFactory(() =>
         {
             var runner = new ScriptedBotRunner(
                 "Foreground GM",
@@ -43,9 +43,9 @@ public sealed class RecordedScenarioTests
                 state);
             foregroundRunners.Add(runner);
             return runner;
-        };
+        });
 
-        Func<IBotRunner> createBackground = () =>
+        IBotRunnerFactory createBackgroundFactory = new DelegateBotRunnerFactory(() =>
         {
             var runner = new ScriptedBotRunner(
                 "Background Adventurer",
@@ -54,29 +54,46 @@ public sealed class RecordedScenarioTests
                 state);
             backgroundRunners.Add(runner);
             return runner;
-        };
+        });
+
+        var initialDesiredState = new TestDesiredState("Initial", log);
+        var baseDesiredState = new TestDesiredState("Base", log);
 
         var description = new DefaultRecordedWoWTestDescription(
             scenario.Name,
-            createForeground,
-            createBackground,
+            createForegroundFactory,
+            createBackgroundFactory,
             options: new OrchestrationOptions
             {
-                ArtifactsRootDirectory = tempDir.Path,
                 DoubleStopRecorderForSafety = false
             },
+            initialDesiredState: initialDesiredState,
+            baseDesiredState: baseDesiredState,
             logger: log);
 
-        var result = await description.ExecuteAsync(server, CancellationToken.None);
+        var orchestrator = new RecordedTestOrchestrator(
+            new ImmediateServerAvailabilityChecker(server),
+            new OrchestrationOptions
+            {
+                ArtifactsRootDirectory = tempDir.Path
+            },
+            log);
+
+        var result = await orchestrator.RunAsync(description, CancellationToken.None);
 
         Assert.True(result.Success);
         Assert.Contains(scenario.Name, result.Message, StringComparison.Ordinal);
         Assert.Null(result.RecordingArtifact);
 
+        Assert.NotNull(result.TestRunDirectory);
+        Assert.True(Directory.Exists(result.TestRunDirectory));
+
         Assert.Single(Directory.GetDirectories(tempDir.Path));
         var scenarioRoot = Directory.GetDirectories(tempDir.Path).Single();
-        Assert.Contains(SanitizeName(scenario.Name), Path.GetFileName(scenarioRoot), StringComparison.Ordinal);
-        Assert.Single(Directory.GetDirectories(scenarioRoot));
+        Assert.Contains(ArtifactPathHelper.SanitizeName(scenario.Name), Path.GetFileName(scenarioRoot), StringComparison.Ordinal);
+        var runDirectories = Directory.GetDirectories(scenarioRoot);
+        Assert.Single(runDirectories);
+        Assert.Equal(result.TestRunDirectory, runDirectories.Single());
 
         foreach (var runner in foregroundRunners.Concat(backgroundRunners))
         {
@@ -93,6 +110,9 @@ public sealed class RecordedScenarioTests
             .Concat(backgroundRunners)
             .SelectMany(r => r.ExecutedSteps);
         Assert.NotEmpty(executedDescriptions);
+
+        Assert.Equal(foregroundRunners.Count, initialDesiredState.ApplyCalls);
+        Assert.Equal(foregroundRunners.Count, baseDesiredState.ApplyCalls);
     }
 
     private static ServerInfo LoadServerInfo()
@@ -119,13 +139,40 @@ public sealed class RecordedScenarioTests
         return new ServerInfo(host, port, realm);
     }
 
-    private static string SanitizeName(string value)
+    private sealed class ImmediateServerAvailabilityChecker : IServerAvailabilityChecker
     {
-        foreach (var c in Path.GetInvalidFileNameChars())
+        private readonly ServerInfo _serverInfo;
+
+        public ImmediateServerAvailabilityChecker(ServerInfo serverInfo)
         {
-            value = value.Replace(c, '_');
+            _serverInfo = serverInfo;
         }
 
-        return value;
+        public Task<ServerInfo?> WaitForAvailableAsync(TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<ServerInfo?>(_serverInfo);
+        }
+    }
+
+    private sealed class TestDesiredState : IServerDesiredState
+    {
+        private readonly ITestLogger _logger;
+
+        public TestDesiredState(string name, ITestLogger logger)
+        {
+            Name = name;
+            _logger = logger;
+        }
+
+        public string Name { get; }
+
+        public int ApplyCalls { get; private set; }
+
+        public Task ApplyAsync(IBotRunner gmRunner, IRecordedTestContext context, CancellationToken cancellationToken)
+        {
+            _logger.Info($"[State] {Name}: applying for '{context.TestName}'");
+            ApplyCalls++;
+            return Task.CompletedTask;
+        }
     }
 }

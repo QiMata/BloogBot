@@ -2,6 +2,21 @@
 
 **Westworld of Warcraft (WWoW)** is a simulation platform that transforms a World of Warcraft–like server into a living world populated by both real players and AI-driven bots. Inspired by HBO’s *Westworld*, this project aims to create AI-controlled characters **indistinguishable from human players** in behavior. In WWoW, AI agents roam the game world, quest, fight monsters, interact with the environment (and eventually with players) just as a human would – providing a rich testbed for **agent-based AI** in a complex game environment.
 
+## Documentation Map
+
+The repository is organized into several large subsystems. Each has its own README with deep dives, quick-start instructions, and API notes:
+
+| Area | Description |
+| --- | --- |
+| [Services](./Services/README.md) | Distributed worker services that coordinate bots, navigation, prompts, and decision making. |
+| [Exports](./Exports/README.md) | Core libraries and native components injected into the WoW client or consumed by services. |
+| [UI](./UI/README.md) | User interfaces for orchestrating bots and monitoring systems. |
+| [BloogBot.AI](./BloogBot.AI/README.md) | Experimental AI agents and supporting tooling. |
+| [Recorded Tests Shared Library](./WWoW.RecordedTests.Shared/README.md) | Orchestration primitives for automated, recorded integration tests. |
+| [Recorded Test Ideas](./WWoW.RecordedTests.Shared/RECORDED_TEST_IDEAS.md) | Backlog of high-value encounters to automate and film. |
+
+Use this README for a high-level overview of the project’s goals, capabilities, and roadmap. Follow the links above for subsystem-specific documentation and build instructions.
+
 ## Purpose and Vision
 
 WWoW’s primary goal is to explore advanced **agentic AI behavior** in an open-world MMORPG setting. By blurring the lines between human and bot players, we can study and push the boundaries of:
@@ -25,6 +40,7 @@ WWoW is built upon an open-source WoW bot framework (originally known as *BloogB
 * **Death and Recovery:** If a bot character dies (for example, overwhelmed by enemies), it will automatically handle corpse retrieval and resurrection. It uses the navmesh to navigate from the graveyard back to its corpse. (If the area is too dangerous or the death point is unreachable, the bot may respawn at a spirit healer after a timeout.)
 * **Persistence and Data Logging:** WWoW can log and persist world data via a database. By default, it can use an **SQLite database** stored locally (no setup required) to remember things like discovered NPCs, hotspots, blacklisted troublesome mobs, etc. Alternatively, it supports **Microsoft SQL/Azure SQL** for cloud data storage. On first run, the necessary tables (for tracking NPCs, hotspots, bot commands, etc.) are automatically created in the database. This persistent data allows bots to “remember” important info across sessions and enables analysis of bot behavior over time.
 * **Discord Integration (optional):** WWoW includes optional Discord bot integration. If enabled with your Discord Bot Token and server info, the system can send notifications or accept simple commands via a Discord channel. This can be used to monitor your AI players remotely (e.g. get notified of level-ups or deaths) or to issue commands like pausing the bots. (Discord integration can be turned off in settings if not needed.)
+* **Recorded Test Harness:** The [`WWoW.RecordedTests.Shared`](./WWoW.RecordedTests.Shared/README.md) library bundles orchestration helpers for filmed regression tests. It ensures private servers are available, coordinates foreground/background runners, and centralizes artifact capture for automated video evidence.
 * **Stealth Operation:** The bots run inside the WoW client process itself, which not only gives them direct access to game functions but also makes them harder to detect by the game’s anti-bot measures. In fact, WWoW disables the legacy Warden anti-cheat in older clients upon injection. The approach is similar to how some cheat bots work, but here it is purposed for creating a believable simulation rather than gaining unfair advantage in competitive play.
 * **Extensibility:** The architecture is modular. You can create new **bot profiles** (for classes or even custom behaviors) by implementing the AI logic for that profile (e.g., how a Warrior fights vs. how a Mage fights). You can also extend the system with new types of agents or scripts – for instance, creating a “QuestingBot” that completes quests, or a “ChatBot” that engages in in-game chat using AI. Developers can use the provided API of the bot to get information about the game state (e.g. player health, nearby units, inventory) and take actions (move, attack, cast spells, etc.).
 
