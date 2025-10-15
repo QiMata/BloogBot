@@ -10,51 +10,63 @@ using WWoW.RecordedTests.Shared.Abstractions.I;
 // A concrete ITestDescription that orchestrates two IBotRunner instances and an optional screen recorder.
 public sealed class DefaultRecordedWoWTestDescription : ITestDescription
 {
-    private readonly Func<IBotRunner> _createForegroundRunner;
-    private readonly Func<IBotRunner> _createBackgroundRunner;
-    private readonly Func<IScreenRecorder>? _createRecorder;
+    private readonly IBotRunnerFactory _foregroundFactory;
+    private readonly IBotRunnerFactory _backgroundFactory;
+    private readonly IScreenRecorderFactory? _recorderFactory;
+    private readonly IServerDesiredState? _initialDesiredState;
+    private readonly IServerDesiredState? _baseDesiredState;
     private readonly OrchestrationOptions _options;
     private readonly ITestLogger _logger;
 
     public DefaultRecordedWoWTestDescription(
         string name,
-        Func<IBotRunner> createForegroundRunner,
-        Func<IBotRunner> createBackgroundRunner,
-        Func<IScreenRecorder>? createRecorder = null,
+        IBotRunnerFactory foregroundFactory,
+        IBotRunnerFactory backgroundFactory,
+        IScreenRecorderFactory? recorderFactory = null,
+        IServerDesiredState? initialDesiredState = null,
+        IServerDesiredState? baseDesiredState = null,
         OrchestrationOptions? options = null,
         ITestLogger? logger = null)
     {
         Name = name ?? throw new ArgumentNullException(nameof(name));
-        _createForegroundRunner = createForegroundRunner ?? throw new ArgumentNullException(nameof(createForegroundRunner));
-        _createBackgroundRunner = createBackgroundRunner ?? throw new ArgumentNullException(nameof(createBackgroundRunner));
-        _createRecorder = createRecorder;
+        _foregroundFactory = foregroundFactory ?? throw new ArgumentNullException(nameof(foregroundFactory));
+        _backgroundFactory = backgroundFactory ?? throw new ArgumentNullException(nameof(backgroundFactory));
+        _recorderFactory = recorderFactory;
+        _initialDesiredState = initialDesiredState;
+        _baseDesiredState = baseDesiredState;
         _options = options ?? new OrchestrationOptions();
         _logger = logger ?? new NullTestLogger();
     }
 
     public string Name { get; }
 
-    public async Task<OrchestrationResult> ExecuteAsync(ServerInfo server, CancellationToken cancellationToken)
+    public async Task<OrchestrationResult> ExecuteAsync(IRecordedTestContext context, CancellationToken cancellationToken)
     {
-        var context = new RecordedTestContext(Name, server);
+        ArgumentNullException.ThrowIfNull(context);
 
-        Directory.CreateDirectory(_options.ArtifactsRootDirectory);
-        var testDir = Path.Combine(_options.ArtifactsRootDirectory, SanitizeFileName(Name), context.StartedAt.ToString("yyyyMMdd_HHmmss"));
-        Directory.CreateDirectory(testDir);
+        Directory.CreateDirectory(context.TestRunDirectory);
 
-        await using var fg = _createForegroundRunner();
-        await using var bg = _createBackgroundRunner();
-        await using var recorder = _createRecorder != null ? _createRecorder() : null;
+        await using var fg = _foregroundFactory.Create();
+        await using var bg = _backgroundFactory.Create();
+        var recorder = _recorderFactory?.Create();
+        await using var _ = recorder;
 
         TestArtifact? artifact = null;
+        var baseStateRestored = false;
 
         try
         {
             // Connect runners
             _logger.Info("[Test] Connecting Foreground (GM) runner...");
-            await fg.ConnectAsync(server, cancellationToken);
+            await fg.ConnectAsync(context.Server, cancellationToken);
             _logger.Info("[Test] Connecting Background runner...");
-            await bg.ConnectAsync(server, cancellationToken);
+            await bg.ConnectAsync(context.Server, cancellationToken);
+
+            if (_initialDesiredState is not null)
+            {
+                _logger.Info($"[Test] Applying initial desired server state '{_initialDesiredState.Name}'...");
+                await _initialDesiredState.ApplyAsync(fg, context, cancellationToken).ConfigureAwait(false);
+            }
 
             // Recorder optional
             if (recorder != null)
@@ -94,6 +106,13 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
             _logger.Info("[Test] Resetting server state (GM)...");
             await fg.ResetServerStateAsync(context, cancellationToken);
 
+            if (_baseDesiredState is not null)
+            {
+                _logger.Info($"[Test] Restoring base server state '{_baseDesiredState.Name}'...");
+                await _baseDesiredState.ApplyAsync(fg, context, cancellationToken).ConfigureAwait(false);
+                baseStateRestored = true;
+            }
+
             // Optional double stop to ensure OBS is stopped
             if (recorder != null && _options.DoubleStopRecorderForSafety)
             {
@@ -105,7 +124,7 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
             if (recorder != null)
             {
                 _logger.Info("[Test] Moving recorded artifact to test log folder...");
-                artifact = await recorder.MoveLastRecordingAsync(testDir, SanitizeFileName(Name), cancellationToken);
+                artifact = await recorder.MoveLastRecordingAsync(context.TestRunDirectory, context.SanitizedTestName, cancellationToken);
             }
 
             // Shut down foreground UI
@@ -114,19 +133,19 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
 
             var successMsg = $"Test '{Name}' executed successfully.";
             _logger.Info(successMsg);
-            return new OrchestrationResult(true, successMsg, artifact);
+            return new OrchestrationResult(true, successMsg, artifact, context.TestRunDirectory);
         }
         catch (OperationCanceledException)
         {
             var msg = "Test execution canceled.";
             _logger.Warn(msg);
-            return new OrchestrationResult(false, msg, artifact);
+            return new OrchestrationResult(false, msg, artifact, context.TestRunDirectory);
         }
         catch (Exception ex)
         {
             var msg = $"Test execution failed: {ex.Message}";
             _logger.Error(msg, ex);
-            return new OrchestrationResult(false, msg, artifact);
+            return new OrchestrationResult(false, msg, artifact, context.TestRunDirectory);
         }
         finally
         {
@@ -144,6 +163,12 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
             {
                 _logger.Info("[Test] Cleanup: resetting server state (GM)...");
                 await fg.ResetServerStateAsync(context, CancellationToken.None);
+                if (!baseStateRestored && _baseDesiredState is not null)
+                {
+                    _logger.Info($"[Test] Cleanup: restoring base server state '{_baseDesiredState.Name}'...");
+                    await _baseDesiredState.ApplyAsync(fg, context, CancellationToken.None).ConfigureAwait(false);
+                    baseStateRestored = true;
+                }
             }
             catch { }
             try
@@ -160,12 +185,5 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
             }
             catch { }
         }
-    }
-
-    private static string SanitizeFileName(string name)
-    {
-        foreach (var c in Path.GetInvalidFileNameChars())
-            name = name.Replace(c, '_');
-        return name;
     }
 }
