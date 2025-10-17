@@ -2,18 +2,20 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using WWoW.RecordedTests.Shared;
 using WWoW.RecordedTests.Shared.Abstractions;
 using WWoW.RecordedTests.Shared.Abstractions.I;
 
 namespace WWoW.RecordedTests.Shared.Tests.TestInfrastructure;
 
-internal sealed class ScriptedBotRunner : IBotRunner
+internal sealed class ScriptedBotRunner : IBotRunner, IGmCommandHost
 {
     private readonly string _role;
     private readonly BotScript _script;
     private readonly ScenarioLog _log;
     private readonly ScenarioState _state;
     private readonly List<string> _executed = new();
+    private readonly List<string> _gmCommands = new();
     private bool _disposed;
 
     public ScriptedBotRunner(string role, BotScript script, ScenarioLog log, ScenarioState state)
@@ -29,6 +31,8 @@ internal sealed class ScriptedBotRunner : IBotRunner
     public BotScript Script => _script;
 
     public bool Disposed => _disposed;
+
+    public IReadOnlyList<string> ExecutedGmCommands => _gmCommands;
 
     public Task ConnectAsync(ServerInfo server, CancellationToken cancellationToken)
     {
@@ -75,6 +79,28 @@ internal sealed class ScriptedBotRunner : IBotRunner
             await step.ExecuteAsync(_lastContext, cancellationToken).ConfigureAwait(false);
             _executed.Add($"Shutdown::{step.StepId}");
         }
+    }
+
+    public Task<GmCommandExecutionResult> ExecuteGmCommandAsync(string command, CancellationToken cancellationToken)
+    {
+        if (command is null)
+        {
+            throw new ArgumentNullException(nameof(command));
+        }
+
+        _log.Info($"[{_role}] GM Command: {command}");
+        _gmCommands.Add(command);
+        return Task.FromResult(GmCommandExecutionResult.Succeeded);
+    }
+
+    async Task<TResult> IBotRunner.AcceptVisitorAsync<TResult>(IBotRunnerVisitor<TResult> visitor, CancellationToken cancellationToken)
+    {
+        if (visitor is IGmCommandRunnerVisitor<TResult> gmVisitor)
+        {
+            return await gmVisitor.VisitAsync(this, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await visitor.VisitAsync(this, cancellationToken).ConfigureAwait(false);
     }
 
     public ValueTask DisposeAsync()

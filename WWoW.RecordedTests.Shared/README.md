@@ -6,6 +6,7 @@
 
 - **RecordedTestOrchestrator** – coordinates server availability checks, bot runner lifecycle, and artifact collection.
 - **DefaultRecordedWoWTestDescription** – ready-made implementation of the `ITestDescription` contract for the common foreground/background runner pattern used in WWoW.
+- **GmCommandServerDesiredState** – declaratively applies a list of GM commands through the foreground runner so scenarios can express preparation/reset logic as MaNGOS/Trinity-style commands.
 - **Abstractions** – lightweight interfaces for loggers, recorders, orchestrator options, bot runners, and server availability.
 - **TrueNAS integration** – clients and helpers that poll TrueNAS Apps releases, optionally starting idle releases before a test begins.
 - **Artifact helpers** – the `ArtifactPathHelper` class for sanitizing names and creating timestamped artifact directories per test run.
@@ -37,9 +38,66 @@ WWoW.RecordedTests.Shared/
    ```
 2. **Implement bot runner factories.** Tests expect factories that create foreground/background bot runners. Reuse the runners in `Services/ForegroundBotRunner` and `Services/BackgroundBotRunner` or provide your own `IBotRunner` implementations and wrap them with `DelegateBotRunnerFactory`.
 3. **Provide a screen recorder factory.** Swap `ObsRecorderStub` with an implementation that talks to OBS WebSocket, ffmpeg, or your recorder of choice. Implement `IScreenRecorder` and surface it through an `IScreenRecorderFactory` (or `DelegateScreenRecorderFactory`).
-4. **Describe desired server states.** Supply `IServerDesiredState` implementations for the initial state your scenario requires and the base state the realm should return to after execution. `DelegateServerDesiredState` makes it easy to wrap ad-hoc logic around the GM runner.
+4. **Describe desired server states.** Supply `IServerDesiredState` implementations for the initial state your scenario requires and the base state the realm should return to after execution. `GmCommandServerDesiredState` covers the common case of running a list of GM commands, while `DelegateServerDesiredState` makes it easy to wrap ad-hoc logic around the GM runner.
 5. **Configure server discovery.** Supply release descriptors in the format `releaseName|host|port[|realm]`. The orchestrator waits until one of the releases is healthy before starting the test and will try to start idle TrueNAS releases automatically.
 6. **Set orchestration options.** Override `OrchestrationOptions` if you need different artifact directories, server availability timeouts, or recording safeguards.
+
+### End-to-End Runner Helper
+
+`RecordedTestRunner` wraps the orchestration pieces into a single entry point that matches the end-to-end checklist. Supply the factories, desired states, and server discovery configuration through `RecordedTestE2EConfiguration`, then optionally persist results with `FileSystemRecordedTestStorage`.
+
+```csharp
+var configuration = new RecordedTestE2EConfiguration
+{
+    TestName = "ShadowfangKeep_Reset",
+    ForegroundFactory = new DelegateBotRunnerFactory(() => new ForegroundBotRunner()),
+    BackgroundFactory = new DelegateBotRunnerFactory(() => new BackgroundBotRunner()),
+    RecorderFactory = new DelegateScreenRecorderFactory(() => new ObsRecorderStub()),
+    InitialDesiredState = new DelegateServerDesiredState("ScenarioInitial", (gm, ctx, token) => gm.PrepareServerStateAsync(ctx, token)),
+    BaseDesiredState = new DelegateServerDesiredState("RealmBaseline", (gm, ctx, token) => gm.ResetServerStateAsync(ctx, token)),
+    MangosAppsClient = new TrueNasAppsClient(Environment.GetRequiredEnvironmentVariable("TRUENAS_API"), Environment.GetRequiredEnvironmentVariable("TRUENAS_API_KEY")),
+    ServerDefinitions = new[] { "wow-classic|10.0.0.15|3724|Alliance" },
+    OrchestrationOptions = new OrchestrationOptions { ArtifactsRootDirectory = "./TestLogs" },
+    ArtifactStorage = new FileSystemRecordedTestStorage("./StoredRuns"),
+    AutomationRunId = Environment.GetEnvironmentVariable("BUILD_ID"),
+    Metadata = new Dictionary<string, string?>
+    {
+        ["branch"] = Environment.GetEnvironmentVariable("GIT_BRANCH")
+    }
+};
+
+var runner = new RecordedTestRunner(configuration);
+var result = await runner.RunAsync(cts.Token);
+
+Console.WriteLine(result.Success
+    ? $"Artifacts stored to {result.TestRunDirectory}"
+    : $"Test failed: {result.Message}");
+```
+
+### GM Command Desired States
+
+The foreground GM runner often needs to execute a predictable sequence of commands (summoning bots, setting reputations, clearing encounters) before and after a scenario. `GmCommandServerDesiredState` captures those commands declaratively and executes them by visiting the foreground runner. Runners that support GM commands should implement `IGmCommandHost` and override `IBotRunner.AcceptVisitorAsync` so the visitor can drive command execution:
+
+```csharp
+var initialState = new GmCommandServerDesiredState(
+    "ScarletMonastery_Setup",
+    new[]
+    {
+        new GmCommandServerDesiredState.GmCommandStep(".gm on"),
+        new GmCommandServerDesiredState.GmCommandStep(ctx => $".tele {ctx.TestName.Replace(' ', '_')} Tirisfal", "Teleport to arena"),
+        new GmCommandServerDesiredState.GmCommandStep(".additem 12345", "Grant quest key")
+    });
+
+var baseState = new GmCommandServerDesiredState(
+    "Realm_Reset",
+    new[]
+    {
+        new GmCommandServerDesiredState.GmCommandStep(".respawn"),
+        new GmCommandServerDesiredState.GmCommandStep(".server restart cancel")
+    });
+```
+
+Each command can either be a literal string or a factory that inspects `IRecordedTestContext` to build dynamic arguments (for example, referencing the sanitized test name). The helper logs each command before execution, throws if a command resolves to an empty value, and stops the workflow if a GM command host reports a failure so orchestration issues surface immediately.
 
 ### Minimal Orchestration Example
 
