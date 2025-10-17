@@ -109,8 +109,16 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
             if (_baseDesiredState is not null)
             {
                 _logger.Info($"[Test] Restoring base server state '{_baseDesiredState.Name}'...");
-                await _baseDesiredState.ApplyAsync(fg, context, cancellationToken).ConfigureAwait(false);
-                baseStateRestored = true;
+                try
+                {
+                    await _baseDesiredState.ApplyAsync(fg, context, cancellationToken).ConfigureAwait(false);
+                    baseStateRestored = true;
+                }
+                catch
+                {
+                    baseStateRestored = false;
+                    throw;
+                }
             }
 
             // Optional double stop to ensure OBS is stopped

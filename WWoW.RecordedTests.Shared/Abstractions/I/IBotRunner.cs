@@ -1,3 +1,6 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace WWoW.RecordedTests.Shared.Abstractions.I;
 
 public interface IBotRunner : IAsyncDisposable
@@ -12,4 +15,7 @@ public interface IBotRunner : IAsyncDisposable
 
     Task RunTestAsync(IRecordedTestContext context, CancellationToken cancellationToken);
     Task ShutdownUiAsync(CancellationToken cancellationToken);
+
+    Task<TResult> AcceptVisitorAsync<TResult>(IBotRunnerVisitor<TResult> visitor, CancellationToken cancellationToken)
+        => visitor.VisitAsync(this, cancellationToken);
 }
