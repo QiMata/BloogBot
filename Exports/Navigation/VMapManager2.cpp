@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include "ModelInstance.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -376,12 +377,7 @@ namespace VMAP
     Cylinder VMapManager2::ConvertCylinderToWorld(const Cylinder& internalCylinder) const
     {
         // Convert back from internal representation to world coordinates
-        float const mid = 0.5f * 64.0f * 533.33333333f;
-        G3D::Vector3 worldBase(
-            mid - internalCylinder.base.x,
-            mid - internalCylinder.base.y,
-            internalCylinder.base.z
-        );
+        G3D::Vector3 worldBase = NavCoord::InternalToWorld(internalCylinder.base);
 
         return Cylinder(worldBase, internalCylinder.axis,
             internalCylinder.radius, internalCylinder.height);
@@ -401,9 +397,7 @@ namespace VMAP
             // Convert contact point back to world coordinates if hit
             if (result.hit)
             {
-                float const mid = 0.5f * 64.0f * 533.33333333f;
-                result.contactPoint.x = mid - result.contactPoint.x;
-                result.contactPoint.y = mid - result.contactPoint.y;
+                result.contactPoint = NavCoord::InternalToWorld(result.contactPoint);
             }
         }
 
@@ -421,7 +415,7 @@ namespace VMAP
             Cylinder internalCyl = ConvertCylinderToInternal(worldCylinder);
 
             // Note: sweep direction doesn't need position conversion, just invert X and Y
-            G3D::Vector3 internalSweepDir(-sweepDir.x, -sweepDir.y, sweepDir.z);
+            G3D::Vector3 internalSweepDir = NavCoord::WorldDirToInternal(sweepDir);
 
             hits = instanceTree->second->SweepCylinder(internalCyl, internalSweepDir, sweepDistance);
 
@@ -429,9 +423,7 @@ namespace VMAP
             auto hitIt = hits.begin();
             while (hitIt != hits.end())
             {
-                float const mid = 0.5f * 64.0f * 533.33333333f;
-                hitIt->position.x = mid - hitIt->position.x;
-                hitIt->position.y = mid - hitIt->position.y;
+                hitIt->position = NavCoord::InternalToWorld(hitIt->position);
                 ++hitIt;
             }
         }
@@ -453,8 +445,7 @@ namespace VMAP
             if (hit)
             {
                 // Normal direction needs to be inverted for X and Y
-                outContactNormal.x = -outContactNormal.x;
-                outContactNormal.y = -outContactNormal.y;
+                outContactNormal = NavCoord::InternalDirToWorld(outContactNormal);
             }
 
             return hit;
@@ -585,8 +576,7 @@ namespace VMAP
             if (found)
             {
                 // invert normal X/Y back to world orientation as done elsewhere
-                outNormal.x = -outNormal.x;
-                outNormal.y = -outNormal.y;
+                outNormal = NavCoord::InternalDirToWorld(outNormal);
             }
 
             return found;
@@ -661,8 +651,7 @@ namespace VMAP
 
     G3D::Vector3 VMapManager2::convertPositionToInternalRep(float x, float y, float z) const
     {
-        float const mid = 0.5f * 64.0f * 533.33333333f;
-        return G3D::Vector3(mid - x, mid - y, z);
+        return NavCoord::WorldToInternal(x, y, z);
     }
 
     VMAPLoadResult VMapManager2::loadMap(const char* pBasePath, unsigned int pMapId, int x, int y)
@@ -820,10 +809,10 @@ namespace VMAP
             if (result)
             {
                 // Convert back to world coordinates
-                float const mid = 0.5f * 64.0f * 533.33333333f;
-                rx = mid - resultPos.x;
-                ry = mid - resultPos.y;
-                rz = resultPos.z;
+                G3D::Vector3 world = NavCoord::InternalToWorld(resultPos);
+                rx = world.x;
+                ry = world.y;
+                rz = world.z;
 
                 return true;
             }

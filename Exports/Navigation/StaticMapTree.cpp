@@ -13,6 +13,7 @@
 #include <vector>
 #include "CapsuleCollision.h"
 #include "CylinderCollision.h" // for CylinderHelpers walkable config
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -31,7 +32,22 @@ namespace VMAP
 
             bool result = prims[entry].intersectRay(ray, distance, pStopAtFirstHit, ignoreM2Model);
             if (result)
+            {
                 hit = true;
+                // Log the specific model hit and the hit position
+                const ModelInstance& mi = prims[entry];
+                G3D::Vector3 hitI = ray.origin() + ray.direction() * distance;           // internal/map coords
+                G3D::Vector3 hitW = NavCoord::InternalToWorld(hitI);                      // convert to world for readability
+                G3D::Vector3 instPosW = NavCoord::InternalToWorld(mi.iPos);
+                const G3D::Vector3& rotDeg = mi.ModelSpawn::iRot;                         // Euler degrees from spawn
+                PHYS_TRACE(PHYS_CYL, "Raycast hit model='" << mi.name << "' id=" << mi.ID
+                    << " adt=" << mi.adtId
+                    << " dist=" << distance
+                    << " hitW=(" << hitW.x << "," << hitW.y << "," << hitW.z << ")"
+                    << " instPosW=(" << instPosW.x << "," << instPosW.y << "," << instPosW.z << ")"
+                    << " rotEulerDeg=(" << rotDeg.x << "," << rotDeg.y << "," << rotDeg.z << ")"
+                    << " scale=" << mi.iScale);
+            }
             return result;
         }
         bool didHit() const

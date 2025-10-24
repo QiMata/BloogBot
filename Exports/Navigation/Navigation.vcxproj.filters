@@ -141,6 +141,7 @@
     </ClInclude>
     <ClInclude Include="SceneQuery.h" />
     <ClInclude Include="QueryHit.h" />
+    <ClInclude Include="CoordinateTransforms.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Header Files">

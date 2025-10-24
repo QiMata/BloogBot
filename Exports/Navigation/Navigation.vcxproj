@@ -237,6 +237,7 @@
     <ClInclude Include="..\Navigation\PathFinder.h" />
     <ClInclude Include="AABox.h" />
     <ClInclude Include="BIH.h" />
+    <ClInclude Include="CoordinateTransforms.h" />
     <ClInclude Include="CylinderCollision.h" />
     <ClInclude Include="IVMapManager.h" />
     <ClInclude Include="MapLoader.h" />
