@@ -46,73 +46,103 @@ namespace VMAP
                                               Vector3& inOutStep, SceneHit& outHit) const
     {
         outHit = SceneHit();
-        float dist = length(inOutStep);
-        if (dist <= 1e-6f)
+        float totalDist = length(inOutStep);
+        if (totalDist <= 1e-6f)
             return false;
 
-        Vector3 dir = inOutStep * (1.0f / dist);
-        SceneHit h1;
-        if (!SceneQuery::SweepCapsuleSingle(map, C, dir, dist, h1))
-        {
-            // No hit, advance fully
-            C.p0 += ToCC(inOutStep);
-            C.p1 += ToCC(inOutStep);
-            return false;
-        }
+        // Multi-plane manifold: collect up to 4 unique contact normals
+        CapsuleCollision::Vec3 manifold[4];
+        int manifoldCount = 0;
 
-        // Advance to first impact
-        float d1 = std::max(0.0f, h1.distance);
-        Vector3 adv1 = dir * d1;
-        C.p0 += ToCC(adv1);
-        C.p1 += ToCC(adv1);
-        outHit = h1;
+        Vector3 totalAdv(0,0,0);
+        Vector3 rem = inOutStep; // remaining displacement to realize
+        bool collided = false;
 
-        float remaining = std::max(0.0f, dist - d1);
-        if (remaining <= 1e-5f)
+        // Iterate gathering up to 4 planes and projecting remaining displacement against all simultaneously
+        for (int iter = 0; iter < 4; ++iter)
         {
-            // Minimal pop out
-            CapsuleCollision::Hit ch; ch.hit = true; ch.depth = 0.0005f; ch.normal = ToCC(h1.normal); ch.point = ToCC(h1.point);
-            CapsuleCollision::Vec3 dummy = ToCC(Vector3(0,0,0));
+            float dist = length(rem);
+            if (dist <= 1e-6f)
+                break;
+
+            Vector3 dir = rem * (1.0f / dist);
+            SceneHit h;
+            if (!SceneQuery::SweepCapsuleTOI(map, C, dir, dist, h, m_cfg.collisionMask))
+            {
+                // No hit along this segment: advance fully and finish
+                C.p0 += ToCC(rem); C.p1 += ToCC(rem);
+                totalAdv += rem;
+                break;
+            }
+
+            // Advance to hit
+            float d = std::max(0.0f, h.distance);
+            Vector3 adv = dir * d;
+            C.p0 += ToCC(adv); C.p1 += ToCC(adv);
+            totalAdv += adv;
+            outHit = h; collided = true;
+
+            // Compute remaining distance after the hit
+            float remainingLen = std::max(0.0f, dist - d);
+
+            // Step-up attempt: if initial horizontal sweep hits and obstacle might be low, try to raise then continue forward
+            if (iter == 0 && remainingLen > 1e-6f && m_cfg.stepHeight > 1e-6f)
+            {
+                Vector3 upN = normalizeSafe(m_cfg.up, Vector3(0,1,0));
+                float horizCos = std::fabs(dir.x*upN.x + dir.y*upN.y + dir.z*upN.z);
+                if (horizCos < 0.3f) // mostly horizontal intent
+                {
+                    SceneHit upHit;
+                    bool upBlocked = SceneQuery::SweepCapsuleTOI(map, C, upN, m_cfg.stepHeight, upHit, m_cfg.collisionMask);
+                    if (!upBlocked)
+                    {
+                        // Probe forward from the raised pose
+                        CapsuleCollision::Capsule Craised = C;
+                        G3D::Vector3 raiseVec = upN * m_cfg.stepHeight;
+                        Craised.p0 += ToCC(raiseVec);
+                        Craised.p1 += ToCC(raiseVec);
+
+                        SceneHit fwdHit;
+                        if (!SceneQuery::SweepCapsuleTOI(map, Craised, dir, remainingLen, fwdHit, m_cfg.collisionMask))
+                        {
+                            // Commit the vertical raise and the forward advance
+                            C = Craised;
+                            C.p0 += ToCC(dir * remainingLen);
+                            C.p1 += ToCC(dir * remainingLen);
+                            totalAdv += raiseVec + dir * remainingLen;
+
+                            // Finish this sweep step
+                            rem = Vector3(0,0,0);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Add normal to manifold and resolve tiny penetration by slack
+            manifoldCount = CapsuleCollision::manifoldAddNormal(manifold, manifoldCount, 4, ToCC(h.normal));
+            CapsuleCollision::Hit ch; ch.hit = true; ch.depth = 0.0f; ch.normal = ToCC(h.normal); ch.point = ToCC(h.point);
+            CapsuleCollision::Vec3 dummy(0,0,0);
             CapsuleCollision::resolveCapsuleHit(C, ch, dummy, m_cfg.resolve);
-            inOutStep = adv1;
-            return true;
+
+            // Remaining displacement along projected manifold direction
+            if (remainingLen <= 1e-6f)
+                break;
+
+            Vector3 remAfter = dir * remainingLen;
+            CapsuleCollision::Vec3 remCC = ToCC(remAfter);
+            // Sequential manifold projection without magnitude preservation
+            CapsuleCollision::Vec3 remProjCC = CapsuleCollision::projectVelocityAgainstNormals(remCC, manifold, manifoldCount, 3, false);
+            rem = ToV3(remProjCC);
+
+            // If projection kills movement, stop
+            if (length(rem) <= 1e-6f)
+                break;
         }
 
-        // Slide remaining along the contact plane
-        Vector3 slideDir = projectOntoPlane(dir, h1.normal);
-        float slideLen = length(slideDir);
-        if (slideLen <= 1e-6f)
-        {
-            inOutStep = adv1; // no slide possible
-            return true;
-        }
-        slideDir = slideDir * (1.0f / slideLen);
-
-        SceneHit h2;
-        if (!SceneQuery::SweepCapsuleSingle(map, C, slideDir, remaining, h2))
-        {
-            // Advance fully along slide
-            Vector3 adv2 = slideDir * remaining;
-            C.p0 += ToCC(adv2);
-            C.p1 += ToCC(adv2);
-            inOutStep = adv1 + adv2;
-            return true;
-        }
-
-        // Second impact during slide
-        float d2 = std::max(0.0f, h2.distance);
-        Vector3 adv2 = slideDir * d2;
-        C.p0 += ToCC(adv2);
-        C.p1 += ToCC(adv2);
-        outHit = h2; // return the most recent hit
-
-        // Minimal pop out on second contact
-        CapsuleCollision::Hit ch2; ch2.hit = true; ch2.depth = 0.0005f; ch2.normal = ToCC(h2.normal); ch2.point = ToCC(h2.point);
-        CapsuleCollision::Vec3 dummy2 = ToCC(Vector3(0,0,0));
-        CapsuleCollision::resolveCapsuleHit(C, ch2, dummy2, m_cfg.resolve);
-
-        inOutStep = adv1 + adv2;
-        return true;
+        // Output realized step
+        inOutStep = totalAdv;
+        return collided;
     }
 
     bool CharacterCapsuleMover::Tick(const StaticMapTree& map, const Vector3& desiredVelocity, const Vector3& gravity, float dt)
@@ -120,6 +150,40 @@ namespace VMAP
         m_grounded = false;
         m_lastHit = SceneHit();
         bool collided = false;
+
+        // Initial depenetration: resolve discrete overlaps before any movement
+        {
+            const int kMaxIters = 8;
+            for (int iter = 0; iter < kMaxIters; ++iter)
+            {
+                std::vector<SceneHit> overlaps;
+                int count = SceneQuery::OverlapCapsule(map, m_capsule, overlaps, m_cfg.collisionMask);
+                if (count <= 0)
+                    break;
+
+                // Pick the deepest overlap
+                const SceneHit* best = nullptr;
+                for (const auto& h : overlaps)
+                {
+                    if (!best || h.distance > best->distance)
+                        best = &h;
+                }
+                if (!best || best->distance <= 0.0f)
+                    break;
+
+                // Convert to collision hit and apply correction (no velocity change during depenetration)
+                CapsuleCollision::Hit ch; ch.hit = true; ch.depth = best->distance; ch.normal = ToCC(best->normal); ch.point = ToCC(best->point);
+                CapsuleCollision::Vec3 dummy(0,0,0);
+                if (!CapsuleCollision::resolveCapsuleHit(m_capsule, ch, dummy, m_cfg.resolve))
+                    break;
+                collided = true;
+                m_lastHit = *best;
+
+                // If the remaining penetration is tiny, stop
+                if (best->distance <= (m_cfg.resolve.contactOffset + CapsuleCollision::LARGE_EPS))
+                    break;
+            }
+        }
 
         // Intended motion step using CCD substeps routed via SceneQuery sweeps
         Vector3 totalStep = desiredVelocity * dt;
@@ -141,6 +205,35 @@ namespace VMAP
         // Update displacement after sliding for caller visibility (excluding gravity)
         m_velocity = dispAccum;
 
+        // After horizontal displacement, perform a short downward sweep to snap to ground and evaluate slope
+        {
+            Vector3 upN = normalizeSafe(m_cfg.up, Vector3(0,1,0));
+            Vector3 downDir = upN * -1.0f;
+            // Small snap range: allow contactOffset + small slack
+            float snapDist = std::max(0.0f, m_cfg.resolve.contactOffset + 0.05f);
+            if (snapDist > 1e-6f)
+            {
+                SceneHit dh;
+                if (SceneQuery::SweepCapsuleTOI(map, m_capsule, downDir, snapDist, dh, m_cfg.collisionMask))
+                {
+                    float adv = std::max(0.0f, dh.distance);
+                    m_capsule.p0 += ToCC(downDir * adv);
+                    m_capsule.p1 += ToCC(downDir * adv);
+                    m_lastHit = dh; collided = true;
+
+                    // Evaluate slope using normal vs up
+                    float c = dh.normal.x*upN.x + dh.normal.y*upN.y + dh.normal.z*upN.z;
+                    if (c >= m_cfg.walkableSlopeCos)
+                    {
+                        // Remove vertical component from accumulated horizontal displacement
+                        float vn = m_velocity.x*upN.x + m_velocity.y*upN.y + m_velocity.z*upN.z;
+                        m_velocity = m_velocity - upN * vn;
+                        m_grounded = true;
+                    }
+                }
+            }
+        }
+
         // Gravity pass
         if (dt > 0.0f)
         {
@@ -152,10 +245,10 @@ namespace VMAP
                 bool ghit = SweepAndSlide(map, m_capsule, gstep, gh);
                 if (ghit) { m_lastHit = gh; collided = true; }
 
-                // Ground test via normal vs up cosine
+                // Ground test via normal vs up cosine (use configured walkableSlopeCos)
                 Vector3 upN = normalizeSafe(m_cfg.up, Vector3(0,1,0));
                 float c = (ghit ? (gh.normal.x*upN.x + gh.normal.y*upN.y + gh.normal.z*upN.z) : -1.0f);
-                if (ghit && c >= m_cfg.resolve.groundCosMin)
+                if (ghit && c >= m_cfg.walkableSlopeCos)
                 {
                     // Remove vertical component from horizontal velocity and mark grounded
                     float vn = m_velocity.x*upN.x + m_velocity.y*upN.y + m_velocity.z*upN.z;

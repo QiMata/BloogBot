@@ -47,8 +47,8 @@ namespace PhysicsConstants
     constexpr float MAX_GROUND_SNAP_UP_SPEED = 9999.0f;
     constexpr float MAX_GROUND_SNAP_DOWN_SPEED = 9999.0f;
 
-    // Slope walkability threshold (cos 45° ? 0.7071) - kept only as documentation default; configurable at runtime
-    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.7071f;
+    // Slope walkability threshold (cos 60° = 0.5) - kept only as documentation default; configurable at runtime
+    constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.5f;
 }
 
 class PhysicsEngine
@@ -66,7 +66,6 @@ public:
 
     // Configuration: walkable slope threshold (cosine of max slope angle)
     void SetWalkableCosMin(float cosMin);
-    void SetWalkableSlopeDegrees(float degrees);
     float GetWalkableCosMin() const;
 
 private:
@@ -144,10 +143,6 @@ private:
     bool ValidateCylinderPosition(uint32_t mapId, float x, float y, float z,
         float tolerance, float cylinderRadius, float cylinderHeight);
 
-    // Slide movement logic with cylinder collision (retained for edge cases)
-    void AttemptSlideMovementWithCylinder(const PhysicsInput& input, MovementState& state,
-        float moveX, float moveY, float moveDist, float cylinderRadius, float cylinderHeight);
-
     // New helpers for improved authenticity
     bool HasHeadClearance(uint32_t mapId, float x, float y, float newZ, float radius, float height);
     void AttemptWallSlide(const PhysicsInput& input, const MovementIntent& intent, MovementState& state,
@@ -163,13 +158,9 @@ private:
 
     // New helpers (non-const to allow calling non-const queries)
     G3D::Vector3 ComputeTerrainNormal(uint32_t mapId, float x, float y);
-    G3D::Vector3 ApproximateVMapNormal(uint32_t mapId, float x, float y, float referenceZ,
-        float cylinderRadius, float cylinderHeight);
-    G3D::Vector3 ProjectOntoGroundPlane(const G3D::Vector3& desired, const G3D::Vector3& normal) const;
 
     // Phase 1 extracted helpers
     MovementIntent BuildMovementIntent(const PhysicsInput& input, float orientation) const;
-    WalkableSurface QueryGroundSurface(uint32_t mapId, float x, float y, float z, float r, float h) const;
     float QueryLiquidLevel(uint32_t mapId, float x, float y, float z, uint32_t& liquidType) const;
     void ResolveGroundAttachment(MovementState& st, const WalkableSurface& surf, float stepUpLimit, float stepDownLimit, float dt);
 };

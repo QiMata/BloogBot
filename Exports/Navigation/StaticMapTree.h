@@ -4,11 +4,13 @@
 #include <unordered_map>
 #include <string>
 #include <memory>
+#include <vector>
 #include "BIH.h"
 #include "Vector3.h"
 #include "Ray.h"
 #include "ModelInstance.h"
 #include "CylinderCollision.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -21,8 +23,7 @@ namespace VMAP
     {
     public:
         MapCylinderCallback(ModelInstance* val, const Cylinder& cyl)
-            : prims(val), cylinder(cyl), bestIntersection() {
-        }
+            : prims(val), cylinder(cyl), bestIntersection() {}
 
         bool operator()(const G3D::Vector3& point, uint32_t entry)
         {
@@ -53,22 +54,27 @@ namespace VMAP
     public:
         MapCylinderSweepCallback(ModelInstance* val, const Cylinder& cyl,
             const G3D::Vector3& dir, float dist)
-            : prims(val), cylinder(cyl), sweepDir(dir), sweepDistance(dist) {
-        }
+            : prims(val), cylinder(cyl), sweepDir(dir), sweepDistance(dist) {}
 
         void operator()(const G3D::Vector3& point, uint32_t entry)
         {
+            // Convert internal cylinder and direction to world space before calling ModelInstance
+            Cylinder worldCyl(
+                NavCoord::InternalToWorld(cylinder.base),
+                cylinder.axis,
+                cylinder.radius,
+                cylinder.height);
+            G3D::Vector3 worldSweepDir = NavCoord::InternalDirToWorld(sweepDir);
+
             std::vector<CylinderSweepHit> modelHits = prims[entry].SweepCylinder(
-                cylinder, sweepDir, sweepDistance);
+                worldCyl, worldSweepDir, sweepDistance);
 
             // Merge hits from this model
-            auto it = modelHits.begin();
-            while (it != modelHits.end())
+            for (auto& h : modelHits)
             {
                 // stamp instance id on unified query record for diagnostics
-                it->q.instanceId = prims[entry].ID;
-                allHits.push_back(*it);
-                ++it;
+                h.q.instanceId = prims[entry].ID;
+                allHits.push_back(h);
             }
         }
 

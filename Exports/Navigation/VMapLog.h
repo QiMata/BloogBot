@@ -119,3 +119,9 @@ const char* PhysLevelName(int lvl);
 #define PHYS_INFO(cat, msg)  PHYS_LOG(1, cat, msg)
 #define PHYS_DBG(cat, msg)   PHYS_LOG(2, cat, msg)
 #define PHYS_TRACE(cat, msg) PHYS_LOG(3, cat, msg)
+
+// Deep trace (very verbose) – compile-time gated. Set to 1 to re-enable detailed step logs.
+#ifndef PHYS_DEEP_TRACE_ENABLED
+#define PHYS_DEEP_TRACE_ENABLED 0
+#endif
+#define PHYS_TRACE_DEEP(cat, msg) do { if (PHYS_DEEP_TRACE_ENABLED) { PHYS_TRACE(cat, msg); } } while(0)

@@ -337,22 +337,36 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
     outCount = 0;
 
     // Validate inputs and early outs
-    if (tree.empty() || objects.empty())
-        return false;
-    if (!bounds.intersects(query))
-        return false;
-    if (maxCount == 0 || outIndices == nullptr)
-        return false;
+    if (tree.empty() || objects.empty()) {
+        PHYS_TRACE(PHYS_CYL, "[BIH][AABB] early-exit: empty tree or objects (treeNodes="<<tree.size()<<" objects="<<objects.size()<<")");
+        return false; }
+    if (!bounds.intersects(query)) {
+        auto gapAxis = [&](int axis)->float { float qLo = (&query.low().x)[axis]; float qHi = (&query.high().x)[axis]; float tLo = (&bounds.low().x)[axis]; float tHi = (&bounds.high().x)[axis]; if (qLo > tHi) return qLo - tHi; if (tLo > qHi) return tLo - qHi; return 0.0f; };
+        PHYS_TRACE(PHYS_CYL, "[BIH][AABB] early-exit: query !intersect tree (qLo=("<<query.low().x<<","<<query.low().y<<","<<query.low().z<<") qHi=("<<query.high().x<<","<<query.high().y<<","<<query.high().z<<") treeLo=("<<bounds.low().x<<","<<bounds.low().y<<","<<bounds.low().z<<") treeHi=("<<bounds.high().x<<","<<bounds.high().y<<","<<bounds.high().z<<") gap=("<<gapAxis(0)<<","<<gapAxis(1)<<","<<gapAxis(2)<<"))");
+        return false; }
+    if (maxCount == 0 || outIndices == nullptr) {
+        PHYS_TRACE(PHYS_CYL, "[BIH][AABB] early-exit: invalid out buffer (maxCount="<<maxCount<<" outIndicesNull="<<(outIndices==nullptr)<<")");
+        return false; }
+
+    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] enter qLo=("<<query.low().x<<","<<query.low().y<<","<<query.low().z
+        <<") qHi=("<<query.high().x<<","<<query.high().y<<","<<query.high().z<<") treeLo=("<<bounds.low().x<<","<<bounds.low().y<<","<<bounds.low().z
+        <<") treeHi=("<<bounds.high().x<<","<<bounds.high().y<<","<<bounds.high().z<<") primCount="<<primCount()<<" objectsSize="<<objects.size()<<" maxCount="<<maxCount<<")");
 
     // Traversal stack
     StackNode stack[MAX_STACK_SIZE];
     int stackPos = 0;
     uint32_t node = 0;
 
+    // Diagnostics counters
+    int nodesVisited = 0;
+    int leavesVisited = 0;
+    int objectsEnumerated = 0;
+
     while (true)
     {
         while (true)
         {
+            ++nodesVisited;
             uint32_t tn = tree[node];
             uint32_t axis = (tn >> 30) & 3;
             bool const BVH2 = tn & (1 << 29);
@@ -368,6 +382,10 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
 
                     bool goLeft = query.low()[axis] <= tr;   // overlaps left if min <= right clip
                     bool goRight = query.high()[axis] >= tl; // overlaps right if max >= left clip
+
+                    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] node="<<node<<" axis="<<axis<<" tl="<<tl<<" tr="<<tr
+                            <<" qMin="<<query.low()[axis]<<" qMax="<<query.high()[axis]
+                            <<" goL="<<(goLeft?1:0)<<" goR="<<(goRight?1:0));
 
                     if (goLeft && goRight)
                     {
@@ -391,15 +409,32 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
                     }
                     else
                     {
-                        // no overlap with either child
-                        break;
+                        // Sanity fallback: neither child selected but query still within global bounds.
+                        // This can happen with degenerate tl/tr ordering or empty slab; to be safe, visit both.
+                        uint32_t right = offset + 3;
+                        if (stackPos < MAX_STACK_SIZE)
+                        {
+                            stack[stackPos++].node = right;
+                            node = offset;
+                            PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][FALLBACK] node="<<node<<" axis="<<axis<<" tl="<<tl<<" tr="<<tr
+                                <<" qMin="<<query.low()[axis]<<" qMax="<<query.high()[axis]<<" -> descend BOTH");
+                            continue;
+                        }
+                        else
+                        {
+                            // stack overflow protection
+                            PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][FALLBACK] stack overflow, abort with outCount="<<outCount);
+                            return outCount > 0;
+                        }
                     }
                 }
                 else
                 {
                     // leaf
+                    ++leavesVisited;
                     uint32_t n = tree[node + 1];
                     uint32_t off = offset;
+                    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] leaf node="<<node<<" count="<<n);
                     while (n > 0)
                     {
                         uint32_t srcIdx = objects[off];
@@ -413,9 +448,11 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
                             else
                             {
                                 // cap reached
+                                PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] cap reached outCount="<<outCount);
                                 return true;
                             }
                         }
+                        ++objectsEnumerated;
                         ++off;
                         --n;
                     }
@@ -426,10 +463,16 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
             {
                 // BVH2 node: empty space cut from both sides, descend only if query spans between cuts
                 if (axis > 2)
+                {
+                    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] BVH2 terminal return outCount="<<outCount);
                     return outCount > 0;
+                }
 
                 float tl = VMAP::intBitsToFloat(tree[node + 1]);
                 float tr = VMAP::intBitsToFloat(tree[node + 2]);
+
+                PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] BVH2 node="<<node<<" axis="<<axis<<" tl="<<tl<<" tr="<<tr
+                        <<" qMin="<<query.low()[axis]<<" qMax="<<query.high()[axis]);
 
                 if (query.low()[axis] <= tr && query.high()[axis] >= tl)
                 {
@@ -448,6 +491,11 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
             break;
         node = stack[--stackPos].node;
     }
+
+    if (outCount == 0)
+        PHYS_TRACE(PHYS_CYL, "[BIH][AABB] exit: NO candidates nodesVisited="<<nodesVisited<<" leavesVisited="<<leavesVisited<<" objectsEnum="<<objectsEnumerated);
+    else
+        PHYS_TRACE(PHYS_CYL, "[BIH][AABB] exit: candidates="<<outCount<<" nodesVisited="<<nodesVisited<<" leavesVisited="<<leavesVisited<<" objectsEnum="<<objectsEnumerated);
 
     return outCount > 0;
 }

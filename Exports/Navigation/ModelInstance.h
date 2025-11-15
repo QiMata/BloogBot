@@ -83,11 +83,18 @@ namespace VMAP
         // Test if cylinder can fit at position without collision
         bool CanCylinderFitAtPosition(const Cylinder& worldCylinder, float tolerance = 0.05f) const;
 
+        // Collision mask source-of-truth for this instance
+        void SetCollisionMask(uint32_t mask) { collisionMask = mask; }
+        uint32_t GetCollisionMask() const { return collisionMask; }
+
     private:
         // Transform vertices from model space to world space
         G3D::Vector3 TransformToWorld(const G3D::Vector3& modelVertex) const;
 
         // Transform cylinder from world space to model space
         Cylinder TransformCylinderToModel(const Cylinder& worldCylinder) const;
+
+        // Per-instance collision mask (default: all bits set). Later may map from materials.
+        uint32_t collisionMask = 0xFFFFFFFFu;
     };
 }

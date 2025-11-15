@@ -22,6 +22,7 @@
 #define CAPSULE_COLLISION_H
 
 #include <cmath>
+#include <cstdint>
 #include "Vector3.h" // expose engine Vector3 in Wicked helpers
 
 namespace CapsuleCollision
@@ -72,9 +73,19 @@ namespace CapsuleCollision
     inline Vec3 operator*(float s, const Vec3& v) { return v * s; }
 
     struct Capsule { Vec3 p0; Vec3 p1; float r; };
-    struct Triangle { Vec3 a, b, c; bool doubleSided = false; };
+    struct Triangle { Vec3 a, b, c; bool doubleSided = false; uint32_t collisionMask = 0xFFFFFFFFu; };
+
+    // Simple query filter for channel-based collision masking
+    struct QueryFilter {
+        uint32_t includeMask = 0xFFFFFFFFu;
+        uint32_t excludeMask = 0u;
+        inline bool Allow(const Triangle& t) const {
+            return (t.collisionMask & includeMask) && ((t.collisionMask & excludeMask) == 0);
+        }
+    };
+
     struct AABB { Vec3 min, max; };
-    struct Hit { bool hit = false; float depth = 0; Vec3 normal = Vec3(0, 1, 0); Vec3 point = Vec3(0, 0, 0); int triIndex = -1; };
+    struct Hit { bool hit = false; float depth = 0; Vec3 normal = Vec3(0, 1, 0); Vec3 point = Vec3(0, 0, 0); int triIndex = -1; bool startPenetrating = false; };
 
     // -- Geometry helpers --
 
@@ -229,6 +240,21 @@ namespace CapsuleCollision
         box.max.y = cc_max(C.p0.y, C.p1.y) + C.r;
         box.max.z = cc_max(C.p0.z, C.p1.z) + C.r;
         return box;
+    }
+
+    inline AABB aabbFromCapsuleSwept(const Capsule& start, const Capsule& end)
+    {
+        // Tight AABB covering both start and end capsule positions (union of their individual AABBs).
+        // This avoids performing multiple external inflations when used with MapMeshView which already
+        // applies a small padding internally.
+        return aabbMerge(aabbFromCapsule(start), aabbFromCapsule(end));
+    }
+
+    inline void aabbInflate(AABB& B, float amount)
+    {
+        if (amount <= 0.0f) return;
+        B.min.x -= amount; B.min.y -= amount; B.min.z -= amount;
+        B.max.x += amount; B.max.y += amount; B.max.z += amount;
     }
 
     // -- Primitive tests --
@@ -389,24 +415,24 @@ namespace CapsuleCollision
         Vec3 c1, c2;
         // Edge AB
         closestPointsBetweenSegments(s0, s1, T.a, T.b, s, t, c1, c2);
-        Vec3 diff = c1 - c2; float d2 = diff.length2();
-        if (d2 < bestDist2)
+        Vec3 diff = c1 - c2; float dist2 = diff.length2();
+        if (dist2 < bestDist2)
         {
-            bestDist2 = d2; onSeg = c1; onTri = c2; found = true;
+            bestDist2 = dist2; onSeg = c1; onTri = c2; found = true;
         }
         // Edge BC
         closestPointsBetweenSegments(s0, s1, T.b, T.c, s, t, c1, c2);
-        diff = c1 - c2; d2 = diff.length2();
-        if (d2 < bestDist2)
+        diff = c1 - c2; dist2 = diff.length2();
+        if (dist2 < bestDist2)
         {
-            bestDist2 = d2; onSeg = c1; onTri = c2; found = true;
+            bestDist2 = dist2; onSeg = c1; onTri = c2; found = true;
         }
         // Edge CA
         closestPointsBetweenSegments(s0, s1, T.c, T.a, s, t, c1, c2);
-        diff = c1 - c2; d2 = diff.length2();
-        if (d2 < bestDist2)
+        diff = c1 - c2; dist2 = diff.length2();
+        if (dist2 < bestDist2)
         {
-            bestDist2 = d2; onSeg = c1; onTri = c2; found = true;
+            bestDist2 = dist2; onSeg = c1; onTri = c2; found = true;
         }
 
         return found;
@@ -472,34 +498,88 @@ namespace CapsuleCollision
 
     // -- Resolution helpers --
 
-    struct ResolveConfig { float penetrationSlack = 1e-4f; float groundCosMin = 0.3f; Vec3 up = Vec3(0, 1, 0); };
+    struct ResolveConfig { float penetrationSlack = 1e-4f; float groundCosMin = 0.3f; Vec3 up = Vec3(0, 1, 0); float contactOffset = 0.02f; };
 
     inline Vec3 projectAndSlide(Vec3 v, Vec3 n)
     {
-        // Project out the component along normal: v' = v - n*(v·n)
-        // Preserve original magnitude along the slide direction when possible
+        // Simple projection: remove the component along normal without preserving magnitude
         n = Vec3::normalizeSafe(n);
-        float vlen = v.length();
         float vn = Vec3::dot(v, n);
-        Vec3 t = v - n * vn; // tangential component
-        float tlen2 = t.length2();
-        if (tlen2 > EPSILON * EPSILON && vlen > EPSILON)
+        return v - n * vn;
+    }
+
+    // Add a contact normal to a small manifold (unique up to a cosine similarity threshold). Returns new count.
+    inline int manifoldAddNormal(Vec3* normals, int count, int maxCount, const Vec3& n, float cosThreshold = 0.98f)
+    {
+        if (maxCount <= 0) return 0;
+        Vec3 nn = Vec3::normalizeSafe(n);
+        for (int i = 0; i < count; ++i)
         {
-            float scale = vlen / cc_sqrt(tlen2);
-            return t * scale;
+            Vec3 ni = Vec3::normalizeSafe(normals[i]);
+            float c = Vec3::dot(nn, ni);
+            if (cc_abs(c) >= cosThreshold)
+                return count; // too similar, skip
         }
-        return Vec3(0, 0, 0);
+        if (count < maxCount)
+        {
+            normals[count] = nn;
+            return count + 1;
+        }
+        return count;
+    }
+
+    // Iterative orthogonal projection onto the intersection of contact planes.
+    // Only removes components moving into a plane (vn < 0). Optionally preserves magnitude.
+    inline Vec3 projectVelocityAgainstNormals(Vec3 v, const Vec3* normals, int count, int iterations = 3, bool preserveMagnitude = true)
+    {
+        if (count <= 0) return v;
+        float targetLen = v.length();
+        for (int it = 0; it < iterations; ++it)
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                Vec3 n = Vec3::normalizeSafe(normals[i]);
+                float vn = Vec3::dot(v, n);
+                if (vn < 0.0f)
+                {
+                    v = v - n * vn; // project out into-plane component
+                }
+            }
+        }
+        if (preserveMagnitude)
+        {
+            float l = v.length();
+            if (l > EPSILON && targetLen > EPSILON)
+            {
+                v = v * (targetLen / l);
+            }
+        }
+        return v;
     }
 
     inline bool resolveCapsuleHit(Capsule& C, const Hit& h, Vec3& inOutVelocity, const ResolveConfig& cfg)
     {
-        if (!h.hit || h.depth <= 0.0f)
+        if (!h.hit)
             return false;
         Vec3 n = Vec3::normalizeSafe(h.normal, cfg.up);
-        // Pop-out translation along normal by (depth + slack)
-        Vec3 correction = n * (h.depth + cfg.penetrationSlack);
-        C.p0 += correction;
-        C.p1 += correction;
+        // Compute correction distance to guarantee a minimum separation (contactOffset) when penetrating.
+        float pop = 0.0f;
+        if (h.depth > 0.0f)
+        {
+            // Penetrating: push out by penetration depth plus desired contact offset and small slack
+            pop = h.depth + cfg.contactOffset + cfg.penetrationSlack;
+        }
+        else
+        {
+            // Speculative (no penetration) contact: only apply tiny slack if any
+            pop = cfg.penetrationSlack;
+        }
+        if (pop > 0.0f)
+        {
+            Vec3 correction = n * pop;
+            C.p0 += correction;
+            C.p1 += correction;
+        }
         // Slide velocity along contact plane
         inOutVelocity = projectAndSlide(inOutVelocity, n);
         return true;
@@ -520,6 +600,7 @@ namespace CapsuleCollision
     {
         out = Hit();
         AABB box = aabbFromCapsule(C);
+        aabbInflate(box, 0.01f);
         int count = 0;
         mesh.query(box, triScratch, count, triCap);
         bool any = false;
@@ -543,6 +624,10 @@ namespace CapsuleCollision
         return any;
     }
 
+    // Forward declaration for analytic per-triangle sweep
+    inline bool capsuleTriangleSweep(const Capsule& start, const Vec3& vel, const Triangle& T,
+                                     float& toi, Vec3& normal, Vec3& impactPoint);
+
     inline bool moveCapsuleWithCCD(Capsule& C, Vec3& velocity, const TriangleMeshView& mesh, const ResolveConfig& cfg, int substeps)
     {
         if (substeps <= 0) substeps = 1;
@@ -552,94 +637,61 @@ namespace CapsuleCollision
         int indices[kStackCap];
         for (int s = 0; s < substeps; ++s)
         {
-            // Keep previous pose for TOI search
+            // Keep previous pose for sweep
             Capsule Cprev = C;
             Vec3 dv = stepVel;
 
-            // Try full integration for this substep
-            C.p0 += dv;
-            C.p1 += dv;
-
-            // Broad-phase: query AABB of moved capsule
-            AABB box = aabbFromCapsule(C);
+            // Broad-phase: query swept AABB between previous and end pose with small inflation
+            Capsule Cend = Cprev; Cend.p0 += dv; Cend.p1 += dv;
+            AABB boxPrev = aabbFromCapsule(Cprev);
+            AABB boxEnd = aabbFromCapsule(Cend);
+            AABB box = aabbMerge(boxPrev, boxEnd);
+            aabbInflate(box, cc_max(0.01f, cfg.contactOffset));
             int count = 0;
             mesh.query(box, indices, count, kStackCap);
 
-            // Check overlap with any candidate triangle at end pose
-            bool overlapEnd = false;
-            Hit tmp; float bestDepthEnd = -1.0f;
+            // Analytic per-triangle sweep to find earliest time-of-impact
+            float bestTOI = 1.0f; bool hitAny = false; Vec3 bestN, bestP; int bestIdx = -1;
+            // Speculative: inflate capsule radius during sweep by contactOffset for early contact
+            Capsule CprevInflated = Cprev; CprevInflated.r = Cprev.r + cc_max(0.0f, cfg.contactOffset);
             for (int i = 0; i < count; ++i)
             {
                 int idx = indices[i];
                 const Triangle& T = mesh.tri(idx);
-                Hit h;
-                if (intersectCapsuleTriangle(C, T, h))
+                float toi; Vec3 n, p;
+                if (capsuleTriangleSweep(CprevInflated, dv, T, toi, n, p))
                 {
-                    overlapEnd = true;
-                    if (h.depth > bestDepthEnd) { bestDepthEnd = h.depth; tmp = h; tmp.triIndex = idx; }
+                    if (toi >= 0.0f && toi <= 1.0f)
+                    {
+                        if (!hitAny || toi < bestTOI)
+                        {
+                            hitAny = true; bestTOI = toi; bestN = n; bestP = p; bestIdx = idx;
+                        }
+                    }
                 }
             }
 
-            if (!overlapEnd)
+            if (!hitAny)
             {
-                // No collision at end of substep, continue
+                // No collision along this substep, integrate fully
+                C = Cend;
                 continue;
             }
 
-            // Conservative advancement (binary search) to find earliest TOI in [0,1]
-            float tLow = 0.0f;
-            float tHigh = 1.0f;
-            const int kTOIIter = 6; // ~1/64 precision along substep
-            for (int it = 0; it < kTOIIter; ++it)
-            {
-                float tMid = 0.5f * (tLow + tHigh);
-                Capsule Cmid = Cprev;
-                Vec3 dvm = dv * tMid;
-                Cmid.p0 += dvm;
-                Cmid.p1 += dvm;
-
-                // Query at mid pose
-                AABB bmid = aabbFromCapsule(Cmid);
-                int cntMid = 0;
-                mesh.query(bmid, indices, cntMid, kStackCap);
-                bool overlapMid = false;
-                for (int i = 0; i < cntMid; ++i)
-                {
-                    const Triangle& T = mesh.tri(indices[i]);
-                    Hit h; if (intersectCapsuleTriangle(Cmid, T, h)) { overlapMid = true; break; }
-                }
-                if (overlapMid) tHigh = tMid; else tLow = tMid;
-            }
-
-            // Move capsule to earliest non-colliding pose (tLow)
+            // Move capsule to impact time (touching configuration)
             C = Cprev;
-            Vec3 dvl = dv * tLow;
-            C.p0 += dvl;
-            C.p1 += dvl;
+            Vec3 adv = dv * bestTOI;
+            C.p0 += adv; C.p1 += adv;
 
-            // Compute contact at slightly inside (tHigh)
-            Capsule Ccontact = Cprev;
-            Vec3 dvh = dv * tHigh;
-            Ccontact.p0 += dvh;
-            Ccontact.p1 += dvh;
-            AABB bcon = aabbFromCapsule(Ccontact);
-            int cntCon = 0;
-            mesh.query(bcon, indices, cntCon, kStackCap);
-            Hit bestHit; float bestDepth = -1.0f;
-            for (int i = 0; i < cntCon; ++i)
-            {
-                int idx = indices[i];
-                const Triangle& T = mesh.tri(idx);
-                Hit h; if (intersectCapsuleTriangle(Ccontact, T, h)) { if (h.depth > bestDepth) { bestDepth = h.depth; bestHit = h; bestHit.triIndex = idx; } }
-            }
+            // Create a tiny penetration to resolve and slide along the surface
+            Hit contact; contact.hit = true; contact.depth = 0.0f; // rely on penetrationSlack and speculative offset already applied
+            contact.normal = Vec3::normalizeSafe(bestN);
+            contact.point = bestP; contact.triIndex = bestIdx;
 
-            if (bestDepth > 0.0f)
-            {
-                collided = true;
-                resolveCapsuleHit(C, bestHit, velocity, cfg);
-                // After resolving, also slide stepVel for subsequent substeps
-                stepVel = projectAndSlide(stepVel, bestHit.normal);
-            }
+            // Apply resolution (pop-out by slack) and slide both global velocity and per-step
+            collided = true;
+            resolveCapsuleHit(C, contact, velocity, cfg);
+            stepVel = projectAndSlide(stepVel, contact.normal);
 
             // Additional lightweight multi-contact iterations to resolve corners/edges
             for (int iter = 0; iter < 3; ++iter)
@@ -662,6 +714,181 @@ namespace CapsuleCollision
         if (velocity.length2() < EPSILON * EPSILON)
             velocity = Vec3(0,0,0);
         return collided;
+    }
+
+    // Analytic sweep test: moving capsule (translation only) vs single triangle.
+    // Returns true if collision occurs for param t in [0,1]. Outputs time of impact (toi), contact normal and impact point on triangle.
+    // Handles planar face, edge and vertex cases via decomposition to sphere sweeps.
+    inline bool capsuleTriangleSweep(const Capsule& start, const Vec3& vel, const Triangle& T,
+                                     float& toi, Vec3& normal, Vec3& impactPoint)
+    {
+        toi = 0.0f; normal = Vec3(0,1,0); impactPoint = T.a;
+        // Early out: zero velocity
+        if (vel.length2() <= EPSILON * EPSILON)
+        {
+            Hit h; if (intersectCapsuleTriangle(start, T, h)) { toi = 0.0f; normal = h.normal; impactPoint = h.point; return true; }
+            return false;
+        }
+
+        // If initially overlapping, report t=0
+        {
+            Hit h; if (intersectCapsuleTriangle(start, T, h)) { toi = 0.0f; normal = h.normal; impactPoint = h.point; return true; }
+        }
+
+        // Precompute triangle plane
+        Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
+        if (T.doubleSided)
+        {
+            // Orient so it opposes motion for more stable face contact normal.
+            if (Vec3::dot(Ntri, vel) > 0.0f) Ntri = Ntri * -1.0f;
+        }
+
+        // Helper: barycentric point-in-triangle on plane (assumes p lies on plane already)
+        auto pointInTriangle = [&](const Vec3& p)->bool {
+            Vec3 v0 = T.b - T.a; Vec3 v1 = T.c - T.a; Vec3 v2 = p - T.a;
+            float d00 = Vec3::dot(v0,v0); float d01 = Vec3::dot(v0,v1); float d11 = Vec3::dot(v1,v1);
+            float d20 = Vec3::dot(v2,v0); float d21 = Vec3::dot(v2,v1);
+            float denom = d00 * d11 - d01 * d01;
+            if (cc_abs(denom) <= EPSILON) return false;
+            float v = (d11 * d20 - d01 * d21) / denom;
+            float w = (d00 * d21 - d01 * d20) / denom;
+            float u = 1.0f - v - w;
+            const float tol = -LARGE_EPS * 10.0f; // allow tiny negative due to FP
+            return (u >= tol && v >= tol && w >= tol);
+        };
+
+        // Sphere-triangle analytic sweep helper (face/edge/vertex) for a single moving sphere center.
+        auto sphereTriangleSweep = [&](const Vec3& center, float radius, float& outT, Vec3& outN, Vec3& outP)->bool
+        {
+            outT = 1.0f; bool hit = false; outN = Ntri; outP = T.a;
+            // 1) Face plane candidates (solve for center-plane distance == radius)
+            float dist0 = signedDistanceToPlane(center, Ntri, dtri); // N oriented from triangle
+            float denom = Vec3::dot(Ntri, vel);
+            if (cc_abs(denom) > EPSILON)
+            {
+                // Two potential contacts: dist(t)=+/-radius
+                float t1 = (radius - dist0) / denom; // dist becomes +radius
+                float t2 = (-radius - dist0) / denom; // dist becomes -radius
+                auto testFaceT = [&](float tCandidate){
+                    if (tCandidate < 0.0f || tCandidate > 1.0f) return; // outside window
+                    Vec3 c = center + vel * tCandidate;
+                    float dNow = signedDistanceToPlane(c, Ntri, dtri);
+                    // Project onto plane
+                    Vec3 pOnPlane = c - Ntri * dNow;
+                    if (pointInTriangle(pOnPlane))
+                    {
+                        if (!hit || tCandidate < outT)
+                        {
+                            hit = true; outT = tCandidate; outN = Ntri; outP = pOnPlane; }
+                    }
+                };
+                if (dist0 > radius) // outside positive side moving towards plane or not
+                    testFaceT(t1);
+                if (dist0 < -radius)
+                    testFaceT(t2);
+                // If inside slab already, ignore face (vertex/edge will handle) unless projection inside -> immediate overlap
+                if (!hit && cc_abs(dist0) < radius && pointInTriangle(center - Ntri * dist0))
+                {
+                    hit = true; outT = 0.0f; outN = Ntri; outP = center - Ntri * dist0;
+                }
+            }
+
+            // 2) Edge capsules (treat edges as capsules of radius=radius)
+            auto rayCapsule = [&](const Vec3& ro, const Vec3& rd, const Vec3& a, const Vec3& b, float rad, float& tHit, Vec3& nHit, Vec3& pHit)->bool
+            {
+                Vec3 axis = b - a; float L2 = axis.length2(); if (L2 <= EPSILON*EPSILON) return false; float L = cc_sqrt(L2); Vec3 n = axis / L;
+                Vec3 dp = ro - a; Vec3 d = rd;
+                float dDotN = Vec3::dot(d, n);
+                Vec3 dPerp = d - n * dDotN;
+                Vec3 oPerp = dp - n * Vec3::dot(dp, n);
+                float A = Vec3::dot(dPerp, dPerp);
+                float B = Vec3::dot(oPerp, dPerp);
+                float C = Vec3::dot(oPerp, oPerp) - rad * rad;
+                bool hitLocal = false; float tBest = 1.0f; Vec3 nBest, pBest;
+                if (A > EPSILON)
+                {
+                    float disc = B*B - A*C;
+                    if (disc >= 0.0f)
+                    {
+                        float sqrtD = cc_sqrt(disc);
+                        float t0 = (-B - sqrtD) / A;
+                        float t1 = (-B + sqrtD) / A;
+                        auto testRoot = [&](float tR){
+                            if (tR < 0.0f || tR > 1.0f) return;
+                            Vec3 c = ro + rd * tR; float k = Vec3::dot(c - a, n);
+                            if (k >= 0.0f && k <= L)
+                            {
+                                Vec3 vperp = c - (a + n * k); // radial vector
+                                float len2 = vperp.length2(); if (len2 <= EPSILON) return; Vec3 nn = vperp / cc_sqrt(len2);
+                                if (!hitLocal || tR < tBest) { hitLocal = true; tBest = tR; nBest = nn; pBest = a + n * k; }
+                            }
+                        };
+                        testRoot(t0); testRoot(t1);
+                    }
+                }
+                // Caps (end spheres)
+                auto raySphere = [&](const Vec3& centerS){
+                    Vec3 m = ro - centerS; float A2 = Vec3::dot(d,d); float B2 = Vec3::dot(m,d); float C2 = Vec3::dot(m,m) - rad*rad; if (C2 < 0.0f) { // inside sphere -> immediate
+                        if (!hitLocal) { hitLocal = true; tBest = 0.0f; nBest = Vec3::normalizeSafe(m, Ntri); pBest = centerS; }
+                        return; }
+                    float disc = B2*B2 - A2*C2; if (disc < 0.0f) return; float tHitS = (-B2 - cc_sqrt(disc)) / (A2 > EPSILON ? A2 : 1.0f);
+                    if (tHitS >= 0.0f && tHitS <= 1.0f)
+                    {
+                        Vec3 c = ro + d * tHitS; Vec3 nrm = c - centerS; float l2 = nrm.length2(); if (l2 > EPSILON*EPSILON) nrm = nrm / cc_sqrt(l2); else nrm = Ntri;
+                        if (!hitLocal || tHitS < tBest) { hitLocal = true; tBest = tHitS; nBest = nrm; pBest = centerS; }
+                    }
+                };
+                raySphere(a); raySphere(b);
+                if (hitLocal)
+                {
+                    tHit = tBest; nHit = nBest; pHit = pBest; return true;
+                }
+                return false;
+            };
+
+            float tEdge; Vec3 nEdge, pEdge;
+            if (rayCapsule(center, vel, T.a, T.b, radius, tEdge, nEdge, pEdge))
+            {
+                if (!hit || tEdge < outT) { hit = true; outT = tEdge; outN = nEdge; outP = pEdge; }
+            }
+            if (rayCapsule(center, vel, T.b, T.c, radius, tEdge, nEdge, pEdge))
+            {
+                if (!hit || tEdge < outT) { hit = true; outT = tEdge; outN = nEdge; outP = pEdge; }
+            }
+            if (rayCapsule(center, vel, T.c, T.a, radius, tEdge, nEdge, pEdge))
+            {
+                if (!hit || tEdge < outT) { hit = true; outT = tEdge; outN = nEdge; outP = pEdge; }
+            }
+
+            return hit;
+        };
+
+        // Test spheres at endpoints and midpoint to approximate side face cases.
+        float bestT = 1.0f; bool any = false; Vec3 bestN, bestP;
+        auto testSphere = [&](const Vec3& c){ float tLocal; Vec3 nLocal, pLocal; if (sphereTriangleSweep(c, start.r, tLocal, nLocal, pLocal)) { if (!any || tLocal < bestT) { any = true; bestT = tLocal; bestN = nLocal; bestP = pLocal; } } };
+        Vec3 mid = (start.p0 + start.p1) * 0.5f;
+        testSphere(start.p0); testSphere(start.p1); testSphere(mid);
+
+        if (!any || bestT < 0.0f || bestT > 1.0f)
+            return false;
+
+        // Finalize outputs. Impact point on triangle surface: for edge/vertex, pLocal is representative location.
+        // For sphere center contact with face, pLocal already projected. Adjust impact to triangle contact point.
+        // Determine triangle point for output: if pLocal lies on plane, keep; else project.
+        float planeDist = signedDistanceToPlane(bestP, Ntri, dtri);
+        if (cc_abs(planeDist) > LARGE_EPS)
+        {
+            bestP = bestP - Ntri * planeDist; // ensure on plane for consistency
+        }
+        // Orient normal to oppose motion (ensure separating direction)
+        if (Vec3::dot(bestN, vel) > 0.0f) bestN = bestN * -1.0f;
+        // If double sided adjust using triangle normal if near face
+        if (T.doubleSided && Vec3::dot(bestN, Ntri) < 0.0f) bestN = bestN * -1.0f;
+
+        toi = bestT;
+        normal = Vec3::normalizeSafe(bestN, Ntri);
+        impactPoint = bestP;
+        return true;
     }
 
     // BEGIN: Wicked helpers

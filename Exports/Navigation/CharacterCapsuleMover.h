@@ -15,6 +15,9 @@ namespace VMAP
         float radius = 0.4f;
         Vector3 up = Vector3(0, 1, 0);
         int ccdSubsteps = 5;
+        float walkableSlopeCos = 0.70710678f; // cos(45deg)
+        float stepHeight = 0.5f; // maximum vertical step-up height to attempt on low obstacles
+        uint32_t collisionMask = 0xFFFFFFFFu; // mask from higher-level systems to filter SceneQuery
         CapsuleCollision::ResolveConfig resolve; // default constructed
     };
 

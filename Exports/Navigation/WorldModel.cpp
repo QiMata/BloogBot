@@ -299,19 +299,10 @@ namespace VMAP
     {
         std::vector<CylinderSweepHit> hits;
 
-        // Create swept bounds
-        G3D::AABox sweepBounds = cyl.getBounds();
-        Cylinder endCyl(cyl.base + sweepDir * sweepDistance, cyl.axis, cyl.radius, cyl.height);
-        sweepBounds.merge(endCyl.getBounds());
+        // Entrance log removed to further reduce spam; only log if we have hits.
 
-        // Quick bounds check
-        if (!iBound.intersects(sweepBounds))
-            return hits;
-
-        // Convert mesh data for CylinderCollision
         std::vector<uint32_t> indices;
         indices.reserve(triangles.size() * 3);
-
         auto triIt = triangles.begin();
         while (triIt != triangles.end())
         {
@@ -321,9 +312,9 @@ namespace VMAP
             ++triIt;
         }
 
-        // Use CylinderCollision's sweep function
         hits = CylinderCollision::SweepCylinder(cyl, sweepDir, sweepDistance, vertices, indices);
 
+        // Suppress per-GroupModel sweep summary log
         return hits;
     }
 
@@ -554,9 +545,6 @@ namespace VMAP
     {
         CylinderIntersection result;
 
-        if (modelFlags & MOD_M2)
-            return result;  // Skip M2 models if needed
-
         // Test against all group models
         auto it = groupModels.begin();
         while (it != groupModels.end())
@@ -582,29 +570,18 @@ namespace VMAP
     {
         std::vector<CylinderSweepHit> allHits;
 
-        if (modelFlags & MOD_M2)
-            return allHits;  // Skip M2 models if needed
-
-        // Sweep through all group models
+        // Sweep through all group models without verbose per-group logging
         auto it = groupModels.begin();
         while (it != groupModels.end())
         {
             std::vector<CylinderSweepHit> groupHits = it->SweepCylinder(cyl, sweepDir, sweepDistance);
-
-            // Merge hits
-            auto hitIt = groupHits.begin();
-            while (hitIt != groupHits.end())
-            {
-                allHits.push_back(*hitIt);
-                ++hitIt;
-            }
-
+            allHits.insert(allHits.end(), groupHits.begin(), groupHits.end());
             ++it;
         }
 
-        // Sort by height (highest first)
         std::sort(allHits.begin(), allHits.end());
 
+        // Suppress WorldModel sweep summary log
         return allHits;
     }
 

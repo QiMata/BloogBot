@@ -5,6 +5,9 @@
 
 namespace VMAP
 {
+    // Local small epsilons
+    static inline float CC_EPS() { return 1e-6f; }
+
     // Helper: Project point onto line segment
     G3D::Vector3 CylinderCollision::ClosestPointOnSegment(
         const G3D::Vector3& point,
@@ -58,7 +61,97 @@ namespace VMAP
         return (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1);
     }
 
-    // Test cylinder caps against triangle
+    // New helper: closest point on triangle in 3D using barycentric regions (Ericson)
+    static inline G3D::Vector3 ClosestPointOnTriangle3D(
+        const G3D::Vector3& p,
+        const G3D::Vector3& a,
+        const G3D::Vector3& b,
+        const G3D::Vector3& c)
+    {
+        G3D::Vector3 ab = b - a;
+        G3D::Vector3 ac = c - a;
+        G3D::Vector3 ap = p - a;
+        float d1 = ab.dot(ap);
+        float d2 = ac.dot(ap);
+        if (d1 <= 0.0f && d2 <= 0.0f) return a; // bary (1,0,0)
+
+        G3D::Vector3 bp = p - b;
+        float d3 = ab.dot(bp);
+        float d4 = ac.dot(bp);
+        if (d3 >= 0.0f && d4 <= d3) return b; // bary (0,1,0)
+
+        float vc = d1 * d4 - d3 * d2;
+        if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
+        {
+            float v = d1 / (d1 - d3 + (std::abs(d1 - d3) <= CC_EPS() ? CC_EPS() : 0.0f));
+            return a + ab * v; // bary (1-v, v, 0)
+        }
+
+        G3D::Vector3 cp = p - c;
+        float d5 = ab.dot(cp);
+        float d6 = ac.dot(cp);
+        if (d6 >= 0.0f && d5 <= d6) return c; // bary (0,0,1)
+
+        float vb = d5 * d2 - d1 * d6;
+        if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
+        {
+            float denom_ac = (d2 - d6);
+            denom_ac = std::abs(denom_ac) <= CC_EPS() ? (denom_ac < 0.0f ? -CC_EPS() : CC_EPS()) : denom_ac;
+            float w = d2 / denom_ac;
+            return a + ac * w; // bary (1-w, 0, w)
+        }
+
+        G3D::Vector3 bc = c - b;
+        float va = d3 * d6 - d5 * d4;
+        if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
+        {
+            float denom_bc = (d4 - d3) + (d5 - d6);
+            denom_bc = std::abs(denom_bc) <= CC_EPS() ? (denom_bc < 0.0f ? -CC_EPS() : CC_EPS()) : denom_bc;
+            float w = (d4 - d3) / denom_bc;
+            return b + bc * w; // bary (0,1-w,w)
+        }
+
+        // Inside face
+        float sum = va + vb + vc;
+        if (std::abs(sum) <= CC_EPS()) return a; // fallback
+        float inv = 1.0f / sum;
+        float v = vb * inv;
+        float w = vc * inv;
+        return a * (1.0f - v - w) + b * v + c * w;
+    }
+
+    // New helper: sphere vs triangle (3D). Writes candidate if closer.
+    static inline bool IntersectSphereTriangle3D(
+        const G3D::Vector3& center,
+        float radius,
+        const G3D::Vector3& v0,
+        const G3D::Vector3& v1,
+        const G3D::Vector3& v2,
+        const G3D::Vector3& triNormalOriented,
+        CylinderIntersection& out)
+    {
+        G3D::Vector3 q = ClosestPointOnTriangle3D(center, v0, v1, v2);
+        G3D::Vector3 d = center - q;
+        float dist2 = d.squaredMagnitude();
+        float r2 = radius * radius;
+        if (dist2 > r2)
+            return false;
+        float dist = std::sqrt(std::max(dist2, 0.0f));
+        G3D::Vector3 n;
+        if (dist > 1e-6f)
+            n = d / dist;
+        else
+            n = triNormalOriented;
+
+        out.hit = true;
+        out.contactPoint = q;
+        out.contactHeight = q.z;
+        out.contactNormal = n;
+        out.penetrationDepth = radius - dist;
+        return true;
+    }
+
+    // Test cylinder caps against triangle (use proper sphere-triangle tests for top & bottom caps)
     bool CylinderCollision::IntersectCylinderCapsWithTriangle(
         const Cylinder& cyl,
         const G3D::Vector3& v0,
@@ -67,111 +160,38 @@ namespace VMAP
         const G3D::Vector3& triNormal,
         CylinderIntersection& result)
     {
-        // Test bottom cap
-        G3D::Vector3 capCenter = cyl.base;
+        bool any = false;
+        CylinderIntersection best;
 
-        // Project cap center onto triangle plane
-        float distToPlane = (capCenter - v0).dot(triNormal);
-        G3D::Vector3 projectedPoint = capCenter - triNormal * distToPlane;
-
-        // Check if projected point is within cylinder radius of triangle
-        bool bottomHit = false;
-
-        if (PointInTriangle2D(projectedPoint, v0, v1, v2)) {
-            // Point is inside triangle
-            if (std::abs(distToPlane) <= 0.1f) { // Small tolerance
-                bottomHit = true;
-                result.hit = true;
-                result.contactPoint = projectedPoint;
-                result.contactHeight = projectedPoint.z;
-                result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
-                result.penetrationDepth = std::abs(distToPlane);
-                PHYS_TRACE(PHYS_CYL, "capHit=bottom inTri=1 distToPlane=" << distToPlane << " nZ=" << result.contactNormal.z);
+        // Bottom cap as sphere
+        {
+            CylinderIntersection tmp;
+            if (IntersectSphereTriangle3D(cyl.base, cyl.radius, v0, v1, v2, (triNormal.z < 0.0f ? -triNormal : triNormal), tmp))
+            {
+                best = tmp;
+                any = true;
             }
         }
-        else {
-            // Check distance to triangle edges
-            float dist0 = DistanceToSegment(projectedPoint, v0, v1);
-            float dist1 = DistanceToSegment(projectedPoint, v1, v2);
-            float dist2 = DistanceToSegment(projectedPoint, v2, v0);
-            float minDist = std::min({ dist0, dist1, dist2 });
-
-            if (minDist <= cyl.radius && std::abs(distToPlane) <= 0.1f) {
-                bottomHit = true;
-                result.hit = true;
-
-                // Find closest point on triangle perimeter
-                G3D::Vector3 closestPoint;
-                if (minDist == dist0) {
-                    closestPoint = ClosestPointOnSegment(projectedPoint, v0, v1);
+        // Top cap as sphere
+        {
+            CylinderIntersection tmp;
+            G3D::Vector3 topCenter = cyl.getTop();
+            if (IntersectSphereTriangle3D(topCenter, cyl.radius, v0, v1, v2, (triNormal.z < 0.0f ? -triNormal : triNormal), tmp))
+            {
+                if (!any || tmp.contactHeight > best.contactHeight)
+                {
+                    best = tmp;
+                    any = true;
                 }
-                else if (minDist == dist1) {
-                    closestPoint = ClosestPointOnSegment(projectedPoint, v1, v2);
-                }
-                else {
-                    closestPoint = ClosestPointOnSegment(projectedPoint, v2, v0);
-                }
-
-                result.contactPoint = closestPoint;
-                result.contactHeight = closestPoint.z;
-                result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
-                result.penetrationDepth = cyl.radius - minDist;
-                PHYS_TRACE(PHYS_CYL, "capHit=bottom inTri=0 minEdgeDist=" << minDist << " nZ=" << result.contactNormal.z);
             }
         }
 
-        // Test top cap similarly
-        capCenter = cyl.getTop();
-        distToPlane = (capCenter - v0).dot(triNormal);
-        projectedPoint = capCenter - triNormal * distToPlane;
-
-        if (PointInTriangle2D(projectedPoint, v0, v1, v2)) {
-            if (std::abs(distToPlane) <= 0.1f) {
-                result.hit = true;
-                // Only update if this is a better (higher) contact point
-                if (projectedPoint.z > result.contactHeight || !bottomHit) {
-                    result.contactPoint = projectedPoint;
-                    result.contactHeight = projectedPoint.z;
-                    result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
-                    result.penetrationDepth = std::abs(distToPlane);
-                }
-                PHYS_TRACE(PHYS_CYL, "capHit=top inTri=1 distToPlane=" << distToPlane << " nZ=" << result.contactNormal.z);
-                return true;
-            }
+        if (any)
+        {
+            result = best;
+            return true;
         }
-        else {
-            float dist0 = DistanceToSegment(projectedPoint, v0, v1);
-            float dist1 = DistanceToSegment(projectedPoint, v1, v2);
-            float dist2 = DistanceToSegment(projectedPoint, v2, v0);
-            float minDist = std::min({ dist0, dist1, dist2 });
-
-            if (minDist <= cyl.radius && std::abs(distToPlane) <= 0.1f) {
-                result.hit = true;
-
-                G3D::Vector3 closestPoint;
-                if (minDist == dist0) {
-                    closestPoint = ClosestPointOnSegment(projectedPoint, v0, v1);
-                }
-                else if (minDist == dist1) {
-                    closestPoint = ClosestPointOnSegment(projectedPoint, v1, v2);
-                }
-                else {
-                    closestPoint = ClosestPointOnSegment(projectedPoint, v2, v0);
-                }
-
-                // Only update if this is a better (higher) contact point
-                if (closestPoint.z > result.contactHeight || !bottomHit) {
-                    result.contactPoint = closestPoint;
-                    result.contactHeight = closestPoint.z;
-                    result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
-                    result.penetrationDepth = cyl.radius - minDist;
-                }
-                PHYS_TRACE(PHYS_CYL, "capHit=top inTri=0 minEdgeDist=" << minDist << " nZ=" << result.contactNormal.z);
-                return true;
-            }
-        }
-
-        return bottomHit;
+        return false;
     }
 
     // Test cylinder side against triangle edges
@@ -202,7 +222,7 @@ namespace VMAP
         if (std::abs(denom) < 0.0001f) {
             // Parallel lines
             s = 0;
-            t = f / e;
+            t = e > 0.0001f ? (f / e) : 0.0f;
         }
         else {
             s = (b * f - c * e) / denom;
@@ -234,7 +254,6 @@ namespace VMAP
             }
 
             result.penetrationDepth = cyl.radius - distance;
-            PHYS_TRACE(PHYS_CYL, "sideHit=edge axisToEdgeLen=" << toEdgeLength << " nZ=" << result.contactNormal.z);
             return true;
         }
 
@@ -310,13 +329,13 @@ namespace VMAP
                             result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
                             result.penetrationDepth = 0; // Axis passes through
                             hit = true;
-                            PHYS_TRACE(PHYS_CYL, "sideHit=axisIntersect nZ=" << result.contactNormal.z);
                         }
                     }
                 }
             }
         }
 
+        (void)cylTop; // silence unused in some builds
         return hit;
     }
 
@@ -343,7 +362,7 @@ namespace VMAP
             return result; // No intersection possible
         }
 
-        // Test cylinder caps against triangle
+        // Test cylinder caps against triangle (using sphere-triangle for both caps)
         CylinderIntersection capsResult;
         bool capsHit = IntersectCylinderCapsWithTriangle(cyl, v0, v1, v2, triNormal, capsResult);
 
@@ -352,26 +371,16 @@ namespace VMAP
         bool sideHit = IntersectCylinderSideWithTriangle(cyl, v0, v1, v2, triNormal, sideResult);
 
         // Return the best (highest) contact point
-        const char* src = "none";
         if (capsHit && sideHit) {
             result = (capsResult.contactHeight > sideResult.contactHeight) ? capsResult : sideResult;
-            src = (capsResult.contactHeight > sideResult.contactHeight) ? "caps" : "side";
         }
         else if (capsHit) {
             result = capsResult;
-            src = "caps";
         }
         else if (sideHit) {
             result = sideResult;
-            src = "side";
         }
 
-        if (result.hit) {
-            PHYS_TRACE(PHYS_CYL, "triangle hit src=" << src
-                << " contactZ=" << result.contactHeight
-                << " triN.z(raw/oriented)=" << triNormalRaw.z << "/" << triNormal.z
-                << " pen=" << result.penetrationDepth);
-        }
         return result;
     }
 
@@ -385,59 +394,124 @@ namespace VMAP
     {
         std::vector<CylinderSweepHit> hits;
 
-        // Create swept bounds for broad phase
+        // Handle zero distance as a pure overlap query
+        G3D::Vector3 sweepVec = sweepDir * sweepDistance;
+        float sweepLen = sweepVec.magnitude();
+        float invSweepLen = (sweepLen > 0.0f ? 1.0f / sweepLen : 0.0f);
+
+        // Swept AABB broadphase (start + end merged)
         G3D::AABox sweepBounds = cyl.getBounds();
-        Cylinder endCyl(cyl.base + sweepDir * sweepDistance, cyl.axis, cyl.radius, cyl.height);
-        sweepBounds.merge(endCyl.getBounds());
+        if (sweepLen > 0.0f)
+        {
+            Cylinder endCyl(cyl.base + sweepVec, cyl.axis, cyl.radius, cyl.height);
+            sweepBounds.merge(endCyl.getBounds());
+        }
 
-        // Test each triangle
         size_t triangleCount = indices.size() / 3;
-        for (size_t i = 0; i < triangleCount; ++i) {
-            const G3D::Vector3& v0ref = vertices[indices[i * 3]];
-            const G3D::Vector3& v1ref = vertices[indices[i * 3 + 1]];
-            const G3D::Vector3& v2ref = vertices[indices[i * 3 + 2]];
+        if (triangleCount == 0)
+            return hits;
 
-            // Quick bounds check
-            G3D::AABox triBounds(v0ref, v0ref);
-            triBounds.merge(v1ref);
-            triBounds.merge(v2ref);
+        // Parameters for CCD refinement
+        const int kCoarseMax = 16;               // max coarse samples
+        const int kRefineIter = 8;               // binary search iterations
+        const float kMinSegLen = 0.25f;          // target coarse segment length
+        const float kPenEps = 1e-5f;             // small epsilon
 
-            if (!sweepBounds.intersects(triBounds)) {
-                continue;
+        for (size_t i = 0; i < triangleCount; ++i)
+        {
+            const G3D::Vector3& v0 = vertices[indices[i * 3 + 0]];
+            const G3D::Vector3& v1 = vertices[indices[i * 3 + 1]];
+            const G3D::Vector3& v2 = vertices[indices[i * 3 + 2]];
+
+            // Triangle bounds vs swept bounds
+            G3D::AABox triBox(v0, v0); triBox.merge(v1); triBox.merge(v2);
+            auto tLo = triBox.low(); auto tHi = triBox.high();
+            auto sLo = sweepBounds.low(); auto sHi = sweepBounds.high();
+
+            // Helper lambda to test at param t in [0,1]
+            auto testAt = [&](float t, CylinderIntersection& outI) -> bool
+            {
+                if (t <= 0.0f)
+                {
+                    outI = IntersectCylinderTriangle(cyl, v0, v1, v2);
+                    return outI.hit;
+                }
+                Cylinder cur(cyl.base + sweepVec * t, cyl.axis, cyl.radius, cyl.height);
+                outI = IntersectCylinderTriangle(cur, v0, v1, v2);
+                return outI.hit;
+            };
+
+            // Check initial overlap first (TOI = 0)
+            CylinderIntersection startHit;
+            if (testAt(0.0f, startHit))
+            {
+                CylinderSweepHit h; h.q.hit = true; h.q.distance = 0.0f; h.q.point = startHit.contactPoint; h.q.normal = startHit.contactNormal; h.height = startHit.contactHeight; h.normal = startHit.contactNormal; h.position = startHit.contactPoint; h.walkable = CylinderHelpers::IsWalkableSurface(startHit.contactNormal); h.triangleIndex = (uint32_t)i; h.q.triIndex = h.triangleIndex; hits.push_back(h);
+                continue; // Already penetrating; earliest possible
             }
 
-            // Conservative advancement along sweep to approximate TOI
-            const int sweepSteps = std::max(1, (int)(sweepDistance / 0.5f));
-            bool added = false;
-            // Note: We cannot compute exact TOI here without full CCD; reuse existing approximation region
-            for (int s = 0; s <= sweepSteps; ++s) {
-                float t = (sweepSteps == 0 ? 0.0f : (float)s / (float)sweepSteps);
-                Cylinder stepCyl(cyl.base + sweepDir * (t * sweepDistance), cyl.axis, cyl.radius, cyl.height);
-                CylinderIntersection inter = IntersectCylinderTriangle(stepCyl, v0ref, v1ref, v2ref);
-                if (inter.hit) {
-                    CylinderSweepHit h;
-                    h.q.hit = true;
-                    h.q.distance = t * sweepDistance;
-                    h.q.point = inter.contactPoint;
-                    h.q.normal = inter.contactNormal;
-                    h.height = inter.contactHeight;
-                    h.normal = inter.contactNormal;
-                    h.position = inter.contactPoint;
-                    h.walkable = CylinderHelpers::IsWalkableSurface(inter.contactNormal);
-                    h.triangleIndex = static_cast<uint32_t>(i);
-                    h.q.triIndex = h.triangleIndex;
-                    hits.push_back(h);
-                    added = true;
-                    // Emit diagnostic trace; instance id may be filled by caller later
-                    PHYS_TRACE(PHYS_CYL, "sweep hit tri=" << h.triangleIndex << " toi=" << h.q.distance
-                        << " h=" << h.height << " nZ=" << h.normal.z);
+            if (sweepLen <= 0.0f)
+            {
+                continue; // no movement and not overlapping
+            }
+
+            // Determine coarse sample count
+            int coarseCount = (int)std::ceil(sweepLen / kMinSegLen);
+            if (coarseCount < 1) coarseCount = 1; else if (coarseCount > kCoarseMax) coarseCount = kCoarseMax;
+
+            float tLow = 0.0f;
+            float tHigh = -1.0f; // sentinel meaning not found
+            CylinderIntersection highHit; // store first colliding intersection
+
+            // Coarse forward march to bracket collision
+            for (int s = 1; s <= coarseCount; ++s)
+            {
+                float t = (float)s / (float)coarseCount; // in (0,1]
+                CylinderIntersection isect;
+                if (testAt(t, isect))
+                {
+                    tHigh = t;
+                    highHit = isect;
                     break;
                 }
             }
 
-            (void)added;
+            if (tHigh < 0.0f)
+            {
+                continue; // no hit along path
+            }
+
+            // Binary search refine earliest TOI between tLow (free) and tHigh (hit)
+            for (int it = 0; it < kRefineIter; ++it)
+            {
+                float tMid = 0.5f * (tLow + tHigh);
+                CylinderIntersection midHit;
+                if (testAt(tMid, midHit))
+                {
+                    tHigh = tMid; // still colliding earlier
+                    highHit = midHit;
+                }
+                else
+                {
+                    tLow = tMid; // move bracket up
+                }
+            }
+
+            // Ensure final contact info at refined tHigh
+            CylinderIntersection finalHit;
+            testAt(tHigh, finalHit); // should be colliding
+            if (!finalHit.hit)
+            {
+                // Fallback to stored highHit if numeric issue
+                finalHit = highHit;
+            }
+
+            // Build sweep hit
+            float toiDist = tHigh * sweepDistance;
+            CylinderSweepHit h; h.q.hit = true; h.q.distance = toiDist; h.q.point = finalHit.contactPoint; h.q.normal = finalHit.contactNormal; h.height = finalHit.contactHeight; h.normal = finalHit.contactNormal; h.position = finalHit.contactPoint; h.walkable = CylinderHelpers::IsWalkableSurface(finalHit.contactNormal); h.triangleIndex = (uint32_t)i; h.q.triIndex = h.triangleIndex;
+            hits.push_back(h);
         }
 
+        // Suppress CCD summary log; ModelInstance emits final summary
         return hits;
     }
 
@@ -451,13 +525,19 @@ namespace VMAP
         float& outHeight,
         G3D::Vector3& outNormal)
     {
-        float bestHeight = -std::numeric_limits<float>::max();
+        // Select the hit whose contact XY is closest to the cylinder base XY,
+        // while still respecting walkable slope and step limits.
+        float bestDist2 = std::numeric_limits<float>::max();
+        int bestIdx = -1;
         bool foundSurface = false;
 
-        for (const auto& hit : hits) {
+        for (size_t i = 0; i < hits.size(); ++i) {
+            const auto& hit = hits[i];
             // Skip non-walkable surfaces
             if (!hit.walkable) {
-                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex << " nZ=" << hit.normal.z << " walkable=0");
+                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex
+                    << " inst=" << hit.q.instanceId
+                    << " nZ=" << hit.normal.z << " walkable=0");
                 continue;
             }
 
@@ -465,26 +545,41 @@ namespace VMAP
             float heightDiff = hit.height - currentHeight;
 
             if (heightDiff > maxStepUp) {
-                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex << " heightDiff=" << heightDiff << " > maxStepUp");
+                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex
+                    << " inst=" << hit.q.instanceId
+                    << " heightDiff=" << heightDiff << " > maxStepUp");
                 continue; // Too high to step up
             }
 
             if (heightDiff < -maxStepDown) {
-                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex << " heightDiff=" << heightDiff << " < -maxStepDown");
+                PHYS_TRACE(PHYS_SURF, "reject hit tri=" << hit.triangleIndex
+                    << " inst=" << hit.q.instanceId
+                    << " heightDiff=" << heightDiff << " < -maxStepDown");
                 continue; // Too far to step down
             }
 
-            // Prefer the highest valid surface (most likely to be ground)
-            if (hit.height > bestHeight) {
-                bestHeight = hit.height;
+            // Compute planar distance^2 from cylinder base XY to hit XY
+            float dx = hit.position.x - cyl.base.x;
+            float dy = hit.position.y - cyl.base.y;
+            float d2 = dx * dx + dy * dy;
+
+            // Prefer the smallest XY distance; tie-breaker prefers higher height
+            if (d2 < bestDist2 || (std::abs(d2 - bestDist2) <= 1e-6f && bestIdx >= 0 && hit.height > hits[(size_t)bestIdx].height)) {
+                bestDist2 = d2;
                 outHeight = hit.height;
                 outNormal = hit.normal;
+                bestIdx = (int)i;
                 foundSurface = true;
             }
         }
 
         if (foundSurface) {
-            PHYS_TRACE(PHYS_SURF, "best walkable h=" << outHeight << " nZ=" << outNormal.z);
+            const auto& h = hits[(size_t)bestIdx];
+            PHYS_TRACE(PHYS_SURF, "best walkable h=" << outHeight
+                << " nZ=" << outNormal.z
+                << " tri=" << h.triangleIndex
+                << " inst=" << h.q.instanceId
+                << " dXY2=" << bestDist2);
         }
 
         return foundSurface;
@@ -499,11 +594,15 @@ namespace VMAP
         G3D::Vector3& outNormal)
     {
         float bestStepHeight = std::numeric_limits<float>::max();
+        int bestIdx = -1;
         bool foundSurface = false;
 
-        for (const auto& hit : hits) {
+        for (size_t i = 0; i < hits.size(); ++i) {
+            const auto& hit = hits[i];
             if (!hit.walkable) {
-                PHYS_TRACE(PHYS_SURF, "reject step tri=" << hit.triangleIndex << " walkable=0");
+                PHYS_TRACE(PHYS_SURF, "reject step tri=" << hit.triangleIndex
+                    << " inst=" << hit.q.instanceId
+                    << " walkable=0");
                 continue;
             }
 
@@ -516,13 +615,22 @@ namespace VMAP
                     bestStepHeight = hit.height;
                     outHeight = hit.height;
                     outNormal = hit.normal;
+                    bestIdx = (int)i;
                     foundSurface = true;
                 }
+            } else {
+                PHYS_TRACE(PHYS_SURF, "reject step tri=" << hit.triangleIndex
+                    << " inst=" << hit.q.instanceId
+                    << " heightDiff=" << heightDiff << " not in (0,maxStepUp]");
             }
         }
 
         if (foundSurface) {
-            PHYS_TRACE(PHYS_SURF, "best stepUp h=" << outHeight << " nZ=" << outNormal.z);
+            const auto& h = hits[(size_t)bestIdx];
+            PHYS_TRACE(PHYS_SURF, "best stepUp h=" << outHeight
+                << " nZ=" << outNormal.z
+                << " tri=" << h.triangleIndex
+                << " inst=" << h.q.instanceId);
         }
 
         return foundSurface;

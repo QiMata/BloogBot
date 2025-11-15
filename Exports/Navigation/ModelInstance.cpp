@@ -325,17 +325,15 @@ namespace VMAP
         std::vector<CylinderSweepHit> hits;
 
         if (!iModel)
+        {
             return hits;
+        }
 
         // Create swept bounds for broad phase
         G3D::AABox sweepBounds = worldCylinder.getBounds();
         Cylinder endCyl(worldCylinder.base + sweepDir * sweepDistance,
             worldCylinder.axis, worldCylinder.radius, worldCylinder.height);
         sweepBounds.merge(endCyl.getBounds());
-
-        // Quick bounds check
-        if (!iBound.intersects(sweepBounds))
-            return hits;
 
         // Transform cylinder and sweep into model space
         Cylinder modelCylinder = TransformCylinderToModel(worldCylinder);
@@ -365,7 +363,9 @@ namespace VMAP
             ++it;
         }
 
-        LOG_DEBUG("[MI][SweepCylinder] name='" << name << "' id=" << ID << " hits=" << hits.size());
+        // Summarize only when there are hits
+        if (!hits.empty())
+            PHYS_TRACE(PHYS_CYL, "[MI::Sweep] hits="<<hits.size()<<" name='"<<name<<"' id="<<ID);
         return hits;
     }
 

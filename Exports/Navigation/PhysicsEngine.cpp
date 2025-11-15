@@ -145,13 +145,6 @@ void PhysicsEngine::SetWalkableCosMin(float cosMin)
     VMAP::CylinderHelpers::SetWalkableCosMin(m_walkableCosMin);
 }
 
-void PhysicsEngine::SetWalkableSlopeDegrees(float degrees)
-{
-    // convert degrees to radians, take cos
-    float radians = degrees * (3.14159265358979323846f / 180.0f);
-    SetWalkableCosMin(std::cos(radians));
-}
-
 float PhysicsEngine::GetWalkableCosMin() const
 {
     return m_walkableCosMin;
@@ -274,49 +267,6 @@ G3D::Vector3 PhysicsEngine::ComputeTerrainNormal(uint32_t mapId, float x, float 
     return (len < 0.0001f) ? G3D::Vector3(0, 0, 1) : n / len;
 }
 
-G3D::Vector3 PhysicsEngine::ApproximateVMapNormal(uint32_t mapId, float x, float y, float referenceZ,
-                                                  float cylinderRadius, float cylinderHeight)
-{
-    if (!m_vmapManager)
-        return { 0, 0, 1 };
-
-    float centerH = m_vmapManager->GetCylinderHeight(mapId, x, y, referenceZ + 0.5f,
-                                                     cylinderRadius, cylinderHeight, 2.0f);
-    if (centerH <= INVALID_HEIGHT)
-        return { 0, 0, 1 };
-
-    float offset = std::min(0.5f, cylinderRadius * 0.5f);
-    auto sample = [&](float sx, float sy) -> float
-    {
-        float h = m_vmapManager->GetCylinderHeight(mapId, sx, sy, referenceZ + 0.5f,
-                                                   cylinderRadius, cylinderHeight, 2.0f);
-        return (h > INVALID_HEIGHT) ? h : centerH;
-    };
-
-    float hXp = sample(x + offset, y);
-    float hXn = sample(x - offset, y);
-    float hYp = sample(x, y + offset);
-    float hYn = sample(x, y - offset);
-
-    G3D::Vector3 dxv(2 * offset, 0, hXp - hXn);
-    G3D::Vector3 dyv(0, 2 * offset, hYp - hYn);
-    G3D::Vector3 n = dxv.cross(dyv);
-    float len = n.magnitude();
-    G3D::Vector3 out = (len < 0.0001f) ? G3D::Vector3(0, 0, 1) : n / len;
-    PHYS_TRACE(PHYS_SURF, "normalApprox samples center=" << centerH
-        << " x+=" << hXp << " x-=" << hXn << " y+=" << hYp << " y-=" << hYn
-        << " nZ=" << out.z);
-    return out;
-}
-
-G3D::Vector3 PhysicsEngine::ProjectOntoGroundPlane(const G3D::Vector3& desired, const G3D::Vector3& normal) const
-{
-    float d = desired.dot(normal);
-    G3D::Vector3 p = desired - normal * d;
-    float len = p.magnitude();
-    return (len < 0.0001f) ? G3D::Vector3(0, 0, 0) : p / len;
-}
-
 // =====================================================================================
 // Head Clearance
 // =====================================================================================
@@ -424,31 +374,39 @@ PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurfaceWithCylinder(ui
 
     if (m_vmapManager)
     {
-        float queryZ = currentZ + maxStepUp * 0.5f;
-        float vh = m_vmapManager->GetCylinderHeight(mapId, x, y, queryZ, radius, height, 4.0f);
-        if (vh > INVALID_HEIGHT)
+        // Prefer robust multi-triangle surface fitting from VMAP manager
+        Cylinder curCyl = CreatePlayerCylinder(x, y, currentZ, radius, height);
+        float mh = INVALID_HEIGHT; G3D::Vector3 mn(0,0,1);
+        if (m_vmapManager->FindCylinderWalkableSurface(mapId, curCyl, currentZ, maxStepUp, maxStepDown, mh, mn))
         {
-            float diff = vh - currentZ;
-            if (diff >= -(maxStepDown + GROUND_HEIGHT_TOLERANCE) && diff <= maxStepUp + GROUND_HEIGHT_TOLERANCE)
+            float diff = mh - currentZ;
+            if (diff >= -(maxStepDown + GROUND_HEIGHT_TOLERANCE) && diff <= maxStepUp + GROUND_HEIGHT_TOLERANCE && mn.z >= cosMin)
             {
-                G3D::Vector3 n = ApproximateVMapNormal(mapId, x, y, vh, radius, height);
-                if (n.z >= cosMin)
-                    baseCandidates.push_back({ vh, SurfaceSource::VMAP, n });
+                baseCandidates.push_back({ mh, SurfaceSource::VMAP, mn });
             }
         }
+
+        // Probe upward small increments for the lowest legal step-up
         const float inc = 0.25f;
         for (float raised = inc; raised <= maxStepUp + GROUND_HEIGHT_TOLERANCE; raised += inc)
         {
-            float queryZ2 = currentZ + raised;
-            float vh2 = m_vmapManager->GetCylinderHeight(mapId, x, y, queryZ2, radius, height, 4.0f);
-            if (vh2 <= INVALID_HEIGHT) continue;
-            float diff = vh2 - currentZ;
-            if (diff < -GROUND_HEIGHT_TOLERANCE || diff > maxStepUp + GROUND_HEIGHT_TOLERANCE) continue;
-            G3D::Vector3 n2 = ApproximateVMapNormal(mapId, x, y, vh2, radius, height);
-            if (n2.z < cosMin) continue;
-            if (!HasHeadClearance(mapId, x, y, vh2, radius, height)) continue;
-            upwardCandidates.push_back({ vh2, SurfaceSource::VMAP, n2 });
-            if (diff <= inc + GROUND_HEIGHT_TOLERANCE) break;
+            float probeBaseZ = currentZ + raised;
+            Cylinder probeCyl = CreatePlayerCylinder(x, y, probeBaseZ, radius, height);
+            float mh2 = INVALID_HEIGHT; G3D::Vector3 mn2(0,0,1);
+            if (!m_vmapManager->FindCylinderWalkableSurface(mapId, probeCyl, probeBaseZ, maxStepUp - raised, maxStepDown, mh2, mn2))
+                continue;
+
+            float diff = mh2 - currentZ;
+            if (diff < -GROUND_HEIGHT_TOLERANCE || diff > maxStepUp + GROUND_HEIGHT_TOLERANCE)
+                continue;
+            if (mn2.z < cosMin)
+                continue;
+            if (!HasHeadClearance(mapId, x, y, mh2, radius, height))
+                continue;
+
+            upwardCandidates.push_back({ mh2, SurfaceSource::VMAP, mn2 });
+            if (diff <= inc + GROUND_HEIGHT_TOLERANCE)
+                break;
         }
     }
 
@@ -504,12 +462,6 @@ PhysicsEngine::MovementIntent PhysicsEngine::BuildMovementIntent(const PhysicsIn
     intent.dir = G3D::Vector3(dirX, dirY, 0.0f);
     intent.jumpRequested = (input.moveFlags & MOVEFLAG_JUMPING) != 0;
     return intent;
-}
-
-PhysicsEngine::WalkableSurface PhysicsEngine::QueryGroundSurface(uint32_t mapId, float x, float y, float z, float r, float h) const
-{
-    return const_cast<PhysicsEngine*>(this)->FindWalkableSurfaceWithCylinder(mapId, x, y, z,
-        STEP_HEIGHT, STEP_DOWN_HEIGHT, r, h);
 }
 
 float PhysicsEngine::QueryLiquidLevel(uint32_t mapId, float x, float y, float z, uint32_t& liquidType) const
@@ -993,6 +945,11 @@ void PhysicsEngine::AttemptWallSlide(const PhysicsInput& input, const MovementIn
 PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 {
     ++gPhysFrameCounter;
+    PHYS_TRACE(PHYS_MOVE, "[Step] frame="<<gPhysFrameCounter
+        <<" map="<<input.mapId
+        <<" pos="<<input.x<<","<<input.y<<","<<input.z
+        <<" vel="<<input.vx<<","<<input.vy<<","<<input.vz
+        <<" dt="<<dt);
     PhysicsOutput out{};
     if (!m_initialized)
     {
@@ -1003,9 +960,61 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
     MovementState st{}; st.x = input.x; st.y = input.y; st.z = input.z; st.orientation = input.orientation; st.pitch = input.pitch; st.vx = input.vx; st.vy = input.vy; st.vz = input.vz; st.fallTime = input.fallTime; st.groundNormal = { 0, 0, 1 };
 
     MovementIntent intent = BuildMovementIntent(input, st.orientation);
-    WalkableSurface surf = QueryGroundSurface(input.mapId, st.x, st.y, st.z, r, h);
-    uint32_t liquidType = 0; float liquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, liquidType);
+
+    // Early penetration rescue: if starting under a model surface, try to lift to nearest walkable top
+    if (m_vmapManager) {
+        float upDist = 0.0f, inDist = 0.0f;
+        if (m_vmapManager->isUnderModel(input.mapId, st.x, st.y, st.z, &upDist, &inDist)) {
+            Cylinder rescueCyl = CreatePlayerCylinder(st.x, st.y, st.z, r, h);
+            float liftH = INVALID_HEIGHT; G3D::Vector3 liftN(0,0,1);
+            // Allow a larger upward search window when rescuing
+            float rescueStepUp = std::max(STEP_HEIGHT * 2.0f, h * 1.5f);
+            if (m_vmapManager->FindCylinderWalkableSurface(input.mapId, rescueCyl, st.z, rescueStepUp, 0.0f, liftH, liftN) && liftH > st.z) {
+                st.z = liftH; st.groundNormal = liftN; st.isGrounded = true;
+                PHYS_INFO(PHYS_SURF, "rescueUnderModel liftH=" << liftH << " nZ=" << liftN.z << " inDist=" << inDist << " upDist=" << upDist);
+            } else {
+                PHYS_TRACE(PHYS_SURF, "rescueUnderModel noSurface upDist=" << upDist << " inDist=" << inDist);
+            }
+        }
+    }
+
+    // Use VMAP::VMapManager2::FindCylinderWalkableSurface to determine capsule Z when available
+    WalkableSurface surf{ false, INVALID_HEIGHT, SurfaceSource::NONE, {0,0,1} };
+    if (m_vmapManager)
+    {
+        EnsureMapLoaded(input.mapId);
+        Cylinder curCyl = CreatePlayerCylinder(st.x, st.y, st.z, r, h);
+
+        // First try: use configured downward sweep to gather walkable hits, then pick best
+        {
+            auto hits = m_vmapManager->SweepForWalkableSurfaces(input.mapId, curCyl, st.z, STEP_HEIGHT, STEP_DOWN_HEIGHT);
+            float sh = INVALID_HEIGHT; G3D::Vector3 sn(0,0,1);
+            if (!hits.empty() && VMAP::CylinderCollision::FindBestWalkableSurface(curCyl, hits, st.z, STEP_HEIGHT, STEP_DOWN_HEIGHT, sh, sn))
+            {
+                surf = { true, sh, SurfaceSource::VMAP, sn };
+            }
+        }
+
+        // Fallback to VMAP consolidated finder if sweep did not yield a surface
+        if (!surf.found)
+        {
+            float mh = INVALID_HEIGHT; G3D::Vector3 mn(0,0,1);
+            if (m_vmapManager->FindCylinderWalkableSurface(input.mapId, curCyl, st.z, STEP_HEIGHT, STEP_DOWN_HEIGHT, mh, mn))
+            {
+                surf = { true, mh, SurfaceSource::VMAP, mn };
+            }
+        }
+    }
+    else
+    {
+        // Fallback to legacy query (terrain-only) when VMAP is not available
+        surf = FindWalkableSurfaceWithCylinder(input.mapId, st.x, st.y, st.z, STEP_HEIGHT, STEP_DOWN_HEIGHT, r, h);
+    }
+
+    // Apply ground attachment from the chosen surface result
     ResolveGroundAttachment(st, surf, STEP_HEIGHT, STEP_DOWN_HEIGHT, dt);
+
+    uint32_t liquidType = 0; float liquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, liquidType);
 
     MovementMode mode = MovementMode::Air; bool inWater = false;
     if (liquidLevel > INVALID_HEIGHT) { float thresh = liquidLevel - h * 0.75f; inWater = st.z < thresh; }

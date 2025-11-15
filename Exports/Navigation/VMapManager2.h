@@ -77,6 +77,14 @@ namespace VMAP
         CylinderIntersection IntersectCylinder(unsigned int pMapId, const Cylinder& worldCylinder) const;
         std::vector<CylinderSweepHit> SweepCylinder(unsigned int pMapId, const Cylinder& worldCylinder,
             const G3D::Vector3& sweepDir, float sweepDistance) const;
+        
+        // Convenience: configured downward sweep to detect walkable surfaces around current height
+        std::vector<CylinderSweepHit> SweepForWalkableSurfaces(unsigned int pMapId,
+            const Cylinder& baseCylinder,
+            float currentHeight,
+            float maxStepUp,
+            float maxStepDown) const;
+        
         bool CheckCylinderCollision(unsigned int pMapId, const Cylinder& worldCylinder,
             float& outContactHeight, G3D::Vector3& outContactNormal,
             ModelInstance** outHitInstance = nullptr) const;
@@ -110,5 +118,12 @@ namespace VMAP
         // Multi-map cylinder operations
         CylinderIntersection IntersectCylinderAllMaps(const Cylinder& worldCylinder) const;
         bool CanCylinderFitAllMaps(const Cylinder& worldCylinder, float tolerance = 0.05f) const;
+
+        // Debug: Dump triangles and fitted surface around a patch centered at (x,y,z)
+        bool DumpSurfacePatch(unsigned int pMapId,
+            float x, float y, float z,
+            float patchHalfXY = 1.0f,
+            float patchHalfZ = 2.0f,
+            int maxTrianglesToLog = 64) const;
     };
 }

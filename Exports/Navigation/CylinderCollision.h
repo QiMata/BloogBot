@@ -175,7 +175,7 @@ namespace VMAP
     {
         // Global configurable walkable slope threshold (cosine of max slope angle)
         inline float& WalkableCosMinRef() {
-            static float s_walkableCosMin = 0.7071f; // default cos(45deg)
+            static float s_walkableCosMin = 0.5f; // default cos(60deg)
             return s_walkableCosMin;
         }
         inline void SetWalkableCosMin(float v) { WalkableCosMinRef() = v; }
