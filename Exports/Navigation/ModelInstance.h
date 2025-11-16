@@ -87,10 +87,10 @@ namespace VMAP
         void SetCollisionMask(uint32_t mask) { collisionMask = mask; }
         uint32_t GetCollisionMask() const { return collisionMask; }
 
-    private:
-        // Transform vertices from model space to world space
+        // Transform vertex from model to world space
         G3D::Vector3 TransformToWorld(const G3D::Vector3& modelVertex) const;
 
+    private:
         // Transform cylinder from world space to model space
         Cylinder TransformCylinderToModel(const Cylinder& worldCylinder) const;
 

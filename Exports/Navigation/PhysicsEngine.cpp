@@ -950,6 +950,10 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
         <<" pos="<<input.x<<","<<input.y<<","<<input.z
         <<" vel="<<input.vx<<","<<input.vy<<","<<input.vz
         <<" dt="<<dt);
+
+    // Ensure all walkable surface queries in this step use the configured slope threshold.
+    VMAP::CylinderHelpers::WalkableCosScope walkableScope(m_walkableCosMin);
+
     PhysicsOutput out{};
     if (!m_initialized)
     {

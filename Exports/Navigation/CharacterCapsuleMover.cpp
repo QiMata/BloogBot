@@ -1,6 +1,7 @@
 #include "CharacterCapsuleMover.h"
 #include <algorithm>
 #include <cmath>
+#include "CylinderCollision.h" // for CylinderHelpers::WalkableCosScope
 
 namespace VMAP
 {
@@ -10,8 +11,7 @@ namespace VMAP
     static inline G3D::Vector3 normalizeSafe(const G3D::Vector3& v, const G3D::Vector3& def = {0,1,0})
     {
         float len = length(v);
-        if (len > 1e-6f) return v * (1.0f / len);
-        return def;
+        return (len > 1e-6f) ? v * (1.0f / len) : def;
     }
 
     static inline G3D::Vector3 projectOntoPlane(const G3D::Vector3& v, const G3D::Vector3& n)
@@ -24,7 +24,6 @@ namespace VMAP
     CharacterCapsuleMover::CharacterCapsuleMover()
     {
         m_capsule = Capsule{ Vec3(0,0,0), Vec3(0,1,0), 0.4f };
-        m_velocity = Vector3(0,0,0);
         m_grounded = false;
         m_lastHit = SceneHit();
         m_cfg = CharacterCapsuleConfig();
@@ -37,7 +36,6 @@ namespace VMAP
         m_capsule.p0 = ToCC(base);
         m_capsule.p1 = ToCC(base + upN * cfg.height);
         m_capsule.r = cfg.radius;
-        m_velocity = Vector3(0,0,0);
         m_grounded = false;
         m_lastHit = SceneHit();
     }
@@ -145,8 +143,11 @@ namespace VMAP
         return collided;
     }
 
-    bool CharacterCapsuleMover::Tick(const StaticMapTree& map, const Vector3& desiredVelocity, const Vector3& gravity, float dt)
+    bool CharacterCapsuleMover::Tick(const StaticMapTree& map, const Vector3& velocity, const Vector3& gravity, float dt)
     {
+        // Ensure any walkable-slope queries honoring CylinderHelpers use the per-character setting
+        VMAP::CylinderHelpers::WalkableCosScope slopeScope(m_cfg.walkableSlopeCos);
+
         m_grounded = false;
         m_lastHit = SceneHit();
         bool collided = false;
@@ -185,25 +186,17 @@ namespace VMAP
             }
         }
 
-        // Intended motion step using CCD substeps routed via SceneQuery sweeps
-        Vector3 totalStep = desiredVelocity * dt;
+        // Horizontal movement from supplied velocity
+        Vector3 totalStep = velocity * dt;
         Vector3 perStep = (std::max(1, m_cfg.ccdSubsteps) > 0) ? totalStep * (1.0f / std::max(1, m_cfg.ccdSubsteps)) : totalStep;
-        Vector3 dispAccum(0,0,0);
         for (int i = 0; i < std::max(1, m_cfg.ccdSubsteps); ++i)
         {
             if (length(perStep) <= 1e-6f) continue;
-            // capture before
-            Vector3 before(m_capsule.p0.x, m_capsule.p0.y, m_capsule.p0.z);
             Vector3 step = perStep;
             SceneHit h;
             bool hit = SweepAndSlide(map, m_capsule, step, h);
-            Vector3 after(m_capsule.p0.x, m_capsule.p0.y, m_capsule.p0.z);
-            dispAccum += (after - before);
             if (hit) { m_lastHit = h; collided = true; }
         }
-
-        // Update displacement after sliding for caller visibility (excluding gravity)
-        m_velocity = dispAccum;
 
         // After horizontal displacement, perform a short downward sweep to snap to ground and evaluate slope
         {
@@ -225,9 +218,6 @@ namespace VMAP
                     float c = dh.normal.x*upN.x + dh.normal.y*upN.y + dh.normal.z*upN.z;
                     if (c >= m_cfg.walkableSlopeCos)
                     {
-                        // Remove vertical component from accumulated horizontal displacement
-                        float vn = m_velocity.x*upN.x + m_velocity.y*upN.y + m_velocity.z*upN.z;
-                        m_velocity = m_velocity - upN * vn;
                         m_grounded = true;
                     }
                 }
@@ -240,7 +230,6 @@ namespace VMAP
             Vector3 gstep = gravity * dt;
             if (length(gstep) > 1e-6f)
             {
-                // capture before for possible external use; we keep m_velocity as horizontal-only
                 SceneHit gh;
                 bool ghit = SweepAndSlide(map, m_capsule, gstep, gh);
                 if (ghit) { m_lastHit = gh; collided = true; }
@@ -250,9 +239,6 @@ namespace VMAP
                 float c = (ghit ? (gh.normal.x*upN.x + gh.normal.y*upN.y + gh.normal.z*upN.z) : -1.0f);
                 if (ghit && c >= m_cfg.walkableSlopeCos)
                 {
-                    // Remove vertical component from horizontal velocity and mark grounded
-                    float vn = m_velocity.x*upN.x + m_velocity.y*upN.y + m_velocity.z*upN.z;
-                    m_velocity = m_velocity - upN * vn;
                     m_grounded = true;
                 }
             }

@@ -572,11 +572,29 @@ namespace VMAP
 
         // Sweep through all group models without verbose per-group logging
         auto it = groupModels.begin();
+        uint32_t gIndex = 0;
         while (it != groupModels.end())
         {
             std::vector<CylinderSweepHit> groupHits = it->SweepCylinder(cyl, sweepDir, sweepDistance);
+            // Stamp group index and (lazy) triangle surface info
+            // Fetch vertices for surface computation only if we have hits
+            if (!groupHits.empty())
+            {
+                const std::vector<G3D::Vector3>& verts = it->GetVertices();
+                for (auto& h : groupHits)
+                {
+                    h.groupIndex = gIndex;
+                    // Triangle index is local to groupHits generation (from CylinderCollision). Compute centroid/normal if valid indices.
+                    uint32_t triIdx = h.triangleIndex;
+                    // Each triangle produced in CylinderCollision::SweepCylinder referenced indices vector ordering; we rely on same ordering when building indices there (sequential).
+                    // To recover vertices: triIdx refers to triangle number, need indices = triIdx*3 .. triIdx*3+2. We cannot reconstruct indices here without original index list.
+                    // Instead approximate centroid using hit.position (already contact point) and keep triNormal = h.normal. If later precise data required, adjust GroupModel::SweepCylinder to embed triangle vertices.
+                    h.triCentroid = h.position; // contact point as centroid proxy
+                    h.triNormal = h.normal;     // existing contact normal
+                }
+            }
             allHits.insert(allHits.end(), groupHits.begin(), groupHits.end());
-            ++it;
+            ++it; ++gIndex;
         }
 
         std::sort(allHits.begin(), allHits.end());

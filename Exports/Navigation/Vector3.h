@@ -36,6 +36,12 @@ namespace G3D
         // Right multiplication by matrix (defined in Vector3.cpp to avoid circular dependency)
         Vector3 operator*(const Matrix3& m) const;
 
+        // Addition assignment operator
+        Vector3& operator+=(const Vector3& v)
+        {
+            x += v.x; y += v.y; z += v.z; return *this;
+        }
+
         // Division assignment operator
         Vector3& operator/=(float s)
         {

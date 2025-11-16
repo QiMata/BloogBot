@@ -75,13 +75,15 @@ namespace VMAP
         G3D::Vector3 normal = G3D::Vector3(0,0,1);
         G3D::Vector3 position = G3D::Vector3(0,0,0);
         bool walkable = false;
-        uint32_t triangleIndex = 0;
-
+        uint32_t triangleIndex = 0; // index within the group model's triangle list
+        uint32_t groupIndex = 0;     // group model index within WorldModel (set during sweep aggregation)
+        // Triangle surface info (computed lazily when needed)
+        G3D::Vector3 triNormal = G3D::Vector3(0,0,1);
+        G3D::Vector3 triCentroid = G3D::Vector3(0,0,0);
         // Sorting by earliest Time Of Impact (ascending distance)
         bool operator<(const CylinderSweepHit& other) const {
             return q.distance < other.q.distance;
         }
-
         // Implicit conversion to unified hit
         operator QueryHit() const { return q; }
     };
@@ -181,11 +183,19 @@ namespace VMAP
         inline void SetWalkableCosMin(float v) { WalkableCosMinRef() = v; }
         inline float GetWalkableCosMin() { return WalkableCosMinRef(); }
 
+        // RAII scope to temporarily override walkable slope cosine
+        struct WalkableCosScope
+        {
+            float prev;
+            explicit WalkableCosScope(float cosMin) : prev(WalkableCosMinRef()) { SetWalkableCosMin(cosMin); }
+            ~WalkableCosScope() { SetWalkableCosMin(prev); }
+        };
+
         // Strategy for computing triangle normals relative to world up (Z)
         enum class TriangleNormalMode { Raw = 0, Upward = 1, DetourXY = 2 };
         inline TriangleNormalMode& TriangleNormalModeRef() {
-            // Default to upward-oriented hemisphere alignment (modern engine style)
-            static TriangleNormalMode s_mode = TriangleNormalMode::Upward;
+            // Default to raw geometric normal
+            static TriangleNormalMode s_mode = TriangleNormalMode::Raw;
             return s_mode;
         }
         inline void SetTriangleNormalMode(TriangleNormalMode m) { TriangleNormalModeRef() = m; }
@@ -238,7 +248,7 @@ namespace VMAP
         }
 
         // Detour-style orientation: historically uses XZ for Y-up.
-        // We are Z-up, so project to XY for winding, then hemisphere-align upward.
+        // We are Z-up, so project to XY for winding, then return raw normal (no hemisphere alignment).
         inline G3D::Vector3 CalculateTriangleNormalDetourXY(
             const G3D::Vector3& v0,
             const G3D::Vector3& v1,
@@ -247,14 +257,9 @@ namespace VMAP
             // Compute raw normal
             G3D::Vector3 n = CalculateTriangleNormalRaw(v0, v1, v2);
             // XY signed area (2x area), positive for CCW in XY (Z-up right-handed)
+            // Kept for possible future use/validation; do not flip hemisphere
             float area2 = (v1.x - v0.x) * (v2.y - v0.y) - (v2.x - v0.x) * (v1.y - v0.y);
-            // For degenerate projections, just fall back to hemisphere alignment
-            if (std::abs(area2) < 1e-8f) {
-                if (n.z < 0.0f) n = -n;
-                return n;
-            }
-            // Hemisphere alignment like modern engines (ensures upward-facing)
-            if (n.z < 0.0f) n = -n;
+            (void)area2;
             return n;
         }
 
@@ -269,7 +274,7 @@ namespace VMAP
             case TriangleNormalMode::Raw:      return CalculateTriangleNormalRaw(v0, v1, v2);
             case TriangleNormalMode::DetourXY: return CalculateTriangleNormalDetourXY(v0, v1, v2);
             case TriangleNormalMode::Upward:
-            default:                           return CalculateTriangleNormalUpward(v0, v1, v2);
+            default:                           return CalculateTriangleNormalRaw(v0, v1, v2);
             }
         }
 

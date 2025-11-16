@@ -201,6 +201,12 @@ namespace VMAP
             std::vector<G3D::Vector3>& outVertices,
             std::vector<uint32_t>& outIndices) const;
 
+        // Access a specific group model (read-only) for triangle enrichment
+        inline const GroupModel* GetGroupModel(uint32_t index) const
+        {
+            return (index < groupModels.size()) ? &groupModels[index] : nullptr;
+        }
+
     protected:
         uint32_t RootWMOID;
         std::vector<GroupModel> groupModels;

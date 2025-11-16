@@ -14,6 +14,8 @@
 #include <limits>
 #include "ModelInstance.h"
 #include "CoordinateTransforms.h"
+#include "SceneQuery.h"
+#include "CapsuleCollision.h"
 
 namespace VMAP
 {
@@ -29,7 +31,19 @@ namespace VMAP
         return SweepCylinder(pMapId, sweepCyl, G3D::Vector3(0,0,-1), sweepDist);
     }
 
-    // Get height using cylinder for more accurate ground detection
+    // Helper: build a capsule from a cylinder (p0 at base, p1 at base+axis*height, r=radius)
+    static inline CapsuleCollision::Capsule ToCapsule(const Cylinder& cyl)
+    {
+        CapsuleCollision::Capsule C;
+        G3D::Vector3 p0 = cyl.base;
+        G3D::Vector3 p1 = cyl.base + cyl.axis * cyl.height;
+        C.p0 = { p0.x, p0.y, p0.z };
+        C.p1 = { p1.x, p1.y, p1.z };
+        C.r = cyl.radius;
+        return C;
+    }
+
+    // Get height using SceneQuery sweeps instead of legacy SweepCylinder
     float VMapManager2::GetCylinderHeight(unsigned int pMapId, float x, float y, float z,
         float cylinderRadius, float cylinderHeight, float maxSearchDist)
     {
@@ -41,46 +55,28 @@ namespace VMAP
             return PhysicsConstants::INVALID_HEIGHT;
         }
 
-        // Build a cylinder centered around the query position and sweep downward
+        // Build a capsule centered around the query position and sweep downward
         Cylinder worldCyl(G3D::Vector3(x, y, z + maxSearchDist * 0.5f),
             G3D::Vector3(0, 0, 1), cylinderRadius, cylinderHeight);
+        CapsuleCollision::Capsule cap = ToCapsule(worldCyl);
 
-        std::vector<CylinderSweepHit> hits = SweepCylinder(
-            pMapId, worldCyl, G3D::Vector3(0, 0, -1), maxSearchDist);
+        std::vector<SceneHit> hits;
+        int count = SceneQuery::SweepCapsuleAll(*instanceTree->second, cap, G3D::Vector3(0,0,-1), maxSearchDist, hits);
 
-        // Log sweep results for diagnostics
-        if (!hits.empty())
+        if (count > 0)
         {
-            PHYS_TRACE(PHYS_SURF, "[CylHeight] sweep hits=" << hits.size()
-                << " pos=(" << x << "," << y << "," << z << ") r=" << cylinderRadius
-                << " h=" << cylinderHeight << " dist=" << maxSearchDist);
-            size_t toLog = std::min<size_t>(hits.size(), 8);
-            for (size_t i = 0; i < toLog; ++i)
-            {
-                const auto& h = hits[i];
-                PHYS_TRACE(PHYS_SURF, "  hit[" << i << "] tri=" << h.triangleIndex
-                    << " toi=" << h.q.distance
-                    << " h=" << h.height
-                    << " nZ=" << h.normal.z
-                    << " walkable=" << (h.walkable ? 1 : 0)
-                    << " pos=(" << h.position.x << "," << h.position.y << "," << h.position.z << ")");
-            }
-        }
-
-        if (!hits.empty())
-        {
+            const float cosMin = VMAP::CylinderHelpers::GetWalkableCosMin();
+            float bestH = -std::numeric_limits<float>::infinity();
             for (const auto& h : hits)
             {
-                if (h.walkable)
-                {
-                    PHYS_TRACE(PHYS_SURF, "[CylHeight] selected tri=" << h.triangleIndex
-                        << " h=" << h.height << " nZ=" << h.normal.z
-                        << " toi=" << h.q.distance);
-                    PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::GetCylinderHeight -> " << h.height);
-                    return h.height;
-                }
+                if (h.normal.z < cosMin) continue;
+                bestH = std::max(bestH, h.point.z);
             }
-            PHYS_TRACE(PHYS_SURF, "[CylHeight] no walkable surface among hits, falling back");
+            if (std::isfinite(bestH))
+            {
+                PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::GetCylinderHeight -> " << bestH);
+                return bestH;
+            }
         }
 
         // Fallback to regular height check
@@ -568,69 +564,55 @@ namespace VMAP
             return true; // no map collision system
         }
 
-        // Movement check is looser: accept floor contact, only reject if a surface intrudes in upper body (ceiling) or side penetration.
-        Cylinder internal = ConvertCylinderToInternal(worldCylinder);
-        // Slight radius expansion for conservative side test
-        Cylinder expanded(internal.base, internal.axis, internal.radius + tolerance, internal.height);
-        CylinderIntersection inter = instanceTree->second->IntersectCylinder(expanded);
-        if (!inter.hit)
+        // SceneQuery overlap with expanded capsule
+        Cylinder expanded(worldCylinder.base, worldCylinder.axis, worldCylinder.radius + tolerance, worldCylinder.height);
+        CapsuleCollision::Capsule C = ToCapsule(expanded);
+        std::vector<SceneHit> overlaps;
+        int cnt = SceneQuery::OverlapCapsule(*instanceTree->second, C, overlaps);
+        if (cnt <= 0)
         {
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderFitAtPosition -> 1 (free)");
-            return true; // free space
-        }
-
-        float rel = inter.contactHeight - expanded.base.z;
-        const float HEAD_REGION_START = expanded.height * 0.7f; // upper 30% is head/shoulder region
-        // If contact is within a small band near the feet treat as acceptable support
-        if (rel >= -0.05f && rel <= 0.25f && inter.contactNormal.z >= 0.55f)
-        {
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderFitAtPosition -> 1 (feet support)");
-            return true;
-        }
-        // If contact normal is mostly vertical and below head region treat as support (e.g., slope)
-        if (rel < HEAD_REGION_START && inter.contactNormal.z >= 0.70f)
-        {
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderFitAtPosition -> 1 (slope support)");
             return true;
         }
 
-        // Otherwise treat as blocking (wall or low ceiling) - emit diagnostics about nearby instances
-        LOG_INFO("[VMAP][FitReject] map=" << pMapId
+        // Evaluate contacts: accept floor support
+        const float HEAD_REGION_START = expanded.height * 0.7f;
+        const float walkableCosMin = VMAP::CylinderHelpers::GetWalkableCosMin();
+        bool floorSupport = false;
+        bool ceilingBlock = false;
+        float nearestCeilRel = std::numeric_limits<float>::infinity();
+        for (const auto& h : overlaps)
+        {
+            float rel = h.point.z - expanded.base.z;
+            if (rel >= -0.05f && rel <= 0.25f && h.normal.z >= 0.55f)
+            {
+                floorSupport = true;
+                continue;
+            }
+            if (rel < HEAD_REGION_START && h.normal.z >= 0.70f)
+            {
+                floorSupport = true;
+                continue;
+            }
+            if (rel >= expanded.height - 0.30f && h.normal.z <= 0.30f)
+            {
+                ceilingBlock = true;
+                nearestCeilRel = std::min(nearestCeilRel, rel);
+            }
+        }
+
+        bool fit = (floorSupport && !ceilingBlock);
+        LOG_INFO("[VMAP][FitCheck][SceneQuery] map=" << pMapId
             << " base=(" << worldCylinder.base.x << "," << worldCylinder.base.y << "," << worldCylinder.base.z << ")"
             << " h=" << worldCylinder.height << " r=" << worldCylinder.radius
             << " tol=" << tolerance << " expR=" << (worldCylinder.radius + tolerance)
-            << " rel=" << rel << " nZ=" << inter.contactNormal.z
-            << " pen=" << inter.penetrationDepth << " tri=" << inter.triIndex
-            << " region=" << ClassifyRegion(rel, HEAD_REGION_START)
-            << " reason=" << RejectReason(rel, HEAD_REGION_START, inter.contactNormal.z)
-            << " cosMin=" << VMAP::CylinderHelpers::GetWalkableCosMin());
+            << " floor=" << (floorSupport?1:0)
+            << " ceilBlock=" << (ceilingBlock?1:0)
+            << " nearestCeilRel=" << (std::isfinite(nearestCeilRel)?nearestCeilRel:-1.0f)
+            << " cosMin=" << walkableCosMin);
 
-        // Log exact blocking instance if available
-        float ch = 0.0f; G3D::Vector3 n(0,0,1); ModelInstance* hitInst = nullptr;
-        if (instanceTree->second->CheckCylinderCollision(expanded, ch, n, &hitInst) && hitInst)
-        {
-            std::string resolvedPath = ResolveModelPath(iBasePath, hitInst->name);
-            LOG_INFO("    blocking name='" << hitInst->name << "' id=" << hitInst->ID << " adt=" << hitInst->adtId
-                << " contactH=" << ch << " nZ=" << n.z);
-            if (!resolvedPath.empty())
-                LOG_INFO("    file='" << resolvedPath << "'");
-        }
-
-        std::vector<ModelInstance*> nearby;
-        instanceTree->second->GetCylinderCollisionCandidates(expanded, nearby);
-        size_t cap = std::min<size_t>(nearby.size(), 6);
-        for (size_t i = 0; i < cap; ++i)
-        {
-            const ModelInstance* mi = nearby[i];
-            const auto& b = mi->getBounds();
-            auto lo = b.low(); auto hi = b.high();
-            LOG_INFO("    inst[" << i << "] name='" << mi->name << "' id=" << mi->ID << " adt=" << mi->adtId
-                << " boundsLo=(" << lo.x << "," << lo.y << "," << lo.z << ")"
-                << " hi=(" << hi.x << "," << hi.y << "," << hi.z << ")");
-        }
-
-        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderFitAtPosition -> 0");
-        return false;
+        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderFitAtPosition -> " << (fit?1:0));
+        return fit;
     }
 
     bool VMapManager2::FindCylinderWalkableSurface(unsigned int pMapId, const Cylinder& worldCylinder,
@@ -652,15 +634,19 @@ namespace VMAP
         float zCastStartW = currentHeight + std::max(0.1f, maxStepUp);
         float searchDist = std::max(0.25f, maxStepUp + maxStepDown);
 
-        // 1) Prefer a coherent plane from swept-cylinder hits under the capsule at this XY
+        // 1) Prefer a coherent plane from swept-capsule hits
         const float cosMin = VMAP::CylinderHelpers::GetWalkableCosMin();
         const float bandEps = std::max(0.05f, std::min(0.35f, worldCylinder.radius * 0.5f));
+        // Tolerance for small conversion/quantization errors when comparing heights (in meters)
+        const float rangeEps = std::max(0.005f, std::min(0.03f, worldCylinder.radius * 0.05f));
 
         Cylinder sweepCyl(G3D::Vector3(xW, yW, zCastStartW), G3D::Vector3(0,0,1), worldCylinder.radius, worldCylinder.height);
-        auto hits = SweepCylinder(pMapId, sweepCyl, G3D::Vector3(0,0,-1), searchDist);
+        CapsuleCollision::Capsule C = ToCapsule(sweepCyl);
+        std::vector<SceneHit> hits;
+        (void)SceneQuery::SweepCapsuleAll(*instanceTree->second, C, G3D::Vector3(0,0,-1), searchDist, hits);
 
-        // Collect basic stats only; suppress per-hit and detailed logs
-        int rejNotWalk = 0, rejSteep = 0, rejRange = 0, acc = 0;
+        // Collect basic stats only
+        int rejSteep = 0, rejRange = 0, acc = 0;
         struct GroupAgg { float maxH = -std::numeric_limits<float>::infinity(); G3D::Vector3 nSum = {0,0,0}; int count = 0; };
         std::unordered_map<uint64_t, GroupAgg> groups;
         auto makeKey = [&](uint32_t instId, float h) -> uint64_t {
@@ -671,17 +657,16 @@ namespace VMAP
 
         for (const auto& h : hits)
         {
-            if (!h.walkable) { ++rejNotWalk; continue; }
+            float hZ = h.point.z;
             if (h.normal.z < cosMin) { ++rejSteep; continue; }
-            float d = h.height - currentHeight;
+            float d = hZ - currentHeight;
             if (d > maxStepUp + 1e-3f || d < -maxStepDown - 1e-3f) { ++rejRange; continue; }
-            uint32_t instId = h.q.instanceId;
-            uint64_t key = makeKey(instId, h.height);
+            uint32_t instId = h.instanceId;
+            uint64_t key = makeKey(instId, hZ);
             auto& g = groups[key];
-            g.maxH = std::max(g.maxH, h.height);
+            g.maxH = std::max(g.maxH, hZ);
             g.nSum = G3D::Vector3(g.nSum.x + h.normal.x, g.nSum.y + h.normal.y, g.nSum.z + h.normal.z);
-            g.count++;
-            ++acc;
+            g.count++; ++acc;
         }
 
         float bestH = -std::numeric_limits<float>::infinity();
@@ -689,24 +674,17 @@ namespace VMAP
         bool haveGroup = false;
         for (auto& kv : groups)
         {
-            const GroupAgg& g = kv.second;
-            if (g.count <= 0) continue;
+            const GroupAgg& g = kv.second; if (g.count <= 0) continue;
             if (g.maxH > bestH)
             {
                 bestH = g.maxH;
-                G3D::Vector3 n = g.nSum;
-                float len = n.magnitude();
-                if (len > 1e-6f) n = n / len; else n = G3D::Vector3(0,0,1);
-                if (n.z < 0.0f) n = -n; // upward hemisphere
-                bestN = n;
-                haveGroup = true;
+                G3D::Vector3 n = g.nSum; float len = n.magnitude(); if (len > 1e-6f) n = n / len; else n = G3D::Vector3(0,0,1);
+                if (n.z < 0.0f) n = -n; bestN = n; haveGroup = true;
             }
         }
 
-        // Single summary log for the sweep phase (no spam)
-        PHYS_TRACE(PHYS_SURF, "[FindSurf] hits=" << hits.size()
+        PHYS_TRACE(PHYS_SURF, "[FindSurf][SceneQuery] hits=" << hits.size()
             << " acc=" << acc
-            << " rejNW=" << rejNotWalk
             << " rejSteep=" << rejSteep
             << " rejRange=" << rejRange
             << " groups=" << groups.size()
@@ -718,21 +696,55 @@ namespace VMAP
 
         if (haveGroup)
         {
-            outHeight = bestH;
-            outNormal = bestN;
-            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Sweep topH=" << outHeight << " nZ=" << outNormal.z);
+            outHeight = bestH; outNormal = bestN;
+            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Sweep(CQ) topH=" << outHeight << " nZ=" << outNormal.z);
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 1 h="<<outHeight);
             return true;
         }
 
-        // 2) Fallback: use downward ray height for Z, then try to derive normal from nearby sweep hits
-        // Build internal-space cast origin at (x,y,zCastStart)
+        // 1.5) Caps-only overlap probe (SceneQuery)
+        {
+            float bestCapH = -std::numeric_limits<float>::infinity();
+            G3D::Vector3 bestCapN(0,0,1);
+            bool capFound = false;
+
+            auto testSphere = [&](const G3D::Vector3& centerW)
+            {
+                std::vector<SceneHit> overlaps;
+                int cnt = SceneQuery::OverlapSphere(*instanceTree->second, centerW, worldCylinder.radius, overlaps);
+                if (cnt <= 0) return;
+                for (const auto& h : overlaps)
+                {
+                    G3D::Vector3 n = h.normal; if (n.z < 0.0f) n = -n;
+                    float ch = h.point.z;
+                    float diff = ch - currentHeight;
+                    if (n.z >= cosMin && diff <= maxStepUp + 1e-3f && diff >= -maxStepDown - 1e-3f)
+                    {
+                        if (!capFound || ch > bestCapH)
+                        { capFound = true; bestCapH = ch; bestCapN = n; }
+                    }
+                }
+            };
+
+            float r = worldCylinder.radius;
+            testSphere(G3D::Vector3(xW, yW, currentHeight + r));
+            testSphere(G3D::Vector3(xW, yW, currentHeight + worldCylinder.height - r));
+
+            if (capFound)
+            {
+                outHeight = bestCapH; outNormal = bestCapN;
+                PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=CapsSphere h=" << outHeight << " nZ=" << outNormal.z);
+                PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 1 h="<<outHeight);
+                return true;
+            }
+        }
+
+        // 2) Fallback: downward ray for Z, then derive normal from hits near band
         G3D::Vector3 castStartI = convertPositionToInternalRep(xW, yW, zCastStartW);
         float hI = instanceTree->second->getHeight(castStartI, searchDist);
         if (!std::isfinite(hI))
         {
-            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=None (no height) hits=" << hits.size()
-                << " acc=" << acc << " groups=" << groups.size());
+            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=None (no height) hits=" << hits.size());
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 0 (no height)");
             return false;
         }
@@ -741,49 +753,42 @@ namespace VMAP
         outHeight = hw.z;
 
         float diff = outHeight - currentHeight;
-        if (diff > maxStepUp + 1e-3f || diff < -maxStepDown - 1e-3f)
+        // Allow a small tolerance to account for coordinate conversion/quantization. If slightly below current height
+        // but within tolerance, clamp to current height to avoid spurious out-of-range.
+        if (diff < 0.0f && diff >= -rangeEps)
         {
-            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Ray out-of-range diff=" << diff
-                << " hits=" << hits.size() << " acc=" << acc);
+            outHeight = currentHeight; // keep rider on top without micro jitter
+            diff = 0.0f;
+        }
+        if (diff > maxStepUp + rangeEps || diff < -maxStepDown - rangeEps)
+        {
+            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Ray out-of-range diff=" << diff);
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 0 (range)");
             return false;
         }
 
-        // Derive normal from sweep hits closest to the chosen height band, avoid cross-model ray mixing
         if (!hits.empty())
         {
             float bestAbs = std::numeric_limits<float>::max();
             G3D::Vector3 nPick(0,0,1);
             for (const auto& h : hits)
             {
-                if (!h.walkable || h.normal.z < cosMin) continue;
-                float a = std::abs(h.height - outHeight);
+                if (h.normal.z < cosMin) continue;
+                float a = std::abs(h.point.z - outHeight);
                 if (a <= bandEps && a < bestAbs)
-                {
-                    bestAbs = a; nPick = h.normal;
-                }
+                { bestAbs = a; nPick = h.normal; }
             }
             if (bestAbs < std::numeric_limits<float>::max())
             {
-                if (nPick.z < 0.0f) nPick = -nPick;
-                outNormal = nPick;
-                PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Ray+SweepN h=" << outHeight << " nZ=" << outNormal.z << " |dh|=" << bestAbs);
+                if (nPick.z < 0.0f) nPick = -nPick; outNormal = nPick;
+                PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Ray+SweepN(CQ) h=" << outHeight << " nZ=" << outNormal.z);
                 PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 1 h="<<outHeight);
                 return true;
             }
         }
 
-        // Last resort: default up normal if nothing else; avoid mixing offset rays
-        // Provide diagnostics explaining why we had to fall back
-        std::string fallbackReason;
-        if (hits.empty())
-            fallbackReason = "no sweep hits";
-        else if (acc == 0)
-            fallbackReason = "no walkable sweep hits in step window";
-        else
-            fallbackReason = "unable to derive normal: no walkable hit within bandEps (" + std::to_string(bandEps) + ") near height or nZ<cosMin (" + std::to_string(cosMin) + ")";
         outNormal = G3D::Vector3(0,0,1);
-        PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=FallbackUp h=" << outHeight << " nZ=" << outNormal.z << " reason=" << fallbackReason);
+        PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=FallbackUp h=" << outHeight << " nZ=" << outNormal.z);
         PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 1 h="<<outHeight);
         return true;
     }
@@ -798,50 +803,40 @@ namespace VMAP
             return true; // no map collision system
         }
 
-        // Movement check is looser: accept floor contact, only reject if a surface intrudes in upper body (ceiling) or side penetration.
-        Cylinder internal = ConvertCylinderToInternal(worldCylinder);
-        // Slight radius expansion for conservative side test
-        Cylinder expanded(internal.base, internal.axis, internal.radius + tolerance, internal.height);
-        CylinderIntersection inter = instanceTree->second->IntersectCylinder(expanded);
-        if (!inter.hit)
+        Cylinder expanded(worldCylinder.base, worldCylinder.axis, worldCylinder.radius + tolerance, worldCylinder.height);
+        CapsuleCollision::Capsule C = ToCapsule(expanded);
+        std::vector<SceneHit> overlaps;
+        int cnt = SceneQuery::OverlapCapsule(*instanceTree->second, C, overlaps);
+        if (cnt <= 0)
         {
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderMoveAtPosition -> 1 (free)");
-            return true; // free space
-        }
-
-        float rel = inter.contactHeight - expanded.base.z;
-        const float HEAD_REGION_START = expanded.height * 0.7f; // upper 30% is head/shoulder region
-        // If contact is within a small band near the feet treat as acceptable support
-        if (rel >= -0.05f && rel <= 0.25f && inter.contactNormal.z >= 0.55f)
-        {
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderMoveAtPosition -> 1 (feet support)");
             return true;
         }
-        // If contact normal is mostly vertical and below head region treat as support (e.g., slope)
-        if (rel < HEAD_REGION_START && inter.contactNormal.z >= 0.70f)
+
+        const float HEAD_REGION_START = expanded.height * 0.7f;
+        bool floorSupport = false; bool ceilingBlock = false; float nearestCeilRel = std::numeric_limits<float>::infinity();
+        for (const auto& h : overlaps)
         {
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderMoveAtPosition -> 1 (slope support)");
+            float rel = h.point.z - expanded.base.z;
+            if (rel >= -0.05f && rel <= 0.25f && h.normal.z >= 0.55f) { floorSupport = true; continue; }
+            if (rel < HEAD_REGION_START && h.normal.z >= 0.70f) { floorSupport = true; continue; }
+            if (rel >= expanded.height - 0.30f && h.normal.z <= 0.30f) { ceilingBlock = true; nearestCeilRel = std::min(nearestCeilRel, rel); }
+        }
+
+        if (floorSupport && !ceilingBlock)
+        {
+            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderMoveAtPosition -> 1 (support)");
             return true;
         }
-        // Otherwise treat as blocking (wall or low ceiling)
 
-        LOG_DEBUG("[VMAP][MoveReject] map=" << pMapId
+        LOG_DEBUG("[VMAP][MoveReject][SceneQuery] map=" << pMapId
             << " base=(" << worldCylinder.base.x << "," << worldCylinder.base.y << "," << worldCylinder.base.z << ")"
             << " h=" << worldCylinder.height << " r=" << worldCylinder.radius
             << " tol=" << tolerance << " expR=" << (worldCylinder.radius + tolerance)
-            << " rel=" << rel << " nZ=" << inter.contactNormal.z
-            << " pen=" << inter.penetrationDepth << " tri=" << inter.triIndex
-            << " region=" << ClassifyRegion(rel, HEAD_REGION_START)
-            << " reason=" << RejectReason(rel, HEAD_REGION_START, inter.contactNormal.z)
-            << " cosMin=" << VMAP::CylinderHelpers::GetWalkableCosMin());
-
-        // Log exact blocking instance if available (debug-level to avoid spam)
-        float ch = 0.0f; G3D::Vector3 n(0,0,1); ModelInstance* hitInst = nullptr;
-        if (instanceTree->second->CheckCylinderCollision(expanded, ch, n, &hitInst) && hitInst)
-        {
-            LOG_DEBUG("    name='" << hitInst->name << "' id=" << hitInst->ID
-                << " adt=" << hitInst->adtId << " contactH=" << ch << " nZ=" << n.z);
-        }
+            << " floor=" << (floorSupport?1:0)
+            << " ceilBlock=" << (ceilingBlock?1:0)
+            << " nearestCeilRel=" << (std::isfinite(nearestCeilRel)?nearestCeilRel:-1.0f)
+        );
         PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderMoveAtPosition -> 0");
         return false;
     }

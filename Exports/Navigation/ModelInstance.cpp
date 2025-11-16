@@ -156,8 +156,8 @@ namespace VMAP
         if (iModel->IntersectPoint(pModel, zDirModel, zDist, info))
         {
             G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-            // Transform back to world space using the original right-multiply convention
-            float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
+            // Transform back to world space using model->world rotation (iRot)
+            float world_Z = ((modelGround * iRot) * iScale + iPos).z;
             if (info.ground_Z < world_Z)
             {
                 info.ground_Z = world_Z;
@@ -181,7 +181,7 @@ namespace VMAP
         if (iModel->GetLocationInfo(pModel, zDirModel, zDist, groupInfo))
         {
             G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-            float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
+            float world_Z = ((modelGround * iRot) * iScale + iPos).z;
             if (info.ground_Z < world_Z)
             {
                 info.rootId = groupInfo.rootId;
@@ -203,7 +203,7 @@ namespace VMAP
         G3D::Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
         if (info.hitModel->GetLiquidLevel(pModel, liqHeight))
         {
-            liqHeight = (G3D::Vector3(pModel.x, pModel.y, liqHeight) * iInvRot * iScale + iPos).z;
+            liqHeight = (G3D::Vector3(pModel.x, pModel.y, liqHeight) * iRot * iScale + iPos).z;
             return true;
         }
         return false;
@@ -231,7 +231,7 @@ namespace VMAP
             groupId = info.groupId;
 
             G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-            float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
+            float world_Z = ((modelGround * iRot) * iScale + iPos).z;
             if (pos.z > world_Z)
                 pos.z = world_Z;
         }
@@ -240,8 +240,8 @@ namespace VMAP
     // Transform a vertex from model space to world space
     G3D::Vector3 ModelInstance::TransformToWorld(const G3D::Vector3& modelVertex) const
     {
-        // Apply scale, then rotation, then translation using original right-multiply convention
-        return (modelVertex * iScale) * iInvRot + iPos;
+        // Correct order: scale -> model->world rotation (iRot) -> translation
+        return (modelVertex * iScale) * iRot + iPos;
     }
 
     // Transform cylinder from world space to model space
@@ -290,8 +290,8 @@ namespace VMAP
         {
             // Transform contact point back to instance/world space
             G3D::Vector3 worldPt = TransformToWorld(modelHit.contactPoint);
-            // Transform normal (direction only)
-            G3D::Vector3 worldN = modelHit.contactNormal * iInvRot; // matches right-multiply convention
+            // Transform normal (direction only) using model->world rotation
+            G3D::Vector3 worldN = modelHit.contactNormal * iRot;
             float nLen = worldN.magnitude();
             if (nLen > 0.0001f)
                 worldN /= nLen;
@@ -300,7 +300,6 @@ namespace VMAP
             result.contactPoint = worldPt;
             result.contactHeight = worldPt.z;
             result.contactNormal = worldN;
-            // Preserve instance id for diagnostics
             result.instanceId = ID;
 
             LOG_INFO("[MI][IntersectCylinder] name='" << name << "' id=" << ID
@@ -309,8 +308,6 @@ namespace VMAP
         }
         else
         {
-            // No mesh hit; do NOT synthesize a side-normal from bounds here to avoid false wall normals (nZ=0)
-            // Leave as no-hit to let higher-level queries decide via sweeps/raycast.
             LOG_DEBUG("[MI][IntersectCylinder] name='" << name << "' id=" << ID
                 << " adt=" << adtId << " hit=0 mesh=0 boundsIntersect=1");
         }
@@ -351,54 +348,80 @@ namespace VMAP
             G3D::Vector3 wpos = TransformToWorld(h.position);
             h.position = wpos;
             h.height = wpos.z;
-            // Normal
-            G3D::Vector3 wn = h.normal * iInvRot;
+            // Normal using model->world rotation
+            G3D::Vector3 wn = h.normal * iRot;
             float nLen = wn.magnitude();
             if (nLen > 0.0001f) wn /= nLen; else wn = G3D::Vector3(0,0,1);
             h.normal = wn;
             h.q.normal = wn;
-            // Stamp instance id for diagnostics
             h.q.instanceId = ID;
+
+            // Triangle surface enrichment
+            uint32_t triGlobal = h.triangleIndex;
+            uint32_t cumulative = 0;
+            const GroupModel* foundGroup = nullptr;
+            uint32_t localTri = 0;
+            for (uint32_t gi = 0; ; ++gi)
+            {
+                const GroupModel* gm = iModel->GetGroupModel(gi);
+                if (!gm) break;
+                uint32_t triCount = (uint32_t)gm->GetTriangles().size();
+                if (triGlobal < cumulative + triCount)
+                {
+                    foundGroup = gm;
+                    localTri = triGlobal - cumulative;
+                    h.groupIndex = gi;
+                    break;
+                }
+                cumulative += triCount;
+            }
+            if (foundGroup && localTri < foundGroup->GetTriangles().size())
+            {
+                const auto& tri = foundGroup->GetTriangles()[localTri];
+                const auto& verts = foundGroup->GetVertices();
+                if (tri.idx0 < verts.size() && tri.idx1 < verts.size() && tri.idx2 < verts.size())
+                {
+                    G3D::Vector3 v0m = verts[tri.idx0];
+                    G3D::Vector3 v1m = verts[tri.idx1];
+                    G3D::Vector3 v2m = verts[tri.idx2];
+                    G3D::Vector3 v0w = TransformToWorld(v0m);
+                    G3D::Vector3 v1w = TransformToWorld(v1m);
+                    G3D::Vector3 v2w = TransformToWorld(v2m);
+                    G3D::Vector3 nTri = CylinderHelpers::CalculateTriangleNormalOriented(v0w, v1w, v2w);
+                    if (nTri.z < 0.0f) nTri = -nTri;
+                    G3D::Vector3 centroid = (v0w + v1w + v2w) * (1.0f/3.0f);
+                    h.triNormal = nTri;
+                    h.triCentroid = centroid;
+                }
+            }
+
             hits.push_back(h);
             ++it;
         }
 
-        // Summarize only when there are hits
         if (!hits.empty())
             PHYS_TRACE(PHYS_CYL, "[MI::Sweep] hits="<<hits.size()<<" name='"<<name<<"' id="<<ID);
         return hits;
     }
 
-    // Get transformed mesh data for external collision testing
     bool ModelInstance::GetTransformedMeshData(std::vector<G3D::Vector3>& outVertices,
         std::vector<uint32_t>& outIndices) const
     {
         if (!iModel)
             return false;
 
-        // Get the raw mesh data from the WorldModel
         std::vector<G3D::Vector3> modelVertices;
         if (!iModel->GetAllMeshData(modelVertices, outIndices))
             return false;
 
-        // Clear and reserve space for transformed vertices
         outVertices.clear();
         outVertices.reserve(modelVertices.size());
 
-        // Transform each vertex from model space to world space
-        // Transformation: scale -> rotate -> translate
         auto vertIt = modelVertices.begin();
         while (vertIt != modelVertices.end())
         {
-            // Apply scale
-            G3D::Vector3 scaled = (*vertIt) * iScale;
-
-            // Apply rotation using original right-multiply convention
-            G3D::Vector3 rotated = scaled * iInvRot;
-
-            // Apply translation
-            G3D::Vector3 worldPos = rotated + iPos;
-
+            // Correct transformation: scale -> iRot -> translate
+            G3D::Vector3 worldPos = ((*vertIt) * iScale) * iRot + iPos;
             outVertices.push_back(worldPos);
             ++vertIt;
         }
@@ -406,34 +429,27 @@ namespace VMAP
         return true;
     }
 
-    // Check if cylinder collides with model
     bool ModelInstance::CheckCylinderCollision(const Cylinder& worldCylinder,
         float& outContactHeight, G3D::Vector3& outContactNormal) const
     {
         if (!iModel)
             return false;
 
-        // Quick bounds check first
         if (!iBound.intersects(worldCylinder.getBounds()))
             return false;
 
-        // Transform cylinder to model space for testing
         Cylinder modelCylinder = TransformCylinderToModel(worldCylinder);
 
         float ch = 0.0f; G3D::Vector3 n(0,0,1);
         bool hit = iModel->CheckCylinderCollision(modelCylinder, ch, n);
         if (hit)
         {
-            // Transform normal back to instance/world space
-            G3D::Vector3 wn = n * iInvRot;
+            G3D::Vector3 wn = n * iRot;
             float nLen = wn.magnitude();
             if (nLen > 0.0001f) wn /= nLen; else wn = G3D::Vector3(0,0,1);
 
-            // Transform contact height into world Z by lifting along normal to instance space
-            // We can reconstruct contact point approximately from baseZ + rel, but easier is to set height =
-            // (TransformToWorld of model-space contact point), however CheckCylinderCollision only provides height.
-            // Use model-space height directly as Z and transform along scale + translation (rotation does not affect Z if consistent).
-            float worldZ = (G3D::Vector3(0,0,ch) * iInvRot * iScale + iPos).z;
+            // Transform contact height using model->world rotation (rotation shouldn't alter pure Z if axis aligned but keeps consistency)
+            float worldZ = (G3D::Vector3(0,0,ch) * iRot * iScale + iPos).z;
 
             outContactHeight = worldZ;
             outContactNormal = wn;
@@ -446,21 +462,17 @@ namespace VMAP
         return false;
     }
 
-    // Test if cylinder can fit at position without collision
     bool ModelInstance::CanCylinderFitAtPosition(const Cylinder& worldCylinder, float tolerance) const
     {
         if (!iModel)
             return true;  // No model = no collision
 
-        // Manually expand cylinder radius by tolerance
         Cylinder expanded = worldCylinder;
         expanded.radius += tolerance;
 
-        // Quick bounds check
         if (!iBound.intersects(expanded.getBounds()))
             return true;
 
-        // Transform to model space and ask world model
         Cylinder modelCylinder = TransformCylinderToModel(expanded);
         bool ok = iModel->CanCylinderFitAtPosition(modelCylinder, 0.0f);
         LOG_DEBUG("[MI][CanFit] name='" << name << "' id=" << ID << " ok=" << (ok?1:0));

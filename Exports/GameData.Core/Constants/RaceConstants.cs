@@ -1,11 +1,12 @@
-﻿using System.Text;
+﻿using System;
+using System.IO;
+using System.Text;
+using System.Collections.Generic;
 using GameData.Core.Enums;
 
 namespace GameData.Core.Constants
 {
-    /// <summary>
-    /// Druid shapeshift forms
-    /// </summary>
+    // Druid shapeshift forms (subset for vanilla)
     public enum DruidForm
     {
         Human = 0,

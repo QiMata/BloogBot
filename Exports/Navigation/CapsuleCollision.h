@@ -30,6 +30,8 @@ namespace CapsuleCollision
     // Small constants for numerical stability
     static const float EPSILON = 1e-6f;
     static const float LARGE_EPS = 1e-4f;
+    // Treat touching as overlap tolerance (about 1 mm in world units)
+    static const float TOUCH_EPS = 1e-3f;
 
     // Basic math helpers without STL
     inline float cc_min(float a, float b) { return a < b ? a : b; }
@@ -334,17 +336,22 @@ namespace CapsuleCollision
     // Sphere-triangle intersection via closest point on triangle
     inline bool intersectSphereTriangle(const Vec3& center, float radius, const Triangle& T, Hit& out)
     {
+        // Plane cull: if sphere center farther than radius from triangle plane, it cannot overlap the triangle plane
+        Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
+        float signedDist = signedDistanceToPlane(center, Ntri, dtri);
+        if (cc_abs(signedDist) > radius + TOUCH_EPS)
+            return false;
+
         float u, v, w;
         Vec3 q = closestPointOnTriangle(T, center, &u, &v, &w);
         Vec3 d = center - q;
         float dist2 = d.length2();
-        float r2 = radius * radius;
+        float rEff = radius + TOUCH_EPS;
+        float r2 = rEff * rEff;
         if (dist2 > r2)
             return false;
 
         float dist = cc_sqrt(dist2);
-        Vec3 Ntri; float dtri;
-        trianglePlane(T, Ntri, dtri);
         Vec3 n = dist > EPSILON ? (d / (dist > EPSILON ? dist : 1.0f)) : Ntri;
         if (T.doubleSided)
         {
@@ -356,6 +363,7 @@ namespace CapsuleCollision
             n = Ntri;
 
         out.hit = true;
+        // Keep true geometric penetration depth without TOUCH_EPS bias
         out.depth = radius - dist;
         out.normal = Vec3::normalizeSafe(n);
         out.point = q;
@@ -442,6 +450,22 @@ namespace CapsuleCollision
 
     inline bool intersectCapsuleTriangle(const Capsule& C, const Triangle& T, Hit& out)
     {
+        // Quick plane cull against the capsule central axis (useful for vertical walls):
+        // If the capsule axis is parallel to the triangle plane and the axis-to-plane distance > radius,
+        // then the capsule cannot overlap that triangle.
+        Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
+        Vec3 axis = C.p1 - C.p0;
+        float axisLen2 = axis.length2();
+        Vec3 dir = axisLen2 > EPSILON*EPSILON ? (axis / cc_sqrt(axisLen2)) : Vec3(0, 1, 0);
+        float denom = Vec3::dot(Ntri, dir);
+        if (cc_abs(denom) <= EPSILON)
+        {
+            // Parallel: distance from any axis point to plane is constant
+            float lineDist = cc_abs(signedDistanceToPlane(C.p0, Ntri, dtri));
+            if (lineDist > C.r)
+                return false;
+        }
+
         Vec3 onSeg, onTri;
         if (!closestPoints_Segment_Triangle(C.p0, C.p1, T, onSeg, onTri))
             return false;
@@ -461,13 +485,11 @@ namespace CapsuleCollision
         else
         {
             // If extremely close, fall back to triangle normal
-            Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
             n = Ntri;
         }
         // If double sided, make sure normal points from triangle towards capsule
         if (T.doubleSided)
         {
-            Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
             if (Vec3::dot(n, Ntri) < 0.0f) n = n * -1.0f;
         }
 

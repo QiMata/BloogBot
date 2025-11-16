@@ -15,13 +15,13 @@ namespace VMAP
         float radius = 0.4f;
         Vector3 up = Vector3(0, 1, 0);
         int ccdSubsteps = 5;
-        float walkableSlopeCos = 0.70710678f; // cos(45deg)
+        float walkableSlopeCos = 0.5f; // cos(60deg) — default WoW-like slope limit
         float stepHeight = 0.5f; // maximum vertical step-up height to attempt on low obstacles
         uint32_t collisionMask = 0xFFFFFFFFu; // mask from higher-level systems to filter SceneQuery
         CapsuleCollision::ResolveConfig resolve; // default constructed
     };
 
-    // Lightweight non-physics character controller using SceneQuery as a facade
+    // Stateless sweep/slide helper; velocity supplied per Tick (not stored between calls)
     class CharacterCapsuleMover {
     public:
         CharacterCapsuleMover();
@@ -29,17 +29,15 @@ namespace VMAP
         // base = feet position; capsule = [p0 = base, p1 = base + up * height]
         void SetPose(const Vector3& base, const CharacterCapsuleConfig& cfg);
 
-        // Move using desired velocity, then apply gravity. dt is in seconds.
-        // Returns true if any collision happened during this tick.
+        // Advance capsule using provided velocity (horizontal intent) and gravity (vertical). Velocity is not retained.
         bool Tick(const StaticMapTree& map,
-                  const Vector3& desiredVelocity,
+                  const Vector3& velocity,
                   const Vector3& gravity,
                   float dt);
 
         bool IsGrounded() const { return m_grounded; }
         const SceneHit& LastHit() const { return m_lastHit; }
         CapsuleCollision::Capsule GetCapsule() const { return m_capsule; }
-        Vector3 LastDisplacement() const { return m_velocity; }
 
     private:
         static inline CapsuleCollision::Vec3 ToCC(const Vector3& v) { return CapsuleCollision::Vec3(v.x, v.y, v.z); }
@@ -50,7 +48,6 @@ namespace VMAP
                            Vector3& inOutStep, SceneHit& outHit) const;
 
         CapsuleCollision::Capsule m_capsule;
-        Vector3 m_velocity; // last tick displacement after sliding (world space)
         bool m_grounded = false;
         SceneHit m_lastHit;
         CharacterCapsuleConfig m_cfg;

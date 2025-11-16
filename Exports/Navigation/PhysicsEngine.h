@@ -114,6 +114,43 @@ private:
         G3D::Vector3 normal;
     };
 
+    // Added physics query result structs
+    struct HitResult
+    {
+        bool blocking;            // true if this hit blocks movement
+        float toi;                // time/distance of impact along sweep (0..sweepDist)
+        float penetrationDepth;   // penetration depth if starting overlapping
+        G3D::Vector3 impactPoint; // world-space contact point
+        G3D::Vector3 impactNormal;// world-space contact normal (unit length)
+        void Reset()
+        {
+            blocking = false;
+            toi = 0.0f;
+            penetrationDepth = 0.0f;
+            impactPoint = G3D::Vector3(0,0,0);
+            impactNormal = G3D::Vector3(0,0,1);
+        }
+    };
+
+    struct FloorResult
+    {
+        bool hasFloor;            // any floor detected
+        bool walkable;            // floor satisfies walkable slope criteria
+        float floorDist;          // distance from query origin to floor (vertical or along sweep)
+        float lineDist;           // parametric distance along cast line (e.g. ray length fraction)
+        G3D::Vector3 floorPoint;  // world-space point on floor
+        G3D::Vector3 floorNormal; // floor surface normal
+        void Reset()
+        {
+            hasFloor = false;
+            walkable = false;
+            floorDist = 0.0f;
+            lineDist = 0.0f;
+            floorPoint = G3D::Vector3(0,0,0);
+            floorNormal = G3D::Vector3(0,0,1);
+        }
+    };
+
     // Phase 1: helper describing player directional input & actions
     struct MovementIntent
     {

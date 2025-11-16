@@ -2,6 +2,8 @@
 #include "CylinderCollision.h"
 #include "VMapLog.h" // for PHYS_* logging
 #include <limits>
+// Use analytic sweep utilities from capsule implementation
+#include "CapsuleCollision.h"
 
 namespace VMAP
 {
@@ -166,7 +168,7 @@ namespace VMAP
         // Bottom cap as sphere
         {
             CylinderIntersection tmp;
-            if (IntersectSphereTriangle3D(cyl.base, cyl.radius, v0, v1, v2, (triNormal.z < 0.0f ? -triNormal : triNormal), tmp))
+            if (IntersectSphereTriangle3D(cyl.base, cyl.radius, v0, v1, v2, triNormal, tmp))
             {
                 best = tmp;
                 any = true;
@@ -176,7 +178,7 @@ namespace VMAP
         {
             CylinderIntersection tmp;
             G3D::Vector3 topCenter = cyl.getTop();
-            if (IntersectSphereTriangle3D(topCenter, cyl.radius, v0, v1, v2, (triNormal.z < 0.0f ? -triNormal : triNormal), tmp))
+            if (IntersectSphereTriangle3D(topCenter, cyl.radius, v0, v1, v2, triNormal, tmp))
             {
                 if (!any || tmp.contactHeight > best.contactHeight)
                 {
@@ -325,8 +327,8 @@ namespace VMAP
                             result.hit = true;
                             result.contactPoint = intersectionPoint;
                             result.contactHeight = intersectionPoint.z;
-                            // Ensure upward-facing for contact
-                            result.contactNormal = triNormal.z < 0.0f ? -triNormal : triNormal;
+                            // Use raw triangle normal (no upward flip)
+                            result.contactNormal = triNormal;
                             result.penetrationDepth = 0; // Axis passes through
                             hit = true;
                         }
@@ -348,8 +350,7 @@ namespace VMAP
     {
         CylinderIntersection result;
 
-        // Calculate triangle normal (use oriented strategy)
-        G3D::Vector3 triNormalRaw = CylinderHelpers::CalculateTriangleNormalRaw(v0, v1, v2);
+        // Calculate triangle normal (use oriented strategy -> configured)
         G3D::Vector3 triNormal = CylinderHelpers::CalculateTriangleNormalOriented(v0, v1, v2);
 
         // Quick reject: Check if cylinder bounds intersect triangle bounds
@@ -394,124 +395,96 @@ namespace VMAP
     {
         std::vector<CylinderSweepHit> hits;
 
-        // Handle zero distance as a pure overlap query
+        // Build an equivalent capsule approximation of the cylinder for analytic sweep
+        CapsuleCollision::Capsule cap;
+        cap.p0 = { cyl.base.x, cyl.base.y, cyl.base.z };
+        G3D::Vector3 top = cyl.getTop();
+        cap.p1 = { top.x, top.y, top.z };
+        cap.r = cyl.radius;
+
+        // Velocity vector for sweep (capsuleTriangleSweep expects translation over [0,1])
         G3D::Vector3 sweepVec = sweepDir * sweepDistance;
-        float sweepLen = sweepVec.magnitude();
-        float invSweepLen = (sweepLen > 0.0f ? 1.0f / sweepLen : 0.0f);
+        CapsuleCollision::Vec3 vel(sweepVec.x, sweepVec.y, sweepVec.z);
 
-        // Swept AABB broadphase (start + end merged)
-        G3D::AABox sweepBounds = cyl.getBounds();
-        if (sweepLen > 0.0f)
-        {
-            Cylinder endCyl(cyl.base + sweepVec, cyl.axis, cyl.radius, cyl.height);
-            sweepBounds.merge(endCyl.getBounds());
-        }
-
-        size_t triangleCount = indices.size() / 3;
-        if (triangleCount == 0)
+        size_t triCount = indices.size() / 3;
+        if (triCount == 0)
             return hits;
 
-        // Parameters for CCD refinement
-        const int kCoarseMax = 16;               // max coarse samples
-        const int kRefineIter = 8;               // binary search iterations
-        const float kMinSegLen = 0.25f;          // target coarse segment length
-        const float kPenEps = 1e-5f;             // small epsilon
-
-        for (size_t i = 0; i < triangleCount; ++i)
+        // Handle start overlap first: report TOI=0 for any overlapping triangles
+        for (size_t i = 0; i < triCount; ++i)
         {
             const G3D::Vector3& v0 = vertices[indices[i * 3 + 0]];
             const G3D::Vector3& v1 = vertices[indices[i * 3 + 1]];
             const G3D::Vector3& v2 = vertices[indices[i * 3 + 2]];
 
-            // Triangle bounds vs swept bounds
-            G3D::AABox triBox(v0, v0); triBox.merge(v1); triBox.merge(v2);
-            auto tLo = triBox.low(); auto tHi = triBox.high();
-            auto sLo = sweepBounds.low(); auto sHi = sweepBounds.high();
+            CapsuleCollision::Triangle T;
+            T.a = { v0.x, v0.y, v0.z };
+            T.b = { v1.x, v1.y, v1.z };
+            T.c = { v2.x, v2.y, v2.z };
+            T.doubleSided = true;
+            T.collisionMask = 0xFFFFFFFFu;
 
-            // Helper lambda to test at param t in [0,1]
-            auto testAt = [&](float t, CylinderIntersection& outI) -> bool
+            CapsuleCollision::Hit overlap;
+            if (CapsuleCollision::intersectCapsuleTriangle(cap, T, overlap))
             {
-                if (t <= 0.0f)
-                {
-                    outI = IntersectCylinderTriangle(cyl, v0, v1, v2);
-                    return outI.hit;
-                }
-                Cylinder cur(cyl.base + sweepVec * t, cyl.axis, cyl.radius, cyl.height);
-                outI = IntersectCylinderTriangle(cur, v0, v1, v2);
-                return outI.hit;
-            };
-
-            // Check initial overlap first (TOI = 0)
-            CylinderIntersection startHit;
-            if (testAt(0.0f, startHit))
-            {
-                CylinderSweepHit h; h.q.hit = true; h.q.distance = 0.0f; h.q.point = startHit.contactPoint; h.q.normal = startHit.contactNormal; h.height = startHit.contactHeight; h.normal = startHit.contactNormal; h.position = startHit.contactPoint; h.walkable = CylinderHelpers::IsWalkableSurface(startHit.contactNormal); h.triangleIndex = (uint32_t)i; h.q.triIndex = h.triangleIndex; hits.push_back(h);
-                continue; // Already penetrating; earliest possible
+                CylinderSweepHit h;
+                h.q.hit = true;
+                h.q.distance = 0.0f;
+                h.q.point = G3D::Vector3(overlap.point.x, overlap.point.y, overlap.point.z);
+                h.q.normal = G3D::Vector3(overlap.normal.x, overlap.normal.y, overlap.normal.z);
+                h.height = h.q.point.z;
+                h.normal = h.q.normal;
+                h.position = h.q.point;
+                h.walkable = CylinderHelpers::IsWalkableSurface(h.normal);
+                h.triangleIndex = (uint32_t)i;
+                h.q.triIndex = h.triangleIndex;
+                hits.push_back(h);
             }
-
-            if (sweepLen <= 0.0f)
-            {
-                continue; // no movement and not overlapping
-            }
-
-            // Determine coarse sample count
-            int coarseCount = (int)std::ceil(sweepLen / kMinSegLen);
-            if (coarseCount < 1) coarseCount = 1; else if (coarseCount > kCoarseMax) coarseCount = kCoarseMax;
-
-            float tLow = 0.0f;
-            float tHigh = -1.0f; // sentinel meaning not found
-            CylinderIntersection highHit; // store first colliding intersection
-
-            // Coarse forward march to bracket collision
-            for (int s = 1; s <= coarseCount; ++s)
-            {
-                float t = (float)s / (float)coarseCount; // in (0,1]
-                CylinderIntersection isect;
-                if (testAt(t, isect))
-                {
-                    tHigh = t;
-                    highHit = isect;
-                    break;
-                }
-            }
-
-            if (tHigh < 0.0f)
-            {
-                continue; // no hit along path
-            }
-
-            // Binary search refine earliest TOI between tLow (free) and tHigh (hit)
-            for (int it = 0; it < kRefineIter; ++it)
-            {
-                float tMid = 0.5f * (tLow + tHigh);
-                CylinderIntersection midHit;
-                if (testAt(tMid, midHit))
-                {
-                    tHigh = tMid; // still colliding earlier
-                    highHit = midHit;
-                }
-                else
-                {
-                    tLow = tMid; // move bracket up
-                }
-            }
-
-            // Ensure final contact info at refined tHigh
-            CylinderIntersection finalHit;
-            testAt(tHigh, finalHit); // should be colliding
-            if (!finalHit.hit)
-            {
-                // Fallback to stored highHit if numeric issue
-                finalHit = highHit;
-            }
-
-            // Build sweep hit
-            float toiDist = tHigh * sweepDistance;
-            CylinderSweepHit h; h.q.hit = true; h.q.distance = toiDist; h.q.point = finalHit.contactPoint; h.q.normal = finalHit.contactNormal; h.height = finalHit.contactHeight; h.normal = finalHit.contactNormal; h.position = finalHit.contactPoint; h.walkable = CylinderHelpers::IsWalkableSurface(finalHit.contactNormal); h.triangleIndex = (uint32_t)i; h.q.triIndex = h.triangleIndex;
-            hits.push_back(h);
         }
 
-        // Suppress CCD summary log; ModelInstance emits final summary
+        // If there was any start penetration, we only keep those as earliest impacts
+        if (!hits.empty() || sweepDistance <= 0.0f)
+        {
+            return hits;
+        }
+
+        // Analytic sweep per-triangle using capsuleTriangleSweep
+        for (size_t i = 0; i < triCount; ++i)
+        {
+            const G3D::Vector3& v0 = vertices[indices[i * 3 + 0]];
+            const G3D::Vector3& v1 = vertices[indices[i * 3 + 1]];
+            const G3D::Vector3& v2 = vertices[indices[i * 3 + 2]];
+
+            CapsuleCollision::Triangle T;
+            T.a = { v0.x, v0.y, v0.z };
+            T.b = { v1.x, v1.y, v1.z };
+            T.c = { v2.x, v2.y, v2.z };
+            T.doubleSided = true;
+            T.collisionMask = 0xFFFFFFFFu;
+
+            float toi; CapsuleCollision::Vec3 nI, pI;
+            if (CapsuleCollision::capsuleTriangleSweep(cap, vel, T, toi, nI, pI))
+            {
+                if (toi >= 0.0f && toi <= 1.0f)
+                {
+                    CylinderSweepHit h;
+                    h.q.hit = true;
+                    h.q.distance = toi * sweepDistance;
+                    h.q.point = G3D::Vector3(pI.x, pI.y, pI.z);
+                    h.q.normal = G3D::Vector3(nI.x, nI.y, nI.z);
+                    h.height = h.q.point.z;
+                    h.normal = h.q.normal;
+                    h.position = h.q.point;
+                    h.walkable = CylinderHelpers::IsWalkableSurface(h.normal);
+                    h.triangleIndex = (uint32_t)i;
+                    h.q.triIndex = h.triangleIndex;
+                    hits.push_back(h);
+                }
+            }
+        }
+
+        // Sort by earliest time-of-impact (distance)
+        std::sort(hits.begin(), hits.end());
         return hits;
     }
 
