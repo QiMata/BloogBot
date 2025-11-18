@@ -167,10 +167,6 @@ private:
     float GetTerrainHeight(uint32_t mapId, float x, float y);
     float GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType);
 
-    // Cylinder-based surface finding (simplified: single terrain + minimal vmap sampling)
-    WalkableSurface FindWalkableSurfaceWithCylinder(uint32_t mapId, float x, float y, float currentZ,
-        float maxStepUp, float maxStepDown, float cylinderRadius, float cylinderHeight);
-
     // Movement processing (simplified authentic style)
     void ProcessGroundMovementWithCylinder(const PhysicsInput& input, const MovementIntent& intent, MovementState& state,
         float dt, float speed, float cylinderRadius, float cylinderHeight);

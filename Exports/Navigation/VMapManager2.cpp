@@ -104,6 +104,24 @@ namespace VMAP
         PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::GetCylinderCollisionCandidates count="<<outInstances.size());
     }
 
+    // Capsule sweep wrapper using SceneQuery
+    std::vector<SceneHit> VMapManager2::SweepCapsuleAll(unsigned int pMapId,
+        const CapsuleCollision::Capsule& capsuleStart,
+        const G3D::Vector3& dir,
+        float distance,
+        uint32_t includeMask) const
+    {
+        std::vector<SceneHit> out;
+        auto it = iInstanceMapTrees.find(pMapId);
+        if (it == iInstanceMapTrees.end() || it->second == nullptr)
+            return out;
+        StaticMapTree* tree = it->second;
+        // Forward to SceneQuery implementation which operates on StaticMapTree
+        QueryParams qp; qp.includeMask = includeMask;
+        SceneQuery::SweepCapsuleAll(*tree, capsuleStart, dir, distance, out, includeMask, qp);
+        return out;
+    }
+
     // Global model name to path mapping
     static std::unordered_map<std::string, std::string> modelNameToPath;
     static bool modelMappingLoaded = false;
@@ -614,185 +632,7 @@ namespace VMAP
         PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::CanCylinderFitAtPosition -> " << (fit?1:0));
         return fit;
     }
-
-    bool VMapManager2::FindCylinderWalkableSurface(unsigned int pMapId, const Cylinder& worldCylinder,
-        float currentHeight, float maxStepUp, float maxStepDown,
-        float& outHeight, G3D::Vector3& outNormal) const
-    {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::FindCylinderWalkableSurface map="<<pMapId
-            <<" curZ="<<currentHeight<<" up="<<maxStepUp<<" down="<<maxStepDown);
-        auto instanceTree = iInstanceMapTrees.find(pMapId);
-        if (instanceTree == iInstanceMapTrees.end())
-        {
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 0 (no tree)");
-            return false;
-        }
-
-        // Search window
-        float xW = worldCylinder.base.x;
-        float yW = worldCylinder.base.y;
-        float zCastStartW = currentHeight + std::max(0.1f, maxStepUp);
-        float searchDist = std::max(0.25f, maxStepUp + maxStepDown);
-
-        // 1) Prefer a coherent plane from swept-capsule hits
-        const float cosMin = VMAP::CylinderHelpers::GetWalkableCosMin();
-        const float bandEps = std::max(0.05f, std::min(0.35f, worldCylinder.radius * 0.5f));
-        // Tolerance for small conversion/quantization errors when comparing heights (in meters)
-        const float rangeEps = std::max(0.005f, std::min(0.03f, worldCylinder.radius * 0.05f));
-
-        Cylinder sweepCyl(G3D::Vector3(xW, yW, zCastStartW), G3D::Vector3(0,0,1), worldCylinder.radius, worldCylinder.height);
-        CapsuleCollision::Capsule C = ToCapsule(sweepCyl);
-        std::vector<SceneHit> hits;
-        (void)SceneQuery::SweepCapsuleAll(*instanceTree->second, C, G3D::Vector3(0,0,-1), searchDist, hits);
-
-        // Collect basic stats only
-        int rejSteep = 0, rejRange = 0, acc = 0;
-        struct GroupAgg { float maxH = -std::numeric_limits<float>::infinity(); G3D::Vector3 nSum = {0,0,0}; int count = 0; };
-        std::unordered_map<uint64_t, GroupAgg> groups;
-        auto makeKey = [&](uint32_t instId, float h) -> uint64_t {
-            int band = (int)std::floor(h / bandEps + 0.5f);
-            uint64_t k = ((uint64_t)instId << 32) | (uint32_t)(band & 0x7fffffff);
-            return k;
-        };
-
-        for (const auto& h : hits)
-        {
-            float hZ = h.point.z;
-            if (h.normal.z < cosMin) { ++rejSteep; continue; }
-            float d = hZ - currentHeight;
-            if (d > maxStepUp + 1e-3f || d < -maxStepDown - 1e-3f) { ++rejRange; continue; }
-            uint32_t instId = h.instanceId;
-            uint64_t key = makeKey(instId, hZ);
-            auto& g = groups[key];
-            g.maxH = std::max(g.maxH, hZ);
-            g.nSum = G3D::Vector3(g.nSum.x + h.normal.x, g.nSum.y + h.normal.y, g.nSum.z + h.normal.z);
-            g.count++; ++acc;
-        }
-
-        float bestH = -std::numeric_limits<float>::infinity();
-        G3D::Vector3 bestN(0,0,1);
-        bool haveGroup = false;
-        for (auto& kv : groups)
-        {
-            const GroupAgg& g = kv.second; if (g.count <= 0) continue;
-            if (g.maxH > bestH)
-            {
-                bestH = g.maxH;
-                G3D::Vector3 n = g.nSum; float len = n.magnitude(); if (len > 1e-6f) n = n / len; else n = G3D::Vector3(0,0,1);
-                if (n.z < 0.0f) n = -n; bestN = n; haveGroup = true;
-            }
-        }
-
-        PHYS_TRACE(PHYS_SURF, "[FindSurf][SceneQuery] hits=" << hits.size()
-            << " acc=" << acc
-            << " rejSteep=" << rejSteep
-            << " rejRange=" << rejRange
-            << " groups=" << groups.size()
-            << " x=" << xW << " y=" << yW
-            << " zStart=" << zCastStartW
-            << " dist=" << searchDist
-            << " bandEps=" << bandEps
-            << " cosMin=" << cosMin);
-
-        if (haveGroup)
-        {
-            outHeight = bestH; outNormal = bestN;
-            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Sweep(CQ) topH=" << outHeight << " nZ=" << outNormal.z);
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 1 h="<<outHeight);
-            return true;
-        }
-
-        // 1.5) Caps-only overlap probe (SceneQuery)
-        {
-            float bestCapH = -std::numeric_limits<float>::infinity();
-            G3D::Vector3 bestCapN(0,0,1);
-            bool capFound = false;
-
-            auto testSphere = [&](const G3D::Vector3& centerW)
-            {
-                std::vector<SceneHit> overlaps;
-                int cnt = SceneQuery::OverlapSphere(*instanceTree->second, centerW, worldCylinder.radius, overlaps);
-                if (cnt <= 0) return;
-                for (const auto& h : overlaps)
-                {
-                    G3D::Vector3 n = h.normal; if (n.z < 0.0f) n = -n;
-                    float ch = h.point.z;
-                    float diff = ch - currentHeight;
-                    if (n.z >= cosMin && diff <= maxStepUp + 1e-3f && diff >= -maxStepDown - 1e-3f)
-                    {
-                        if (!capFound || ch > bestCapH)
-                        { capFound = true; bestCapH = ch; bestCapN = n; }
-                    }
-                }
-            };
-
-            float r = worldCylinder.radius;
-            testSphere(G3D::Vector3(xW, yW, currentHeight + r));
-            testSphere(G3D::Vector3(xW, yW, currentHeight + worldCylinder.height - r));
-
-            if (capFound)
-            {
-                outHeight = bestCapH; outNormal = bestCapN;
-                PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=CapsSphere h=" << outHeight << " nZ=" << outNormal.z);
-                PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 1 h="<<outHeight);
-                return true;
-            }
-        }
-
-        // 2) Fallback: downward ray for Z, then derive normal from hits near band
-        G3D::Vector3 castStartI = convertPositionToInternalRep(xW, yW, zCastStartW);
-        float hI = instanceTree->second->getHeight(castStartI, searchDist);
-        if (!std::isfinite(hI))
-        {
-            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=None (no height) hits=" << hits.size());
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 0 (no height)");
-            return false;
-        }
-
-        G3D::Vector3 hw = NavCoord::InternalToWorld(G3D::Vector3(castStartI.x, castStartI.y, hI));
-        outHeight = hw.z;
-
-        float diff = outHeight - currentHeight;
-        // Allow a small tolerance to account for coordinate conversion/quantization. If slightly below current height
-        // but within tolerance, clamp to current height to avoid spurious out-of-range.
-        if (diff < 0.0f && diff >= -rangeEps)
-        {
-            outHeight = currentHeight; // keep rider on top without micro jitter
-            diff = 0.0f;
-        }
-        if (diff > maxStepUp + rangeEps || diff < -maxStepDown - rangeEps)
-        {
-            PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Ray out-of-range diff=" << diff);
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 0 (range)");
-            return false;
-        }
-
-        if (!hits.empty())
-        {
-            float bestAbs = std::numeric_limits<float>::max();
-            G3D::Vector3 nPick(0,0,1);
-            for (const auto& h : hits)
-            {
-                if (h.normal.z < cosMin) continue;
-                float a = std::abs(h.point.z - outHeight);
-                if (a <= bandEps && a < bestAbs)
-                { bestAbs = a; nPick = h.normal; }
-            }
-            if (bestAbs < std::numeric_limits<float>::max())
-            {
-                if (nPick.z < 0.0f) nPick = -nPick; outNormal = nPick;
-                PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=Ray+SweepN(CQ) h=" << outHeight << " nZ=" << outNormal.z);
-                PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 1 h="<<outHeight);
-                return true;
-            }
-        }
-
-        outNormal = G3D::Vector3(0,0,1);
-        PHYS_TRACE(PHYS_SURF, "[FindSurf][Summary] method=FallbackUp h=" << outHeight << " nZ=" << outNormal.z);
-        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCylinderWalkableSurface -> 1 h="<<outHeight);
-        return true;
-    }
-
+            
     bool VMapManager2::CanCylinderMoveAtPosition(unsigned int pMapId, const Cylinder& worldCylinder, float tolerance) const
     {
         PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::CanCylinderMoveAtPosition map="<<pMapId<<" tol="<<tolerance);
@@ -977,16 +817,14 @@ namespace VMAP
     bool VMapManager2::isUnderModel(unsigned int pMapId, float x, float y, float z,
         float* outDist, float* inDist) const
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::isUnderModel map="<<pMapId);
+        // Silent: function is known-good; avoid noisy PERF tracing here
         auto instanceTree = iInstanceMapTrees.find(pMapId);
         if (instanceTree != iInstanceMapTrees.end())
         {
             G3D::Vector3 pos = convertPositionToInternalRep(x, y, z);
             bool res = instanceTree->second->isUnderModel(pos, outDist, inDist);
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::isUnderModel -> "<<(res?1:0));
             return res;
         }
-        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::isUnderModel -> 0 (no tree)");
         return false;
     }
 

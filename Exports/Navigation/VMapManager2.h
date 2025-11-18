@@ -9,6 +9,8 @@
 #include <string>
 #include "Vector3.h"
 #include "CylinderCollision.h"
+#include "CapsuleCollision.h"
+#include "SceneQuery.h"
 
 namespace VMAP
 {
@@ -85,6 +87,13 @@ namespace VMAP
             float maxStepUp,
             float maxStepDown) const;
         
+        // Capsule sweep wrapper using SceneQuery
+        std::vector<SceneHit> SweepCapsuleAll(unsigned int pMapId,
+            const CapsuleCollision::Capsule& capsuleStart,
+            const G3D::Vector3& dir,
+            float distance,
+            uint32_t includeMask = 0xFFFFFFFFu) const;
+
         bool CheckCylinderCollision(unsigned int pMapId, const Cylinder& worldCylinder,
             float& outContactHeight, G3D::Vector3& outContactNormal,
             ModelInstance** outHitInstance = nullptr) const;
@@ -92,11 +101,6 @@ namespace VMAP
             float tolerance = 0.05f) const;
         bool CanCylinderMoveAtPosition(unsigned int pMapId, const Cylinder& worldCylinder,
             float tolerance = 0.05f) const;
-
-        // Find walkable surface for cylinder movement
-        bool FindCylinderWalkableSurface(unsigned int pMapId, const Cylinder& worldCylinder,
-            float currentHeight, float maxStepUp, float maxStepDown,
-            float& outHeight, G3D::Vector3& outNormal) const;
 
         // Get height using cylinder for more accurate ground detection
         // NOTE: This is non-const because it calls the non-const getHeight() method

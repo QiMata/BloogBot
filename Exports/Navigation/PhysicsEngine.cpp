@@ -210,7 +210,8 @@ void PhysicsEngine::EnsureMapLoaded(uint32_t mapId)
 {
     if (m_vmapManager && !m_vmapManager->isMapInitialized(mapId)) {
         m_vmapManager->initializeMap(mapId);
-        PHYS_DBG(PHYS_MOVE, "Map initialized id=" << mapId);
+        // Removed noisy per-map initialized debug log
+        // PHYS_DBG(PHYS_MOVE, "Map initialized id=" << mapId);
     }
 }
 
@@ -336,117 +337,6 @@ bool PhysicsEngine::HasHeadClearance(uint32_t mapId, float x, float y, float new
 }
 
 // =====================================================================================
-// Walkable surface search
-// =====================================================================================
-PhysicsEngine::WalkableSurface PhysicsEngine::FindWalkableSurfaceWithCylinder(uint32_t mapId, float x, float y,
-    float currentZ, float maxStepUp, float maxStepDown, float radius, float height)
-{
-    auto t0 = std::chrono::high_resolution_clock::now();
-    WalkableSurface best{ false, INVALID_HEIGHT, SurfaceSource::NONE, { 0, 0, 1 } };
-
-    if (m_vmapManager)
-    {
-        EnsureMapLoaded(mapId);
-        const float GRID = 533.33333f;
-        const float MID = 32.0f * GRID;
-        int tileX = int((MID - y) / GRID);
-        int tileY = int((MID - x) / GRID);
-        m_vmapManager->loadMap(nullptr, mapId, tileX, tileY);
-    }
-
-    struct Candidate { float h; SurfaceSource src; G3D::Vector3 n; };
-    std::vector<Candidate> baseCandidates;
-    std::vector<Candidate> upwardCandidates;
-
-    float cosMin = VMAP::CylinderHelpers::GetWalkableCosMin();
-
-    float tH = GetTerrainHeight(mapId, x, y);
-    if (tH > INVALID_HEIGHT)
-    {
-        float diff = tH - currentZ;
-        if (diff >= -(maxStepDown + GROUND_HEIGHT_TOLERANCE) && diff <= maxStepUp + GROUND_HEIGHT_TOLERANCE)
-        {
-            G3D::Vector3 n = ComputeTerrainNormal(mapId, x, y);
-            if (n.z >= cosMin)
-                baseCandidates.push_back({ tH, SurfaceSource::TERRAIN, n });
-        }
-    }
-
-    if (m_vmapManager)
-    {
-        // Prefer robust multi-triangle surface fitting from VMAP manager
-        Cylinder curCyl = CreatePlayerCylinder(x, y, currentZ, radius, height);
-        float mh = INVALID_HEIGHT; G3D::Vector3 mn(0,0,1);
-        if (m_vmapManager->FindCylinderWalkableSurface(mapId, curCyl, currentZ, maxStepUp, maxStepDown, mh, mn))
-        {
-            float diff = mh - currentZ;
-            if (diff >= -(maxStepDown + GROUND_HEIGHT_TOLERANCE) && diff <= maxStepUp + GROUND_HEIGHT_TOLERANCE && mn.z >= cosMin)
-            {
-                baseCandidates.push_back({ mh, SurfaceSource::VMAP, mn });
-            }
-        }
-
-        // Probe upward small increments for the lowest legal step-up
-        const float inc = 0.25f;
-        for (float raised = inc; raised <= maxStepUp + GROUND_HEIGHT_TOLERANCE; raised += inc)
-        {
-            float probeBaseZ = currentZ + raised;
-            Cylinder probeCyl = CreatePlayerCylinder(x, y, probeBaseZ, radius, height);
-            float mh2 = INVALID_HEIGHT; G3D::Vector3 mn2(0,0,1);
-            if (!m_vmapManager->FindCylinderWalkableSurface(mapId, probeCyl, probeBaseZ, maxStepUp - raised, maxStepDown, mh2, mn2))
-                continue;
-
-            float diff = mh2 - currentZ;
-            if (diff < -GROUND_HEIGHT_TOLERANCE || diff > maxStepUp + GROUND_HEIGHT_TOLERANCE)
-                continue;
-            if (mn2.z < cosMin)
-                continue;
-            if (!HasHeadClearance(mapId, x, y, mh2, radius, height))
-                continue;
-
-            upwardCandidates.push_back({ mh2, SurfaceSource::VMAP, mn2 });
-            if (diff <= inc + GROUND_HEIGHT_TOLERANCE)
-                break;
-        }
-    }
-
-    auto pickBetter = [&](const Candidate& a, const Candidate& b)
-    {
-        float da = a.h - currentZ; float db = b.h - currentZ;
-        if (da >= 0 && db < 0) return true;
-        if (db >= 0 && da < 0) return false;
-        if (da >= 0 && db >= 0) return da < db;
-        return a.h > b.h;
-    };
-
-    if (!upwardCandidates.empty())
-    {
-        Candidate chosen = upwardCandidates.front();
-        for (auto& c : upwardCandidates)
-            if ((c.h - currentZ) < (chosen.h - currentZ))
-                chosen = c;
-        best = { true, chosen.h, chosen.src, chosen.n };
-    }
-    else
-    {
-        for (auto& c : baseCandidates)
-        {
-            if (!best.found) { best = { true, c.h, c.src, c.n }; continue; }
-            Candidate cur{ best.height, best.source, best.normal };
-            if (pickBetter(c, cur)) { best.height = c.h; best.source = c.src; best.normal = c.n; }
-        }
-    }
-
-    auto t1 = std::chrono::high_resolution_clock::now();
-    auto us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-    if (best.found)
-        PHYS_TRACE(PHYS_SURF, "surface h=" << best.height << " src=" << (best.source==SurfaceSource::TERRAIN?"terrain":"vmap") << " nZ=" << best.normal.z << " dt_us=" << us << " cosMin=" << cosMin);
-    else
-        PHYS_TRACE(PHYS_SURF, "surface none dt_us=" << us);
-    return best;
-}
-
-// =====================================================================================
 // Movement helpers
 // =====================================================================================
 PhysicsEngine::MovementIntent PhysicsEngine::BuildMovementIntent(const PhysicsInput& input, float orientation) const
@@ -516,273 +406,93 @@ void PhysicsEngine::ProcessGroundMovementWithCylinder(const PhysicsInput& input,
 
     if (intent.hasInput) { st.vx = intent.dir.x * speed; st.vy = intent.dir.y * speed; } else { st.vx = st.vy = 0; }
 
+    // No horizontal movement -> nothing to sweep
+    G3D::Vector3 moveDir(intent.dir.x, intent.dir.y, 0.0f);
+    float intendedDist = std::sqrt(st.vx * st.vx + st.vy * st.vy) * dt;
+    if (intendedDist <= 0.0f)
+        return;
+
+    // Build capsule in world space (base at feet)
+    CapsuleCollision::Capsule cap;
+    cap.p0 = CapsuleCollision::Vec3(st.x, st.y, st.z);
+    cap.p1 = CapsuleCollision::Vec3(st.x, st.y, st.z + height);
+    cap.r = radius;
+
+    // If no vmap manager available, just advance
+    if (!m_vmapManager)
+    {
+        st.x += moveDir.x * intendedDist;
+        st.y += moveDir.y * intendedDist;
+        return;
+    }
+
+    // Perform broad analytic sweep using SceneQuery wrapper
+    std::vector<SceneHit> hits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, moveDir, intendedDist);
+    if (hits.empty())
+    {
+        // Nothing hit: advance fully
+        st.x += moveDir.x * intendedDist;
+        st.y += moveDir.y * intendedDist;
+        return;
+    }
+
+    // SweepCapsuleAll returns earliest-cohort hits (or start-penetrating hits). Pick the first hit as representative
+    const SceneHit& hit = hits.front();
+
+    // If starting penetrating, zero horizontal motion and leave
+    if (hit.startPenetrating)
+    {
+        st.vx = st.vy = 0.0f;
+        PHYS_TRACE(PHYS_CYL, "Start-penetrating during advance map=" << input.mapId << " tri=" << hit.triIndex);
+        return;
+    }
+
+    // Move up to contact point
+    float travel = std::max(0.0f, hit.distance);
+    st.x += moveDir.x * travel;
+    st.y += moveDir.y * travel;
+
+    // Evaluate surface normal
+    st.groundNormal = hit.normal;
+    // If normal is walkable, consider grounded for this frame
+    if (hit.normal.z >= VMAP::CylinderHelpers::GetWalkableCosMin())
+    {
+        st.isGrounded = true;
+        st.vx = st.vy = 0.0f; // stop horizontal motion when contacting walkable surface
+        PHYS_TRACE(PHYS_STEP, "Advance hit walkable tri=" << hit.triIndex << " normalZ=" << hit.normal.z);
+        return;
+    }
+
+    // Non-walkable hit (wall/steep). Try wall-slide first which may modify vx/vy
+    AttemptWallSlide(input, intent, st, dt, speed, radius, height);
+
+    // Try to advance with possibly modified velocities after slide
     float newX = st.x + st.vx * dt; float newY = st.y + st.vy * dt;
-
-    // Diagnostics helper to inspect nearby VMAP models and walkable surface at a location
-    auto diagModels = [&](float dx, float dy, float dz, const char* tag)
+    if (ValidateCylinderPosition(input.mapId, newX, newY, st.z + 0.01f, 0.02f, radius, height))
     {
-        if (!m_vmapManager) return;
-        Cylinder cylHere = CreatePlayerCylinder(dx, dy, dz, radius, height);
-        std::vector<ModelInstance*> instances;
-        m_vmapManager->GetCylinderCollisionCandidates(input.mapId, cylHere, instances);
-        PHYS_INFO(PHYS_STEP, std::string("[DIAG]") << tag << " pos=" << dx << "," << dy << "," << dz << " instCount=" << instances.size());
-        size_t limit = std::min<size_t>(instances.size(), 5);
-        for (size_t i = 0; i < limit; ++i)
-        {
-            const ModelInstance* mi = instances[i];
-            G3D::AABox b = mi->getBounds();
-            G3D::Vector3 lo = b.low(); G3D::Vector3 hi = b.high();
-            PHYS_INFO(PHYS_STEP, "  inst[" << i << "] name='" << mi->name << "' id=" << mi->ID << " adt=" << mi->adtId
-                << " boundsLo=" << lo.x << "," << lo.y << "," << lo.z
-                << " hi=" << hi.x << "," << hi.y << "," << hi.z);
-        }
-        float outH = INVALID_HEIGHT; G3D::Vector3 outN(0,0,1);
-        bool found = m_vmapManager->FindCylinderWalkableSurface(input.mapId, cylHere, dz, STEP_HEIGHT, STEP_DOWN_HEIGHT, outH, outN);
-        PHYS_INFO(PHYS_STEP, "  walkable found=" << (found?1:0) << " h=" << outH << " nZ=" << outN.z);
-        if (found)
-        {
-            Cylinder fit = CreatePlayerCylinder(dx, dy, outH, radius, height);
-            bool fitOk = m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit, 0.02f);
-            PHYS_INFO(PHYS_CYL, "  fitAtH=" << (fitOk?1:0));
-        }
-    };
-
-    // Helper: when blocked, log the exact collided model instance (name + id) if available
-    auto logBlockingInstance = [&](float px, float py, float pz, const char* tag)
-    {
-        if (!m_vmapManager) return;
-        float ch = 0.0f; G3D::Vector3 n(0,0,1); ModelInstance* hit = nullptr;
-        Cylinder c = CreatePlayerCylinder(px, py, pz, radius, height);
-        if (m_vmapManager->CheckCylinderCollision(input.mapId, c, ch, n, &hit) && hit)
-        {
-            PHYS_INFO(PHYS_CYL, std::string("[HIT]") << tag << " name='" << hit->name << "' id=" << hit->ID
-                << " adt=" << hit->adtId << " contactH=" << ch << " nZ=" << n.z);
-        }
-    };
-
-    auto tryAdvance = [&](float& tx, float& ty) -> bool
-    {
-        if (ValidateCylinderPosition(input.mapId, tx, ty, st.z + 0.01f, 0.02f, radius, height)) return true;
-        PHYS_TRACE(PHYS_MOVE, "blocked initial advance");
-
-        // Try to immediately ride on top of the blocking model at its contact height (debug)
-        if (gForceRideTop && m_vmapManager)
-        {
-            float ch = INVALID_HEIGHT; G3D::Vector3 n(0,0,1); ModelInstance* hit = nullptr;
-            Cylinder c = CreatePlayerCylinder(tx, ty, st.z + 0.01f, radius, height);
-            if (m_vmapManager->CheckCylinderCollision(input.mapId, c, ch, n, &hit) && ch > INVALID_HEIGHT)
-            {
-                float placeX = tx, placeY = ty, placeZ = ch;
-                // Use triangle contact to find a stable placement on the top surface
-                if (TryFindStepUpPlacement(m_vmapManager, input.mapId, tx, ty, ch, /*contactPoint*/ G3D::Vector3(tx,ty,ch), n, intent.dir, radius, height, placeX, placeY, placeZ))
-                {
-                    Cylinder fit = CreatePlayerCylinder(placeX, placeY, placeZ, radius, height);
-                    bool headOK = HasHeadClearance(input.mapId, placeX, placeY, placeZ, radius, height);
-                    if (m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit, 0.02f) && headOK)
-                    {
-                        float finalZ = RaycastDownFrom(m_vmapManager, input.mapId, placeX, placeY, placeZ);
-                        st.x = placeX; st.y = placeY; st.z = finalZ; st.groundNormal = n;
-                        newX = st.x; newY = st.y;
-                        PHYS_INFO(PHYS_STEP, "[FORCE] rideTop(atAdvance) place (" << placeX << "," << placeY << ") ch=" << ch << " rayZ=" << finalZ);
-                        return true;
-                    }
-                }
-            }
-        }
-
-        logBlockingInstance(tx, ty, st.z + 0.01f, "advance");
-        diagModels(tx, ty, st.z, "blocked");
-        AttemptWallSlide(input, intent, st, dt, speed, radius, height);
-        tx = st.x + st.vx * dt; ty = st.y + st.vy * dt;
-        if (ValidateCylinderPosition(input.mapId, tx, ty, st.z + 0.01f, 0.02f, radius, height)) return true;
-        logBlockingInstance(tx, ty, st.z + 0.01f, "afterSlide");
-        G3D::Vector3 mv(st.vx * dt, st.vy * dt, 0); float len = mv.magnitude();
-        if (len > 0.0001f)
-        {
-            G3D::Vector3 step = mv * (-1.0f / std::max(4.0f, len / 0.1f)); float pX = tx; float pY = ty;
-            for (int i=0;i<8;++i){ pX += step.x; pY += step.y; if (ValidateCylinderPosition(input.mapId, pX, pY, st.z + 0.01f, 0.02f, radius, height)) { tx=pX; ty=pY; PHYS_TRACE(PHYS_MOVE, "backoff success i="<<i); return true; } }
-        }
-        st.vx = st.vy = 0; PHYS_TRACE(PHYS_MOVE, "advance failed zero velocity"); logBlockingInstance(tx, ty, st.z + 0.01f, "advanceFail"); diagModels(tx, ty, st.z, "advanceFail"); return false; };
-
-    if (!tryAdvance(newX, newY))
-    {
-        // Attempt a step-up when the initial horizontal move is blocked
-        const float inc = 0.25f;
-        float raised = 0.0f;
-        while (raised < STEP_HEIGHT + GROUND_HEIGHT_TOLERANCE)
-        {
-            raised += inc;
-            float probeBaseZ = st.z + raised;
-            if (!HasHeadClearance(input.mapId, newX, newY, probeBaseZ, radius, height))
-            {
-                PHYS_TRACE(PHYS_HEAD, "blockedStep headBlock raised="<<raised);
-                break; // cannot step further up if head is blocked
-            }
-
-            // Check we can actually place the cylinder at the raised Z at the new XY
-            if (!ValidateCylinderPosition(input.mapId, newX, newY, probeBaseZ + 0.01f, 0.02f, radius, height))
-            {
-                PHYS_TRACE(PHYS_STEP, "blockedStep raise="<<raised<<" movePos invalid");
-                logBlockingInstance(newX, newY, probeBaseZ + 0.01f, "stepRaise");
-                continue;
-            }
-
-            // Find a supporting walkable surface from the raised base (only allow remaining step-up)
-            WalkableSurface probe = FindWalkableSurfaceWithCylinder(input.mapId, newX, newY, probeBaseZ,
-                STEP_HEIGHT - raised, STEP_DOWN_HEIGHT, radius, height);
-            if (!probe.found)
-            {
-                PHYS_TRACE(PHYS_STEP, "blockedStep raise="<<raised<<" no surface");
-                continue;
-            }
-
-            float totalRaise = probe.height - st.z;
-            if (totalRaise >= -GROUND_HEIGHT_TOLERANCE && totalRaise <= STEP_HEIGHT + GROUND_HEIGHT_TOLERANCE)
-            {
-                Cylinder fit = CreatePlayerCylinder(newX, newY, probe.height, radius, height);
-                if (m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit, 0.02f))
-                {
-                    // Commit the step-up
-                    st.x = newX; st.y = newY; st.z = probe.height; st.groundNormal = probe.normal;
-                    PHYS_TRACE(PHYS_STEP, "blockedStepUp success height="<<probe.height<<" totalRaise="<<totalRaise);
-                    return; // done for this frame
-                }
-                PHYS_TRACE(PHYS_CYL, "blockedStep fitReject h="<<probe.height);
-                logBlockingInstance(newX, newY, probe.height + 0.01f, "fitReject");
-                diagModels(newX, newY, probe.height, "fitReject");
-            }
-            else
-            {
-                PHYS_TRACE(PHYS_STEP, "blockedStep raise="<<raised<<" totalRaiseOutOfRange="<<totalRaise);
-            }
-        }
-
-        // Forced step-up (debug): ride along the top of whatever we collided with
-        if (gForceRideTop && m_vmapManager)
-        {
-            // 1) Prefer exact contact height from a direct collision probe
-            float ch = INVALID_HEIGHT; G3D::Vector3 n(0,0,1); ModelInstance* hit = nullptr;
-            Cylinder ctest = CreatePlayerCylinder(newX, newY, st.z + 0.01f, radius, height);
-            if (m_vmapManager->CheckCylinderCollision(input.mapId, ctest, ch, n, &hit) && ch > INVALID_HEIGHT)
-            {
-                float placeX = newX, placeY = newY, placeZ = ch;
-                if (TryFindStepUpPlacement(m_vmapManager, input.mapId, newX, newY, ch, G3D::Vector3(newX,newY,ch), n, intent.dir, radius, height, placeX, placeY, placeZ))
-                {
-                    Cylinder fit = CreatePlayerCylinder(placeX, placeY, placeZ, radius, height);
-                    bool headOK = HasHeadClearance(input.mapId, placeX, placeY, placeZ, radius, height);
-                    if (m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit, 0.02f) && headOK)
-                    {
-                        float finalZ = RaycastDownFrom(m_vmapManager, input.mapId, placeX, placeY, placeZ);
-                        st.x = placeX; st.y = placeY; st.z = finalZ; st.groundNormal = n;
-                        PHYS_INFO(PHYS_STEP, "[FORCE] rideTop(contactH) place (" << placeX << "," << placeY << ") ch=" << ch << " rayZ=" << finalZ);
-                        return;
-                    }
-                }
-            }
-
-            // 2) Fallback to searching a larger upward range for walkable surface
-            Cylinder cylProbe = CreatePlayerCylinder(newX, newY, st.z, radius, height);
-            float forcedH = INVALID_HEIGHT; G3D::Vector3 forcedN(0,0,1);
-            bool found = m_vmapManager->FindCylinderWalkableSurface(
-                input.mapId, cylProbe, st.z, /*maxStepUp*/ 6.0f, /*maxStepDown*/ 0.0f, forcedH, forcedN);
-            if (found && forcedH > INVALID_HEIGHT)
-            {
-                Cylinder fit2 = CreatePlayerCylinder(newX, newY, forcedH, radius, height);
-                bool headOK2 = HasHeadClearance(input.mapId, newX, newY, forcedH, radius, height);
-                if (m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit2, 0.02f) && headOK2)
-                {
-                    float finalZ = RaycastDownFrom(m_vmapManager, input.mapId, newX, newY, forcedH);
-                    st.x = newX; st.y = newY; st.z = finalZ; st.groundNormal = forcedN;
-                    PHYS_INFO(PHYS_STEP, "[FORCE] rideTop(search) baseH=" << forcedH << " rayZ=" << finalZ << " nZ=" << forcedN.z);
-                    return;
-                }
-                else
-                {
-                    PHYS_INFO(PHYS_STEP, "[FORCE] rideTop(search) candidate rejected fit=" << (m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit2, 0.02f)?1:0)
-                        << " headOK=" << (headOK2?1:0) << " h=" << forcedH);
-                }
-            }
-            else
-            {
-                PHYS_TRACE(PHYS_STEP, "[FORCE] rideTop no surface found");
-            }
-        }
-
-        return; // No valid step-up found; stay in place after zeroing velocity in tryAdvance
+        st.x = newX; st.y = newY; return;
     }
 
-    WalkableSurface surface = FindWalkableSurfaceWithCylinder(input.mapId, newX, newY, st.z,
-        STEP_HEIGHT, STEP_DOWN_HEIGHT, radius, height);
-
-    auto applySurface = [&](const WalkableSurface& ws)
-    { st.x = newX; st.y = newY; st.z = ws.height; st.groundNormal = ws.normal; };
-
-    if (surface.found)
+    // If blocked, attempt a step-up placement using contact info (best-effort)
     {
-        float diff = surface.height - st.z;
-        PHYS_TRACE(PHYS_SURF, "surfaceFound diff=" << diff << " curZ=" << st.z << " targetZ=" << surface.height);
-        if (diff <= STEP_HEIGHT + GROUND_HEIGHT_TOLERANCE && diff >= -STEP_DOWN_HEIGHT - GROUND_HEIGHT_TOLERANCE)
+        float placeX = st.x, placeY = st.y, placeZ = st.z;
+        if (TryFindStepUpPlacement(m_vmapManager, input.mapId, st.x, st.y, st.z, hit.point, hit.normal, intent.dir, radius, height, placeX, placeY, placeZ))
         {
-            // For pure downward snap, do not require head clearance; rely on fit check only
-            Cylinder fit = CreatePlayerCylinder(newX, newY, surface.height, radius, height);
-            if (!m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit, 0.02f)) {
-                if (diff < -GROUND_HEIGHT_TOLERANCE) { st.x = newX; st.y = newY; PHYS_TRACE(PHYS_CYL, "downMoveKeepZ fitReject surfaceHeight="<<surface.height); return; }
-                if (diff > GROUND_HEIGHT_TOLERANCE) { // upward small step fallback
-                    float probeRefZ = surface.height + 0.05f;
-                    float supportH = m_vmapManager ? m_vmapManager->GetCylinderHeight(input.mapId, newX, newY, probeRefZ, radius, height, 1.0f) : INVALID_HEIGHT;
-                    if (supportH > INVALID_HEIGHT && std::fabs(supportH - surface.height) <= 0.15f) {
-                        if (HasHeadClearance(input.mapId, newX, newY, surface.height, radius, height)) {
-                            applySurface(surface); PHYS_TRACE(PHYS_STEP, "fallbackStepUp success h="<<surface.height<<" diff="<<diff<<" supportH="<<supportH); return; }
-                    }
-                }
-                PHYS_TRACE(PHYS_CYL, "fitReject surfaceHeight="<<surface.height); return; }
-            applySurface(surface); PHYS_TRACE(PHYS_SURF, "snapZ newZ="<<st.z); return;
-        }
-
-        if (diff > STEP_HEIGHT + GROUND_HEIGHT_TOLERANCE)
-        {
-            const float inc = 0.25f; float raised = 0.0f; WalkableSurface stepSurf{ false, 0, SurfaceSource::NONE, { 0, 0, 1 } };
-            while (raised < STEP_HEIGHT + GROUND_HEIGHT_TOLERANCE)
+            Cylinder fit = CreatePlayerCylinder(placeX, placeY, placeZ, radius, height);
+            bool headOK = HasHeadClearance(input.mapId, placeX, placeY, placeZ, radius, height);
+            if (m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit, 0.02f) && headOK)
             {
-                raised += inc; float probeBaseZ = st.z + raised;
-                if (!HasHeadClearance(input.mapId, newX, newY, probeBaseZ, radius, height)) { PHYS_TRACE(PHYS_HEAD, "stepProbe headBlock raised="<<raised); break; }
-                WalkableSurface probe = FindWalkableSurfaceWithCylinder(input.mapId, newX, newY, probeBaseZ,
-                    STEP_HEIGHT - raised, STEP_DOWN_HEIGHT, radius, height);
-                if (!probe.found) continue;
-                float totalRaise = probe.height - st.z;
-                PHYS_TRACE(PHYS_STEP, "probeRaise="<<raised<<" totalRaise="<<totalRaise);
-                if (totalRaise >= -GROUND_HEIGHT_TOLERANCE && totalRaise <= STEP_HEIGHT + GROUND_HEIGHT_TOLERANCE)
-                {
-                    Cylinder fit = CreatePlayerCylinder(newX, newY, probe.height, radius, height);
-                    if (m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit, 0.02f)) { stepSurf = probe; PHYS_TRACE(PHYS_STEP, "stepSuccess height="<<probe.height); }
-                    break;
-                }
+                float finalZ = RaycastDownFrom(m_vmapManager, input.mapId, placeX, placeY, placeZ);
+                st.x = placeX; st.y = placeY; st.z = finalZ; st.groundNormal = hit.normal; st.vx = st.vy = 0.0f; st.isGrounded = (hit.normal.z >= VMAP::CylinderHelpers::GetWalkableCosMin());
+                PHYS_INFO(PHYS_STEP, "[STEP] placed at (" << placeX << "," << placeY << ") rayZ=" << finalZ << " tri=" << hit.triIndex);
+                return;
             }
-            if (stepSurf.found) { applySurface(stepSurf); st.x += intent.dir.x * 0.02f; st.y += intent.dir.y * 0.02f; return; }
-            AttemptWallSlide(input, intent, st, dt, speed, radius, height);
-            newX = st.x + st.vx * dt; newY = st.y + st.vy * dt;
-            if (st.vx != 0 || st.vy != 0)
-            {
-                WalkableSurface slide = FindWalkableSurfaceWithCylinder(input.mapId, newX, newY, st.z,
-                    STEP_HEIGHT, STEP_DOWN_HEIGHT, radius, height);
-                if (slide.found)
-                {
-                    float sdiff = slide.height - st.z;
-                    if (sdiff <= STEP_HEIGHT + GROUND_HEIGHT_TOLERANCE && sdiff >= -STEP_DOWN_HEIGHT - GROUND_HEIGHT_TOLERANCE)
-                    {
-                        Cylinder fit2 = CreatePlayerCylinder(newX, newY, slide.height, radius, height);
-                        if (m_vmapManager->CanCylinderFitAtPosition(input.mapId, fit2, 0.02f)) { applySurface(slide); return; }
-                    }
-                }
-            }
-            st.vx = st.vy = 0; return;
         }
-        st.x = newX; st.y = newY; return; // large drop beyond step-down
     }
 
-    // If no surface was found at the target location, still advance horizontally and let next frame resolve grounding
-    st.x = newX;
-    st.y = newY;
+    // As a last resort, zero horizontal velocity and leave in place
+    st.vx = st.vy = 0.0f;
+    PHYS_TRACE(PHYS_MOVE, "Advance blocked after sweep; zeroing velocity");
 }
 
 // =====================================================================================
@@ -797,9 +507,9 @@ void PhysicsEngine::ProcessAirMovement(const PhysicsInput& input, const Movement
     float dX = tgtX - curX, dY = tgtY - curY; float len = std::sqrt(dX*dX + dY*dY);
     if (len > 0.0001f) { float maxChange = AIR_ACCEL * dt; if (len > maxChange) { float scale = maxChange / len; dX *= scale; dY *= scale; } curX += dX; curY += dY; }
     st.vx = curX; st.vy = curY; st.x += st.vx * dt; st.y += st.vy * dt; st.z += st.vz * dt;
-    WalkableSurface ground = FindWalkableSurfaceWithCylinder(input.mapId, st.x, st.y, st.z,
+    /*WalkableSurface ground = FindWalkableSurfaceWithCylinder(input.mapId, st.x, st.y, st.z,
         STEP_HEIGHT, DEFAULT_HEIGHT_SEARCH, input.radius, input.height);
-    if (st.vz <= 0 && ground.found) { float diff = ground.height - st.z; if (diff >= -STEP_DOWN_HEIGHT - GROUND_HEIGHT_TOLERANCE && diff <= GROUND_HEIGHT_TOLERANCE) { st.z = ground.height; st.vz = 0; st.isGrounded = true; st.fallTime = 0; st.groundNormal = ground.normal; PHYS_TRACE(PHYS_MOVE, "land diff="<<diff); } }
+    if (st.vz <= 0 && ground.found) { float diff = ground.height - st.z; if (diff >= -STEP_DOWN_HEIGHT - GROUND_HEIGHT_TOLERANCE && diff <= GROUND_HEIGHT_TOLERANCE) { st.z = ground.height; st.vz = 0; st.isGrounded = true; st.fallTime = 0; st.groundNormal = ground.normal; PHYS_TRACE(PHYS_MOVE, "land diff="<<diff); } }*/
 }
 
 void PhysicsEngine::ProcessSwimMovement(const PhysicsInput& input, const MovementIntent& intent,
@@ -965,24 +675,6 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 
     MovementIntent intent = BuildMovementIntent(input, st.orientation);
 
-    // Early penetration rescue: if starting under a model surface, try to lift to nearest walkable top
-    if (m_vmapManager) {
-        float upDist = 0.0f, inDist = 0.0f;
-        if (m_vmapManager->isUnderModel(input.mapId, st.x, st.y, st.z, &upDist, &inDist)) {
-            Cylinder rescueCyl = CreatePlayerCylinder(st.x, st.y, st.z, r, h);
-            float liftH = INVALID_HEIGHT; G3D::Vector3 liftN(0,0,1);
-            // Allow a larger upward search window when rescuing
-            float rescueStepUp = std::max(STEP_HEIGHT * 2.0f, h * 1.5f);
-            if (m_vmapManager->FindCylinderWalkableSurface(input.mapId, rescueCyl, st.z, rescueStepUp, 0.0f, liftH, liftN) && liftH > st.z) {
-                st.z = liftH; st.groundNormal = liftN; st.isGrounded = true;
-                PHYS_INFO(PHYS_SURF, "rescueUnderModel liftH=" << liftH << " nZ=" << liftN.z << " inDist=" << inDist << " upDist=" << upDist);
-            } else {
-                PHYS_TRACE(PHYS_SURF, "rescueUnderModel noSurface upDist=" << upDist << " inDist=" << inDist);
-            }
-        }
-    }
-
-    // Use VMAP::VMapManager2::FindCylinderWalkableSurface to determine capsule Z when available
     WalkableSurface surf{ false, INVALID_HEIGHT, SurfaceSource::NONE, {0,0,1} };
     if (m_vmapManager)
     {
@@ -991,28 +683,35 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 
         // First try: use configured downward sweep to gather walkable hits, then pick best
         {
-            auto hits = m_vmapManager->SweepForWalkableSurfaces(input.mapId, curCyl, st.z, STEP_HEIGHT, STEP_DOWN_HEIGHT);
-            float sh = INVALID_HEIGHT; G3D::Vector3 sn(0,0,1);
-            if (!hits.empty() && VMAP::CylinderCollision::FindBestWalkableSurface(curCyl, hits, st.z, STEP_HEIGHT, STEP_DOWN_HEIGHT, sh, sn))
-            {
-                surf = { true, sh, SurfaceSource::VMAP, sn };
-            }
-        }
+            float startOffset = std::max(0.1f, STEP_HEIGHT);
+            float sweepDist = std::max(0.25f, STEP_HEIGHT + STEP_DOWN_HEIGHT);
+            CapsuleCollision::Capsule cap;
+            G3D::Vector3 capBase(st.x, st.y, st.z + startOffset);
+            cap.p0 = { capBase.x, capBase.y, capBase.z };
+            G3D::Vector3 capP1 = capBase + G3D::Vector3(0,0,1) * h;
+            cap.p1 = { capP1.x, capP1.y, capP1.z };
+            cap.r = r;
 
-        // Fallback to VMAP consolidated finder if sweep did not yield a surface
-        if (!surf.found)
-        {
-            float mh = INVALID_HEIGHT; G3D::Vector3 mn(0,0,1);
-            if (m_vmapManager->FindCylinderWalkableSurface(input.mapId, curCyl, st.z, STEP_HEIGHT, STEP_DOWN_HEIGHT, mh, mn))
+            auto hits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, G3D::Vector3(0,0,-1), sweepDist);
+
+            float bestH = INVALID_HEIGHT; G3D::Vector3 bestN(0,0,1);
+            for (const auto& hh : hits)
             {
-                surf = { true, mh, SurfaceSource::VMAP, mn };
+                if (hh.startPenetrating)
+                {
+                    bestH = st.z; bestN = hh.normal; break;
+                }
+                if (hh.normal.z < VMAP::CylinderHelpers::GetWalkableCosMin()) continue;
+                float candH = hh.point.z;
+                float diff = candH - st.z;
+                const float tol = GROUND_HEIGHT_TOLERANCE;
+                if (diff <= STEP_HEIGHT + tol && diff >= -STEP_DOWN_HEIGHT - tol)
+                {
+                    if (bestH == INVALID_HEIGHT || candH > bestH) { bestH = candH; bestN = hh.normal; }
+                }
             }
+            if (bestH > INVALID_HEIGHT) surf = { true, bestH, SurfaceSource::VMAP, bestN };
         }
-    }
-    else
-    {
-        // Fallback to legacy query (terrain-only) when VMAP is not available
-        surf = FindWalkableSurfaceWithCylinder(input.mapId, st.x, st.y, st.z, STEP_HEIGHT, STEP_DOWN_HEIGHT, r, h);
     }
 
     // Apply ground attachment from the chosen surface result

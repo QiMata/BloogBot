@@ -17,6 +17,71 @@
 
 namespace VMAP
 {
+    // Helper: squared distance from point to AABox
+    static inline float PointToAABBDistSq(const G3D::Vector3& p, const G3D::AABox& box)
+    {
+        const G3D::Vector3 lo = box.low();
+        const G3D::Vector3 hi = box.high();
+        float d = 0.0f;
+        if (p.x < lo.x) { float t = lo.x - p.x; d += t * t; }
+        else if (p.x > hi.x) { float t = p.x - hi.x; d += t * t; }
+        if (p.y < lo.y) { float t = lo.y - p.y; d += t * t; }
+        else if (p.y > hi.y) { float t = p.y - hi.y; d += t * t; }
+        if (p.z < lo.z) { float t = lo.z - p.z; d += t * t; }
+        else if (p.z > hi.z) { float t = p.z - hi.z; d += t * t; }
+        return d;
+    }
+
+    // Helper: approximate minimal squared distance between segment [a,b] and AABox using ternary search on t in [0,1]
+    static inline float SegmentAABBDistSq(const G3D::Vector3& a, const G3D::Vector3& b, const G3D::AABox& box)
+    {
+        // If segment intersects box, distance is zero. Quick slab test.
+        G3D::Vector3 dir = b - a;
+        G3D::Vector3 invDir(0,0,0);
+        invDir.x = (std::abs(dir.x) > 1e-9f) ? 1.0f / dir.x : 0.0f;
+        invDir.y = (std::abs(dir.y) > 1e-9f) ? 1.0f / dir.y : 0.0f;
+        invDir.z = (std::abs(dir.z) > 1e-9f) ? 1.0f / dir.z : 0.0f;
+
+        float tmin = 0.0f, tmax = 1.0f;
+        for (int i = 0; i < 3; ++i)
+        {
+            float origin = (&a.x)[i];
+            float d = (&dir.x)[i];
+            float lo = (&box.low().x)[i];
+            float hi = (&box.high().x)[i];
+            if (std::abs(d) < 1e-9f)
+            {
+                if (origin < lo || origin > hi) { tmin = 1.0f; tmax = 0.0f; break; }
+                continue;
+            }
+            float t1 = (lo - origin) / d;
+            float t2 = (hi - origin) / d;
+            if (t1 > t2) std::swap(t1, t2);
+            tmin = std::max(tmin, t1);
+            tmax = std::min(tmax, t2);
+            if (tmin > tmax) break;
+        }
+        if (tmin <= tmax && tmin <= 1.0f && tmax >= 0.0f)
+            return 0.0f; // intersects
+
+        // Ternary search over t in [0,1] for minimal distance squared
+        float loT = 0.0f, hiT = 1.0f;
+        float best = PointToAABBDistSq(a, box);
+        const int ITER = 20;
+        for (int it = 0; it < ITER; ++it)
+        {
+            float t1 = loT + (hiT - loT) / 3.0f;
+            float t2 = hiT - (hiT - loT) / 3.0f;
+            G3D::Vector3 p1 = a + dir * t1;
+            G3D::Vector3 p2 = a + dir * t2;
+            float d1 = PointToAABBDistSq(p1, box);
+            float d2 = PointToAABBDistSq(p2, box);
+            best = std::min(best, std::min(d1, d2));
+            if (d1 > d2) loT = t1; else hiT = t2;
+        }
+        return best;
+    }
+
     class MapRayCallback
     {
     public:
@@ -137,13 +202,47 @@ namespace VMAP
 
         bool any = iTree.QueryAABB(sweepBounds, indices.data(), count, cap);
         if(!any || count==0){ return allHits; }
+
+        // Detailed candidate logging to help diagnose why BIH returned candidates but no hits
+        PHYS_TRACE(PHYS_CYL, "[MapTree::Sweep] BIH candidates=" << count << " sweepBoundsLo=(" << sweepBounds.low().x << "," << sweepBounds.low().y << "," << sweepBounds.low().z << ") sweepBoundsHi=(" << sweepBounds.high().x << "," << sweepBounds.high().y << "," << sweepBounds.high().z << ")");
+        size_t toLog = std::min<uint32_t>(count, 8u);
+        for (size_t i=0;i<toLog;++i)
+        {
+            uint32_t idx = indices[i];
+            if (idx >= iNTreeValues)
+            {
+                PHYS_TRACE(PHYS_CYL, "  cand["<<i<<"] idx="<<idx<<" (OOB)");
+                continue;
+            }
+            const ModelInstance& inst = iTreeValues[idx];
+            G3D::AABox b = inst.getBounds();
+            G3D::Vector3 lo = b.low(); G3D::Vector3 hi = b.high();
+            PHYS_TRACE(PHYS_CYL, "  cand["<<i<<"] idx="<<idx<<" name='"<<inst.name<<"' id="<<inst.ID<<" adt="<<inst.adtId
+                << " loaded=" << (inst.iModel?1:0)
+                << " bLo=("<<lo.x<<","<<lo.y<<","<<lo.z<<") bHi=("<<hi.x<<","<<hi.y<<","<<hi.z<<")");
+        }
+
         MapCylinderSweepCallback callback(iTreeValues, cyl, sweepDir, sweepDistance);
         uint32_t processed=0;
+        G3D::Vector3 segA = cyl.base;
+        G3D::Vector3 segB = cyl.base + sweepDir * sweepDistance;
+        const float eps = 0.02f; // small epsilon
         for (uint32_t i=0;i<count;++i){
             uint32_t idx=indices[i];
             if(idx>=iNTreeValues) continue;
             ModelInstance& inst = iTreeValues[idx];
             if(!inst.iModel) continue;
+
+            // Fast reject: compute minimal distance between instance AABB and sweep segment
+            G3D::AABox ib = inst.getBounds();
+            float minDistSq = SegmentAABBDistSq(segA, segB, ib);
+            float radiusLimit = (cyl.radius + eps);
+            if (minDistSq > radiusLimit * radiusLimit)
+            {
+                // skip this instance - its bounds are farther than the capsule radius + eps from the sweep segment
+                continue;
+            }
+
             size_t prev = callback.allHits.size();
             callback(cyl.base, idx);
             size_t added = callback.allHits.size() - prev;

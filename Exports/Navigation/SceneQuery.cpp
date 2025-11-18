@@ -8,11 +8,41 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <cstdlib>
+#include <mutex>
 
 using namespace VMAP;
 
 namespace
 {
+    // Debug: allow targeting a single instance ID via env var VMAP_DEBUG_INSTANCE
+    static uint32_t g_meshview_debug_instance = 0;
+    static float g_meshview_debug_hit_x = 0.0f;
+    static float g_meshview_debug_hit_y = 0.0f;
+    static float g_meshview_debug_hit_z = 0.0f;
+    static bool g_meshview_have_hit = false;
+    static std::once_flag g_meshview_debug_init;
+    static void InitMeshViewDebug()
+    {
+        const char* ev = std::getenv("VMAP_DEBUG_INSTANCE");
+        if (ev)
+        {
+            char* end = nullptr;
+            unsigned long v = std::strtoul(ev, &end, 10);
+            if (end != ev)
+                g_meshview_debug_instance = static_cast<uint32_t>(v);
+        }
+        const char* hit = std::getenv("VMAP_DEBUG_HIT"); // format: x,y,z
+        if (hit)
+        {
+            float hx=0, hy=0, hz=0;
+            if (sscanf(hit, "%f,%f,%f", &hx, &hy, &hz) == 3)
+            {
+                g_meshview_debug_hit_x = hx; g_meshview_debug_hit_y = hy; g_meshview_debug_hit_z = hz; g_meshview_have_hit = true;
+            }
+        }
+    }
+
     // Local mesh view for building triangle caches out of map tree (internal space)
     class MapMeshView : public CapsuleCollision::TriangleMeshView
     {
@@ -27,6 +57,9 @@ namespace
 
         void query(const CapsuleCollision::AABB& box, int* outIndices, int& count, int maxCount) const override
         {
+            // Ensure debug init runs once
+            std::call_once(g_meshview_debug_init, InitMeshViewDebug);
+
             count = 0;
             m_cache.clear();
             m_triToInstance.clear();
@@ -139,10 +172,52 @@ namespace
                 if (idx >= m_instanceCount) continue;
                 const ModelInstance& inst = m_instances[idx];
                 if (!inst.iModel) { PHYS_TRACE(PHYS_CYL, "[MeshView.query] skip inst id="<<inst.ID<<" no model name='"<<inst.name<<"'"); continue; }
+
+                // If we're debugging this instance, precompute modelBox (model-space) -> used for debug comparison
+                G3D::AABox modelBoxMS(G3D::Vector3(0,0,0), G3D::Vector3(0,0,0));
+                bool haveModelBoxMS = false;
+                if (g_meshview_debug_instance != 0 && inst.ID == g_meshview_debug_instance)
+                {
+                    G3D::Vector3 wLoI = queryBox.low();
+                    G3D::Vector3 wHiI = queryBox.high();
+                    G3D::Vector3 cornersDbg[8] = {
+                        {wLoI.x, wLoI.y, wLoI.z}, {wHiI.x, wLoI.y, wLoI.z}, {wLoI.x, wHiI.y, wLoI.z}, {wHiI.x, wHiI.y, wLoI.z},
+                        {wLoI.x, wLoI.y, wHiI.z}, {wHiI.x, wLoI.y, wHiI.z}, {wLoI.x, wHiI.y, wHiI.z}, {wHiI.x, wHiI.y, wHiI.z}
+                    };
+                    G3D::Vector3 c0Dbg = inst.iInvRot * ((cornersDbg[0] - inst.iPos) * inst.iInvScale);
+                    modelBoxMS = G3D::AABox(c0Dbg, c0Dbg);
+                    for (int ci = 1; ci < 8; ++ci)
+                    {
+                        modelBoxMS.merge(inst.iInvRot * ((cornersDbg[ci] - inst.iPos) * inst.iInvScale));
+                    }
+                    G3D::Vector3 mInflateDbg(0.08f, 6.0f, 0.08f);
+                    modelBoxMS = G3D::AABox(modelBoxMS.low() - mInflateDbg, modelBoxMS.high() + mInflateDbg);
+                    haveModelBoxMS = true;
+                }
+
                 if (!inst.iBound.intersects(queryBox)) {
-                    G3D::Vector3 qbLo = queryBox.low(); G3D::Vector3 qbHi = queryBox.high();
-                    G3D::Vector3 bLo = inst.iBound.low(); G3D::Vector3 bHi = inst.iBound.high();
-                    PHYS_TRACE(PHYS_CYL, "[MeshView.query] skip inst id="<<inst.ID<<" name='"<<inst.name<<"' boundLo=("<<bLo.x<<","<<bLo.y<<","<<bLo.z<<") boundHi=("<<bHi.x<<","<<bHi.y<<","<<bHi.z<<") qLo=("<<qbLo.x<<","<<qbLo.y<<","<<qbLo.z<<") qHi=("<<qbHi.x<<","<<qbHi.y<<","<<qbHi.z<<") reason=bound_no_intersect");
+                    // Only emit the noisy bound_no_intersect trace when the instance matches the debug id configured in VMAP_DEBUG_INSTANCE
+                    if (g_meshview_debug_instance != 0 && inst.ID == g_meshview_debug_instance)
+                    {
+                        G3D::Vector3 qbLo = queryBox.low(); G3D::Vector3 qbHi = queryBox.high();
+                        G3D::Vector3 bLo = inst.iBound.low(); G3D::Vector3 bHi = inst.iBound.high();
+                        PHYS_TRACE(PHYS_CYL, "[MeshView.query] skip inst id="<<inst.ID<<" name='"<<inst.name<<"' boundLo=("<<bLo.x<<","<<bLo.y<<","<<bLo.z<<") boundHi=("<<bHi.x<<","<<bHi.y<<","<<bHi.z<<") qLo=("<<qbLo.x<<","<<qbLo.y<<","<<qbLo.z<<") qHi=("<<qbHi.x<<","<<qbHi.y<<","<<qbHi.z<<") reason=bound_no_intersect");
+
+                        if (haveModelBoxMS)
+                        {
+                            G3D::Vector3 mLo = modelBoxMS.low();
+                            G3D::Vector3 mHi = modelBoxMS.high();
+                            G3D::Vector3 mLoI = (mLo * inst.iScale) * inst.iRot + inst.iPos;
+                            G3D::Vector3 mHiI = (mHi * inst.iScale) * inst.iRot + inst.iPos;
+                            G3D::Vector3 mLoW = NavCoord::InternalToWorld(mLoI);
+                            G3D::Vector3 mHiW = NavCoord::InternalToWorld(mHiI);
+
+                            // wLo and wHi are available in this scope as the world-space query box
+                            PHYS_TRACE(PHYS_CYL, "[MeshView.debugCompare] hitW=(" << (g_meshview_have_hit?g_meshview_debug_hit_x:0.0f) << "," << (g_meshview_have_hit?g_meshview_debug_hit_y:0.0f) << "," << (g_meshview_have_hit?g_meshview_debug_hit_z:0.0f) << ")"
+                                << " qWLo=(" << wLo.x << "," << wLo.y << "," << wLo.z << ") qWHi=(" << wHi.x << "," << wHi.y << "," << wHi.z << ")"
+                                << " modelBoxWLo=(" << mLoW.x << "," << mLoW.y << "," << mLoW.z << ") modelBoxWHi=(" << mHiW.x << "," << mHiW.y << "," << mHiW.z << ")");
+                        }
+                    }
                     continue; }
 
                 uint32_t instMask = inst.GetCollisionMask();
@@ -235,7 +310,7 @@ namespace
                 }
 
                 size_t emittedNow = m_cache.size() - emittedBefore;
-                totalEmitted += emittedNow;
+                size_t totalEmitted = 0;
                 PHYS_TRACE(PHYS_CYL, "[MeshView.query] instance id=" << inst.ID << " name='" << inst.name << "' haveBoundsData=" << (haveBoundsData?1:0)
                     << " triCount=" << triCount << " visited=" << triVisited << " inBoxOrSkipped=" << triInBox << " emittedTris=" << emittedNow);
 
@@ -480,8 +555,7 @@ int SceneQuery::OverlapSphere(const StaticMapTree& map,
     CapsuleCollision::AABB worldBox = AABBFromAABox(G3D::AABox(wLo, wHi));
 
     G3D::Vector3 iCenter = NavCoord::WorldToInternal(center);
-    PHYS_TRACE(PHYS_CYL, "[OverlapSphere] enter centerW=(" << center.x << "," << center.y << "," << center.z
-        << ") centerI=(" << iCenter.x << "," << iCenter.y << "," << iCenter.z << ") r=" << radius
+    PHYS_TRACE(PHYS_CYL, "[OverlapSphere] enter centerW=(" << center.x << "," << center.y << "," << center.z << ") centerI=(" << iCenter.x << "," << iCenter.y << "," << iCenter.z << ") r=" << radius
         << " wLo=(" << wLo.x << "," << wLo.y << "," << wLo.z << ") wHi=(" << wHi.x << "," << wHi.y << "," << wHi.z << ") mask=0x" << std::hex << includeMask << std::dec);
 
     CapsuleCollision::Capsule C; C.p0 = { iCenter.x, iCenter.y, iCenter.z }; C.p1 = { iCenter.x, iCenter.y, iCenter.z }; C.r = radius;
@@ -550,118 +624,12 @@ bool SceneQuery::SweepCapsuleSingle(const StaticMapTree& map,
                                     uint32_t includeMask,
                                     const QueryParams& params)
 {
+    // Centralize logic: use SweepCapsuleAll and return the first hit if any.
     outHit = SceneHit();
-
-    // Convert capsule and sweep vector to internal space for intersection tests
-    CapsuleCollision::Capsule C = capsuleStart;
-    G3D::Vector3 wP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
-    G3D::Vector3 wP1(capsuleStart.p1.x, capsuleStart.p1.y, capsuleStart.p1.z);
-    G3D::Vector3 iP0 = NavCoord::WorldToInternal(wP0);
-    G3D::Vector3 iP1 = NavCoord::WorldToInternal(wP1);
-    C.p0 = { iP0.x, iP0.y, iP0.z };
-    C.p1 = { iP1.x, iP1.y, iP1.z };
-
-    G3D::Vector3 iDir = NavCoord::WorldDirToInternal(dir);
-    CapsuleCollision::Vec3 vel(iDir.x * distance, iDir.y * distance, iDir.z * distance);
-
-    MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
-
-    // Pre-check for initial overlap at start pose: world-space broadphase
-    {
-        G3D::Vector3 wLo = wP0.min(wP1) - G3D::Vector3(C.r, C.r, C.r);
-        G3D::Vector3 wHi = wP0.max(wP1) + G3D::Vector3(C.r, C.r, C.r);
-        CapsuleCollision::AABB worldBox = AABBFromAABox(G3D::AABox(wLo, wHi));
-        int idxPre[256]; int cntPre = 0;
-        view.query(worldBox, idxPre, cntPre, 256);
-        PHYS_TRACE(PHYS_CYL, "[SweepCapsuleSingle] startOverlapCheck AABB wLo=(" << wLo.x << "," << wLo.y << "," << wLo.z
-            << ") wHi=(" << wHi.x << "," << wHi.y << "," << wHi.z << ") candidates=" << cntPre);
-        float bestDepth = -1.0f; CapsuleCollision::Hit best; const ModelInstance* bestInst = nullptr;
-        for (int i = 0; i < cntPre; ++i)
-        {
-            int triIdx = idxPre[i];
-            const auto& T = view.tri(triIdx);
-            CapsuleCollision::Hit ch;
-            if (CapsuleCollision::intersectCapsuleTriangle(C, T, ch))
-            {
-                if (ch.depth > bestDepth)
-                {
-                    bestDepth = ch.depth; best = ch; best.triIndex = triIdx; bestInst = view.triInstance(triIdx);
-                }
-            }
-        }
-        if (bestDepth > 0.0f)
-        {
-            // Convert to world and return immediate hit with startPenetrating
-            G3D::Vector3 iN(best.normal.x, best.normal.y, best.normal.z);
-            G3D::Vector3 wN = NavCoord::InternalDirToWorld(iN);
-            G3D::Vector3 iP(best.point.x, best.point.y, best.point.z);
-            G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
-            outHit.hit = true;
-            outHit.distance = 0.0f;
-            outHit.time = 0.0f;
-            outHit.normal = wN;
-            outHit.point = wP;
-            outHit.triIndex = best.triIndex;
-            outHit.instanceId = bestInst ? bestInst->ID : 0;
-            outHit.startPenetrating = true;
-            return true;
-        }
-    }
-
-    // Broad-phase: swept AABB between start and end (world space)
-    G3D::Vector3 wP0End = wP0 + dir * distance;
-    G3D::Vector3 wP1End = wP1 + dir * distance;
-    G3D::Vector3 wMin = wP0.min(wP1).min(wP0End.min(wP1End)) - G3D::Vector3(C.r, C.r, C.r);
-    G3D::Vector3 wMax = wP0.max(wP1).max(wP0End.max(wP1End)) + G3D::Vector3(C.r, C.r, C.r);
-    CapsuleCollision::AABB sweepBox = AABBFromAABox(G3D::AABox(wMin, wMax));
-    CapsuleCollision::aabbInflate(sweepBox, 0.005f);
-    const int kCap = 1024; int triIdxs[kCap]; int triCount = 0;
-    view.query(sweepBox, triIdxs, triCount, kCap);
-    PHYS_TRACE(PHYS_CYL, "[SweepCapsuleSingle] sweepAABB wMin=(" << wMin.x << "," << wMin.y << "," << wMin.z
-        << ") wMax=(" << wMax.x << "," << wMax.y << "," << wMax.z << ") r=" << C.r << " triCandidates=" << triCount);
-    if (triCount <= 0)
-        return false;
-
-    // Optionally dump first few triangle descriptors
-    for (int i = 0; i < std::min(8, triCount); ++i)
-    {
-        int ti = triIdxs[i];
-        const auto* mi = view.triInstance(ti);
-        PHYS_TRACE_DEEP(PHYS_CYL, "  triCandidate[" << i << "] triIdx=" << ti << " instId=" << (mi ? (int)mi->ID : -1)
-            << " triLocal=" << view.triLocalIndex(ti));
-    }
-
-    // Find earliest time-of-impact among candidates
-    float bestTOI = 1.0f; bool found = false; CapsuleCollision::Vec3 bestN, bestP; int bestIdx = -1; uint32_t bestInstId = 0;
-    for (int i = 0; i < triCount; ++i)
-    {
-        int ti = triIdxs[i];
-        const auto& T = view.tri(ti);
-        float toi; CapsuleCollision::Vec3 n, p;
-        if (CapsuleCollision::capsuleTriangleSweep(C, vel, T, toi, n, p))
-        {
-            if (toi >= 0.0f && toi <= 1.0f)
-            {
-                if (!found || toi < bestTOI)
-                {
-                    found = true; bestTOI = toi; bestN = n; bestP = p; bestIdx = ti; const ModelInstance* mi = view.triInstance(ti); bestInstId = mi ? mi->ID : 0;
-                }
-            }
-        }
-    }
-
-    if (!found)
-        return false;
-
-    // Output earliest hit
-    outHit.hit = true;
-    outHit.time = CapsuleCollision::cc_clamp(bestTOI, 0.0f, 1.0f);
-    outHit.distance = outHit.time * distance;
-    // Convert normal and point to world
-    G3D::Vector3 wN = NavCoord::InternalDirToWorld(G3D::Vector3(bestN.x, bestN.y, bestN.z));
-    G3D::Vector3 wP = NavCoord::InternalToWorld(G3D::Vector3(bestP.x, bestP.y, bestP.z));
-    outHit.normal = wN; outHit.point = wP; outHit.triIndex = bestIdx; outHit.instanceId = bestInstId; outHit.startPenetrating = false;
-
+    std::vector<SceneHit> hits;
+    int n = SweepCapsuleAll(map, capsuleStart, dir, distance, hits, includeMask, params);
+    if (n <= 0) return false;
+    outHit = hits.front();
     return true;
 }
 
@@ -744,6 +712,22 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
         {
             if (toi >= 0.0f && toi <= 1.0f)
             {
+                // Log detailed triangle info for diagnostics
+                LogTriangleSurfaceInfo(T, view.triLocalIndex(ti));
+                // Convert internal impact point/normal to world for logging
+                G3D::Vector3 iP(p.x, p.y, p.z);
+                G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
+                G3D::Vector3 iN(n.x, n.y, n.z);
+                G3D::Vector3 wN = NavCoord::InternalDirToWorld(iN);
+                const ModelInstance* miLog = view.triInstance(ti);
+                PHYS_TRACE(PHYS_CYL, "[SweepCapsuleAll] candidate triIdx=" << ti
+                    << " triLocal=" << view.triLocalIndex(ti)
+                    << " toi=" << toi
+                    << " pointW=(" << wP.x << "," << wP.y << "," << wP.z << ")"
+                    << " normalW=(" << wN.x << "," << wN.y << "," << wN.z << ")"
+                    << " instId=" << (miLog?miLog->ID:0)
+                    << " name='" << (miLog?miLog->name:"(none)") << "'");
+
                 HitTmp tmp; tmp.t = toi; tmp.triIdx = ti; tmp.nI = { n.x, n.y, n.z }; tmp.pI = { p.x, p.y, p.z };
                 const ModelInstance* mi = view.triInstance(ti); tmp.instId = mi ? mi->ID : 0;
                 candidates.push_back(tmp);
@@ -754,15 +738,12 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     if (candidates.empty())
         return 0;
 
-    // Sort by time (earliest first)
-    std::sort(candidates.begin(), candidates.end(), [](const HitTmp& a, const HitTmp& b){ return a.t < b.t; });
+    // Sort by time (earliest first). Tie-break by triangle index for deterministic order.
+    std::sort(candidates.begin(), candidates.end(), [](const HitTmp& a, const HitTmp& b){ if (a.t == b.t) return a.triIdx < b.triIdx; return a.t < b.t; });
 
-    // Early out: keep only hits at the earliest time within a small epsilon window
-    const float tol = 1e-4f;
-    float tMin = candidates.front().t;
+    // Convert all candidates into SceneHit entries (return all hits along the sweep)
     for (const auto& c : candidates)
     {
-        if (c.t > tMin + tol) break; // stop after earliest cohort
         SceneHit h; h.hit = true; h.time = CapsuleCollision::cc_clamp(c.t, 0.0f, 1.0f); h.distance = h.time * distance;
         // Convert normal and point to world
         G3D::Vector3 wN = NavCoord::InternalDirToWorld(c.nI);
@@ -770,9 +751,6 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
         h.normal = wN; h.point = wP; h.triIndex = c.triIdx; h.instanceId = c.instId; h.startPenetrating = false;
         outHits.push_back(h);
     }
-
-    // Ensure sorted by time already (all have same cohort time) but keep deterministic order by tri index
-    std::sort(outHits.begin(), outHits.end(), [](const SceneHit& a, const SceneHit& b){ if (a.time == b.time) return a.triIndex < b.triIndex; return a.time < b.time; });
 
     return (int)outHits.size();
 }
@@ -786,82 +764,12 @@ bool SceneQuery::SweepCapsuleTOI(const StaticMapTree& map,
                                  uint32_t includeMask,
                                  const QueryParams& params)
 {
+    // Use the centralized SweepCapsuleAll implementation and extract the earliest hit (TOI)
     outHit = SceneHit();
-    if (distance <= 0.0f)
-        return false;
-
-    // Convert capsule and direction to internal space.
-    CapsuleCollision::Capsule C0 = capsuleStart;
-    G3D::Vector3 wP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
-    G3D::Vector3 wP1(capsuleStart.p1.x, capsuleStart.p1.y, capsuleStart.p1.z);
-    G3D::Vector3 iP0 = NavCoord::WorldToInternal(wP0);
-    G3D::Vector3 iP1 = NavCoord::WorldToInternal(wP1);
-    C0.p0 = { iP0.x, iP0.y, iP0.z }; C0.p1 = { iP1.x, iP1.y, iP1.z };
-    G3D::Vector3 iDir = NavCoord::WorldDirToInternal(dir);
-    CapsuleCollision::Vec3 vel(iDir.x * distance, iDir.y * distance, iDir.z * distance); // sweep velocity in internal space
-
-    MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
-
-    // Broad-phase gather of potentially intersecting triangles along sweep AABB (world space).
-    G3D::Vector3 wP0End = wP0 + dir * distance; G3D::Vector3 wP1End = wP1 + dir * distance;
-    G3D::Vector3 wMin = wP0.min(wP1).min(wP0End.min(wP1End)) - G3D::Vector3(C0.r, C0.r, C0.r);
-    G3D::Vector3 wMax = wP0.max(wP1).max(wP0End.max(wP1End)) + G3D::Vector3(C0.r, C0.r, C0.r);
-    CapsuleCollision::AABB sweepBox = AABBFromAABox(G3D::AABox(wMin, wMax));
-    CapsuleCollision::aabbInflate(sweepBox, 0.005f);
-    int triIdxs[512]; int triCount = 0;
-    view.query(sweepBox, triIdxs, triCount, 512);
-    PHYS_TRACE(PHYS_CYL, "[SweepCapsuleTOI] sweepAABB wMin=(" << wMin.x << "," << wMin.y << "," << wMin.z
-        << ") wMax=(" << wMax.x << "," << wMax.y << "," << wMax.z << ") r=" << C0.r << " triCandidates=" << triCount);
-    if (triCount == 0)
-        return false;
-
-    // Start overlap check (t=0)
-    {
-        float bestDepth0 = -1.0f; CapsuleCollision::Hit best0; const ModelInstance* bestInst0 = nullptr; int bestLocal0 = -1;
-        for (int i = 0; i < triCount; ++i)
-        {
-            const auto& T = view.tri(triIdxs[i]); CapsuleCollision::Hit h;
-            if (CapsuleCollision::intersectCapsuleTriangle(C0, T, h))
-            {
-                if (h.depth > bestDepth0) { bestDepth0 = h.depth; best0 = h; best0.triIndex = triIdxs[i]; bestInst0 = view.triInstance(triIdxs[i]); bestLocal0 = view.triLocalIndex(triIdxs[i]); }
-            }
-        }
-        if (bestDepth0 > 0.0f)
-        {
-            G3D::Vector3 wN = NavCoord::InternalDirToWorld(G3D::Vector3(best0.normal.x, best0.normal.y, best0.normal.z));
-            G3D::Vector3 wP = NavCoord::InternalToWorld(G3D::Vector3(best0.point.x, best0.point.y, best0.point.z));
-            outHit.hit = true; outHit.distance = 0.0f; outHit.time = 0.0f; outHit.normal = wN; outHit.point = wP; outHit.triIndex = best0.triIndex; outHit.instanceId = bestInst0 ? bestInst0->ID : 0; outHit.startPenetrating = true;
-            PHYS_TRACE(PHYS_CYL, "SweepCapsuleTOI startPenetrating depth=" << bestDepth0 << " triLocal=" << bestLocal0);
-            return true;
-        }
-    }
-
-    // Analytic per-triangle sweep to find earliest TOI.
-    float bestTOI = 1.0f; bool found = false; CapsuleCollision::Vec3 hitN, hitP; int bestIdx = -1; uint32_t bestInstId = 0; int bestLocal = -1;
-    for (int i = 0; i < triCount; ++i)
-    {
-        int ti = triIdxs[i]; const auto& T = view.tri(ti);
-        float toi; CapsuleCollision::Vec3 n, p;
-        if (CapsuleCollision::capsuleTriangleSweep(C0, vel, T, toi, n, p))
-        {
-            if (toi >= 0.0f && toi <= 1.0f && (!found || toi < bestTOI))
-            {
-                found = true; bestTOI = toi; hitN = n; hitP = p; bestIdx = ti; const ModelInstance* mi = view.triInstance(ti); bestInstId = mi ? mi->ID : 0; bestLocal = view.triLocalIndex(ti);
-            }
-        }
-    }
-
-    if (!found)
-        return false; // free path
-
-    // Output hit at earliest TOI
-    outHit.hit = true;
-    outHit.time = CapsuleCollision::cc_clamp(bestTOI, 0.0f, 1.0f);
-    outHit.distance = outHit.time * distance;
-    G3D::Vector3 wN = NavCoord::InternalDirToWorld(G3D::Vector3(hitN.x, hitN.y, hitN.z));
-    G3D::Vector3 wP = NavCoord::InternalToWorld(G3D::Vector3(hitP.x, hitP.y, hitP.z));
-    outHit.normal = wN; outHit.point = wP; outHit.triIndex = bestIdx; outHit.instanceId = bestInstId; outHit.startPenetrating = false;
-    PHYS_TRACE(PHYS_CYL, "SweepCapsuleTOI analytic impact toi=" << bestTOI << " dist=" << outHit.distance << " triLocal=" << bestLocal);
-
+    std::vector<SceneHit> hits;
+    int n = SweepCapsuleAll(map, capsuleStart, dir, distance, hits, includeMask, params);
+    if (n <= 0) return false;
+    // hits are the earliest cohort (or start-penetrating); use the first one as the TOI
+    outHit = hits.front();
     return true;
 }
