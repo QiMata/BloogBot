@@ -5,6 +5,7 @@
 #include "VMapFactory.h"
 #include "MapLoader.h"
 #include "Navigation.h"
+#include "CoordinateTransforms.h"
 #include "VMapLog.h"
 #include "CylinderCollision.h" // for CylinderHelpers walkable config
 #include "ModelInstance.h"     // for debug diagnostics on model collisions
@@ -683,16 +684,32 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 
         // First try: use configured downward sweep to gather walkable hits, then pick best
         {
-            float startOffset = std::max(0.1f, STEP_HEIGHT);
             float sweepDist = std::max(0.25f, STEP_HEIGHT + STEP_DOWN_HEIGHT);
             CapsuleCollision::Capsule cap;
-            G3D::Vector3 capBase(st.x, st.y, st.z + startOffset);
-            cap.p0 = { capBase.x, capBase.y, capBase.z };
-            G3D::Vector3 capP1 = capBase + G3D::Vector3(0,0,1) * h;
-            cap.p1 = { capP1.x, capP1.y, capP1.z };
+            // Bottom sphere at st.z (feet) and top sphere at st.z + height (top of cylinder)
+            cap.p0 = CapsuleCollision::Vec3(st.x, st.y, st.z);
+            cap.p1 = CapsuleCollision::Vec3(st.x, st.y, st.z + h);
             cap.r = r;
 
             auto hits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, G3D::Vector3(0,0,-1), sweepDist);
+
+            // Diagnostic: log all SceneHit candidates returned by SweepCapsuleAll
+            PHYS_TRACE(PHYS_SURF, "[SweepCapsuleAll->SweepForWalkableSurfaces] SceneHit candidates count=" << hits.size());
+            for (size_t hi = 0; hi < hits.size(); ++hi)
+            {
+                const SceneHit& sh = hits[hi];
+                G3D::Vector3 wP = sh.point;
+                G3D::Vector3 wN = sh.normal;
+                G3D::Vector3 iP = NavCoord::WorldToInternal(wP);
+                G3D::Vector3 iN = NavCoord::WorldDirToInternal(wN);
+                PHYS_TRACE(PHYS_SURF, "  hit[" << hi << "] instId=" << sh.instanceId << " triIndex=" << sh.triIndex
+                    << " startPen=" << (sh.startPenetrating?1:0)
+                    << " time=" << sh.time << " dist=" << sh.distance
+                    << " pointW=(" << wP.x << "," << wP.y << "," << wP.z << ")"
+                    << " normalW=(" << wN.x << "," << wN.y << "," << wN.z << ")"
+                    << " pointI=(" << iP.x << "," << iP.y << "," << iP.z << ")"
+                    << " normalI=(" << iN.x << "," << iN.y << "," << iN.z << ")");
+            }
 
             float bestH = INVALID_HEIGHT; G3D::Vector3 bestN(0,0,1);
             for (const auto& hh : hits)
