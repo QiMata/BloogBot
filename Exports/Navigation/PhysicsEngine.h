@@ -196,4 +196,7 @@ private:
     MovementIntent BuildMovementIntent(const PhysicsInput& input, float orientation) const;
     float QueryLiquidLevel(uint32_t mapId, float x, float y, float z, uint32_t& liquidType) const;
     void ResolveGroundAttachment(MovementState& st, const WalkableSurface& surf, float stepUpLimit, float stepDownLimit, float dt);
+
+    // Refactored: Find the best walkable surface at a given position (from vmap or MapLoader fallback)
+    WalkableSurface FindBestSurface(uint32_t mapId, float x, float y, float z, float radius, float height);
 };

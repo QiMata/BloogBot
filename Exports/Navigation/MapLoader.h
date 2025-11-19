@@ -8,6 +8,7 @@
 #include <mutex>
 #include <cstdio>
 #include <vector>
+#include "CapsuleCollision.h"
 
 // Map file format constants (matching vMaNGOS)
 namespace MapFormat
@@ -213,17 +214,19 @@ public:
     uint8_t GetLiquidType(uint32_t mapId, float x, float y);
     uint16_t GetAreaId(uint32_t mapId, float x, float y);
 
-    // New: get surface normal at world pos (returns false if invalid)
-    bool GetNormal(uint32_t mapId, float x, float y, float& nx, float& ny, float& nz);
-
-    // Refined: Only return the triangle at (posX, posY)
-    // Deprecated: Use the new version with posX, posY
-    bool GetTileTerrainTriangles(uint32_t mapId, uint32_t x, uint32_t y, std::vector<MapFormat::TerrainTriangle>& out);
-    bool GetTileTerrainTriangles(uint32_t mapId, uint32_t x, uint32_t y, float posX, float posY, std::vector<MapFormat::TerrainTriangle>& out);
-
     size_t GetLoadedTileCount() const;
     bool IsTileLoaded(uint32_t mapId, uint32_t x, uint32_t y) const;
     bool IsInitialized() const { return m_initialized; }
 
     void WorldToGridCoords(float worldX, float worldY, uint32_t& gridX, uint32_t& gridY) const { worldToGridCoords(worldX, worldY, gridX, gridY); }
+
+    // Helper to get a pointer to the loaded GridMap for a tile (returns nullptr if not loaded)
+    MapFormat::GridMap* GetGridMap(uint32_t mapId, uint32_t x, uint32_t y)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto it = m_loadedTiles.find(makeKey(mapId, x, y));
+        if (it != m_loadedTiles.end())
+            return it->second.get();
+        return nullptr;
+    }
 };
