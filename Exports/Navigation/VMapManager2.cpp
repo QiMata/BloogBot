@@ -122,6 +122,22 @@ namespace VMAP
         return out;
     }
 
+    bool VMapManager2::RaycastSingle(unsigned int pMapId,
+                           const G3D::Vector3& origin,
+                           const G3D::Vector3& dir,
+                           float maxDistance,
+                           SceneHit& outHit,
+                           uint32_t includeMask) const
+    {
+        outHit = SceneHit();
+        auto it = iInstanceMapTrees.find(pMapId);
+        if (it == iInstanceMapTrees.end() || it->second == nullptr)
+            return false;
+        StaticMapTree* tree = it->second;
+        QueryParams qp; qp.includeMask = includeMask;
+        return SceneQuery::RaycastSingle(*tree, origin, dir, maxDistance, outHit, qp);
+    }
+
     // Global model name to path mapping
     static std::unordered_map<std::string, std::string> modelNameToPath;
     static bool modelMappingLoaded = false;

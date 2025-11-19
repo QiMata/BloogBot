@@ -53,6 +53,7 @@ namespace CapsuleCollision
         inline Vec3 operator/(float s) const { float inv = cc_abs(s) > EPSILON ? (1.0f / s) : 0.0f; return Vec3(x * inv, y * inv, z * inv); }
         inline Vec3& operator+=(const Vec3& o) { x += o.x; y += o.y; z += o.z; return *this; }
         inline Vec3& operator-=(const Vec3& o) { x -= o.x; y -= o.y; z -= o.z; return *this; }
+        inline Vec3 operator-() const { return Vec3(-x, -y, -z); } // unary minus operator
 
         inline float length2() const { return x * x + y * y + z * z; }
         inline float length() const { return cc_sqrt(length2()); }
@@ -740,177 +741,179 @@ namespace CapsuleCollision
 
     // Analytic sweep test: moving capsule (translation only) vs single triangle.
     // Returns true if collision occurs for param t in [0,1]. Outputs time of impact (toi), contact normal and impact point on triangle.
-    // Handles planar face, edge and vertex cases via decomposition to sphere sweeps.
+    // Handles planar face, edge and vertex cases via decomposition to segment/segment and segment/point sweeps.
     inline bool capsuleTriangleSweep(const Capsule& start, const Vec3& vel, const Triangle& T,
                                      float& toi, Vec3& normal, Vec3& impactPoint)
     {
-        toi = 0.0f; normal = Vec3(0,1,0); impactPoint = T.a;
+        toi = 1.0f;
+        bool hit = false;
+        normal = Vec3(0, 1, 0);
+        impactPoint = T.a;
+
         // Early out: zero velocity
         if (vel.length2() <= EPSILON * EPSILON)
         {
-            Hit h; if (intersectCapsuleTriangle(start, T, h)) { toi = 0.0f; normal = h.normal; impactPoint = h.point; return true; }
+            Hit h;
+            if (intersectCapsuleTriangle(start, T, h)) {
+                toi = 0.0f; normal = h.normal; impactPoint = h.point; return true;
+            }
             return false;
         }
 
         // If initially overlapping, report t=0
         {
-            Hit h; if (intersectCapsuleTriangle(start, T, h)) { toi = 0.0f; normal = h.normal; impactPoint = h.point; return true; }
+            Hit h;
+            if (intersectCapsuleTriangle(start, T, h)) {
+                toi = 0.0f; normal = h.normal; impactPoint = h.point; return true;
+            }
         }
 
-        // Precompute triangle plane
-        Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
-        if (T.doubleSided)
-        {
-            // Orient so it opposes motion for more stable face contact normal.
-            if (Vec3::dot(Ntri, vel) > 0.0f) Ntri = Ntri * -1.0f;
-        }
-
-        // Helper: barycentric point-in-triangle on plane (assumes p lies on plane already)
-        auto pointInTriangle = [&](const Vec3& p)->bool {
-            Vec3 v0 = T.b - T.a; Vec3 v1 = T.c - T.a; Vec3 v2 = p - T.a;
-            float d00 = Vec3::dot(v0,v0); float d01 = Vec3::dot(v0,v1); float d11 = Vec3::dot(v1,v1);
-            float d20 = Vec3::dot(v2,v0); float d21 = Vec3::dot(v2,v1);
+        // Helper: point-in-triangle (barycentric)
+        auto pointInTriangle = [&](const Vec3& p) -> bool {
+            Vec3 v0 = T.b - T.a, v1 = T.c - T.a, v2 = p - T.a;
+            float d00 = Vec3::dot(v0, v0), d01 = Vec3::dot(v0, v1), d11 = Vec3::dot(v1, v1);
+            float d20 = Vec3::dot(v2, v0), d21 = Vec3::dot(v2, v1);
             float denom = d00 * d11 - d01 * d01;
             if (cc_abs(denom) <= EPSILON) return false;
             float v = (d11 * d20 - d01 * d21) / denom;
             float w = (d00 * d21 - d01 * d20) / denom;
             float u = 1.0f - v - w;
-            const float tol = -LARGE_EPS * 10.0f; // allow tiny negative due to FP
+            const float tol = -LARGE_EPS * 10.0f;
             return (u >= tol && v >= tol && w >= tol);
         };
 
-        // Sphere-triangle analytic sweep helper (face/edge/vertex) for a single moving sphere center.
-        auto sphereTriangleSweep = [&](const Vec3& center, float radius, float& outT, Vec3& outN, Vec3& outP)->bool
-        {
-            outT = 1.0f; bool hit = false; outN = Ntri; outP = T.a;
-            // 1) Face plane candidates (solve for center-plane distance == radius)
-            float dist0 = signedDistanceToPlane(center, Ntri, dtri); // N oriented from triangle
-            float denom = Vec3::dot(Ntri, vel);
-            if (cc_abs(denom) > EPSILON)
-            {
-                // Two potential contacts: dist(t)=+/-radius
-                float t1 = (radius - dist0) / denom; // dist becomes +radius
-                float t2 = (-radius - dist0) / denom; // dist becomes -radius
-                auto testFaceT = [&](float tCandidate){
-                    if (tCandidate < 0.0f || tCandidate > 1.0f) return; // outside window
-                    Vec3 c = center + vel * tCandidate;
-                    float dNow = signedDistanceToPlane(c, Ntri, dtri);
-                    // Project onto plane
-                    Vec3 pOnPlane = c - Ntri * dNow;
-                    if (pointInTriangle(pOnPlane))
-                    {
-                        if (!hit || tCandidate < outT)
-                        {
-                            hit = true; outT = tCandidate; outN = Ntri; outP = pOnPlane; }
-                    }
-                };
-                if (dist0 > radius) // outside positive side moving towards plane or not
-                    testFaceT(t1);
-                if (dist0 < -radius)
-                    testFaceT(t2);
-                // If inside slab already, ignore face (vertex/edge will handle) unless projection inside -> immediate overlap
-                if (!hit && cc_abs(dist0) < radius && pointInTriangle(center - Ntri * dist0))
-                {
-                    hit = true; outT = 0.0f; outN = Ntri; outP = center - Ntri * dist0;
-                }
-            }
+        // 1. Face contact: sweep segment against triangle plane, check if intersection is inside triangle
+        Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
+        float seg0_dist = signedDistanceToPlane(start.p0, Ntri, dtri);
+        float seg1_dist = signedDistanceToPlane(start.p1, Ntri, dtri);
+        float vel_dot_n = Vec3::dot(Ntri, vel);
 
-            // 2) Edge capsules (treat edges as capsules of radius=radius)
-            auto rayCapsule = [&](const Vec3& ro, const Vec3& rd, const Vec3& a, const Vec3& b, float rad, float& tHit, Vec3& nHit, Vec3& pHit)->bool
-            {
-                Vec3 axis = b - a; float L2 = axis.length2(); if (L2 <= EPSILON*EPSILON) return false; float L = cc_sqrt(L2); Vec3 n = axis / L;
-                Vec3 dp = ro - a; Vec3 d = rd;
-                float dDotN = Vec3::dot(d, n);
-                Vec3 dPerp = d - n * dDotN;
-                Vec3 oPerp = dp - n * Vec3::dot(dp, n);
-                float A = Vec3::dot(dPerp, dPerp);
-                float B = Vec3::dot(oPerp, dPerp);
-                float C = Vec3::dot(oPerp, oPerp) - rad * rad;
-                bool hitLocal = false; float tBest = 1.0f; Vec3 nBest, pBest;
-                if (A > EPSILON)
-                {
-                    float disc = B*B - A*C;
-                    if (disc >= 0.0f)
-                    {
-                        float sqrtD = cc_sqrt(disc);
-                        float t0 = (-B - sqrtD) / A;
-                        float t1 = (-B + sqrtD) / A;
-                        auto testRoot = [&](float tR){
-                            if (tR < 0.0f || tR > 1.0f) return;
-                            Vec3 c = ro + rd * tR; float k = Vec3::dot(c - a, n);
-                            if (k >= 0.0f && k <= L)
-                            {
-                                Vec3 vperp = c - (a + n * k); // radial vector
-                                float len2 = vperp.length2(); if (len2 <= EPSILON) return; Vec3 nn = vperp / cc_sqrt(len2);
-                                if (!hitLocal || tR < tBest) { hitLocal = true; tBest = tR; nBest = nn; pBest = a + n * k; }
-                            }
-                        };
-                        testRoot(t0); testRoot(t1);
+        // Only consider if moving towards the plane
+        if (cc_abs(vel_dot_n) > EPSILON) {
+            // Find t where either endpoint touches the plane (expand by radius)
+            float t0 = (start.r - seg0_dist) / vel_dot_n;
+            float t1 = (start.r - seg1_dist) / vel_dot_n;
+            float t2 = (-start.r - seg0_dist) / vel_dot_n;
+            float t3 = (-start.r - seg1_dist) / vel_dot_n;
+            float t_candidates[4] = { t0, t1, t2, t3 };
+            for (int i = 0; i < 4; ++i) {
+                float t = t_candidates[i];
+                if (t < 0.0f || t > 1.0f) continue;
+                Vec3 p0 = start.p0 + vel * t;
+                Vec3 p1 = start.p1 + vel * t;
+                // For each t, check if the segment between p0 and p1 intersects the triangle
+                // Project both endpoints onto the plane
+                float d0 = signedDistanceToPlane(p0, Ntri, dtri);
+                float d1 = signedDistanceToPlane(p1, Ntri, dtri);
+                Vec3 q0 = p0 - Ntri * d0;
+                Vec3 q1 = p1 - Ntri * d1;
+                // Check if either endpoint is inside triangle
+                if (pointInTriangle(q0) || pointInTriangle(q1)) {
+                    if (t < toi) {
+                        toi = t;
+                        normal = Ntri;
+                        impactPoint = pointInTriangle(q0) ? q0 : q1;
+                        hit = true;
                     }
                 }
-                // Caps (end spheres)
-                auto raySphere = [&](const Vec3& centerS){
-                    Vec3 m = ro - centerS; float A2 = Vec3::dot(d,d); float B2 = Vec3::dot(m,d); float C2 = Vec3::dot(m,m) - rad*rad; if (C2 < 0.0f) { // inside sphere -> immediate
-                        if (!hitLocal) { hitLocal = true; tBest = 0.0f; nBest = Vec3::normalizeSafe(m, Ntri); pBest = centerS; }
-                        return; }
-                    float disc = B2*B2 - A2*C2; if (disc < 0.0f) return; float tHitS = (-B2 - cc_sqrt(disc)) / (A2 > EPSILON ? A2 : 1.0f);
-                    if (tHitS >= 0.0f && tHitS <= 1.0f)
-                    {
-                        Vec3 c = ro + d * tHitS; Vec3 nrm = c - centerS; float l2 = nrm.length2(); if (l2 > EPSILON*EPSILON) nrm = nrm / cc_sqrt(l2); else nrm = Ntri;
-                        if (!hitLocal || tHitS < tBest) { hitLocal = true; tBest = tHitS; nBest = nrm; pBest = centerS; }
+            }
+        }
+
+        // 2. Edge contact: sweep capsule segment against each triangle edge (segment-segment sweep)
+        auto segmentSegmentSweep = [](const Vec3& p0, const Vec3& p1, const Vec3& q0, const Vec3& q1, const Vec3& v, float radius, float& outT, Vec3& outN, Vec3& outP) -> bool {
+            // Relative motion: move q0-q1 by -v, p0-p1 is stationary
+            Vec3 r = q0 - p0;
+            Vec3 d1 = p1 - p0;
+            Vec3 d2 = q1 - q0;
+            Vec3 v_rel = -v;
+            float t = 0.0f;
+            float s, tseg;
+            Vec3 c1, c2;
+            // Use conservative advancement (subdivide [0,1])
+            const int steps = 8;
+            bool found = false;
+            float bestT = 1.0f;
+            for (int i = 0; i <= steps; ++i) {
+                float alpha = (float)i / steps;
+                Vec3 q0m = q0 + v_rel * alpha;
+                Vec3 q1m = q1 + v_rel * alpha;
+                closestPointsBetweenSegments(p0, p1, q0m, q1m, s, tseg, c1, c2);
+                Vec3 diff = c1 - c2;
+                float dist2 = diff.length2();
+                if (dist2 <= (radius + EPSILON) * (radius + EPSILON)) {
+                    if (alpha < bestT) {
+                        bestT = alpha;
+                        outT = alpha;
+                        outN = Vec3::normalizeSafe(diff);
+                        outP = c2;
+                        found = true;
                     }
-                };
-                raySphere(a); raySphere(b);
-                if (hitLocal)
-                {
-                    tHit = tBest; nHit = nBest; pHit = pBest; return true;
                 }
-                return false;
-            };
-
-            float tEdge; Vec3 nEdge, pEdge;
-            if (rayCapsule(center, vel, T.a, T.b, radius, tEdge, nEdge, pEdge))
-            {
-                if (!hit || tEdge < outT) { hit = true; outT = tEdge; outN = nEdge; outP = pEdge; }
             }
-            if (rayCapsule(center, vel, T.b, T.c, radius, tEdge, nEdge, pEdge))
-            {
-                if (!hit || tEdge < outT) { hit = true; outT = tEdge; outN = nEdge; outP = pEdge; }
-            }
-            if (rayCapsule(center, vel, T.c, T.a, radius, tEdge, nEdge, pEdge))
-            {
-                if (!hit || tEdge < outT) { hit = true; outT = tEdge; outN = nEdge; outP = pEdge; }
-            }
-
-            return hit;
+            return found;
         };
 
-        // Test spheres at endpoints and midpoint to approximate side face cases.
-        float bestT = 1.0f; bool any = false; Vec3 bestN, bestP;
-        auto testSphere = [&](const Vec3& c){ float tLocal; Vec3 nLocal, pLocal; if (sphereTriangleSweep(c, start.r, tLocal, nLocal, pLocal)) { if (!any || tLocal < bestT) { any = true; bestT = tLocal; bestN = nLocal; bestP = pLocal; } } };
-        Vec3 mid = (start.p0 + start.p1) * 0.5f;
-        testSphere(start.p0); testSphere(start.p1); testSphere(mid);
-
-        if (!any || bestT < 0.0f || bestT > 1.0f)
-            return false;
-
-        // Finalize outputs. Impact point on triangle surface: for edge/vertex, pLocal is representative location.
-        // For sphere center contact with face, pLocal already projected. Adjust impact to triangle contact point.
-        // Determine triangle point for output: if pLocal lies on plane, keep; else project.
-        float planeDist = signedDistanceToPlane(bestP, Ntri, dtri);
-        if (cc_abs(planeDist) > LARGE_EPS)
-        {
-            bestP = bestP - Ntri * planeDist; // ensure on plane for consistency
+        Vec3 triEdges[3][2] = { {T.a, T.b}, {T.b, T.c}, {T.c, T.a} };
+        for (int i = 0; i < 3; ++i) {
+            float tEdge; Vec3 nEdge, pEdge;
+            if (segmentSegmentSweep(start.p0, start.p1, triEdges[i][0], triEdges[i][1], vel, start.r, tEdge, nEdge, pEdge)) {
+                if (tEdge < toi) {
+                    toi = tEdge;
+                    normal = nEdge;
+                    impactPoint = pEdge;
+                    hit = true;
+                }
+            }
         }
-        // Orient normal to oppose motion (ensure separating direction)
-        if (Vec3::dot(bestN, vel) > 0.0f) bestN = bestN * -1.0f;
-        // If double sided adjust using triangle normal if near face
-        if (T.doubleSided && Vec3::dot(bestN, Ntri) < 0.0f) bestN = bestN * -1.0f;
 
-        toi = bestT;
-        normal = Vec3::normalizeSafe(bestN, Ntri);
-        impactPoint = bestP;
-        return true;
+        // 3. Vertex contact: sweep capsule segment against each triangle vertex (point-segment sweep)
+        auto pointSegmentSweep = [](const Vec3& seg0, const Vec3& seg1, const Vec3& v, const Vec3& pt, float radius, float& outT, Vec3& outN, Vec3& outP) -> bool {
+            // Move pt by -v, segment is stationary
+            Vec3 v_rel = -v;
+            const int steps = 8;
+            bool found = false;
+            float bestT = 1.0f;
+            for (int i = 0; i <= steps; ++i) {
+                float alpha = (float)i / steps;
+                Vec3 ptm = pt + v_rel * alpha;
+                float tseg;
+                Vec3 c = closestPointOnSegment(seg0, seg1, ptm, &tseg);
+                Vec3 diff = c - ptm;
+                float dist2 = diff.length2();
+                if (dist2 <= (radius + EPSILON) * (radius + EPSILON)) {
+                    if (alpha < bestT) {
+                        bestT = alpha;
+                        outT = alpha;
+                        outN = Vec3::normalizeSafe(diff);
+                        outP = ptm;
+                        found = true;
+                    }
+                }
+            }
+            return found;
+        };
+
+        Vec3 triVerts[3] = { T.a, T.b, T.c };
+        for (int i = 0; i < 3; ++i) {
+            float tVert; Vec3 nVert, pVert;
+            if (pointSegmentSweep(start.p0, start.p1, vel, triVerts[i], start.r, tVert, nVert, pVert)) {
+                if (tVert < toi) {
+                    toi = tVert;
+                    normal = nVert;
+                    impactPoint = pVert;
+                    hit = true;
+                }
+            }
+        }
+
+        // Finalize
+        if (hit && toi >= 0.0f && toi <= 1.0f) {
+            // Orient normal to oppose motion
+            if (Vec3::dot(normal, vel) > 0.0f) normal = normal * -1.0f;
+            normal = Vec3::normalizeSafe(normal, Ntri);
+            return true;
+        }
+        return false;
     }
 
     // BEGIN: Wicked helpers

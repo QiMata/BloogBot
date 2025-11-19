@@ -6,6 +6,7 @@
 #include <string>
 #include <iomanip>
 #include <cmath>
+#include "CoordinateTransforms.h"
 
 // Ray intersection template implementation
 template<typename RayCallback>
@@ -163,13 +164,21 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
                         uint32_t srcIdx = objects[offset];
                         uint32_t objIdx = mapObjectIndex(srcIdx);
                         PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][Ray]   test obj srcIdx="<<srcIdx<<" mapped="<<objIdx);
+                        // Also emit a non-deep trace for inspected objects to aid debugging when DEEP is off
+                        PHYS_TRACE(PHYS_CYL, "[BIH][Ray][TEST] srcIdx="<<srcIdx<<" mapped="<<objIdx<<" node="<<node<<" offset="<<offset<<" maxDist="<<maxDist);
                         if (objIdx != 0xFFFFFFFFu)
                         {
                             bool hit = intersectCallback(r, objIdx, maxDist, stopAtFirstHit, ignoreM2Model);
+                            // Log hit result at visible trace level as well
+                            PHYS_TRACE(PHYS_CYL, "[BIH][Ray][RESULT] obj="<<objIdx<<" hit="<<(hit?1:0)<<" maxDistNow="<<maxDist);
                             if (hit)
                             {
                                 ++hitsAccepted;
                                 PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][Ray]   HIT obj="<<objIdx<<" maxDistNow="<<maxDist);
+                                // Compute hit point in internal space and convert to world for additional logging
+                                G3D::Vector3 hitI = r.origin() + r.direction() * maxDist;
+                                G3D::Vector3 hitW = NavCoord::InternalToWorld(hitI);
+                                PHYS_TRACE(PHYS_CYL, "[BIH][Ray][HITPOINT] obj="<<objIdx<<" hitI=("<<hitI.x<<","<<hitI.y<<","<<hitI.z<<") hitW=("<<hitW.x<<","<<hitW.y<<","<<hitW.z<<")");
                             }
                             if (stopAtFirstHit && hit)
                             {
@@ -394,6 +403,8 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
             bool const BVH2 = tn & (1 << 29);
             uint32_t offset = tn & ~(7u << 29);
 
+            PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][VISIT] node="<<node<<" axis="<<axis<<" BVH2="<<BVH2<<" qLo=("<<query.low().x<<","<<query.low().y<<","<<query.low().z<<") qHi=("<<query.high().x<<","<<query.high().y<<","<<query.high().z<<")");
+
             if (!BVH2)
             {
                 if (axis < 3)
@@ -405,7 +416,7 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
                     bool goLeft = query.low()[axis] <= tr;   // overlaps left if min <= right clip
                     bool goRight = query.high()[axis] >= tl; // overlaps right if max >= left clip
 
-                    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] node="<<node<<" axis="<<axis<<" tl="<<tl<<" tr="<<tr
+                    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][BRANCH] node="<<node<<" axis="<<axis<<" tl="<<tl<<" tr="<<tr
                             <<" qMin="<<query.low()[axis]<<" qMax="<<query.high()[axis]
                             <<" goL="<<(goLeft?1:0)<<" goR="<<(goRight?1:0));
 
@@ -451,12 +462,12 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
                     ++leavesVisited;
                     uint32_t n = tree[node + 1];
                     uint32_t off = offset;
-                    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] leaf node="<<node<<" count="<<n);
+                    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][LEAF] node="<<node<<" count="<<n);
                     while (n > 0)
                     {
                         uint32_t srcIdx = objects[off];
                         uint32_t objIdx = mapObjectIndex(srcIdx);
-                        PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB]   obj srcIdx="<<srcIdx<<" mapped="<<objIdx);
+                        PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][LEAFOBJ] node="<<node<<" srcIdx="<<srcIdx<<" mapped="<<objIdx);
                         if (objIdx != 0xFFFFFFFFu)
                         {
                             if (outCount < maxCount)
@@ -487,7 +498,7 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
                 float tl = VMAP::intBitsToFloat(tree[node + 1]);
                 float tr = VMAP::intBitsToFloat(tree[node + 2]);
 
-                PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] BVH2 node="<<node<<" axis="<<axis<<" tl="<<tl<<" tr="<<tr
+                PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][BVH2] node="<<node<<" axis="<<axis<<" tl="<<tl<<" tr="<<tr
                         <<" qMin="<<query.low()[axis]<<" qMax="<<query.high()[axis]);
 
                 if (query.low()[axis] <= tr && query.high()[axis] >= tl)
@@ -497,6 +508,7 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
                 }
                 else
                 {
+                    PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][BVH2] prune node="<<node);
                     break;
                 }
             }
@@ -505,7 +517,7 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
         if (stackPos == 0)
             break;
         node = stack[--stackPos].node;
-        PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB] pop node="<<node<<" stackPos="<<stackPos);
+        PHYS_TRACE_DEEP(PHYS_CYL, "[BIH][AABB][POP] node="<<node<<" stackPos="<<stackPos);
     }
 
     if (outCount == 0)

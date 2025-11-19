@@ -739,6 +739,178 @@ uint16_t GridMap::getArea(float x, float y) const
     return m_areaMap[lx * 16 + ly];
 }
 
+// Helper to sample V9 heights regardless of storage type
+float GridMap::sampleV9Height(int xi, int yi) const
+{
+    if (xi < 0 || xi >= V9_SIZE || yi < 0 || yi >= V9_SIZE)
+        return INVALID_HEIGHT;
+
+    int idx = xi * V9_SIZE + yi;
+    if (m_V9)
+        return m_V9[idx];
+    if (m_uint16_V9)
+        return m_uint16_V9[idx] * m_gridIntHeightMultiplier + m_gridHeight;
+    if (m_uint8_V9)
+        return m_uint8_V9[idx] * m_gridIntHeightMultiplier + m_gridHeight;
+    return INVALID_HEIGHT;
+}
+
+// Produce terrain triangles (world coordinates) for this tile based on V9/V8 data
+void GridMap::getTerrainTriangles(std::vector<TerrainTriangle>& out) const
+{
+    out.clear();
+
+    // Need V9 data to build triangles
+    if ((!m_V9 && !m_uint16_V9 && !m_uint8_V9) || (!m_V8 && !m_uint16_V8 && !m_uint8_V8))
+    {
+        // we can still attempt to build from corners only by averaging centers
+        if (!m_V9 && !m_uint16_V9 && !m_uint8_V9)
+            return;
+    }
+
+    // Iterate over V8 cells (128x128), each cell produces 4 triangles meeting at cell-center
+    for (int xi = 0; xi < V8_SIZE; ++xi)
+    {
+        for (int yi = 0; yi < V8_SIZE; ++yi)
+        {
+            // Skip if cell is a hole
+            if (isHole(xi, yi))
+                continue;
+
+            // Corner heights (V9 indices)
+            float h1 = sampleV9Height(xi, yi);
+            float h2 = sampleV9Height(xi + 1, yi);
+            float h3 = sampleV9Height(xi, yi + 1);
+            float h4 = sampleV9Height(xi + 1, yi + 1);
+
+            // Determine center height
+            float h5 = INVALID_HEIGHT;
+            int v8_idx = xi * V8_SIZE + yi;
+            if (m_V8)
+            {
+                h5 = 2.0f * m_V8[v8_idx]; // stored half-center convention in some formats
+            }
+            else if (m_uint16_V8)
+            {
+                h5 = m_uint16_V8[v8_idx] * m_gridIntHeightMultiplier + m_gridHeight;
+            }
+            else if (m_uint8_V8)
+            {
+                h5 = m_uint8_V8[v8_idx] * m_gridIntHeightMultiplier + m_gridHeight;
+            }
+            else
+            {
+                // fallback: average corners
+                if (h1 > INVALID_HEIGHT_VALUE && h2 > INVALID_HEIGHT_VALUE && h3 > INVALID_HEIGHT_VALUE && h4 > INVALID_HEIGHT_VALUE)
+                    h5 = (h1 + h2 + h3 + h4) * 0.25f;
+            }
+
+            // If any corner or center invalid, skip the triangles for this cell
+            if (h1 <= INVALID_HEIGHT_VALUE || h2 <= INVALID_HEIGHT_VALUE || h3 <= INVALID_HEIGHT_VALUE || h4 <= INVALID_HEIGHT_VALUE || h5 <= INVALID_HEIGHT_VALUE)
+                continue;
+
+            // Helper to convert V9/V8 index to world coordinates
+            auto idxToWorld = [](int i, int j) -> std::pair<float, float>
+            {
+                float wx = (32.0f - (float)i / (float)MAP_RESOLUTION) * SIZE_OF_GRIDS;
+                float wy = (32.0f - (float)j / (float)MAP_RESOLUTION) * SIZE_OF_GRIDS;
+                return { wx, wy };
+            };
+
+            // corner world coords
+            auto c1 = idxToWorld(xi, yi);
+            auto c2 = idxToWorld(xi + 1, yi);
+            auto c3 = idxToWorld(xi, yi + 1);
+            auto c4 = idxToWorld(xi + 1, yi + 1);
+            // center world coords (half-offset in indices maps to half a grid step in world space)
+            float center_i = xi + 0.5f;
+            float center_j = yi + 0.5f;
+            float cx = (32.0f - center_i / (float)MAP_RESOLUTION) * SIZE_OF_GRIDS;
+            float cy = (32.0f - center_j / (float)MAP_RESOLUTION) * SIZE_OF_GRIDS;
+
+            // Build 4 triangles: (c1,c2,center), (c1,c3,center), (c2,c4,center), (c3,c4,center)
+            TerrainTriangle t;
+
+            // T1: c1, c2, center
+            t.ax = c1.first; t.ay = c1.second; t.az = h1;
+            t.bx = c2.first; t.by = c2.second; t.bz = h2;
+            t.cx = cx;      t.cy = cy;      t.cz = h5;
+            out.push_back(t);
+
+            // T2: c1, c3, center
+            t.ax = c1.first; t.ay = c1.second; t.az = h1;
+            t.bx = c3.first; t.by = c3.second; t.bz = h3;
+            t.cx = cx;      t.cy = cy;      t.cz = h5;
+            out.push_back(t);
+
+            // T3: c2, c4, center
+            t.ax = c2.first; t.ay = c2.second; t.az = h2;
+            t.bx = c4.first; t.by = c4.second; t.bz = h4;
+            t.cx = cx;      t.cy = cy;      t.cz = h5;
+            out.push_back(t);
+
+            // T4: c3, c4, center
+            t.ax = c3.first; t.ay = c3.second; t.az = h3;
+            t.bx = c4.first; t.by = c4.second; t.bz = h4;
+            t.cx = cx;      t.cy = cy;      t.cz = h5;
+            out.push_back(t);
+        }
+    }
+}
+
+bool MapFormat::GridMap::getNormal(float x, float y, float& nx, float& ny, float& nz) const
+{
+    // Build triangles for this tile
+    std::vector<TerrainTriangle> tris;
+    this->getTerrainTriangles(tris);
+    if (tris.empty())
+        return false;
+
+    // Find triangle that contains (x,y) in 2D (world XY)
+    for (const auto& tri : tris)
+    {
+        float x1 = tri.ax, y1 = tri.ay;
+        float x2 = tri.bx, y2 = tri.by;
+        float x3 = tri.cx, y3 = tri.cy;
+
+        float denom = ((y2 - y3)*(x1 - x3) + (x3 - x2)*(y1 - y3));
+        if (std::abs(denom) < 1e-6f)
+            continue;
+
+        float a = ((y2 - y3)*(x - x3) + (x3 - x2)*(y - y3)) / denom;
+        float b = ((y3 - y1)*(x - x3) + (x1 - x3)*(y - y3)) / denom;
+        float c = 1.0f - a - b;
+
+        if (a >= 0.0f && b >= 0.0f && c >= 0.0f)
+        {
+            // Compute normal using cross product of two edges (3D)
+            float ux = tri.bx - tri.ax;
+            float uy = tri.by - tri.ay;
+            float uz = tri.bz - tri.az;
+
+            float vx = tri.cx - tri.ax;
+            float vy = tri.cy - tri.ay;
+            float vz = tri.cz - tri.az;
+
+            // cross = u x v
+            float cxn = uy * vz - uz * vy;
+            float cyn = uz * vx - ux * vz;
+            float czn = ux * vy - uy * vx;
+
+            float len = std::sqrt(cxn * cxn + cyn * cyn + czn * czn);
+            if (len < 1e-6f)
+                return false;
+
+            nx = cxn / len;
+            ny = cyn / len;
+            nz = czn / len;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // ==================== MapLoader Implementation ====================
 
 MapLoader::MapLoader()
@@ -942,4 +1114,96 @@ bool MapLoader::IsTileLoaded(uint32_t mapId, uint32_t x, uint32_t y) const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_loadedTiles.find(makeKey(mapId, x, y)) != m_loadedTiles.end();
+}
+
+// MapLoader: expose triangles for a specific tile (load tile if needed)
+bool MapLoader::GetTileTerrainTriangles(uint32_t mapId, uint32_t x, uint32_t y, std::vector<MapFormat::TerrainTriangle>& out)
+{
+    std::cerr << "[MapLoader::GetTileTerrainTriangles] Deprecated overload called! Use the version with posX, posY." << std::endl;
+    out.clear();
+    return false;
+}
+
+// Refined: Only return the triangle at (posX, posY)
+bool MapLoader::GetTileTerrainTriangles(uint32_t mapId, uint32_t x, uint32_t y, float posX, float posY, std::vector<MapFormat::TerrainTriangle>& out)
+{
+    std::cout << "[MapLoader::GetTileTerrainTriangles] mapId=" << mapId << " x=" << x << " y=" << y << " posX=" << posX << " posY=" << posY << std::endl;
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    // Log coordinate conversion: compute grid from provided pos and compare
+    uint32_t calcGX = 0, calcGY = 0;
+    worldToGridCoords(posX, posY, calcGX, calcGY);
+    std::cout << "[MapLoader::GetTileTerrainTriangles] computed gridFromPos: gx=" << calcGX << " gy=" << calcGY << " (provided x=" << x << " y=" << y << ")" << std::endl;
+
+    // Compute tile world origin and local coordinates inside tile
+    float tileOriginX = (CENTER_GRID_ID - (float)x) * GRID_SIZE; // careful: CENTER_GRID_ID - gridY? original mapping uses (32 - gridY) * GRID_SIZE for origin X
+    float tileOriginY = (CENTER_GRID_ID - (float)y) * GRID_SIZE; // and (32 - gridX) * GRID_SIZE for origin Y
+    // Above computes origin using provided x,y as grid indices in same axis; provide both interpretations for clarity
+    float tileOriginX_fromGridY = (CENTER_GRID_ID - (float)y) * GRID_SIZE; // origin X using gridY
+    float tileOriginY_fromGridX = (CENTER_GRID_ID - (float)x) * GRID_SIZE; // origin Y using gridX
+
+    float localX = posX - tileOriginX_fromGridY; // worldX - originX
+    float localY = posY - tileOriginY_fromGridX; // worldY - originY
+
+    std::cout << "[MapLoader::GetTileTerrainTriangles] tileOrigin (from gridY,gridX) originX=" << tileOriginX_fromGridY << " originY=" << tileOriginY_fromGridX << std::endl;
+    std::cout << "[MapLoader::GetTileTerrainTriangles] local coords in tile: localX=" << localX << " localY=" << localY << " (GRID_SIZE=" << GRID_SIZE << ")" << std::endl;
+
+    uint64_t key = makeKey(mapId, x, y);
+    auto it = m_loadedTiles.find(key);
+    if (it == m_loadedTiles.end())
+    {
+        std::cout << "[MapLoader::GetTileTerrainTriangles] Tile not loaded, attempting to load..." << std::endl;
+        if (!LoadMapTile(mapId, x, y)) {
+            std::cout << "[MapLoader::GetTileTerrainTriangles] LoadMapTile failed" << std::endl;
+            return false;
+        }
+        it = m_loadedTiles.find(key);
+        if (it == m_loadedTiles.end()) {
+            std::cout << "[MapLoader::GetTileTerrainTriangles] Tile still not found after load" << std::endl;
+            return false;
+        }
+    }
+
+    std::vector<MapFormat::TerrainTriangle> allTris;
+    it->second->getTerrainTriangles(allTris);
+    out.clear();
+    for (const auto& tri : allTris) {
+        float x1 = tri.ax, y1 = tri.ay;
+        float x2 = tri.bx, y2 = tri.by;
+        float x3 = tri.cx, y3 = tri.cy;
+        float denom = ((y2 - y3)*(x1 - x3) + (x3 - x2)*(y1 - y3));
+        if (std::abs(denom) < 1e-6f) continue;
+        float a = ((y2 - y3)*(posX - x3) + (x3 - x2)*(posY - y3)) / denom;
+        float b = ((y3 - y1)*(posX - x3) + (x1 - x3)*(posY - y3)) / denom;
+        float c = 1.0f - a - b;
+        if (a >= 0 && b >= 0 && c >= 0) {
+            out.push_back(tri);
+            break; // Only one triangle needed
+        }
+    }
+    std::cout << "[MapLoader::GetTileTerrainTriangles] Matching triangle count: " << out.size() << std::endl;
+    return !out.empty();
+}
+
+// New: Get surface normal at world pos
+bool MapLoader::GetNormal(uint32_t mapId, float x, float y, float& nx, float& ny, float& nz)
+{
+    uint32_t gridX, gridY;
+    worldToGridCoords(x, y, gridX, gridY);
+
+    // Load the tile if not already loaded
+    if (!LoadMapTile(mapId, gridY, gridX))
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    auto it = m_loadedTiles.find(makeKey(mapId, gridY, gridX));
+    if (it == m_loadedTiles.end())
+    {
+        return false;
+    }
+
+    return it->second->getNormal(x, y, nx, ny, nz);
 }

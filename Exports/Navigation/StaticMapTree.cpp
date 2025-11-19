@@ -108,6 +108,100 @@ namespace VMAP
                     << " instPosW=(" << instPosW.x << "," << instPosW.y << "," << instPosW.z << ")"
                     << " rotEulerDeg=(" << rotDeg.x << "," << rotDeg.y << "," << rotDeg.z << ")"
                     << " scale=" << mi.iScale);
+
+                // Attempt to find which group and triangle was hit (if available)
+                if (mi.iModel)
+                {
+                    const WorldModel* wm = mi.iModel.get();
+                    int foundTri = -1;
+                    int foundGroup = -1;
+                    for (uint32_t gi = 0; ; ++gi)
+                    {
+                        const GroupModel* gm = wm->GetGroupModel(gi);
+                        if (!gm) break;
+                        int triIdx = gm->GetLastHitTriangle();
+                        if (triIdx >= 0)
+                        {
+                            foundGroup = (int)gi;
+                            foundTri = triIdx;
+                            break;
+                        }
+                    }
+                    if (foundTri >= 0)
+                    {
+                        // Fetch triangle vertex indices and positions
+                        const GroupModel* gm = wm->GetGroupModel((uint32_t)foundGroup);
+                        if (gm)
+                        {
+                            const auto& verts = gm->GetVertices();
+                            const auto& tris = gm->GetTriangles();
+                            if (foundTri < (int)tris.size())
+                            {
+                                const MeshTriangle& mt = tris[foundTri];
+                                G3D::Vector3 v0_model = verts[mt.idx0];
+                                G3D::Vector3 v1_model = verts[mt.idx1];
+                                G3D::Vector3 v2_model = verts[mt.idx2];
+
+                                // Transform model-space vertices to internal (instance) space
+                                G3D::Vector3 v0_internal = mi.TransformToWorld(v0_model);
+                                G3D::Vector3 v1_internal = mi.TransformToWorld(v1_model);
+                                G3D::Vector3 v2_internal = mi.TransformToWorld(v2_model);
+
+                                // Convert internal to actual world coordinates
+                                G3D::Vector3 v0_world = NavCoord::InternalToWorld(v0_internal);
+                                G3D::Vector3 v1_world = NavCoord::InternalToWorld(v1_internal);
+                                G3D::Vector3 v2_world = NavCoord::InternalToWorld(v2_internal);
+
+                                // Compute triangle normal in world space
+                                G3D::Vector3 tn = (v1_world - v0_world).cross(v2_world - v0_world);
+                                float tlen = tn.magnitude(); if (tlen > 0.00001f) tn /= tlen; else tn = G3D::Vector3(0,0,1);
+
+                                // Compute additional diagnostic quantities: centroid, area, plane distance of hit, barycentric coords
+                                G3D::Vector3 centroid_world = (v0_world + v1_world + v2_world) / 3.0f;
+                                float area = 0.5f * ((v1_world - v0_world).cross(v2_world - v0_world)).magnitude();
+                                float planeDist = (hitW - v0_world).dot(tn); // distance (signed) from hit to triangle plane
+
+                                // Barycentric coordinates of hitW on triangle (projected onto triangle plane)
+                                G3D::Vector3 v0v = v1_world - v0_world;
+                                G3D::Vector3 v1v = v2_world - v0_world;
+                                G3D::Vector3 v2v = hitW - v0_world;
+                                float d00 = v0v.dot(v0v);
+                                float d01 = v0v.dot(v1v);
+                                float d11 = v1v.dot(v1v);
+                                float d20 = v2v.dot(v0v);
+                                float d21 = v2v.dot(v1v);
+                                float denom = d00 * d11 - d01 * d01;
+                                float baryU=0.0f, baryV=0.0f, baryW=0.0f;
+                                if (std::abs(denom) > 1e-9f)
+                                {
+                                    baryV = (d11 * d20 - d01 * d21) / denom;
+                                    baryW = (d00 * d21 - d01 * d20) / denom;
+                                    baryU = 1.0f - baryV - baryW;
+                                }
+
+                                PHYS_TRACE(PHYS_CYL, "  tri found group=" << foundGroup << " tri=" << foundTri
+                                    << " instId=" << mi.ID
+                                    // model-space
+                                    << " v0_model=(" << v0_model.x << "," << v0_model.y << "," << v0_model.z << ")"
+                                    << " v1_model=(" << v1_model.x << "," << v1_model.y << "," << v1_model.z << ")"
+                                    << " v2_model=(" << v2_model.x << "," << v2_model.y << "," << v2_model.z << ")"
+                                    // internal (instance/transformed) space
+                                    << " v0_internal=(" << v0_internal.x << "," << v0_internal.y << "," << v0_internal.z << ")"
+                                    << " v1_internal=(" << v1_internal.x << "," << v1_internal.y << "," << v1_internal.z << ")"
+                                    << " v2_internal=(" << v2_internal.x << "," << v2_internal.y << "," << v2_internal.z << ")"
+                                    // world space
+                                    << " v0_world=(" << v0_world.x << "," << v0_world.y << "," << v0_world.z << ")"
+                                    << " v1_world=(" << v1_world.x << "," << v1_world.y << "," << v1_world.z << ")"
+                                    << " v2_world=(" << v2_world.x << "," << v2_world.y << "," << v2_world.z << ")"
+                                    << " triNormalW=(" << tn.x << "," << tn.y << "," << tn.z << ")"
+                                    << " centroidW=(" << centroid_world.x << "," << centroid_world.y << "," << centroid_world.z << ")"
+                                    << " area=" << area
+                                    << " planeDist=" << planeDist
+                                    << " bary=(" << baryU << "," << baryV << "," << baryW << ")");
+                            }
+                        }
+                    }
+                }
             }
             return result;
         }
@@ -382,7 +476,109 @@ namespace VMAP
     { if(!iTreeValues || iNTreeValues==0) return false; class LocationInfoCallback { public: LocationInfoCallback(ModelInstance* val):prims(val),found(false){} void operator()(const G3D::Vector3& point,uint32_t entry){ if(!prims || !prims[entry].iModel) return; if(prims[entry].GetLocationInfo(point,tempInfo)) found=true; } ModelInstance* prims; LocationInfo tempInfo; bool found; }; LocationInfoCallback cb(iTreeValues); iTree.intersectPoint(pos, cb); if(cb.found){ info = cb.tempInfo; return true; } return false; }
 
     bool StaticMapTree::getIntersectionTime(G3D::Ray const& pRay, float& pMaxDist, bool pStopAtFirstHit, bool ignoreM2Model) const
-    { float distance = pMaxDist; MapRayCallback cb(iTreeValues); iTree.intersectRay(pRay, cb, distance, pStopAtFirstHit, ignoreM2Model); if(cb.didHit()) pMaxDist = distance; return cb.didHit(); }
+    {
+        float distance = pMaxDist; MapRayCallback cb(iTreeValues); iTree.intersectRay(pRay, cb, distance, pStopAtFirstHit, ignoreM2Model); if(cb.didHit()) pMaxDist = distance; return cb.didHit();
+    }
+
+    bool StaticMapTree::getIntersectionTime(G3D::Ray const& pRay, float& pMaxDist, bool pStopAtFirstHit, bool ignoreM2Model,
+        G3D::Vector3* outHitPointW, G3D::Vector3* outHitNormalW, uint32_t* outInstanceId, int* outTriIndex) const
+    {
+        // Default outputs
+        if (outHitPointW) *outHitPointW = G3D::Vector3(0,0,0);
+        if (outHitNormalW) *outHitNormalW = G3D::Vector3(0,0,1);
+        if (outInstanceId) *outInstanceId = 0;
+        if (outTriIndex) *outTriIndex = -1;
+
+        float distance = pMaxDist;
+        MapRayCallback cb(iTreeValues);
+        iTree.intersectRay(pRay, cb, distance, pStopAtFirstHit, ignoreM2Model);
+        if (!cb.didHit()) return false;
+
+        // cb logged the hit earlier and distance is in internal units along pRay.direction
+        // Compute hit point and try to extract triangle info we logged earlier via ModelInstance's last-hit tracking
+        G3D::Vector3 hitI = pRay.origin() + pRay.direction() * distance;
+        G3D::Vector3 hitW = NavCoord::InternalToWorld(hitI);
+
+        // Fill out outputs
+        if (outHitPointW) *outHitPointW = hitW;
+
+        // Attempt to get normal and triangle index from the hittable instance if available
+        // We will search the instances that were used; rely on GroupModel::GetLastHitTriangle populated earlier
+        bool found = false;
+        for (uint32_t i = 0; i < iNTreeValues; ++i)
+        {
+            const ModelInstance& mi = iTreeValues[i];
+            if (!mi.iModel) continue;
+            if (!mi.iBound.contains(hitI)) continue;
+            const WorldModel* wm = mi.iModel.get();
+            // Iterate group models to find any that recorded a last hit triangle
+            for (uint32_t gi = 0; ; ++gi)
+            {
+                const GroupModel* gm = wm->GetGroupModel(gi);
+                if (!gm) break;
+                int triIdx = gm->GetLastHitTriangle();
+                if (triIdx >= 0)
+                {
+                    // Found triangle within this group; compute its world normal
+                    const auto& tris = gm->GetTriangles();
+                    const auto& verts = gm->GetVertices();
+                    if (triIdx < (int)tris.size())
+                    {
+                        const MeshTriangle& mt = tris[triIdx];
+                        if (mt.idx0 < verts.size() && mt.idx1 < verts.size() && mt.idx2 < verts.size())
+                        {
+                            G3D::Vector3 v0 = verts[mt.idx0]; G3D::Vector3 v1 = verts[mt.idx1]; G3D::Vector3 v2 = verts[mt.idx2];
+                            G3D::Vector3 wv0 = mi.TransformToWorld(v0);
+                            G3D::Vector3 wv1 = mi.TransformToWorld(v1);
+                            G3D::Vector3 wv2 = mi.TransformToWorld(v2);
+                            G3D::Vector3 triN = (wv1 - wv0).cross(wv2 - wv0);
+                            float len = triN.magnitude(); if (len > 1e-6f) triN /= len; else triN = G3D::Vector3(0,0,1);
+                            if (triN.z < 0.0f) triN = -triN;
+                            if (outHitNormalW) *outHitNormalW = triN;
+                            if (outInstanceId) *outInstanceId = mi.ID;
+                            if (outTriIndex) *outTriIndex = triIdx;
+                            found = true;
+
+                            // Additional diagnostic logging: centroid, area, plane distance, barycentric coords
+                            G3D::Vector3 centroid = (wv0 + wv1 + wv2) / 3.0f;
+                            float area = 0.5f * ((wv1 - wv0).cross(wv2 - wv0)).magnitude();
+                            float planeDist = (hitW - wv0).dot(triN);
+                            G3D::Vector3 v0v = wv1 - wv0;
+                            G3D::Vector3 v1v = wv2 - wv0;
+                            G3D::Vector3 v2v = hitW - wv0;
+                            float d00 = v0v.dot(v0v);
+                            float d01 = v0v.dot(v1v);
+                            float d11 = v1v.dot(v1v);
+                            float d20 = v2v.dot(v0v);
+                            float d21 = v2v.dot(v1v);
+                            float denom = d00 * d11 - d01 * d01;
+                            float baryU=0.0f, baryV=0.0f, baryW=0.0f;
+                            if (std::abs(denom) > 1e-9f)
+                            {
+                                baryV = (d11 * d20 - d01 * d21) / denom;
+                                baryW = (d00 * d21 - d01 * d20) / denom;
+                                baryU = 1.0f - baryV - baryW;
+                            }
+                            PHYS_TRACE(PHYS_CYL, "  getIntersectionTime triDetails instId=" << mi.ID << " tri=" << triIdx << " triLocal=" << triIdx
+                                << " v0w=("<<wv0.x<<","<<wv0.y<<","<<wv0.z<<")"
+                                << " v1w=("<<wv1.x<<","<<wv1.y<<","<<wv1.z<<")"
+                                << " v2w=("<<wv2.x<<","<<wv2.y<<","<<wv2.z<<")"
+                                << " triNormalW=("<<triN.x<<","<<triN.y<<","<<triN.z<<")"
+                                << " centroidW=("<<centroid.x<<","<<centroid.y<<","<<centroid.z<<")"
+                                << " area="<<area<<" planeDist="<<planeDist
+                                << " bary=("<<baryU<<","<<baryV<<","<<baryW<<")");
+                        }
+                    }
+                    break;
+                }
+            }
+            if (found) break;
+        }
+
+        // Update caller's maxDist to new clipped value (convert internal ray param back to maxDist in same units as pMaxDist expected)
+        pMaxDist = distance;
+        return true;
+    }
 
     uint32_t StaticMapTree::packTileID(uint32_t tileX, uint32_t tileY) { return (tileX << 16) | tileY; }
     void StaticMapTree::unpackTileID(uint32_t ID, uint32_t& tileX, uint32_t& tileY) { tileX=(ID>>16); tileY=(ID & 0xFFFF); }

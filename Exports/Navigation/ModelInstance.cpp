@@ -5,6 +5,7 @@
 #include <iostream>
 #include <algorithm>
 #include "VMapLog.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -112,26 +113,88 @@ namespace VMAP
             return false;
         }
 
+        // Log incoming ray and instance transform for debug correlation
+        G3D::Vector3 rayOrgI = ray.origin();
+        G3D::Vector3 rayDirI = ray.direction();
+        G3D::Vector3 rayOrgW = NavCoord::InternalToWorld(rayOrgI);
+        G3D::Vector3 rayDirW = NavCoord::InternalDirToWorld(rayDirI);
+        G3D::Vector3 instPosI = iPos; // instance position stored in internal
+        G3D::Vector3 instPosW = NavCoord::InternalToWorld(instPosI);
+
+        PHYS_TRACE(PHYS_CYL, "[MI::intersectRay] enter instId=" << ID << " name='" << name << "'"
+            << " rayOrgI=(" << rayOrgI.x << "," << rayOrgI.y << "," << rayOrgI.z << ")"
+            << " rayOrgW=(" << rayOrgW.x << "," << rayOrgW.y << "," << rayOrgW.z << ")"
+            << " rayDirI=(" << rayDirI.x << "," << rayDirI.y << "," << rayDirI.z << ")"
+            << " rayDirW=(" << rayDirW.x << "," << rayDirW.x << "," << rayDirW.z << ")"
+            << " instPosI=(" << instPosI.x << "," << instPosI.y << "," << instPosI.z << ")"
+            << " instPosW=(" << instPosW.x << "," << instPosW.y << "," << instPosW.z << ")"
+            << " iScale=" << iScale << " iRotEulerDeg=(" << ModelSpawn::iRot.x << "," << ModelSpawn::iRot.y << "," << ModelSpawn::iRot.z << ")");
+
         float time = ray.intersectionTime(iBound);
         if (time == G3D::inf())
         {
+            PHYS_TRACE(PHYS_CYL, "[MI::intersectRay] early-exit bounds miss instId=" << ID);
             return false;
         }
 
-        // child bounds are defined in object space:
+        // Transform ray into model space correctly accounting for rotation and scale
+        // Transform origin: translate into instance internal-space then rotate and scale into model-space
         G3D::Vector3 p = iInvRot * (ray.origin() - iPos) * iInvScale;
-        G3D::Ray modRay(p, iInvRot * ray.direction());
+        // Transform direction: rotate then scale (directions do not translate)
+        G3D::Vector3 d = iInvRot * ray.direction();
+        d = d * iInvScale; // apply inverse scale to direction so model-space dir and distance are consistent
+
+        G3D::Ray modRay(p, d);
+        // Compute model-space max distance corresponding to world-space maxDist
         float distance = maxDist * iInvScale;
+
+        // Log model-space ray (modRay) and a world-space approximation for its origin/direction
+        G3D::Vector3 modOrg = modRay.origin();
+        G3D::Vector3 modDir = modRay.direction();
+        // Compute an approximate world-space origin/direction by first mapping the model-space point into internal
+        // then converting the internal result into world-space. This ensures labels match values in logs.
+        G3D::Vector3 modOrgInternal = (modOrg * iScale) * iRot + iPos; // internal-space position
+        G3D::Vector3 modOrgW = NavCoord::InternalToWorld(modOrgInternal);
+        G3D::Vector3 modDirInternal = (modDir * iScale) * iRot; // direction in internal space
+        G3D::Vector3 modDirW = NavCoord::InternalDirToWorld(modDirInternal); // convert to world direction
+        PHYS_TRACE(PHYS_CYL, "[MI::intersectRay] modRay.modelOrg=(" << modOrg.x << "," << modOrg.y << "," << modOrg.z << ")" 
+            << " modRay.modelDir=(" << modDir.x << "," << modDir.y << "," << modDir.z << ")"
+            << " modOrgWApprox=(" << modOrgW.x << "," << modOrgW.y << "," << modOrgW.z << ")"
+            << " modDirWApprox=(" << modDirW.x << "," << modDirW.y << "," << modDirW.z << ")"
+            << " distanceModelSpace=" << distance << " maxDistWorldIn=" << maxDist);
 
         bool hit = iModel->IntersectRay(modRay, distance, stopAtFirstHit, ignoreM2Model);
 
         if (hit)
         {
+            // distance is in model-space. Compute the model-space hit point and convert to world BEFORE scaling the distance
+            G3D::Vector3 modelHitPoint = modRay.origin() + modRay.direction() * distance;
+            G3D::Vector3 internalHitPoint = (modelHitPoint * iScale) * iRot + iPos; // internal-space
+            G3D::Vector3 worldHitPoint = NavCoord::InternalToWorld(internalHitPoint);
+
+            // Log the model hit location and the world-space converted point
+            PHYS_TRACE(PHYS_CYL, "[MI::intersectRay] hit instId=" << ID << " triHitModelDistance=" << distance
+                << " modelHitPoint=(" << modelHitPoint.x << "," << modelHitPoint.y << "," << modelHitPoint.z << ")"
+                << " internalHitPoint=(" << internalHitPoint.x << "," << internalHitPoint.y << "," << internalHitPoint.z << ")"
+                << " worldHitPoint=(" << worldHitPoint.x << "," << worldHitPoint.y << "," << worldHitPoint.z << ")");
+
+            // Convert model-space distance back to world-space distance and set maxDist accordingly
             distance *= iScale;
             maxDist = distance;
+
+            PHYS_TRACE(PHYS_CYL, "[MI::intersectRay] returning hit maxDistWorld=" << maxDist);
+        }
+        else
+        {
+            PHYS_TRACE(PHYS_CYL, "[MI::intersectRay] no hit instId=" << ID);
         }
 
-        return hit;
+        if (hit)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     void ModelInstance::intersectPoint(const G3D::Vector3& p, AreaInfo& info) const
@@ -157,7 +220,7 @@ namespace VMAP
         {
             G3D::Vector3 modelGround = pModel + zDirModel * zDist;
             // Transform back to world space using model->world rotation (iRot)
-            float world_Z = ((modelGround * iRot) * iScale + iPos).z;
+            float world_Z = TransformToWorld(modelGround).z;
             if (info.ground_Z < world_Z)
             {
                 info.ground_Z = world_Z;
@@ -181,7 +244,7 @@ namespace VMAP
         if (iModel->GetLocationInfo(pModel, zDirModel, zDist, groupInfo))
         {
             G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-            float world_Z = ((modelGround * iRot) * iScale + iPos).z;
+            float world_Z = TransformToWorld(modelGround).z;
             if (info.ground_Z < world_Z)
             {
                 info.rootId = groupInfo.rootId;
@@ -203,7 +266,8 @@ namespace VMAP
         G3D::Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
         if (info.hitModel->GetLiquidLevel(pModel, liqHeight))
         {
-            liqHeight = (G3D::Vector3(pModel.x, pModel.y, liqHeight) * iRot * iScale + iPos).z;
+            // Use TransformToWorld to correctly compute world-space z
+            liqHeight = TransformToWorld(G3D::Vector3(pModel.x, pModel.y, liqHeight)).z;
             return true;
         }
         return false;
@@ -231,27 +295,32 @@ namespace VMAP
             groupId = info.groupId;
 
             G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-            float world_Z = ((modelGround * iRot) * iScale + iPos).z;
+            float world_Z = TransformToWorld(modelGround).z;
             if (pos.z > world_Z)
                 pos.z = world_Z;
         }
     }
 
-    // Transform a vertex from model space to world space
+    // Transform a vertex from model space to world space (now returns true world-space coords)
     G3D::Vector3 ModelInstance::TransformToWorld(const G3D::Vector3& modelVertex) const
     {
-        // Correct order: scale -> model->world rotation (iRot) -> translation
-        return (modelVertex * iScale) * iRot + iPos;
+        // Compute internal-space global position then convert to world-space
+        G3D::Vector3 internalPos = (modelVertex * iScale) * iRot + iPos;
+        return NavCoord::InternalToWorld(internalPos);
     }
 
     // Transform cylinder from world space to model space
     Cylinder ModelInstance::TransformCylinderToModel(const Cylinder& worldCylinder) const
     {
-        // Transform base position to model space
-        G3D::Vector3 modelBase = iInvRot * (worldCylinder.base - iPos) * iInvScale;
+        // Convert world base and axis into internal-space first
+        G3D::Vector3 baseInternal = NavCoord::WorldToInternal(worldCylinder.base);
+        G3D::Vector3 axisInternal = NavCoord::WorldDirToInternal(worldCylinder.axis);
+
+        // Transform base position to model space (internal -> model)
+        G3D::Vector3 modelBase = iInvRot * (baseInternal - iPos) * iInvScale;
 
         // Transform axis (just rotate, no translation)
-        G3D::Vector3 modelAxis = iInvRot * worldCylinder.axis;
+        G3D::Vector3 modelAxis = iInvRot * axisInternal;
 
         // Scale radius and height
         float modelRadius = worldCylinder.radius * iInvScale;
@@ -289,9 +358,11 @@ namespace VMAP
         if (modelHit.hit)
         {
             // Transform contact point back to instance/world space
-            G3D::Vector3 worldPt = TransformToWorld(modelHit.contactPoint);
-            // Transform normal (direction only) using model->world rotation
-            G3D::Vector3 worldN = modelHit.contactNormal * iRot;
+            G3D::Vector3 internalWorldPt = (modelHit.contactPoint * iScale) * iRot + iPos; // internal-space
+            G3D::Vector3 worldPt = NavCoord::InternalToWorld(internalWorldPt);
+            // Transform normal (direction only) using model->world rotation and convert to world-space
+            G3D::Vector3 worldN_internal = modelHit.contactNormal * iRot;
+            G3D::Vector3 worldN = NavCoord::InternalDirToWorld(worldN_internal);
             float nLen = worldN.magnitude();
             if (nLen > 0.0001f)
                 worldN /= nLen;
@@ -334,9 +405,14 @@ namespace VMAP
 
         // Transform cylinder and sweep into model space
         Cylinder modelCylinder = TransformCylinderToModel(worldCylinder);
-        G3D::Vector3 modelSweepDir = iInvRot * sweepDir; // rotate direction only
+        // Convert sweep direction to internal then rotate to model-space
+        G3D::Vector3 sweepDirInternal = NavCoord::WorldDirToInternal(sweepDir);
+        G3D::Vector3 modelSweepDir = iInvRot * sweepDirInternal; // rotate direction only
 
-        std::vector<CylinderSweepHit> modelHits = iModel->SweepCylinder(modelCylinder, modelSweepDir, sweepDistance);
+        // Apply inverse scale to direction and distance so model-space sweep is consistent with model scaling
+        modelSweepDir = modelSweepDir * iInvScale;
+        float modelSweepDistance = sweepDistance * iInvScale;
+        std::vector<CylinderSweepHit> modelHits = iModel->SweepCylinder(modelCylinder, modelSweepDir, modelSweepDistance);
 
         // Transform results back to instance/world space
         hits.reserve(modelHits.size());
@@ -344,12 +420,14 @@ namespace VMAP
         while (it != modelHits.end())
         {
             CylinderSweepHit h = *it;
-            // Position/height
-            G3D::Vector3 wpos = TransformToWorld(h.position);
+            // Position/height: transform model-space vertex into internal then to world
+            G3D::Vector3 internalPos = (h.position * iScale) * iRot + iPos;
+            G3D::Vector3 wpos = NavCoord::InternalToWorld(internalPos);
             h.position = wpos;
             h.height = wpos.z;
-            // Normal using model->world rotation
-            G3D::Vector3 wn = h.normal * iRot;
+            // Normal using model->world rotation then convert to world-space
+            G3D::Vector3 wn_internal = h.normal * iRot;
+            G3D::Vector3 wn = NavCoord::InternalDirToWorld(wn_internal);
             float nLen = wn.magnitude();
             if (nLen > 0.0001f) wn /= nLen; else wn = G3D::Vector3(0,0,1);
             h.normal = wn;
@@ -420,8 +498,9 @@ namespace VMAP
         auto vertIt = modelVertices.begin();
         while (vertIt != modelVertices.end())
         {
-            // Correct transformation: scale -> iRot -> translate
-            G3D::Vector3 worldPos = ((*vertIt) * iScale) * iRot + iPos;
+            // Correct transformation: scale -> iRot -> translate, then convert to world
+            G3D::Vector3 internalPos = ((*vertIt) * iScale) * iRot + iPos;
+            G3D::Vector3 worldPos = NavCoord::InternalToWorld(internalPos);
             outVertices.push_back(worldPos);
             ++vertIt;
         }
@@ -444,12 +523,13 @@ namespace VMAP
         bool hit = iModel->CheckCylinderCollision(modelCylinder, ch, n);
         if (hit)
         {
-            G3D::Vector3 wn = n * iRot;
+            G3D::Vector3 wn_internal = n * iRot;
+            G3D::Vector3 wn = NavCoord::InternalDirToWorld(wn_internal);
             float nLen = wn.magnitude();
             if (nLen > 0.0001f) wn /= nLen; else wn = G3D::Vector3(0,0,1);
 
-            // Transform contact height using model->world rotation (rotation shouldn't alter pure Z if axis aligned but keeps consistency)
-            float worldZ = (G3D::Vector3(0,0,ch) * iRot * iScale + iPos).z;
+            // Transform contact height using TransformToWorld for correctness
+            float worldZ = TransformToWorld(G3D::Vector3(0,0,ch)).z;
 
             outContactHeight = worldZ;
             outContactNormal = wn;

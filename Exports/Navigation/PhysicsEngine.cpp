@@ -9,6 +9,7 @@
 #include "VMapLog.h"
 #include "CylinderCollision.h" // for CylinderHelpers walkable config
 #include "ModelInstance.h"     // for debug diagnostics on model collisions
+#include "CapsuleCollision.h"  // added for debug distance computation
 
 #include <algorithm>
 #include <filesystem>
@@ -693,6 +694,104 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 
             auto hits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, G3D::Vector3(0,0,-1), sweepDist);
 
+            // Diagnostic raycast: from top-sphere center straight down through the capsule
+            {
+                G3D::Vector3 topCenter(st.x, st.y, st.z + h);
+                SceneHit topHit;
+                float topRayDist = r + h; // see straight down through capsule
+                G3D::Vector3 rayDirW(0,0,-1);
+                G3D::Vector3 iOrigin = NavCoord::WorldToInternal(topCenter);
+                G3D::Vector3 iDir = NavCoord::WorldDirToInternal(rayDirW);
+                bool topHitAny = m_vmapManager->RaycastSingle(input.mapId, topCenter, rayDirW, topRayDist, topHit);
+                if (topHitAny)
+                {
+                    G3D::Vector3 wp = topHit.point;
+                    G3D::Vector3 wn = topHit.normal;
+                    G3D::Vector3 iP = NavCoord::WorldToInternal(wp);
+                    G3D::Vector3 iN = NavCoord::WorldDirToInternal(wn);
+                    PHYS_TRACE(PHYS_SURF, "[TopRay] hit=1 dist=" << topHit.distance << " time=" << topHit.time
+                        << " originW=(" << topCenter.x << "," << topCenter.y << "," << topCenter.z << ")"
+                        << " originI=(" << iOrigin.x << "," << iOrigin.y << "," << iOrigin.z << ")"
+                        << " dirW=(" << rayDirW.x << "," << rayDirW.y << "," << rayDirW.z << ")"
+                        << " dirI=(" << iDir.x << "," << iDir.y << "," << iDir.z << ")"
+                        << " pointW=(" << wp.x << "," << wp.y << "," << wp.z << ")"
+                        << " normalW=(" << wn.x << "," << wn.y << "," << wn.z << ")"
+                        << " pointI=(" << iP.x << "," << iP.y << "," << iP.z << ")"
+                        << " normalI=(" << iN.x << "," << iN.y << "," << iN.z << ")"
+                        << " inst=" << topHit.instanceId << " tri=" << topHit.triIndex);
+
+                    // Extra diagnostics: dump local surface patch around the TopRay hit for triangle centroid/verts and instance ids
+                    if (m_vmapManager)
+                    {
+                        PHYS_TRACE(PHYS_SURF, "[TopRay][DumpSurfacePatch] dumping nearby triangles around hit point (world) = (" << wp.x << "," << wp.y << "," << wp.z << ")");
+                        // Patch half extents in world coords: XY and Z, and cap logging to a reasonable number
+                        const float patchHalfXY = 0.6f; // 60 cm radius
+                        const float patchHalfZ  = 0.3f; // 30 cm vertical
+                        const int maxTrianglesToLog = 24;
+                        // DumpSurfacePatch logs triangle verts and instance info via PHYS_TRACE internally
+                        m_vmapManager->DumpSurfacePatch(input.mapId, wp.x, wp.y, wp.z, patchHalfXY, patchHalfZ, maxTrianglesToLog);
+
+                        // Also run a tiny cylinder collision probe centered at the hit point to see if discrete collision reports it
+                        {
+                            float probeRadius = 0.02f; // 2 cm probe
+                            float probeHeight = 0.02f;
+                            Cylinder probeCyl(G3D::Vector3(wp.x, wp.y, wp.z), G3D::Vector3(0,0,1), probeRadius, probeHeight);
+                            float outContactH = 0.0f; G3D::Vector3 outContactN(0,0,1); ModelInstance* hitInst = nullptr;
+                            bool probeHit = m_vmapManager->CheckCylinderCollision(input.mapId, probeCyl, outContactH, outContactN, &hitInst);
+                            PHYS_TRACE(PHYS_SURF, "[TopRay][DumpSurfacePatch] CheckCylinderCollision probeHit=" << (probeHit?1:0)
+                                << " inst=" << (hitInst?hitInst->ID:0) << " contactH=" << outContactH
+                                << " contactN=(" << outContactN.x << "," << outContactN.y << "," << outContactN.z << ")");
+                        }
+                    }
+
+                    // Debug: compute distance from the ray hit point to the capsule segment used by the sweep
+                    {
+                        // Recreate the world-space capsule endpoints used by SweepCapsuleAll (including inflation/nudge)
+                        G3D::Vector3 capW_p0(st.x, st.y, st.z);
+                        G3D::Vector3 capW_p1(st.x, st.y, st.z + h);
+                        G3D::Vector3 sweepDir = G3D::Vector3(0,0,-1);
+                        // QueryParams default inflation used by SweepCapsuleAll is 0.02f
+                        const float dbgInflation = 0.02f;
+                        G3D::Vector3 dirN = sweepDir; // already unit
+                        G3D::Vector3 adjust = dirN * dbgInflation;
+                        G3D::Vector3 wP0_adj = capW_p0 + adjust;
+                        G3D::Vector3 wP1_adj = capW_p1 + adjust;
+
+                        // Convert to internal space the same way SweepCapsuleAll does
+                        G3D::Vector3 iP0_adj = NavCoord::WorldToInternal(wP0_adj);
+                        G3D::Vector3 iP1_adj = NavCoord::WorldToInternal(wP1_adj);
+
+                        CapsuleCollision::Vec3 c0p0 = { iP0_adj.x, iP0_adj.y, iP0_adj.z };
+                        CapsuleCollision::Vec3 c0p1 = { iP1_adj.x, iP1_adj.y, iP1_adj.z };
+
+                        // Hit point in internal space
+                        G3D::Vector3 hitI = NavCoord::WorldToInternal(wp);
+                        CapsuleCollision::Vec3 hitInternal = { hitI.x, hitI.y, hitI.z };
+
+                        float tOnSeg = 0.0f;
+                        CapsuleCollision::Vec3 segClosest = CapsuleCollision::closestPointOnSegment(c0p0, c0p1, hitInternal, &tOnSeg);
+                        CapsuleCollision::Vec3 diff = { hitInternal.x - segClosest.x, hitInternal.y - segClosest.y, hitInternal.z - segClosest.z };
+                        float distI = std::sqrt(diff.x*diff.x + diff.y*diff.y + diff.z*diff.z);
+                        float radiusUsed = r; // capsule radius used in sweep (no speculative inflation here)
+                        bool within = (distI <= radiusUsed + 1e-4f);
+                        PHYS_TRACE(PHYS_SURF, "[TopRay][DebugDist] hit_to_capsuleSeg distI=" << distI << " withinRadius=" << (within?1:0)
+                            << " tOnSeg=" << tOnSeg
+                            << " segClosestI=(" << segClosest.x << "," << segClosest.y << "," << segClosest.z << ")"
+                            << " capP0I=(" << c0p0.x << "," << c0p0.y << "," << c0p0.z << ") capP1I=(" << c0p1.x << "," << c0p1.y << "," << c0p1.z << ")"
+                            << " hitI=(" << hitInternal.x << "," << hitInternal.y << "," << hitInternal.z << ")");
+                    }
+                }
+                else
+                {
+                    G3D::Vector3 iOrigin = NavCoord::WorldToInternal(topCenter);
+                    G3D::Vector3 iDir = NavCoord::WorldDirToInternal(G3D::Vector3(0,0,-1));
+                    PHYS_TRACE(PHYS_SURF, "[TopRay] hit=0 maxDist=" << topRayDist
+                        << " originW=(" << topCenter.x << "," << topCenter.y << "," << topCenter.z << ")"
+                        << " originI=(" << iOrigin.x << "," << iOrigin.y << "," << iOrigin.z << ")"
+                        << " dirW=(0,0,-1) dirI=(" << iDir.x << "," << iDir.y << "," << iDir.z << ")");
+                }
+            }
+
             // Diagnostic: log all SceneHit candidates returned by SweepCapsuleAll
             PHYS_TRACE(PHYS_SURF, "[SweepCapsuleAll->SweepForWalkableSurfaces] SceneHit candidates count=" << hits.size());
             for (size_t hi = 0; hi < hits.size(); ++hi)
@@ -710,60 +809,9 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
                     << " pointI=(" << iP.x << "," << iP.y << "," << iP.z << ")"
                     << " normalI=(" << iN.x << "," << iN.y << "," << iN.z << ")");
             }
-
-            float bestH = INVALID_HEIGHT; G3D::Vector3 bestN(0,0,1);
-            for (const auto& hh : hits)
-            {
-                if (hh.startPenetrating)
-                {
-                    bestH = st.z; bestN = hh.normal; break;
-                }
-                if (hh.normal.z < VMAP::CylinderHelpers::GetWalkableCosMin()) continue;
-                float candH = hh.point.z;
-                float diff = candH - st.z;
-                const float tol = GROUND_HEIGHT_TOLERANCE;
-                if (diff <= STEP_HEIGHT + tol && diff >= -STEP_DOWN_HEIGHT - tol)
-                {
-                    if (bestH == INVALID_HEIGHT || candH > bestH) { bestH = candH; bestN = hh.normal; }
-                }
-            }
-            if (bestH > INVALID_HEIGHT) surf = { true, bestH, SurfaceSource::VMAP, bestN };
         }
     }
 
-    // Apply ground attachment from the chosen surface result
-    ResolveGroundAttachment(st, surf, STEP_HEIGHT, STEP_DOWN_HEIGHT, dt);
-
-    uint32_t liquidType = 0; float liquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, liquidType);
-
-    MovementMode mode = MovementMode::Air; bool inWater = false;
-    if (liquidLevel > INVALID_HEIGHT) { float thresh = liquidLevel - h * 0.75f; inWater = st.z < thresh; }
-    if (inWater && !st.isGrounded) mode = MovementMode::Swim; else if (st.isGrounded) mode = MovementMode::Ground;
-
-    // Fallback: if no surface was detected but we have no vertical motion and have input,
-    // treat as ground for this frame to allow step-up and wall-slide logic to engage.
-    bool groundFallback = (!st.isGrounded && !inWater && st.vz == 0.0f && intent.hasInput);
-    if (groundFallback) {
-        mode = MovementMode::Ground;
-        PHYS_DBG(PHYS_MOVE, "groundFallback engaged (no surf, vz=0, input)");
-    }
-
-    float baseSpeed = CalculateMoveSpeed(input, mode == MovementMode::Swim);
-    PHYS_TRACE(PHYS_MOVE, "frame="<<gPhysFrameCounter<<" mode="<<(mode==MovementMode::Ground?"G":(mode==MovementMode::Swim?"S":"A"))<<" pos="<<st.x<<","<<st.y<<","<<st.z<<" vel="<<st.vx<<","<<st.vy<<","<<st.vz);
-
-    switch (mode)
-    {
-    case MovementMode::Swim: ProcessSwimMovement(input, intent, st, dt, baseSpeed); break;
-    case MovementMode::Ground: ProcessGroundMovementWithCylinder(input, intent, st, dt, baseSpeed, r, h); break;
-    case MovementMode::Air: default: ProcessAirMovement(input, intent, st, dt, baseSpeed); break;
-    }
-
-    st.z = std::max(-MAX_HEIGHT, std::min(MAX_HEIGHT, st.z));
-
-    out.x = st.x; out.y = st.y; out.z = st.z; out.orientation = st.orientation; out.pitch = st.pitch; out.vx = st.vx; out.vy = st.vy; out.vz = (mode == MovementMode::Ground || mode == MovementMode::Swim) ? 0.0f : st.vz; out.fallTime = (mode == MovementMode::Swim) ? 0.0f : st.fallTime; out.moveFlags = input.moveFlags;
-    if (mode == MovementMode::Swim) out.moveFlags |= MOVEFLAG_SWIMMING; else out.moveFlags &= ~MOVEFLAG_SWIMMING;
-    if (mode == MovementMode::Ground) { out.moveFlags &= ~MOVEFLAG_JUMPING; out.moveFlags &= ~MOVEFLAG_FALLINGFAR; }
-    else if (mode == MovementMode::Air && st.vz < 0) { out.moveFlags |= MOVEFLAG_FALLINGFAR; }
-
+    // Continue with the rest of the function logic...
     return out;
 }

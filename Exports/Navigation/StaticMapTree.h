@@ -123,6 +123,10 @@ namespace VMAP
 
         bool getIntersectionTime(const G3D::Ray& ray, float& maxDist,
             bool stopAtFirstHit, bool ignoreM2Model) const;
+        // Extended variant: optionally retrieve hit point (world), hit normal (world), instanceId and triangle index
+        bool getIntersectionTime(const G3D::Ray& ray, float& maxDist,
+            bool stopAtFirstHit, bool ignoreM2Model,
+            G3D::Vector3* outHitPointW, G3D::Vector3* outHitNormalW, uint32_t* outInstanceId, int* outTriIndex) const;
 
         ModelInstance* FindCollisionModel(const G3D::Vector3& pos1, const G3D::Vector3& pos2);
 

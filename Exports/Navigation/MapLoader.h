@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <cstdio>
+#include <vector>
 
 // Map file format constants (matching vMaNGOS)
 namespace MapFormat
@@ -92,6 +93,14 @@ namespace MapFormat
     };
 #pragma pack(pop)
 
+    // Simple terrain triangle representation (world coords)
+    struct TerrainTriangle
+    {
+        float ax, ay, az;
+        float bx, by, bz;
+        float cx, cy, cz;
+    };
+
     // GridMap class - holds one map tile
     class GridMap
     {
@@ -149,6 +158,9 @@ namespace MapFormat
         bool loadHolesData(FILE* in, uint32_t offset, uint32_t size);
         bool loadLiquidData(FILE* in, uint32_t offset, uint32_t size);
 
+        // Helper to sample V9 heights regardless of storage type
+        float sampleV9Height(int xi, int yi) const;
+
     public:
         GridMap() = default;
         ~GridMap();
@@ -160,6 +172,12 @@ namespace MapFormat
         float getLiquidLevel(float x, float y) const;
         uint8_t getLiquidType(float x, float y) const;
         uint16_t getArea(float x, float y) const;
+
+        // New: extract terrain triangles (world coordinates) for this tile
+        void getTerrainTriangles(std::vector<TerrainTriangle>& out) const;
+
+        // New: compute surface normal at world position (returns false if invalid / hole)
+        bool getNormal(float x, float y, float& nx, float& ny, float& nz) const;
     };
 }
 
@@ -195,7 +213,17 @@ public:
     uint8_t GetLiquidType(uint32_t mapId, float x, float y);
     uint16_t GetAreaId(uint32_t mapId, float x, float y);
 
+    // New: get surface normal at world pos (returns false if invalid)
+    bool GetNormal(uint32_t mapId, float x, float y, float& nx, float& ny, float& nz);
+
+    // Refined: Only return the triangle at (posX, posY)
+    // Deprecated: Use the new version with posX, posY
+    bool GetTileTerrainTriangles(uint32_t mapId, uint32_t x, uint32_t y, std::vector<MapFormat::TerrainTriangle>& out);
+    bool GetTileTerrainTriangles(uint32_t mapId, uint32_t x, uint32_t y, float posX, float posY, std::vector<MapFormat::TerrainTriangle>& out);
+
     size_t GetLoadedTileCount() const;
     bool IsTileLoaded(uint32_t mapId, uint32_t x, uint32_t y) const;
     bool IsInitialized() const { return m_initialized; }
+
+    void WorldToGridCoords(float worldX, float worldY, uint32_t& gridX, uint32_t& gridY) const { worldToGridCoords(worldX, worldY, gridX, gridY); }
 };

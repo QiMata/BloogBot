@@ -10,6 +10,7 @@
 #include "BIH.h"
 #include "G3D/BoundsTrait.h"
 #include "CylinderCollision.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -88,6 +89,9 @@ namespace VMAP
         GroupModel(const GroupModel& other) = delete;
         GroupModel& operator=(const GroupModel& other) = delete;
 
+        // Last triangle index hit by the most recent IntersectRay call (local to this group's triangles)
+        mutable int m_lastHitTriangle = -1;
+
     public:
         GroupModel() : iMogpFlags(0), iGroupWMOID(0), iLiquid(nullptr) {}
         GroupModel(uint32_t mogpFlags, uint32_t groupWMOID, const G3D::AABox& bound)
@@ -136,10 +140,14 @@ namespace VMAP
             std::vector<G3D::Vector3>::const_iterator vertices,
             const G3D::Ray& ray, float& distance);
 
+        // Find the triangle index (local to this group) hit by the ray if any.
+        // Returns true if a triangle was hit and outTriIndex is set.
+        bool GetHitTriangleIndex(const G3D::Ray& ray, float& distance, int& outTriIndex) const;
+
         struct GModelRayCallback
         {
-            GModelRayCallback(std::vector<MeshTriangle> const& tris, std::vector<G3D::Vector3> const& vert) :
-                vertices(vert.begin()), triangles(tris.begin()), hit(0) {
+            GModelRayCallback(std::vector<MeshTriangle> const& tris, std::vector<G3D::Vector3> const& vert, GroupModel* parentPtr) :
+                vertices(vert.begin()), triangles(tris.begin()), hit(0), parent(parentPtr), lastHitIndex(-1) {
             }
 
             bool operator()(G3D::Ray const& ray, uint32_t entry, float& distance, bool /*stopAtFirstHit*/, bool /*ignoreM2Model*/)
@@ -152,8 +160,36 @@ namespace VMAP
                 if (result)
                 {
                     ++hit;
-                    LOG_TRACE("[GModelRayCallback] Triangle " << entry << " HIT! Total hits: " << hit
-                        << " New distance: " << distance);
+                    lastHitIndex = (int)entry;
+                    if (parent) parent->m_lastHitTriangle = lastHitIndex;
+
+                    // Log model-space vertices, internal-converted and world-converted vertices, and group/triangle indices
+                    const MeshTriangle& mt = triangles[entry];
+                    G3D::Vector3 mv0 = vertices[mt.idx0];
+                    G3D::Vector3 mv1 = vertices[mt.idx1];
+                    G3D::Vector3 mv2 = vertices[mt.idx2];
+
+                    // Treat group model vertices as internal coordinates for conversion to world
+                    G3D::Vector3 iv0 = mv0;
+                    G3D::Vector3 iv1 = mv1;
+                    G3D::Vector3 iv2 = mv2;
+
+                    G3D::Vector3 wv0 = NavCoord::InternalToWorld(iv0);
+                    G3D::Vector3 wv1 = NavCoord::InternalToWorld(iv1);
+                    G3D::Vector3 wv2 = NavCoord::InternalToWorld(iv2);
+
+                    LOG_INFO("[GModelRayCallback] Triangle " << entry << " HIT! Total hits: " << hit
+                        << " New distance: " << distance
+                        << " GroupWMO=" << (parent ? parent->GetWmoID() : 0) << " TriLocal=" << entry
+                        << " v0_local=(" << mv0.x << "," << mv0.y << "," << mv0.z << ")"
+                        << " v1_local=(" << mv1.x << "," << mv1.y << "," << mv1.z << ")"
+                        << " v2_local=(" << mv2.x << "," << mv2.y << "," << mv2.z << ")"
+                        << " v0_internal=(" << iv0.x << "," << iv0.y << "," << iv0.z << ")"
+                        << " v1_internal=(" << iv1.x << "," << iv1.y << "," << iv1.z << ")"
+                        << " v2_internal=(" << iv2.x << "," << iv2.y << "," << iv2.z << ")"
+                        << " v0_world=(" << wv0.x << "," << wv0.y << "," << wv0.z << ")"
+                        << " v1_world=(" << wv1.x << "," << wv1.y << "," << wv1.z << ")"
+                        << " v2_world=(" << wv2.x << "," << wv2.y << "," << wv2.z << ")");
                 }
                 else
                 {
@@ -166,7 +202,11 @@ namespace VMAP
             std::vector<G3D::Vector3>::const_iterator vertices;
             std::vector<MeshTriangle>::const_iterator triangles;
             uint32_t hit;
+            int lastHitIndex;
+            GroupModel* parent;
         };
+
+        int GetLastHitTriangle() const { return m_lastHitTriangle; }
     };
 
     // WorldModel class with cylinder collision support
@@ -206,6 +246,9 @@ namespace VMAP
         {
             return (index < groupModels.size()) ? &groupModels[index] : nullptr;
         }
+
+        // Detailed intersect that also returns which group and triangle index were hit (if available).
+        bool IntersectRayDetailed(const G3D::Ray& ray, float& distance, uint32_t& outGroupIndex, int& outTriIndex, bool stopAtFirstHit, bool ignoreM2Model) const;
 
     protected:
         uint32_t RootWMOID;

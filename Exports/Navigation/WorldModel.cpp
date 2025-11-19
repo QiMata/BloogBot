@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <algorithm>
 #include "VMapLog.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -340,7 +341,10 @@ namespace VMAP
         if (triangles.empty())
             return 0;
 
-        GModelRayCallback callback(triangles, vertices);
+        // Reset last hit tracking
+        m_lastHitTriangle = -1;
+
+        GModelRayCallback callback(triangles, vertices, const_cast<GroupModel*>(this));
         meshTree.intersectRay(ray, callback, distance, stopAtFirstHit, ignoreM2Model);
         return callback.hit;
     }
@@ -489,6 +493,9 @@ namespace VMAP
             }
         }
 
+        // Reset last hit tracking
+        m_lastHitTriangle = -1;
+
         // Read MBIH chunk (mesh BIH tree)
         if (!readChunk(rf, chunk, "MBIH", 4))
         {
@@ -539,6 +546,50 @@ namespace VMAP
         WModelRayCallBack isc(groupModels);
         groupTree.intersectRay(ray, isc, distance, stopAtFirstHit, ignoreM2Model);
         return isc.hit;
+    }
+
+    bool WorldModel::IntersectRayDetailed(const G3D::Ray& ray, float& distance, uint32_t& outGroupIndex, int& outTriIndex, bool stopAtFirstHit, bool ignoreM2Model) const
+    {
+        if (ignoreM2Model && (modelFlags & MOD_M2))
+            return false;
+
+        float minDist = distance;
+        bool anyHit = false;
+        uint32_t foundGroup = 0;
+        int foundTri = -1;
+
+        for (uint32_t gi = 0; gi < groupModels.size(); ++gi)
+        {
+            float d = minDist;
+            if (groupModels[gi].IntersectRay(ray, d, stopAtFirstHit, ignoreM2Model))
+            {
+                anyHit = true;
+                if (d < minDist)
+                {
+                    minDist = d;
+                    foundGroup = gi;
+                    // Attempt to get triangle index from the group (if tracked)
+                    foundTri = groupModels[gi].GetLastHitTriangle();
+                }
+            }
+        }
+
+        if (anyHit)
+        {
+            distance = minDist;
+            outGroupIndex = foundGroup;
+            outTriIndex = foundTri;
+
+            // Log the found group and triangle and show hit point in world and internal coordinates for comparison
+            G3D::Vector3 hitWorld = ray.origin() + ray.direction() * minDist;
+            G3D::Vector3 hitInternal = NavCoord::WorldToInternal(hitWorld);
+            LOG_INFO("[WorldModel::IntersectRayDetailed] FoundGroup=" << foundGroup << " FoundTri=" << foundTri
+                << " HitWorld=(" << hitWorld.x << "," << hitWorld.y << "," << hitWorld.z << ")"
+                << " HitInternal=(" << hitInternal.x << "," << hitInternal.y << "," << hitInternal.z << ")");
+
+            return true;
+        }
+        return false;
     }
 
     CylinderIntersection WorldModel::IntersectCylinder(const Cylinder& cyl) const

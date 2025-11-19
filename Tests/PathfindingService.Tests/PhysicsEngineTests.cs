@@ -36,6 +36,7 @@ namespace PathfindingService.Tests
 
         [Theory]
         // mapId,      x,           y,           z,           race,         adtGroundZ,     adtLiquidZ
+        [InlineData(1u, -562.225f, -4189.092f, 70.789f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(0u, -8949.950000f, -132.490000f, 83.229485f, Race.Human, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(0u, -6240.320000f, 331.033000f, 382.619171f, Race.Human, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(0u, 524.311279f, 312.037323f, 31.260843f, Race.Orc, 0.002989f, MovementFlags.MOVEFLAG_NONE)]

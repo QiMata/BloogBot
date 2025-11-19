@@ -94,9 +94,18 @@ namespace VMAP
             float distance,
             uint32_t includeMask = 0xFFFFFFFFu) const;
 
+        // Raycast wrapper (single hit)
+        bool RaycastSingle(unsigned int pMapId,
+                           const G3D::Vector3& origin,
+                           const G3D::Vector3& dir,
+                           float maxDistance,
+                           SceneHit& outHit,
+                           uint32_t includeMask = 0xFFFFFFFFu) const;
+
         bool CheckCylinderCollision(unsigned int pMapId, const Cylinder& worldCylinder,
             float& outContactHeight, G3D::Vector3& outContactNormal,
             ModelInstance** outHitInstance = nullptr) const;
+
         bool CanCylinderFitAtPosition(unsigned int pMapId, const Cylinder& worldCylinder,
             float tolerance = 0.05f) const;
         bool CanCylinderMoveAtPosition(unsigned int pMapId, const Cylinder& worldCylinder,

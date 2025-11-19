@@ -34,6 +34,7 @@ namespace VMAP
         uint32_t instanceId = 0; // ModelInstance::ID
         int triIndex = -1;       // Triangle index within model (if available)
         bool startPenetrating = false; // True if the sweep started already overlapping (t=0 overlap)
+        bool normalFlipped = false; // True if we flipped normal to enforce upward-facing hemisphere
     };
 
     class SceneQuery
@@ -100,5 +101,8 @@ namespace VMAP
                                     SceneHit& outHit,
                                     uint32_t includeMask = 0xFFFFFFFFu,
                                     const QueryParams& params = QueryParams());
+
+        // Debug helper: test all triangles of a specific instance against a world-space capsule and log any collisions.
+        static int DebugTestInstanceCapsuleTriangles(const StaticMapTree& map, uint32_t instanceId, const CapsuleCollision::Capsule& capsuleWorld);
     };
 }
