@@ -75,7 +75,7 @@ namespace VMAP
                               uint32_t includeMask = 0xFFFFFFFFu,
                               const QueryParams& params = QueryParams());
 
-        static int SweepCapsuleAll(const StaticMapTree& map,
+        static int SweepCapsule(const StaticMapTree& map,
                                    const CapsuleCollision::Capsule& capsuleStart,
                                    const G3D::Vector3& dir,
                                    float distance,

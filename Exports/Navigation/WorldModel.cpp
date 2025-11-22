@@ -211,6 +211,7 @@ namespace VMAP
         m_lastHitTriangle = -1;
 
         GModelRayCallback callback(triangles, vertices, const_cast<GroupModel*>(this));
+        // Restore original traversal behavior: honor caller's stopAtFirstHit flag.
         meshTree.intersectRay(ray, callback, distance, stopAtFirstHit, ignoreM2Model);
         return callback.hit;
     }
@@ -253,6 +254,7 @@ namespace VMAP
 
         float t = f * edge2.dot(q);
 
+        // Original threshold: require t > 0.00001f (ignore near-zero origins) and closer than current distance.
         if (t > 0.00001f && t < distance)
         {
             distance = t;

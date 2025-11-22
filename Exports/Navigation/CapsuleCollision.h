@@ -501,26 +501,6 @@ namespace CapsuleCollision
         return true;
     }
 
-    inline bool intersectCapsuleCapsule(const Capsule& A, const Capsule& B, Hit& out)
-    {
-        float s, t; Vec3 cA, cB;
-        closestPointsBetweenSegments(A.p0, A.p1, B.p0, B.p1, s, t, cA, cB);
-        Vec3 d = cA - cB;
-        float dist2 = d.length2();
-        float rsum = A.r + B.r;
-        if (dist2 > rsum * rsum)
-            return false;
-        float dist = cc_sqrt(dist2);
-        Vec3 n = dist > EPSILON ? (d / (dist > 0.0f ? dist : 1.0f)) : Vec3(0, 1, 0);
-        out.hit = true;
-        out.depth = rsum - dist;
-        out.normal = Vec3::normalizeSafe(n);
-        out.point = (cA + cB) * 0.5f;
-        return true;
-    }
-
-    // -- Resolution helpers --
-
     struct ResolveConfig { float penetrationSlack = 1e-4f; float groundCosMin = 0.3f; Vec3 up = Vec3(0, 1, 0); float contactOffset = 0.02f; };
 
     inline Vec3 projectAndSlide(Vec3 v, Vec3 n)

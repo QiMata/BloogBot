@@ -486,7 +486,7 @@ int SceneQuery::OverlapBox(const StaticMapTree& map,
     return OverlapSphere(map, c, r, outOverlaps, includeMask, params);
 }
 
-int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
+int SceneQuery::SweepCapsule(const StaticMapTree& map,
     const CapsuleCollision::Capsule& capsuleStart,
     const G3D::Vector3& dir,
     float distance,
@@ -494,12 +494,22 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     uint32_t includeMask,
     const QueryParams& params)
 {
+    PHYS_TRACE(PHYS_CYL, "SweepCapsule ENTER includeMask=0x" << std::hex << includeMask << std::dec
+        << " distance=" << distance
+        << " dirW=(" << dir.x << "," << dir.y << "," << dir.z << ")"
+        << " capStart.p0W=(" << capsuleStart.p0.x << "," << capsuleStart.p0.y << "," << capsuleStart.p0.z << ")"
+        << " capStart.p1W=(" << capsuleStart.p1.x << "," << capsuleStart.p1.y << "," << capsuleStart.p1.z << ")"
+        << " r=" << capsuleStart.r
+        << " params.inflation=" << params.inflation);
     // Refactored: Collect all valid contacts using continuous collision detection (GJK/SAT analytic sweep).
     // Returns a sorted list of contacts by time-of-impact, including penetration depth, contact point, normal, triangle index.
     // Handles start penetration (t=0) and all contact types (face, edge, vertex).
     outHits.clear();
     if (distance <= 0.0f)
+    {
+        PHYS_TRACE(PHYS_CYL, "SweepCapsule EARLY EXIT distance<=0");
         return 0;
+    }
 
     CapsuleCollision::Capsule C0 = capsuleStart;
     G3D::Vector3 wP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
@@ -513,6 +523,8 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
             G3D::Vector3 adjust = dirN * params.inflation;
             wP0 = wP0 + adjust;
             wP1 = wP1 + adjust;
+            PHYS_TRACE(PHYS_CYL, "Inflated start by dirN*inflation adjust=(" << adjust.x << "," << adjust.y << "," << adjust.z
+                << ") new wP0=(" << wP0.x << "," << wP0.y << "," << wP0.z << ") new wP1=(" << wP1.x << "," << wP1.y << "," << wP1.z << ")");
         }
     }
     G3D::Vector3 iP0 = NavCoord::WorldToInternal(wP0);
@@ -520,16 +532,45 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     C0.p0 = { iP0.x, iP0.y, iP0.z }; C0.p1 = { iP1.x, iP1.y, iP1.z };
     G3D::Vector3 iDir = NavCoord::WorldDirToInternal(dir);
     CapsuleCollision::Vec3 vel(iDir.x * distance, iDir.y * distance, iDir.z * distance);
+    PHYS_TRACE(PHYS_CYL, "Internal start iP0=(" << iP0.x << "," << iP0.y << "," << iP0.z << ") iP1=(" << iP1.x << "," << iP1.y << "," << iP1.z
+        << ") radius=" << C0.r << " iDir=(" << iDir.x << "," << iDir.y << "," << iDir.z << ") velI=(" << vel.x << "," << vel.y << "," << vel.z << ")");
 
     MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
     G3D::Vector3 wP0End = wP0 + dir * distance;
     G3D::Vector3 wP1End = wP1 + dir * distance;
     G3D::Vector3 wMin = wP0.min(wP1).min(wP0End.min(wP1End)) - G3D::Vector3(C0.r, C0.r, C0.r);
     G3D::Vector3 wMax = wP0.max(wP1).max(wP0End.max(wP1End)) + G3D::Vector3(C0.r, C0.r, C0.r);
+    PHYS_TRACE(PHYS_CYL, "Sweep world segment: wP0Start=(" << wP0.x << "," << wP0.y << "," << wP0.z
+        << ") wP1Start=(" << wP1.x << "," << wP1.y << "," << wP1.z << ") wP0End=(" << wP0End.x << "," << wP0End.y << "," << wP0End.z
+        << ") wP1End=(" << wP1End.x << "," << wP1End.y << "," << wP1End.z << ")");
+    PHYS_TRACE(PHYS_CYL, "Sweep broadphase world AABB preInflate min=(" << wMin.x << "," << wMin.y << "," << wMin.z
+        << ") max=(" << wMax.x << "," << wMax.y << "," << wMax.z << ")");
+
     CapsuleCollision::AABB sweepBox = AABBFromAABox(G3D::AABox(wMin, wMax));
     CapsuleCollision::aabbInflate(sweepBox, 0.005f);
+    PHYS_TRACE(PHYS_CYL, "Sweep broadphase AABB inflated by 0.005 min=(" << sweepBox.min.x << "," << sweepBox.min.y << "," << sweepBox.min.z
+        << ") max=(" << sweepBox.max.x << "," << sweepBox.max.y << "," << sweepBox.max.z << ")");
+
     const int kCap = 1024; int triIdxs[kCap]; int triCount = 0;
     view.query(sweepBox, triIdxs, triCount, kCap);
+    PHYS_TRACE(PHYS_CYL, "view.query returned triCount=" << triCount << " (cap=" << kCap << ")");
+
+    // Optionally sample a few triangles selected by broadphase for diagnostics
+    {
+        int sampleN = std::min(triCount, 6);
+        for (int si = 0; si < sampleN; ++si)
+        {
+            int tgi = triIdxs[si];
+            const auto& T = view.tri(tgi);
+            G3D::Vector3 wA = NavCoord::InternalToWorld(G3D::Vector3(T.a.x, T.a.y, T.a.z));
+            G3D::Vector3 wB = NavCoord::InternalToWorld(G3D::Vector3(T.b.x, T.b.y, T.b.z));
+            G3D::Vector3 wC = NavCoord::InternalToWorld(G3D::Vector3(T.c.x, T.c.y, T.c.z));
+            PHYS_TRACE(PHYS_CYL, "Sample tri[" << si << "] idx=" << tgi
+                << " wA=(" << wA.x << "," << wA.y << "," << wA.z << ")"
+                << " wB=(" << wB.x << "," << wB.y << "," << wB.z << ")"
+                << " wC=(" << wC.x << "," << wC.y << "," << wC.z << ")");
+        }
+    }
 
     // Collect start-penetrating overlaps (t=0)
     for (int i = 0; i < triCount; ++i)
@@ -544,6 +585,8 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
             G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
             G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
             const ModelInstance* mi = view.triInstance(ti);
+            PHYS_TRACE(PHYS_CYL, "Start penetration triIdx=" << ti << " instId=" << (mi?mi->ID:0)
+                << " depth=" << ch.depth << " wPoint=(" << wP.x << "," << wP.y << "," << wP.z << ") wNormal=(" << wN.x << "," << wN.y << "," << wN.z << ")");
             SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = wN; h.point = wP; h.triIndex = ti; h.instanceId = mi ? mi->ID : 0; h.startPenetrating = true; h.penetrationDepth = ch.depth;
             EnsureUpwardNormal(h.normal, h);
             outHits.push_back(h);
@@ -551,6 +594,7 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     }
     if (!outHits.empty())
     {
+        PHYS_TRACE(PHYS_CYL, "SweepCapsule EXIT with startPenetrating hits count=" << outHits.size());
         std::sort(outHits.begin(), outHits.end(), [](const SceneHit& a, const SceneHit& b) { return a.triIndex < b.triIndex; });
         return (int)outHits.size();
     }
@@ -577,6 +621,10 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
             CapsuleCollision::intersectCapsuleTriangle(impactCapsule, T, ch);
             HitTmp tmp; tmp.t = toi; tmp.triIdx = selTriIdx; tmp.nI = { n.x, n.y, n.z }; tmp.pI = { p.x, p.y, p.z }; tmp.instId = instId; tmp.penetrationDepth = ch.depth;
             candidates.push_back(tmp);
+            G3D::Vector3 wP = NavCoord::InternalToWorld(G3D::Vector3(p.x, p.y, p.z));
+            G3D::Vector3 wN = NavCoord::InternalDirToWorld(G3D::Vector3(n.x, n.y, n.z));
+            PHYS_TRACE(PHYS_CYL, "Sweep candidate triIdx=" << selTriIdx << " instId=" << instId << " toi=" << toi
+                << " wPoint=(" << wP.x << "," << wP.y << "," << wP.z << ") wNormal=(" << wN.x << "," << wN.y << "," << wN.z << ") depth@impact=" << ch.depth);
         }
     }
     if (!candidates.empty())
@@ -596,8 +644,11 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
             hit.point = wImpact; hit.normal = wNormal; hit.triIndex = cand.triIdx; hit.instanceId = cand.instId;
             hit.startPenetrating = false;
             EnsureUpwardNormal(hit.normal, hit);
+            PHYS_TRACE(PHYS_CYL, "Sweep HIT toi=" << hit.time << " dist=" << hit.distance << " wPoint=(" << hit.point.x << "," << hit.point.y << "," << hit.point.z
+                << ") wNormal=(" << hit.normal.x << "," << hit.normal.y << "," << hit.normal.z << ") instId=" << hit.instanceId << " triIdx=" << hit.triIndex);
             outHits.push_back(hit);
         }
+        PHYS_TRACE(PHYS_CYL, "SweepCapsule EXIT hits count=" << outHits.size());
         return (int)outHits.size();
     }
 
@@ -607,10 +658,13 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     inflCaps.r += overlapInflation;
     std::vector<SceneHit> overlapHits;
     int nOverlap = OverlapCapsule(map, inflCaps, overlapHits, includeMask, params);
+    PHYS_TRACE(PHYS_CYL, "Fallback OverlapCapsule (r+=" << overlapInflation << ") returned nOverlap=" << nOverlap);
     if (nOverlap > 0)
     {
         outHits = overlapHits;
+        PHYS_TRACE(PHYS_CYL, "SweepCapsule EXIT using fallback overlaps count=" << outHits.size());
         return nOverlap;
     }
+    PHYS_TRACE(PHYS_CYL, "SweepCapsule EXIT no hits");
     return 0;
 }

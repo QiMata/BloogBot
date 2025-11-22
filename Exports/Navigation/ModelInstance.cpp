@@ -104,36 +104,24 @@ namespace VMAP
         iInvScale = 1.f / iScale;
     }
 
+    // Simplified to match reference server implementation
     bool ModelInstance::intersectRay(const G3D::Ray& ray, float& maxDist,
         bool stopAtFirstHit, bool ignoreM2Model) const
     {
         if (!iModel)
-        {
             return false;
-        }
 
         float time = ray.intersectionTime(iBound);
         if (time == G3D::inf())
-        {
             return false;
-        }
 
-        // Transform ray into model space correctly accounting for rotation and scale
         G3D::Vector3 p = iInvRot * (ray.origin() - iPos) * iInvScale;
-        G3D::Vector3 d = iInvRot * ray.direction();
-        d = d * iInvScale;
-        G3D::Ray modRay(p, d);
+        G3D::Ray modRay(p, iInvRot * ray.direction());
         float distance = maxDist * iInvScale;
 
         bool hit = iModel->IntersectRay(modRay, distance, stopAtFirstHit, ignoreM2Model);
-
         if (hit)
         {
-            // distance is in model-space. Compute the model-space hit point and convert to world BEFORE scaling the distance
-            G3D::Vector3 modelHitPoint = modRay.origin() + modRay.direction() * distance;
-            G3D::Vector3 internalHitPoint = (modelHitPoint * iScale) * iRot + iPos; // internal-space
-            G3D::Vector3 worldHitPoint = NavCoord::InternalToWorld(internalHitPoint);
-            // Convert model-space distance back to world-space distance and set maxDist accordingly
             distance *= iScale;
             maxDist = distance;
         }

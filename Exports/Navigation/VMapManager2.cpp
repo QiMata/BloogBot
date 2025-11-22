@@ -32,7 +32,7 @@ namespace VMAP
         StaticMapTree* tree = it->second;
         // Forward to SceneQuery implementation which operates on StaticMapTree
         QueryParams qp; qp.includeMask = includeMask;
-        SceneQuery::SweepCapsuleAll(*tree, capsuleStart, dir, distance, out, includeMask, qp);
+        SceneQuery::SweepCapsule(*tree, capsuleStart, dir, distance, out, includeMask, qp);
         return out;
     }
 
