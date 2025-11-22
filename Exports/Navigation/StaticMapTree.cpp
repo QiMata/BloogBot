@@ -12,7 +12,6 @@
 #include "VMapLog.h"
 #include <vector>
 #include "CapsuleCollision.h"
-#include "CylinderCollision.h" // for CylinderHelpers walkable config
 #include "CoordinateTransforms.h"
 
 namespace VMAP
@@ -85,7 +84,11 @@ namespace VMAP
     class MapRayCallback
     {
     public:
-        MapRayCallback(ModelInstance* val) : prims(val), hit(false) {}
+        MapRayCallback(ModelInstance* val) : prims(val), hit(false) {
+            hitCount = 0;
+            closestDist = std::numeric_limits<float>::max();
+            closestModel = nullptr;
+        }
         bool operator()(G3D::Ray const& ray, uint32_t entry, float& distance, bool pStopAtFirstHit = true, bool ignoreM2Model = false)
         {
             if (!prims)
@@ -96,159 +99,25 @@ namespace VMAP
             if (result)
             {
                 hit = true;
-                const ModelInstance& mi = prims[entry];
-                G3D::Vector3 hitI = ray.origin() + ray.direction() * distance;
-                G3D::Vector3 hitW = NavCoord::InternalToWorld(hitI);
-                G3D::Vector3 instPosW = NavCoord::InternalToWorld(mi.iPos);
-                const G3D::Vector3& rotDeg = mi.ModelSpawn::iRot;
-                PHYS_TRACE(PHYS_CYL, "Raycast hit model='" << mi.name << "' id=" << mi.ID
-                    << " adt=" << mi.adtId
-                    << " dist=" << distance
-                    << " hitW=(" << hitW.x << "," << hitW.y << "," << hitW.z << ")"
-                    << " instPosW=(" << instPosW.x << "," << instPosW.y << "," << instPosW.z << ")"
-                    << " rotEulerDeg=(" << rotDeg.x << "," << rotDeg.y << "," << rotDeg.z << ")"
-                    << " scale=" << mi.iScale);
-
-                // Attempt to find which group and triangle was hit (if available)
-                if (mi.iModel)
+                ++hitCount;
+                if (distance < closestDist)
                 {
-                    const WorldModel* wm = mi.iModel.get();
-                    int foundTri = -1;
-                    int foundGroup = -1;
-                    for (uint32_t gi = 0; ; ++gi)
-                    {
-                        const GroupModel* gm = wm->GetGroupModel(gi);
-                        if (!gm) break;
-                        int triIdx = gm->GetLastHitTriangle();
-                        if (triIdx >= 0)
-                        {
-                            foundGroup = (int)gi;
-                            foundTri = triIdx;
-                            break;
-                        }
-                    }
-                    if (foundTri >= 0)
-                    {
-                        // Fetch triangle vertex indices and positions
-                        const GroupModel* gm = wm->GetGroupModel((uint32_t)foundGroup);
-                        if (gm)
-                        {
-                            const auto& verts = gm->GetVertices();
-                            const auto& tris = gm->GetTriangles();
-                            if (foundTri < (int)tris.size())
-                            {
-                                const MeshTriangle& mt = tris[foundTri];
-                                G3D::Vector3 v0_model = verts[mt.idx0];
-                                G3D::Vector3 v1_model = verts[mt.idx1];
-                                G3D::Vector3 v2_model = verts[mt.idx2];
-
-                                // Transform model-space vertices to internal (instance) space
-                                G3D::Vector3 v0_internal = mi.TransformToWorld(v0_model);
-                                G3D::Vector3 v1_internal = mi.TransformToWorld(v1_model);
-                                G3D::Vector3 v2_internal = mi.TransformToWorld(v2_model);
-
-                                // Convert internal to actual world coordinates
-                                G3D::Vector3 v0_world = NavCoord::InternalToWorld(v0_internal);
-                                G3D::Vector3 v1_world = NavCoord::InternalToWorld(v1_internal);
-                                G3D::Vector3 v2_world = NavCoord::InternalToWorld(v2_internal);
-
-                                // Compute triangle normal in world space
-                                G3D::Vector3 tn = (v1_world - v0_world).cross(v2_world - v0_world);
-                                float tlen = tn.magnitude(); if (tlen > 0.00001f) tn /= tlen; else tn = G3D::Vector3(0,0,1);
-
-                                // Compute additional diagnostic quantities: centroid, area, plane distance of hit, barycentric coords
-                                G3D::Vector3 centroid_world = (v0_world + v1_world + v2_world) / 3.0f;
-                                float area = 0.5f * ((v1_world - v0_world).cross(v2_world - v0_world)).magnitude();
-                                float planeDist = (hitW - v0_world).dot(tn); // distance (signed) from hit to triangle plane
-
-                                // Barycentric coordinates of hitW on triangle (projected onto triangle plane)
-                                G3D::Vector3 v0v = v1_world - v0_world;
-                                G3D::Vector3 v1v = v2_world - v0_world;
-                                G3D::Vector3 v2v = hitW - v0_world;
-                                float d00 = v0v.dot(v0v);
-                                float d01 = v0v.dot(v1v);
-                                float d11 = v1v.dot(v1v);
-                                float d20 = v2v.dot(v0v);
-                                float d21 = v2v.dot(v1v);
-                                float denom = d00 * d11 - d01 * d01;
-                                float baryU=0.0f, baryV=0.0f, baryW=0.0f;
-                                if (std::abs(denom) > 1e-9f)
-                                {
-                                    baryV = (d11 * d20 - d01 * d21) / denom;
-                                    baryW = (d00 * d21 - d01 * d20) / denom;
-                                    baryU = 1.0f - baryV - baryW;
-                                }
-
-                                PHYS_TRACE(PHYS_CYL, "  tri found group=" << foundGroup << " tri=" << foundTri
-                                    << " instId=" << mi.ID
-                                    // model-space
-                                    << " v0_model=(" << v0_model.x << "," << v0_model.y << "," << v0_model.z << ")"
-                                    << " v1_model=(" << v1_model.x << "," << v1_model.y << "," << v1_model.z << ")"
-                                    << " v2_model=(" << v2_model.x << "," << v2_model.y << "," << v2_model.z << ")"
-                                    // internal (instance/transformed) space
-                                    << " v0_internal=(" << v0_internal.x << "," << v0_internal.y << "," << v0_internal.z << ")"
-                                    << " v1_internal=(" << v1_internal.x << "," << v1_internal.y << "," << v1_internal.z << ")"
-                                    << " v2_internal=(" << v2_internal.x << "," << v2_internal.y << "," << v2_internal.z << ")"
-                                    // world space
-                                    << " v0_world=(" << v0_world.x << "," << v0_world.y << "," << v0_world.z << ")"
-                                    << " v1_world=(" << v1_world.x << "," << v1_world.y << "," << v1_world.z << ")"
-                                    << " v2_world=(" << v2_world.x << "," << v2_world.y << "," << v2_world.z << ")"
-                                    << " triNormalW=(" << tn.x << "," << tn.y << "," << tn.z << ")"
-                                    << " centroidW=(" << centroid_world.x << "," << centroid_world.y << "," << centroid_world.z << ")"
-                                    << " area=" << area
-                                    << " planeDist=" << planeDist
-                                    << " bary=(" << baryU << "," << baryV << "," << baryW << ")");
-                            }
-                        }
-                    }
+                    closestDist = distance;
+                    closestModel = &prims[entry];
                 }
             }
             return result;
         }
         bool didHit() const { return hit; }
+        int getHitCount() const { return hitCount; }
+        const ModelInstance* getClosestModel() const { return closestModel; }
+        float getClosestDist() const { return closestDist; }
     protected:
-        ModelInstance* prims; bool hit; bool los; };
-
-    class StaticMeshView : public CapsuleCollision::TriangleMeshView
-    {
-    public:
-        StaticMeshView(const BIH* tree, const ModelInstance* instances, uint32_t instanceCount)
-            : m_tree(tree), m_instances(instances), m_instanceCount(instanceCount) { m_cache.reserve(1024); }
-        void query(const CapsuleCollision::AABB& box, int* outIndices, int& count, int maxCount) const override
-        {
-            count = 0; m_cache.clear();
-            if (!m_tree || !m_instances || m_instanceCount == 0 || !outIndices || maxCount <= 0)
-                return;
-            G3D::Vector3 qlo(box.min.x, box.min.y, box.min.z);
-            G3D::Vector3 qhi(box.max.x, box.max.y, box.max.z);
-            const G3D::Vector3 qInflate(0.02f,0.02f,0.02f);
-            G3D::AABox queryBox(qlo - qInflate, qhi + qInflate);
-            const uint32_t cap = std::min<uint32_t>(m_instanceCount, 16384);
-            std::vector<uint32_t> instIdx(cap); uint32_t instCount = 0;
-            if (!m_tree->QueryAABB(queryBox, instIdx.data(), instCount, cap) || instCount == 0)
-                return;
-            for (uint32_t k=0;k<instCount;++k)
-            {
-                uint32_t idx = instIdx[k]; if (idx >= m_instanceCount) continue; const ModelInstance& inst = m_instances[idx];
-                if (!inst.iModel) continue; if (!inst.iBound.intersects(queryBox)) continue;
-                G3D::Vector3 wLo = queryBox.low(); G3D::Vector3 wHi = queryBox.high();
-                G3D::Vector3 corners[8] = { {wLo.x,wLo.y,wLo.z},{wHi.x,wLo.y,wLo.z},{wLo.x,wHi.y,wLo.z},{wHi.x,wHi.y,wLo.z},{wLo.x,wLo.y,wHi.z},{wHi.x,wLo.y,wHi.z},{wLo.x,wHi.y,wHi.z},{wHi.x,wHi.y,wHi.z} };
-                G3D::Vector3 c0 = inst.iInvRot * ((corners[0]-inst.iPos) * inst.iInvScale);
-                G3D::AABox modelBox(c0,c0);
-                for (int ci=1;ci<8;++ci) modelBox.merge(inst.iInvRot * ((corners[ci]-inst.iPos) * inst.iInvScale));
-                const G3D::Vector3 mInflate(0.02f,0.02f,0.02f); modelBox = G3D::AABox(modelBox.low()-mInflate, modelBox.high()+mInflate);
-                std::vector<G3D::Vector3> vertices; std::vector<uint32_t> indices; bool haveBoundsData = inst.iModel->GetMeshDataInBounds(modelBox, vertices, indices);
-                if (!haveBoundsData) { if (!inst.iModel->GetAllMeshData(vertices, indices)) continue; }
-                auto emitTriangle = [&](const G3D::Vector3& a,const G3D::Vector3& b,const G3D::Vector3& c)
-                { G3D::Vector3 wa=(a*inst.iScale)*inst.iRot+inst.iPos; G3D::Vector3 wb=(b*inst.iScale)*inst.iRot+inst.iPos; G3D::Vector3 wc=(c*inst.iScale)*inst.iRot+inst.iPos; CapsuleCollision::Triangle T; T.a={wa.x,wa.y,wa.z}; T.b={wb.x,wb.y,wb.z}; T.c={wc.x,wc.y,wc.z}; T.doubleSided=true; int triIndex=(int)m_cache.size(); m_cache.push_back(T); if (count < maxCount) outIndices[count++] = triIndex; };
-                size_t triCount = indices.size()/3; for (size_t t=0;t<triCount;++t)
-                { uint32_t i0=indices[t*3+0], i1=indices[t*3+1], i2=indices[t*3+2]; if (i0>=vertices.size()||i1>=vertices.size()||i2>=vertices.size()) continue; const G3D::Vector3& a=vertices[i0]; const G3D::Vector3& b=vertices[i1]; const G3D::Vector3& c=vertices[i2]; if (!haveBoundsData){ G3D::Vector3 lo=a.min(b).min(c); G3D::Vector3 hi=a.max(b).max(c); if(!G3D::AABox(lo,hi).intersects(modelBox)) continue; } emitTriangle(a,b,c); if (count >= maxCount) break; }
-                if (count >= maxCount) break;
-            }
-        }
-        const CapsuleCollision::Triangle& tri(int idx) const override { return m_cache[idx]; }
-        int triangleCount() const override { return (int)m_cache.size(); }
-    private: const BIH* m_tree; const ModelInstance* m_instances; uint32_t m_instanceCount; mutable std::vector<CapsuleCollision::Triangle> m_cache; };
+        ModelInstance* prims; bool hit; bool los;
+        int hitCount;
+        float closestDist;
+        const ModelInstance* closestModel;
+    };
 
     StaticMapTree::StaticMapTree(uint32_t mapId, const std::string& basePath)
         : iMapID(mapId), iBasePath(basePath), iIsTiled(false), iTreeValues(nullptr), iNTreeValues(0)
@@ -284,182 +153,6 @@ namespace VMAP
     void StaticMapTree::UnloadMap(VMapManager2* vm)
     { if(iTreeValues){ for(uint32_t i=0;i<iNTreeValues;++i) iTreeValues[i].setUnloaded(); } iLoadedTiles.clear(); iLoadedSpawns.clear(); }
 
-    CylinderIntersection StaticMapTree::IntersectCylinder(const Cylinder& cyl) const
-    { CylinderIntersection result; if (!iTreeValues || iNTreeValues == 0) return result; MapCylinderCallback callback(iTreeValues, cyl); iTree.intersectPoint(cyl.getCenter(), callback); return callback.bestIntersection; }
-
-    // Enhanced logging version
-    std::vector<CylinderSweepHit> StaticMapTree::SweepCylinder(const Cylinder& cyl, const G3D::Vector3& sweepDir, float sweepDistance) const
-    {
-        std::vector<CylinderSweepHit> allHits; if (!iTreeValues || iNTreeValues == 0){ return allHits; }
-        G3D::AABox sweepBounds = cyl.getBounds(); Cylinder endCyl(cyl.base + sweepDir * sweepDistance, cyl.axis, cyl.radius, cyl.height); sweepBounds.merge(endCyl.getBounds());
-        const uint32_t cap = std::min<uint32_t>(iNTreeValues, 8192); std::vector<uint32_t> indices(cap); uint32_t count=0;
-
-        bool any = iTree.QueryAABB(sweepBounds, indices.data(), count, cap);
-        if(!any || count==0){ return allHits; }
-
-        // Detailed candidate logging to help diagnose why BIH returned candidates but no hits
-        PHYS_TRACE(PHYS_CYL, "[MapTree::Sweep] BIH candidates=" << count << " sweepBoundsLo=(" << sweepBounds.low().x << "," << sweepBounds.low().y << "," << sweepBounds.low().z << ") sweepBoundsHi=(" << sweepBounds.high().x << "," << sweepBounds.high().y << "," << sweepBounds.high().z << ")");
-        size_t toLog = std::min<uint32_t>(count, 8u);
-        for (size_t i=0;i<toLog;++i)
-        {
-            uint32_t idx = indices[i];
-            if (idx >= iNTreeValues)
-            {
-                PHYS_TRACE(PHYS_CYL, "  cand["<<i<<"] idx="<<idx<<" (OOB)");
-                continue;
-            }
-            const ModelInstance& inst = iTreeValues[idx];
-            G3D::AABox b = inst.getBounds();
-            G3D::Vector3 lo = b.low(); G3D::Vector3 hi = b.high();
-            PHYS_TRACE(PHYS_CYL, "  cand["<<i<<"] idx="<<idx<<" name='"<<inst.name<<"' id="<<inst.ID<<" adt="<<inst.adtId
-                << " loaded=" << (inst.iModel?1:0)
-                << " bLo=("<<lo.x<<","<<lo.y<<","<<lo.z<<") bHi=("<<hi.x<<","<<hi.y<<","<<hi.z<<")");
-        }
-
-        MapCylinderSweepCallback callback(iTreeValues, cyl, sweepDir, sweepDistance);
-        uint32_t processed=0;
-        G3D::Vector3 segA = cyl.base;
-        G3D::Vector3 segB = cyl.base + sweepDir * sweepDistance;
-        const float eps = 0.02f; // small epsilon
-        for (uint32_t i=0;i<count;++i){
-            uint32_t idx=indices[i];
-            if(idx>=iNTreeValues) continue;
-            ModelInstance& inst = iTreeValues[idx];
-            if(!inst.iModel) continue;
-
-            // Fast reject: compute minimal distance between instance AABB and sweep segment
-            G3D::AABox ib = inst.getBounds();
-            float minDistSq = SegmentAABBDistSq(segA, segB, ib);
-            float radiusLimit = (cyl.radius + eps);
-            if (minDistSq > radiusLimit * radiusLimit)
-            {
-                // skip this instance - its bounds are farther than the capsule radius + eps from the sweep segment
-                continue;
-            }
-
-            size_t prev = callback.allHits.size();
-            callback(cyl.base, idx);
-            size_t added = callback.allHits.size() - prev;
-            (void)added; // suppress unused warning if compiled without logs
-            ++processed;
-        }
-        allHits = std::move(callback.allHits); std::sort(allHits.begin(), allHits.end());
-        // Single synopsis
-        PHYS_TRACE(PHYS_CYL, "[MapTree::Sweep] hits="<<allHits.size()<<" processed="<<processed);
-        return allHits;
-    }
-
-    bool StaticMapTree::CheckCylinderCollision(const Cylinder& cyl, float& outContactHeight, G3D::Vector3& outContactNormal, ModelInstance** outHitInstance) const
-    {
-        // Initial guards and basic info
-        if (!iTreeValues || iNTreeValues == 0)
-        {
-            PHYS_TRACE(PHYS_CYL, "[CylCol] abort: no instances (iNTreeValues=" << iNTreeValues << ")");
-            return false;
-        }
-
-        // Log cylinder parameters and broad-phase bounds
-        G3D::AABox bounds = cyl.getBounds();
-        PHYS_TRACE(PHYS_CYL, "[CylCol] centerI=(" << cyl.getCenter().x << "," << cyl.getCenter().y << "," << cyl.getCenter().z
-            << ") baseI=(" << cyl.base.x << "," << cyl.base.y << "," << cyl.base.z
-            << ") axis=(" << cyl.axis.x << "," << cyl.axis.y << "," << cyl.axis.z
-            << ") r=" << cyl.radius << " h=" << cyl.height
-            << " boundsLo=(" << bounds.low().x << "," << bounds.low().y << "," << bounds.low().z
-            << ") hi=(" << bounds.high().x << "," << bounds.high().y << "," << bounds.high().z << ") entries=" << iNTreeValues);
-
-        // Gather BIH candidates using bounds to understand empty hits
-        const uint32_t cap = std::min<uint32_t>(iNTreeValues, 8192);
-        std::vector<uint32_t> indices(cap); uint32_t count = 0;
-        bool any = iTree.QueryAABB(bounds, indices.data(), count, cap);
-        if (!any || count == 0)
-        {
-            PHYS_TRACE(PHYS_CYL, "[CylCol] BIH AABB query returned 0 candidates");
-        }
-        else
-        {
-            PHYS_TRACE(PHYS_CYL, "[CylCol] BIH candidates=" << count);
-            size_t toLog = std::min<size_t>(count, 8);
-            for (size_t i = 0; i < toLog; ++i)
-            {
-                uint32_t idx = indices[i];
-                if (idx >= iNTreeValues) { PHYS_TRACE(PHYS_CYL, "  cand["<<i<<"] idx="<<idx<<" (OOB)"); continue; }
-                const ModelInstance& inst = iTreeValues[idx];
-                G3D::Vector3 lo = inst.getBounds().low();
-                G3D::Vector3 hi = inst.getBounds().high();
-                PHYS_TRACE(PHYS_CYL, "  cand["<<i<<"] idx="<<idx<<" name='"<<inst.name<<"' id="<<inst.ID<<" adt="<<inst.adtId
-                    << " loaded=" << (inst.iModel?1:0)
-                    << " bLo=("<<lo.x<<","<<lo.y<<","<<lo.z<<") bHi=("<<hi.x<<","<<hi.y<<","<<hi.z<<")");
-            }
-        }
-
-        // Run the existing point-based traversal
-        MapCylinderCallback callback(iTreeValues, cyl);
-        iTree.intersectPoint(cyl.getCenter(), callback);
-
-        if (callback.bestIntersection.hit)
-        {
-            outContactHeight = callback.bestIntersection.contactHeight;
-            outContactNormal = callback.bestIntersection.contactNormal;
-            if (outHitInstance) *outHitInstance = callback.hitInstance;
-
-            const ModelInstance* mi = callback.hitInstance;
-            PHYS_TRACE(PHYS_CYL, "[CylCol] HIT h=" << outContactHeight
-                << " n=(" << outContactNormal.x << "," << outContactNormal.y << "," << outContactNormal.z << ")"
-                << (mi? (std::string(" inst='") + mi->name + "' id=" + std::to_string(mi->ID)).c_str() : " inst=null"));
-            return true;
-        }
-
-        // If no hit, optionally try per-candidate detailed checks to understand why
-        if (any && count > 0)
-        {
-            int tested = 0, localHits = 0; float bestH = -G3D::inf(); G3D::Vector3 bestN(0,0,1); const ModelInstance* bestInst = nullptr;
-            size_t toTry = std::min<uint32_t>(count, 16u);
-            for (size_t i = 0; i < toTry; ++i)
-            {
-                uint32_t idx = indices[i]; if (idx >= iNTreeValues) continue;
-                ModelInstance& inst = iTreeValues[idx]; if (!inst.iModel) continue;
-                ++tested;
-                CylinderIntersection r = inst.IntersectCylinder(cyl);
-                if (r.hit)
-                {
-                    ++localHits;
-                    if (r.contactHeight > bestH) { bestH = r.contactHeight; bestN = r.contactNormal; bestInst = &inst; }
-                    PHYS_TRACE(PHYS_CYL, "  perInstHit idx="<<idx<<" id="<<inst.ID<<" h="<<r.contactHeight<<" nZ="<<r.contactNormal.z);
-                }
-                else
-                {
-                    PHYS_TRACE(PHYS_CYL, "  perInstNoHit idx="<<idx<<" id="<<inst.ID);
-                }
-            }
-            if (localHits > 0)
-            {
-                PHYS_TRACE(PHYS_CYL, "[CylCol] WARN: intersectPoint reported 0 but per-instance tests found hits="<<localHits
-                    << " bestH="<<bestH<<" bestN.z="<<bestN.z<<" inst="<<(bestInst?bestInst->ID:0));
-            }
-            else
-            {
-                PHYS_TRACE(PHYS_CYL, "[CylCol] No per-instance hits among first "<<toTry<<" candidates");
-            }
-        }
-        else
-        {
-            PHYS_TRACE(PHYS_CYL, "[CylCol] No candidates to test per-instance");
-        }
-
-        return false;
-    }
-
-    bool StaticMapTree::CanCylinderFitAtPosition(const Cylinder& cyl, float tolerance) const
-    { if (!iTreeValues || iNTreeValues == 0) return true; const float FOOT_ALLOW=0.20f; const float HEAD_CLEAR_MARGIN=0.30f; const float walkableCosMin = VMAP::CylinderHelpers::GetWalkableCosMin(); Cylinder broad(cyl.base, cyl.axis, cyl.radius + tolerance, cyl.height); CylinderIntersection quickHit = IntersectCylinder(broad); if(!quickHit.hit) return true; float sweepDist = cyl.height + FOOT_ALLOW + 0.10f; Cylinder sweepCyl(G3D::Vector3(cyl.base.x,cyl.base.y,cyl.base.z + cyl.height + 0.05f), cyl.axis, cyl.radius + tolerance * 0.5f, cyl.height); std::vector<CylinderSweepHit> hits = SweepCylinder(sweepCyl, G3D::Vector3(0,0,-1), sweepDist); bool hasAcceptableFloor=false; bool blockingCeiling=false; float nearestCeilingRel=9999.0f; float baseZ=cyl.base.z; for(const auto& h : hits){ float rel = h.height - baseZ; if(rel < -0.05f) continue; if(rel > cyl.height + 0.05f) continue; if(rel <= FOOT_ALLOW && h.walkable && h.normal.z >= walkableCosMin){ hasAcceptableFloor=true; continue; } if(rel >= cyl.height - HEAD_CLEAR_MARGIN && h.normal.z <= 0.3f){ blockingCeiling=true; nearestCeilingRel = std::min(nearestCeilingRel, rel); } }
-        if(!hasAcceptableFloor && quickHit.hit){ float qRel = quickHit.contactHeight - baseZ; if(quickHit.contactNormal.z >= walkableCosMin && qRel >= -0.25f && qRel <= cyl.height * 0.6f){ hasAcceptableFloor=true; } else if(qRel >= cyl.height - HEAD_CLEAR_MARGIN && quickHit.contactNormal.z <= 0.3f){ blockingCeiling=true; nearestCeilingRel = std::min(nearestCeilingRel, qRel); } }
-        if(!hasAcceptableFloor && !blockingCeiling && hits.empty()) hasAcceptableFloor = true; bool fit = hasAcceptableFloor && !blockingCeiling; LOG_INFO("CanCylinderFitAtPosition SWEEP baseZ="<<baseZ<<" floor="<<(hasAcceptableFloor?1:0)<<" blockCeil="<<(blockingCeiling?1:0)<<" nearestCeilRel="<<(nearestCeilingRel==9999.0f?-1.0f:nearestCeilingRel)<<" h="<<cyl.height<<" r="<<cyl.radius<<" quickRel="<<(quickHit.hit?(quickHit.contactHeight - baseZ):-999.0f)<<" quickNz="<<(quickHit.hit?quickHit.contactNormal.z:-1.0f)<<" hits="<<hits.size()); return fit; }
-
-    bool StaticMapTree::FindCylinderWalkableSurface(const Cylinder& cyl, float currentHeight, float maxStepUp, float maxStepDown, float& outHeight, G3D::Vector3& outNormal) const
-    { if (!iTreeValues || iNTreeValues == 0) return false; G3D::Vector3 sweepDir(0,0,-1); float sweepDistance = maxStepUp + maxStepDown; Cylinder sweepCyl(G3D::Vector3(cyl.base.x,cyl.base.y,currentHeight + maxStepUp), cyl.axis, cyl.radius, cyl.height); std::vector<CylinderSweepHit> hits = SweepCylinder(sweepCyl, sweepDir, sweepDistance); return CylinderCollision::FindBestWalkableSurface(cyl, hits, currentHeight, maxStepUp, maxStepDown, outHeight, outNormal); }
-
-    void StaticMapTree::GetCylinderCollisionCandidates(const Cylinder& cyl, std::vector<ModelInstance*>& outInstances) const
-    { outInstances.clear(); if (!iTreeValues || iNTreeValues == 0) return; G3D::AABox bounds = cyl.getBounds(); const uint32_t cap = std::min<uint32_t>(iNTreeValues, 8192); std::vector<uint32_t> indices(cap); uint32_t count=0; bool any = iTree.QueryAABB(bounds, indices.data(), count, cap); if(!any || count==0) return; outInstances.reserve(count); for (uint32_t i=0;i<count;++i){ uint32_t idx=indices[i]; if(idx >= iNTreeValues) continue; if(!iTreeValues[idx].iModel) continue; if(!iTreeValues[idx].getBounds().intersects(bounds)) continue; outInstances.push_back(&iTreeValues[idx]); } }
-
     bool StaticMapTree::isInLineOfSight(const G3D::Vector3& pos1, const G3D::Vector3& pos2, bool ignoreM2Model) const
     { if(!iTreeValues || iNTreeValues==0) return true; float maxDist=(pos2-pos1).magnitude(); if(maxDist < 0.001f) return true; G3D::Ray ray = G3D::Ray::fromOriginAndDirection(pos1,(pos2-pos1)/maxDist); float intersectDist = maxDist; bool hit = getIntersectionTime(ray, intersectDist, true, ignoreM2Model); return !hit; }
 
@@ -467,7 +160,19 @@ namespace VMAP
     { if(!iTreeValues || iNTreeValues==0){ resultHitPos = pos2; return false; } float maxDist = (pos2-pos1).magnitude(); if (maxDist < 0.001f){ resultHitPos=pos2; return false; } G3D::Vector3 dir=(pos2-pos1)/maxDist; G3D::Ray ray=G3D::Ray::fromOriginAndDirection(pos1,dir); float distance=maxDist; if(getIntersectionTime(ray,distance,true,false)){ resultHitPos=pos1+dir*distance; if(modifyDist>0 && distance > modifyDist) resultHitPos = pos1 + dir * (distance - modifyDist); return true; } resultHitPos=pos2; return false; }
 
     float StaticMapTree::getHeight(const G3D::Vector3& pos, float maxSearchDist) const
-    { float height = -G3D::inf(); if(!iTreeValues || iNTreeValues==0) return height; int loadedCount=0; for(uint32_t i=0;i<iNTreeValues;++i) if(iTreeValues[i].iModel) loadedCount++; G3D::Vector3 rayStart=pos; G3D::Ray ray(rayStart, G3D::Vector3(0,0,-1)); float distance = maxSearchDist * 2; if(getIntersectionTime(ray,distance,false,false)) height = pos.z - distance; return height; }
+    {
+        // WoW emulator style: single downward raycast, return closest hit Z below query point
+        if (!iTreeValues || iNTreeValues == 0)
+            return -std::numeric_limits<float>::infinity();
+        G3D::Ray ray(pos, G3D::Vector3(0,0,-1));
+        float distance = maxSearchDist * 2;
+        if (getIntersectionTime(ray, distance, false, false))
+        {
+            // Return Z of hit point (internal coordinates)
+            return pos.z - distance;
+        }
+        return -std::numeric_limits<float>::infinity();
+    }
 
     bool StaticMapTree::getAreaInfo(G3D::Vector3& pos, uint32_t& flags, int32_t& adtId, int32_t& rootId, int32_t& groupId) const
     { class AreaInfoCallback { public: AreaInfoCallback(ModelInstance* val):prims(val){} void operator()(const G3D::Vector3& point,uint32_t entry){ if(!prims || !prims[entry].iModel) return; prims[entry].intersectPoint(point,aInfo);} ModelInstance* prims; AreaInfo aInfo; }; AreaInfoCallback cb(iTreeValues); iTree.intersectPoint(pos, cb); if (cb.aInfo.result){ flags=cb.aInfo.flags; adtId=cb.aInfo.adtId; rootId=cb.aInfo.rootId; groupId=cb.aInfo.groupId; pos.z=cb.aInfo.ground_Z; return true; } return false; }
@@ -477,108 +182,18 @@ namespace VMAP
 
     bool StaticMapTree::getIntersectionTime(G3D::Ray const& pRay, float& pMaxDist, bool pStopAtFirstHit, bool ignoreM2Model) const
     {
-        float distance = pMaxDist; MapRayCallback cb(iTreeValues); iTree.intersectRay(pRay, cb, distance, pStopAtFirstHit, ignoreM2Model); if(cb.didHit()) pMaxDist = distance; return cb.didHit();
-    }
-
-    bool StaticMapTree::getIntersectionTime(G3D::Ray const& pRay, float& pMaxDist, bool pStopAtFirstHit, bool ignoreM2Model,
-        G3D::Vector3* outHitPointW, G3D::Vector3* outHitNormalW, uint32_t* outInstanceId, int* outTriIndex) const
-    {
-        // Default outputs
-        if (outHitPointW) *outHitPointW = G3D::Vector3(0,0,0);
-        if (outHitNormalW) *outHitNormalW = G3D::Vector3(0,0,1);
-        if (outInstanceId) *outInstanceId = 0;
-        if (outTriIndex) *outTriIndex = -1;
-
         float distance = pMaxDist;
         MapRayCallback cb(iTreeValues);
         iTree.intersectRay(pRay, cb, distance, pStopAtFirstHit, ignoreM2Model);
-        if (!cb.didHit()) return false;
-
-        // cb logged the hit earlier and distance is in internal units along pRay.direction
-        // Compute hit point and try to extract triangle info we logged earlier via ModelInstance's last-hit tracking
-        G3D::Vector3 hitI = pRay.origin() + pRay.direction() * distance;
-        G3D::Vector3 hitW = NavCoord::InternalToWorld(hitI);
-
-        // Fill out outputs
-        if (outHitPointW) *outHitPointW = hitW;
-
-        // Attempt to get normal and triangle index from the hittable instance if available
-        // We will search the instances that were used; rely on GroupModel::GetLastHitTriangle populated earlier
-        bool found = false;
-        for (uint32_t i = 0; i < iNTreeValues; ++i)
-        {
-            const ModelInstance& mi = iTreeValues[i];
-            if (!mi.iModel) continue;
-            if (!mi.iBound.contains(hitI)) continue;
-            const WorldModel* wm = mi.iModel.get();
-            // Iterate group models to find any that recorded a last hit triangle
-            for (uint32_t gi = 0; ; ++gi)
-            {
-                const GroupModel* gm = wm->GetGroupModel(gi);
-                if (!gm) break;
-                int triIdx = gm->GetLastHitTriangle();
-                if (triIdx >= 0)
-                {
-                    // Found triangle within this group; compute its world normal
-                    const auto& tris = gm->GetTriangles();
-                    const auto& verts = gm->GetVertices();
-                    if (triIdx < (int)tris.size())
-                    {
-                        const MeshTriangle& mt = tris[triIdx];
-                        if (mt.idx0 < verts.size() && mt.idx1 < verts.size() && mt.idx2 < verts.size())
-                        {
-                            G3D::Vector3 v0 = verts[mt.idx0]; G3D::Vector3 v1 = verts[mt.idx1]; G3D::Vector3 v2 = verts[mt.idx2];
-                            G3D::Vector3 wv0 = mi.TransformToWorld(v0);
-                            G3D::Vector3 wv1 = mi.TransformToWorld(v1);
-                            G3D::Vector3 wv2 = mi.TransformToWorld(v2);
-                            G3D::Vector3 triN = (wv1 - wv0).cross(wv2 - wv0);
-                            float len = triN.magnitude(); if (len > 1e-6f) triN /= len; else triN = G3D::Vector3(0,0,1);
-                            if (triN.z < 0.0f) triN = -triN;
-                            if (outHitNormalW) *outHitNormalW = triN;
-                            if (outInstanceId) *outInstanceId = mi.ID;
-                            if (outTriIndex) *outTriIndex = triIdx;
-                            found = true;
-
-                            // Additional diagnostic logging: centroid, area, plane distance, barycentric coords
-                            G3D::Vector3 centroid = (wv0 + wv1 + wv2) / 3.0f;
-                            float area = 0.5f * ((wv1 - wv0).cross(wv2 - wv0)).magnitude();
-                            float planeDist = (hitW - wv0).dot(triN);
-                            G3D::Vector3 v0v = wv1 - wv0;
-                            G3D::Vector3 v1v = wv2 - wv0;
-                            G3D::Vector3 v2v = hitW - wv0;
-                            float d00 = v0v.dot(v0v);
-                            float d01 = v0v.dot(v1v);
-                            float d11 = v1v.dot(v1v);
-                            float d20 = v2v.dot(v0v);
-                            float d21 = v2v.dot(v1v);
-                            float denom = d00 * d11 - d01 * d01;
-                            float baryU=0.0f, baryV=0.0f, baryW=0.0f;
-                            if (std::abs(denom) > 1e-9f)
-                            {
-                                baryV = (d11 * d20 - d01 * d21) / denom;
-                                baryW = (d00 * d21 - d01 * d20) / denom;
-                                baryU = 1.0f - baryV - baryW;
-                            }
-                            PHYS_TRACE(PHYS_CYL, "  getIntersectionTime triDetails instId=" << mi.ID << " tri=" << triIdx << " triLocal=" << triIdx
-                                << " v0w=("<<wv0.x<<","<<wv0.y<<","<<wv0.z<<")"
-                                << " v1w=("<<wv1.x<<","<<wv1.y<<","<<wv1.z<<")"
-                                << " v2w=("<<wv2.x<<","<<wv2.y<<","<<wv2.z<<")"
-                                << " triNormalW=("<<triN.x<<","<<triN.y<<","<<triN.z<<")"
-                                << " centroidW=("<<centroid.x<<","<<centroid.y<<","<<centroid.z<<")"
-                                << " area="<<area<<" planeDist="<<planeDist
-                                << " bary=("<<baryU<<","<<baryV<<","<<baryW<<")");
-                        }
-                    }
-                    break;
-                }
-            }
-            if (found) break;
+        if(cb.didHit()) pMaxDist = distance;
+        // Summary log: number of hits and closest model
+        if (cb.getHitCount() > 0 && cb.getClosestModel()) {
+            PHYS_TRACE(PHYS_CYL, "[RaycastSummary] hits=" << cb.getHitCount() << " closest='" << cb.getClosestModel()->name << "' id=" << cb.getClosestModel()->ID << " dist=" << cb.getClosestDist());
         }
-
-        // Update caller's maxDist to new clipped value (convert internal ray param back to maxDist in same units as pMaxDist expected)
-        pMaxDist = distance;
-        return true;
+        return cb.didHit();
     }
+
+    // Removed extended getIntersectionTime overload for WoW emulator compatibility
 
     uint32_t StaticMapTree::packTileID(uint32_t tileX, uint32_t tileY) { return (tileX << 16) | tileY; }
     void StaticMapTree::unpackTileID(uint32_t ID, uint32_t& tileX, uint32_t& tileY) { tileX=(ID>>16); tileY=(ID & 0xFFFF); }

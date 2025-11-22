@@ -9,7 +9,6 @@
 #include "Vector3.h"
 #include "Ray.h"
 #include "ModelInstance.h"
-#include "CylinderCollision.h"
 #include "CoordinateTransforms.h"
 
 namespace VMAP
@@ -17,73 +16,6 @@ namespace VMAP
     class VMapManager2;
     class GroupModel;
     class WorldModel;
-
-    // Callback for cylinder collision with map
-    class MapCylinderCallback
-    {
-    public:
-        MapCylinderCallback(ModelInstance* val, const Cylinder& cyl)
-            : prims(val), cylinder(cyl), bestIntersection() {}
-
-        bool operator()(const G3D::Vector3& point, uint32_t entry)
-        {
-            CylinderIntersection result = prims[entry].IntersectCylinder(cylinder);
-            if (result.hit)
-            {
-                // stamp instance id for diagnostics
-                result.instanceId = prims[entry].ID;
-                if (!bestIntersection.hit || result.contactHeight > bestIntersection.contactHeight)
-                {
-                    bestIntersection = result;
-                    hitInstance = &prims[entry];
-                }
-                return true;
-            }
-            return false;
-        }
-
-        ModelInstance* prims;
-        const Cylinder& cylinder;
-        CylinderIntersection bestIntersection;
-        ModelInstance* hitInstance = nullptr;
-    };
-
-    // Callback for cylinder sweep through map
-    class MapCylinderSweepCallback
-    {
-    public:
-        MapCylinderSweepCallback(ModelInstance* val, const Cylinder& cyl,
-            const G3D::Vector3& dir, float dist)
-            : prims(val), cylinder(cyl), sweepDir(dir), sweepDistance(dist) {}
-
-        void operator()(const G3D::Vector3& point, uint32_t entry)
-        {
-            // Convert internal cylinder and direction to world space before calling ModelInstance
-            Cylinder worldCyl(
-                NavCoord::InternalToWorld(cylinder.base),
-                cylinder.axis,
-                cylinder.radius,
-                cylinder.height);
-            G3D::Vector3 worldSweepDir = NavCoord::InternalDirToWorld(sweepDir);
-
-            std::vector<CylinderSweepHit> modelHits = prims[entry].SweepCylinder(
-                worldCyl, worldSweepDir, sweepDistance);
-
-            // Merge hits from this model
-            for (auto& h : modelHits)
-            {
-                // stamp instance id on unified query record for diagnostics
-                h.q.instanceId = prims[entry].ID;
-                allHits.push_back(h);
-            }
-        }
-
-        ModelInstance* prims;
-        const Cylinder& cylinder;
-        G3D::Vector3 sweepDir;
-        float sweepDistance;
-        std::vector<CylinderSweepHit> allHits;
-    };
 
     class StaticMapTree
     {
@@ -123,30 +55,9 @@ namespace VMAP
 
         bool getIntersectionTime(const G3D::Ray& ray, float& maxDist,
             bool stopAtFirstHit, bool ignoreM2Model) const;
-        // Extended variant: optionally retrieve hit point (world), hit normal (world), instanceId and triangle index
-        bool getIntersectionTime(const G3D::Ray& ray, float& maxDist,
-            bool stopAtFirstHit, bool ignoreM2Model,
-            G3D::Vector3* outHitPointW, G3D::Vector3* outHitNormalW, uint32_t* outInstanceId, int* outTriIndex) const;
+        // Removed extended variant with extra output parameters for WoW emulator compatibility
 
         ModelInstance* FindCollisionModel(const G3D::Vector3& pos1, const G3D::Vector3& pos2);
-
-        // New cylinder collision methods
-        CylinderIntersection IntersectCylinder(const Cylinder& cyl) const;
-        std::vector<CylinderSweepHit> SweepCylinder(const Cylinder& cyl,
-            const G3D::Vector3& sweepDir, float sweepDistance) const;
-        bool CheckCylinderCollision(const Cylinder& cyl,
-            float& outContactHeight, G3D::Vector3& outContactNormal,
-            ModelInstance** outHitInstance = nullptr) const;
-        bool CanCylinderFitAtPosition(const Cylinder& cyl, float tolerance = 0.05f) const;
-
-        // Find best walkable surface for cylinder movement
-        bool FindCylinderWalkableSurface(const Cylinder& cyl,
-            float currentHeight, float maxStepUp, float maxStepDown,
-            float& outHeight, G3D::Vector3& outNormal) const;
-
-        // Get all model instances that a cylinder might collide with
-        void GetCylinderCollisionCandidates(const Cylinder& cyl,
-            std::vector<ModelInstance*>& outInstances) const;
 
         // Utility functions
         static uint32_t packTileID(uint32_t tileX, uint32_t tileY);

@@ -237,9 +237,7 @@
     <ClInclude Include="..\Navigation\PathFinder.h" />
     <ClInclude Include="AABox.h" />
     <ClInclude Include="BIH.h" />
-    <ClInclude Include="CharacterCapsuleMover.h" />
     <ClInclude Include="CoordinateTransforms.h" />
-    <ClInclude Include="CylinderCollision.h" />
     <ClInclude Include="IVMapManager.h" />
     <ClInclude Include="MapLoader.h" />
     <ClInclude Include="Matrix3.h" />
@@ -284,8 +282,6 @@
     <ClCompile Include="..\Navigation\PathFinder.cpp" />
     <ClCompile Include="AABox.cpp" />
     <ClCompile Include="BIH.cpp" />
-    <ClCompile Include="CharacterCapsuleMover.cpp" />
-    <ClCompile Include="CylinderCollision.cpp" />
     <ClCompile Include="MapLoader.cpp" />
     <ClCompile Include="Matrix3.cpp" />
     <ClCompile Include="ModelInstance.cpp" />

@@ -67,11 +67,7 @@
     <ClCompile Include="MapLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="CylinderCollision.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SceneQuery.cpp" />
-    <ClCompile Include="CharacterCapsuleMover.cpp">
+    <ClCompile Include="SceneQuery.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -139,13 +135,13 @@
     <ClInclude Include="VMapLog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="CylinderCollision.h">
+    <ClInclude Include="CoordinateTransforms.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SceneQuery.h" />
-    <ClInclude Include="QueryHit.h" />
-    <ClInclude Include="CoordinateTransforms.h" />
-    <ClInclude Include="CharacterCapsuleMover.h">
+    <ClInclude Include="QueryHit.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneQuery.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

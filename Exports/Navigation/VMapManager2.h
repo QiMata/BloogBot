@@ -8,7 +8,6 @@
 #include <shared_mutex>
 #include <string>
 #include "Vector3.h"
-#include "CylinderCollision.h"
 #include "CapsuleCollision.h"
 #include "SceneQuery.h"
 
@@ -75,18 +74,6 @@ namespace VMAP
 
         std::shared_ptr<WorldModel> acquireModelInstance(const std::string& basepath, const std::string& filename);
 
-        // New cylinder collision methods
-        CylinderIntersection IntersectCylinder(unsigned int pMapId, const Cylinder& worldCylinder) const;
-        std::vector<CylinderSweepHit> SweepCylinder(unsigned int pMapId, const Cylinder& worldCylinder,
-            const G3D::Vector3& sweepDir, float sweepDistance) const;
-        
-        // Convenience: configured downward sweep to detect walkable surfaces around current height
-        std::vector<CylinderSweepHit> SweepForWalkableSurfaces(unsigned int pMapId,
-            const Cylinder& baseCylinder,
-            float currentHeight,
-            float maxStepUp,
-            float maxStepDown) const;
-        
         // Capsule sweep wrapper using SceneQuery
         std::vector<SceneHit> SweepCapsuleAll(unsigned int pMapId,
             const CapsuleCollision::Capsule& capsuleStart,
@@ -94,49 +81,13 @@ namespace VMAP
             float distance,
             uint32_t includeMask = 0xFFFFFFFFu) const;
 
-        // Raycast wrapper (single hit)
-        bool RaycastSingle(unsigned int pMapId,
-                           const G3D::Vector3& origin,
-                           const G3D::Vector3& dir,
-                           float maxDistance,
-                           SceneHit& outHit,
-                           uint32_t includeMask = 0xFFFFFFFFu) const;
-
-        bool CheckCylinderCollision(unsigned int pMapId, const Cylinder& worldCylinder,
-            float& outContactHeight, G3D::Vector3& outContactNormal,
-            ModelInstance** outHitInstance = nullptr) const;
-
-        bool CanCylinderFitAtPosition(unsigned int pMapId, const Cylinder& worldCylinder,
-            float tolerance = 0.05f) const;
-        bool CanCylinderMoveAtPosition(unsigned int pMapId, const Cylinder& worldCylinder,
-            float tolerance = 0.05f) const;
-
         // Get height using cylinder for more accurate ground detection
         // NOTE: This is non-const because it calls the non-const getHeight() method
         float GetCylinderHeight(unsigned int pMapId, float x, float y, float z,
             float cylinderRadius, float cylinderHeight, float maxSearchDist);
 
-        // Check if cylinder path is clear
-        bool IsCylinderPathClear(unsigned int pMapId, const Cylinder& startCylinder,
-            const G3D::Vector3& endPos, float stepHeight = 2.3f) const;
-
-        // Get all collision candidates for a cylinder
-        void GetCylinderCollisionCandidates(unsigned int pMapId, const Cylinder& worldCylinder,
-            std::vector<ModelInstance*>& outInstances) const;
-
         // Convert cylinder between coordinate systems
         Cylinder ConvertCylinderToInternal(const Cylinder& worldCylinder) const;
         Cylinder ConvertCylinderToWorld(const Cylinder& internalCylinder) const;
-
-        // Multi-map cylinder operations
-        CylinderIntersection IntersectCylinderAllMaps(const Cylinder& worldCylinder) const;
-        bool CanCylinderFitAllMaps(const Cylinder& worldCylinder, float tolerance = 0.05f) const;
-
-        // Debug: Dump triangles and fitted surface around a patch centered at (x,y,z)
-        bool DumpSurfacePatch(unsigned int pMapId,
-            float x, float y, float z,
-            float patchHalfXY = 1.0f,
-            float patchHalfZ = 2.0f,
-            int maxTrianglesToLog = 64) const;
     };
 }

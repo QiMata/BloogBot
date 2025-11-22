@@ -101,7 +101,7 @@ namespace PathfindingService.Tests
         }
 
         [Theory]
-        [InlineData(1u, -601.518f, -4602.816f, 37.600f, 1.612760f, Race.Orc, -598.668f, -4601.770f, 37.614f)] // Your exact scenario
+        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -598.668f, -4601.770f, 37.614f)] // Your exact scenario
         [InlineData(1u, -562.225f, -4189.092f, 70.789f, 6.175373f, Race.Orc, -555.043f, -4189.869f, 72.656f)] // Your exact scenario
         [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8949.95f, -125.49f, 83.23f)]  // North facing
         [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8942.95f, -132.49f, 83.23f)] // East facing  
@@ -184,6 +184,8 @@ namespace PathfindingService.Tests
             Console.WriteLine($"  Orientation: {orientation:F3} rad");
             Console.WriteLine($"  Movement angle: {moveAngle:F3} rad");
             Console.WriteLine($"  Velocity: ({output.vx:F2}, {output.vy:F2}, {output.vz:F2})");
+
+            Assert.Equal(expectedZ, output.z);
         }
     }
 }

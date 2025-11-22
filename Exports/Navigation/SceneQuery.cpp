@@ -10,14 +10,12 @@
 #include <vector>
 #include <cstdlib>
 #include <mutex>
+#include <iostream>
 
 using namespace VMAP;
 
 namespace
 {
-    // Note: debug instance/point helpers removed. We collect triangle candidates in the mesh view
-    // and perform diagnostics at the end of SweepCapsuleAll.
-
     // Helper to ensure normals face the Z-up hemisphere for walkability tests.
     static inline void EnsureUpwardNormal(G3D::Vector3& n, SceneHit& h)
     {
@@ -27,6 +25,24 @@ namespace
             n = -n;
             h.normalFlipped = true;
         }
+    }
+
+    // Helper function to compute barycentric coordinates for a point on a triangle
+    static G3D::Vector3 ComputeBarycentric(const G3D::Vector3& p, const G3D::Vector3& a, const G3D::Vector3& b, const G3D::Vector3& c)
+    {
+        G3D::Vector3 v0 = b - a;
+        G3D::Vector3 v1 = c - a;
+        G3D::Vector3 v2 = p - a;
+        float d00 = v0.dot(v0);
+        float d01 = v0.dot(v1);
+        float d11 = v1.dot(v1);
+        float d20 = v2.dot(v0);
+        float d21 = v2.dot(v1);
+        float denom = d00 * d11 - d01 * d01;
+        float v = (d11 * d20 - d01 * d21) / denom;
+        float w = (d00 * d21 - d01 * d20) / denom;
+        float u = 1.0f - v - w;
+        return G3D::Vector3(u, v, w);
     }
 
     // Local mesh view for building triangle caches out of map tree (internal space)
@@ -43,6 +59,10 @@ namespace
 
         void query(const CapsuleCollision::AABB& box, int* outIndices, int& count, int maxCount) const override
         {
+            PHYS_TRACE(PHYS_CYL, "MapMeshView::query ENTER includeMask=0x" << std::hex << m_includeMask << std::dec
+                << " instanceCount=" << m_instanceCount
+                << " inputBox.min=(" << box.min.x << "," << box.min.y << "," << box.min.z << ")"
+                << " inputBox.max=(" << box.max.x << "," << box.max.y << "," << box.max.z << ")");
             // Mesh query: collect triangles. No debug init here.
 
             count = 0;
@@ -50,7 +70,12 @@ namespace
             m_triToInstance.clear();
             m_triToLocalTri.clear();
             if (!m_tree || !m_instances || m_instanceCount == 0 || !outIndices || maxCount <= 0)
+            {
+                PHYS_TRACE(PHYS_CYL, "MapMeshView::query EARLY EXIT (invalid inputs) m_tree=" << (m_tree?"Y":"N")
+                    << " m_instances=" << (m_instances?"Y":"N") << " m_instanceCount=" << m_instanceCount
+                    << " outIndices=" << (outIndices?"Y":"N") << " maxCount=" << maxCount);
                 return;
+            }
 
             // Build world-space AABox from input AABB and convert to internal map space
             G3D::Vector3 wLo(box.min.x, box.min.y, box.min.z);
@@ -59,40 +84,49 @@ namespace
             const float wInfl = 0.005f;
             wLo = wLo - G3D::Vector3(wInfl, wInfl, wInfl);
             wHi = wHi + G3D::Vector3(wInfl, wInfl, wInfl);
+            PHYS_TRACE(PHYS_CYL, "World AABB inflated wInfl=" << wInfl << " wLo=(" << wLo.x << "," << wLo.y << "," << wLo.z
+                << ") wHi=(" << wHi.x << "," << wHi.y << "," << wHi.z << ")");
 
             // Transform all 8 corners of the world-space AABB into internal space and compute a conservative internal AABB.
             G3D::Vector3 worldCorners[8] = {
                 { wLo.x, wLo.y, wLo.z }, { wHi.x, wLo.y, wLo.z }, { wLo.x, wHi.y, wLo.z }, { wHi.x, wHi.y, wLo.z },
                 { wLo.x, wLo.y, wHi.z }, { wHi.x, wLo.y, wHi.z }, { wLo.x, wHi.y, wHi.z }, { wHi.x, wHi.y, wHi.z }
             };
+            for (int ciLog = 0; ciLog < 8; ++ciLog)
+                PHYS_TRACE(PHYS_CYL, "World corner[" << ciLog << "]=(" << worldCorners[ciLog].x << "," << worldCorners[ciLog].y << "," << worldCorners[ciLog].z << ")");
 
             G3D::Vector3 qLo, qHi;
             // initialize with first corner
             G3D::Vector3 iC0 = NavCoord::WorldToInternal(worldCorners[0]);
             qLo = iC0; qHi = iC0;
+            PHYS_TRACE(PHYS_CYL, "Internal corner[0]=(" << iC0.x << "," << iC0.y << "," << iC0.z << ") (init)");
             for (int ci = 1; ci < 8; ++ci)
             {
                 G3D::Vector3 iC = NavCoord::WorldToInternal(worldCorners[ci]);
                 qLo.x = std::min(qLo.x, iC.x); qLo.y = std::min(qLo.y, iC.y); qLo.z = std::min(qLo.z, iC.z);
                 qHi.x = std::max(qHi.x, iC.x); qHi.y = std::max(qHi.y, iC.y); qHi.z = std::max(qHi.z, iC.z);
+                PHYS_TRACE(PHYS_CYL, "Internal corner[" << ci << "]=(" << iC.x << "," << iC.y << "," << iC.z << ")");
             }
             // Inflate more along Y to catch near-miss instances (diagnostic)
             G3D::Vector3 qInflate(0.08f, 6.0f, 0.08f);
             G3D::AABox queryBox(qLo - qInflate, qHi + qInflate);
+            PHYS_TRACE(PHYS_CYL, "Internal AABB pre-inflate qLo=(" << qLo.x << "," << qLo.y << "," << qLo.z << ") qHi=(" << qHi.x << "," << qHi.y << "," << qHi.z
+                << ") inflate=(" << qInflate.x << "," << qInflate.y << "," << qInflate.z << ") queryBox.low=(" << queryBox.low().x << "," << queryBox.low().y << "," << queryBox.low().z
+                << ") high=(" << queryBox.high().x << "," << queryBox.high().y << "," << queryBox.high().z << ")");
 
-            // Conservative radius estimate: infer capsule/sweep radius from world-space AABB size
-            // The caller includes capsule radius when building the world AABB. Compute an approximate
-            // world-space radius as half the largest axis extent and use it to further inflate
-            // per-instance model-space boxes below (converted by instance inverse scale).
+            // Conservative radius estimate
             G3D::Vector3 worldAabbLo = wLo;
             G3D::Vector3 worldAabbHi = wHi;
             G3D::Vector3 worldExt = worldAabbHi - worldAabbLo;
             float approxWorldRadius = std::max(std::max(worldExt.x, worldExt.y), worldExt.z) * 0.5f;
+            PHYS_TRACE(PHYS_CYL, "World extents=(" << worldExt.x << "," << worldExt.y << "," << worldExt.z << ") approxWorldRadius=" << approxWorldRadius);
 
             const uint32_t cap = (std::min<uint32_t>)(m_instanceCount, 16384);
             std::vector<uint32_t> instIdx(cap);
             uint32_t instCount = 0;
-            if (!m_tree->QueryAABB(queryBox, instIdx.data(), instCount, cap))
+            bool bihOk = m_tree->QueryAABB(queryBox, instIdx.data(), instCount, cap);
+            PHYS_TRACE(PHYS_CYL, "BIH QueryAABB result=" << (bihOk?"OK":"MISS") << " instCount=" << instCount << " cap=" << cap);
+            if (!bihOk)
             {
                 // Diagnostic for 226014 as before
                 for (uint32_t i = 0; i < m_instanceCount; ++i)
@@ -102,6 +136,8 @@ namespace
                         bool ib = m_instances[i].iBound.intersects(queryBox);
                         G3D::Vector3 qbLo = queryBox.low(); G3D::Vector3 qbHi = queryBox.high();
                         G3D::Vector3 bLo = m_instances[i].iBound.low(); G3D::Vector3 bHi = m_instances[i].iBound.high();
+                        PHYS_TRACE(PHYS_CYL, "DIAG instance 226014 bound.low=(" << bLo.x << "," << bLo.y << "," << bLo.z << ") bound.high=(" << bHi.x << "," << bHi.y << "," << bHi.z
+                            << ") query.low=(" << qbLo.x << "," << qbLo.y << "," << qbLo.z << ") query.high=(" << qbHi.x << "," << qbHi.y << "," << qbHi.z << ") intersects=" << (ib?"Y":"N"));
                         break;
                     }
                 }
@@ -115,12 +151,12 @@ namespace
                     if (!inst.iBound.intersects(queryBox)) continue;
                     instIdx[instCount++] = i;
                 }
-                if (instCount == 0) return; // nothing even after fallback
+                PHYS_TRACE(PHYS_CYL, "Fallback brute-force instCount=" << instCount);
+                if (instCount == 0) { PHYS_TRACE(PHYS_CYL, "MapMeshView::query EXIT no instances after fallback"); return; }
             }
             else
             {
-                // Augment BIH result with a conservative fallback: add any intersecting instance not returned by BIH.
-                // This guards against BIH edge-case misses on tight boxes.
+                // Augment BIH result with a conservative fallback
                 std::vector<char> present(m_instanceCount, 0);
                 for (uint32_t k = 0; k < instCount; ++k)
                 {
@@ -137,6 +173,16 @@ namespace
                     if (!inst.iBound.intersects(queryBox)) continue;
                     instIdx[instCount++] = i; present[i] = 1; ++added;
                 }
+                PHYS_TRACE(PHYS_CYL, "Augmented BIH instCount=" << instCount << " added=" << added);
+            }
+            for (uint32_t l = 0; l < instCount; ++l)
+            {
+                uint32_t ii = instIdx[l];
+                if (ii >= m_instanceCount) continue;
+                const ModelInstance& inst = m_instances[ii];
+                G3D::Vector3 bLo = inst.iBound.low(); G3D::Vector3 bHi = inst.iBound.high();
+                PHYS_TRACE(PHYS_CYL, "Instance sel idx=" << ii << " ID=" << inst.ID << " bound.low=(" << bLo.x << "," << bLo.y << "," << bLo.z << ") bound.high=(" << bHi.x << "," << bHi.y << "," << bHi.z
+                    << ") scale=" << inst.iScale << " invScale=" << inst.iInvScale << " pos=(" << inst.iPos.x << "," << inst.iPos.y << "," << inst.iPos.z << ")");
             }
 
             size_t totalEmitted = 0;
@@ -145,16 +191,17 @@ namespace
                 uint32_t idx = instIdx[k];
                 if (idx >= m_instanceCount) continue;
                 const ModelInstance& inst = m_instances[idx];
-                if (!inst.iModel) { continue; }
+                if (!inst.iModel) { PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " skipped (no model)"); continue; }
 
                 if (!inst.iBound.intersects(queryBox)) {
-                    // Instance bounds did not intersect; skip.
+                    PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " ID=" << inst.ID << " skipped (bounds miss query)");
                     continue;
                 }
 
                 uint32_t instMask = inst.GetCollisionMask();
                 if ((instMask & m_includeMask) == 0)
                 {
+                    PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " ID=" << inst.ID << " skipped (mask filter) instMask=0x" << std::hex << instMask << std::dec);
                     continue;
                 }
 
@@ -172,23 +219,31 @@ namespace
                     G3D::Vector3 pm = inst.iInvRot * ((corners[ci] - inst.iPos) * inst.iInvScale);
                     modelBox.merge(pm);
                 }
+                G3D::Vector3 mbLo0 = modelBox.low(); G3D::Vector3 mbHi0 = modelBox.high();
                 // Inflate model-space box (larger Y) plus conservative radius converted to model-space
                 G3D::Vector3 mInflate(0.08f, 6.0f, 0.08f);
-                // Convert approximate world radius into model-space by applying instance inverse scale
                 float modelRadiusInfl = approxWorldRadius * inst.iInvScale;
                 G3D::Vector3 modelRadiusVec(modelRadiusInfl, modelRadiusInfl, modelRadiusInfl);
                 modelBox = G3D::AABox(modelBox.low() - (mInflate + modelRadiusVec), modelBox.high() + (mInflate + modelRadiusVec));
+                G3D::Vector3 mbLo = modelBox.low(); G3D::Vector3 mbHi = modelBox.high();
+                PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " ID=" << inst.ID << " modelBox preInflate.low=(" << mbLo0.x << "," << mbLo0.y << "," << mbLo0.z
+                    << ") preInflate.high=(" << mbHi0.x << "," << mbHi0.y << "," << mbHi0.z << ") inflateVec=(" << (mInflate.x+modelRadiusVec.x) << "," << (mInflate.y+modelRadiusVec.y) << "," << (mInflate.z+modelRadiusVec.z)
+                    << ") final.low=(" << mbLo.x << "," << mbLo.y << "," << mbLo.z << ") final.high=(" << mbHi.x << "," << mbHi.x << "," << mbHi.z << ")");
 
                 std::vector<G3D::Vector3> vertices;
                 std::vector<uint32_t> indices;
                 bool haveBoundsData = inst.iModel->GetMeshDataInBounds(modelBox, vertices, indices);
+                PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " haveBoundsData=" << (haveBoundsData?"Y":"N") << " verts=" << vertices.size() << " indices=" << indices.size());
                 if (!haveBoundsData)
                 {
-                    if (!inst.iModel->GetAllMeshData(vertices, indices))
+                    if (!inst.iModel->GetAllMeshData(vertices, indices)) {
+                        PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " GetAllMeshData FAILED");
                         continue;
-                    // Relax culling further for full-mesh path: expand box again slightly
+                    }
                     const G3D::Vector3 extra(0.10f, 0.50f, 0.10f);
                     modelBox = G3D::AABox(modelBox.low() - extra, modelBox.high() + extra);
+                    PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " Expanded full-mesh modelBox extra=(" << extra.x << "," << extra.y << "," << extra.z
+                        << ") new.low=(" << modelBox.low().x << "," << modelBox.low().y << "," << modelBox.low().z << ") new.high=(" << modelBox.high().x << "," << modelBox.high().y << "," << modelBox.high().z << ")");
                 }
 
                 size_t triCount = indices.size() / 3;
@@ -197,7 +252,6 @@ namespace
 
                 auto emitTri = [&](const G3D::Vector3& a, const G3D::Vector3& b, const G3D::Vector3& c, int localTriIndex)
                     {
-                        // Transform model-space vertex directly into INTERNAL space (do not apply WorldToInternal twice)
                         G3D::Vector3 ia = (a * inst.iScale) * inst.iRot + inst.iPos;
                         G3D::Vector3 ib = (b * inst.iScale) * inst.iRot + inst.iPos;
                         G3D::Vector3 ic = (c * inst.iScale) * inst.iRot + inst.iPos;
@@ -205,14 +259,18 @@ namespace
                         int triIndex = (int)m_cache.size();
                         m_cache.push_back(T); m_triToInstance.push_back(idx); m_triToLocalTri.push_back(localTriIndex);
                         if (count < maxCount) outIndices[count++] = triIndex;
+                        PHYS_TRACE(PHYS_CYL, "Emit tri globalIdx=" << triIndex << " localTriIndex=" << localTriIndex << " instIdx=" << idx
+                            << " ia=(" << ia.x << "," << ia.y << "," << ia.z << ") ib=(" << ib.x << "," << ib.y << "," << ib.z
+                            << ") ic=(" << ic.x << "," << ic.y << "," << ic.z << ")");
                     };
 
+                PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " Tri loop triCount=" << triCount << " maxCount=" << maxCount);
                 for (size_t t = 0; t < triCount; ++t)
                 {
                     uint32_t i0 = indices[t * 3 + 0];
                     uint32_t i1 = indices[t * 3 + 1];
                     uint32_t i2 = indices[t * 3 + 2];
-                    if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size()) continue;
+                    if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size()) { PHYS_TRACE(PHYS_CYL, "Bad tri indices t="<<t); continue; }
                     const G3D::Vector3& a = vertices[i0];
                     const G3D::Vector3& b = vertices[i1];
                     const G3D::Vector3& c = vertices[i2];
@@ -223,8 +281,8 @@ namespace
                         G3D::Vector3 lo = a.min(b).min(c);
                         G3D::Vector3 hi = a.max(b).max(c);
                         G3D::AABox triBox(lo, hi);
-                        if (!triBox.intersects(modelBox))
-                            continue;
+                        bool inBox = triBox.intersects(modelBox);
+                        if (!inBox) continue;
                         ++triInBox;
                     }
                     else
@@ -233,46 +291,16 @@ namespace
                     }
 
                     emitTri(a, b, c, (int)t);
-                    if (count >= maxCount) break;
+                    if (count >= maxCount) { PHYS_TRACE(PHYS_CYL, "Reached maxCount=" << maxCount << " breaking tri loop"); break; }
                 }
 
                 size_t emittedNow = m_cache.size() - emittedBefore;
                 totalEmitted += emittedNow;
+                PHYS_TRACE(PHYS_CYL, "Instance idx=" << idx << " Summary triVisited=" << triVisited << " triInBox=" << triInBox << " emitted=" << emittedNow << " totalEmitted=" << totalEmitted << " outCount=" << count);
 
-                // Sample first few emitted triangles for diagnostic (log world-space triangle verts)
-                if (emittedNow > 0)
-                {
-                    int samples = 0;
-                    const int maxSamples = 6;
-                    for (size_t triIdx = emittedBefore; triIdx < m_cache.size() && samples < maxSamples; ++triIdx, ++samples)
-                    {
-                        const auto& TT = m_cache[triIdx];
-                        // Convert internal tri verts back to world for logging
-                        G3D::Vector3 wA = NavCoord::InternalToWorld(G3D::Vector3(TT.a.x, TT.a.y, TT.a.z));
-                        G3D::Vector3 wB = NavCoord::InternalToWorld(G3D::Vector3(TT.b.x, TT.b.y, TT.b.z));
-                        G3D::Vector3 wC = NavCoord::InternalToWorld(G3D::Vector3(TT.c.x, TT.c.y, TT.c.z));
-
-                        // Internal-space triangle coords (TT.* are stored in internal space)
-                        G3D::Vector3 iA(TT.a.x, TT.a.y, TT.a.z);
-                        G3D::Vector3 iB(TT.b.x, TT.b.y, TT.b.z);
-                        G3D::Vector3 iC(TT.c.x, TT.c.y, TT.c.z);
-                        G3D::Vector3 triLoI = iA.min(iB).min(iC);
-                        G3D::Vector3 triHiI = iA.max(iB).max(iC);
-                        G3D::AABox triBoxI(triLoI, triHiI);
-                        bool intersectsQuery = triBoxI.intersects(queryBox);
-                        if (intersectsQuery)
-                        {
-                            G3D::Vector3 qLo = queryBox.low();
-                            G3D::Vector3 qHi = queryBox.high();
-                            // Emit internal coords and offsets relative to query box to see any offshift
-                            G3D::Vector3 offLo = triLoI - qLo;
-                            G3D::Vector3 offHi = triHiI - qHi;
-                        }
-                    }
-                }
-
-                if (count >= maxCount) break;
+                if (count >= maxCount) { PHYS_TRACE(PHYS_CYL, "MapMeshView::query terminating (global maxCount reached) count=" << count); break; }
             }
+            PHYS_TRACE(PHYS_CYL, "MapMeshView::query EXIT totalTriangles=" << m_cache.size() << " outCount=" << count);
         }
 
         const CapsuleCollision::Triangle& tri(int idx) const override { return m_cache[idx]; }
@@ -310,125 +338,6 @@ static inline CapsuleCollision::AABB AABBFromAABox(const G3D::AABox& box)
     r.min = { lo.x, lo.y, lo.z };
     r.max = { hi.x, hi.y, hi.z };
     return r;
-}
-
-static inline const char* CapsulePartFromT(float t)
-{
-    if (t <= 0.1f) return "cap-bottom";
-    if (t >= 0.9f) return "cap-top";
-    return "side";
-}
-
-static inline void LogTriangleSurfaceInfo(const CapsuleCollision::Triangle& T, int triLocalIdx)
-{
-    CapsuleCollision::Vec3 N; float d;
-    CapsuleCollision::trianglePlane(T, N, d);
-    G3D::Vector3 iN(N.x, N.y, N.z);
-    G3D::Vector3 wN = NavCoord::InternalDirToWorld(iN);
-    G3D::Vector3 va = NavCoord::InternalToWorld(G3D::Vector3(T.a.x, T.a.y, T.a.z));
-    G3D::Vector3 vb = NavCoord::InternalToWorld(G3D::Vector3(T.b.x, T.b.y, T.b.z));
-    G3D::Vector3 vc = NavCoord::InternalToWorld(G3D::Vector3(T.c.x, T.c.y, T.c.z));
-    G3D::Vector3 cent = (va + vb + vc) * (1.0f / 3.0f);
-
-    // Cross-product consistency check (analytic normal from vertices)
-    {
-        // Compute edges in INTERNAL space
-        CapsuleCollision::Vec3 u = T.b - T.a;
-        CapsuleCollision::Vec3 v = T.c - T.a;
-        // cross in internal
-        CapsuleCollision::Vec3 crossI = { u.y * v.z - u.z * v.y,
-                                          u.z * v.x - u.x * v.z,
-                                          u.x * v.y - u.y * v.x };
-        float lenI = std::sqrt(crossI.x * crossI.x + crossI.y * crossI.y + crossI.z * crossI.z);
-        if (lenI <= 1e-6f)
-        {
-        }
-        else
-        {
-            // normalize internal cross
-            CapsuleCollision::Vec3 crossINorm = { crossI.x / lenI, crossI.y / lenI, crossI.z / lenI };
-            // convert analytic normal to world via InternalDirToWorld
-            G3D::Vector3 crossINormG3D(crossINorm.x, crossINorm.y, crossINorm.z);
-            G3D::Vector3 crossW = NavCoord::InternalDirToWorld(crossINormG3D);
-            // normalize world cross
-            float lenW = std::sqrt(crossW.x * crossW.x + crossW.y * crossW.y + crossW.z * crossW.z);
-            if (lenW > 1e-6f)
-            {
-                crossW = crossW / lenW;
-            }
-            // compare with wN (may be unnormalized)
-            float wNlen = std::sqrt(wN.x * wN.x + wN.y * wN.y + wN.z * wN.z);
-            G3D::Vector3 wNNorm = wNlen > 1e-6f ? (wN / wNlen) : wN;
-            float dotv = wNNorm.dot(crossW);
-            float angleDeg = 0.0f;
-            if (dotv >= -1.0f && dotv <= 1.0f)
-                angleDeg = std::acos(std::min(1.0f, std::max(-1.0f, dotv))) * (180.0f / 3.14159265358979323846f);
-
-            // If the analytic normal is opposite sign, log note (winding difference)
-            if (dotv < 0.0f)
-            {
-            }
-        }
-    }
-}
-
-bool SceneQuery::RaycastSingle(const StaticMapTree& map,
-    const G3D::Vector3& origin,
-    const G3D::Vector3& dir,
-    float maxDistance,
-    SceneHit& outHit,
-    const QueryParams& params)
-{
-    outHit = SceneHit();
-    if (maxDistance <= 0.0f)
-        return false;
-
-    // Convert origin and compute internal-space max distance by mapping the end point
-    G3D::Vector3 iOrigin = NavCoord::WorldToInternal(origin);
-    G3D::Vector3 iEndWorld = origin + dir * maxDistance;
-    G3D::Vector3 iEnd = NavCoord::WorldToInternal(iEndWorld);
-    G3D::Vector3 iDir = iEnd - iOrigin;
-    float distI = iDir.magnitude();
-    if (distI <= 1e-9f)
-        return false;
-
-    // Use the internal direction vector for the ray (may be non-unit)
-    G3D::Vector3 iDirNorm = iDir; // keep as-is; getIntersectionTime expects param in same units
-    G3D::Ray ray = G3D::Ray::fromOriginAndDirection(iOrigin, iDirNorm);
-    float hitDistI = distI;
-    bool hitAny = map.getIntersectionTime(ray, hitDistI, true, false);
-    if (!hitAny)
-        return false;
-
-    // Compute world-space hit point from internal hit data
-    G3D::Vector3 iHitPoint = iOrigin + iDirNorm * hitDistI;
-    G3D::Vector3 wHitPoint = NavCoord::InternalToWorld(iHitPoint);
-
-    // Compute actual world-space distance along original world direction
-    float worldDist = (wHitPoint - origin).magnitude();
-
-    outHit.hit = true;
-    outHit.distance = worldDist;
-    outHit.time = (maxDistance > 0.0f ? CapsuleCollision::cc_clamp(worldDist / maxDistance, 0.0f, 1.0f) : 0.0f);
-    outHit.point = wHitPoint;
-    return true;
-}
-
-int SceneQuery::RaycastAll(const StaticMapTree& map,
-    const G3D::Vector3& origin,
-    const G3D::Vector3& dir,
-    float maxDistance,
-    std::vector<SceneHit>& outHits,
-    const QueryParams& params)
-{
-    outHits.clear();
-    SceneHit h;
-    if (RaycastSingle(map, origin, dir, maxDistance, h, params))
-    {
-        outHits.push_back(h);
-        return 1;
-    }
-    return 0;
 }
 
 int SceneQuery::OverlapCapsule(const StaticMapTree& map,
@@ -486,9 +395,6 @@ int SceneQuery::OverlapCapsule(const StaticMapTree& map,
                 CapsuleCollision::Vec3 rel = onSeg - C.p0;
                 t = CapsuleCollision::cc_clamp(CapsuleCollision::Vec3::dot(rel, segDir) / segLen2, 0.0f, 1.0f);
             }
-            const char* part = CapsulePartFromT(t);
-
-            LogTriangleSurfaceInfo(T, view.triLocalIndex(triIdx));
 
             const ModelInstance* mi = view.triInstance(triIdx);
             if (mi)
@@ -547,7 +453,6 @@ int SceneQuery::OverlapSphere(const StaticMapTree& map,
             G3D::Vector3 wN = NavCoord::InternalDirToWorld(iN);
             G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
             G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
-            LogTriangleSurfaceInfo(T, view.triLocalIndex(triIdx));
 
             const ModelInstance* mi = view.triInstance(triIdx);
             if (mi)
@@ -581,23 +486,6 @@ int SceneQuery::OverlapBox(const StaticMapTree& map,
     return OverlapSphere(map, c, r, outOverlaps, includeMask, params);
 }
 
-bool SceneQuery::SweepCapsuleSingle(const StaticMapTree& map,
-    const CapsuleCollision::Capsule& capsuleStart,
-    const G3D::Vector3& dir,
-    float distance,
-    SceneHit& outHit,
-    uint32_t includeMask,
-    const QueryParams& params)
-{
-    // Centralize logic: use SweepCapsuleAll and return the first hit if any.
-    outHit = SceneHit();
-    std::vector<SceneHit> hits;
-    int n = SweepCapsuleAll(map, capsuleStart, dir, distance, hits, includeMask, params);
-    if (n <= 0) return false;
-    outHit = hits.front();
-    return true;
-}
-
 int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     const CapsuleCollision::Capsule& capsuleStart,
     const G3D::Vector3& dir,
@@ -606,17 +494,16 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     uint32_t includeMask,
     const QueryParams& params)
 {
+    // Refactored: Collect all valid contacts using continuous collision detection (GJK/SAT analytic sweep).
+    // Returns a sorted list of contacts by time-of-impact, including penetration depth, contact point, normal, triangle index.
+    // Handles start penetration (t=0) and all contact types (face, edge, vertex).
     outHits.clear();
     if (distance <= 0.0f)
         return 0;
 
-    // Convert capsule and direction to internal space (for intersection tests)
     CapsuleCollision::Capsule C0 = capsuleStart;
     G3D::Vector3 wP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
     G3D::Vector3 wP1(capsuleStart.p1.x, capsuleStart.p1.y, capsuleStart.p1.z);
-
-    // If caller provided an inflation (used here to reduce sweep start offset), nudge the capsule
-    // start position slightly toward the sweep direction to reduce misses due to tiny offsets.
     if (params.inflation != 0.0f)
     {
         float dirLen = dir.magnitude();
@@ -628,7 +515,6 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
             wP1 = wP1 + adjust;
         }
     }
-
     G3D::Vector3 iP0 = NavCoord::WorldToInternal(wP0);
     G3D::Vector3 iP1 = NavCoord::WorldToInternal(wP1);
     C0.p0 = { iP0.x, iP0.y, iP0.z }; C0.p1 = { iP1.x, iP1.y, iP1.z };
@@ -636,8 +522,6 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     CapsuleCollision::Vec3 vel(iDir.x * distance, iDir.y * distance, iDir.z * distance);
 
     MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
-
-    // Broad-phase: swept AABB between start and end (world space)
     G3D::Vector3 wP0End = wP0 + dir * distance;
     G3D::Vector3 wP1End = wP1 + dir * distance;
     G3D::Vector3 wMin = wP0.min(wP1).min(wP0End.min(wP1End)) - G3D::Vector3(C0.r, C0.r, C0.r);
@@ -647,10 +531,7 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
     const int kCap = 1024; int triIdxs[kCap]; int triCount = 0;
     view.query(sweepBox, triIdxs, triCount, kCap);
 
-    // Diagnostic: log sweep geometry (world and internal) and sweep params before per-triangle evaluation
-
-    // Gather start-penetrating overlaps first (t=0). If any, early out after collecting all at t=0
-    std::vector<SceneHit> startHits;
+    // Collect start-penetrating overlaps (t=0)
     for (int i = 0; i < triCount; ++i)
     {
         int ti = triIdxs[i];
@@ -658,124 +539,69 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
         CapsuleCollision::Hit ch;
         if (CapsuleCollision::intersectCapsuleTriangle(C0, T, ch))
         {
-            // Convert to world
             G3D::Vector3 iN(ch.normal.x, ch.normal.y, ch.normal.z);
             G3D::Vector3 wN = NavCoord::InternalDirToWorld(iN);
             G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
             G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
             const ModelInstance* mi = view.triInstance(ti);
-
-            // Log the triangle we intersected (start-penetrating)
-
-            SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = wN; h.point = wP; h.triIndex = ti; h.instanceId = mi ? mi->ID : 0; h.startPenetrating = true;
+            SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = wN; h.point = wP; h.triIndex = ti; h.instanceId = mi ? mi->ID : 0; h.startPenetrating = true; h.penetrationDepth = ch.depth;
             EnsureUpwardNormal(h.normal, h);
-            startHits.push_back(h);
+            outHits.push_back(h);
         }
     }
-    if (!startHits.empty())
+    if (!outHits.empty())
     {
-        // Sort deterministically by tri index for stability
-        std::sort(startHits.begin(), startHits.end(), [](const SceneHit& a, const SceneHit& b) { return a.triIndex < b.triIndex; });
-        outHits = startHits;
+        std::sort(outHits.begin(), outHits.end(), [](const SceneHit& a, const SceneHit& b) { return a.triIndex < b.triIndex; });
         return (int)outHits.size();
     }
 
-    // --- replace centroid-based ray target with triangle-closest-point ray and prefer triangles within radius ---
-    const int kDiagnosticCount = 6;
-    struct TriDist { int triIdx; float dist2; float dist; G3D::Vector3 centroidW; G3D::Vector3 triClosestI; G3D::Vector3 segClosestI; };
-    std::vector<TriDist> triDists; triDists.reserve(triCount);
-
+    // Collect all sweep contacts (face, edge, vertex)
+    struct HitTmp { float t; int triIdx; G3D::Vector3 nI; G3D::Vector3 pI; uint32_t instId; float penetrationDepth; };
+    std::vector<HitTmp> candidates;
     for (int i = 0; i < triCount; ++i)
     {
-        int ti = triIdxs[i];
-        const auto& T = view.tri(ti);
-
-        // compute closest points between capsule segment (internal) and triangle (internal)
-        CapsuleCollision::Vec3 sSeg, sTri;
-        CapsuleCollision::closestPoints_Segment_Triangle(C0.p0, C0.p1, T, sSeg, sTri);
-        G3D::Vector3 pSegI(sSeg.x, sSeg.y, sSeg.z);
-        G3D::Vector3 pTriI(sTri.x, sTri.y, sTri.z);
-        G3D::Vector3 diff = pSegI - pTriI;
-        float d2 = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
-        float d = std::sqrt(d2);
-
-        // centroid world for logging convenience
-        G3D::Vector3 iA(T.a.x, T.a.y, T.a.z), iB(T.b.x, T.b.y, T.b.z), iC(T.c.x, T.c.y, T.c.z);
-        G3D::Vector3 centI = (iA + iB + iC) * (1.0f / 3.0f);
-        G3D::Vector3 centW = NavCoord::InternalToWorld(centI);
-
-        TriDist td; td.triIdx = ti; td.dist2 = d2; td.dist = d; td.centroidW = centW; td.triClosestI = pTriI; td.segClosestI = pSegI;
-        triDists.push_back(td);
-    }
-
-    // sort globally by distance
-    std::sort(triDists.begin(), triDists.end(), [](const TriDist& a, const TriDist& b) { return a.dist2 < b.dist2; });
-
-    // Prefer triangles whose closest-segment distance is within capsule radius + epsilon.
-    const float kNearEps = 0.01f;
-    std::vector<TriDist> selectedTDs; selectedTDs.reserve(kDiagnosticCount);
-    for (const TriDist& td : triDists)
-    {
-        if ((float)selectedTDs.size() >= kDiagnosticCount) break;
-        if (td.dist <= (C0.r + kNearEps))
-            selectedTDs.push_back(td);
-    }
-    // If not enough near candidates, fill from nearest by distance
-    if ((int)selectedTDs.size() < kDiagnosticCount)
-    {
-        for (const TriDist& td : triDists)
-        {
-            if ((int)selectedTDs.size() >= kDiagnosticCount) break;
-            // avoid duplicates
-            bool found = false;
-            for (const TriDist& s : selectedTDs) if (s.triIdx == td.triIdx) { found = true; break; }
-            if (!found) selectedTDs.push_back(td);
-        }
-    }
-
-    struct HitTmp { float t; int triIdx; G3D::Vector3 nI; G3D::Vector3 pI; uint32_t instId; };
-    std::vector<HitTmp> candidates; candidates.reserve(selectedTDs.size());
-
-    for (const TriDist& td : selectedTDs)
-    {
-        int selTriIdx = td.triIdx;
+        int selTriIdx = triIdxs[i];
         const auto& T = view.tri(selTriIdx);
         int triLocal = view.triLocalIndex(selTriIdx);
         const ModelInstance* mi = view.triInstance(selTriIdx);
         uint32_t instId = mi ? mi->ID : 0;
-
         float toi; CapsuleCollision::Vec3 n, p;
         bool sweepHit = CapsuleCollision::capsuleTriangleSweep(C0, vel, T, toi, n, p);
         if (sweepHit && toi >= 0.0f && toi <= 1.0f)
         {
-            HitTmp tmp; tmp.t = toi; tmp.triIdx = selTriIdx; tmp.nI = { n.x, n.y, n.z }; tmp.pI = { p.x, p.y, p.z };
-            tmp.instId = instId;
+            // Compute penetration depth at impact
+            CapsuleCollision::Capsule impactCapsule = C0;
+            impactCapsule.p0 = impactCapsule.p0 + vel * toi;
+            impactCapsule.p1 = impactCapsule.p1 + vel * toi;
+            CapsuleCollision::Hit ch;
+            CapsuleCollision::intersectCapsuleTriangle(impactCapsule, T, ch);
+            HitTmp tmp; tmp.t = toi; tmp.triIdx = selTriIdx; tmp.nI = { n.x, n.y, n.z }; tmp.pI = { p.x, p.y, p.z }; tmp.instId = instId; tmp.penetrationDepth = ch.depth;
             candidates.push_back(tmp);
         }
     }
-
-    // If analytic candidates found among the selected triangles, pick earliest TOI as before
     if (!candidates.empty())
     {
         std::sort(candidates.begin(), candidates.end(), [](const HitTmp& a, const HitTmp& b) { if (a.t == b.t) return a.triIdx < b.triIdx; return a.t < b.t; });
-        const HitTmp& best = candidates.front();
-
-        SceneHit bestHit;
-        bestHit.hit = true;
-        bestHit.time = CapsuleCollision::cc_clamp(best.t, 0.0f, 1.0f);
-        bestHit.distance = bestHit.time * distance;
-        G3D::Vector3 iImpact(best.pI.x, best.pI.y, best.pI.z);
-        G3D::Vector3 wImpact = NavCoord::InternalToWorld(iImpact);
-        G3D::Vector3 iNormal(best.nI.x, best.nI.y, best.nI.z);
-        G3D::Vector3 wNormal = NavCoord::InternalDirToWorld(iNormal);
-        bestHit.point = wImpact; bestHit.normal = wNormal; bestHit.triIndex = best.triIdx; bestHit.instanceId = best.instId;
-        bestHit.startPenetrating = false;
-        EnsureUpwardNormal(bestHit.normal, bestHit);
-
-        outHits.push_back(bestHit);
-        return 1;
+        for (const auto& cand : candidates)
+        {
+            SceneHit hit;
+            hit.hit = true;
+            hit.time = CapsuleCollision::cc_clamp(cand.t, 0.0f, 1.0f);
+            hit.distance = hit.time * distance;
+            hit.penetrationDepth = cand.penetrationDepth;
+            G3D::Vector3 iImpact(cand.pI.x, cand.pI.y, cand.pI.z);
+            G3D::Vector3 wImpact = NavCoord::InternalToWorld(iImpact);
+            G3D::Vector3 iNormal(cand.nI.x, cand.nI.y, cand.nI.z);
+            G3D::Vector3 wNormal = NavCoord::InternalDirToWorld(iNormal);
+            hit.point = wImpact; hit.normal = wNormal; hit.triIndex = cand.triIdx; hit.instanceId = cand.instId;
+            hit.startPenetrating = false;
+            EnsureUpwardNormal(hit.normal, hit);
+            outHits.push_back(hit);
+        }
+        return (int)outHits.size();
     }
 
+    // Fallback: overlap at end position
     const float overlapInflation = 0.01f;
     CapsuleCollision::Capsule inflCaps = capsuleStart;
     inflCaps.r += overlapInflation;
@@ -786,112 +612,5 @@ int SceneQuery::SweepCapsuleAll(const StaticMapTree& map,
         outHits = overlapHits;
         return nOverlap;
     }
-
     return 0;
-}
-
-// New pure sweep that only finds time of impact and impact point/normal.
-bool SceneQuery::SweepCapsuleTOI(const StaticMapTree& map,
-    const CapsuleCollision::Capsule& capsuleStart,
-    const G3D::Vector3& dir,
-    float distance,
-    SceneHit& outHit,
-    uint32_t includeMask,
-    const QueryParams& params)
-{
-    // Use the centralized SweepCapsuleAll implementation and extract the earliest hit (TOI)
-    outHit = SceneHit();
-    std::vector<SceneHit> hits;
-    int n = SweepCapsuleAll(map, capsuleStart, dir, distance, hits, includeMask, params);
-    if (n <= 0) return false;
-    // hits are the earliest cohort (or start-penetrating); use the first one as the TOI
-    outHit = hits.front();
-    return true;
-}
-
-// Debug helper: test all triangles of a specific instance against a world-space capsule and log any collisions.
-// Returns number of triangles that intersect the capsule.
-int SceneQuery::DebugTestInstanceCapsuleTriangles(const StaticMapTree& map, uint32_t instanceId, const CapsuleCollision::Capsule& capsuleWorld)
-{
-    int hitCount = 0;
-    // Convert world capsule to internal space
-    G3D::Vector3 wp0(capsuleWorld.p0.x, capsuleWorld.p0.y, capsuleWorld.p0.z);
-    G3D::Vector3 wp1(capsuleWorld.p1.x, capsuleWorld.p1.y, capsuleWorld.p1.z);
-    G3D::Vector3 ip0 = NavCoord::WorldToInternal(wp0);
-    G3D::Vector3 ip1 = NavCoord::WorldToInternal(wp1);
-    CapsuleCollision::Capsule C = capsuleWorld;
-    C.p0 = { ip0.x, ip0.y, ip0.z };
-    C.p1 = { ip1.x, ip1.y, ip1.z };
-
-    const ModelInstance* found = nullptr;
-    const ModelInstance* instances = map.GetInstancesPtr();
-    uint32_t instCount = map.GetInstanceCount();
-    for (uint32_t i = 0; i < instCount; ++i)
-    {
-        if (instances[i].ID == instanceId)
-        {
-            found = &instances[i];
-            break;
-        }
-    }
-    if (!found)
-    {
-        return 0;
-    }
-    if (!found->iModel)
-    {
-        return 0;
-    }
-
-    // Iterate groups and triangles
-    for (uint32_t gi = 0; ; ++gi)
-    {
-        const GroupModel* gm = found->iModel->GetGroupModel(gi);
-        if (!gm) break;
-        const auto& verts = gm->GetVertices();
-        const auto& tris = gm->GetTriangles();
-        for (uint32_t ti = 0; ti < tris.size(); ++ti)
-        {
-            const MeshTriangle& mt = tris[ti];
-            if (mt.idx0 >= verts.size() || mt.idx1 >= verts.size() || mt.idx2 >= verts.size())
-                continue;
-            // Convert model-space vertices into INTERNAL space using instance transform
-            G3D::Vector3 a_model = verts[mt.idx0];
-            G3D::Vector3 b_model = verts[mt.idx1];
-            G3D::Vector3 c_model = verts[mt.idx2];
-            G3D::Vector3 a_internal = (a_model * found->iScale) * found->iRot + found->iPos;
-            G3D::Vector3 b_internal = (b_model * found->iScale) * found->iRot + found->iPos;
-            G3D::Vector3 c_internal = (c_model * found->iScale) * found->iRot + found->iPos;
-
-            // Build CapsuleCollision::Triangle in internal space
-            CapsuleCollision::Triangle T;
-            T.a = { a_internal.x, a_internal.y, a_internal.z };
-            T.b = { b_internal.x, b_internal.y, b_internal.z };
-            T.c = { c_internal.x, c_internal.y, c_internal.z };
-            T.doubleSided = true;
-            T.collisionMask = found->GetCollisionMask();
-
-            // Test intersection
-            CapsuleCollision::Hit ch;
-            if (CapsuleCollision::intersectCapsuleTriangle(C, T, ch))
-            {
-                ++hitCount;
-                G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
-                G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
-                G3D::Vector3 iN(ch.normal.x, ch.normal.y, ch.normal.z);
-                G3D::Vector3 wN = NavCoord::InternalDirToWorld(iN);
-
-                // Also compute closest segment-triangle distance for comparison
-                CapsuleCollision::Vec3 sSeg, sTri;
-                CapsuleCollision::closestPoints_Segment_Triangle(C.p0, C.p1, T, sSeg, sTri);
-                G3D::Vector3 pSegI(sSeg.x, sSeg.y, sSeg.z);
-                G3D::Vector3 pTriI(sTri.x, sTri.y, sTri.z);
-                float d = (pSegI - pTriI).magnitude();
-                G3D::Vector3 pSegW = NavCoord::InternalToWorld(pSegI);
-                G3D::Vector3 pTriW = NavCoord::InternalToWorld(pTriI);
-            }
-        }
-    }
-
-    return hitCount;
 }

@@ -68,6 +68,22 @@ public:
     void SetWalkableCosMin(float cosMin);
     float GetWalkableCosMin() const;
 
+    // Surface information
+    enum class SurfaceSource
+    {
+        NONE,
+        TERRAIN,
+        VMAP
+    };
+
+    struct WalkableSurface
+    {
+        bool found;
+        float height;
+        SurfaceSource source;
+        G3D::Vector3 normal;
+    };
+
 private:
     PhysicsEngine();
     ~PhysicsEngine();
@@ -96,22 +112,6 @@ private:
         bool isSwimming;
         float fallTime;
         G3D::Vector3 groundNormal;
-    };
-
-    // Surface information
-    enum class SurfaceSource
-    {
-        NONE,
-        TERRAIN,
-        VMAP
-    };
-
-    struct WalkableSurface
-    {
-        bool found;
-        float height;
-        SurfaceSource source;
-        G3D::Vector3 normal;
     };
 
     // Added physics query result structs
@@ -168,18 +168,10 @@ private:
     float GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType);
 
     // Movement processing (simplified authentic style)
-    void ProcessGroundMovementWithCylinder(const PhysicsInput& input, const MovementIntent& intent, MovementState& state,
+    void ProcessGroundMovement(const PhysicsInput& input, const MovementIntent& intent, MovementState& state,
         float dt, float speed, float cylinderRadius, float cylinderHeight);
     void ProcessAirMovement(const PhysicsInput& input, const MovementIntent& intent, MovementState& state, float dt, float speed);
     void ProcessSwimMovement(const PhysicsInput& input, const MovementIntent& intent, MovementState& state, float dt, float speed);
-
-    bool ValidateCylinderPosition(uint32_t mapId, float x, float y, float z,
-        float tolerance, float cylinderRadius, float cylinderHeight);
-
-    // New helpers for improved authenticity
-    bool HasHeadClearance(uint32_t mapId, float x, float y, float newZ, float radius, float height);
-    void AttemptWallSlide(const PhysicsInput& input, const MovementIntent& intent, MovementState& state,
-        float dt, float speed, float radius, float height);
 
     // Helper methods
     float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming);
@@ -195,8 +187,4 @@ private:
     // Phase 1 extracted helpers
     MovementIntent BuildMovementIntent(const PhysicsInput& input, float orientation) const;
     float QueryLiquidLevel(uint32_t mapId, float x, float y, float z, uint32_t& liquidType) const;
-    void ResolveGroundAttachment(MovementState& st, const WalkableSurface& surf, float stepUpLimit, float stepDownLimit, float dt);
-
-    // Refactored: Find the best walkable surface at a given position (from vmap or MapLoader fallback)
-    WalkableSurface FindBestSurface(uint32_t mapId, float x, float y, float z, float radius, float height);
 };

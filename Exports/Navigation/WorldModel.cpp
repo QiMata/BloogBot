@@ -32,35 +32,23 @@ namespace VMAP
         bool hit;
     };
 
-    // Cylinder collision callback for WorldModel
-    class WModelCylinderCallBack
+    // Helper function to compute barycentric coordinates for a point on a triangle
+    static G3D::Vector3 ComputeBarycentric(const G3D::Vector3& p, const G3D::Vector3& a, const G3D::Vector3& b, const G3D::Vector3& c)
     {
-    public:
-        WModelCylinderCallBack(const std::vector<GroupModel>& models, const Cylinder& cyl)
-            : groupModels(models), cylinder(cyl), bestIntersection() {
-        }
-
-        bool operator()(const G3D::Vector3& center, uint32_t entry)
-        {
-            if (entry >= groupModels.size())
-                return false;
-
-            CylinderIntersection groupResult = groupModels[entry].IntersectCylinder(cylinder);
-            if (groupResult.hit)
-            {
-                if (!bestIntersection.hit || groupResult.contactHeight > bestIntersection.contactHeight)
-                {
-                    bestIntersection = groupResult;
-                }
-                return true;
-            }
-            return false;
-        }
-
-        const std::vector<GroupModel>& groupModels;
-        const Cylinder& cylinder;
-        CylinderIntersection bestIntersection;
-    };
+        G3D::Vector3 v0 = b - a;
+        G3D::Vector3 v1 = c - a;
+        G3D::Vector3 v2 = p - a;
+        float d00 = v0.dot(v0);
+        float d01 = v0.dot(v1);
+        float d11 = v1.dot(v1);
+        float d20 = v2.dot(v0);
+        float d21 = v2.dot(v1);
+        float denom = d00 * d11 - d01 * d01;
+        float v = (d11 * d20 - d01 * d21) / denom;
+        float w = (d00 * d21 - d01 * d20) / denom;
+        float u = 1.0f - v - w;
+        return G3D::Vector3(u, v, w);
+    }
 
     // ======================== WmoLiquid Implementation ========================
 
@@ -195,128 +183,6 @@ namespace VMAP
         }
         out = liquid;
         return result;
-    }
-
-    void WmoLiquid::getPosInfo(uint32_t& tilesX, uint32_t& tilesY, G3D::Vector3& corner) const
-    {
-        tilesX = iTilesX;
-        tilesY = iTilesY;
-        corner = iCorner;
-    }
-
-    // ======================== GroupModel Implementation ========================
-
-    void GroupModel::setMeshData(std::vector<G3D::Vector3>& vert, std::vector<MeshTriangle>& triangles)
-    {
-        vertices = std::move(vert);
-        this->triangles = std::move(triangles);
-
-        // Calculate the overall bounds for the group
-        if (!vertices.empty())
-        {
-            iBound = G3D::AABox(vertices[0], vertices[0]);
-            auto it = vertices.begin();
-            ++it;
-            while (it != vertices.end())
-            {
-                iBound.merge(*it);
-                ++it;
-            }
-        }
-
-        // Build bounds for each triangle
-        std::vector<G3D::AABox> bounds;
-        bounds.reserve(this->triangles.size());
-
-        auto triIt = this->triangles.begin();
-        while (triIt != this->triangles.end())
-        {
-            // Create bounds from all three vertices of the triangle
-            G3D::Vector3 lo = vertices[triIt->idx0];
-            G3D::Vector3 hi = lo;
-
-            // Properly expand bounds to include all three vertices
-            lo = lo.min(vertices[triIt->idx1]).min(vertices[triIt->idx2]);
-            hi = hi.max(vertices[triIt->idx1]).max(vertices[triIt->idx2]);
-
-            bounds.push_back(G3D::AABox(lo, hi));
-            ++triIt;
-        }
-    }
-
-    void GroupModel::GetMeshData(std::vector<G3D::Vector3>& outVertices, std::vector<uint32_t>& outIndices) const
-    {
-        // Copy vertices
-        outVertices = vertices;
-
-        // Convert triangles to indices
-        outIndices.clear();
-        outIndices.reserve(triangles.size() * 3);
-
-        auto it = triangles.begin();
-        while (it != triangles.end())
-        {
-            outIndices.push_back(it->idx0);
-            outIndices.push_back(it->idx1);
-            outIndices.push_back(it->idx2);
-            ++it;
-        }
-    }
-
-    CylinderIntersection GroupModel::IntersectCylinder(const Cylinder& cyl) const
-    {
-        CylinderIntersection result;
-
-        // Quick bounds check
-        if (!iBound.intersects(cyl.getBounds()))
-            return result;
-
-        // Test cylinder against all triangles
-        auto triIt = triangles.begin();
-        while (triIt != triangles.end())
-        {
-            const G3D::Vector3& v0 = vertices[triIt->idx0];
-            const G3D::Vector3& v1 = vertices[triIt->idx1];
-            const G3D::Vector3& v2 = vertices[triIt->idx2];
-
-            CylinderIntersection triResult = CylinderCollision::IntersectCylinderTriangle(cyl, v0, v1, v2);
-
-            if (triResult.hit)
-            {
-                if (!result.hit || triResult.contactHeight > result.contactHeight)
-                {
-                    result = triResult;
-                }
-            }
-
-            ++triIt;
-        }
-
-        return result;
-    }
-
-    std::vector<CylinderSweepHit> GroupModel::SweepCylinder(const Cylinder& cyl,
-        const G3D::Vector3& sweepDir, float sweepDistance) const
-    {
-        std::vector<CylinderSweepHit> hits;
-
-        // Entrance log removed to further reduce spam; only log if we have hits.
-
-        std::vector<uint32_t> indices;
-        indices.reserve(triangles.size() * 3);
-        auto triIt = triangles.begin();
-        while (triIt != triangles.end())
-        {
-            indices.push_back(triIt->idx0);
-            indices.push_back(triIt->idx1);
-            indices.push_back(triIt->idx2);
-            ++triIt;
-        }
-
-        hits = CylinderCollision::SweepCylinder(cyl, sweepDir, sweepDistance, vertices, indices);
-
-        // Suppress per-GroupModel sweep summary log
-        return hits;
     }
 
     bool GroupModel::IsInsideObject(const G3D::Vector3& pos, const G3D::Vector3& down, float& z_dist) const
@@ -546,136 +412,6 @@ namespace VMAP
         WModelRayCallBack isc(groupModels);
         groupTree.intersectRay(ray, isc, distance, stopAtFirstHit, ignoreM2Model);
         return isc.hit;
-    }
-
-    bool WorldModel::IntersectRayDetailed(const G3D::Ray& ray, float& distance, uint32_t& outGroupIndex, int& outTriIndex, bool stopAtFirstHit, bool ignoreM2Model) const
-    {
-        if (ignoreM2Model && (modelFlags & MOD_M2))
-            return false;
-
-        float minDist = distance;
-        bool anyHit = false;
-        uint32_t foundGroup = 0;
-        int foundTri = -1;
-
-        for (uint32_t gi = 0; gi < groupModels.size(); ++gi)
-        {
-            float d = minDist;
-            if (groupModels[gi].IntersectRay(ray, d, stopAtFirstHit, ignoreM2Model))
-            {
-                anyHit = true;
-                if (d < minDist)
-                {
-                    minDist = d;
-                    foundGroup = gi;
-                    // Attempt to get triangle index from the group (if tracked)
-                    foundTri = groupModels[gi].GetLastHitTriangle();
-                }
-            }
-        }
-
-        if (anyHit)
-        {
-            distance = minDist;
-            outGroupIndex = foundGroup;
-            outTriIndex = foundTri;
-
-            // Log the found group and triangle and show hit point in world and internal coordinates for comparison
-            G3D::Vector3 hitWorld = ray.origin() + ray.direction() * minDist;
-            G3D::Vector3 hitInternal = NavCoord::WorldToInternal(hitWorld);
-            LOG_INFO("[WorldModel::IntersectRayDetailed] FoundGroup=" << foundGroup << " FoundTri=" << foundTri
-                << " HitWorld=(" << hitWorld.x << "," << hitWorld.y << "," << hitWorld.z << ")"
-                << " HitInternal=(" << hitInternal.x << "," << hitInternal.y << "," << hitInternal.z << ")");
-
-            return true;
-        }
-        return false;
-    }
-
-    CylinderIntersection WorldModel::IntersectCylinder(const Cylinder& cyl) const
-    {
-        CylinderIntersection result;
-
-        // Test against all group models
-        auto it = groupModels.begin();
-        while (it != groupModels.end())
-        {
-            CylinderIntersection groupResult = it->IntersectCylinder(cyl);
-
-            if (groupResult.hit)
-            {
-                if (!result.hit || groupResult.contactHeight > result.contactHeight)
-                {
-                    result = groupResult;
-                }
-            }
-
-            ++it;
-        }
-
-        return result;
-    }
-
-    std::vector<CylinderSweepHit> WorldModel::SweepCylinder(const Cylinder& cyl,
-        const G3D::Vector3& sweepDir, float sweepDistance) const
-    {
-        std::vector<CylinderSweepHit> allHits;
-
-        // Sweep through all group models without verbose per-group logging
-        auto it = groupModels.begin();
-        uint32_t gIndex = 0;
-        while (it != groupModels.end())
-        {
-            std::vector<CylinderSweepHit> groupHits = it->SweepCylinder(cyl, sweepDir, sweepDistance);
-            // Stamp group index and (lazy) triangle surface info
-            // Fetch vertices for surface computation only if we have hits
-            if (!groupHits.empty())
-            {
-                const std::vector<G3D::Vector3>& verts = it->GetVertices();
-                for (auto& h : groupHits)
-                {
-                    h.groupIndex = gIndex;
-                    // Triangle index is local to groupHits generation (from CylinderCollision). Compute centroid/normal if valid indices.
-                    uint32_t triIdx = h.triangleIndex;
-                    // Each triangle produced in CylinderCollision::SweepCylinder referenced indices vector ordering; we rely on same ordering when building indices there (sequential).
-                    // To recover vertices: triIdx refers to triangle number, need indices = triIdx*3 .. triIdx*3+2. We cannot reconstruct indices here without original index list.
-                    // Instead approximate centroid using hit.position (already contact point) and keep triNormal = h.normal. If later precise data required, adjust GroupModel::SweepCylinder to embed triangle vertices.
-                    h.triCentroid = h.position; // contact point as centroid proxy
-                    h.triNormal = h.normal;     // existing contact normal
-                }
-            }
-            allHits.insert(allHits.end(), groupHits.begin(), groupHits.end());
-            ++it; ++gIndex;
-        }
-
-        std::sort(allHits.begin(), allHits.end());
-
-        // Suppress WorldModel sweep summary log
-        return allHits;
-    }
-
-    bool WorldModel::CheckCylinderCollision(const Cylinder& cyl,
-        float& outContactHeight, G3D::Vector3& outContactNormal) const
-    {
-        CylinderIntersection result = IntersectCylinder(cyl);
-
-        if (result.hit)
-        {
-            outContactHeight = result.contactHeight;
-            outContactNormal = result.contactNormal;
-            return true;
-        }
-
-        return false;
-    }
-
-    bool WorldModel::CanCylinderFitAtPosition(const Cylinder& cyl, float tolerance) const
-    {
-        // Create slightly expanded cylinder for tolerance
-        Cylinder testCyl(cyl.base, cyl.axis, cyl.radius + tolerance, cyl.height);
-
-        CylinderIntersection result = IntersectCylinder(testCyl);
-        return !result.hit;
     }
 
     bool WorldModel::GetAllMeshData(std::vector<G3D::Vector3>& outVertices,
