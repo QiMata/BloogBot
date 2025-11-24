@@ -127,8 +127,8 @@ private:
             blocking = false;
             toi = 0.0f;
             penetrationDepth = 0.0f;
-            impactPoint = G3D::Vector3(0,0,0);
-            impactNormal = G3D::Vector3(0,0,1);
+            impactPoint = G3D::Vector3(0, 0, 0);
+            impactNormal = G3D::Vector3(0, 0, 1);
         }
     };
 
@@ -146,8 +146,8 @@ private:
             walkable = false;
             floorDist = 0.0f;
             lineDist = 0.0f;
-            floorPoint = G3D::Vector3(0,0,0);
-            floorNormal = G3D::Vector3(0,0,1);
+            floorPoint = G3D::Vector3(0, 0, 0);
+            floorNormal = G3D::Vector3(0, 0, 1);
         }
     };
 

@@ -79,7 +79,7 @@ namespace VMAP
 
             // Also store original case
             modelNameToPath[filename] = fullPath;
-        };
+            };
 
         try
         {
@@ -452,7 +452,7 @@ namespace VMAP
     bool VMapManager2::isInLineOfSight(unsigned int pMapId, float x1, float y1, float z1,
         float x2, float y2, float z2, bool ignoreM2Model)
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::isInLineOfSight map="<<pMapId);
+        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::isInLineOfSight map=" << pMapId);
         if (!isLineOfSightCalcEnabled())
         {
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::isInLineOfSight -> 1 (disabled)");
@@ -464,7 +464,7 @@ namespace VMAP
             G3D::Vector3 pos1 = convertPositionToInternalRep(x1, y1, z1);
             G3D::Vector3 pos2 = convertPositionToInternalRep(x2, y2, z2);
             bool r = instanceTree->second->isInLineOfSight(pos1, pos2, ignoreM2Model);
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::isInLineOfSight -> "<<(r?1:0));
+            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::isInLineOfSight -> " << (r ? 1 : 0));
             return r;
         }
         PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::isInLineOfSight -> 1 (no tree)");
@@ -474,14 +474,14 @@ namespace VMAP
     ModelInstance* VMapManager2::FindCollisionModel(unsigned int mapId, float x0, float y0, float z0,
         float x1, float y1, float z1)
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::FindCollisionModel map="<<mapId);
+        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::FindCollisionModel map=" << mapId);
         auto instanceTree = iInstanceMapTrees.find(mapId);
         if (instanceTree != iInstanceMapTrees.end())
         {
             G3D::Vector3 pos1 = convertPositionToInternalRep(x0, y0, z0);
             G3D::Vector3 pos2 = convertPositionToInternalRep(x1, y1, z1);
             ModelInstance* m = instanceTree->second->FindCollisionModel(pos1, pos2);
-            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCollisionModel -> "<<(m?"hit":"null"));
+            PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCollisionModel -> " << (m ? "hit" : "null"));
             return m;
         }
         PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::FindCollisionModel -> null (no tree)");
@@ -492,7 +492,7 @@ namespace VMAP
         float x2, float y2, float z2,
         float& rx, float& ry, float& rz, float pModifyDist)
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::getObjectHitPos map="<<pMapId);
+        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::getObjectHitPos map=" << pMapId);
         auto instanceTree = iInstanceMapTrees.find(pMapId);
         if (instanceTree != iInstanceMapTrees.end())
         {
@@ -514,7 +514,7 @@ namespace VMAP
 
     float VMapManager2::getHeight(unsigned int pMapId, float x, float y, float z, float maxSearchDist)
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::getHeight map="<<pMapId);
+        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::getHeight map=" << pMapId);
         if (!isHeightCalcEnabled())
         {
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::getHeight -> INVALID (disabled)");
@@ -529,18 +529,18 @@ namespace VMAP
             h = instanceTree->second->getHeight(pos, maxSearchDist);
             if (!std::isfinite(h)) h = PhysicsConstants::INVALID_HEIGHT;
         }
-        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::getHeight -> "<<h);
+        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::getHeight -> " << h);
         return h;
     }
 
     bool VMapManager2::getAreaInfo(unsigned int pMapId, float x, float y, float& z,
         uint32_t& flags, int32_t& adtId, int32_t& rootId, int32_t& groupId) const
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::getAreaInfo map="<<pMapId);
+        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::getAreaInfo map=" << pMapId);
         auto instanceTree = iInstanceMapTrees.find(pMapId);
         if (instanceTree != iInstanceMapTrees.end())
         {
-            G3D::Vector3 pos = NavCoord::WorldToInternal(x,y,z);
+            G3D::Vector3 pos = NavCoord::WorldToInternal(x, y, z);
             bool res = instanceTree->second->getAreaInfo(pos, flags, adtId, rootId, groupId);
             if (res)
             {
@@ -557,11 +557,11 @@ namespace VMAP
     bool VMapManager2::GetLiquidLevel(uint32_t pMapId, float x, float y, float z,
         uint8_t ReqLiquidTypeMask, float& level, float& floor, uint32_t& type) const
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::GetLiquidLevel map="<<pMapId);
+        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::GetLiquidLevel map=" << pMapId);
         auto instanceTree = iInstanceMapTrees.find(pMapId);
         if (instanceTree != iInstanceMapTrees.end())
         {
-            G3D::Vector3 pos = NavCoord::WorldToInternal(x,y,z);
+            G3D::Vector3 pos = NavCoord::WorldToInternal(x, y, z);
             LocationInfo info;
             if (instanceTree->second->GetLocationInfo(pos, info) && info.hitModel)
             {

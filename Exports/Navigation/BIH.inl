@@ -1,3 +1,4 @@
+// BIH.inl - Updated with extensive logging
 #pragma once
 #include "VMapDefinitions.h"
 #include "VMapLog.h"
@@ -122,10 +123,10 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
                     // push back node
                     if (stackPos < MAX_STACK_SIZE)
                     {
-                        stack[stackPos].node = back;
-                        stack[stackPos].tnear = (tb >= intervalMin) ? tb : intervalMin;
-                        stack[stackPos].tfar = intervalMax;
-                        ++stackPos;
+                    stack[stackPos].node = back;
+                    stack[stackPos].tnear = (tb >= intervalMin) ? tb : intervalMin;
+                    stack[stackPos].tfar = intervalMax;
+                    ++stackPos;
                     }
                     else
                     {
@@ -149,7 +150,7 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
                         uint32_t objIdx = mapObjectIndex(srcIdx);
                         if (objIdx != 0xFFFFFFFFu)
                         {
-                            bool hit = intersectCallback(r, objIdx, maxDist, stopAtFirstHit, ignoreM2Model);
+                        bool hit = intersectCallback(r, objIdx, maxDist, stopAtFirstHit, ignoreM2Model);
                             if (hit)
                             {
                                 ++hitsAccepted;
@@ -157,10 +158,10 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
                                 G3D::Vector3 hitI = r.origin() + r.direction() * maxDist;
                                 G3D::Vector3 hitW = NavCoord::InternalToWorld(hitI);
                             }
-                            if (stopAtFirstHit && hit)
-                            {
-                                return;
-                            }
+                        if (stopAtFirstHit && hit)
+                        {
+                            return;
+                        }
                         }
                         --n;
                         ++offset;
@@ -193,18 +194,24 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
 
         do
         {
+            // stack is empty?
             if (stackPos == 0)
             {
                 return;
             }
+
+            // move back up the stack
             --stackPos;
             intervalMin = stack[stackPos].tnear;
+
             if (maxDist < intervalMin)
             {
                 continue;
             }
+
             node = stack[stackPos].node;
             intervalMax = stack[stackPos].tfar;
+
             break;
         } while (true);
     }
@@ -240,9 +247,11 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
             {
                 if (axis < 3)
                 {
+                    // "normal" interior node
                     float tl = VMAP::intBitsToFloat(tree[node + 1]);
                     float tr = VMAP::intBitsToFloat(tree[node + 2]);
 
+                    // point is between clip zones
                     if (tl < p[axis] && tr > p[axis])
                     {
                         break;
@@ -250,19 +259,24 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
 
                     int right = offset + 3;
                     node = right;
+
+                    // point is in right node only
                     if (tl < p[axis])
                     {
                         continue;
                     }
+
                     node = offset; // left
+
+                    // point is in left node only
                     if (tr > p[axis])
                     {
                         continue;
                     }
                     if (stackPos < MAX_STACK_SIZE)
                     {
-                        stack[stackPos].node = right;
-                        ++stackPos;
+                    stack[stackPos].node = right;
+                    ++stackPos;
                     }
                     else
                     {
@@ -282,7 +296,7 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
                         uint32_t objIdx = mapObjectIndex(srcIdx);
                         if (objIdx != 0xFFFFFFFFu)
                         {
-                            intersectCallback(p, objIdx);
+                        intersectCallback(p, objIdx);
                         }
                         --n; ++off;
                     }
@@ -295,21 +309,27 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
                 {
                     return;
                 }
+
                 float tl = VMAP::intBitsToFloat(tree[node + 1]);
                 float tr = VMAP::intBitsToFloat(tree[node + 2]);
+
                 node = offset;
+
                 if (tl > p[axis] || tr < p[axis])
                 {
                     break;
                 }
+
                 continue;
             }
         }
 
+        // Pop from stack
         if (stackPos == 0)
         {
             return;
         }
+
         --stackPos;
         node = stack[stackPos].node;
     }
@@ -391,7 +411,7 @@ inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32
                         {
                             return outCount > 0;
                         }
-                    }
+}
                 }
                 else
                 {

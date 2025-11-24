@@ -145,7 +145,7 @@ namespace VMAP
                 G3D::Vector3 triNormal = (mv1 - mv0).cross(mv2 - mv0);
                 float triArea = triNormal.magnitude() * 0.5f;
                 if (triArea > 0.00001f) triNormal = triNormal / (2.0f * triArea);
-                else triNormal = {0,0,0};
+                else triNormal = { 0,0,0 };
 
                 bool result = GroupModel::IntersectTriangle(mt, vertices, ray, distance);
 
