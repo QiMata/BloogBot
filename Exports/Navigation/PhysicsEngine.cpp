@@ -457,28 +457,28 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	// ------------------------------------------------------------
 	// Build a path from original input position to the proposed final physics position
 	// and log the navmesh destination (last corner) to compare Z/height.
-	Navigation* nav = Navigation::GetInstance();
-	if (nav)
-	{
-		// Make sure navigation maps are initialized (safe to call repeatedly)
-		nav->Initialize();
-		int pathLen = 0;
-		XYZ start(input.x, input.y, input.z);
-		XYZ end(st.x, st.y, st.z);
-		XYZ* pathArr = nav->CalculatePath(input.mapId, start, end, true /*straightPath*/, &pathLen);
-		if (pathArr && pathLen > 0)
-		{
-			const XYZ& dest = pathArr[pathLen - 1];
-			const XYZ& orig = pathArr[0];
-			PHYS_INFO(PHYS_MOVE, "[Step] NavMesh start=" << orig.X << ", " << orig.Y << ", " << orig.Z
-				<< " end = " << dest.X << ", " << dest.Y << ", " << dest.Z
-				<< " physicsEnd=" << st.x << "," << st.y << "," << st.z);
-			// Override output Z with navmesh destination Z (temporary choice)
-			out.z = dest.Z;
-		}
-		if (pathArr)
-			nav->FreePathArr(pathArr);
-	}
+	//Navigation* nav = Navigation::GetInstance();
+	//if (nav)
+	//{
+	//	// Make sure navigation maps are initialized (safe to call repeatedly)
+	//	nav->Initialize();
+	//	int pathLen = 0;
+	//	XYZ start(input.x, input.y, input.z);
+	//	XYZ end(st.x, st.y, st.z);
+	//	XYZ* pathArr = nav->CalculatePath(input.mapId, start, end, true /*straightPath*/, &pathLen);
+	//	if (pathArr && pathLen > 0)
+	//	{
+	//		const XYZ& dest = pathArr[pathLen - 1];
+	//		const XYZ& orig = pathArr[0];
+	//		PHYS_INFO(PHYS_MOVE, "[Step] NavMesh start=" << orig.X << ", " << orig.Y << ", " << orig.Z
+	//			<< " end = " << dest.X << ", " << dest.Y << ", " << dest.Z
+	//			<< " physicsEnd=" << st.x << "," << st.y << "," << st.z);
+	//		// Override output Z with navmesh destination Z (temporary choice)
+	//		out.z = dest.Z;
+	//	}
+	//	if (pathArr)
+	//		nav->FreePathArr(pathArr);
+	//}
 
 	return out;
 }
