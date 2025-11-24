@@ -22,7 +22,8 @@ namespace WoWSharpClient.Tests.Handlers
             // Call the HandleUpdateObject method on ObjectUpdateHandler
             ObjectUpdateHandler.HandleUpdateObject(opcode, data);
 
-            WoWSharpObjectManager.Instance.ProcessUpdates();
+            WoWSharpObjectManager.Instance.ProcessUpdatesAsync(new CancellationTokenSource().Token);
+
             // Verify that objects with the expected GUIDs were added to the ObjectManager
             Assert.Equal(6, WoWSharpObjectManager.Instance.Objects.Count());
 
@@ -137,7 +138,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             _woWClientMock.Setup(expression => expression.SendNameQuery(150));
 
-            WoWSharpObjectManager.Instance.ProcessUpdates();
+            WoWSharpObjectManager.Instance.ProcessUpdatesAsync(new CancellationTokenSource().Token);
 
             // Verify that objects with the expected GUIDs were added to the ObjectManager
             Assert.True(WoWSharpObjectManager.Instance.Objects.Any(o => o.Guid == 150));

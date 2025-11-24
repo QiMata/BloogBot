@@ -1,4 +1,4 @@
-// WorldModel.cpp - Fixed to properly handle VMAP_7.0 format files
+// WorldModel.cpp - Enhanced with cylinder collision support
 #include "WorldModel.h"
 #include "VMapDefinitions.h"
 #include "G3D/BoundsTrait.h"
@@ -6,7 +6,9 @@
 #include <cstring>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 #include "VMapLog.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -29,6 +31,25 @@ namespace VMAP
         const std::vector<GroupModel>& groupModels;
         bool hit;
     };
+
+    // Helper function to compute barycentric coordinates for a point on a triangle
+    static G3D::Vector3 ComputeBarycentric(const G3D::Vector3& p, const G3D::Vector3& a, const G3D::Vector3& b, const G3D::Vector3& c)
+    {
+        G3D::Vector3 v0 = b - a;
+        G3D::Vector3 v1 = c - a;
+        G3D::Vector3 v2 = p - a;
+        float d00 = v0.dot(v0);
+        float d01 = v0.dot(v1);
+        float d11 = v1.dot(v1);
+        float d20 = v2.dot(v0);
+        float d21 = v2.dot(v1);
+        float denom = d00 * d11 - d01 * d01;
+        float v = (d11 * d20 - d01 * d21) / denom;
+        float w = (d00 * d21 - d01 * d20) / denom;
+        float u = 1.0f - v - w;
+        return G3D::Vector3(u, v, w);
+    }
+
     // ======================== WmoLiquid Implementation ========================
 
     WmoLiquid::WmoLiquid(uint32_t width, uint32_t height, const G3D::Vector3& corner, uint32_t type)
@@ -164,48 +185,6 @@ namespace VMAP
         return result;
     }
 
-    void WmoLiquid::getPosInfo(uint32_t& tilesX, uint32_t& tilesY, G3D::Vector3& corner) const
-    {
-        tilesX = iTilesX;
-        tilesY = iTilesY;
-        corner = iCorner;
-    }
-
-    // ======================== GroupModel Implementation ========================
-
-    void GroupModel::setMeshData(std::vector<G3D::Vector3>& vert, std::vector<MeshTriangle>& triangles)
-    {
-        vertices = std::move(vert);
-        this->triangles = std::move(triangles);
-
-        // Calculate the overall bounds for the group
-        if (!vertices.empty())
-        {
-            iBound = G3D::AABox(vertices[0], vertices[0]);
-            for (const auto& vertex : vertices)
-            {
-                iBound.merge(vertex);
-            }
-        }
-
-        // Build bounds for each triangle
-        std::vector<G3D::AABox> bounds;
-        bounds.reserve(this->triangles.size());
-
-        for (const auto& tri : this->triangles)
-        {
-            // Create bounds from all three vertices of the triangle
-            G3D::Vector3 lo = vertices[tri.idx0];
-            G3D::Vector3 hi = lo;
-
-            // Properly expand bounds to include all three vertices
-            lo = lo.min(vertices[tri.idx1]).min(vertices[tri.idx2]);
-            hi = hi.max(vertices[tri.idx1]).max(vertices[tri.idx2]);
-
-            bounds.push_back(G3D::AABox(lo, hi));
-        }
-    }
-
     bool GroupModel::IsInsideObject(const G3D::Vector3& pos, const G3D::Vector3& down, float& z_dist) const
     {
         if (!iBound.contains(pos))
@@ -223,14 +202,40 @@ namespace VMAP
         return false;
     }
 
-    // Also add logging to the IntersectTriangle method:
     uint32_t GroupModel::IntersectRay(const G3D::Ray& ray, float& distance, bool stopAtFirstHit, bool ignoreM2Model) const
     {
         if (triangles.empty())
-            return 0;  // Note: server returns false but should return 0 for uint32
+            return 0;
 
-        GModelRayCallback callback(triangles, vertices);
+        // Reset last hit tracking
+        m_lastHitTriangle = -1;
+
+        GModelRayCallback callback(triangles, vertices, const_cast<GroupModel*>(this));
+        // Restore original traversal behavior: honor caller's stopAtFirstHit flag.
         meshTree.intersectRay(ray, callback, distance, stopAtFirstHit, ignoreM2Model);
+
+        // Emit PHYS_TRACE so it shows in same channel as other raycast summaries
+        if (m_lastHitTriangle >= 0)
+        {
+            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRay] hits=" << callback.hit << " lastTri=" << m_lastHitTriangle << " dist=" << distance << " wmoId=" << iGroupWMOID);
+
+            // Additional per-triangle diagnostics in model space: hit point, normal.z and barycentric
+            const MeshTriangle& mt = triangles[(size_t)m_lastHitTriangle];
+            const G3D::Vector3& v0 = vertices[(size_t)mt.idx0];
+            const G3D::Vector3& v1 = vertices[(size_t)mt.idx1];
+            const G3D::Vector3& v2 = vertices[(size_t)mt.idx2];
+            G3D::Vector3 n = (v1 - v0).cross(v2 - v0).directionOrZero();
+            float cosZ = n.z; // model-space z component
+            G3D::Vector3 p = ray.origin() + ray.direction() * distance;
+            G3D::Vector3 bary = ComputeBarycentric(p, v0, v1, v2);
+            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRayTri] tri=" << m_lastHitTriangle
+                << " pM=(" << p.x << "," << p.y << "," << p.z << ") nM=(" << n.x << "," << n.y << "," << n.z
+                << ") cosZ_M=" << cosZ << " bary=(" << bary.x << "," << bary.y << "," << bary.z << ")");
+        }
+        else
+        {
+            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRay] no hit wmoId=" << iGroupWMOID);
+        }
         return callback.hit;
     }
 
@@ -272,6 +277,7 @@ namespace VMAP
 
         float t = f * edge2.dot(q);
 
+        // Original threshold: require t > 0.00001f (ignore near-zero origins) and closer than current distance.
         if (t > 0.00001f && t < distance)
         {
             distance = t;
@@ -378,6 +384,9 @@ namespace VMAP
             }
         }
 
+        // Reset last hit tracking
+        m_lastHitTriangle = -1;
+
         // Read MBIH chunk (mesh BIH tree)
         if (!readChunk(rf, chunk, "MBIH", 4))
         {
@@ -403,8 +412,6 @@ namespace VMAP
 
         if (chunkSize > 0)
         {
-            // Note: WmoLiquid::readFromFile signature might be different
-            // You may need to adjust this based on your implementation
             if (!WmoLiquid::readFromFile(rf, iLiquid))
             {
                 std::cerr << "[GroupModel] Failed to read liquid data" << std::endl;
@@ -414,6 +421,8 @@ namespace VMAP
 
         return true;
     }
+
+    // ======================== WorldModel Implementation ========================
 
     bool WorldModel::IntersectRay(const G3D::Ray& ray, float& distance, bool stopAtFirstHit, bool ignoreM2Model) const
     {
@@ -428,6 +437,96 @@ namespace VMAP
         WModelRayCallBack isc(groupModels);
         groupTree.intersectRay(ray, isc, distance, stopAtFirstHit, ignoreM2Model);
         return isc.hit;
+    }
+
+    bool WorldModel::GetAllMeshData(std::vector<G3D::Vector3>& outVertices,
+        std::vector<uint32_t>& outIndices) const
+    {
+        if (groupModels.empty())
+            return false;
+
+        outVertices.clear();
+        outIndices.clear();
+
+        uint32_t vertexOffset = 0;
+
+        auto groupIt = groupModels.begin();
+        while (groupIt != groupModels.end())
+        {
+            const std::vector<G3D::Vector3>& groupVerts = groupIt->GetVertices();
+            const std::vector<MeshTriangle>& groupTris = groupIt->GetTriangles();
+
+            // Copy vertices
+            auto vertIt = groupVerts.begin();
+            while (vertIt != groupVerts.end())
+            {
+                outVertices.push_back(*vertIt);
+                ++vertIt;
+            }
+
+            // Copy and offset triangle indices
+            auto triIt = groupTris.begin();
+            while (triIt != groupTris.end())
+            {
+                outIndices.push_back(triIt->idx0 + vertexOffset);
+                outIndices.push_back(triIt->idx1 + vertexOffset);
+                outIndices.push_back(triIt->idx2 + vertexOffset);
+                ++triIt;
+            }
+
+            vertexOffset += groupVerts.size();
+            ++groupIt;
+        }
+
+        return !outVertices.empty();
+    }
+
+    bool WorldModel::GetMeshDataInBounds(const G3D::AABox& bounds,
+        std::vector<G3D::Vector3>& outVertices,
+        std::vector<uint32_t>& outIndices) const
+    {
+        if (groupModels.empty())
+            return false;
+
+        outVertices.clear();
+        outIndices.clear();
+
+        uint32_t vertexOffset = 0;
+
+        auto groupIt = groupModels.begin();
+        while (groupIt != groupModels.end())
+        {
+            // Check if group intersects bounds
+            if (groupIt->GetBound().intersects(bounds))
+            {
+                const std::vector<G3D::Vector3>& groupVerts = groupIt->GetVertices();
+                const std::vector<MeshTriangle>& groupTris = groupIt->GetTriangles();
+
+                // Copy vertices
+                auto vertIt = groupVerts.begin();
+                while (vertIt != groupVerts.end())
+                {
+                    outVertices.push_back(*vertIt);
+                    ++vertIt;
+                }
+
+                // Copy and offset triangle indices
+                auto triIt = groupTris.begin();
+                while (triIt != groupTris.end())
+                {
+                    outIndices.push_back(triIt->idx0 + vertexOffset);
+                    outIndices.push_back(triIt->idx1 + vertexOffset);
+                    outIndices.push_back(triIt->idx2 + vertexOffset);
+                    ++triIt;
+                }
+
+                vertexOffset += groupVerts.size();
+            }
+
+            ++groupIt;
+        }
+
+        return !outVertices.empty();
     }
 
     bool WorldModel::readFile(const std::string& filename)
@@ -483,8 +582,12 @@ namespace VMAP
             groupModels.resize(count);
 
             // Read each group model
-            for (uint32_t i = 0; i < count && result; ++i)
+            uint32_t i = 0;
+            while (i < count && result)
+            {
                 result = groupModels[i].readFromFile(rf);
+                ++i;
+            }
 
             // Read GBIH chunk (BIH tree)
             if (result && !readChunk(rf, chunk, "GBIH", 4))

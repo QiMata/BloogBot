@@ -1,4 +1,4 @@
-// VMapManager2.h
+// VMapManager2.h - Enhanced with cylinder collision support
 #pragma once
 
 #include "IVMapManager.h"
@@ -8,6 +8,8 @@
 #include <shared_mutex>
 #include <string>
 #include "Vector3.h"
+#include "CapsuleCollision.h"
+#include "SceneQuery.h"
 
 namespace VMAP
 {
@@ -71,5 +73,21 @@ namespace VMAP
             uint8_t ReqLiquidTypeMask, float& level, float& floor, uint32_t& type) const override;
 
         std::shared_ptr<WorldModel> acquireModelInstance(const std::string& basepath, const std::string& filename);
+
+        // Capsule sweep wrapper using SceneQuery
+        std::vector<SceneHit> SweepCapsuleAll(unsigned int pMapId,
+            const CapsuleCollision::Capsule& capsuleStart,
+            const G3D::Vector3& dir,
+            float distance,
+            uint32_t includeMask = 0xFFFFFFFFu) const;
+
+        // Get height using cylinder for more accurate ground detection
+        // NOTE: This is non-const because it calls the non-const getHeight() method
+        float GetCylinderHeight(unsigned int pMapId, float x, float y, float z,
+            float cylinderRadius, float cylinderHeight, float maxSearchDist);
+
+        // Convert cylinder between coordinate systems
+        Cylinder ConvertCylinderToInternal(const Cylinder& worldCylinder) const;
+        Cylinder ConvertCylinderToWorld(const Cylinder& internalCylinder) const;
     };
 }

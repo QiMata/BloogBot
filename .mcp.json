@@ -1,0 +1,7 @@
+{
+  "servers": {
+    "memorizer": {
+      "url": "http://localhost:5000/sse"
+    }
+  }
+}
