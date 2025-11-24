@@ -57,6 +57,19 @@ namespace G3D
             return sqrt(x * x + y * y + z * z);
         }
 
+        // Added to support SceneQuery diagnostics (matches g3dlite semantics)
+        inline Vector3 directionOrZero() const {
+            float mag = magnitude();
+            if (mag < 1e-7f) {
+                return Vector3::zero();
+            } else if (mag > 0.99999f && mag < 1.00001f) {
+                return *this; // already unit
+            } else {
+                float inv = 1.0f / mag;
+                return Vector3(x * inv, y * inv, z * inv);
+            }
+        }
+
         bool operator==(const Vector3& v) const { return x == v.x && y == v.y && z == v.z; }
         bool operator!=(const Vector3& v) const { return !(*this == v); }
 

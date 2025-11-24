@@ -255,7 +255,10 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	std::vector<SceneHit> hits;
 	if (m_vmapManager)
 		hits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, moveDir, intendedDist);
-	if (!hits.empty()) {
+
+	// NEW: Temporarily ignore sweep collisions to allow movement (requested)
+	bool ignoreSweep = true;
+	if (!hits.empty() && !ignoreSweep) {
 		const SceneHit& hit = hits.front();
 		float travel = std::max(0.0f, hit.distance);
 		st.x += moveDir.x * travel;
@@ -274,9 +277,12 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		}
 	}
 	else {
+		if (!hits.empty()) {
+			PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule sweep ignored (temporary override), proceeding as unobstructed");
+		}
 		st.x += moveDir.x * intendedDist;
 		st.y += moveDir.y * intendedDist;
-		PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule sweep: no collision, moved full distance");
+		PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule sweep: no collision (or ignored), moved full distance");
 		// Query both VMAP and ADT terrain heights
 		float vmapZ = INVALID_HEIGHT;
 		if (m_vmapManager)
@@ -445,5 +451,34 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.vy = st.vy;
 	out.vz = st.vz;
 	out.moveFlags = input.moveFlags;
+
+	// ------------------------------------------------------------
+	// NavMesh path height comparison
+	// ------------------------------------------------------------
+	// Build a path from original input position to the proposed final physics position
+	// and log the navmesh destination (last corner) to compare Z/height.
+	Navigation* nav = Navigation::GetInstance();
+	if (nav)
+	{
+		// Make sure navigation maps are initialized (safe to call repeatedly)
+		nav->Initialize();
+		int pathLen = 0;
+		XYZ start(input.x, input.y, input.z);
+		XYZ end(st.x, st.y, st.z);
+		XYZ* pathArr = nav->CalculatePath(input.mapId, start, end, true /*straightPath*/, &pathLen);
+		if (pathArr && pathLen > 0)
+		{
+			const XYZ& dest = pathArr[pathLen - 1];
+			const XYZ& orig = pathArr[0];
+			PHYS_INFO(PHYS_MOVE, "[Step] NavMesh start=" << orig.X << ", " << orig.Y << ", " << orig.Z
+				<< " end = " << dest.X << ", " << dest.Y << ", " << dest.Z
+				<< " physicsEnd=" << st.x << "," << st.y << "," << st.z);
+			// Override output Z with navmesh destination Z (temporary choice)
+			out.z = dest.Z;
+		}
+		if (pathArr)
+			nav->FreePathArr(pathArr);
+	}
+
 	return out;
 }
