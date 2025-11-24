@@ -145,6 +145,7 @@ namespace WoWSharpClient.Movement
 
             // Update position from physics
             _player.Position = new Position(output.NewPosX, output.NewPosY, output.NewPosZ);
+            _player.SwimPitch = output.Pitch;
 
             // Update velocity
             _velocity = new Vector3(output.NewVelX, output.NewVelY, output.NewVelZ);

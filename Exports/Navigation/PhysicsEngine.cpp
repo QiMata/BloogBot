@@ -9,6 +9,7 @@
 #include "VMapLog.h"
 #include "ModelInstance.h"     // for debug diagnostics on model collisions
 #include "CapsuleCollision.h"  // added for debug distance computation
+#include "PhysicsBridge.h"     // ensure movement flag constants (added for swimming flag update)
 
 #include <algorithm>
 #include <filesystem>
@@ -415,13 +416,47 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 
 	// 2. Query surface and liquid state
 	uint32_t liquidType = 0;
+	// Capture raw ADT and VMAP liquid levels for diagnostics before merged query
+	float adtLiquidLevel = INVALID_HEIGHT; uint32_t adtLiquidType = 0;
+	if (m_mapLoader && m_mapLoader->IsInitialized()) {
+		adtLiquidLevel = m_mapLoader->GetLiquidLevel(input.mapId, st.x, st.y);
+		if (adtLiquidLevel > INVALID_HEIGHT)
+			adtLiquidType = m_mapLoader->GetLiquidType(input.mapId, st.x, st.y);
+	}
+	float vmapLiquidLevel = INVALID_HEIGHT; uint32_t vmapLiquidType = 0;
+	if (m_vmapManager) {
+		float level, floor; uint32_t type;
+		if (m_vmapManager->GetLiquidLevel(input.mapId, st.x, st.y, st.z, 0xFF, level, floor, type)) {
+			vmapLiquidLevel = level; vmapLiquidType = type;
+		}
+	}
 	float liquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, liquidType);
 	bool isSwimming = false;
-	if (liquidLevel > PhysicsConstants::INVALID_HEIGHT && st.z < liquidLevel + PhysicsConstants::WATER_LEVEL_DELTA)
+	float swimImmersion = -9999.0f; // diagnostic: liquidLevel - (feet + radius)
+	const float swimImmersionThreshold = 1.0f; // new threshold for entering swim state
+	if (liquidLevel > PhysicsConstants::INVALID_HEIGHT)
 	{
-		isSwimming = true;
-		st.isSwimming = true;
+		float refZ = st.z + r; // reference point (top of lower sphere)
+		swimImmersion = liquidLevel - refZ;
+		if (swimImmersion > swimImmersionThreshold)
+		{
+			isSwimming = true;
+			st.isSwimming = true;
+		}
 	}
+	// NEW: capture ADT terrain height for diagnostics
+	float adtTerrainZ = GetTerrainHeight(input.mapId, st.x, st.y);
+	PHYS_INFO(PHYS_MOVE, "[Step] WaterDiag posZ=" << st.z
+		<< " radius=" << r
+		<< " refZ=" << (st.z + r)
+		<< " adtTerrainZ=" << adtTerrainZ
+		<< " adtWaterLevel=" << adtLiquidLevel
+		<< " vmapWaterLevel=" << vmapLiquidLevel
+		<< " chosenWater=" << liquidLevel
+		<< " immersion=" << swimImmersion
+		<< " immersionThreshold=" << swimImmersionThreshold
+		<< " prevDeltaConst=" << PhysicsConstants::WATER_LEVEL_DELTA
+		<< " willSwim=" << (isSwimming ? 1 : 0));
 
 	// 3. Delegate movement to the appropriate helper method
 	float moveSpeed = CalculateMoveSpeed(input, isSwimming);
@@ -450,35 +485,40 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.vx = st.vx;
 	out.vy = st.vy;
 	out.vz = st.vz;
-	out.moveFlags = input.moveFlags;
+	out.moveFlags = input.moveFlags; // start from input flags
+	// Set / clear swimming flag based on physics decision
+	if (isSwimming)
+		out.moveFlags |= MOVEFLAG_SWIMMING;
+	else
+		out.moveFlags &= ~MOVEFLAG_SWIMMING;
 
 	// ------------------------------------------------------------
 	// NavMesh path height comparison
 	// ------------------------------------------------------------
 	// Build a path from original input position to the proposed final physics position
 	// and log the navmesh destination (last corner) to compare Z/height.
-	//Navigation* nav = Navigation::GetInstance();
-	//if (nav)
-	//{
-	//	// Make sure navigation maps are initialized (safe to call repeatedly)
-	//	nav->Initialize();
-	//	int pathLen = 0;
-	//	XYZ start(input.x, input.y, input.z);
-	//	XYZ end(st.x, st.y, st.z);
-	//	XYZ* pathArr = nav->CalculatePath(input.mapId, start, end, true /*straightPath*/, &pathLen);
-	//	if (pathArr && pathLen > 0)
-	//	{
-	//		const XYZ& dest = pathArr[pathLen - 1];
-	//		const XYZ& orig = pathArr[0];
-	//		PHYS_INFO(PHYS_MOVE, "[Step] NavMesh start=" << orig.X << ", " << orig.Y << ", " << orig.Z
-	//			<< " end = " << dest.X << ", " << dest.Y << ", " << dest.Z
-	//			<< " physicsEnd=" << st.x << "," << st.y << "," << st.z);
-	//		// Override output Z with navmesh destination Z (temporary choice)
-	//		out.z = dest.Z;
-	//	}
-	//	if (pathArr)
-	//		nav->FreePathArr(pathArr);
-	//}
+	Navigation* nav = Navigation::GetInstance();
+	if (nav)
+	{
+		// Make sure navigation maps are initialized (safe to call repeatedly)
+		nav->Initialize();
+		int pathLen = 0;
+		XYZ start(input.x, input.y, input.z);
+		XYZ end(st.x, st.y, st.z);
+		XYZ* pathArr = nav->CalculatePath(input.mapId, start, end, true /*straightPath*/, &pathLen);
+		if (pathArr && pathLen > 0)
+		{
+			const XYZ& dest = pathArr[pathLen - 1];
+			const XYZ& orig = pathArr[0];
+			PHYS_INFO(PHYS_MOVE, "[Step] NavMesh start=" << orig.X << ", " << orig.Y << ", " << orig.Z
+				<< " end = " << dest.X << ", " << dest.Y << ", " << dest.Z
+				<< " physicsEnd=" << st.x << "," << st.y << "," << st.z);
+			// Override output Z with navmesh destination Z (temporary choice)
+			out.z = dest.Z;
+		}
+		if (pathArr)
+			nav->FreePathArr(pathArr);
+	}
 
 	return out;
 }

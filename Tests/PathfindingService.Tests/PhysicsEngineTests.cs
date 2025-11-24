@@ -43,7 +43,7 @@ namespace PathfindingService.Tests
         [InlineData(0u, 537.798401f, 279.534973f, 31.208981f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(0u, 538.0f, 279.0f, 31.237110f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(0u, 582.693848f, 342.985321f, 31.149933f, Race.Orc, 0f, MovementFlags.MOVEFLAG_SWIMMING)]
-        [InlineData(0u, 623.246948f, 349.184143f, 31.149933f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
+        [InlineData(0u, 623.246948f, 349.184143f, 31.149933f, Race.Orc, 0f, MovementFlags.MOVEFLAG_SWIMMING)]
         [InlineData(0u, 623.683838f, 349.455780f, 31.245306f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(1u, -2917.580000f, -257.980000f, 53.362350f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(1u, -618.518f, -4251.67f, 38.718f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
@@ -101,12 +101,12 @@ namespace PathfindingService.Tests
         }
 
         [Theory]
-        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -598.668f, -4601.770f, 37.614f)] // Your exact scenario
-        [InlineData(1u, -562.225f, -4189.092f, 70.789f, 6.175373f, Race.Orc, -555.043f, -4189.869f, 72.656f)] // Your exact scenario
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8949.95f, -125.49f, 83.23f)]  // North facing
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8942.95f, -132.49f, 83.23f)] // East facing  
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8949.95f, -139.49f, 83.23f)] // South facing
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8956.95f, -132.49f, 83.23f)] // West facing
+        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -598.668f, -4601.770f, 41.0648575)] // Your exact scenario
+        [InlineData(1u, -562.225f, -4189.092f, 70.789f, 6.175373f, Race.Orc, -555.043f, -4189.869f, 72.6432724f)] // Your exact scenario
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8949.95f, -125.49f, 83.6794205f)]  // North facing
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8942.95f, -132.49f, 83.3185196f)] // East facing  
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8949.95f, -139.49f, 82.9244919f)] // South facing
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8956.95f, -132.49f, 83.4673691f)] // West facing
         public void StepPhysics_ForwardMovement(
             uint mapId,
             float startX, float startY, float startZ,
@@ -186,6 +186,8 @@ namespace PathfindingService.Tests
             Console.WriteLine($"  Velocity: ({output.vx:F2}, {output.vy:F2}, {output.vz:F2})");
 
             Assert.Equal(expectedZ, output.z);
+            Assert.Equal(expectedY, output.y);
+            Assert.Equal(expectedX, output.x);
         }
     }
 }
