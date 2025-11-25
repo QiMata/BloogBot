@@ -117,6 +117,13 @@ namespace PathfindingService.Repository
         public IntPtr splinePoints;
         public int splinePointCount;
         public int currentSplineIndex;
+        // Previous ground tracking (mirrors PhysicsBridge.h)
+        public int prevGroundTriIndex;           // -1 if none / terrain
+        public uint prevGroundInstanceId;        // 0 if none
+        public float prevGroundZ;                // last known ground height
+        public float prevGroundNx;               // previous ground normal X
+        public float prevGroundNy;               // previous ground normal Y
+        public float prevGroundNz;               // previous ground normal Z
         public uint mapId;
         public float deltaTime;
     }
@@ -135,6 +142,12 @@ namespace PathfindingService.Repository
         public bool collided;
         public float groundZ;
         public float liquidZ;
+        // Ground surface identification (mirrors PhysicsBridge.h)
+        public int groundTriIndex;               // triangle index within model, -1 if terrain or none
+        public uint groundInstanceId;            // model instance id, 0 if terrain or none
+        public float groundNx;                   // ground surface normal X
+        public float groundNy;                   // ground surface normal Y
+        public float groundNz;                   // ground surface normal Z
         public float fallDistance;
         public float fallTime;
         public int currentSplineIndex;

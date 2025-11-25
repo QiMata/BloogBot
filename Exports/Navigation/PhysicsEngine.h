@@ -112,6 +112,14 @@ private:
         bool isSwimming;
         float fallTime;
         G3D::Vector3 groundNormal;
+        // Support ramp plane (for smoothing step transitions)
+        bool rampActive = false;
+        G3D::Vector3 rampN; // plane normal (upward)
+        float rampD = 0.0f; // plane constant (n.x*x + n.y*y + n.z*z + d = 0)
+        G3D::Vector3 rampStart; // previous ground point
+        G3D::Vector3 rampEnd;   // new stepped point
+        G3D::Vector3 rampDir;   // horizontal movement direction used to form plane
+        float rampLength = 0.0f; // horizontal distance along rampDir between start/end
     };
 
     // Added physics query result structs

@@ -515,6 +515,13 @@ namespace VMAP
     float VMapManager2::getHeight(unsigned int pMapId, float x, float y, float z, float maxSearchDist)
     {
         PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::getHeight map=" << pMapId);
+        // Coordinate space notes for this query chain:
+        // 1) (x,y,z) provided by caller are assumed WORLD space. In this project WORLD and INTERNAL share Z; only X/Y are mirrored.
+        // 2) convertPositionToInternalRep -> NavCoord::WorldToInternal: internalPos = (MID - x, MID - y, z). This mirrors X/Y about global MapMid, Z unchanged.
+        // 3) StaticMapTree::getHeight expects INTERNAL space position; it performs a downward ray entirely in INTERNAL space.
+        // 4) During ray traversal each ModelInstance converts INTERNAL -> MODEL-LOCAL (inverse rotation & scale) for triangle tests.
+        // 5) Intersection distance returned is converted back to INTERNAL distance (scale reapplied) and height computed as internalPos.z - hitDistance.
+        // 6) Because Z is invariant between WORLD and INTERNAL, returning internal height directly yields correct WORLD Z.
         if (!isHeightCalcEnabled())
         {
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::getHeight -> INVALID (disabled)");
@@ -524,9 +531,9 @@ namespace VMAP
         auto instanceTree = iInstanceMapTrees.find(pMapId);
         if (instanceTree != iInstanceMapTrees.end())
         {
-            G3D::Vector3 pos = convertPositionToInternalRep(x, y, z);
-            // Modern raycast: only accept closest walkable hit
-            h = instanceTree->second->getHeight(pos, maxSearchDist);
+            G3D::Vector3 pos = convertPositionToInternalRep(x, y, z); // WORLD -> INTERNAL (X/Y mirrored, Z preserved)
+            // Modern raycast: only accept closest walkable hit (performed in INTERNAL space)
+            h = instanceTree->second->getHeight(pos, maxSearchDist); // returns INTERNAL Z (== WORLD Z)
             if (!std::isfinite(h)) h = PhysicsConstants::INVALID_HEIGHT;
         }
         PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::getHeight -> " << h);

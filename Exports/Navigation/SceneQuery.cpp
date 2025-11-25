@@ -55,7 +55,7 @@ namespace
         return "SIDE";
     }
 
-    // Local mesh view for building triangle caches out of map tree (internal space)
+    // Stores triangles in MODEL-LOCAL space; broadphase still done in INTERNAL space like raycast.
     class MapMeshView : public CapsuleCollision::TriangleMeshView
     {
     public:
@@ -171,20 +171,8 @@ namespace
                         if (!triBox.intersects(modelBox)) continue;
                     }
 
-                    // Transform model-local vertices into internal/global space (fix space mismatch)
-                    bool canSkipTransform = std::abs(inst.iScale - 1.0f) < 1e-5f;
-                    // Skip rotation identity check (Matrix3 API); rely on scale and position only
-                    canSkipTransform = canSkipTransform && (std::abs(inst.iPos.x)<1e-5f && std::abs(inst.iPos.y)<1e-5f && std::abs(inst.iPos.z)<1e-5f);
-
-                    G3D::Vector3 ia, ib, ic;
-                    if (canSkipTransform) {
-                        ia = a; ib = b; ic = c; // vertices already in internal/global space
-                    } else {
-                        ia = (a * inst.iScale) * inst.iRot + inst.iPos;
-                        ib = (b * inst.iScale) * inst.iRot + inst.iPos;
-                        ic = (c * inst.iScale) * inst.iRot + inst.iPos;
-                    }
-                    CapsuleCollision::Triangle T; T.a = { ia.x, ia.y, ia.z }; T.b = { ib.x, ib.y, ib.z }; T.c = { ic.x, ic.y, ic.z }; T.doubleSided = false; T.collisionMask = instMask;
+                    // Store model-local verts
+                    CapsuleCollision::Triangle T; T.a = { a.x, a.y, a.z }; T.b = { b.x, b.y, b.z }; T.c = { c.x, c.y, c.z }; T.doubleSided = false; T.collisionMask = instMask;
                     int triIndex = (int)m_cache.size();
                     m_cache.push_back(T); m_triToInstance.push_back(idx); m_triToLocalTri.push_back((int)t);
                     if (count < maxCount) outIndices[count++] = triIndex; else break;
@@ -220,7 +208,7 @@ namespace
         const ModelInstance* m_instances;
         uint32_t m_instanceCount;
         uint32_t m_includeMask;
-        mutable std::vector<CapsuleCollision::Triangle> m_cache;
+        mutable std::vector<CapsuleCollision::Triangle> m_cache; // MODEL-LOCAL vertices stored
         mutable std::vector<uint32_t> m_triToInstance;
         mutable std::vector<int> m_triToLocalTri;
     };
@@ -236,6 +224,7 @@ static inline CapsuleCollision::AABB AABBFromAABox(const G3D::AABox& box)
     return r;
 }
 
+// OverlapCapsule: test in model-local per instance
 int SceneQuery::OverlapCapsule(const StaticMapTree& map,
     const CapsuleCollision::Capsule& capsule,
     std::vector<SceneHit>& outOverlaps,
@@ -244,36 +233,42 @@ int SceneQuery::OverlapCapsule(const StaticMapTree& map,
 {
     outOverlaps.clear();
 
-    CapsuleCollision::Capsule C = capsule; // world input
-    G3D::Vector3 wp0(capsule.p0.x, capsule.p0.y, capsule.p0.z);
-    G3D::Vector3 wp1(capsule.p1.x, capsule.p1.y, capsule.p1.z);
-    G3D::Vector3 ip0 = NavCoord::WorldToInternal(wp0);
-    G3D::Vector3 ip1 = NavCoord::WorldToInternal(wp1);
-    C.p0 = { ip0.x, ip0.y, ip0.z }; C.p1 = { ip1.x, ip1.y, ip1.z };
+    G3D::Vector3 wP0(capsule.p0.x, capsule.p0.y, capsule.p0.z);
+    G3D::Vector3 wP1(capsule.p1.x, capsule.p1.y, capsule.p1.z);
+
+    // Broadphase internal AABB
+    G3D::Vector3 iP0 = NavCoord::WorldToInternal(wP0);
+    G3D::Vector3 iP1 = NavCoord::WorldToInternal(wP1);
+    G3D::Vector3 iLo = iP0.min(iP1) - G3D::Vector3(capsule.r, capsule.r, capsule.r);
+    G3D::Vector3 iHi = iP0.max(iP1) + G3D::Vector3(capsule.r, capsule.r, capsule.r);
+    CapsuleCollision::AABB internalBox; internalBox.min = { iLo.x, iLo.y, iLo.z }; internalBox.max = { iHi.x, iHi.y, iHi.z }; CapsuleCollision::aabbInflate(internalBox, 0.005f);
 
     MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
 
-    // Build internal-space AABB around capsule ends (include radius) with small inflation.
-    G3D::Vector3 iLo = ip0.min(ip1) - G3D::Vector3(C.r, C.r, C.r);
-    G3D::Vector3 iHi = ip0.max(ip1) + G3D::Vector3(C.r, C.r, C.r);
-    CapsuleCollision::AABB internalBox; internalBox.min = { iLo.x, iLo.y, iLo.z }; internalBox.max = { iHi.x, iHi.y, iHi.z }; CapsuleCollision::aabbInflate(internalBox, 0.005f);
-
     int indices[512]; int count = 0;
-    view.query(internalBox, indices, count, 512);
+    view.queryInternal(internalBox, indices, count, 512);
 
     for (int i = 0; i < count; ++i)
     {
-        int cacheIdx = indices[i];
-        const auto& T = view.tri(cacheIdx);
-        CapsuleCollision::Hit ch;
-        if (CapsuleCollision::intersectCapsuleTriangle(C, T, ch))
+        int idx = indices[i];
+        const auto& Tlocal = view.tri(idx);
+        const ModelInstance* mi = view.triInstance(idx);
+        if (!mi) continue;
+
+        float invScale = mi->iInvScale;
+        G3D::Vector3 p0L = mi->iInvRot * ((wP0 - mi->iPos) * invScale);
+        G3D::Vector3 p1L = mi->iInvRot * ((wP1 - mi->iPos) * invScale);
+        CapsuleCollision::Capsule CLocal; CLocal.p0 = { p0L.x, p0L.y, p0L.z }; CLocal.p1 = { p1L.x, p1L.y, p1L.z }; CLocal.r = capsule.r * invScale;
+
+        CapsuleCollision::Hit hLocal;
+        if (CapsuleCollision::intersectCapsuleTriangle(CLocal, Tlocal, hLocal))
         {
-            G3D::Vector3 iN(ch.normal.x, ch.normal.y, ch.normal.z);
-            G3D::Vector3 wN = NavCoord::InternalDirToWorld(iN);
-            G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
-            G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
-            const ModelInstance* mi = view.triInstance(cacheIdx);
-            SceneHit h; h.hit = true; h.distance = ch.depth; h.time = 0.0f; h.normal = wN; h.point = wP; h.triIndex = view.triLocalIndex(cacheIdx); h.instanceId = mi ? mi->ID : 0; EnsureUpwardNormal(h.normal, h); outOverlaps.push_back(h);
+            G3D::Vector3 ptL(hLocal.point.x, hLocal.point.y, hLocal.point.z);
+            G3D::Vector3 nL(hLocal.normal.x, hLocal.normal.y, hLocal.normal.z);
+            G3D::Vector3 wPoint = (ptL * mi->iScale) * mi->iRot + mi->iPos;
+            G3D::Vector3 wNormal = (nL * mi->iRot).directionOrZero();
+
+            SceneHit h; h.hit = true; h.distance = hLocal.depth * mi->iScale; h.time = 0.0f; h.normal = wNormal; h.point = wPoint; h.triIndex = view.triLocalIndex(idx); h.instanceId = mi->ID; EnsureUpwardNormal(h.normal, h); outOverlaps.push_back(h);
         }
     }
 
@@ -290,31 +285,34 @@ int SceneQuery::OverlapSphere(const StaticMapTree& map,
     outOverlaps.clear();
 
     G3D::Vector3 iCenter = NavCoord::WorldToInternal(center);
-    CapsuleCollision::Capsule C; C.p0 = { iCenter.x, iCenter.y, iCenter.z }; C.p1 = { iCenter.x, iCenter.y, iCenter.z }; C.r = radius;
-
-    MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
-
-    // Internal-space AABB for sphere
     G3D::Vector3 iLo = iCenter - G3D::Vector3(radius, radius, radius);
     G3D::Vector3 iHi = iCenter + G3D::Vector3(radius, radius, radius);
     CapsuleCollision::AABB internalBox; internalBox.min = { iLo.x, iLo.y, iLo.z }; internalBox.max = { iHi.x, iHi.y, iHi.z }; CapsuleCollision::aabbInflate(internalBox, 0.005f);
 
+    MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
+
     int indices[512]; int count = 0;
-    view.query(internalBox, indices, count, 512);
+    view.queryInternal(internalBox, indices, count, 512);
 
     for (int i = 0; i < count; ++i)
     {
-        int cacheIdx = indices[i];
-        const auto& T = view.tri(cacheIdx);
-        CapsuleCollision::Hit ch;
-        if (CapsuleCollision::intersectSphereTriangle(C.p0, C.r, T, ch))
+        int idx = indices[i];
+        const auto& Tlocal = view.tri(idx);
+        const ModelInstance* mi = view.triInstance(idx);
+        if (!mi) continue;
+
+        float invScale = mi->iInvScale;
+        G3D::Vector3 cL = mi->iInvRot * ((center - mi->iPos) * invScale);
+
+        CapsuleCollision::Hit hLocal;
+        if (CapsuleCollision::intersectSphereTriangle({ cL.x, cL.y, cL.z }, radius * invScale, Tlocal, hLocal))
         {
-            G3D::Vector3 iN(ch.normal.x, ch.normal.y, ch.normal.z);
-            G3D::Vector3 wN = NavCoord::InternalDirToWorld(iN);
-            G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
-            G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
-            const ModelInstance* mi = view.triInstance(cacheIdx);
-            SceneHit h; h.hit = true; h.distance = ch.depth; h.time = 0.0f; h.normal = wN; h.point = wP; h.triIndex = view.triLocalIndex(cacheIdx); h.instanceId = mi ? mi->ID : 0; EnsureUpwardNormal(h.normal, h); outOverlaps.push_back(h);
+            G3D::Vector3 ptL(hLocal.point.x, hLocal.point.y, hLocal.point.z);
+            G3D::Vector3 nL(hLocal.normal.x, hLocal.normal.y, hLocal.normal.z);
+            G3D::Vector3 wPoint = (ptL * mi->iScale) * mi->iRot + mi->iPos;
+            G3D::Vector3 wNormal = (nL * mi->iRot).directionOrZero();
+
+            SceneHit h; h.hit = true; h.distance = hLocal.depth * mi->iScale; h.time = 0.0f; h.normal = wNormal; h.point = wPoint; h.triIndex = view.triLocalIndex(idx); h.instanceId = mi->ID; EnsureUpwardNormal(h.normal, h); outOverlaps.push_back(h);
         }
     }
 
@@ -359,7 +357,6 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
         return 0;
     }
 
-    CapsuleCollision::Capsule C0 = capsuleStart;
     G3D::Vector3 wP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
     G3D::Vector3 wP1(capsuleStart.p1.x, capsuleStart.p1.y, capsuleStart.p1.z);
     if (params.inflation != 0.0f)
@@ -373,29 +370,18 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
             wP1 = wP1 + adjust;
         }
     }
-    G3D::Vector3 iP0 = NavCoord::WorldToInternal(wP0);
-    G3D::Vector3 iP1 = NavCoord::WorldToInternal(wP1);
-    // Roundtrip back to world to verify scaling consistency
-    G3D::Vector3 wP0_round = NavCoord::InternalToWorld(iP0);
-    G3D::Vector3 wP1_round = NavCoord::InternalToWorld(iP1);
-    G3D::Vector3 deltaP0 = wP0_round - wP0;
-    G3D::Vector3 deltaP1 = wP1_round - wP1;
-    PHYS_TRACE(PHYS_CYL, "[CapsuleRoundTrip] p0W=(" << wP0.x << "," << wP0.y << "," << wP0.z << ") p0I=(" << iP0.x << "," << iP0.y << "," << iP0.z
-        << ") p0W2=(" << wP0_round.x << "," << wP0_round.y << "," << wP0_round.z << ") delta=(" << deltaP0.x << "," << deltaP0.y << "," << deltaP0.z << ")");
-    PHYS_TRACE(PHYS_CYL, "[CapsuleRoundTrip] p1W=(" << wP1.x << "," << wP1.y << "," << wP1.z << ") p1I=(" << iP1.x << "," << iP1.y << "," << iP1.z
-        << ") p1W2=(" << wP1_round.x << "," << wP1_round.y << "," << wP1_round.z << ") delta=(" << deltaP1.x << "," << deltaP1.y << "," << deltaP1.z << ")");
-    C0.p0 = { iP0.x, iP0.y, iP0.z }; C0.p1 = { iP1.x, iP1.y, iP1.z };
-    G3D::Vector3 iDir = NavCoord::WorldDirToInternal(dir);
-    CapsuleCollision::Vec3 vel(iDir.x * distance, iDir.y * distance, iDir.z * distance);
-
-    // Internal-space sweep endpoints and AABB (replace previous world-space box construction)
-    G3D::Vector3 iP0End = iP0 + iDir * distance;
-    G3D::Vector3 iP1End = iP1 + iDir * distance;
-    G3D::Vector3 iMin = iP0.min(iP1).min(iP0End.min(iP1End)) - G3D::Vector3(C0.r, C0.r, C0.r);
-    G3D::Vector3 iMax = iP0.max(iP1).max(iP0End.max(iP1End)) + G3D::Vector3(C0.r, C0.r, C0.r);
+    // Convert adjusted world capsule endpoints to INTERNAL space once (mirrors raycast chain)
+    G3D::Vector3 iW0 = NavCoord::WorldToInternal(wP0);
+    G3D::Vector3 iW1 = NavCoord::WorldToInternal(wP1);
+    // Broadphase internal AABB (use original radius)
+    G3D::Vector3 iP0 = iW0;
+    G3D::Vector3 iP1 = iW1;
+    G3D::Vector3 iP0End = iP0 + NavCoord::WorldDirToInternal(dir) * distance;
+    G3D::Vector3 iP1End = iP1 + NavCoord::WorldDirToInternal(dir) * distance;
+    G3D::Vector3 iMin = iP0.min(iP1).min(iP0End.min(iP1End)) - G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r);
+    G3D::Vector3 iMax = iP0.max(iP1).max(iP0End.max(iP1End)) + G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r);
     CapsuleCollision::AABB sweepBoxI; sweepBoxI.min = { iMin.x, iMin.y, iMin.z }; sweepBoxI.max = { iMax.x, iMax.y, iMax.z }; CapsuleCollision::aabbInflate(sweepBoxI, 0.005f);
-    PHYS_TRACE(PHYS_CYL, "Sweep AABB internal min=(" << sweepBoxI.min.x << "," << sweepBoxI.min.y << "," << sweepBoxI.min.z
-        << ") max=(" << sweepBoxI.max.x << "," << sweepBoxI.max.y << "," << sweepBoxI.max.z << ")");
+    sweepBoxI.min.z -= (capsuleStart.r * 0.5f);
 
     MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
     const int kCap = 1024; int triIdxs[kCap]; int triCount = 0;
@@ -407,114 +393,124 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
     if (PhysicsEngine::Instance())
         walkableCos = PhysicsEngine::Instance()->GetWalkableCosMin();
 
-    auto slopeAngleDeg = [](const G3D::Vector3& n) -> float {
-        float cz = std::max(-1.0f, std::min(1.0f, n.z));
-        return std::acos(cz) * (180.0f / 3.14159265359f);
-    };
-
-    // Diagnostic: log all triangles at t=0 with raw depth, even if not overlapping.
-    for (int di = 0; di < triCount; ++di)
-    {
-        int cacheIdx = triIdxs[di];
-        int modelTri = view.triLocalIndex(cacheIdx);
-        const auto& T = view.tri(cacheIdx);
-        CapsuleCollision::Vec3 sOnSeg, sOnTri;
-        CapsuleCollision::closestPoints_Segment_Triangle(C0.p0, C0.p1, T, sOnSeg, sOnTri);
-        CapsuleCollision::Vec3 diff = sOnSeg - sOnTri;
-        float dist = diff.length();
-        float rawDepth = capsuleStart.r - dist; // can be negative if separated
-        float segLen2 = (C0.p1 - C0.p0).length2();
-        float segT = 0.0f;
-        if (segLen2 > CapsuleCollision::EPSILON * CapsuleCollision::EPSILON)
-            segT = CapsuleCollision::cc_clamp(CapsuleCollision::Vec3::dot(sOnSeg - C0.p0, (C0.p1 - C0.p0)) / segLen2, 0.0f, 1.0f);
-        const char* region = ClassifyCapsuleRegion(segT);
-        G3D::Vector3 wOnTri = NavCoord::InternalToWorld(G3D::Vector3(sOnTri.x, sOnTri.y, sOnTri.z));
-        G3D::Vector3 wAxisPt = NavCoord::InternalToWorld(G3D::Vector3(sOnSeg.x, sOnSeg.y, sOnSeg.z));
-        float radialLen = (wOnTri - wAxisPt).magnitude();
-        float radialRatio = capsuleStart.r > 0.0f ? (radialLen / capsuleStart.r) : 0.0f;
-        // Triangle normal (internal -> world)
-        G3D::Vector3 wA = NavCoord::InternalToWorld(G3D::Vector3(T.a.x, T.a.y, T.a.z));
-        G3D::Vector3 wB = NavCoord::InternalToWorld(G3D::Vector3(T.b.x, T.b.y, T.b.z));
-        G3D::Vector3 wC = NavCoord::InternalToWorld(G3D::Vector3(T.c.x, T.c.y, T.c.z));
-        G3D::Vector3 triN = (wB - wA).cross(wC - wA).directionOrZero();
-        float angleDeg = slopeAngleDeg(triN);
-        bool walkable = (triN.z >= walkableCos);
-        G3D::Vector3 bary = ComputeBarycentric(wOnTri, wA, wB, wC);
-        const float edgeEps = 0.05f;
-        int smallCount = (bary.x < edgeEps) + (bary.y < edgeEps) + (bary.z < edgeEps);
-        const char* triRegion = smallCount >= 2 ? "VERTEX" : (smallCount == 1 ? "EDGE" : "FACE");
-        bool overlap = rawDepth >= 0.0f;
-        const ModelInstance* mi = view.triInstance(cacheIdx);
-        PHYS_TRACE(PHYS_CYL, "t0 triCacheIdx=" << cacheIdx << " modelTri=" << modelTri << " instId=" << (mi?mi->ID:0)
-            << " rawDepth=" << rawDepth << " dist=" << dist
-            << " segT=" << segT << " region=" << region
-            << " radialRatio=" << radialRatio
-            << " bary=(" << bary.x << "," << bary.y << "," << bary.z << ") triRegion=" << triRegion
-            << " walkable=" << (walkable?"Y":"N") << " cosZ=" << triN.z
-            << " overlap=" << (overlap?"Y":"N"));
-    }
-
-    // Collect start-penetrating overlaps (t=0)
+    // Detailed triangle comparison logs
     for (int i = 0; i < triCount; ++i)
     {
         int cacheIdx = triIdxs[i];
-        const auto& T = view.tri(cacheIdx);
-        CapsuleCollision::Hit ch;
-        if (CapsuleCollision::intersectCapsuleTriangle(C0, T, ch))
+        const CapsuleCollision::Triangle& Tlocal = view.tri(cacheIdx);
+        const ModelInstance* mi = view.triInstance(cacheIdx);
+        if (!mi) continue;
+
+        float invScale = mi->iInvScale;
+        // Use internal-space endpoints for model-local transform (fix space mismatch)
+        G3D::Vector3 p0L = mi->iInvRot * ((iW0 - mi->iPos) * invScale);
+        G3D::Vector3 p1L = mi->iInvRot * ((iW1 - mi->iPos) * invScale);
+        CapsuleCollision::Capsule CLocal; CLocal.p0 = { p0L.x, p0L.y, p0L.z }; CLocal.p1 = { p1L.x, p1L.y, p1L.z }; CLocal.r = capsuleStart.r * invScale;
+        CapsuleCollision::Vec3 sSegL, sTriL;
+        CapsuleCollision::closestPoints_Segment_Triangle(CLocal.p0, CLocal.p1, Tlocal, sSegL, sTriL);
+        float distL = (sSegL - sTriL).length();
+        float rawDepthL = CLocal.r - distL;
+        float segLen2L = (CLocal.p1 - CLocal.p0).length2();
+        float segTL = 0.0f;
+        if (segLen2L > CapsuleCollision::EPSILON * CapsuleCollision::EPSILON)
+            segTL = CapsuleCollision::Vec3::dot(sSegL - CLocal.p0, (CLocal.p1 - CLocal.p0)) / segLen2L;
+        const char* regionL = ClassifyCapsuleRegion(segTL);
+
+        // world triangle
+        G3D::Vector3 wA = (G3D::Vector3(Tlocal.a.x, Tlocal.a.y, Tlocal.a.z) * mi->iScale) * mi->iRot + mi->iPos;
+        G3D::Vector3 wB = (G3D::Vector3(Tlocal.b.x, Tlocal.b.y, Tlocal.b.z) * mi->iScale) * mi->iRot + mi->iPos;
+        G3D::Vector3 wC = (G3D::Vector3(Tlocal.c.x, Tlocal.c.y, Tlocal.c.z) * mi->iScale) * mi->iRot + mi->iPos;
+        CapsuleCollision::Triangle Tw; Tw.a = { wA.x, wA.y, wA.z }; Tw.b = { wB.x, wB.y, wB.z }; Tw.c = { wC.x, wC.y, wC.z };
+        CapsuleCollision::Vec3 sSegW, sTriW;
+        CapsuleCollision::closestPoints_Segment_Triangle({ wP0.x, wP0.y, wP0.z }, { wP1.x, wP1.y, wP1.z }, Tw, sSegW, sTriW);
+        float distW = (sSegW - sTriW).length();
+        float rawDepthW = capsuleStart.r - distW;
+        float segLen2W = (Tw.c - Tw.a).length2();
+
+        // bary/world normal
+        G3D::Vector3 triN = (wB - wA).cross(wC - wA).directionOrZero();
+        SceneHit flipDummy; EnsureUpwardNormal(triN, flipDummy);
+        G3D::Vector3 wPtTri(sTriW.x, sTriW.y, sTriW.z);
+        G3D::Vector3 bary = ComputeBarycentric(wPtTri, wA, wB, wC);
+        int smallCount = (bary.x < 0.05f) + (bary.y < 0.05f) + (bary.z < 0.05f);
+        const char* triRegion = (smallCount >= 2 ? "VERTEX" : (smallCount == 1 ? "EDGE" : "FACE"));
+        PHYS_TRACE(PHYS_CYL, "tComp triCacheIdx=" << cacheIdx << " modelTri=" << view.triLocalIndex(cacheIdx) << " instId=" << mi->ID
+            << " p0W=(" << wP0.x << "," << wP0.y << "," << wP0.z << ") p1W=(" << wP1.x << "," << wP1.y << "," << wP1.z << ")"
+            << " p0L=(" << p0L.x << "," << p0L.y << "," << p0L.z << ") p1L=(" << p1L.x << "," << p1L.y << "," << p1L.z << ")"
+            << " rW=" << capsuleStart.r << " rL=" << CLocal.r
+            << " rawDepthL=" << rawDepthL << " distL=" << distL << " segTL=" << segTL << " regionL=" << regionL
+            << " rawDepthW=" << rawDepthW << " distW=" << distW
+            << " triN=(" << triN.x << "," << triN.y << "," << triN.z << ") bary=(" << bary.x << "," << bary.y << "," << bary.z << ") triRegion=" << triRegion);
+
+        // Additional diagnostic: improved required sweep distance along dir to reach contact.
+        // Previous quadratic approach assumed both closest points remain fixed features; produced unstable huge values.
+        // New approach: approximate that the capsule closest point translates by dirN * t. Separation decreases linearly by proj = dot(deltaNorm, dirN).
+        // needSweepDist = (gapDist - radius) / proj if proj > 0, else unreachable (-1).
+        G3D::Vector3 deltaVec(sSegW.x - sTriW.x, sSegW.y - sTriW.y, sSegW.z - sTriW.z);
+        float gapDist = distW; // current separation
+        G3D::Vector3 dirN = dir.directionOrZero();
+        float rad = capsuleStart.r;
+        float deltaLen = deltaVec.magnitude();
+        float proj = 0.0f; if (deltaLen > 1e-6f) proj = deltaVec.dot(dirN) / deltaLen; // cosine of angle between separation and motion
+        float needSweepDist = -1.0f; // -1 means unreachable along dir
+        const char* reachReason = "OK";
+        if (gapDist <= rad)
         {
-            // Contact normal from intersection
-            G3D::Vector3 iContactN(ch.normal.x, ch.normal.y, ch.normal.z);
-            G3D::Vector3 wContactN = NavCoord::InternalDirToWorld(iContactN);
-            G3D::Vector3 iP(ch.point.x, ch.point.y, ch.point.z);
-            G3D::Vector3 wP = NavCoord::InternalToWorld(iP);
-            const ModelInstance* mi = view.triInstance(cacheIdx);
+            needSweepDist = 0.0f; reachReason = "already overlapping";
+        }
+        else if (proj > 1e-4f)
+        {
+            needSweepDist = (gapDist - rad) / proj; reachReason = "projected";
+        }
+        else
+        {
+            reachReason = "proj<=0 (moving away or orthogonal)";
+        }
+        PHYS_TRACE(PHYS_CYL, "tCompExtra tri=" << view.triLocalIndex(cacheIdx)
+            << " gapDist=" << gapDist
+            << " radius=" << rad
+            << " deltaLen=" << deltaLen
+            << " deltaNormDotDir=" << proj
+            << " needSweepDist=" << needSweepDist
+            << " providedSweepDist=" << distance
+            << " reason=" << reachReason);
+    }
 
-            // Triangle surface normal (independent of contact feature) in world space
-            G3D::Vector3 wA = NavCoord::InternalToWorld(G3D::Vector3(T.a.x, T.a.y, T.a.z));
-            G3D::Vector3 wB = NavCoord::InternalToWorld(G3D::Vector3(T.b.x, T.b.y, T.b.z));
-            G3D::Vector3 wC = NavCoord::InternalToWorld(G3D::Vector3(T.c.x, T.c.y, T.c.z));
+    // Start penetration check per triangle in model-local space
+    for (int i = 0; i < triCount; ++i)
+    {
+        int cacheIdx = triIdxs[i];
+        const CapsuleCollision::Triangle& Tlocal = view.tri(cacheIdx);
+        const ModelInstance* mi = view.triInstance(cacheIdx);
+        if (!mi) continue;
+
+        float invScale = mi->iInvScale;
+        G3D::Vector3 p0L = mi->iInvRot * ((iW0 - mi->iPos) * invScale);
+        G3D::Vector3 p1L = mi->iInvRot * ((iW1 - mi->iPos) * invScale);
+        CapsuleCollision::Capsule CLocal; CLocal.p0 = { p0L.x, p0L.y, p0L.z }; CLocal.p1 = { p1L.x, p1L.y, p1L.z }; CLocal.r = capsuleStart.r * invScale;
+
+        CapsuleCollision::Hit chL;
+        if (CapsuleCollision::intersectCapsuleTriangle(CLocal, Tlocal, chL))
+        {
+            // Build world hit
+            G3D::Vector3 ptL(chL.point.x, chL.point.y, chL.point.z);
+            G3D::Vector3 wPoint = (ptL * mi->iScale) * mi->iRot + mi->iPos;
+            G3D::Vector3 wA = (G3D::Vector3(Tlocal.a.x, Tlocal.a.y, Tlocal.a.z) * mi->iScale) * mi->iRot + mi->iPos;
+            G3D::Vector3 wB = (G3D::Vector3(Tlocal.b.x, Tlocal.b.y, Tlocal.b.z) * mi->iScale) * mi->iRot + mi->iPos;
+            G3D::Vector3 wC = (G3D::Vector3(Tlocal.c.x, Tlocal.c.y, Tlocal.c.z) * mi->iScale) * mi->iRot + mi->iPos;
             G3D::Vector3 wSurfN = (wB - wA).cross(wC - wA).directionOrZero();
-            // Ensure upward for surface normal before walkability test (do not mutate contact normal)
-            SceneHit dummyHit; EnsureUpwardNormal(wSurfN, dummyHit);
-            float angleDegSurf = slopeAngleDeg(wSurfN);
-            bool walkableSurf = (wSurfN.z >= walkableCos);
+            SceneHit dummy; EnsureUpwardNormal(wSurfN, dummy);
 
-            // Additional contact diagnostics (unchanged)
-            CapsuleCollision::Vec3 sOnSeg, sOnTri;
-            CapsuleCollision::closestPoints_Segment_Triangle(C0.p0, C0.p1, T, sOnSeg, sOnTri);
-            CapsuleCollision::Vec3 segDir = C0.p1 - C0.p0;
-            float segLen2 = segDir.length2();
-            float segT = 0.0f;
-            if (segLen2 > CapsuleCollision::EPSILON * CapsuleCollision::EPSILON)
-            {
-                segT = CapsuleCollision::cc_clamp(CapsuleCollision::Vec3::dot(sOnSeg - C0.p0, segDir) / segLen2, 0.0f, 1.0f);
-            }
-            const char* region = ClassifyCapsuleRegion(segT);
-            G3D::Vector3 wAxisPt = NavCoord::InternalToWorld(G3D::Vector3(sOnSeg.x, sOnSeg.y, sOnSeg.z));
-            G3D::Vector3 wRad = wP - wAxisPt;
-            float radialLen = wRad.magnitude();
-            float radialRatio = radialLen / C0.r;
-
-            // Triangle barycentric classification (world space)
-            G3D::Vector3 bary = ComputeBarycentric(wP, wA, wB, wC);
-            const float edgeEps = 0.05f;
-            int smallCount = (bary.x < edgeEps) + (bary.y < edgeEps) + (bary.z < edgeEps);
-            const char* triRegion = smallCount >= 2 ? "VERTEX" : (smallCount == 1 ? "EDGE" : "FACE");
-
-            PHYS_TRACE(PHYS_CYL, "Start penetration triCacheIdx=" << cacheIdx << " modelTri=" << view.triLocalIndex(cacheIdx) << " instId=" << (mi?mi->ID:0)
-                << " depth=" << ch.depth
-                << " wPoint=(" << wP.x << "," << wP.y << "," << wP.z << ")"
-                << " surfN=(" << wSurfN.x << "," << wSurfN.y << "," << wSurfN.z << ") contactN=(" << wContactN.x << "," << wContactN.y << "," << wContactN.z << ")"
-                << " cosZ_surf=" << wSurfN.z << " cosZ_contact=" << wContactN.z << " walkableSurf=" << (walkableSurf?"Y":"N")
-                << " slopeDegSurf=" << angleDegSurf << " thresh=" << walkableCos
-                << " segT=" << segT << " region=" << region
-                << " radialLen=" << radialLen << " radialRatio=" << radialRatio
-                << " bary=(" << bary.x << "," << bary.y << "," << bary.z << ") triRegion=" << triRegion);
-            // Use surface normal for hit.normal to keep consistent walkability classification downstream
-            SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = wSurfN; h.point = wP; h.triIndex = view.triLocalIndex(cacheIdx); h.instanceId = mi ? mi->ID : 0; h.startPenetrating = true; h.penetrationDepth = ch.depth;
-            // Already ensured upward on wSurfN; mark flip info
-            h.normalFlipped = dummyHit.normalFlipped;
+            SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = wSurfN; h.point = wPoint; h.triIndex = view.triLocalIndex(cacheIdx); h.instanceId = mi->ID; h.startPenetrating = true; h.penetrationDepth = chL.depth * mi->iScale; h.normalFlipped = dummy.normalFlipped;
             outHits.push_back(h);
+
+            // Extra: per-hit log with barycentric to correlate with raycast
+            G3D::Vector3 barySP = ComputeBarycentric(h.point, wA, wB, wC);
+            PHYS_TRACE(PHYS_CYL, "[Hit] startPen tri=" << h.triIndex << " instId=" << h.instanceId
+                << " depth=" << h.penetrationDepth
+                << " pointW=(" << h.point.x << "," << h.point.y << "," << h.point.z << ")"
+                << " normalW=(" << h.normal.x << "," << h.normal.y << "," << h.normal.z << ")"
+                << " bary=(" << barySP.x << "," << barySP.y << "," << barySP.z << ")");
         }
     }
     if (!outHits.empty())
@@ -524,53 +520,71 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
         return (int)outHits.size();
     }
 
-    struct HitTmp { float t; int triCacheIdx; int triLocalIdx; uint32_t instId; G3D::Vector3 nI; G3D::Vector3 pI; float penetrationDepth; };
+    // Analytic sweep in model-local space
+    struct HitTmp { float t; int triCacheIdx; int triLocalIdx; uint32_t instId; G3D::Vector3 nWorld; G3D::Vector3 pWorld; float penetrationDepth; };
     std::vector<HitTmp> candidates; candidates.reserve(triCount);
+    G3D::Vector3 worldVel = dir * distance;
     for (int i = 0; i < triCount; ++i)
     {
         int cacheIdx = triIdxs[i];
-        const auto& T = view.tri(cacheIdx);
+        const CapsuleCollision::Triangle& Tlocal = view.tri(cacheIdx);
         const ModelInstance* mi = view.triInstance(cacheIdx);
-        uint32_t instId = mi ? mi->ID : 0;
-        float toi; CapsuleCollision::Vec3 n, p;
-        bool sweepHit = CapsuleCollision::capsuleTriangleSweep(C0, vel, T, toi, n, p);
-        if (sweepHit && toi >= 0.0f && toi <= 1.0f)
+        if (!mi) continue;
+
+        float invScale = mi->iInvScale;
+        G3D::Vector3 p0L = mi->iInvRot * ((iW0 - mi->iPos) * invScale);
+        G3D::Vector3 p1L = mi->iInvRot * ((iW1 - mi->iPos) * invScale);
+        G3D::Vector3 vL = mi->iInvRot * (worldVel * invScale); // worldVel is still world->internal mirrored only through rotation; acceptable approximation
+        CapsuleCollision::Capsule CLocal; CLocal.p0 = { p0L.x, p0L.y, p0L.z }; CLocal.p1 = { p1L.x, p1L.y, p1L.z }; CLocal.r = capsuleStart.r * invScale;
+        CapsuleCollision::Vec3 velLocal(vL.x, vL.y, vL.z);
+
+        float toi; CapsuleCollision::Vec3 nL, pL;
+        if (CapsuleCollision::capsuleTriangleSweep(CLocal, velLocal, Tlocal, toi, nL, pL) && toi >= 0.0f && toi <= 1.0f)
         {
-            CapsuleCollision::Capsule impactCapsule = C0;
-            impactCapsule.p0 = impactCapsule.p0 + vel * toi;
-            impactCapsule.p1 = impactCapsule.p1 + vel * toi;
-            CapsuleCollision::Hit ch; CapsuleCollision::intersectCapsuleTriangle(impactCapsule, T, ch);
-            candidates.push_back(HitTmp{ toi, cacheIdx, view.triLocalIndex(cacheIdx), instId, { n.x, n.y, n.z }, { p.x, p.y, p.z }, ch.depth });
+            CapsuleCollision::Capsule impact = CLocal;
+            impact.p0 = impact.p0 + velLocal * toi;
+            impact.p1 = impact.p1 + velLocal * toi;
+            CapsuleCollision::Hit chL; CapsuleCollision::intersectCapsuleTriangle(impact, Tlocal, chL);
+
+            G3D::Vector3 pLocal(pL.x, pL.y, pL.z);
+            G3D::Vector3 nLocal(nL.x, nL.y, nL.z);
+            G3D::Vector3 wImpact = (pLocal * mi->iScale) * mi->iRot + mi->iPos;
+            G3D::Vector3 wNormal = (nLocal * mi->iRot).directionOrZero();
+
+            candidates.push_back(HitTmp{ toi, cacheIdx, view.triLocalIndex(cacheIdx), mi->ID, wNormal, wImpact, chL.depth * mi->iScale });
         }
     }
     if (!candidates.empty())
     {
         std::sort(candidates.begin(), candidates.end(), [](const HitTmp& a, const HitTmp& b) { if (a.t == b.t) return a.triLocalIdx < b.triLocalIdx; return a.t < b.t; });
-        for (auto& cand : candidates)
+        for (auto& c : candidates)
         {
-            SceneHit hit; hit.hit = true; hit.time = CapsuleCollision::cc_clamp(cand.t, 0.0f, 1.0f); hit.distance = hit.time * distance; hit.penetrationDepth = cand.penetrationDepth;
-            G3D::Vector3 wImpact = NavCoord::InternalToWorld(G3D::Vector3(cand.pI.x, cand.pI.y, cand.pI.z));
-            G3D::Vector3 wContactN = NavCoord::InternalDirToWorld(G3D::Vector3(cand.nI.x, cand.nI.y, cand.nI.z));
-            // Surface normal for classification
-            const auto& T = view.tri(cand.triCacheIdx);
-            G3D::Vector3 wA = NavCoord::InternalToWorld(G3D::Vector3(T.a.x, T.a.y, T.a.z));
-            G3D::Vector3 wB = NavCoord::InternalToWorld(G3D::Vector3(T.b.x, T.b.y, T.b.z));
-            G3D::Vector3 wC = NavCoord::InternalToWorld(G3D::Vector3(T.c.x, T.c.y, T.c.z));
-            G3D::Vector3 wSurfN = (wB - wA).cross(wC - wA).directionOrZero();
-            SceneHit dummyFlip; EnsureUpwardNormal(wSurfN, dummyFlip);
-            bool walkableSurf = (wSurfN.z >= walkableCos);
-            hit.point = wImpact; hit.normal = wSurfN; hit.triIndex = cand.triLocalIdx; hit.instanceId = cand.instId; hit.startPenetrating = false; hit.normalFlipped = dummyFlip.normalFlipped;
-            PHYS_TRACE(PHYS_CYL, "Sweep HIT toi=" << hit.time << " dist=" << hit.distance << " instId=" << hit.instanceId << " modelTri=" << hit.triIndex
-                << " impactPoint=(" << hit.point.x << "," << hit.point.y << "," << hit.point.z << ")"
-                << " surfN=(" << wSurfN.x << "," << wSurfN.y << "," << wSurfN.z << ") contactN=(" << wContactN.x << "," << wContactN.y << "," << wContactN.z << ")"
-                << " cosZ_surf=" << wSurfN.z << " cosZ_contact=" << wContactN.z << " walkableSurf=" << (walkableSurf?"Y":"N")
-                << " penetrationDepth=" << hit.penetrationDepth);
-            outHits.push_back(hit);
+            SceneHit h; h.hit = true; h.time = CapsuleCollision::cc_clamp(c.t, 0.0f, 1.0f); h.distance = h.time * distance; h.penetrationDepth = c.penetrationDepth;
+            G3D::Vector3 wSurfN = c.nWorld.directionOrZero(); SceneHit dummy; EnsureUpwardNormal(wSurfN, dummy);
+            h.normal = wSurfN; h.point = c.pWorld; h.triIndex = c.triLocalIdx; h.instanceId = c.instId; h.startPenetrating = false; h.normalFlipped = dummy.normalFlipped;
+            outHits.push_back(h);
+
+            // Extra: per-hit log with barycentric to correlate with raycast
+            const CapsuleCollision::Triangle& Tlocal = view.tri(c.triCacheIdx);
+            const ModelInstance* mi = view.triInstance(c.triCacheIdx);
+            if (mi)
+            {
+                G3D::Vector3 wA = (G3D::Vector3(Tlocal.a.x, Tlocal.a.y, Tlocal.a.z) * mi->iScale) * mi->iRot + mi->iPos;
+                G3D::Vector3 wB = (G3D::Vector3(Tlocal.b.x, Tlocal.b.y, Tlocal.b.z) * mi->iScale) * mi->iRot + mi->iPos;
+                G3D::Vector3 wC = (G3D::Vector3(Tlocal.c.x, Tlocal.c.y, Tlocal.c.z) * mi->iScale) * mi->iRot + mi->iPos;
+                G3D::Vector3 barySW = ComputeBarycentric(h.point, wA, wB, wC);
+                PHYS_TRACE(PHYS_CYL, "[Hit] sweep tri=" << h.triIndex << " instId=" << h.instanceId
+                    << " t=" << h.time << " dist=" << h.distance
+                    << " pointW=(" << h.point.x << "," << h.point.y << "," << h.point.z << ")"
+                    << " normalW=(" << h.normal.x << "," << h.normal.y << "," << h.normal.z << ")"
+                    << " bary=(" << barySW.x << "," << barySW.y << "," << barySW.z << ")");
+            }
         }
         PHYS_TRACE(PHYS_CYL, "SweepCapsule EXIT hits count=" << outHits.size());
         return (int)outHits.size();
     }
 
+    // Fallback overlap
     const float overlapInflation = 0.01f;
     CapsuleCollision::Capsule inflCaps = capsuleStart; inflCaps.r += overlapInflation;
     std::vector<SceneHit> overlapHits;
