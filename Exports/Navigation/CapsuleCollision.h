@@ -129,13 +129,12 @@ namespace CapsuleCollision
         return Vec3::dot(N, p) + d;
     }
 
-    // Closest point on triangle ABC to point P using barycentric technique (Ericson 5.1.5)
+    // Closest point on triangle ABC to point P using robust barycentric technique
     inline Vec3 closestPointOnTriangle(const Triangle& T, const Vec3& p, float* u = nullptr, float* v = nullptr, float* w = nullptr)
     {
         const Vec3& a = T.a;
         const Vec3& b = T.b;
         const Vec3& c = T.c;
-        // Check vertex regions against A, B, C
         Vec3 ab = b - a;
         Vec3 ac = c - a;
         Vec3 ap = p - a;
@@ -143,74 +142,90 @@ namespace CapsuleCollision
         float d2 = Vec3::dot(ac, ap);
         if (d1 <= 0.0f && d2 <= 0.0f)
         {
-            if (u) *u = 1.0f; if (v) *v = 0.0f; if (w) *w = 0.0f; return a; // bary (1,0,0)
+            if (u) *u = 1.0f; if (v) *v = 0.0f; if (w) *w = 0.0f; return a;
         }
 
-        // Check vertex region B
         Vec3 bp = p - b;
         float d3 = Vec3::dot(ab, bp);
         float d4 = Vec3::dot(ac, bp);
         if (d3 >= 0.0f && d4 <= d3)
         {
-            if (u) *u = 0.0f; if (v) *v = 1.0f; if (w) *w = 0.0f; return b; // bary (0,1,0)
+            if (u) *u = 0.0f; if (v) *v = 1.0f; if (w) *w = 0.0f; return b;
         }
 
-        // Check edge region AB
         float vc = d1 * d4 - d3 * d2;
         if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
         {
-            float v_ab = d1 / (d1 - d3 + (cc_abs(d1 - d3) <= EPSILON ? EPSILON : 0.0f));
-            Vec3 q = a + ab * v_ab; // bary (1-v_ab, v_ab, 0)
+            float denom = (d1 - d3);
+            denom = cc_abs(denom) <= EPSILON ? (denom < 0.0f ? -EPSILON : EPSILON) : denom;
+            float v_ab = d1 / denom;
+            v_ab = cc_clamp(v_ab, 0.0f, 1.0f);
+            Vec3 q = a + ab * v_ab;
             if (u) *u = 1.0f - v_ab; if (v) *v = v_ab; if (w) *w = 0.0f;
             return q;
         }
 
-        // Check vertex region C
         Vec3 cp = p - c;
         float d5 = Vec3::dot(ab, cp);
         float d6 = Vec3::dot(ac, cp);
         if (d6 >= 0.0f && d5 <= d6)
         {
-            if (u) *u = 0.0f; if (v) *v = 0.0f; if (w) *w = 1.0f; return c; // bary (0,0,1)
+            if (u) *u = 0.0f; if (v) *v = 0.0f; if (w) *w = 1.0f; return c;
         }
 
-        // Check edge region AC
         float vb = d5 * d2 - d1 * d6;
         if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
         {
             float denom_ac = (d2 - d6);
             denom_ac = cc_abs(denom_ac) <= EPSILON ? (denom_ac < 0.0f ? -EPSILON : EPSILON) : denom_ac;
             float w_ac = d2 / denom_ac;
-            Vec3 q = a + ac * w_ac; // bary (1-w_ac, 0, w_ac)
+            w_ac = cc_clamp(w_ac, 0.0f, 1.0f);
+            Vec3 q = a + ac * w_ac;
             if (u) *u = 1.0f - w_ac; if (v) *v = 0.0f; if (w) *w = w_ac;
             return q;
         }
 
-        // Check edge region BC
         Vec3 bc = c - b;
         float va = d3 * d6 - d5 * d4;
-        if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
+        float denom_bc = (d4 - d3) + (d5 - d6);
+        if (va <= 0.0f && denom_bc >= 0.0f)
         {
-            float denom_bc = (d4 - d3) + (d5 - d6);
             denom_bc = cc_abs(denom_bc) <= EPSILON ? (denom_bc < 0.0f ? -EPSILON : EPSILON) : denom_bc;
             float w_bc = (d4 - d3) / denom_bc;
-            Vec3 q = b + bc * w_bc; // bary (0, 1-w_bc, w_bc)
+            w_bc = cc_clamp(w_bc, 0.0f, 1.0f);
+            Vec3 q = b + bc * w_bc;
             if (u) *u = 0.0f; if (v) *v = 1.0f - w_bc; if (w) *w = w_bc;
             return q;
         }
 
-        // Inside face region. Compute using barycentrics
-        float sum = va + vb + vc;
-        if (cc_abs(sum) <= EPSILON)
+        // Face region: project to plane and compute barycentrics using cross-area method
+        Vec3 N; float d;
+        trianglePlane(T, N, d);
+        float dist = signedDistanceToPlane(p, N, d);
+        Vec3 proj = p - N * dist; // projection on triangle plane
+        Vec3 v0 = b - a;
+        Vec3 v1 = c - a;
+        Vec3 v2 = proj - a;
+        float d00 = Vec3::dot(v0, v0);
+        float d01 = Vec3::dot(v0, v1);
+        float d11 = Vec3::dot(v1, v1);
+        float d20 = Vec3::dot(v2, v0);
+        float d21 = Vec3::dot(v2, v1);
+        float denom = d00 * d11 - d01 * d01;
+        float vv = 0.0f, ww = 0.0f;
+        if (cc_abs(denom) > EPSILON)
         {
-            if (u) *u = 1.0f; if (v) *v = 0.0f; if (w) *w = 0.0f; return a; // fallback to A
+            vv = (d11 * d20 - d01 * d21) / denom;
+            ww = (d00 * d21 - d01 * d20) / denom;
         }
-        float denom = 1.0f / sum;
-        float v_bary = vb * denom;
-        float w_bary = vc * denom;
-        float u_bary = 1.0f - v_bary - w_bary;
-        if (u) *u = u_bary; if (v) *v = v_bary; if (w) *w = w_bary;
-        return a * u_bary + b * v_bary + c * w_bary;
+        float uu = 1.0f - vv - ww;
+        // Clamp barycentrics to a small tolerance band
+        const float tol = -LARGE_EPS * 10.0f;
+        vv = vv < tol ? 0.0f : (vv > 1.0f ? 1.0f : vv);
+        ww = ww < tol ? 0.0f : (ww > 1.0f ? 1.0f : ww);
+        uu = 1.0f - vv - ww;
+        if (u) *u = uu; if (v) *v = vv; if (w) *w = ww;
+        return a * uu + b * vv + c * ww;
     }
 
     inline AABB aabbMerge(const AABB& A, const AABB& B)
@@ -374,7 +389,6 @@ namespace CapsuleCollision
     // Compute closest points between a segment and a triangle; returns onSeg and onTri
     inline bool closestPoints_Segment_Triangle(const Vec3& s0, const Vec3& s1, const Triangle& T, Vec3& onSeg, Vec3& onTri)
     {
-        // 1) Check if segment intersects the triangle plane inside the triangle
         Vec3 N; float d;
         trianglePlane(T, N, d);
         Vec3 dir = s1 - s0;
@@ -384,19 +398,30 @@ namespace CapsuleCollision
 
         if (cc_abs(denom) > EPSILON)
         {
-            float t = -(Vec3::dot(N, s0) + d) / denom; // param along segment
+            float t = -(Vec3::dot(N, s0) + d) / denom;
             if (t >= 0.0f && t <= 1.0f)
             {
-                Vec3 p = s0 + dir * t; // intersection point with plane
-                // Check if p is inside triangle via barycentric
-                float u, v, w;
-                Vec3 q = closestPointOnTriangle(T, p, &u, &v, &w);
-                // If p is inside, closest is zero distance on plane
-                Vec3 diff = p - q;
-                if (diff.length2() <= LARGE_EPS * LARGE_EPS)
+                Vec3 p = s0 + dir * t; // intersection with plane
+                // Project onto plane and run explicit point-in-triangle test
+                float pd = signedDistanceToPlane(p, N, d);
+                Vec3 proj = p - N * pd;
+                Vec3 v0 = T.b - T.a, v1 = T.c - T.a, v2 = proj - T.a;
+                float d00 = Vec3::dot(v0, v0), d01 = Vec3::dot(v0, v1), d11 = Vec3::dot(v1, v1);
+                float d20 = Vec3::dot(v2, v0), d21 = Vec3::dot(v2, v1);
+                float triDen = d00 * d11 - d01 * d01;
+                bool inside = false;
+                if (cc_abs(triDen) > EPSILON)
+                {
+                    float bv = (d11 * d20 - d01 * d21) / triDen;
+                    float bw = (d00 * d21 - d01 * d20) / triDen;
+                    float bu = 1.0f - bv - bw;
+                    const float tol = -LARGE_EPS * 10.0f;
+                    inside = (bu >= tol && bv >= tol && bw >= tol);
+                }
+                if (inside)
                 {
                     onSeg = p;
-                    onTri = q;
+                    onTri = proj;
                     return true;
                 }
             }
@@ -412,8 +437,8 @@ namespace CapsuleCollision
             onSeg = s0; onTri = q0; found = true;
         }
         Vec3 q1 = closestPointOnTriangle(T, s1);
-        Vec3 d1 = s1 - q1;
-        float dist2_1 = d1.length2();
+        Vec3 d1v = s1 - q1;
+        float dist2_1 = d1v.length2();
         if (dist2_1 < bestDist2)
         {
             bestDist2 = dist2_1; onSeg = s1; onTri = q1; found = true;
@@ -422,21 +447,18 @@ namespace CapsuleCollision
         // 3) Segment to triangle edges distances
         float s, t;
         Vec3 c1, c2;
-        // Edge AB
         closestPointsBetweenSegments(s0, s1, T.a, T.b, s, t, c1, c2);
         Vec3 diff = c1 - c2; float dist2 = diff.length2();
         if (dist2 < bestDist2)
         {
             bestDist2 = dist2; onSeg = c1; onTri = c2; found = true;
         }
-        // Edge BC
         closestPointsBetweenSegments(s0, s1, T.b, T.c, s, t, c1, c2);
         diff = c1 - c2; dist2 = diff.length2();
         if (dist2 < bestDist2)
         {
             bestDist2 = dist2; onSeg = c1; onTri = c2; found = true;
         }
-        // Edge CA
         closestPointsBetweenSegments(s0, s1, T.c, T.a, s, t, c1, c2);
         diff = c1 - c2; dist2 = diff.length2();
         if (dist2 < bestDist2)
