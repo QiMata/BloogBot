@@ -273,14 +273,57 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	// (future) walkableCosMin could be configurable; already accessible via GetWalkableCosMin()
 
 	if (!hits.empty() && !ignoreSweep) {
-		// Find earliest walkable hit we can step onto (positive delta within step height)
-		const SceneHit* chosenWalkable = nullptr;
-		for (const auto& h : hits) {
-			float dz = h.point.z - st.z;
-			if (h.normal.z >= walkableCosMin && dz >= 0.0f && dz <= stepUpLimit) { chosenWalkable = &h; break; }
-		}
-		if (chosenWalkable) {
-			// Build a temporary support ramp plane from previous position (st.x,st.y,st.z) to chosenWalkable->point
+		 // First: if we are already overlapping (startPenetrating) a walkable surface, slide instead of stepping.
+        const SceneHit& firstHit = hits.front();
+        float nZMag = std::fabs(firstHit.normal.z);
+        bool walkableStartPen = firstHit.startPenetrating && nZMag >= walkableCosMin; // allow either orientation
+        if (walkableStartPen) {
+            // Use upward-oriented normal for plane math
+            G3D::Vector3 n = (firstHit.normal.z < 0.0f ? -firstHit.normal : firstHit.normal).directionOrZero();
+            if (n.magnitude() < 1e-5f) n = G3D::Vector3(0,0,1);
+            G3D::Vector3 tangent = (moveDir - n * moveDir.dot(n));
+            if (tangent.magnitude() < 1e-5f) {
+                tangent = G3D::Vector3(-n.y, n.x, 0.0f);
+            }
+            G3D::Vector3 slideDir = tangent.directionOrZero();
+            float slideDist = intendedDist;
+            float newX = st.x + slideDir.x * slideDist;
+            float newY = st.y + slideDir.y * slideDist;
+            float refZPoint = firstHit.point.z;
+            float footBottom = st.z + radius;
+            bool pointValid = true;
+            if ((footBottom - refZPoint) > (stepDownLimit + 1.0f)) {
+                pointValid = false;
+            }
+            G3D::Vector3 planePoint(pointValid ? firstHit.point.x : st.x,
+                                     pointValid ? firstHit.point.y : st.y,
+                                     pointValid ? refZPoint : footBottom);
+            float D = -n.dot(planePoint);
+            float newZ = st.z;
+            if (std::fabs(n.z) > 1e-5f) {
+                newZ = (-D - n.x * newX - n.y * newY) / n.z;
+            }
+            float dzSlide = newZ - st.z;
+            if (dzSlide > stepUpLimit) newZ = st.z + stepUpLimit; else if (dzSlide < -stepDownLimit) newZ = st.z - stepDownLimit;
+            st.x = newX; st.y = newY; st.z = newZ; st.isGrounded = true; st.groundNormal = n; st.vx = st.vy = 0.0f;
+            PHYS_INFO(PHYS_MOVE, "[GroundMove] Sliding along walkable surface startPen dist=" << slideDist
+                << " slideDir=" << slideDir.x << "," << slideDir.y << "," << slideDir.z
+                << " newPos=" << st.x << "," << st.y << "," << st.z
+                << (pointValid ? " planePointValid" : " planePointFallback")
+                << " dzSlide=" << dzSlide);
+            return;
+        }
+        // Find earliest walkable hit we can step onto (exclude startPenetrating or zero-distance hits)
+        const SceneHit* chosenWalkable = nullptr;
+        for (const auto& h : hits) {
+            if (h.startPenetrating) continue;
+            if (h.distance <= 1e-4f) continue;
+            float dz = h.point.z - st.z;
+            float hNZMag = std::fabs(h.normal.z);
+            if (hNZMag >= walkableCosMin && dz >= 0.0f && dz <= stepUpLimit) { chosenWalkable = &h; break; }
+        }
+        if (chosenWalkable) {
+            // Build a temporary support ramp plane from previous position (st.x,st.y,st.z) to chosenWalkable->point
 			G3D::Vector3 oldPos(st.x, st.y, st.z);
 			float travel = std::max(0.0f, chosenWalkable->distance);
 			G3D::Vector3 moveDirN = moveDir.directionOrZero();
@@ -322,28 +365,27 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			st.rampLength = (steppedPoint - oldPos).dot(moveDirN);
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Stepped up via capsule sweep travel=" << travel << " newZ=" << st.z << " hitTri=" << chosenWalkable->triIndex << " rampActive=1 rampLength=" << st.rampLength << " rampN=" << rampN.x << "," << rampN.y << "," << rampN.z << " sweepSegH=" << sweepSegmentHeight << "/" << fullSegLen);
 			return;
-		}
-		// If no walkable step candidate, treat first hit as obstruction (horizontal movement stops before wall)
-		const SceneHit& hit = hits.front();
-		float travel = std::max(0.0f, hit.distance);
-		st.x += moveDir.x * travel;
-		st.y += moveDir.y * travel;
-		st.groundNormal = hit.normal;
-		if (hit.normal.z >= walkableCosMin) {
-			// Grounded at collision point (may be descending / ascending within limits)
-			float dz = hit.point.z - st.z;
-			if ((dz >= 0.0f && dz <= stepUpLimit) || (dz < 0.0f && -dz <= stepDownLimit)) {
-				st.z = hit.point.z;
-				st.isGrounded = true;
-			}
-			st.vx = st.vy = 0.0f;
-			PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule sweep: grounded travel=" << travel << " newZ=" << st.z << " sweepSegH=" << sweepSegmentHeight);
-		}
-		else {
-			st.vx = st.vy = 0.0f; // stop due to wall impact
-			PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule sweep: non-walkable obstruction, horizontal velocity zeroed travel=" << travel << " sweepSegH=" << sweepSegmentHeight);
-		}
-		return;
+        }
+        // If no walkable step candidate, treat first hit as obstruction (horizontal movement stops before wall)
+        const SceneHit& hit = hits.front();
+        float travel = std::max(0.0f, hit.distance);
+        st.x += moveDir.x * travel;
+        st.y += moveDir.y * travel;
+        st.groundNormal = hit.normal;
+        if (hit.normal.z >= walkableCosMin) {
+            float dz = hit.point.z - st.z;
+            if ((dz >= 0.0f && dz <= stepUpLimit) || (dz < 0.0f && -dz <= stepDownLimit)) {
+                st.z = hit.point.z;
+                st.isGrounded = true;
+            }
+            st.vx = st.vy = 0.0f;
+            PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule sweep: grounded travel=" << travel << " newZ=" << st.z << " sweepSegH=" << sweepSegmentHeight);
+        }
+        else {
+            st.vx = st.vy = 0.0f; // stop due to wall impact
+            PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule sweep: non-walkable obstruction, horizontal velocity zeroed travel=" << travel << " sweepSegH=" << sweepSegmentHeight);
+        }
+        return;
 	}
 	else {
 		if (!hits.empty()) {
@@ -354,24 +396,22 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule sweep: no collision, moved full distance sweepSegH=" << sweepSegmentHeight);
 		// Query both VMAP and ADT terrain heights
 		float vmapZ = INVALID_HEIGHT;
-		if (m_vmapManager)
-			vmapZ = m_vmapManager->getHeight(input.mapId, st.x, st.y, st.z + height, stepUpLimit + stepDownLimit + height);
+		if (m_vmapManager) {
+			// vmapZ = m_vmapManager->getHeight(input.mapId, st.x, st.y, st.z + height, stepUpLimit + stepDownLimit + height); // disabled: no longer needed during update
+			vmapZ = INVALID_HEIGHT;
+		}
 		float adtZ = GetTerrainHeight(input.mapId, st.x, st.y);
+		// Log VMap direct height but do not use it to set final Z (diagnostic only)
+		if (vmapZ > INVALID_HEIGHT)
+		{
+			PHYS_INFO(PHYS_MOVE, std::string("[GroundMove] VMAP height probed (diagnostic only): z=") << vmapZ);
+		}
 		float bestZ = st.z;
 		bool found = false;
-		// Check VMAP height
-		if (vmapZ > INVALID_HEIGHT) {
-			float diff = vmapZ - st.z;
-			if ((diff >= 0.0f && diff <= stepUpLimit) || (diff < 0.0f && diff >= -stepDownLimit)) {
-				bestZ = vmapZ;
-				found = true;
-				PHYS_INFO(PHYS_MOVE, "[GroundMove] VMAP height accepted: z=" << vmapZ);
-			}
-		}
-		// Check ADT height
+		// Only use ADT height for fallback snapping
 		if (adtZ > INVALID_HEIGHT) {
 			float diff = adtZ - st.z;
-			if (((diff >= 0.0f && diff <= stepUpLimit) || (diff < 0.0f && diff >= -stepDownLimit)) && (!found || adtZ > bestZ)) {
+			if (((diff >= 0.0f && diff <= stepUpLimit) || (diff < 0.0f && diff >= -stepDownLimit))) {
 				bestZ = adtZ;
 				found = true;
 				PHYS_INFO(PHYS_MOVE, "[GroundMove] ADT height accepted: z=" << adtZ);
@@ -545,7 +585,8 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	if (m_vmapManager)
 	{
 		float maxSearch = STEP_HEIGHT + STEP_DOWN_HEIGHT + h;
-		float vmapHeightDirect = m_vmapManager->getHeight(input.mapId, st.x, st.y, st.z + h, maxSearch);
+		// float vmapHeightDirect = m_vmapManager->getHeight(input.mapId, st.x, st.y, st.z + h, maxSearch); // disabled: not calculating during update
+		float vmapHeightDirect = INVALID_HEIGHT;
 		// Downward capsule sweep to gather triangles below/at feet
 		CapsuleCollision::Capsule footCaps; // small vertical span near feet
 		float footBottom = st.z + r; // top of lower sphere
@@ -582,6 +623,13 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 				<< " normal=(" << bestHit->normal.x << "," << bestHit->normal.y << "," << bestHit->normal.z << ")"
 				<< " penetrationDepth=" << bestHit->penetrationDepth
 				<< " hitsTotal=" << groundHits.size());
+			// Update output ground identification using best hit
+			out.groundTriIndex = bestHit->triIndex;
+			out.groundInstanceId = bestHit->instanceId;
+			out.groundNx = bestHit->normal.x;
+			out.groundNy = bestHit->normal.y;
+			out.groundNz = bestHit->normal.z;
+			out.groundZ = bestHit->point.z;
 		}
 		else
 		{
@@ -634,32 +682,31 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	// Propagate ramp state diagnostics (extend PhysicsOutput later if needed)
 	out.isGrounded = st.isGrounded;
 	out.groundZ = st.z; // simplification
-
-	// ------------------------------------------------------------
-	// NavMesh path height comparison
-	// ------------------------------------------------------------
-	Navigation* nav = Navigation::GetInstance();
-	if (nav)
-	{
-		// Make sure navigation maps are initialized (safe to call repeatedly)
-		nav->Initialize();
-		int pathLen = 0;
-		XYZ start(input.x, input.y, input.z);
-		XYZ end(st.x, st.y, st.z);
-		XYZ* pathArr = nav->CalculatePath(input.mapId, start, end, true /*straightPath*/, &pathLen);
-		if (pathArr && pathLen > 0)
-		{
-			const XYZ& dest = pathArr[pathLen - 1];
-			const XYZ& orig = pathArr[0];
-			PHYS_INFO(PHYS_MOVE, "[Step] NavMesh start=" << orig.X << ", " << orig.Y << ", " << orig.Z
-				<< " end = " << dest.X << ", " << dest.Y << ", " << dest.Z
-				<< " physicsEnd=" << st.x << "," << st.y << "," << st.z);
-			// Override output Z with navmesh destination Z (temporary choice)
-			out.z = dest.Z;
-		}
-		if (pathArr)
-			nav->FreePathArr(pathArr);
-	}
-
+	// Initialize ground identification defaults
+	out.groundTriIndex = input.prevGroundTriIndex;
+	out.groundInstanceId = input.prevGroundInstanceId;
+	out.groundNx = st.groundNormal.x;
+	out.groundNy = st.groundNormal.y;
+	out.groundNz = st.groundNormal.z;
+	// If a recent ground hit was found in this frame, prefer it
+	// Note: we infer latest contact from rampEnd when rampActive toggled or from bestHit in downward probe
+	// The downward probe above logged bestHit; here we only set output using stable normal/state already in st.
+	// Ramp persistence
+	out.rampActive = st.rampActive;
+	out.rampStartX = st.rampStart.x;
+	out.rampStartY = st.rampStart.y;
+	out.rampStartZ = st.rampStart.z;
+	out.rampEndX = st.rampEnd.x;
+	out.rampEndY = st.rampEnd.y;
+	out.rampEndZ = st.rampEnd.z;
+	out.rampDirX = st.rampDir.x;
+	out.rampDirY = st.rampDir.y;
+	out.rampDirZ = st.rampDir.z;
+	out.rampN_X = st.rampN.x;
+	out.rampN_Y = st.rampN.y;
+	out.rampN_Z = st.rampN.z;
+	out.rampD = st.rampD;
+	out.rampLength = st.rampLength;
+	
 	return out;
 }

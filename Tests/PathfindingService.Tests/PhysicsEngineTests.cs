@@ -136,7 +136,14 @@ namespace PathfindingService.Tests
                 runSpeed = 7.0f,
                 runBackSpeed = 4.5f,
                 swimSpeed = 4.72f,
-                flightSpeed = 2.5f
+                flightSpeed = 2.5f,
+                // initialize previous ground tracking to sentinel values
+                prevGroundTriIndex = -1,
+                prevGroundInstanceId = 0,
+                prevGroundZ = startZ,
+                prevGroundNx = 0f,
+                prevGroundNy = 0f,
+                prevGroundNz = 1f,
             };
 
             PhysicsOutput output = new();
@@ -149,6 +156,13 @@ namespace PathfindingService.Tests
                 input.y = output.y;
                 input.z = output.z;
                 input.moveFlags = output.moveFlags;
+                // propagate ground surface identification between frames
+                input.prevGroundTriIndex = output.groundTriIndex;
+                input.prevGroundInstanceId = output.groundInstanceId;
+                input.prevGroundZ = output.groundZ;
+                input.prevGroundNx = output.groundNx;
+                input.prevGroundNy = output.groundNy;
+                input.prevGroundNz = output.groundNz;
             }
 
             // After 1 second of forward movement at run speed (7.0 units/sec)
@@ -184,6 +198,7 @@ namespace PathfindingService.Tests
             Console.WriteLine($"  Orientation: {orientation:F3} rad");
             Console.WriteLine($"  Movement angle: {moveAngle:F3} rad");
             Console.WriteLine($"  Velocity: ({output.vx:F2}, {output.vy:F2}, {output.vz:F2})");
+            Console.WriteLine($"  Ground tri/inst: {output.groundTriIndex} / {output.groundInstanceId} | groundZ={output.groundZ:F3} nx={output.groundNx:F3} ny={output.groundNy:F3} nz={output.groundNz:F3}");
 
             Assert.Equal(expectedZ, output.z);
             Assert.Equal(expectedY, output.y);

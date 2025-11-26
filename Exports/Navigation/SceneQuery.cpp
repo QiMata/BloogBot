@@ -20,12 +20,11 @@ namespace
     // Helper to ensure normals face the Z-up hemisphere for walkability tests.
     static inline void EnsureUpwardNormal(G3D::Vector3& n, SceneHit& h)
     {
-        // Use world Z-up. If normal points downward, flip and mark flipped.
-        if (n.z < 0.0f)
-        {
-            n = -n;
-            h.normalFlipped = true;
-        }
+        // Previously flipped normals with negative Z to the upward hemisphere.
+        // That could incorrectly classify underside contacts as walkable and cause snapping down ramps.
+        // New behavior: do not flip the normal; preserve model-provided orientation.
+        // Track flag but leave it false.
+        h.normalFlipped = false;
     }
 
     // Helper function to compute barycentric coordinates for a point on a triangle
@@ -381,7 +380,8 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
     G3D::Vector3 iMin = iP0.min(iP1).min(iP0End.min(iP1End)) - G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r);
     G3D::Vector3 iMax = iP0.max(iP1).max(iP0End.max(iP1End)) + G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r);
     CapsuleCollision::AABB sweepBoxI; sweepBoxI.min = { iMin.x, iMin.y, iMin.z }; sweepBoxI.max = { iMax.x, iMax.y, iMax.z }; CapsuleCollision::aabbInflate(sweepBoxI, 0.005f);
-    sweepBoxI.min.z -= (capsuleStart.r * 0.5f);
+    // Reduce vertical dip: use small epsilon instead of radius-based lowering to avoid pulling far-below triangles
+    sweepBoxI.min.z -= 0.05f;
 
     MapMeshView view(map.GetBIHTree(), map.GetInstancesPtr(), map.GetInstanceCount(), includeMask);
     const int kCap = 1024; int triIdxs[kCap]; int triCount = 0;
@@ -434,13 +434,13 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
         G3D::Vector3 bary = ComputeBarycentric(wPtTri, wA, wB, wC);
         int smallCount = (bary.x < 0.05f) + (bary.y < 0.05f) + (bary.z < 0.05f);
         const char* triRegion = (smallCount >= 2 ? "VERTEX" : (smallCount == 1 ? "EDGE" : "FACE"));
-        PHYS_TRACE(PHYS_CYL, "tComp triCacheIdx=" << cacheIdx << " modelTri=" << view.triLocalIndex(cacheIdx) << " instId=" << mi->ID
+        /*PHYS_TRACE(PHYS_CYL, "tComp triCacheIdx=" << cacheIdx << " modelTri=" << view.triLocalIndex(cacheIdx) << " instId=" << mi->ID
             << " p0W=(" << wP0.x << "," << wP0.y << "," << wP0.z << ") p1W=(" << wP1.x << "," << wP1.y << "," << wP1.z << ")"
             << " p0L=(" << p0L.x << "," << p0L.y << "," << p0L.z << ") p1L=(" << p1L.x << "," << p1L.y << "," << p1L.z << ")"
             << " rW=" << capsuleStart.r << " rL=" << CLocal.r
             << " rawDepthL=" << rawDepthL << " distL=" << distL << " segTL=" << segTL << " regionL=" << regionL
             << " rawDepthW=" << rawDepthW << " distW=" << distW
-            << " triN=(" << triN.x << "," << triN.y << "," << triN.z << ") bary=(" << bary.x << "," << bary.y << "," << bary.z << ") triRegion=" << triRegion);
+            << " triN=(" << triN.x << "," << triN.y << "," << triN.z << ") bary=(" << bary.x << "," << bary.y << "," << bary.z << ") triRegion=" << triRegion);*/
 
         // Additional diagnostic: improved required sweep distance along dir to reach contact.
         // Previous quadratic approach assumed both closest points remain fixed features; produced unstable huge values.
@@ -466,14 +466,14 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
         {
             reachReason = "proj<=0 (moving away or orthogonal)";
         }
-        PHYS_TRACE(PHYS_CYL, "tCompExtra tri=" << view.triLocalIndex(cacheIdx)
+        /*PHYS_TRACE(PHYS_CYL, "tCompExtra tri=" << view.triLocalIndex(cacheIdx)
             << " gapDist=" << gapDist
             << " radius=" << rad
             << " deltaLen=" << deltaLen
             << " deltaNormDotDir=" << proj
             << " needSweepDist=" << needSweepDist
             << " providedSweepDist=" << distance
-            << " reason=" << reachReason);
+            << " reason=" << reachReason);*/
     }
 
     // Start penetration check per triangle in model-local space

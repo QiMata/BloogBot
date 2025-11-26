@@ -146,4 +146,14 @@ struct PhysicsOutput
     // Spline progress
     int currentSplineIndex;
     float splineProgress;      // 0.0 to 1.0 between current and next point
+
+    // Ramp interpolation diagnostics (persisted by caller between frames)
+    // These fields enable smooth step/ramp traversal across frames.
+    bool rampActive;
+    float rampStartX, rampStartY, rampStartZ;
+    float rampEndX, rampEndY, rampEndZ;
+    float rampDirX, rampDirY, rampDirZ;
+    float rampN_X, rampN_Y, rampN_Z; // ramp plane normal
+    float rampD;                      // plane D term
+    float rampLength;                 // expected traversal length along rampDir
 };
