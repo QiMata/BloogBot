@@ -534,7 +534,7 @@ float GridMap::getHeightFromFloat(float x, float y) const
             // Triangle 1 (h1, h2, h5 points)
             float h1 = m_V9[v9_idx1];
             float h2 = m_V9[v9_idx2];
-            float h5 = 2 * m_V8[v8_idx];
+            float h5 = m_V8[v8_idx];
             a = h2 - h1;
             b = h5 - h1 - h2;
             c = h1;
@@ -544,7 +544,7 @@ float GridMap::getHeightFromFloat(float x, float y) const
             // Triangle 2 (h1, h3, h5 points)
             float h1 = m_V9[v9_idx1];
             float h3 = m_V9[v9_idx3];
-            float h5 = 2 * m_V8[v8_idx];
+            float h5 = m_V8[v8_idx];
             a = h5 - h1 - h3;
             b = h3 - h1;
             c = h1;
@@ -557,7 +557,7 @@ float GridMap::getHeightFromFloat(float x, float y) const
             // Triangle 3 (h2, h4, h5 points)
             float h2 = m_V9[v9_idx2];
             float h4 = m_V9[v9_idx4];
-            float h5 = 2 * m_V8[v8_idx];
+            float h5 = m_V8[v8_idx];
             a = h2 + h4 - h5;
             b = h4 - h2;
             c = h5 - h4;
@@ -567,7 +567,7 @@ float GridMap::getHeightFromFloat(float x, float y) const
             // Triangle 4 (h3, h4, h5 points)
             float h3 = m_V9[v9_idx3];
             float h4 = m_V9[v9_idx4];
-            float h5 = 2 * m_V8[v8_idx];
+            float h5 = m_V8[v8_idx];
             a = h4 - h3;
             b = h3 + h4 - h5;
             c = h5 - h4;
@@ -763,11 +763,11 @@ float GridMap::sampleV8Center(int xi, int yi) const
         return INVALID_HEIGHT;
     int idx = xi * V8_SIZE + yi;
     if (m_V8)
-        return m_V8[idx] * 2.0f; // match getHeightFromFloat (h5 = 2 * V8)
+        return m_V8[idx];
     if (m_uint16_V8)
-        return (m_uint16_V8[idx] * m_gridIntHeightMultiplier + m_gridHeight) * 2.0f;
+        return (m_uint16_V8[idx] * m_gridIntHeightMultiplier + m_gridHeight);
     if (m_uint8_V8)
-        return (m_uint8_V8[idx] * m_gridIntHeightMultiplier + m_gridHeight) * 2.0f;
+        return (m_uint8_V8[idx] * m_gridIntHeightMultiplier + m_gridHeight);
     return INVALID_HEIGHT;
 }
 
@@ -815,14 +815,14 @@ bool GridMap::getNormal(float x, float y, float& nx, float& ny, float& nz) const
             // Triangle 1: (h1, h2, h5)
             a = CapsuleCollision::Vec3(wx0, wy0, m_V9[v9_idx1]);
             b = CapsuleCollision::Vec3(wx1, wy0, m_V9[v9_idx2]);
-            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, 2 * m_V8[v8_idx] / 2.0f);
+            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, m_V8[v8_idx]);
         }
         else
         {
             // Triangle 2: (h1, h3, h5)
             a = CapsuleCollision::Vec3(wx0, wy0, m_V9[v9_idx1]);
             b = CapsuleCollision::Vec3(wx0, wy1, m_V9[v9_idx3]);
-            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, 2 * m_V8[v8_idx] / 2.0f);
+            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, m_V8[v8_idx]);
         }
     }
     else
@@ -832,14 +832,14 @@ bool GridMap::getNormal(float x, float y, float& nx, float& ny, float& nz) const
             // Triangle 3: (h2, h4, h5)
             a = CapsuleCollision::Vec3(wx1, wy0, m_V9[v9_idx2]);
             b = CapsuleCollision::Vec3(wx1, wy1, m_V9[v9_idx4]);
-            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, 2 * m_V8[v8_idx] / 2.0f);
+            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, m_V8[v8_idx]);
         }
         else
         {
             // Triangle 4: (h3, h4, h5)
             a = CapsuleCollision::Vec3(wx0, wy1, m_V9[v9_idx3]);
             b = CapsuleCollision::Vec3(wx1, wy1, m_V9[v9_idx4]);
-            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, 2 * m_V8[v8_idx] / 2.0f);
+            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, m_V8[v8_idx]);
         }
     }
 

@@ -101,13 +101,13 @@ namespace PathfindingService.Tests
         }
 
         [Theory]
-        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -601.812195f, -4595.82373f, 41.0648575)] // Your exact scenario
+        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -601.817322f, -4595.82764f, 41.0653114)] // Your exact scenario
         [InlineData(1u, -562.225f, -4189.092f, 70.789f, 6.175373f, Race.Orc, -555.441589f, -4190.04834f, 72.6371841f)] // Your exact scenario
-        [InlineData(1u, -535.151367f, -4200.184082f, 74.552f, 0.126206f, Race.Orc, -535.151367f, -4200.184082f, 74.552f)]
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8942.95801f, -132.490005f, 83.6794205f)]  // North facing
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8949.9502f, -125.489944f, 83.3185196f)] // East facing  
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8956.94238f, -132.490005f, 82.9244919f)] // South facing
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8949.9502f, -139.490128f, 83.4673691f)] // West facing
+        [InlineData(1u, -535.151367f, -4200.184082f, 74.552f, 0.126206f, Race.Orc, -528.697388f, -4199.83057f, 76.9935532f)]
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8942.95801f, -132.485428f, 83.6792374f)]  // North facing
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8949.93066f, -125.49894f, 83.3325424f)] // East facing  
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8956.92383f, -132.509186f, 82.9271317f)] // South facing
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8949.94922f, -139.487244f, 83.467598f)] // West facing
         public void StepPhysics_ForwardMovement(
             uint mapId,
             float startX, float startY, float startZ,
