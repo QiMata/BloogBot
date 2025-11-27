@@ -9,11 +9,11 @@ using WoWSharpClient.Parsers;
 
 namespace WoWSharpClient.Movement
 {
-    public class MovementController
+    public class MovementController(WoWClient client, PathfindingClient physics, WoWLocalPlayer player)
     {
-        private readonly WoWClient _client;
-        private readonly PathfindingClient _physics;
-        private readonly WoWLocalPlayer _player;
+        private readonly WoWClient _client = client;
+        private readonly PathfindingClient _physics = physics;
+        private readonly WoWLocalPlayer _player = player;
 
         // Physics state
         private Vector3 _velocity = Vector3.Zero;
@@ -21,22 +21,13 @@ namespace WoWSharpClient.Movement
 
         // Network timing
         private uint _lastPacketTime;
-        private MovementFlags _lastSentFlags;
+        private MovementFlags _lastSentFlags = player.MovementFlags;
         private const uint PACKET_INTERVAL_MS = 500;
 
         // Debug tracking
-        private Vector3 _lastPhysicsPosition;
+        private Vector3 _lastPhysicsPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
         private float _accumulatedDelta = 0;
         private int _frameCounter = 0;
-
-        public MovementController(WoWClient client, PathfindingClient physics, WoWLocalPlayer player)
-        {
-            _client = client;
-            _physics = physics;
-            _player = player;
-            _lastSentFlags = player.MovementFlags;
-            _lastPhysicsPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
-        }
 
         // ======== MAIN UPDATE - Called every frame ========
         public void Update(float deltaSec, uint gameTimeMs)
