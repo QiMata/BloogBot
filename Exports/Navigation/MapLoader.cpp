@@ -210,7 +210,7 @@ bool GridMap::loadHeightData(FILE* in, uint32_t offset, uint32_t size)
 
         // Create a default header
         m_heightHeader = new MapHeightHeader();
-        m_heightHeader->fourcc = expectedHeightMagic;
+        m_heightHeader->fourcc = *reinterpret_cast<const uint32_t*>(MAP_HEIGHT_MAGIC);
         m_heightHeader->flags = 0; // float format
         m_heightHeader->gridHeight = 0.0f;
         m_heightHeader->gridMaxHeight = 100.0f;
@@ -1042,4 +1042,249 @@ bool MapLoader::IsTileLoaded(uint32_t mapId, uint32_t x, uint32_t y) const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_loadedTiles.find(makeKey(mapId, x, y)) != m_loadedTiles.end();
+}
+
+// ---- New: terrain triangle extraction ----
+void GridMap::getTerrainTriangles(std::vector<TerrainTriangle>& out) const
+{
+    if (!m_V9 || !m_V8)
+        return;
+
+    auto pushUpward = [&](float ax, float ay, float az,
+                          float bx, float by, float bz,
+                          float cx, float cy, float cz) {
+        // Compute normal z to ensure upward orientation
+        float abx = bx - ax, aby = by - ay, abz = bz - az;
+        float acx = cx - ax, acy = cy - ay, acz = cz - az;
+        float nx = aby * acz - abz * acy;
+        float ny = abz * acx - abx * acz;
+        float nz = abx * acy - aby * acx;
+        if (nz < 0.0f)
+            out.push_back({ ax, ay, az, cx, cy, cz, bx, by, bz }); // swap to flip
+        else
+            out.push_back({ ax, ay, az, bx, by, bz, cx, cy, cz });
+    };
+
+    // Iterate map squares (128x128). For each square, emit two tris unless it's a hole.
+    for (int xi = 0; xi < V8_SIZE; ++xi)
+    {
+        for (int yi = 0; yi < V8_SIZE; ++yi)
+        {
+            if (isHole(xi, yi))
+                continue;
+            float wx0 = xi * GRID_PART_SIZE;
+            float wy0 = yi * GRID_PART_SIZE;
+            float wx1 = (xi + 1) * GRID_PART_SIZE;
+            float wy1 = (yi + 1) * GRID_PART_SIZE;
+
+            int v9_idx1 = xi * V9_SIZE + yi;
+            int v9_idx2 = (xi + 1) * V9_SIZE + yi;
+            int v9_idx3 = xi * V9_SIZE + (yi + 1);
+            int v9_idx4 = (xi + 1) * V9_SIZE + (yi + 1);
+            int v8_idx = xi * V8_SIZE + yi;
+
+            float h1 = m_V9[v9_idx1];
+            float h2 = m_V9[v9_idx2];
+            float h3 = m_V9[v9_idx3];
+            float h4 = m_V9[v9_idx4];
+            float h5 = m_V8[v8_idx] * 2.0f; // center is averaged
+
+            float cx = (wx0 + wx1) * 0.5f;
+            float cy = (wy0 + wy1) * 0.5f;
+            // Emit with ensured upward normal
+            pushUpward(wx0, wy0, h1, wx1, wy0, h2, cx, cy, h5);
+            pushUpward(wx0, wy0, h1, wx0, wy1, h3, cx, cy, h5);
+            pushUpward(wx1, wy0, h2, wx1, wy1, h4, cx, cy, h5);
+            pushUpward(wx0, wy1, h3, wx1, wy1, h4, cx, cy, h5);
+        }
+    }
+}
+
+void GridMap::getTerrainTrianglesInAABB(float minX, float minY, float maxX, float maxY,
+                                        std::vector<TerrainTriangle>& out) const
+{
+    if (!m_V9 || !m_V8)
+        return;
+
+    auto pushUpward = [&](float ax, float ay, float az,
+                          float bx, float by, float bz,
+                          float cx, float cy, float cz) {
+        float abx = bx - ax, aby = by - ay, abz = bz - az;
+        float acx = cx - ax, acy = cy - ay, acz = cz - az;
+        float nz = abx * acy - aby * acx;
+        if (nz < 0.0f)
+            out.push_back({ ax, ay, az, cx, cy, cz, bx, by, bz });
+        else
+            out.push_back({ ax, ay, az, bx, by, bz, cx, cy, cz });
+    };
+
+    // Clamp to tile-local bounds [0, GRID_SIZE]
+    float x0 = std::max(0.0f, minX);
+    float y0 = std::max(0.0f, minY);
+    float x1 = std::min(GRID_SIZE, maxX);
+    float y1 = std::min(GRID_SIZE, maxY);
+    if (x0 >= x1 || y0 >= y1) return;
+
+    int xi0 = std::max(0, (int)std::floor(x0 / GRID_PART_SIZE));
+    int yi0 = std::max(0, (int)std::floor(y0 / GRID_PART_SIZE));
+    int xi1 = std::min(V8_SIZE - 1, (int)std::floor(x1 / GRID_PART_SIZE));
+    int yi1 = std::min(V8_SIZE - 1, (int)std::floor(y1 / GRID_PART_SIZE));
+
+    for (int xi = xi0; xi <= xi1; ++xi)
+    {
+        for (int yi = yi0; yi <= yi1; ++yi)
+        {
+            if (isHole(xi, yi))
+                continue;
+
+            float wx0 = xi * GRID_PART_SIZE;
+            float wy0 = yi * GRID_PART_SIZE;
+            float wx1 = (xi + 1) * GRID_PART_SIZE;
+            float wy1 = (yi + 1) * GRID_PART_SIZE;
+
+            int v9_idx1 = xi * V9_SIZE + yi;
+            int v9_idx2 = (xi + 1) * V9_SIZE + yi;
+            int v9_idx3 = xi * V9_SIZE + (yi + 1);
+            int v9_idx4 = (xi + 1) * V9_SIZE + (yi + 1);
+            int v8_idx = xi * V8_SIZE + yi;
+
+            float h1 = m_V9[v9_idx1];
+            float h2 = m_V9[v9_idx2];
+            float h3 = m_V9[v9_idx3];
+            float h4 = m_V9[v9_idx4];
+            float h5 = m_V8[v8_idx] * 2.0f;
+
+            auto overlaps = [&](float ax, float ay, float bx, float by, float cx, float cy) {
+                float minTx = std::min({ ax, bx, cx });
+                float minTy = std::min({ ay, by, cy });
+                float maxTx = std::max({ ax, bx, cx });
+                float maxTy = std::max({ ay, by, cy });
+                return !(maxTx < minX || maxTy < minY || minTx > maxX || minTy > maxY);
+            };
+
+            float cx = (wx0 + wx1) * 0.5f;
+            float cy = (wy0 + wy1) * 0.5f;
+            if (overlaps(wx0, wy0, wx1, wy0, cx, cy))
+                pushUpward(wx0, wy0, h1, wx1, wy0, h2, cx, cy, h5);
+            if (overlaps(wx0, wy0, wx0, wy1, cx, cy))
+                pushUpward(wx0, wy0, h1, wx0, wy1, h3, cx, cy, h5);
+            if (overlaps(wx1, wy0, wx1, wy1, cx, cy))
+                pushUpward(wx1, wy0, h2, wx1, wy1, h4, cx, cy, h5);
+            if (overlaps(wx0, wy1, wx1, wy1, cx, cy))
+                pushUpward(wx0, wy1, h3, wx1, wy1, h4, cx, cy, h5);
+        }
+    }
+}
+
+bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, float maxX, float maxY,
+                                   std::vector<MapFormat::TerrainTriangle>& out)
+{
+    if (!m_initialized)
+    {
+        std::cout << "[TerrainQuery] ERROR: MapLoader not initialized" << std::endl;
+        return false;
+    }
+
+    // Log input AABB
+    std::cout << std::fixed << std::setprecision(3)
+        << "[TerrainQuery] map=" << mapId
+        << " AABB x:[" << minX << "," << maxX << "] y:[" << minY << "," << maxY << "]" << std::endl;
+
+    // Use the same grid coordinate convention as GetHeight
+    uint32_t gx0, gy0, gx1, gy1;
+    worldToGridCoords(minX, minY, gx0, gy0);
+    worldToGridCoords(maxX, maxY, gx1, gy1);
+    std::cout << "[TerrainQuery] grid from(min->max): gx0=" << gx0 << " gy0=" << gy0
+              << " gx1=" << gx1 << " gy1=" << gy1 << std::endl;
+
+    uint32_t minGX = std::min(gx0, gx1);
+    uint32_t maxGX = std::max(gx0, gx1);
+    uint32_t minGY = std::min(gy0, gy1);
+    uint32_t maxGY = std::max(gy0, gy1);
+    std::cout << "[TerrainQuery] grid range GX:[" << minGX << "," << maxGX << "] GY:[" << minGY << "," << maxGY << "]" << std::endl;
+
+    size_t before = out.size();
+    size_t tilesVisited = 0, tilesLoaded = 0, tilesMissing = 0;
+    size_t trisOut = 0;
+
+    for (uint32_t tileY = minGY; tileY <= maxGY; ++tileY)
+    {
+        for (uint32_t tileX = minGX; tileX <= maxGX; ++tileX)
+        {
+            ++tilesVisited;
+            // Match GetHeight ordering: LoadMapTile(mapId, gridY, gridX)
+            bool loadedOk = LoadMapTile(mapId, tileY, tileX);
+            std::cout << "[TerrainQueryTile] try tileY=" << tileY << " tileX=" << tileX
+                      << " loaded=" << (loadedOk?"1":"0") << std::endl;
+            if (!loadedOk)
+            {
+                ++tilesMissing;
+                continue;
+            }
+            ++tilesLoaded;
+
+            std::lock_guard<std::mutex> lock(m_mutex);
+            auto it = m_loadedTiles.find(makeKey(mapId, tileY, tileX));
+            if (it == m_loadedTiles.end())
+            {
+                std::cout << "[TerrainQueryTile] not in cache after load key(map, y, x)=" << mapId << "," << tileY << "," << tileX << std::endl;
+                ++tilesMissing;
+                continue;
+            }
+            GridMap* tile = it->second.get();
+            if (!tile)
+            {
+                std::cout << "[TerrainQueryTile] null GridMap ptr for tile y=" << tileY << " x=" << tileX << std::endl;
+                ++tilesMissing;
+                continue;
+            }
+
+            // Compute tile world origin consistent with worldToGridCoords
+            // Current formula returns the tile's MAX corner (upper/right depending on axis direction).
+            // For local tile coordinates we need the MIN (lower-left) corner so that 0 <= local < GRID_SIZE.
+            float tileMaxWorldX = (CENTER_GRID_ID - static_cast<float>(tileY)) * GRID_SIZE; // previous tileOriginX (upper bound)
+            float tileMaxWorldY = (CENTER_GRID_ID - static_cast<float>(tileX)) * GRID_SIZE; // previous tileOriginY (upper bound)
+            float tileOriginX = tileMaxWorldX - GRID_SIZE; // lower bound of tile in world X
+            float tileOriginY = tileMaxWorldY - GRID_SIZE; // lower bound of tile in world Y
+            std::cout << std::fixed << std::setprecision(3)
+                      << "[TerrainQueryTile] origin worldX=" << tileOriginX << " worldY=" << tileOriginY
+                      << " (lower-bound; upperX=" << tileMaxWorldX << " upperY=" << tileMaxWorldY << ")" << std::endl;
+
+            // Convert world AABB to tile-local AABB (0..GRID_SIZE range). Clamp to valid range.
+            float localMinX = minX - tileOriginX;
+            float localMinY = minY - tileOriginY;
+            float localMaxX = maxX - tileOriginX;
+            float localMaxY = maxY - tileOriginY;
+            // Clamp to [0, GRID_SIZE] so queries outside the tile don't produce large negatives
+            auto clampLocal = [](float v) { return v; };
+            localMinX = std::max(0.0f, localMinX); localMinY = std::max(0.0f, localMinY);
+            localMaxX = std::min(GRID_SIZE, localMaxX); localMaxY = std::min(GRID_SIZE, localMaxY);
+            std::cout << "[TerrainQueryTile] local AABB x:[" << localMinX << "," << localMaxX << "] y:[" << localMinY << "," << localMaxY << "]" << std::endl;
+
+            // Gather local triangles within the local AABB
+            std::vector<TerrainTriangle> localTris;
+            tile->getTerrainTrianglesInAABB(localMinX, localMinY, localMaxX, localMaxY, localTris);
+            std::cout << "[TerrainQueryTile] local tris count=" << localTris.size() << std::endl;
+
+            // Translate back to world-space and append
+            for (const auto& t : localTris)
+            {
+                MapFormat::TerrainTriangle tw;
+                tw.ax = t.ax + tileOriginX; tw.ay = t.ay + tileOriginY; tw.az = t.az;
+                tw.bx = t.bx + tileOriginX; tw.by = t.by + tileOriginY; tw.bz = t.bz;
+                tw.cx = t.cx + tileOriginX; tw.cy = t.cy + tileOriginY; tw.cz = t.cz;
+                out.push_back(tw);
+                ++trisOut;
+            }
+        }
+    }
+
+    bool any = out.size() > before;
+    std::cout << "[TerrainQuery] result any=" << (any?"1":"0")
+              << " trisOut=" << trisOut
+              << " tilesVisited=" << tilesVisited
+              << " tilesLoaded=" << tilesLoaded
+              << " tilesMissing=" << tilesMissing << std::endl;
+
+    return any;
 }

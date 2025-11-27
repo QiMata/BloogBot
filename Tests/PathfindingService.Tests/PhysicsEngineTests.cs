@@ -101,12 +101,13 @@ namespace PathfindingService.Tests
         }
 
         [Theory]
-        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -598.668f, -4601.770f, 41.0648575)] // Your exact scenario
-        [InlineData(1u, -562.225f, -4189.092f, 70.789f, 6.175373f, Race.Orc, -555.043f, -4189.869f, 72.6432724f)] // Your exact scenario
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8949.95f, -125.49f, 83.6794205f)]  // North facing
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8942.95f, -132.49f, 83.3185196f)] // East facing  
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8949.95f, -139.49f, 82.9244919f)] // South facing
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8956.95f, -132.49f, 83.4673691f)] // West facing
+        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -601.812195f, -4595.82373f, 41.0648575)] // Your exact scenario
+        [InlineData(1u, -562.225f, -4189.092f, 70.789f, 6.175373f, Race.Orc, -555.441589f, -4190.04834f, 72.6371841f)] // Your exact scenario
+        [InlineData(1u, -535.151367f, -4200.184082f, 74.552f, 0.126206f, Race.Orc, -535.151367f, -4200.184082f, 74.552f)]
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8942.95801f, -132.490005f, 83.6794205f)]  // North facing
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8949.9502f, -125.489944f, 83.3185196f)] // East facing  
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8956.94238f, -132.490005f, 82.9244919f)] // South facing
+        [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8949.9502f, -139.490128f, 83.4673691f)] // West facing
         public void StepPhysics_ForwardMovement(
             uint mapId,
             float startX, float startY, float startZ,
@@ -137,13 +138,6 @@ namespace PathfindingService.Tests
                 runBackSpeed = 4.5f,
                 swimSpeed = 4.72f,
                 flightSpeed = 2.5f,
-                // initialize previous ground tracking to sentinel values
-                prevGroundTriIndex = -1,
-                prevGroundInstanceId = 0,
-                prevGroundZ = startZ,
-                prevGroundNx = 0f,
-                prevGroundNy = 0f,
-                prevGroundNz = 1f,
             };
 
             PhysicsOutput output = new();
@@ -156,13 +150,7 @@ namespace PathfindingService.Tests
                 input.y = output.y;
                 input.z = output.z;
                 input.moveFlags = output.moveFlags;
-                // propagate ground surface identification between frames
-                input.prevGroundTriIndex = output.groundTriIndex;
-                input.prevGroundInstanceId = output.groundInstanceId;
-                input.prevGroundZ = output.groundZ;
-                input.prevGroundNx = output.groundNx;
-                input.prevGroundNy = output.groundNy;
-                input.prevGroundNz = output.groundNz;
+                // ground tracking fields removed from interop; rely on engine state
             }
 
             // After 1 second of forward movement at run speed (7.0 units/sec)
@@ -172,7 +160,8 @@ namespace PathfindingService.Tests
             float expectedDistance = input.runSpeed * totalTime;
             float actualDistance = MathF.Sqrt(
                 MathF.Pow(output.x - startX, 2) +
-                MathF.Pow(output.y - startY, 2));
+                MathF.Pow(output.y - startY, 2) +
+                MathF.Pow(output.z - startZ, 2));
 
             // Verify we moved approximately the right distance
             Assert.InRange(actualDistance, expectedDistance - 1, expectedDistance + 1); // Within 1 unit tolerance
@@ -198,7 +187,6 @@ namespace PathfindingService.Tests
             Console.WriteLine($"  Orientation: {orientation:F3} rad");
             Console.WriteLine($"  Movement angle: {moveAngle:F3} rad");
             Console.WriteLine($"  Velocity: ({output.vx:F2}, {output.vy:F2}, {output.vz:F2})");
-            Console.WriteLine($"  Ground tri/inst: {output.groundTriIndex} / {output.groundInstanceId} | groundZ={output.groundZ:F3} nx={output.groundNx:F3} ny={output.groundNy:F3} nz={output.groundNz:F3}");
 
             Assert.Equal(expectedZ, output.z);
             Assert.Equal(expectedY, output.y);

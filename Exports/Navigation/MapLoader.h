@@ -176,6 +176,9 @@ namespace MapFormat
 
         // New: extract terrain triangles (world coordinates) for this tile
         void getTerrainTriangles(std::vector<TerrainTriangle>& out) const;
+        // New: extract terrain triangles within world-space AABB
+        void getTerrainTrianglesInAABB(float minX, float minY, float maxX, float maxY,
+                                       std::vector<TerrainTriangle>& out) const;
 
         // New: compute surface normal at world position (returns false if invalid / hole)
         bool getNormal(float x, float y, float& nx, float& ny, float& nz) const;
@@ -229,4 +232,8 @@ public:
             return it->second.get();
         return nullptr;
     }
+
+    // New: Gather terrain triangles across all tiles overlapped by world-space AABB
+    bool GetTerrainTriangles(uint32_t mapId, float minX, float minY, float maxX, float maxY,
+                             std::vector<MapFormat::TerrainTriangle>& out);
 };

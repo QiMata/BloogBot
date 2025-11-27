@@ -84,6 +84,9 @@ public:
         G3D::Vector3 normal;
     };
 
+    // New: expose MapLoader for read-only terrain queries
+    MapLoader* GetMapLoader() const;
+
 private:
     PhysicsEngine();
     ~PhysicsEngine();

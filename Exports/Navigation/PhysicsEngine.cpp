@@ -73,6 +73,12 @@ float PhysicsEngine::GetWalkableCosMin() const
 	return m_walkableCosMin;
 }
 
+// Expose MapLoader for read-only terrain queries
+MapLoader* PhysicsEngine::GetMapLoader() const
+{
+    return m_mapLoader.get();
+}
+
 // =====================================================================================
 // Initialization / Shutdown
 // =====================================================================================
@@ -234,6 +240,12 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 {
 	PHYS_INFO(PHYS_MOVE, "[GroundMove] Start pos=" << st.x << "," << st.y << "," << st.z << " vel=" << st.vx << "," << st.vy << " dt=" << dt);
 
+	// Global step limits and thresholds used across branches
+	const float stepUpLimit = STEP_HEIGHT;
+	const float stepDownLimit = STEP_DOWN_HEIGHT;
+	const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+	const float TOL = 1e-5f;
+
 	// --- Intent & early-outs ---
 	if (intent.jumpRequested) {
 		st.vz = JUMP_VELOCITY;
@@ -244,7 +256,76 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	}
 	if (!intent.hasInput) {
 		st.vx = st.vy = 0.0f;
-		PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=NoInput vx/vy=0");
+		PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=NoInput vx/vy=0 (will perform downward settle)");
+
+		// Build a normal-sized capsule spanning from max step-up down to step-down
+		CapsuleCollision::Capsule cap;
+		float capBottom = (st.z + radius) - stepDownLimit; // extend below feet
+		float capTop    = (st.z + radius) + stepUpLimit;   // extend above feet
+		// Ensure segment length does not exceed full capsule height
+		float fullSegLen = (height - 2.0f * radius);
+		float desiredSegLen = capTop - capBottom;
+		if (desiredSegLen > fullSegLen) {
+			float overflow = desiredSegLen - fullSegLen;
+			// Center segment around feet by trimming equally from top and bottom
+			capBottom += overflow * 0.5f;
+			capTop    -= overflow * 0.5f;
+		}
+		cap.p0 = CapsuleCollision::Vec3(st.x, st.y, capBottom);
+		cap.p1 = CapsuleCollision::Vec3(st.x, st.y, capTop);
+		cap.r = radius;
+		PHYS_INFO(PHYS_MOVE, "[GroundMove] SettleCapsule p0=(" << cap.p0.x << "," << cap.p0.y << "," << cap.p0.z << ") p1=(" << cap.p1.x << "," << cap.p1.y << "," << cap.p1.z << ") r=" << cap.r << " spanUp=" << stepUpLimit << " spanDown=" << stepDownLimit);
+
+		// Downward sweep to find closest walkable surface
+		G3D::Vector3 downDir(0, 0, -1);
+		float settleDist = std::max(3.0f, height + 2.0f);
+		std::vector<SceneHit> downHits;
+		if (m_vmapManager)
+			downHits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, downDir, settleDist);
+		PHYS_INFO(PHYS_MOVE, "[GroundMove] DownwardSweep count=" << downHits.size() << " dist=" << settleDist);
+
+		// Prefer the earliest non-penetrating walkable surface
+		const SceneHit* bestNP = nullptr;
+		for (size_t i = 0; i < downHits.size(); ++i) {
+			const auto& h = downHits[i];
+			PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownHit idx=" << i << " startPen=" << (h.startPenetrating?1:0) << " dist=" << h.distance << " nZ=" << h.normal.z << " pZ=" << h.point.z);
+			if (h.startPenetrating) { PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownReject idx=" << i << " reason=StartPenetrating"); continue; }
+			if (h.normal.z < walkableCosMin) { PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownReject idx=" << i << " reason=Unwalkable nZ=" << h.normal.z); continue; }
+			bestNP = &h;
+			break;
+		}
+
+		// Otherwise, if penetrating at start, choose highest up-facing contact
+		const SceneHit* bestPen = nullptr; float bestPenZ = -FLT_MAX;
+		for (size_t i = 0; i < downHits.size(); ++i) {
+			const auto& h = downHits[i];
+			PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownHitPen idx=" << i << " startPen=" << (h.startPenetrating?1:0) << " nZ=" << h.normal.z << " pZ=" << h.point.z);
+			if (!h.startPenetrating) continue;
+			if (h.normal.z < 0.0f) { PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownReject idx=" << i << " reason=PenetratingDownFacing"); continue; }
+			if (h.point.z > bestPenZ) { bestPenZ = h.point.z; bestPen = &h; }
+		}
+		if (bestPen) {
+			st.z = bestPen->point.z;
+			st.isGrounded = true;
+			st.groundNormal = bestPen->normal.directionOrZero();
+			PHYS_INFO(PHYS_MOVE, "[GroundMove] Settle result: Penetrating adjust to z=" << st.z << " nZ=" << st.groundNormal.z);
+			return;
+		}
+
+		// ADT terrain fallback
+		float adtZ = GetTerrainHeight(input.mapId, st.x, st.y);
+		if (adtZ > PhysicsConstants::INVALID_HEIGHT) {
+			st.z = adtZ;
+			st.isGrounded = true;
+			st.groundNormal = G3D::Vector3(0, 0, 1);
+			PHYS_INFO(PHYS_MOVE, "[GroundMove] Settle result: ADT fallback z=" << st.z);
+			return;
+		}
+
+		// Nothing found: start falling
+		st.isGrounded = false;
+		if (st.vz >= 0.0f) st.vz = -0.1f;
+		PHYS_INFO(PHYS_MOVE, "[GroundMove] Settle result: No ground, start falling vz=" << st.vz);
 		return;
 	}
 	st.vx = intent.dir.x * speed;
@@ -259,16 +340,22 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		return;
 	}
 
-	// --- Build foot capsule with reduced sweep segment ---
+	// --- Build foot capsule spanning step-up to step-down ---
 	CapsuleCollision::Capsule cap;
-	float capBottom = st.z + radius;
+	// use existing stepUpLimit and stepDownLimit defined earlier in this scope
+	float capBottom = (st.z + radius) - stepDownLimit;
+	float capTop    = (st.z + radius) + stepUpLimit;
 	float fullSegLen = (height - 2.0f * radius);
-	float sweepSegmentHeight = std::max(0.1f, std::min(fullSegLen, STEP_HEIGHT + 0.25f));
-	float capTop = capBottom + sweepSegmentHeight;
+	float desiredSegLen = capTop - capBottom;
+	if (desiredSegLen > fullSegLen) {
+		float overflow = desiredSegLen - fullSegLen;
+		capBottom += overflow * 0.5f;
+		capTop    -= overflow * 0.5f;
+	}
 	cap.p0 = CapsuleCollision::Vec3(st.x, st.y, capBottom);
 	cap.p1 = CapsuleCollision::Vec3(st.x, st.y, capTop);
 	cap.r = radius;
-	PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule p0=(" << cap.p0.x << "," << cap.p0.y << "," << cap.p0.z << ") p1=(" << cap.p1.x << "," << cap.p1.y << "," << cap.p1.z << ") r=" << cap.r << " segH=" << sweepSegmentHeight << "/" << fullSegLen);
+	PHYS_INFO(PHYS_MOVE, "[GroundMove] Capsule p0=(" << cap.p0.x << "," << cap.p0.y << "," << cap.p0.z << ") p1=(" << cap.p1.x << "," << cap.p1.y << "," << cap.p1.z << ") r=" << cap.r << " spanUp=" << stepUpLimit << " spanDown=" << stepDownLimit << " fullSegLen=" << fullSegLen);
 
 	std::vector<SceneHit> hits;
 	if (m_vmapManager)
@@ -276,20 +363,44 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	PHYS_INFO(PHYS_MOVE, "[GroundMove] SweepCapsuleAll count=" << hits.size());
 
 	// --- Step limits and thresholds ---
-	const float stepUpLimit = STEP_HEIGHT;
-	const float stepDownLimit = STEP_DOWN_HEIGHT;
-	const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-	const float TOL = 1e-5f;
+	// (already defined at function start)
+
+	// Helper lambda: attempt step-up from penetration when all hits are penetrating
+	auto TryStepUpFromPenetration = [&](const std::vector<SceneHit>& allHits) -> bool {
+		// Find best candidate point within stepUpLimit above current feet
+		const SceneHit* best = nullptr;
+		float bestDz = FLT_MAX;
+		for (const auto& h : allHits) {
+			if (!h.startPenetrating) continue; // only consider penetration contacts
+			float dz = h.point.z - st.z;
+			if (dz < 0.0f || dz > stepUpLimit + 0.01f) continue;
+			// Prefer surfaces with a reasonably upward facing normal
+			if (h.normal.z < 0.0f) continue; // ignore upside-down faces
+			// record smallest upward move (closest step) so we do not over-ascend
+			if (dz < bestDz) { bestDz = dz; best = &h; }
+		}
+		if (!best) return false;
+		// Perform horizontal advance (full intendedDist) while stepping up
+		G3D::Vector3 moveDirN = DirectionOrFallback(moveDir, G3D::Vector3(1,0,0));
+		st.x += moveDirN.x * intendedDist;
+		st.y += moveDirN.y * intendedDist;
+		st.z = best->point.z; // snap to candidate surface height
+		st.isGrounded = true;
+		st.vx = st.vy = 0.0f;
+		st.groundNormal = best->normal.z > 0.0f ? best->normal.directionOrZero() : G3D::Vector3(0,0,1);
+		PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=StepUpPen tri=" << best->triIndex << " dz=" << bestDz << " newPos=(" << st.x << "," << st.y << "," << st.z << ")");
+		return true;
+	};
 
 	if (!hits.empty()) {
 		// 1) If overlapping a walkable surface at start, perform a simple slide along its plane.
 		const SceneHit& firstHit = hits.front();
 		PHYS_INFO(PHYS_MOVE, "[GroundMove] FirstHit tri=" << firstHit.triIndex << " instId=" << firstHit.instanceId << " startPen=" << (firstHit.startPenetrating?1:0) << " dist=" << firstHit.distance << " n=(" << firstHit.normal.x << "," << firstHit.normal.y << "," << firstHit.normal.z << ") p=(" << firstHit.point.x << "," << firstHit.point.y << "," << firstHit.point.z << ")");
-		float nZMag = std::fabs(firstHit.normal.z);
-		bool walkableStartPen = firstHit.startPenetrating && nZMag >= walkableCosMin;
+		float nZ = firstHit.normal.z; // use signed Z now
+		bool walkableStartPen = firstHit.startPenetrating && nZ >= walkableCosMin;
 		if (walkableStartPen) {
-			PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=SlideStartPen walkableN=1 nZMag=" << nZMag);
-			G3D::Vector3 n = (firstHit.normal.z < 0.0f ? -firstHit.normal : firstHit.normal).directionOrZero();
+			PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=SlideStartPen walkableN=1 nZ=" << nZ);
+			G3D::Vector3 n = firstHit.normal.directionOrZero();
 			if (n.magnitude() < TOL) n = G3D::Vector3(0,0,1);
 			G3D::Vector3 moveDirN = DirectionOrFallback(moveDir, G3D::Vector3(1,0,0));
 			G3D::Vector3 slideDir = (moveDirN - n * moveDirN.dot(n)).directionOrZero();
@@ -309,16 +420,29 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			return;
 		}
 
-		// 2) Find earliest walkable non-penetrating step candidate
+		// 2) Find earliest walkable non-penetrating step candidate (positive Z normal only)
 		const SceneHit* chosenWalkable = nullptr;
 		for (size_t i = 0; i < hits.size(); ++i) {
 			const auto& h = hits[i];
 			PHYS_TRACE(PHYS_MOVE, "[GroundMove] EvalHit idx=" << i << " tri=" << h.triIndex << " startPen=" << (h.startPenetrating?1:0) << " dist=" << h.distance << " nZ=" << h.normal.z << " pZ=" << h.point.z);
-			if (h.startPenetrating) continue;
-			if (h.distance <= 1e-4f) continue;
-			if (std::fabs(h.normal.z) < walkableCosMin) continue;
+			if (h.startPenetrating) {
+				PHYS_TRACE(PHYS_MOVE, "[GroundMove] Reject idx=" << i << " reason=StartPenetrating");
+				continue;
+			}
+			if (h.distance <= 1e-4f) {
+				PHYS_TRACE(PHYS_MOVE, "[GroundMove] Reject idx=" << i << " reason=ZeroOrTinyDistance dist=" << h.distance);
+				continue;
+			}
+			if (h.normal.z < walkableCosMin) {
+				PHYS_TRACE(PHYS_MOVE, "[GroundMove] Reject idx=" << i << " reason=UnwalkableNormal nZ=" << h.normal.z << " thresh=" << walkableCosMin);
+				continue;
+			}
 			float dz = h.point.z - st.z;
-			if (dz >= 0.0f && dz <= stepUpLimit) { chosenWalkable = &h; break; }
+			if (!(dz >= 0.0f && dz <= stepUpLimit)) {
+				PHYS_TRACE(PHYS_MOVE, "[GroundMove] Reject idx=" << i << " reason=StepUpRange dz=" << dz << " limit=" << stepUpLimit);
+				continue;
+			}
+			chosenWalkable = &h; break;
 		}
 		if (chosenWalkable) {
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=StepUp tri=" << chosenWalkable->triIndex << " dist=" << chosenWalkable->distance << " targetZ=" << chosenWalkable->point.z);
@@ -353,6 +477,15 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			return;
 		}
 
+		// 2b) Fallback: all penetrating contacts, try penetration-based step up.
+		bool allPenetrating = true;
+		for (const auto& h : hits) { if (!h.startPenetrating) { allPenetrating = false; break; } }
+		if (allPenetrating && firstHit.distance <= 1e-4f) {
+			if (TryStepUpFromPenetration(hits)) {
+				return; // stepped up successfully
+			}
+		}
+
 		// 3) No step candidate: obstruction branch
 		const SceneHit& hit = hits.front();
 		PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=Obstruction tri=" << hit.triIndex << " dist=" << hit.distance << " nZ=" << hit.normal.z << " pZ=" << hit.point.z);
@@ -360,15 +493,19 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		st.x += moveDir.x * travel;
 		st.y += moveDir.y * travel;
 		st.groundNormal = hit.normal;
-		if (std::fabs(hit.normal.z) >= walkableCosMin) {
+		if (hit.normal.z >= walkableCosMin) {
 			float dz = hit.point.z - st.z;
+			PHYS_TRACE(PHYS_MOVE, "[GroundMove] ObstructionEval dz=" << dz << " stepUpLimit=" << stepUpLimit << " stepDownLimit=" << stepDownLimit);
 			if ((dz >= 0.0f && dz <= stepUpLimit) || (dz < 0.0f && -dz <= stepDownLimit)) {
 				st.z = hit.point.z;
 				st.isGrounded = true;
+			} else {
+				PHYS_TRACE(PHYS_MOVE, "[GroundMove] ObstructionReject reason=OutOfRange dz=" << dz);
 			}
 			st.vx = st.vy = 0.0f;
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result Obstruction walkable=1 travel=" << travel << " newPos=(" << st.x << "," << st.y << "," << st.z << ")");
 		} else {
+			PHYS_TRACE(PHYS_MOVE, "[GroundMove] ObstructionReject reason=UnwalkableNormal nZ=" << hit.normal.z);
 			st.vx = st.vy = 0.0f;
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result Obstruction walkable=0 travel=" << travel << " newPos=(" << st.x << "," << st.y << "," << st.z << ")");
 		}
@@ -390,8 +527,11 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	float bestZ = st.z; bool found = false;
 	if (adtZ > INVALID_HEIGHT) {
 		float diff = adtZ - st.z;
+		PHYS_TRACE(PHYS_MOVE, "[GroundMove] ADT snap eval diff=" << diff << " stepUpLimit=" << stepUpLimit << " stepDownLimit=" << stepDownLimit);
 		if (((diff >= 0.0f && diff <= stepUpLimit) || (diff < 0.0f && diff >= -stepDownLimit))) {
 			bestZ = adtZ; found = true; PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=ADTHeightSnap z=" << adtZ);
+		} else {
+			PHYS_TRACE(PHYS_MOVE, "[GroundMove] ADT snap reject reason=OutOfRange diff=" << diff);
 		}
 	}
 	if (found) {
@@ -601,8 +741,6 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.isGrounded = st.isGrounded;
 	out.groundZ = st.z; // simplification
 	// Initialize ground identification defaults
-	out.groundTriIndex = input.prevGroundTriIndex;
-	out.groundInstanceId = input.prevGroundInstanceId;
 	out.groundNx = st.groundNormal.x;
 	out.groundNy = st.groundNormal.y;
 	out.groundNz = st.groundNormal.z;

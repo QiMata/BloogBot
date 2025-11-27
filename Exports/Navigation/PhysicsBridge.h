@@ -96,8 +96,6 @@ struct PhysicsInput
     int currentSplineIndex;
 
     // Previous ground tracking (fed back from last PhysicsOutput)
-    int prevGroundTriIndex;        // -1 if none / terrain
-    uint32_t prevGroundInstanceId; // 0 if none
     float prevGroundZ;              // last known ground height (for stabilizing)
     float prevGroundNx;             // previous ground normal X
     float prevGroundNy;             // previous ground normal Y
@@ -133,8 +131,6 @@ struct PhysicsOutput
     float liquidZ;             // Liquid surface height (if any)
 
     // Ground surface identification
-    int groundTriIndex;            // triangle index within model, -1 if terrain or none
-    uint32_t groundInstanceId;     // model instance id, 0 if terrain or none
     float groundNx;                // ground surface normal X
     float groundNy;                // ground surface normal Y
     float groundNz;                // ground surface normal Z
