@@ -161,6 +161,8 @@ namespace MapFormat
 
         // Helper to sample V9 heights regardless of storage type
         float sampleV9Height(int xi, int yi) const;
+        // Helper to sample V8 center height regardless of storage type (returns 2*center like getHeight)
+        float sampleV8Center(int xi, int yi) const;
 
     public:
         GridMap() = default;
@@ -182,6 +184,8 @@ namespace MapFormat
 
         // New: compute surface normal at world position (returns false if invalid / hole)
         bool getNormal(float x, float y, float& nx, float& ny, float& nz) const;
+        // New: sample all 5 heights for a square (corner V9s + center V8*2). Returns false if hole/invalid/out of range.
+        bool getSquareHeights(int xi, int yi, float& h1, float& h2, float& h3, float& h4, float& h5) const;
     };
 }
 
@@ -200,6 +204,17 @@ private:
     std::string getMapFileName(uint32_t mapId, uint32_t x, uint32_t y) const;
     uint64_t makeKey(uint32_t mapId, uint32_t x, uint32_t y) const;
     void worldToGridCoords(float worldX, float worldY, uint32_t& gridX, uint32_t& gridY) const;
+    // New: compute tile origin (lower-left world corner) given grid indices (note axis swap convention)
+    void computeTileOrigin(uint32_t gridY, uint32_t gridX, float& originX, float& originY) const;
+    // New: convert world-space AABB to tile-local clamped AABB
+    void worldAABBToTileLocal(float minX, float minY, float maxX, float maxY,
+                              float originX, float originY,
+                              float& localMinX, float& localMinY, float& localMaxX, float& localMaxY) const;
+    // New: transform world (x,y) to cell indices and fractions (0..127) using same tx/ty as GridMap height logic
+    void worldToCellIndices(float x, float y, int& cellX, int& cellY, float& fracX, float& fracY) const;
+    // New: sample height and square corner/center heights (fan) at world position; returns false if invalid
+    bool SampleHeightAndSquare(uint32_t mapId, float x, float y, int& cellX, int& cellY,
+                               float& outHeight, float& h1, float& h2, float& h3, float& h4, float& h5);
 
 public:
     MapLoader();
@@ -236,4 +251,8 @@ public:
     // New: Gather terrain triangles across all tiles overlapped by world-space AABB
     bool GetTerrainTriangles(uint32_t mapId, float minX, float minY, float maxX, float maxY,
                              std::vector<MapFormat::TerrainTriangle>& out);
+
+    // Expose sampling helper (optional external use)
+    bool GetHeightAndSquare(uint32_t mapId, float x, float y, int& cellX, int& cellY,
+                            float& outHeight, float& h1, float& h2, float& h3, float& h4, float& h5) { return SampleHeightAndSquare(mapId, x, y, cellX, cellY, outHeight, h1, h2, h3, h4, h5); }
 };

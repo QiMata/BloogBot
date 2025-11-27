@@ -756,6 +756,21 @@ float GridMap::sampleV9Height(int xi, int yi) const
     return INVALID_HEIGHT;
 }
 
+// Helper to sample V8 (center) heights regardless of storage type
+float GridMap::sampleV8Center(int xi, int yi) const
+{
+    if (xi < 0 || xi >= V8_SIZE || yi < 0 || yi >= V8_SIZE)
+        return INVALID_HEIGHT;
+    int idx = xi * V8_SIZE + yi;
+    if (m_V8)
+        return m_V8[idx] * 2.0f; // match getHeightFromFloat (h5 = 2 * V8)
+    if (m_uint16_V8)
+        return (m_uint16_V8[idx] * m_gridIntHeightMultiplier + m_gridHeight) * 2.0f;
+    if (m_uint8_V8)
+        return (m_uint8_V8[idx] * m_gridIntHeightMultiplier + m_gridHeight) * 2.0f;
+    return INVALID_HEIGHT;
+}
+
 // New: compute surface normal at world position (returns false if invalid / hole)
 bool GridMap::getNormal(float x, float y, float& nx, float& ny, float& nz) const
 {
@@ -837,6 +852,142 @@ bool GridMap::getNormal(float x, float y, float& nx, float& ny, float& nz) const
     ny = n.y;
     nz = n.z;
     return true;
+}
+
+// ---- New: terrain triangle extraction ----
+void GridMap::getTerrainTriangles(std::vector<TerrainTriangle>& out) const
+{
+    // Support all storage formats; require that any V9/V8 exist
+    if (!(m_V9 || m_uint16_V9 || m_uint8_V9) || !(m_V8 || m_uint16_V8 || m_uint8_V8))
+        return;
+
+    auto pushUpward = [&](float ax, float ay, float az,
+                          float bx, float by, float bz,
+                          float cx, float cy, float cz) {
+        // Compute normal z to ensure upward orientation
+        float abx = bx - ax, aby = by - ay, abz = bz - az;
+        float acx = cx - ax, acy = cy - ay, acz = cz - az;
+        float nx = aby * acz - abz * acy;
+        float ny = abz * acx - abx * acz;
+        float nz = abx * acy - aby * acx;
+        if (nz < 0.0f)
+            out.push_back({ ax, ay, az, cx, cy, cz, bx, by, bz }); // swap to flip
+        else
+            out.push_back({ ax, ay, az, bx, by, bz, cx, cy, cz });
+    };
+
+    // Iterate map squares (128x128). For each square, emit two tris unless it's a hole.
+    for (int xi = 0; xi < V8_SIZE; ++xi)
+    {
+        for (int yi = 0; yi < V8_SIZE; ++yi)
+        {
+            if (isHole(xi, yi))
+                continue;
+            float wx0 = xi * GRID_PART_SIZE;
+            float wy0 = yi * GRID_PART_SIZE;
+            float wx1 = (xi + 1) * GRID_PART_SIZE;
+            float wy1 = (yi + 1) * GRID_PART_SIZE;
+
+            // Heights sampled using storage-agnostic helpers
+            float h1 = sampleV9Height(xi,     yi    );
+            float h2 = sampleV9Height(xi + 1, yi    );
+            float h3 = sampleV9Height(xi,     yi + 1);
+            float h4 = sampleV9Height(xi + 1, yi + 1);
+            float h5 = sampleV8Center(xi, yi);
+            if (h1 <= INVALID_HEIGHT_VALUE || h2 <= INVALID_HEIGHT_VALUE ||
+                h3 <= INVALID_HEIGHT_VALUE || h4 <= INVALID_HEIGHT_VALUE ||
+                h5 <= INVALID_HEIGHT_VALUE)
+            {
+                continue;
+            }
+
+            float cx = (wx0 + wx1) * 0.5f;
+            float cy = (wy0 + wy1) * 0.5f;
+            // Emit with ensured upward normal
+            pushUpward(wx0, wy0, h1, wx1, wy0, h2, cx, cy, h5);
+            pushUpward(wx0, wy0, h1, wx0, wy1, h3, cx, cy, h5);
+            pushUpward(wx1, wy0, h2, wx1, wy1, h4, cx, cy, h5);
+            pushUpward(wx0, wy1, h3, wx1, wy1, h4, cx, cy, h5);
+        }
+    }
+}
+
+void GridMap::getTerrainTrianglesInAABB(float minX, float minY, float maxX, float maxY,
+                                        std::vector<TerrainTriangle>& out) const
+{
+    // Support all storage formats; require that any V9/V8 exist
+    if (!(m_V9 || m_uint16_V9 || m_uint8_V9) || !(m_V8 || m_uint16_V8 || m_uint8_V8))
+        return;
+
+    auto pushUpward = [&](float ax, float ay, float az,
+                          float bx, float by, float bz,
+                          float cx, float cy, float cz) {
+        float abx = bx - ax, aby = by - ay, abz = bz - az;
+        float acx = cx - ax, acy = cy - ay, acz = cz - az;
+        float nz = abx * acy - aby * acx;
+        if (nz < 0.0f)
+            out.push_back({ ax, ay, az, cx, cy, cz, bx, by, bz });
+        else
+            out.push_back({ ax, ay, az, bx, by, bz, cx, cy, cz });
+    };
+
+    // Clamp to tile-local bounds [0, GRID_SIZE]
+    float x0 = std::max(0.0f, minX);
+    float y0 = std::max(0.0f, minY);
+    float x1 = std::min(GRID_SIZE, maxX);
+    float y1 = std::min(GRID_SIZE, maxY);
+    if (x0 >= x1 || y0 >= y1) return;
+
+    int xi0 = std::max(0, (int)std::floor(x0 / GRID_PART_SIZE));
+    int yi0 = std::max(0, (int)std::floor(y0 / GRID_PART_SIZE));
+    int xi1 = std::min(V8_SIZE - 1, (int)std::floor(x1 / GRID_PART_SIZE));
+    int yi1 = std::min(V8_SIZE - 1, (int)std::floor(y1 / GRID_PART_SIZE));
+
+    for (int xi = xi0; xi <= xi1; ++xi)
+    {
+        for (int yi = yi0; yi <= yi1; ++yi)
+        {
+            if (isHole(xi, yi))
+                continue;
+
+            float wx0 = xi * GRID_PART_SIZE;
+            float wy0 = yi * GRID_PART_SIZE;
+            float wx1 = (xi + 1) * GRID_PART_SIZE;
+            float wy1 = (yi + 1) * GRID_PART_SIZE;
+
+            // Heights sampled using storage-agnostic helpers
+            float h1 = sampleV9Height(xi,     yi    );
+            float h2 = sampleV9Height(xi + 1, yi    );
+            float h3 = sampleV9Height(xi,     yi + 1);
+            float h4 = sampleV9Height(xi + 1, yi + 1);
+            float h5 = sampleV8Center(xi, yi);
+            if (h1 <= INVALID_HEIGHT_VALUE || h2 <= INVALID_HEIGHT_VALUE ||
+                h3 <= INVALID_HEIGHT_VALUE || h4 <= INVALID_HEIGHT_VALUE ||
+                h5 <= INVALID_HEIGHT_VALUE)
+            {
+                continue;
+            }
+
+            auto overlaps = [&](float ax, float ay, float bx, float by, float cx, float cy) {
+                float minTx = std::min({ ax, bx, cx });
+                float minTy = std::min({ ay, by, cy });
+                float maxTx = std::max({ ax, bx, cx });
+                float maxTy = std::max({ ay, by, cy });
+                return !(maxTx < minX || maxTy < minY || minTx > maxX || minTy > maxY);
+            };
+
+            float cx = (wx0 + wx1) * 0.5f;
+            float cy = (wy0 + wy1) * 0.5f;
+            if (overlaps(wx0, wy0, wx1, wy0, cx, cy))
+                pushUpward(wx0, wy0, h1, wx1, wy0, h2, cx, cy, h5);
+            if (overlaps(wx0, wy0, wx0, wy1, cx, cy))
+                pushUpward(wx0, wy0, h1, wx0, wy1, h3, cx, cy, h5);
+            if (overlaps(wx1, wy0, wx1, wy1, cx, cy))
+                pushUpward(wx1, wy0, h2, wx1, wy1, h4, cx, cy, h5);
+            if (overlaps(wx0, wy1, wx1, wy1, cx, cy))
+                pushUpward(wx0, wy1, h3, wx1, wy1, h4, cx, cy, h5);
+        }
+    }
 }
 
 // ==================== MapLoader Implementation ====================
@@ -938,29 +1089,149 @@ void MapLoader::UnloadAllTiles()
     m_loadedTiles.clear();
 }
 
+void MapLoader::computeTileOrigin(uint32_t gridY, uint32_t gridX, float& originX, float& originY) const
+{
+    // gridY corresponds to world X axis inversion; gridX to world Y axis inversion
+    float tileMaxWorldX = (CENTER_GRID_ID - static_cast<float>(gridY)) * GRID_SIZE;
+    float tileMaxWorldY = (CENTER_GRID_ID - static_cast<float>(gridX)) * GRID_SIZE;
+    originX = tileMaxWorldX - GRID_SIZE;
+    originY = tileMaxWorldY - GRID_SIZE;
+}
+
+void MapLoader::worldAABBToTileLocal(float minX, float minY, float maxX, float maxY,
+                                     float originX, float originY,
+                                     float& localMinX, float& localMinY, float& localMaxX, float& localMaxY) const
+{
+    localMinX = std::max(0.0f, minX - originX);
+    localMinY = std::max(0.0f, minY - originY);
+    localMaxX = std::min(GRID_SIZE, maxX - originX);
+    localMaxY = std::min(GRID_SIZE, maxY - originY);
+}
+
 float MapLoader::GetHeight(uint32_t mapId, float x, float y)
 {
+    // Detailed diagnostics: capture grid coords and tile origin for correlation with GetTerrainTriangles
     uint32_t gridX, gridY;
     worldToGridCoords(x, y, gridX, gridY);
 
-    // Load the tile if not already loaded
-    if (!LoadMapTile(mapId, gridY, gridX))
+    int cellX, cellY; float h, h1, h2, h3, h4, h5;
+    bool ok = SampleHeightAndSquare(mapId, x, y, cellX, cellY, h, h1, h2, h3, h4, h5);
+    if (!ok)
     {
+        std::cout << std::fixed << std::setprecision(3)
+                  << "[TerrainHeight] map=" << mapId
+                  << " x=" << x << " y=" << y
+                  << " gridX=" << gridX << " gridY=" << gridY
+                  << " status=NO_HEIGHT" << std::endl;
         return INVALID_HEIGHT;
     }
 
-    std::lock_guard<std::mutex> lock(m_mutex);
+    // Recompute fractional cell coords (same logic as SampleHeightAndSquare) for logging
+    float fracX, fracY; int tmpCellX, tmpCellY;
+    worldToCellIndices(x, y, tmpCellX, tmpCellY, fracX, fracY);
+    // (cellX should match tmpCellX; cellY should match tmpCellY) but we log both for verification
 
-    // Get the tile from cache
-    auto it = m_loadedTiles.find(makeKey(mapId, gridY, gridX));
-    if (it == m_loadedTiles.end())
+    // Compute tile origin (lower bound world corner) to build world-space triangle vertices
+    float tileOriginX, tileOriginY; computeTileOrigin(gridY, gridX, tileOriginX, tileOriginY);
+
+    // Derive local square (tile-local) coordinate extents
+    // Each cell index maps to tile-local position = index * GRID_PART_SIZE
+    float localX0 = cellX * GRID_PART_SIZE;
+    float localY0 = cellY * GRID_PART_SIZE;
+    float localX1 = (cellX + 1) * GRID_PART_SIZE;
+    float localY1 = (cellY + 1) * GRID_PART_SIZE;
+
+    // World-space square corners
+    float wAx0 = localX0 + tileOriginX; float wAy0 = localY0 + tileOriginY; // bottom-left (h1)
+    float wBx0 = localX1 + tileOriginX; float wBy0 = localY0 + tileOriginY; // bottom-right (h2)
+    float wCx0 = localX0 + tileOriginX; float wCy1 = localY1 + tileOriginY; // top-left (h3)
+    float wDx1 = localX1 + tileOriginX; float wDy1 = localY1 + tileOriginY; // top-right (h4)
+    float wExC = (localX0 + localX1) * 0.5f + tileOriginX; // center X (h5)
+    float wEyC = (localY0 + localY1) * 0.5f + tileOriginY; // center Y (h5)
+
+    // Determine triangle selection & interpolation coefficients (duplicate of SampleHeightAndSquare logic)
+    int triSel; float aCoef, bCoef, cCoef; float reconHeight;
+    if (fracX + fracY < 1.0f)
     {
-        return INVALID_HEIGHT;
+        if (fracX > fracY)
+        {
+            triSel = 1; // h1,h2,h5
+            aCoef = h2 - h1; bCoef = h5 - h1 - h2; cCoef = h1;
+        }
+        else
+        {
+            triSel = 2; // h1,h3,h5
+            aCoef = h5 - h1 - h3; bCoef = h3 - h1; cCoef = h1;
+        }
+    }
+    else
+    {
+        if (fracX > fracY)
+        {
+            triSel = 3; // h2,h4,h5
+            aCoef = h2 + h4 - h5; bCoef = h4 - h2; cCoef = h5 - h4;
+        }
+        else
+        {
+            triSel = 4; // h3,h4,h5
+            aCoef = h4 - h3; bCoef = h3 + h4 - h5; cCoef = h5 - h4;
+        }
+    }
+    reconHeight = aCoef * fracX + bCoef * fracY + cCoef; // should match h
+
+    // Prepare triangle vertex world positions based on triSel
+    // Order A,B,C corresponds to interpolation logic used above
+    float tAx, tAy, tAz, tBx, tBy, tBz, tCx, tCy, tCz;
+    switch (triSel)
+    {
+    case 1: // h1 (A), h2 (B), h5 (C)
+        tAx = wAx0; tAy = wAy0; tAz = h1;
+        tBx = wBx0; tBy = wBy0; tBz = h2;
+        tCx = wExC; tCy = wEyC; tCz = h5;
+        break;
+    case 2: // h1 (A), h3 (B), h5 (C)
+        tAx = wAx0; tAy = wAy0; tAz = h1;
+        tBx = wCx0; tBy = wCy1; tBz = h3;
+        tCx = wExC; tCy = wEyC; tCz = h5;
+        break;
+    case 3: // h2 (A), h4 (B), h5 (C)
+        tAx = wBx0; tAy = wBy0; tAz = h2;
+        tBx = wDx1; tBy = wDy1; tBz = h4;
+        tCx = wExC; tCy = wEyC; tCz = h5;
+        break;
+    case 4: // h3 (A), h4 (B), h5 (C)
+        tAx = wCx0; tAy = wCy1; tAz = h3;
+        tBx = wDx1; tBy = wDy1; tBz = h4;
+        tCx = wExC; tCy = wEyC; tCz = h5;
+        break;
+    default:
+        tAx = tAy = tAz = tBx = tBy = tBz = tCx = tCy = tCz = 0.0f;
+        break;
     }
 
-    float height = it->second->getHeight(x, y);
+    // Emit consolidated diagnostic line
+    std::cout << std::fixed << std::setprecision(3)
+              << "[TerrainHeight] map=" << mapId
+              << " x=" << x << " y=" << y
+              << " gridX=" << gridX << " gridY=" << gridY
+              << " cellX=" << cellX << " cellY=" << cellY
+              << " fracX=" << fracX << " fracY=" << fracY
+              << " triSel=" << triSel
+              << " h=" << h
+              << " h1=" << h1 << " h2=" << h2 << " h3=" << h3 << " h4=" << h4 << " h5=" << h5
+              << " a=" << aCoef << " b=" << bCoef << " c=" << cCoef
+              << " recon=" << reconHeight
+              << std::endl;
 
-    return height;
+    // Emit triangle vertices for correlation with TerrainTriSample (world space)
+    std::cout << std::fixed << std::setprecision(3)
+              << "[TerrainHeightTri] map=" << mapId
+              << " triSel=" << triSel
+              << " A=(" << tAx << "," << tAy << "," << tAz << ")"
+              << " B=(" << tBx << "," << tBy << "," << tBz << ")"
+              << " C=(" << tCx << "," << tCy << "," << tCz << ")" << std::endl;
+
+    return h;
 }
 
 float MapLoader::GetLiquidLevel(uint32_t mapId, float x, float y)
@@ -1045,137 +1316,6 @@ bool MapLoader::IsTileLoaded(uint32_t mapId, uint32_t x, uint32_t y) const
 }
 
 // ---- New: terrain triangle extraction ----
-void GridMap::getTerrainTriangles(std::vector<TerrainTriangle>& out) const
-{
-    if (!m_V9 || !m_V8)
-        return;
-
-    auto pushUpward = [&](float ax, float ay, float az,
-                          float bx, float by, float bz,
-                          float cx, float cy, float cz) {
-        // Compute normal z to ensure upward orientation
-        float abx = bx - ax, aby = by - ay, abz = bz - az;
-        float acx = cx - ax, acy = cy - ay, acz = cz - az;
-        float nx = aby * acz - abz * acy;
-        float ny = abz * acx - abx * acz;
-        float nz = abx * acy - aby * acx;
-        if (nz < 0.0f)
-            out.push_back({ ax, ay, az, cx, cy, cz, bx, by, bz }); // swap to flip
-        else
-            out.push_back({ ax, ay, az, bx, by, bz, cx, cy, cz });
-    };
-
-    // Iterate map squares (128x128). For each square, emit two tris unless it's a hole.
-    for (int xi = 0; xi < V8_SIZE; ++xi)
-    {
-        for (int yi = 0; yi < V8_SIZE; ++yi)
-        {
-            if (isHole(xi, yi))
-                continue;
-            float wx0 = xi * GRID_PART_SIZE;
-            float wy0 = yi * GRID_PART_SIZE;
-            float wx1 = (xi + 1) * GRID_PART_SIZE;
-            float wy1 = (yi + 1) * GRID_PART_SIZE;
-
-            int v9_idx1 = xi * V9_SIZE + yi;
-            int v9_idx2 = (xi + 1) * V9_SIZE + yi;
-            int v9_idx3 = xi * V9_SIZE + (yi + 1);
-            int v9_idx4 = (xi + 1) * V9_SIZE + (yi + 1);
-            int v8_idx = xi * V8_SIZE + yi;
-
-            float h1 = m_V9[v9_idx1];
-            float h2 = m_V9[v9_idx2];
-            float h3 = m_V9[v9_idx3];
-            float h4 = m_V9[v9_idx4];
-            float h5 = m_V8[v8_idx] * 2.0f; // center is averaged
-
-            float cx = (wx0 + wx1) * 0.5f;
-            float cy = (wy0 + wy1) * 0.5f;
-            // Emit with ensured upward normal
-            pushUpward(wx0, wy0, h1, wx1, wy0, h2, cx, cy, h5);
-            pushUpward(wx0, wy0, h1, wx0, wy1, h3, cx, cy, h5);
-            pushUpward(wx1, wy0, h2, wx1, wy1, h4, cx, cy, h5);
-            pushUpward(wx0, wy1, h3, wx1, wy1, h4, cx, cy, h5);
-        }
-    }
-}
-
-void GridMap::getTerrainTrianglesInAABB(float minX, float minY, float maxX, float maxY,
-                                        std::vector<TerrainTriangle>& out) const
-{
-    if (!m_V9 || !m_V8)
-        return;
-
-    auto pushUpward = [&](float ax, float ay, float az,
-                          float bx, float by, float bz,
-                          float cx, float cy, float cz) {
-        float abx = bx - ax, aby = by - ay, abz = bz - az;
-        float acx = cx - ax, acy = cy - ay, acz = cz - az;
-        float nz = abx * acy - aby * acx;
-        if (nz < 0.0f)
-            out.push_back({ ax, ay, az, cx, cy, cz, bx, by, bz });
-        else
-            out.push_back({ ax, ay, az, bx, by, bz, cx, cy, cz });
-    };
-
-    // Clamp to tile-local bounds [0, GRID_SIZE]
-    float x0 = std::max(0.0f, minX);
-    float y0 = std::max(0.0f, minY);
-    float x1 = std::min(GRID_SIZE, maxX);
-    float y1 = std::min(GRID_SIZE, maxY);
-    if (x0 >= x1 || y0 >= y1) return;
-
-    int xi0 = std::max(0, (int)std::floor(x0 / GRID_PART_SIZE));
-    int yi0 = std::max(0, (int)std::floor(y0 / GRID_PART_SIZE));
-    int xi1 = std::min(V8_SIZE - 1, (int)std::floor(x1 / GRID_PART_SIZE));
-    int yi1 = std::min(V8_SIZE - 1, (int)std::floor(y1 / GRID_PART_SIZE));
-
-    for (int xi = xi0; xi <= xi1; ++xi)
-    {
-        for (int yi = yi0; yi <= yi1; ++yi)
-        {
-            if (isHole(xi, yi))
-                continue;
-
-            float wx0 = xi * GRID_PART_SIZE;
-            float wy0 = yi * GRID_PART_SIZE;
-            float wx1 = (xi + 1) * GRID_PART_SIZE;
-            float wy1 = (yi + 1) * GRID_PART_SIZE;
-
-            int v9_idx1 = xi * V9_SIZE + yi;
-            int v9_idx2 = (xi + 1) * V9_SIZE + yi;
-            int v9_idx3 = xi * V9_SIZE + (yi + 1);
-            int v9_idx4 = (xi + 1) * V9_SIZE + (yi + 1);
-            int v8_idx = xi * V8_SIZE + yi;
-
-            float h1 = m_V9[v9_idx1];
-            float h2 = m_V9[v9_idx2];
-            float h3 = m_V9[v9_idx3];
-            float h4 = m_V9[v9_idx4];
-            float h5 = m_V8[v8_idx] * 2.0f;
-
-            auto overlaps = [&](float ax, float ay, float bx, float by, float cx, float cy) {
-                float minTx = std::min({ ax, bx, cx });
-                float minTy = std::min({ ay, by, cy });
-                float maxTx = std::max({ ax, bx, cx });
-                float maxTy = std::max({ ay, by, cy });
-                return !(maxTx < minX || maxTy < minY || minTx > maxX || minTy > maxY);
-            };
-
-            float cx = (wx0 + wx1) * 0.5f;
-            float cy = (wy0 + wy1) * 0.5f;
-            if (overlaps(wx0, wy0, wx1, wy0, cx, cy))
-                pushUpward(wx0, wy0, h1, wx1, wy0, h2, cx, cy, h5);
-            if (overlaps(wx0, wy0, wx0, wy1, cx, cy))
-                pushUpward(wx0, wy0, h1, wx0, wy1, h3, cx, cy, h5);
-            if (overlaps(wx1, wy0, wx1, wy1, cx, cy))
-                pushUpward(wx1, wy0, h2, wx1, wy1, h4, cx, cy, h5);
-            if (overlaps(wx0, wy1, wx1, wy1, cx, cy))
-                pushUpward(wx0, wy1, h3, wx1, wy1, h4, cx, cy, h5);
-        }
-    }
-}
-
 bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, float maxX, float maxY,
                                    std::vector<MapFormat::TerrainTriangle>& out)
 {
@@ -1185,12 +1325,10 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
         return false;
     }
 
-    // Log input AABB
     std::cout << std::fixed << std::setprecision(3)
         << "[TerrainQuery] map=" << mapId
         << " AABB x:[" << minX << "," << maxX << "] y:[" << minY << "," << maxY << "]" << std::endl;
 
-    // Use the same grid coordinate convention as GetHeight
     uint32_t gx0, gy0, gx1, gy1;
     worldToGridCoords(minX, minY, gx0, gy0);
     worldToGridCoords(maxX, maxY, gx1, gy1);
@@ -1212,7 +1350,6 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
         for (uint32_t tileX = minGX; tileX <= maxGX; ++tileX)
         {
             ++tilesVisited;
-            // Match GetHeight ordering: LoadMapTile(mapId, gridY, gridX)
             bool loadedOk = LoadMapTile(mapId, tileY, tileX);
             std::cout << "[TerrainQueryTile] try tileY=" << tileY << " tileX=" << tileX
                       << " loaded=" << (loadedOk?"1":"0") << std::endl;
@@ -1239,43 +1376,85 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
                 continue;
             }
 
-            // Compute tile world origin consistent with worldToGridCoords
-            // Current formula returns the tile's MAX corner (upper/right depending on axis direction).
-            // For local tile coordinates we need the MIN (lower-left) corner so that 0 <= local < GRID_SIZE.
-            float tileMaxWorldX = (CENTER_GRID_ID - static_cast<float>(tileY)) * GRID_SIZE; // previous tileOriginX (upper bound)
-            float tileMaxWorldY = (CENTER_GRID_ID - static_cast<float>(tileX)) * GRID_SIZE; // previous tileOriginY (upper bound)
-            float tileOriginX = tileMaxWorldX - GRID_SIZE; // lower bound of tile in world X
-            float tileOriginY = tileMaxWorldY - GRID_SIZE; // lower bound of tile in world Y
+            // Compute tile origin (lower bound world corner)
+            float tileMaxWorldX = (CENTER_GRID_ID - static_cast<float>(tileY)) * GRID_SIZE;
+            float tileMaxWorldY = (CENTER_GRID_ID - static_cast<float>(tileX)) * GRID_SIZE;
+            float tileOriginX = tileMaxWorldX - GRID_SIZE;
+            float tileOriginY = tileMaxWorldY - GRID_SIZE;
             std::cout << std::fixed << std::setprecision(3)
                       << "[TerrainQueryTile] origin worldX=" << tileOriginX << " worldY=" << tileOriginY
                       << " (lower-bound; upperX=" << tileMaxWorldX << " upperY=" << tileMaxWorldY << ")" << std::endl;
 
-            // Convert world AABB to tile-local AABB (0..GRID_SIZE range). Clamp to valid range.
+            // Convert world AABB to tile-local space (non-inverted for logging)
             float localMinX = minX - tileOriginX;
             float localMinY = minY - tileOriginY;
             float localMaxX = maxX - tileOriginX;
             float localMaxY = maxY - tileOriginY;
-            // Clamp to [0, GRID_SIZE] so queries outside the tile don't produce large negatives
-            auto clampLocal = [](float v) { return v; };
             localMinX = std::max(0.0f, localMinX); localMinY = std::max(0.0f, localMinY);
             localMaxX = std::min(GRID_SIZE, localMaxX); localMaxY = std::min(GRID_SIZE, localMaxY);
             std::cout << "[TerrainQueryTile] local AABB x:[" << localMinX << "," << localMaxX << "] y:[" << localMinY << "," << localMaxY << "]" << std::endl;
 
-            // Gather local triangles within the local AABB
-            std::vector<TerrainTriangle> localTris;
-            tile->getTerrainTrianglesInAABB(localMinX, localMinY, localMaxX, localMaxY, localTris);
-            std::cout << "[TerrainQueryTile] local tris count=" << localTris.size() << std::endl;
+            // Invert local coordinates to match GetHeight indexing (cell 0 near tile upper bound)
+            float invMinX = GRID_SIZE - localMaxX;
+            float invMaxX = GRID_SIZE - localMinX;
+            float invMinY = GRID_SIZE - localMaxY;
+            float invMaxY = GRID_SIZE - localMinY;
+            std::cout << "[TerrainQueryTile] local INV AABB x:[" << invMinX << "," << invMaxX << "] y:[" << invMinY << "," << invMaxY << "]" << std::endl;
 
-            // Translate back to world-space and append
-            for (const auto& t : localTris)
+            // Clamp inverted ranges
+            invMinX = std::max(0.0f, invMinX); invMinY = std::max(0.0f, invMinY);
+            invMaxX = std::min(GRID_SIZE, invMaxX); invMaxY = std::min(GRID_SIZE, invMaxY);
+
+            int xi0 = std::max(0, (int)std::floor(invMinX / GRID_PART_SIZE));
+            int yi0 = std::max(0, (int)std::floor(invMinY / GRID_PART_SIZE));
+            int xi1 = std::min(V8_SIZE - 1, (int)std::floor(invMaxX / GRID_PART_SIZE));
+            int yi1 = std::min(V8_SIZE - 1, (int)std::floor(invMaxY / GRID_PART_SIZE));
+            std::cout << "[TerrainQueryTile] inverted cell range X:[" << xi0 << "," << xi1 << "] Y:[" << yi0 << "," << yi1 << "]" << std::endl;
+
+            size_t addedThisTile = 0;
+            for (int xi = xi0; xi <= xi1; ++xi)
             {
-                MapFormat::TerrainTriangle tw;
-                tw.ax = t.ax + tileOriginX; tw.ay = t.ay + tileOriginY; tw.az = t.az;
-                tw.bx = t.bx + tileOriginX; tw.by = t.by + tileOriginY; tw.bz = t.bz;
-                tw.cx = t.cx + tileOriginX; tw.cy = t.cy + tileOriginY; tw.cz = t.cz;
-                out.push_back(tw);
-                ++trisOut;
+                for (int yi = yi0; yi <= yi1; ++yi)
+                {
+                    float h1, h2, h3, h4, h5;
+                    if (!tile->getSquareHeights(xi, yi, h1, h2, h3, h4, h5))
+                        continue;
+
+                    // Inverted local positions
+                    float invX0 = xi * GRID_PART_SIZE;
+                    float invY0 = yi * GRID_PART_SIZE;
+                    float invX1 = (xi + 1) * GRID_PART_SIZE;
+                    float invY1 = (yi + 1) * GRID_PART_SIZE;
+
+                    // Map to world: world = origin + (GRID_SIZE - local)
+                    float wA0 = tileOriginX + (GRID_SIZE - invX0);
+                    float wB0 = tileOriginX + (GRID_SIZE - invX1);
+                    float wY0 = tileOriginY + (GRID_SIZE - invY0);
+                    float wY1 = tileOriginY + (GRID_SIZE - invY1);
+                    float wCX = tileOriginX + (GRID_SIZE - (invX0 + invX1) * 0.5f);
+                    float wCY = tileOriginY + (GRID_SIZE - (invY0 + invY1) * 0.5f);
+
+                    auto pushUpward = [&](float ax, float ay, float az,
+                                          float bx, float by, float bz,
+                                          float cx, float cy, float cz) {
+                        float abx = bx - ax, aby = by - ay, abz = bz - az;
+                        float acx = cx - ax, acy = cy - ay, acz = cz - az;
+                        float nz = abx * acy - aby * acx;
+                        if (nz < 0.0f)
+                            out.push_back({ ax, ay, az, cx, cy, cz, bx, by, bz });
+                        else
+                            out.push_back({ ax, ay, az, bx, by, bz, cx, cy, cz });
+                        ++trisOut; ++addedThisTile;
+                    };
+
+                    // Four triangles (matching GetHeight order after inversion)
+                    pushUpward(wA0, wY0, h1, wB0, wY0, h2, wCX, wCY, h5); // (h1,h2,h5)
+                    pushUpward(wA0, wY0, h1, wA0, wY1, h3, wCX, wCY, h5); // (h1,h3,h5)
+                    pushUpward(wB0, wY0, h2, wB0, wY1, h4, wCX, wCY, h5); // (h2,h4,h5)
+                    pushUpward(wA0, wY1, h3, wB0, wY1, h4, wCX, wCY, h5); // (h3,h4,h5)
+                }
             }
+            std::cout << "[TerrainQueryTile] emitted tris after inversion=" << addedThisTile << std::endl;
         }
     }
 
@@ -1287,4 +1466,98 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
               << " tilesMissing=" << tilesMissing << std::endl;
 
     return any;
+}
+
+bool GridMap::getSquareHeights(int xi, int yi, float& h1, float& h2, float& h3, float& h4, float& h5) const
+{
+    if (xi < 0 || xi >= V8_SIZE || yi < 0 || yi >= V8_SIZE)
+        return false;
+    if (isHole(xi, yi))
+        return false;
+    h1 = sampleV9Height(xi,     yi    );
+    h2 = sampleV9Height(xi + 1, yi    );
+    h3 = sampleV9Height(xi,     yi + 1);
+    h4 = sampleV9Height(xi + 1, yi + 1);
+    h5 = sampleV8Center(xi, yi);
+    if (h1 <= INVALID_HEIGHT_VALUE || h2 <= INVALID_HEIGHT_VALUE || h3 <= INVALID_HEIGHT_VALUE ||
+        h4 <= INVALID_HEIGHT_VALUE || h5 <= INVALID_HEIGHT_VALUE)
+        return false;
+    return true;
+}
+
+void MapLoader::worldToCellIndices(float x, float y, int& cellX, int& cellY, float& fracX, float& fracY) const
+{
+    float tx = MAP_RESOLUTION * (32 - x / SIZE_OF_GRIDS);
+    float ty = MAP_RESOLUTION * (32 - y / SIZE_OF_GRIDS);
+    cellX = ((int)tx) & (MAP_RESOLUTION - 1);
+    cellY = ((int)ty) & (MAP_RESOLUTION - 1);
+    fracX = tx - (int)tx;
+    fracY = ty - (int)ty;
+}
+
+bool MapLoader::SampleHeightAndSquare(uint32_t mapId, float x, float y, int& cellX, int& cellY,
+                                      float& outHeight, float& h1, float& h2, float& h3, float& h4, float& h5)
+{
+    uint32_t gridX, gridY;
+    worldToGridCoords(x, y, gridX, gridY);
+    if (!LoadMapTile(mapId, gridY, gridX))
+        return false;
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto it = m_loadedTiles.find(makeKey(mapId, gridY, gridX));
+    if (it == m_loadedTiles.end())
+        return false;
+    GridMap* tile = it->second.get();
+    if (!tile)
+        return false;
+
+    float fracX, fracY;
+    worldToCellIndices(x, y, cellX, cellY, fracX, fracY);
+
+    if (!tile->getSquareHeights(cellX, cellY, h1, h2, h3, h4, h5))
+    {
+        outHeight = INVALID_HEIGHT;
+        return false;
+    }
+
+    // Reproduce getHeightFromFloat triangle interpolation logic (matching GridMap::getHeightFromFloat)
+    if (fracX + fracY < 1.0f)
+    {
+        if (fracX > fracY)
+        {
+            // h1, h2, h5
+            float a = h2 - h1;
+            float b = h5 - h1 - h2;
+            float c = h1;
+            outHeight = a * fracX + b * fracY + c;
+        }
+        else
+        {
+            // h1, h3, h5
+            float a = h5 - h1 - h3;
+            float b = h3 - h1;
+            float c = h1;
+            outHeight = a * fracX + b * fracY + c;
+        }
+    }
+    else
+    {
+        if (fracX > fracY)
+        {
+            // h2, h4, h5
+            float a = h2 + h4 - h5;
+            float b = h4 - h2;
+            float c = h5 - h4;
+            outHeight = a * fracX + b * fracY + c;
+        }
+        else
+        {
+            // h3, h4, h5
+            float a = h4 - h3;
+            float b = h3 + h4 - h5;
+            float c = h5 - h4;
+            outHeight = a * fracX + b * fracY + c;
+        }
+    }
+
+    return true;
 }
