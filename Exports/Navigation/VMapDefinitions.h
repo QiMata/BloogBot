@@ -76,6 +76,79 @@ namespace VMAP
         }
     }
 
+    // Human-readable name for liqType (0-3)
+    inline const char* GetLiquidTypeName(uint32_t liquidType)
+    {
+        switch (liquidType)
+        {
+        case 0: return "Water";
+        case 1: return "Ocean";
+        case 2: return "Magma";
+        case 3: return "Slime";
+        default: return "Unknown";
+        }
+    }
+
+    // New: WMO liquid entry IDs used by vmangos exporter (1=Water, 2=Ocean, 3=Magma, 4=Slime, 21=Naxx Slime)
+    enum WmoLiquidEntry : uint32_t
+    {
+        WMO_LIQUID_ENTRY_NONE = 0,
+        WMO_LIQUID_ENTRY_WATER = 1,
+        WMO_LIQUID_ENTRY_OCEAN = 2,
+        WMO_LIQUID_ENTRY_MAGMA = 3,
+        WMO_LIQUID_ENTRY_SLIME = 4,
+        WMO_LIQUID_ENTRY_NAXX_SLIME = 21
+    };
+
+    // Map entry IDs to filter masks (treat 21 as SLIME)
+    inline uint32_t GetLiquidMaskFromEntry(uint32_t entry)
+    {
+        switch (entry)
+        {
+        case WMO_LIQUID_ENTRY_WATER: return MAP_LIQUID_TYPE_WATER;
+        case WMO_LIQUID_ENTRY_OCEAN: return MAP_LIQUID_TYPE_OCEAN;
+        case WMO_LIQUID_ENTRY_MAGMA: return MAP_LIQUID_TYPE_MAGMA;
+        case WMO_LIQUID_ENTRY_SLIME: return MAP_LIQUID_TYPE_SLIME;
+        case WMO_LIQUID_ENTRY_NAXX_SLIME: return MAP_LIQUID_TYPE_SLIME;
+        default: return MAP_LIQUID_TYPE_WATER;
+        }
+    }
+
+    // Human-readable name for entry IDs
+    inline const char* GetLiquidEntryName(uint32_t entry)
+    {
+        switch (entry)
+        {
+        case WMO_LIQUID_ENTRY_WATER: return "Water";
+        case WMO_LIQUID_ENTRY_OCEAN: return "Ocean";
+        case WMO_LIQUID_ENTRY_MAGMA: return "Magma";
+        case WMO_LIQUID_ENTRY_SLIME: return "Slime";
+        case WMO_LIQUID_ENTRY_NAXX_SLIME: return "Slime (Naxxramas)";
+        default: return "Unknown";
+        }
+    }
+
+    // New: helper to detect if a liquid type is an entry-id (vmangos exporter), not a 0..3 index
+    inline bool IsLiquidEntryId(uint32_t t)
+    {
+        return t == WMO_LIQUID_ENTRY_WATER ||
+               t == WMO_LIQUID_ENTRY_OCEAN ||
+               t == WMO_LIQUID_ENTRY_MAGMA ||
+               t == WMO_LIQUID_ENTRY_SLIME ||
+               t == WMO_LIQUID_ENTRY_NAXX_SLIME;
+    }
+
+    // New: unified helpers to get mask/name regardless of representation
+    inline uint32_t GetLiquidMaskUnified(uint32_t t)
+    {
+        return IsLiquidEntryId(t) ? GetLiquidMaskFromEntry(t) : GetLiquidMask(t);
+    }
+
+    inline const char* GetLiquidNameUnified(uint32_t t)
+    {
+        return IsLiquidEntryId(t) ? GetLiquidEntryName(t) : GetLiquidTypeName(t);
+    }
+
     // File name helpers
     inline std::string getMapFileName(uint32_t mapId)
     {

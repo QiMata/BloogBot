@@ -2,6 +2,7 @@
 #include "MapLoader.h"
 #include "VMapDefinitions.h"
 #include "CapsuleCollision.h"
+#include "VMapLog.h" // added for logging
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -1118,11 +1119,11 @@ float MapLoader::GetHeight(uint32_t mapId, float x, float y)
     bool ok = SampleHeightAndSquare(mapId, x, y, cellX, cellY, h, h1, h2, h3, h4, h5);
     if (!ok)
     {
-        std::cout << std::fixed << std::setprecision(3)
-                  << "[TerrainHeight] map=" << mapId
-                  << " x=" << x << " y=" << y
-                  << " gridX=" << gridX << " gridY=" << gridY
-                  << " status=NO_HEIGHT" << std::endl;
+        // std::cout << std::fixed << std::setprecision(3)
+        //           << "[TerrainHeight] map=" << mapId
+        //           << " x=" << x << " y=" << y
+        //           << " gridX=" << gridX << " gridY=" << gridY
+        //           << " status=NO_HEIGHT" << std::endl;
         return INVALID_HEIGHT;
     }
 
@@ -1209,27 +1210,32 @@ float MapLoader::GetHeight(uint32_t mapId, float x, float y)
         break;
     }
 
-    // Emit consolidated diagnostic line
-    std::cout << std::fixed << std::setprecision(3)
-              << "[TerrainHeight] map=" << mapId
-              << " x=" << x << " y=" << y
-              << " gridX=" << gridX << " gridY=" << gridY
-              << " cellX=" << cellX << " cellY=" << cellY
-              << " fracX=" << fracX << " fracY=" << fracY
-              << " triSel=" << triSel
-              << " h=" << h
-              << " h1=" << h1 << " h2=" << h2 << " h3=" << h3 << " h4=" << h4 << " h5=" << h5
-              << " a=" << aCoef << " b=" << bCoef << " c=" << cCoef
-              << " recon=" << reconHeight
-              << std::endl;
+    // Emit consolidated diagnostic line (disabled per request)
+    // LOG_INFO(std::fixed << std::setprecision(3)
+    //     << "[TerrainHeight] map=" << mapId
+    //     << " x=" << x << " y=" << y
+    //     << " gridX=" << gridX << " gridY=" << gridY
+    //     << " cellX=" << cellX << " cellY=" << cellY
+    //     << " fracX=" << fracX << " fracY=" << fracY
+    //     << " triSel=" << triSel
+    //     << " h=" << h
+    //     << " h1=" << h1 << " h2=" << h2 << " h3=" << h3 << " h4=" << h4 << " h5"
+    //     << " a=" << aCoef << " b=" << bCoef << " c=" << cCoef
+    //     << " recon=" << reconHeight);
 
     // Emit triangle vertices for correlation with TerrainTriSample (world space)
-    std::cout << std::fixed << std::setprecision(3)
-              << "[TerrainHeightTri] map=" << mapId
-              << " triSel=" << triSel
-              << " A=(" << tAx << "," << tAy << "," << tAz << ")"
-              << " B=(" << tBx << "," << tBy << "," << tBz << ")"
-              << " C=(" << tCx << "," << tCy << "," << tCz << ")" << std::endl;
+    // std::cout << std::fixed << std::setprecision(3)
+    //           << "[TerrainHeightTri] map=" << mapId
+    //           << " triSel=" << triSel
+    //           << " A=(" << tAx << "," << tAy << "," << tAz << ")"
+    //           << " B=(" << tBx << "," << tBy << "," << tBz << ")"
+    //           << " C=(" << tCx << "," << tCy << "," << tCz << ")" << std::endl;
+    LOG_DEBUG(std::fixed << std::setprecision(3)
+        << "[TerrainHeightTri] map=" << mapId
+        << " triSel=" << triSel
+        << " A=(" << tAx << "," << tAy << "," << tAz << ")"
+        << " B=(" << tBx << "," << tBy << "," << tBz << ")"
+        << " C=(" << tCx << "," << tCy << "," << tCz << ")");
 
     return h;
 }
@@ -1325,21 +1331,21 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
         return false;
     }
 
-    std::cout << std::fixed << std::setprecision(3)
-        << "[TerrainQuery] map=" << mapId
-        << " AABB x:[" << minX << "," << maxX << "] y:[" << minY << "," << maxY << "]" << std::endl;
+    // std::cout << std::fixed << std::setprecision(3)
+    //     << "[TerrainQuery] map=" << mapId
+    //     << " AABB x:[" << minX << "," << maxX << "] y:[" << minY << "," << maxY << "]" << std::endl;
 
     uint32_t gx0, gy0, gx1, gy1;
     worldToGridCoords(minX, minY, gx0, gy0);
     worldToGridCoords(maxX, maxY, gx1, gy1);
-    std::cout << "[TerrainQuery] grid from(min->max): gx0=" << gx0 << " gy0=" << gy0
-              << " gx1=" << gx1 << " gy1=" << gy1 << std::endl;
+    // std::cout << "[TerrainQuery] grid from(min->max): gx0=" << gx0 << " gy0=" << gy0
+    //           << " gx1=" << gx1 << " gy1=" << gy1 << std::endl;
 
     uint32_t minGX = std::min(gx0, gx1);
     uint32_t maxGX = std::max(gx0, gx1);
     uint32_t minGY = std::min(gy0, gy1);
     uint32_t maxGY = std::max(gy0, gy1);
-    std::cout << "[TerrainQuery] grid range GX:[" << minGX << "," << maxGX << "] GY:[" << minGY << "," << maxGY << "]" << std::endl;
+    // std::cout << "[TerrainQuery] grid range GX:[" << minGX << "," << maxGX << "] GY:[" << minGY << "," << maxGY << "]" << std::endl;
 
     size_t before = out.size();
     size_t tilesVisited = 0, tilesLoaded = 0, tilesMissing = 0;
@@ -1351,8 +1357,8 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
         {
             ++tilesVisited;
             bool loadedOk = LoadMapTile(mapId, tileY, tileX);
-            std::cout << "[TerrainQueryTile] try tileY=" << tileY << " tileX=" << tileX
-                      << " loaded=" << (loadedOk?"1":"0") << std::endl;
+            // std::cout << "[TerrainQueryTile] try tileY=" << tileY << " tileX=" << tileX
+            //           << " loaded=" << (loadedOk?"1":"0") << std::endl;
             if (!loadedOk)
             {
                 ++tilesMissing;
@@ -1381,9 +1387,9 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
             float tileMaxWorldY = (CENTER_GRID_ID - static_cast<float>(tileX)) * GRID_SIZE;
             float tileOriginX = tileMaxWorldX - GRID_SIZE;
             float tileOriginY = tileMaxWorldY - GRID_SIZE;
-            std::cout << std::fixed << std::setprecision(3)
-                      << "[TerrainQueryTile] origin worldX=" << tileOriginX << " worldY=" << tileOriginY
-                      << " (lower-bound; upperX=" << tileMaxWorldX << " upperY=" << tileMaxWorldY << ")" << std::endl;
+            // std::cout << std::fixed << std::setprecision(3)
+            //           << "[TerrainQueryTile] origin worldX=" << tileOriginX << " worldY=" << tileOriginY
+            //           << " (lower-bound; upperX=" << tileMaxWorldX << " upperY=" << tileMaxWorldY << ")" << std::endl;
 
             // Convert world AABB to tile-local space (non-inverted for logging)
             float localMinX = minX - tileOriginX;
@@ -1392,14 +1398,14 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
             float localMaxY = maxY - tileOriginY;
             localMinX = std::max(0.0f, localMinX); localMinY = std::max(0.0f, localMinY);
             localMaxX = std::min(GRID_SIZE, localMaxX); localMaxY = std::min(GRID_SIZE, localMaxY);
-            std::cout << "[TerrainQueryTile] local AABB x:[" << localMinX << "," << localMaxX << "] y:[" << localMinY << "," << localMaxY << "]" << std::endl;
+            // std::cout << "[TerrainQueryTile] local AABB x:[" << localMinX << "," << localMaxX << "] y:[" << localMinY << "," << localMaxY << "]" << std::endl;
 
             // Invert local coordinates to match GetHeight indexing (cell 0 near tile upper bound)
             float invMinX = GRID_SIZE - localMaxX;
             float invMaxX = GRID_SIZE - localMinX;
             float invMinY = GRID_SIZE - localMaxY;
             float invMaxY = GRID_SIZE - localMinY;
-            std::cout << "[TerrainQueryTile] local INV AABB x:[" << invMinX << "," << invMaxX << "] y:[" << invMinY << "," << invMaxY << "]" << std::endl;
+            // std::cout << "[TerrainQueryTile] local INV AABB x:[" << invMinX << "," << invMaxX << "] y:[" << invMinY << "," << invMaxY << "]" << std::endl;
 
             // Clamp inverted ranges
             invMinX = std::max(0.0f, invMinX); invMinY = std::max(0.0f, invMinY);
@@ -1409,7 +1415,7 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
             int yi0 = std::max(0, (int)std::floor(invMinY / GRID_PART_SIZE));
             int xi1 = std::min(V8_SIZE - 1, (int)std::floor(invMaxX / GRID_PART_SIZE));
             int yi1 = std::min(V8_SIZE - 1, (int)std::floor(invMaxY / GRID_PART_SIZE));
-            std::cout << "[TerrainQueryTile] inverted cell range X:[" << xi0 << "," << xi1 << "] Y:[" << yi0 << "," << yi1 << "]" << std::endl;
+            // std::cout << "[TerrainQueryTile] inverted cell range X:[" << xi0 << "," << xi1 << "] Y:[" << yi0 << "," << yi1 << "]" << std::endl;
 
             size_t addedThisTile = 0;
             for (int xi = xi0; xi <= xi1; ++xi)
@@ -1454,16 +1460,16 @@ bool MapLoader::GetTerrainTriangles(uint32_t mapId, float minX, float minY, floa
                     pushUpward(wA0, wY1, h3, wB0, wY1, h4, wCX, wCY, h5); // (h3,h4,h5)
                 }
             }
-            std::cout << "[TerrainQueryTile] emitted tris after inversion=" << addedThisTile << std::endl;
+            // std::cout << "[TerrainQueryTile] emitted tris after inversion=" << addedThisTile << std::endl;
         }
     }
 
     bool any = out.size() > before;
-    std::cout << "[TerrainQuery] result any=" << (any?"1":"0")
-              << " trisOut=" << trisOut
-              << " tilesVisited=" << tilesVisited
-              << " tilesLoaded=" << tilesLoaded
-              << " tilesMissing=" << tilesMissing << std::endl;
+    // std::cout << "[TerrainQuery] result any=" << (any?"1":"0")
+    //           << " trisOut=" << trisOut
+    //           << " tilesVisited=" << tilesVisited
+    //           << " tilesLoaded=" << tilesLoaded
+    //           << " tilesMissing=" << tilesMissing << std::endl;
 
     return any;
 }

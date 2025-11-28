@@ -129,6 +129,7 @@ struct PhysicsOutput
     // Height information
     float groundZ;             // Ground height at position
     float liquidZ;             // Liquid surface height (if any)
+    uint32_t liquidType;       // Liquid type identifier (from VMAP/ADT)
 
     // Ground surface identification
     float groundNx;                // ground surface normal X

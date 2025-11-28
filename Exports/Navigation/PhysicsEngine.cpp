@@ -635,23 +635,25 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	st.groundNormal = { 0, 0, 1 };
 	MovementIntent intent = BuildMovementIntent(input, st.orientation);
 
+	// Query for all liquid types immediately after intent is built
+	uint32_t liquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	float liquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, liquidType);
+
 	// 2. Query surface and liquid state
-	uint32_t liquidType = 0;
 	// Capture raw ADT and VMAP liquid levels for diagnostics before merged query
-	float adtLiquidLevel = INVALID_HEIGHT; uint32_t adtLiquidType = 0;
+	float adtLiquidLevel = INVALID_HEIGHT; uint32_t adtLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
 	if (m_mapLoader && m_mapLoader->IsInitialized()) {
 		adtLiquidLevel = m_mapLoader->GetLiquidLevel(input.mapId, st.x, st.y);
 		if (adtLiquidLevel > INVALID_HEIGHT)
 			adtLiquidType = m_mapLoader->GetLiquidType(input.mapId, st.x, st.y);
 	}
-	float vmapLiquidLevel = INVALID_HEIGHT; uint32_t vmapLiquidType = 0;
+	float vmapLiquidLevel = INVALID_HEIGHT; uint32_t vmapLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
 	if (m_vmapManager) {
 		float level, floor; uint32_t type;
-		if (m_vmapManager->GetLiquidLevel(input.mapId, st.x, st.y, st.z, 0xFF, level, floor, type)) {
+		if (m_vmapManager->GetLiquidLevel(input.mapId, st.x, st.y, st.z + 2.0f, VMAP::MAP_LIQUID_TYPE_ALL_LIQUIDS, level, floor, type)) {
 			vmapLiquidLevel = level; vmapLiquidType = type;
 		}
 	}
-	float liquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, liquidType);
 	bool isSwimming = false;
 	float swimImmersion = -9999.0f; // diagnostic: liquidLevel - (feet + radius)
 	const float swimImmersionThreshold = 1.0f; // new threshold for entering swim state
@@ -667,13 +669,13 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	}
 	// NEW: capture ADT terrain height for diagnostics
 	float adtTerrainZ = GetTerrainHeight(input.mapId, st.x, st.y);
-	PHYS_INFO(PHYS_MOVE, "[Step] WaterDiag posZ=" << st.z
+	PHYS_INFO(PHYS_MOVE, std::string("[Step] WaterDiag posZ=") << st.z
 		<< " radius=" << r
 		<< " refZ=" << (st.z + r)
 		<< " adtTerrainZ=" << adtTerrainZ
-		<< " adtWaterLevel=" << adtLiquidLevel
-		<< " vmapWaterLevel=" << vmapLiquidLevel
-		<< " chosenWater=" << liquidLevel
+		<< " adtWaterLevel=" << adtLiquidLevel << " (type=" << (unsigned)adtLiquidType << ")"
+		<< " vmapWaterLevel=" << vmapLiquidLevel << " (type=" << (unsigned)vmapLiquidType << ")"
+		<< " chosenWater=" << liquidLevel << " (type=" << (unsigned)liquidType << ")"
 		<< " immersion=" << swimImmersion
 		<< " immersionThreshold=" << swimImmersionThreshold
 		<< " prevDeltaConst=" << PhysicsConstants::WATER_LEVEL_DELTA
@@ -722,6 +724,10 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 		}
 	}
 
+	// Re-query liquid at the final position to report current standing liquid type/level
+	uint32_t finalLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	float finalLiquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, finalLiquidType);
+
 	// Output final state
 	out.x = st.x;
 	out.y = st.y;
@@ -740,6 +746,9 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	// Propagate ramp state diagnostics (extend PhysicsOutput later if needed)
 	out.isGrounded = st.isGrounded;
 	out.groundZ = st.z; // simplification
+	// Provide liquid diagnostics (from final position)
+	out.liquidZ = finalLiquidLevel;
+	out.liquidType = finalLiquidType;
 	// Initialize ground identification defaults
 	out.groundNx = st.groundNormal.x;
 	out.groundNy = st.groundNormal.y;

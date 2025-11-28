@@ -181,6 +181,35 @@ namespace VMAP
             delete liquid;
             liquid = nullptr;
         }
+        else
+        {
+            // Successful read: gather summary stats for logging
+            uint32_t heightCount = (liquid->iTilesX + 1) * (liquid->iTilesY + 1);
+            uint32_t tileCount = liquid->iTilesX * liquid->iTilesY;
+            float minH = heightCount ? liquid->iHeight[0] : 0.0f;
+            float maxH = minH;
+            for (uint32_t i = 1; i < heightCount; ++i)
+            {
+                float h = liquid->iHeight[i];
+                if (h < minH) minH = h;
+                if (h > maxH) maxH = h;
+            }
+            uint32_t enabledTiles = 0; // Tiles that are not disabled by 0x0F in lower 4 bits
+            for (uint32_t t = 0; t < tileCount; ++t)
+            {
+                if ((liquid->iFlags[t] & 0x0F) != 0x0F)
+                    ++enabledTiles;
+            }
+            // Sample a few heights (up to 4) for quick inspection
+            std::ostringstream sampleStream;
+            sampleStream << std::fixed << std::setprecision(2);
+            uint32_t samples = std::min<uint32_t>(4, heightCount);
+            for (uint32_t s = 0; s < samples; ++s)
+            {
+                sampleStream << liquid->iHeight[s];
+                if (s + 1 < samples) sampleStream << ",";
+            }
+        }
         out = liquid;
         return result;
     }
@@ -207,35 +236,10 @@ namespace VMAP
         if (triangles.empty())
             return 0;
 
-        // Reset last hit tracking
-        m_lastHitTriangle = -1;
-
         GModelRayCallback callback(triangles, vertices, const_cast<GroupModel*>(this));
-        // Restore original traversal behavior: honor caller's stopAtFirstHit flag.
+
         meshTree.intersectRay(ray, callback, distance, stopAtFirstHit, ignoreM2Model);
 
-        // Emit PHYS_TRACE so it shows in same channel as other raycast summaries
-        if (m_lastHitTriangle >= 0)
-        {
-            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRay] hits=" << callback.hit << " lastTri=" << m_lastHitTriangle << " dist=" << distance << " wmoId=" << iGroupWMOID);
-
-            // Additional per-triangle diagnostics in model space: hit point, normal.z and barycentric
-            const MeshTriangle& mt = triangles[(size_t)m_lastHitTriangle];
-            const G3D::Vector3& v0 = vertices[(size_t)mt.idx0];
-            const G3D::Vector3& v1 = vertices[(size_t)mt.idx1];
-            const G3D::Vector3& v2 = vertices[(size_t)mt.idx2];
-            G3D::Vector3 n = (v1 - v0).cross(v2 - v0).directionOrZero();
-            float cosZ = n.z; // model-space z component
-            G3D::Vector3 p = ray.origin() + ray.direction() * distance;
-            G3D::Vector3 bary = ComputeBarycentric(p, v0, v1, v2);
-            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRayTri] tri=" << m_lastHitTriangle
-                << " pM=(" << p.x << "," << p.y << "," << p.z << ") nM=(" << n.x << "," << n.y << "," << n.z
-                << ") cosZ_M=" << cosZ << " bary=(" << bary.x << "," << bary.y << "," << bary.z << ")");
-        }
-        else
-        {
-            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRay] no hit wmoId=" << iGroupWMOID);
-        }
         return callback.hit;
     }
 
@@ -588,7 +592,6 @@ namespace VMAP
                 result = groupModels[i].readFromFile(rf);
                 ++i;
             }
-
             // Read GBIH chunk (BIH tree)
             if (result && !readChunk(rf, chunk, "GBIH", 4))
             {
@@ -795,9 +798,9 @@ namespace VMAP
                         info.rootId = RootWMOID;
                         hit = true;
 
-                        LOG_INFO("[WorldModel::GetLocationInfo] New location found - Group:" << groupIdx
-                            << " Distance:" << groupDist
-                            << " RootId:" << info.rootId);
+                        // LOG_INFO("[WorldModel::GetLocationInfo] New location found - Group:" << groupIdx
+                        //     << " Distance:" << groupDist
+                        //     << " RootId:" << info.rootId);
 
                         // Update the distance for subsequent checks
                         currentDist = groupDist;
@@ -813,10 +816,10 @@ namespace VMAP
         if (hit)
         {
             dist = minDist;
-            LOG_INFO("[WorldModel::GetLocationInfo] Final location - Distance:" << dist
-                << " RootId:" << info.rootId
-                << " Groups tested:" << groupsTested
-                << " Groups hit:" << groupsHit);
+            // LOG_INFO("[WorldModel::GetLocationInfo] Final location - Distance:" << dist
+            //     << " RootId:" << info.rootId
+            //     << " Groups tested:" << groupsTested
+            //     << " Groups hit:" << groupsHit);
         }
         else
         {

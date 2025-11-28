@@ -62,7 +62,7 @@ namespace
                     << " includeMask=0x" << std::hex << m_includeMask << std::dec
                     << " BIH=" << (m_tree ? "present" : "null")
                     << " instancesPtr=" << (m_instances ? "present" : "null");
-                PHYS_INFO(PHYS_CYL, oss.str());
+                // PHYS_INFO(PHYS_CYL, oss.str()); // commented out per request
             }
         }
 
@@ -87,8 +87,8 @@ namespace
             G3D::Vector3 qHi = { internalBox.max.x, internalBox.max.y, internalBox.max.z };
             const float eps = 0.05f; // symmetric small epsilon
             G3D::AABox queryBox(qLo - G3D::Vector3(eps, eps, eps), qHi + G3D::Vector3(eps, eps, eps));
-            { std::ostringstream oss; oss << "[BroadphaseQuery] internalBoxLo=(" << qLo.x << "," << qLo.y << "," << qLo.z
-                << ") internalBoxHi=(" << qHi.x << "," << qHi.y << "," << qHi.z << ") eps=" << eps << " instCount=" << m_instanceCount; PHYS_TRACE(PHYS_CYL, oss.str()); }
+            // { std::ostringstream oss; oss << "[BroadphaseQuery] internalBoxLo=(" << qLo.x << "," << qLo.y << "," << qLo.z
+            //     << ") internalBoxHi=(" << qHi.x << "," << qHi.y << "," << qHi.z << ") eps=" << eps << " instCount=" << m_instanceCount; PHYS_TRACE(PHYS_CYL, oss.str()); }
 
             // Instance roster diagnostic (sampled)
             {
@@ -96,27 +96,19 @@ namespace
                 for (uint32_t i = 0; i < m_instanceCount && logged < 16; ++i)
                 {
                     const ModelInstance& inst = m_instances[i];
-                    std::ostringstream oss; oss << "[InstanceRoster] idx=" << i << " ID=" << inst.ID
-                        << " modelPtr=" << (inst.iModel?1:0)
-                        << " mask=0x" << std::hex << inst.GetCollisionMask() << std::dec
-                        << " posI=(" << inst.iPos.x << "," << inst.iPos.y << "," << inst.iPos.z << ")"
-                        << " scale=" << inst.iScale
-                        << " boundLo=(" << inst.iBound.low().x << "," << inst.iBound.low().y << "," << inst.iBound.low().z << ")"
-                        << " boundHi=(" << inst.iBound.high().x << "," << inst.iBound.high().y << "," << inst.iBound.high().z << ")";
-                    PHYS_TRACE(PHYS_CYL, oss.str());
                     ++logged;
                 }
-                PHYS_TRACE(PHYS_CYL, std::string("[InstanceRosterSummary] total=") << m_instanceCount << " logged=" << logged);
+                // PHYS_TRACE(PHYS_CYL, std::string("[InstanceRosterSummary] total=") << m_instanceCount << " logged=" << logged);
             }
 
             const uint32_t cap = (std::min<uint32_t>)(m_instanceCount, 16384);
             std::vector<uint32_t> instIdx(cap);
             uint32_t instCount = 0;
             bool bihOk = m_tree->QueryAABB(queryBox, instIdx.data(), instCount, cap);
-            { std::ostringstream oss; oss << "[BroadphaseQuery] BIH result ok=" << (bihOk?1:0) << " rawInstCount=" << instCount; PHYS_TRACE(PHYS_CYL, oss.str()); }
+            // { std::ostringstream oss; oss << "[BroadphaseQuery] BIH result ok=" << (bihOk?1:0) << " rawInstCount=" << instCount; PHYS_TRACE(PHYS_CYL, oss.str()); }
             if (!bihOk)
             {
-                PHYS_INFO(PHYS_CYL, "[BroadphaseQuery] BIH returned false; falling back to bound scan");
+                // PHYS_INFO(PHYS_CYL, "[BroadphaseQuery] BIH returned false; falling back to bound scan");
                 for (uint32_t i = 0; i < m_instanceCount && instCount < cap; ++i)
                 {
                     const ModelInstance& inst = m_instances[i];
@@ -125,7 +117,7 @@ namespace
                     if (!inst.iBound.intersects(queryBox)) continue;
                     instIdx[instCount++] = i;
                 }
-                { std::ostringstream oss; oss << "[BroadphaseQuery] Fallback AABB scan instCount=" << instCount; PHYS_TRACE(PHYS_CYL, oss.str()); }
+                // { std::ostringstream oss; oss << "[BroadphaseQuery] Fallback AABB scan instCount=" << instCount; PHYS_TRACE(PHYS_CYL, oss.str()); }
                 if (instCount == 0) return;
             }
             else
@@ -142,7 +134,7 @@ namespace
                     uint32_t idx = instIdx[k];
                     if (idx >= m_instanceCount) continue;
                     const ModelInstance& inst = m_instances[idx];
-                    std::ostringstream oss; oss << "[BroadphaseInstPre] idx=" << idx << " ID=" << inst.ID << " mask=0x" << std::hex << inst.GetCollisionMask() << std::dec; PHYS_TRACE(PHYS_CYL, oss.str());
+                    // std::ostringstream oss; oss << "[BroadphaseInstPre] idx=" << idx << " ID=" << inst.ID << " mask=0x" << std::hex << inst.GetCollisionMask() << std::dec; PHYS_TRACE(PHYS_CYL, oss.str());
                 }
                 for (uint32_t i = 0; i < m_instanceCount && instCount < cap; ++i)
                 {
@@ -184,12 +176,13 @@ namespace
                 // Log instance bounds
                 G3D::AABox instBound = inst.iBound;
                 {
-                    std::ostringstream oss; oss << "[BroadphaseInst] idx=" << idx << " ID=" << inst.ID
-                        << " mask=0x" << std::hex << instMask << std::dec
-                        << " worldBoundLo=(" << instBound.low().x << "," << instBound.low().y << "," << instBound.low().z << ")"
-                        << " worldBoundHi=(" << instBound.high().x << "," << instBound.high().y << "," << instBound.high().z << ")"
-                        << " modelQueryLo=(" << modelBox.low().x << "," << modelBox.low().y << "," << modelBox.low().z << ")"
-                        << " modelQueryHi=(" << modelBox.high().x << "," << modelBox.high().y << "," << modelBox.high().z << ")"; PHYS_TRACE(PHYS_CYL, oss.str()); }
+                    // std::ostringstream oss; oss << "[BroadphaseInst] idx=" << idx << " ID=" << inst.ID
+                    //     << " mask=0x" << std::hex << instMask << std::dec
+                    //     << " worldBoundLo=(" << instBound.low().x << "," << instBound.low().y << "," << instBound.low().z << ")"
+                    //     << " worldBoundHi=(" << instBound.high().x << "," << instBound.high().y << "," << instBound.high().z << ")"
+                    //     << " modelQueryLo=(" << modelBox.low().x << "," << modelBox.low().y << "," << modelBox.low().z << ")"
+                    //     << " modelQueryHi=(" << modelBox.high().x << "," << modelBox.high().y << "," << modelBox.high().z << ")"; // PHYS_TRACE(PHYS_CYL, oss.str());
+                }
 
                 std::vector<G3D::Vector3> vertices;
                 std::vector<uint32_t> indices;
@@ -197,13 +190,13 @@ namespace
                 if (!haveBoundsData)
                 {
                     if (!inst.iModel->GetAllMeshData(vertices, indices)) {
-                        std::ostringstream oss; oss << "[BroadphaseInst] idx=" << idx << " ID=" << inst.ID << " noMeshData"; PHYS_TRACE(PHYS_CYL, oss.str());
+                        // std::ostringstream oss; oss << "[BroadphaseInst] idx=" << idx << " ID=" << inst.ID << " noMeshData"; // PHYS_TRACE(PHYS_CYL, oss.str());
                         continue;
                     }
                 }
 
                 size_t triCount = indices.size() / 3;
-                { std::ostringstream oss; oss << "[BroadphaseInst] idx=" << idx << " ID=" << inst.ID << " verts=" << vertices.size() << " trisRaw=" << triCount << " boundsFiltered=" << (haveBoundsData?1:0); PHYS_TRACE(PHYS_CYL, oss.str()); }
+                // { std::ostringstream oss; oss << "[BroadphaseInst] idx=" << idx << " ID=" << inst.ID << " verts=" << vertices.size() << " trisRaw=" << triCount << " boundsFiltered=" << (haveBoundsData?1:0); PHYS_TRACE(PHYS_CYL, oss.str()); }
 
                 size_t acceptedThisInst = 0;
                 for (size_t t = 0; t < triCount; ++t)
@@ -232,13 +225,15 @@ namespace
 
                     if (acceptedThisInst < 8) { // log first few sample triangles
                         std::ostringstream oss; oss << "[BroadphaseTriSample] instID=" << inst.ID << " localTri=" << t
-                            << " a=(" << a.x << "," << a.y << "," << a.z << ") b=(" << b.x << "," << b.y << "," << b.z << ") c=(" << c.x << "," << c.y << "," << c.z << ")"; PHYS_TRACE(PHYS_CYL, oss.str()); }
+                            << " a=(" << a.x << "," << a.y << "," << a.z << ") b=(" << b.x << "," << b.y << "," << b.z << ") c=(" << c.x << "," << c.y << "," << c.z << ")"; 
+                        // PHYS_TRACE(PHYS_CYL, oss.str()); // commented out per request
+                    }
                     ++acceptedThisInst;
                 }
-                { std::ostringstream oss; oss << "[BroadphaseInstSummary] ID=" << inst.ID << " acceptedTris=" << acceptedThisInst << " totalOutCount=" << count; PHYS_TRACE(PHYS_CYL, oss.str()); }
+                // { std::ostringstream oss; oss << "[BroadphaseInstSummary] ID=" << inst.ID << " acceptedTris=" << acceptedThisInst << " totalOutCount=" << count; PHYS_TRACE(PHYS_CYL, oss.str()); }
                 if (count >= maxCount) break;
             }
-            { std::ostringstream oss; oss << "[BroadphaseQuery] FinalTriangleCount=" << count; PHYS_TRACE(PHYS_CYL, oss.str()); }
+            // { std::ostringstream oss; oss << "[BroadphaseQuery] FinalTriangleCount=" << count; PHYS_TRACE(PHYS_CYL, oss.str()); }
         }
 
         // Internal-space variant delegates to query now (keep signature for existing callers)
@@ -508,9 +503,9 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
     const int kCap = 1024; int triIdxs[kCap]; int triCount = 0;
     view.queryInternal(sweepBoxI, triIdxs, triCount, kCap);
     if (triCount == kCap) {
-        PHYS_INFO(PHYS_CYL, "[SweepCapsuleBroadphase] triCountReachedCap cap=" << kCap);
+        // PHYS_INFO(PHYS_CYL, "[SweepCapsuleBroadphase] triCountReachedCap cap=" << kCap);
     }
-    PHYS_INFO(PHYS_CYL, "[SweepCapsuleBroadphase] triCount=" << triCount);
+    // PHYS_INFO(PHYS_CYL, "[SweepCapsuleBroadphase] triCount=" << triCount);
     // Build per-instance distribution summary
     if (triCount > 0) {
         std::unordered_map<uint32_t, int> instTriCounts;
@@ -520,7 +515,7 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
             instTriCounts[miDist->ID]++;
         }
         for (auto& kv : instTriCounts) {
-            PHYS_TRACE(PHYS_CYL, "[SweepCapsuleBroadphaseDist] instID=" << kv.first << " tris=" << kv.second);
+            // PHYS_TRACE(PHYS_CYL, "[SweepCapsuleBroadphaseDist] instID=" << kv.first << " tris=" << kv.second);
         }
     }
 
@@ -533,28 +528,28 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
         float maxX = std::max(std::max(wP0.x, wP1.x), std::max(wP0End.x, wP1End.x)) + capsuleStart.r;
         float minY = std::min(std::min(wP0.y, wP1.y), std::min(wP0End.y, wP1End.y)) - capsuleStart.r;
         float maxY = std::max(std::max(wP0.y, wP1.y), std::max(wP0End.y, wP1End.y)) + capsuleStart.r;
-        PHYS_INFO(PHYS_CYL, "[TerrainQuery] map=" << map.GetMapId() << " sweepDist=" << distance
-            << " minX=" << minX << " maxX=" << maxX << " minY=" << minY << " maxY=" << maxY
-            << " capR=" << capsuleStart.r);
+        //PHYS_INFO(PHYS_CYL, "[TerrainQuery] map=" << map.GetMapId() << " sweepDist=" << distance
+        //    << " minX=" << minX << " maxX=" << maxX << " minY=" << minY << " maxY=" << maxY
+        //    << " capR=" << capsuleStart.r); // commented out per request
         if (PhysicsEngine::Instance())
         {
             MapLoader* loader = PhysicsEngine::Instance()->GetMapLoader();
             if (loader)
             {
                 loader->GetTerrainTriangles(map.GetMapId(), minX, minY, maxX, maxY, terrainTris);
-                PHYS_INFO(PHYS_CYL, "[TerrainQuery] result count=" << terrainTris.size());
+                //PHYS_INFO(PHYS_CYL, "[TerrainQuery] result count=" << terrainTris.size()); // commented out per request
                 size_t sample = std::min<size_t>(terrainTris.size(), 16);
                 for (size_t i = 0; i < sample; ++i)
                 {
                     const auto& t = terrainTris[i];
-                    PHYS_TRACE(PHYS_CYL, "[TerrainTriSample] idx=" << i
-                        << " a=(" << t.ax << "," << t.ay << "," << t.az << ")"
-                        << " b=(" << t.bx << "," << t.by << "," << t.bz << ")"
-                        << " c=(" << t.cx << "," << t.cy << "," << t.cz << ")");
+                    //PHYS_TRACE(PHYS_CYL, "[TerrainTriSample] idx=" << i
+                    //    << " a=(" << t.ax << "," << t.ay << "," << t.az << ")"
+                    //    << " b=(" << t.bx << "," << t.by << "," << t.bz << ")"
+                    //    << " c=(" << t.cx << "," << t.cy << "," << t.cz << ")"); // commented out per request
                 }
-                if (terrainTris.empty()) {
-                    PHYS_TRACE(PHYS_CYL, "[TerrainQuery] No triangles returned in region");
-                }
+                //if (terrainTris.empty()) {
+                //    PHYS_TRACE(PHYS_CYL, "[TerrainQuery] No triangles returned in region");
+                //} // commented out per request
             }
             else {
                 PHYS_INFO(PHYS_CYL, "[TerrainQuery] MapLoader nullptr (not initialized) map=" << map.GetMapId());

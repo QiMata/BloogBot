@@ -564,29 +564,51 @@ namespace VMAP
     bool VMapManager2::GetLiquidLevel(uint32_t pMapId, float x, float y, float z,
         uint8_t ReqLiquidTypeMask, float& level, float& floor, uint32_t& type) const
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::GetLiquidLevel map=" << pMapId);
-        auto instanceTree = iInstanceMapTrees.find(pMapId);
-        if (instanceTree != iInstanceMapTrees.end())
+        // PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::GetLiquidLevel map=" << pMapId
+        //     << " worldPos=(" << x << "," << y << "," << z << ") reqMask=0x" << (unsigned)ReqLiquidTypeMask);
+
+        // Ensure map has been initialized similar to getHeight path
+        if (!isMapInitialized(pMapId))
         {
-            G3D::Vector3 pos = NavCoord::WorldToInternal(x, y, z);
-            LocationInfo info;
-            if (instanceTree->second->GetLocationInfo(pos, info) && info.hitModel)
+            PHYS_TRACE(PHYS_PERF, "[Liquid] Map not initialized; initializing map=" << pMapId);
+            const_cast<VMapManager2*>(this)->initializeMap(pMapId);
+        }
+
+        auto instanceTree = iInstanceMapTrees.find(pMapId);
+        if (instanceTree != iInstanceMapTrees.end() && instanceTree->second)
+        {
+            // Use the same conversion helper as getHeight to keep coordinate spaces consistent
+            G3D::Vector3 pos = convertPositionToInternalRep(x, y, z);
+            // PHYS_TRACE(PHYS_PERF, "[Liquid] InternalPos=(" << pos.x << "," << pos.y << "," << pos.z << ")");
+
+            LocationInfo info; bool gotLoc = instanceTree->second->GetLocationInfo(pos, info);
+            // PHYS_TRACE(PHYS_PERF, "[Liquid] GetLocationInfo gotLoc=" << (gotLoc?1:0) << " hitModel=" << (info.hitModel?1:0) << " groundZ=" << info.ground_Z);
+            if (gotLoc && info.hitModel)
             {
-                float liqH;
-                if (info.hitInstance && info.hitInstance->GetLiquidLevel(pos, const_cast<LocationInfo&>(info), liqH))
+                if (info.hitInstance)
                 {
-                    uint32_t liqType = info.hitModel->GetLiquidType();
-                    uint32_t liqMask = GetLiquidMask(liqType);
-                    if (ReqLiquidTypeMask & liqMask)
+                    float liqH; bool liqOk = info.hitInstance->GetLiquidLevel(pos, const_cast<LocationInfo&>(info), liqH);
+                    // PHYS_TRACE(PHYS_PERF, "[Liquid] hitInstance=1 liqOk=" << (liqOk?1:0));
+                    if (liqOk)
                     {
-                        level = liqH; floor = info.ground_Z; type = liqType;
-                        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::GetLiquidLevel -> 1");
-                        return true;
+                        uint32_t liqType = info.hitModel->GetLiquidType();
+                        // New: support both entry-id and index representations
+                        uint32_t liqMask = GetLiquidMaskUnified(liqType);
+                        const char* liqName = GetLiquidNameUnified(liqType);
+                        // PHYS_TRACE(PHYS_PERF, "[Liquid] liqH=" << liqH << " liqType=" << liqType << " (" << liqName << ") liqMask=0x" << std::hex << liqMask << std::dec << " reqMask=0x" << (unsigned)ReqLiquidTypeMask);
+                        if ((liqMask & ReqLiquidTypeMask) != 0)
+                        {
+                            level = liqH;
+                            floor = info.ground_Z;
+                            type = liqType;
+                            return true;
+                        }
                     }
                 }
             }
         }
-        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::GetLiquidLevel -> 0");
+
+        PHYS_INFO(PHYS_PERF, "EXIT VMapManager2::GetLiquidLevel -> 0 (no match)");
         return false;
     }
 

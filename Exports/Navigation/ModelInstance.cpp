@@ -117,6 +117,7 @@ namespace VMAP
 		float time = ray.intersectionTime(iBound);
 		if (time == G3D::inf())
 		{
+			PHYS_TRACE(PHYS_CYL, "[ModelInstance::intersectRay] skip name='" << name << "' ID=" << ID << " (ray outside bounds)");
 			return false;
 		}
 
@@ -125,12 +126,21 @@ namespace VMAP
 		G3D::Ray modRay(p, iInvRot * ray.direction());
 		float distance = maxDist * iInvScale;
 
+		PHYS_TRACE(PHYS_CYL, "[ModelInstance::intersectRay] ENTER name='" << name << "' ID=" << ID
+			<< " stopAtFirst=" << (stopAtFirstHit ? 1 : 0) << " ignoreM2=" << (ignoreM2Model ? 1 : 0)
+			<< " maxDist=" << maxDist);
+
 		bool hit = iModel->IntersectRay(modRay, distance, stopAtFirstHit, ignoreM2Model);
 
 		if (hit)
 		{
 			distance *= iScale;
 			maxDist = distance;
+			PHYS_TRACE(PHYS_CYL, "[ModelInstance::intersectRay] HIT name='" << name << "' ID=" << ID << " dist=" << maxDist);
+		}
+		else
+		{
+			PHYS_TRACE(PHYS_CYL, "[ModelInstance::intersectRay] NOHIT name='" << name << "' ID=" << ID);
 		}
 
 		return hit;
@@ -170,28 +180,45 @@ namespace VMAP
 
 	bool ModelInstance::GetLocationInfo(const G3D::Vector3& p, LocationInfo& info) const
 	{
-		if (!iModel || (flags & MOD_M2))
+		// Original reference logic (prettified & aligned):
+		// 1. Reject if model not loaded or is an M2 (no area/location data)
+		if (!iModel)
+		{
 			return false;
+		}
+		if (flags & MOD_M2)
+			return false;
+		// 2. Quick AABB reject in world/internal space
 		if (!iBound.contains(p))
 			return false;
 
-		G3D::Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
-		G3D::Vector3 zDirModel = iInvRot * G3D::Vector3(0, 0, -1);
-        float zDist = 10000.0f;
-		GroupLocationInfo groupInfo;
+		// 3. Convert query position and ray direction into model local space
+		//    Reference code used Vector3::down(); we replicate with explicit (0,0,-1)
+		G3D::Vector3 pModel = iInvRot * (p - iPos) * iInvScale;          // world->model
+		G3D::Vector3 zDirModel = iInvRot * G3D::Vector3(0, 0, -1);       // world down transformed into model space
 
-		if (iModel->GetLocationInfo(pModel, zDirModel, zDist, groupInfo))
+		// 4. Perform location query against WorldModel groups (distance initialized large)
+		float zDist = 10000.0f; // reference left uninitialized; we use a large sentinel
+		GroupLocationInfo groupInfo;
+		if (!iModel->GetLocationInfo(pModel, zDirModel, zDist, groupInfo))
+			return false;
+
+		// 5. Compute model-space ground point then transform back to world-space Z.
+		G3D::Vector3 modelGround = pModel + zDirModel * zDist; // still model space
+		// Reference server used: world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
+		// Our rotation caching stores iInvRot as world->model, iRot as model->world.
+		// Use iRot (model->world) then apply scale & translation; finally convert internal->world mirroring.
+		G3D::Vector3 worldGroundInternal = (modelGround * iScale) * iRot + iPos; // internal/world (pre NavCoord mirror)
+		float world_Z = NavCoord::InternalToWorld(worldGroundInternal).z; // ensure mirrored space consistency
+
+		// 6. Accept if this ground is higher than any previously stored value
+		if (info.ground_Z < world_Z)
 		{
-			G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-            float world_Z = TransformToWorld(modelGround).z;
-			if (info.ground_Z < world_Z)
-			{
-				info.rootId = groupInfo.rootId;
-				info.hitModel = groupInfo.hitModel;
-				info.ground_Z = world_Z;
-				info.hitInstance = this;
-				return true;
-			}
+			info.rootId = groupInfo.rootId;
+			info.hitModel = groupInfo.hitModel;
+			info.ground_Z = world_Z;
+			info.hitInstance = this;
+			return true;
 		}
 		return false;
 	}
@@ -204,9 +231,9 @@ namespace VMAP
 
 		G3D::Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
 		if (info.hitModel->GetLiquidLevel(pModel, liqHeight))
-		{
-            // Use TransformToWorld to correctly compute world-space z
-            liqHeight = TransformToWorld(G3D::Vector3(pModel.x, pModel.y, liqHeight)).z;
+		 {
+			// Use TransformToWorld to correctly compute world-space z
+			liqHeight = TransformToWorld(G3D::Vector3(pModel.x, pModel.y, liqHeight)).z;
 			return true;
 		}
 		return false;

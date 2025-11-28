@@ -57,7 +57,7 @@ namespace PathfindingService.Tests
         [InlineData(1u, 1679.552124f, -4372.284180f, 27.385866f, 1661.377075f, -4369.652344f, 24.740832f, Race.Orc, 6.151880f, MovementFlags.MOVEFLAG_FORWARD, MovementFlags.MOVEFLAG_FORWARD)] // Origmmar terrain step-up and slide down
         [InlineData(389u, -247.728561f, -30.644503f, -58.082531f, -247.728561f, -30.644503f, -58.082531f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(389u, -158.395340f, 5.857921f, -42.873611f, -158.395340f, 5.857921f, -42.873611f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(389u, -212.988327f, -58.457249f, -65.660034f, -158.395340f, 5.857921f, -42.873611f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
+        [InlineData(389u, -212.988327f, -58.457249f, -65.660034f, -158.395340f, 5.857921f, -42.873611f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)] // Standing in VMAP lava
         public void StepPhysics_SingleFrameUpdate(
             uint mapId,
             float startX, float startY, float startZ,

@@ -154,6 +154,7 @@ extern "C" __declspec(dllexport) PhysicsOutput PhysicsStep(const PhysicsInput& i
     output.isFlying = (input.moveFlags & MOVEFLAG_FLYING) != 0;
     output.groundZ = -100000.0f;
     output.liquidZ = -100000.0f;
+    output.liquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
     return output;
 }
 
