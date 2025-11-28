@@ -373,7 +373,7 @@ int SceneQuery::OverlapCapsule(const StaticMapTree& map,
                     << " worldNFromLocal=(" << worldNFromLocal.x << "," << worldNFromLocal.y << "," << worldNFromLocal.z << ")"
                     << " dot=" << nDot << " zDiff=" << zDiff
                     << " localN=(" << localN.x << "," << localN.y << "," << localN.z << ")";
-                PHYS_INFO(PHYS_SURF, msg.str());
+                // PHYS_INFO(PHYS_SURF, msg.str()); // commented out per request
             }
 
             // Prefer transformed local normal for stability; flip to ensure up-facing for ground tests
@@ -619,7 +619,9 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
                     << " wSurfN=(" << wPoint.x << "," << wPoint.y << "," << wPoint.z << ")"
                     << " worldNFromLocal=(" << worldNFromLocal.x << "," << worldNFromLocal.y << "," << worldNFromLocal.z << ")"
                     << " dot=" << nDot << " zDiff=" << zDiff
-                    << " localN=(" << localN.x << "," << localN.y << "," << localN.z << ")"; PHYS_INFO(PHYS_SURF, msg.str()); }
+                    << " localN=(" << localN.x << "," << localN.y << "," << localN.z << ")";
+                // PHYS_INFO(PHYS_SURF, msg.str()); // commented out per request
+            }
 
             // Prefer transformed local normal for stability; flip to ensure up-facing for ground tests
             bool flipped = false;

@@ -17,6 +17,8 @@
 #include <iomanip>
 #include <cfloat>
 #include <chrono>
+#include <set>
+#include <sstream>
 
 using namespace PhysicsConstants;
 using namespace VMAP;
@@ -26,6 +28,49 @@ int gPhysLogLevel = 3;           // 0=ERR,1=INFO,2=DBG,3=TRACE
 uint32_t gPhysLogMask = PHYS_ALL; // enable everything initially
 
 static uint64_t gPhysFrameCounter = 0;
+
+// Human-readable movement flags
+static std::string FormatMoveFlags(uint32_t flags)
+{
+	if (flags == MOVEFLAG_NONE) return "NONE";
+	std::string s;
+	auto add = [&](uint32_t bit, const char* name) {
+		if (flags & bit) { if (!s.empty()) s += "|"; s += name; }
+	};
+	add(MOVEFLAG_FORWARD, "FORWARD");
+	add(MOVEFLAG_BACKWARD, "BACKWARD");
+	add(MOVEFLAG_STRAFE_LEFT, "STRAFE_LEFT");
+	add(MOVEFLAG_STRAFE_RIGHT, "STRAFE_RIGHT");
+	add(MOVEFLAG_TURN_LEFT, "TURN_LEFT");
+	add(MOVEFLAG_TURN_RIGHT, "TURN_RIGHT");
+	add(MOVEFLAG_PITCH_UP, "PITCH_UP");
+	add(MOVEFLAG_PITCH_DOWN, "PITCH_DOWN");
+	add(MOVEFLAG_WALK_MODE, "WALK_MODE");
+	add(MOVEFLAG_UNUSED10, "UNUSED10");
+	add(MOVEFLAG_LEVITATING, "LEVITATING");
+	add(MOVEFLAG_FIXED_Z, "FIXED_Z");
+	add(MOVEFLAG_ROOT, "ROOT");
+	add(MOVEFLAG_JUMPING, "JUMPING");
+	add(MOVEFLAG_FALLINGFAR, "FALLINGFAR");
+	add(MOVEFLAG_PENDING_STOP, "PENDING_STOP");
+	add(MOVEFLAG_PENDING_UNSTRAFE, "PENDING_UNSTRAFE");
+	add(MOVEFLAG_PENDING_FORWARD, "PENDING_FORWARD");
+	add(MOVEFLAG_PENDING_BACKWARD, "PENDING_BACKWARD");
+	add(MOVEFLAG_PENDING_STR_LEFT, "PENDING_STR_LEFT");
+	add(MOVEFLAG_PENDING_STR_RGHT, "PENDING_STR_RGHT");
+	add(MOVEFLAG_SWIMMING, "SWIMMING");
+	add(MOVEFLAG_SPLINE_ENABLED, "SPLINE_ENABLED");
+	add(MOVEFLAG_MOVED, "MOVED");
+	add(MOVEFLAG_FLYING, "FLYING");
+	add(MOVEFLAG_ONTRANSPORT, "ONTRANSPORT");
+	add(MOVEFLAG_SPLINE_ELEVATION, "SPLINE_ELEVATION");
+	add(MOVEFLAG_UNUSED28, "UNUSED28");
+	add(MOVEFLAG_WATERWALKING, "WATERWALKING");
+	add(MOVEFLAG_SAFE_FALL, "SAFE_FALL");
+	add(MOVEFLAG_HOVER, "HOVER");
+	add(MOVEFLAG_UNUSED32, "UNUSED32");
+	return s.empty() ? std::string("0") : s;
+}
 
 const char* PhysCatName(uint32_t cat)
 {
@@ -238,7 +283,7 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	MovementState& st, float dt, float speed,
 	float radius, float height)
 {
-	PHYS_INFO(PHYS_MOVE, "[GroundMove] Start pos=" << st.x << "," << st.y << "," << st.z << " vel=" << st.vx << "," << st.vy << " dt=" << dt);
+	// PHYS_INFO(PHYS_MOVE, "[GroundMove] Start pos=" << st.x << "," << st.y << "," << st.z << " vel=" << st.vx << "," << st.vy << " dt=" << dt);
 
 	// Global step limits and thresholds used across branches
 	const float stepUpLimit = STEP_HEIGHT;
@@ -330,11 +375,27 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	}
 	st.vx = intent.dir.x * speed;
 	st.vy = intent.dir.y * speed;
-	PHYS_INFO(PHYS_MOVE, "Intent input vx=" << st.vx << " vy=" << st.vy);
+	// PHYS_INFO(PHYS_MOVE, "Intent input vx=" << st.vx << " vy=" << st.vy);
 
 	G3D::Vector3 moveDir(intent.dir.x, intent.dir.y, 0.0f);
 	float intendedDist = std::sqrt(st.vx * st.vx + st.vy * st.vy) * dt;
-	PHYS_INFO(PHYS_MOVE, "intendedDist=" << intendedDist);
+	// PHYS_INFO(PHYS_MOVE, "intendedDist=" << intendedDist);
+
+	// Consolidated input summary (replaces individual logs above)
+	PHYS_INFO(PHYS_MOVE,
+		std::string("[GroundMove] InputSummary\n")
+		<< "  map=" << input.mapId << " dt=" << dt << "\n"
+		<< "  pos=(" << st.x << "," << st.y << "," << st.z << ")\n"
+		<< "  velIn=(" << input.vx << "," << input.vy << "," << input.vz << ")\n"
+		<< "  intentV=(" << st.vx << "," << st.vy << ") intendedDist=" << intendedDist << "\n"
+		<< "  flags=" << FormatMoveFlags(input.moveFlags) << " (0x" << std::hex << input.moveFlags << std::dec << ")\n"
+		<< "  orient=" << input.orientation << " pitch=" << input.pitch << "\n"
+		<< "  size: radius=" << radius << " height=" << height << "\n"
+		<< "  speeds[wlk=" << input.walkSpeed << " run=" << input.runSpeed << " back=" << input.runBackSpeed
+		<< " swim=" << input.swimSpeed << " swimBack=" << input.swimBackSpeed << " fly=" << input.flightSpeed << "]\n"
+		<< "  fallTime=" << input.fallTime << " transportGuid=" << input.transportGuid << "\n"
+		<< "  spline=" << (input.hasSplinePath?1:0) << " splineSpeed=" << input.splineSpeed << " curSplineIdx=" << input.currentSplineIndex);
+
 	if (intendedDist <= 0.0f) {
 		PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=ZeroDistance");
 		return;
@@ -361,6 +422,33 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	if (m_vmapManager)
 		hits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, moveDir, intendedDist);
 	PHYS_INFO(PHYS_MOVE, "[GroundMove] SweepCapsuleAll count=" << hits.size());
+
+	// Build a concise string summarizing all hits for later decision summary
+	std::string hitsSummary;
+	{
+		std::ostringstream oss;
+		oss << "hits=" << hits.size();
+		for (size_t i = 0; i < hits.size(); ++i)
+		{
+			const auto& h = hits[i];
+			oss << " [" << i
+				<< " tri=" << h.triIndex
+				<< " instId=" << h.instanceId
+				<< " startPen=" << (h.startPenetrating?1:0)
+				<< " dist=" << h.distance
+				<< " n=(" << h.normal.x << "," << h.normal.y << "," << h.normal.z << ")"
+				<< " p=(" << h.point.x << "," << h.point.y << "," << h.point.z << ")]";
+		}
+		hitsSummary = oss.str();
+	}
+	auto LogDecisionSummary = [&](const char* decision)
+	{
+		PHYS_INFO(PHYS_MOVE,
+			std::string("[GroundMove] Summary ") << hitsSummary
+			<< " decision=" << decision
+			<< " pos=(" << st.x << "," << st.y << "," << st.z << ")"
+			<< " n=(" << st.groundNormal.x << "," << st.groundNormal.y << "," << st.groundNormal.z << ")");
+	};
 
 	// --- Step limits and thresholds ---
 	// (already defined at function start)
@@ -389,6 +477,7 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		st.vx = st.vy = 0.0f;
 		st.groundNormal = best->normal.z > 0.0f ? best->normal.directionOrZero() : G3D::Vector3(0,0,1);
 		PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=StepUpPen tri=" << best->triIndex << " dz=" << bestDz << " newPos=(" << st.x << "," << st.y << "," << st.z << ")");
+		LogDecisionSummary("StepUpPen");
 		return true;
 	};
 
@@ -417,6 +506,7 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			if (dzSlide > stepUpLimit) newZ = st.z + stepUpLimit; else if (dzSlide < -stepDownLimit) newZ = st.z - stepDownLimit;
 			st.x = newX; st.y = newY; st.z = newZ; st.isGrounded = true; st.groundNormal = n; st.vx = st.vy = 0.0f;
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result SlideStartPen pos=(" << st.x << "," << st.y << "," << st.z << ")");
+			LogDecisionSummary("SlideStartPen");
 			return;
 		}
 
@@ -474,6 +564,7 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			st.rampStart = oldPos; st.rampEnd = steppedPoint; st.rampDir = moveDirN;
 			st.rampLength = (steppedPoint - oldPos).dot(moveDirN);
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result StepUp pos=(" << st.x << "," << st.y << "," << st.z << ") rampActive=1 length=" << st.rampLength);
+			LogDecisionSummary("StepUp");
 			return;
 		}
 
@@ -504,10 +595,12 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			}
 			st.vx = st.vy = 0.0f;
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result Obstruction walkable=1 travel=" << travel << " newPos=(" << st.x << "," << st.y << "," << st.z << ")");
+			LogDecisionSummary("Obstruction");
 		} else {
 			PHYS_TRACE(PHYS_MOVE, "[GroundMove] ObstructionReject reason=UnwalkableNormal nZ=" << hit.normal.z);
 			st.vx = st.vy = 0.0f;
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result Obstruction walkable=0 travel=" << travel << " newPos=(" << st.x << "," << st.y << "," << st.z << ")");
+			LogDecisionSummary("Obstruction");
 		}
 		return;
 	}
@@ -540,6 +633,7 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		st.isGrounded = true;
 		PHYS_INFO(PHYS_MOVE, "[GroundMove] Result ADTHeightSnap newZ=" << st.z);
 	}
+	LogDecisionSummary(found ? "ADTHeightSnap" : "NoHits");
 }
 
 // =====================================================================================
@@ -606,11 +700,17 @@ void PhysicsEngine::ProcessSwimMovement(const PhysicsInput& input, const Movemen
 PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 {
 	++gPhysFrameCounter;
-	PHYS_TRACE(PHYS_MOVE, "[Step] frame=" << gPhysFrameCounter
+	PHYS_TRACE(PHYS_MOVE,
+		std::string("[Step] frame=") << gPhysFrameCounter
 		<< " map=" << input.mapId
-		<< " pos=" << input.x << "," << input.y << "," << input.z
-		<< " vel=" << input.vx << "," << input.vy << "," << input.vz
-		<< " dt=" << dt);
+		<< " dt=" << dt << "\n"
+		<< "  Input pos=(" << input.x << "," << input.y << "," << input.z << ") vel=(" << input.vx << "," << input.vy << "," << input.vz << ")\n"
+		<< "  flags=" << FormatMoveFlags(input.moveFlags) << " (0x" << std::hex << input.moveFlags << std::dec << ")\n"
+		<< "  orient=" << input.orientation << " pitch=" << input.pitch << "\n"
+		<< "  size: radius=" << input.radius << " height=" << input.height << "\n"
+		<< "  speeds[wlk=" << input.walkSpeed << " run=" << input.runSpeed << " back=" << input.runBackSpeed
+		<< " swim=" << input.swimSpeed << " swimBack=" << input.swimBackSpeed << " fly=" << input.flightSpeed << "]\n"
+		<< "  fallTime=" << input.fallTime);
 
 	PhysicsOutput out{};
 	if (!m_initialized)
@@ -669,17 +769,85 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	}
 	// NEW: capture ADT terrain height for diagnostics
 	float adtTerrainZ = GetTerrainHeight(input.mapId, st.x, st.y);
-	PHYS_INFO(PHYS_MOVE, std::string("[Step] WaterDiag posZ=") << st.z
+
+	// Build diagnostic summary of capsule sweep (VMAP) and ADT terrain triangles (capsule AABB)
+	// Compute intended movement distance using current decision for swim/ground speed
+	float diagSpeed = CalculateMoveSpeed(input, isSwimming);
+	G3D::Vector3 diagMoveDir = intent.hasInput ? G3D::Vector3(intent.dir.x, intent.dir.y, 0.0f) : G3D::Vector3(0,0,0);
+	float diagIntendedDist = (diagMoveDir.magnitude() > 0.0f) ? (diagSpeed * dt) : 0.0f;
+
+	// Diagnostic capsule spanning step up/down around feet
+	float capBottom = (st.z + r) - STEP_DOWN_HEIGHT;
+	float capTop = (st.z + r) + STEP_HEIGHT;
+	float fullSegLen = (h - 2.0f * r);
+	float desiredSegLen = capTop - capBottom;
+	if (desiredSegLen > fullSegLen) {
+		float overflow = desiredSegLen - fullSegLen;
+		capBottom += overflow * 0.5f;
+		capTop -= overflow * 0.5f;
+	}
+	CapsuleCollision::Capsule diagCap;
+	diagCap.p0 = CapsuleCollision::Vec3(st.x, st.y, capBottom);
+	diagCap.p1 = CapsuleCollision::Vec3(st.x, st.y, capTop);
+	diagCap.r = r;
+
+	// VMAP sweep
+	std::vector<SceneHit> sweepHits;
+	if (m_vmapManager && diagIntendedDist > 0.0f)
+		sweepHits = m_vmapManager->SweepCapsuleAll(input.mapId, diagCap, diagMoveDir, diagIntendedDist);
+	// Compute summary stats for VMAP hits
+	size_t hitCount = sweepHits.size();
+	size_t penCount = 0, nonPenCount = 0, walkableNP = 0;
+	float earliestNP = FLT_MAX;
+	float hitMinZ = FLT_MAX, hitMaxZ = -FLT_MAX;
+	std::set<uint32_t> uniqueInst;
+	for (const auto& hHit : sweepHits) {
+		if (hHit.startPenetrating) penCount++; else nonPenCount++;
+		if (!hHit.startPenetrating) {
+			earliestNP = std::min(earliestNP, hHit.distance);
+			if (hHit.normal.z >= m_walkableCosMin) walkableNP++;
+		}
+		hitMinZ = std::min(hitMinZ, hHit.point.z);
+		hitMaxZ = std::max(hitMaxZ, hHit.point.z);
+		uniqueInst.insert(hHit.instanceId);
+	}
+	if (earliestNP == FLT_MAX) earliestNP = -1.0f;
+	if (hitCount == 0) { hitMinZ = 0.0f; hitMaxZ = 0.0f; }
+
+	// ADT terrain triangles within swept AABB
+	float endX = st.x + diagMoveDir.x * diagIntendedDist;
+	float endY = st.y + diagMoveDir.y * diagIntendedDist;
+	float minX = std::min(st.x, endX) - r;
+	float minY = std::min(st.y, endY) - r;
+	float maxX = std::max(st.x, endX) + r;
+	float maxY = std::max(st.y, endY) + r;
+	std::vector<MapFormat::TerrainTriangle> triBuf;
+	if (m_mapLoader && m_mapLoader->IsInitialized()) {
+		m_mapLoader->GetTerrainTriangles(input.mapId, minX, minY, maxX, maxY, triBuf);
+	}
+	size_t triCount = triBuf.size();
+	float triMinZ = FLT_MAX, triMaxZ = -FLT_MAX;
+	for (const auto& t : triBuf) {
+		triMinZ = std::min(triMinZ, std::min(t.az, std::min(t.bz, t.cz)));
+		triMaxZ = std::max(triMaxZ, std::max(t.az, std::max(t.bz, t.cz)));
+	}
+	if (triCount == 0) { triMinZ = 0.0f; triMaxZ = 0.0f; }
+
+	// Consolidated summary log replacing old WaterDiag
+	PHYS_INFO(PHYS_MOVE,
+		std::string("[Step] SurfaceSummary\n")
+		<< "  posZ=" << st.z
 		<< " radius=" << r
 		<< " refZ=" << (st.z + r)
-		<< " adtTerrainZ=" << adtTerrainZ
-		<< " adtWaterLevel=" << adtLiquidLevel << " (type=" << (unsigned)adtLiquidType << ")"
-		<< " vmapWaterLevel=" << vmapLiquidLevel << " (type=" << (unsigned)vmapLiquidType << ")"
-		<< " chosenWater=" << liquidLevel << " (type=" << (unsigned)liquidType << ")"
-		<< " immersion=" << swimImmersion
-		<< " immersionThreshold=" << swimImmersionThreshold
-		<< " prevDeltaConst=" << PhysicsConstants::WATER_LEVEL_DELTA
-		<< " willSwim=" << (isSwimming ? 1 : 0));
+		<< " adtTerrainZ=" << adtTerrainZ << "\n"
+		<< "  Liquids: ADT=" << adtLiquidLevel << "(t=" << (unsigned)adtLiquidType << ")"
+		<< " VMAP=" << vmapLiquidLevel << "(t=" << (unsigned)vmapLiquidType << ")"
+		<< " chosen=" << liquidLevel << "(t=" << (unsigned)liquidType << ")"
+		<< " immersion=" << swimImmersion << " thr=" << swimImmersionThreshold << " swim=" << (isSwimming?1:0) << "\n"
+		<< "  VMAP Sweep: hits=" << hitCount << " nonPen=" << nonPenCount << " pen=" << penCount
+		<< " earliestNP=" << earliestNP << " zRange=[" << hitMinZ << "," << hitMaxZ << "] walkableNP=" << walkableNP
+		<< " instances=" << uniqueInst.size() << "\n"
+		<< "  ADT Tris: count=" << triCount << " zRange=[" << triMinZ << "," << triMaxZ << "]");
 
 	// 3. Delegate movement to the appropriate helper method
 	float moveSpeed = CalculateMoveSpeed(input, isSwimming);
@@ -753,6 +921,8 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.groundNx = st.groundNormal.x;
 	out.groundNy = st.groundNormal.y;
 	out.groundNz = st.groundNormal.z;
+	// Also fill explicit swim boolean to match flags
+	out.isSwimming = isSwimming;
 	// If a recent ground hit was found in this frame, prefer it
 	// Note: we infer latest contact from rampEnd when rampActive toggled or from bestHit in downward probe
 	// The downward probe above logged bestHit; here we only set output using stable normal/state already in st.
@@ -772,6 +942,19 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.rampN_Z = st.rampN.z;
 	out.rampD = st.rampD;
 	out.rampLength = st.rampLength;
-	
+
+	// Consolidated output summary
+	PHYS_INFO(PHYS_MOVE,
+		std::string("[Step] OutputSummary\n")
+		<< "  pos=(" << out.x << "," << out.y << "," << out.z << ")\n"
+		<< "  vel=(" << out.vx << "," << out.vy << "," << out.vz << ")\n"
+		<< "  flags=" << FormatMoveFlags(out.moveFlags) << " (0x" << std::hex << out.moveFlags << std::dec << ")\n"
+		<< "  grounded=" << (out.isGrounded?1:0) << " swim=" << (out.isSwimming?1:0) << " fly=" << (out.isFlying?1:0) << " coll=" << (out.collided?1:0) << "\n"
+		<< "  orient=" << out.orientation << " pitch=" << out.pitch << "\n"
+		<< "  groundZ=" << out.groundZ << " groundN=(" << out.groundNx << "," << out.groundNy << "," << out.groundNz << ")\n"
+		<< "  liquidZ=" << out.liquidZ << " type=" << out.liquidType << "\n"
+		<< "  rampActive=" << (out.rampActive?1:0) << " rampEnd=(" << out.rampEndX << "," << out.rampEndY << "," << out.rampEndZ << ")\n"
+		<< "  rampN=(" << out.rampN_X << "," << out.rampN_Y << "," << out.rampN_Z << ") len=" << out.rampLength);
+
 	return out;
 }

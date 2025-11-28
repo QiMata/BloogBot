@@ -608,7 +608,7 @@ namespace VMAP
             }
         }
 
-        PHYS_INFO(PHYS_PERF, "EXIT VMapManager2::GetLiquidLevel -> 0 (no match)");
+        // PHYS_INFO(PHYS_PERF, "EXIT VMapManager2::GetLiquidLevel -> 0 (no match)");
         return false;
     }
 
