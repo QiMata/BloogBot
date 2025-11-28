@@ -285,6 +285,9 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 {
 	// PHYS_INFO(PHYS_MOVE, "[GroundMove] Start pos=" << st.x << "," << st.y << "," << st.z << " vel=" << st.vx << "," << st.vy << " dt=" << dt);
 
+	// Track previous position for actual velocity reporting in summary
+	G3D::Vector3 prevPos(st.x, st.y, st.z);
+
 	// Global step limits and thresholds used across branches
 	const float stepUpLimit = STEP_HEIGHT;
 	const float stepDownLimit = STEP_DOWN_HEIGHT;
@@ -421,9 +424,9 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	std::vector<SceneHit> hits;
 	if (m_vmapManager)
 		hits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, moveDir, intendedDist);
-	PHYS_INFO(PHYS_MOVE, "[GroundMove] SweepCapsuleAll count=" << hits.size());
+	// PHYS_INFO(PHYS_MOVE, "[GroundMove] SweepCapsuleAll count=" << hits.size()); // commented out per request
 
-	// Build a concise string summarizing all hits for later decision summary
+	// Build a human-readable multi-line string summarizing all hits for later decision summary
 	std::string hitsSummary;
 	{
 		std::ostringstream oss;
@@ -431,23 +434,32 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		for (size_t i = 0; i < hits.size(); ++i)
 		{
 			const auto& h = hits[i];
-			oss << " [" << i
-				<< " tri=" << h.triIndex
+			oss << "\n  [" << i
+				<< "] tri=" << h.triIndex
 				<< " instId=" << h.instanceId
 				<< " startPen=" << (h.startPenetrating?1:0)
-				<< " dist=" << h.distance
-				<< " n=(" << h.normal.x << "," << h.normal.y << "," << h.normal.z << ")"
-				<< " p=(" << h.point.x << "," << h.point.y << "," << h.point.z << ")]";
+				<< " dist=" << h.distance << "\n"
+				<< "     n=(" << h.normal.x << "," << h.normal.y << "," << h.normal.z << ")"
+				<< " p=(" << h.point.x << "," << h.point.y << "," << h.point.z << ")";
 		}
 		hitsSummary = oss.str();
 	}
 	auto LogDecisionSummary = [&](const char* decision)
 	{
+		// Compute actual velocity from prevPos to current pos (horizontal only for ground unless falling/jumping)
+		G3D::Vector3 curPos(st.x, st.y, st.z);
+		G3D::Vector3 actualV = (curPos - prevPos) * (dt > 0.0f ? (1.0f / dt) : 0.0f);
+		// Suppress vertical component for ground movement (ramp/step adjustments) unless we are leaving ground (fall) or a jump was requested earlier in frame
+		if (st.isGrounded && st.vz == 0.0f && !intent.jumpRequested) {
+			actualV.z = 0.0f;
+		}
 		PHYS_INFO(PHYS_MOVE,
-			std::string("[GroundMove] Summary ") << hitsSummary
-			<< " decision=" << decision
-			<< " pos=(" << st.x << "," << st.y << "," << st.z << ")"
-			<< " n=(" << st.groundNormal.x << "," << st.groundNormal.y << "," << st.groundNormal.z << ")");
+			std::string("[GroundMove] Summary\n") << hitsSummary << "\n"
+			<< "decision=" << decision << "\n"
+			<< "pos=(" << st.x << "," << st.y << "," << st.z << ")\n"
+			<< "groundNormal=(" << st.groundNormal.x << "," << st.groundNormal.y << "," << st.groundNormal.z << ")\n"
+			<< "intentVel=(" << (intent.hasInput ? intent.dir.x * speed : 0.0f) << "," << (intent.hasInput ? intent.dir.y * speed : 0.0f) << ")"
+			<< " actualVel=(" << actualV.x << "," << actualV.y << "," << actualV.z << ")");
 	};
 
 	// --- Step limits and thresholds ---
@@ -484,11 +496,11 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	if (!hits.empty()) {
 		// 1) If overlapping a walkable surface at start, perform a simple slide along its plane.
 		const SceneHit& firstHit = hits.front();
-		PHYS_INFO(PHYS_MOVE, "[GroundMove] FirstHit tri=" << firstHit.triIndex << " instId=" << firstHit.instanceId << " startPen=" << (firstHit.startPenetrating?1:0) << " dist=" << firstHit.distance << " n=(" << firstHit.normal.x << "," << firstHit.normal.y << "," << firstHit.normal.z << ") p=(" << firstHit.point.x << "," << firstHit.point.y << "," << firstHit.point.z << ")");
+		// PHYS_INFO(PHYS_MOVE, "[GroundMove] FirstHit tri=" << firstHit.triIndex << " instId=" << firstHit.instanceId << " startPen=" << (firstHit.startPenetrating?1:0) << " dist=" << firstHit.distance << " n=(" << firstHit.normal.x << "," << firstHit.normal.y << "," << firstHit.normal.z << ") p=(" << firstHit.point.x << "," << firstHit.point.y << "," << firstHit.point.z << ")"); // commented out per request
 		float nZ = firstHit.normal.z; // use signed Z now
 		bool walkableStartPen = firstHit.startPenetrating && nZ >= walkableCosMin;
 		if (walkableStartPen) {
-			PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=SlideStartPen walkableN=1 nZ=" << nZ);
+			// PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=SlideStartPen walkableN=1 nZ=" << nZ); // commented out per request
 			G3D::Vector3 n = firstHit.normal.directionOrZero();
 			if (n.magnitude() < TOL) n = G3D::Vector3(0,0,1);
 			G3D::Vector3 moveDirN = DirectionOrFallback(moveDir, G3D::Vector3(1,0,0));
@@ -502,10 +514,10 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 				newZ = (-D - n.x * newX - n.y * newY) / n.z;
 			}
 			float dzSlide = newZ - st.z;
-			PHYS_INFO(PHYS_MOVE, "[GroundMove] Slide calc travel=" << travel << " slideDir=(" << slideDir.x << "," << slideDir.y << "," << slideDir.z << ") newXY=(" << newX << "," << newY << ") newZ=" << newZ << " dzSlide=" << dzSlide);
+			// PHYS_INFO(PHYS_MOVE, "[GroundMove] Slide calc travel=" << travel << " slideDir=(" << slideDir.x << "," << slideDir.y << "," << slideDir.z << ") newXY=(" << newX << "," << newY << ") newZ=" << newZ << " dzSlide=" << dzSlide); // commented out per request
 			if (dzSlide > stepUpLimit) newZ = st.z + stepUpLimit; else if (dzSlide < -stepDownLimit) newZ = st.z - stepDownLimit;
 			st.x = newX; st.y = newY; st.z = newZ; st.isGrounded = true; st.groundNormal = n; st.vx = st.vy = 0.0f;
-			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result SlideStartPen pos=(" << st.x << "," << st.y << "," << st.z << ")");
+			// PHYS_INFO(PHYS_MOVE, "[GroundMove] Result SlideStartPen pos=(" << st.x << "," << st.y << "," << st.z << ")"); // commented out per request
 			LogDecisionSummary("SlideStartPen");
 			return;
 		}
@@ -735,6 +747,10 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	st.groundNormal = { 0, 0, 1 };
 	MovementIntent intent = BuildMovementIntent(input, st.orientation);
 
+	// Capture previous position to compute actual velocity at end of step
+	G3D::Vector3 prevPos(st.x, st.y, st.z);
+	float prevZ = st.z;
+
 	// Query for all liquid types immediately after intent is built
 	uint32_t liquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
 	float liquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, liquidType);
@@ -867,15 +883,26 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 		ProcessGroundMovement(input, intent, st, dt, moveSpeed, r, h);
 	}
 
+	// Compute actual velocity based on position delta over dt for this step
+	G3D::Vector3 curPos(st.x, st.y, st.z);
+	G3D::Vector3 actualV(0,0,0);
+	if (dt > 0.0f)
+		actualV = (curPos - prevPos) * (1.0f / dt);
+	// Zero out vertical component unless airborne (falling/jumping) or swimming (vertical motion intentional)
+	bool airborne = (!st.isGrounded) || (st.vz != 0.0f);
+	if (!airborne && !isSwimming) {
+		actualV.z = 0.0f;
+	}
+
 	// If a ramp is active, update interpolation / deactivate when traversed
 	if (st.rampActive)
 	{
-		G3D::Vector3 curPos(st.x, st.y, st.z);
-		float along = (curPos - st.rampStart).dot(st.rampDir);
+		G3D::Vector3 curPos2(st.x, st.y, st.z);
+		float along = (curPos2 - st.rampStart).dot(st.rampDir);
 		if (along < st.rampLength + 0.001f)
 		{
 			// Recompute Z from plane to smooth out incremental movement (if still below end)
-			float planeZ = (-st.rampD - st.rampN.x * curPos.x - st.rampN.y * curPos.y) / (st.rampN.z != 0.0f ? st.rampN.z : 1.0f);
+			float planeZ = (-st.rampD - st.rampN.x * curPos2.x - st.rampN.y * curPos2.y) / (st.rampN.z != 0.0f ? st.rampN.z : 1.0f);
 			if (planeZ > st.z && planeZ <= st.rampEnd.z + 0.02f)
 			{
 				st.z = planeZ;
@@ -902,9 +929,10 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.z = st.z;
 	out.orientation = st.orientation;
 	out.pitch = st.pitch;
-	out.vx = st.vx;
-	out.vy = st.vy;
-	out.vz = st.vz;
+	// Assign calculated actual velocity instead of internal st.v* for reliable reporting
+	out.vx = actualV.x;
+	out.vy = actualV.y;
+	out.vz = actualV.z;
 	out.moveFlags = input.moveFlags; // start from input flags
 	// Set / clear swimming flag based on physics decision
 	if (isSwimming)
