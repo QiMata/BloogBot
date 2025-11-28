@@ -10,6 +10,7 @@
 #include "ModelInstance.h"     // for debug diagnostics on model collisions
 #include "CapsuleCollision.h"  // added for debug distance computation
 #include "PhysicsBridge.h"     // ensure movement flag constants (added for swimming flag update)
+#include "VMapDefinitions.h"   // for GetLiquidNameUnified
 
 #include <algorithm>
 #include <filesystem>
@@ -571,11 +572,12 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			st.groundNormal = rampN;
 			st.isGrounded = true;
 			st.vx = st.vy = 0.0f;
-			st.rampActive = true;
-			st.rampN = rampN; st.rampD = rampD;
-			st.rampStart = oldPos; st.rampEnd = steppedPoint; st.rampDir = moveDirN;
-			st.rampLength = (steppedPoint - oldPos).dot(moveDirN);
-			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result StepUp pos=(" << st.x << "," << st.y << "," << st.z << ") rampActive=1 length=" << st.rampLength);
+			// Ramp interpolation persistence removed; snap to targetZ within limits and rely on per-frame sweeps
+			// st.rampActive = true;
+			// st.rampN = rampN; st.rampD = rampD;
+			// st.rampStart = oldPos; st.rampEnd = steppedPoint; st.rampDir = moveDirN;
+			// st.rampLength = (steppedPoint - oldPos).dot(moveDirN);
+			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result StepUp pos=(" << st.x << "," << st.y << "," << st.z << ") rampActive=0");
 			LogDecisionSummary("StepUp");
 			return;
 		}
@@ -752,11 +754,6 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	float prevZ = st.z;
 
 	// Query for all liquid types immediately after intent is built
-	uint32_t liquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
-	float liquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, liquidType);
-
-	// 2. Query surface and liquid state
-	// Capture raw ADT and VMAP liquid levels for diagnostics before merged query
 	float adtLiquidLevel = INVALID_HEIGHT; uint32_t adtLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
 	if (m_mapLoader && m_mapLoader->IsInitialized()) {
 		adtLiquidLevel = m_mapLoader->GetLiquidLevel(input.mapId, st.x, st.y);
@@ -770,6 +767,10 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 			vmapLiquidLevel = level; vmapLiquidType = type;
 		}
 	}
+	// Choose primary liquid measure for swimming decision (prefer VMAP when available)
+	uint32_t liquidType = (vmapLiquidLevel > INVALID_HEIGHT) ? vmapLiquidType : adtLiquidType;
+	float liquidLevel = (vmapLiquidLevel > INVALID_HEIGHT) ? vmapLiquidLevel : adtLiquidLevel;
+
 	bool isSwimming = false;
 	float swimImmersion = -9999.0f; // diagnostic: liquidLevel - (feet + radius)
 	const float swimImmersionThreshold = 1.0f; // new threshold for entering swim state
@@ -894,34 +895,33 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 		actualV.z = 0.0f;
 	}
 
-	// If a ramp is active, update interpolation / deactivate when traversed
-	if (st.rampActive)
-	{
-		G3D::Vector3 curPos2(st.x, st.y, st.z);
-		float along = (curPos2 - st.rampStart).dot(st.rampDir);
-		if (along < st.rampLength + 0.001f)
-		{
-			// Recompute Z from plane to smooth out incremental movement (if still below end)
-			float planeZ = (-st.rampD - st.rampN.x * curPos2.x - st.rampN.y * curPos2.y) / (st.rampN.z != 0.0f ? st.rampN.z : 1.0f);
-			if (planeZ > st.z && planeZ <= st.rampEnd.z + 0.02f)
-			{
-				st.z = planeZ;
-				PHYS_TRACE(PHYS_STEP, "[Ramp] Interp planeZ=" << planeZ << " along=" << along << "/" << st.rampLength);
-			}
-		}
-		else
-		{
-			// Reached end; finalize and switch to end normal
-			st.z = st.rampEnd.z;
-			st.groundNormal = st.rampN; // could switch to final surface normal if stored separately
-			st.rampActive = false;
-			PHYS_INFO(PHYS_STEP, "[Ramp] Completed ramp traversal finalZ=" << st.z);
+	// Re-query liquid at the final position to report current standing liquid type/level
+	// Perform the liquid sweep AFTER movement placement so PhysicsOutput reflects the surface at the final position.
+	float finalAdtLevel = INVALID_HEIGHT; uint32_t finalAdtType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	if (m_mapLoader && m_mapLoader->IsInitialized()) {
+		finalAdtLevel = m_mapLoader->GetLiquidLevel(input.mapId, st.x, st.y);
+		if (finalAdtLevel > INVALID_HEIGHT)
+			finalAdtType = m_mapLoader->GetLiquidType(input.mapId, st.x, st.y);
+	}
+	float finalVmapLevel = INVALID_HEIGHT; uint32_t finalVmapType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	if (m_vmapManager) {
+		float level, floor; uint32_t type;
+		if (m_vmapManager->GetLiquidLevel(input.mapId, st.x, st.y, st.z + 2.0f, VMAP::MAP_LIQUID_TYPE_ALL_LIQUIDS, level, floor, type)) {
+			finalVmapLevel = level; finalVmapType = type;
 		}
 	}
+	uint32_t finalLiquidType = (finalVmapLevel > INVALID_HEIGHT) ? finalVmapType : finalAdtType;
+	float finalLiquidLevel = (finalVmapLevel > INVALID_HEIGHT) ? finalVmapLevel : finalAdtLevel;
 
-	// Re-query liquid at the final position to report current standing liquid type/level
-	uint32_t finalLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
-	float finalLiquidLevel = QueryLiquidLevel(input.mapId, st.x, st.y, st.z, finalLiquidType);
+	// Determine swimming based on final placement and liquid level relative to capsule feet/top of lower sphere
+	// Use same immersion threshold as earlier decision
+	const float finalImmersionThreshold = 1.0f;
+	bool finalSwimming = false;
+	if (finalLiquidLevel > PhysicsConstants::INVALID_HEIGHT) {
+		float refZ = st.z + r; // top of lower sphere (feet reference)
+		float immersion = finalLiquidLevel - refZ;
+		finalSwimming = immersion > finalImmersionThreshold;
+	}
 
 	// Output final state
 	out.x = st.x;
@@ -934,15 +934,15 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.vy = actualV.y;
 	out.vz = actualV.z;
 	out.moveFlags = input.moveFlags; // start from input flags
-	// Set / clear swimming flag based on physics decision
-	if (isSwimming)
+	// Set / clear swimming flag based on final swimming state
+	if (finalSwimming)
 		out.moveFlags |= MOVEFLAG_SWIMMING;
 	else
 		out.moveFlags &= ~MOVEFLAG_SWIMMING;
 	// Propagate ramp state diagnostics (extend PhysicsOutput later if needed)
 	out.isGrounded = st.isGrounded;
 	out.groundZ = st.z; // simplification
-	// Provide liquid diagnostics (from final position)
+	// Provide liquid diagnostics (final position)
 	out.liquidZ = finalLiquidLevel;
 	out.liquidType = finalLiquidType;
 	// Initialize ground identification defaults
@@ -950,28 +950,10 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.groundNy = st.groundNormal.y;
 	out.groundNz = st.groundNormal.z;
 	// Also fill explicit swim boolean to match flags
-	out.isSwimming = isSwimming;
-	// If a recent ground hit was found in this frame, prefer it
-	// Note: we infer latest contact from rampEnd when rampActive toggled or from bestHit in downward probe
-	// The downward probe above logged bestHit; here we only set output using stable normal/state already in st.
-	// Ramp persistence
-	out.rampActive = st.rampActive;
-	out.rampStartX = st.rampStart.x;
-	out.rampStartY = st.rampStart.y;
-	out.rampStartZ = st.rampStart.z;
-	out.rampEndX = st.rampEnd.x;
-	out.rampEndY = st.rampEnd.y;
-	out.rampEndZ = st.rampEnd.z;
-	out.rampDirX = st.rampDir.x;
-	out.rampDirY = st.rampDir.y;
-	out.rampDirZ = st.rampDir.z;
-	out.rampN_X = st.rampN.x;
-	out.rampN_Y = st.rampN.y;
-	out.rampN_Z = st.rampN.z;
-	out.rampD = st.rampD;
-	out.rampLength = st.rampLength;
+	out.isSwimming = finalSwimming;
 
 	// Consolidated output summary
+	const char* liquidName = VMAP::GetLiquidNameUnified(out.liquidType);
 	PHYS_INFO(PHYS_MOVE,
 		std::string("[Step] OutputSummary\n")
 		<< "  pos=(" << out.x << "," << out.y << "," << out.z << ")\n"
@@ -980,9 +962,7 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 		<< "  grounded=" << (out.isGrounded?1:0) << " swim=" << (out.isSwimming?1:0) << " fly=" << (out.isFlying?1:0) << " coll=" << (out.collided?1:0) << "\n"
 		<< "  orient=" << out.orientation << " pitch=" << out.pitch << "\n"
 		<< "  groundZ=" << out.groundZ << " groundN=(" << out.groundNx << "," << out.groundNy << "," << out.groundNz << ")\n"
-		<< "  liquidZ=" << out.liquidZ << " type=" << out.liquidType << "\n"
-		<< "  rampActive=" << (out.rampActive?1:0) << " rampEnd=(" << out.rampEndX << "," << out.rampEndY << "," << out.rampEndZ << ")\n"
-		<< "  rampN=(" << out.rampN_X << "," << out.rampN_Y << "," << out.rampN_Z << ") len=" << out.rampLength);
+		<< "  liquidZ=" << out.liquidZ << " type=" << liquidName);
 
 	return out;
 }

@@ -141,6 +141,7 @@ namespace PathfindingService.Repository
         public bool collided;
         public float groundZ;
         public float liquidZ;
+        public uint liquidType;              // align with PhysicsBridge.h
         // Ground surface identification (mirrors PhysicsBridge.h)
         public float groundNx;                   // ground surface normal X
         public float groundNy;                   // ground surface normal Y
