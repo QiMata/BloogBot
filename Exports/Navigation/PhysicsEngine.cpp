@@ -501,7 +501,35 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		float nZ = firstHit.normal.z; // use signed Z now
 		bool walkableStartPen = firstHit.startPenetrating && nZ >= walkableCosMin;
 		if (walkableStartPen) {
-			// PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=SlideStartPen walkableN=1 nZ=" << nZ); // commented out per request
+			 // If both walkable and unwalkable penetrating planes are present, prefer stepping up onto the walkable surface.
+			bool hasUnwalkablePen = false;
+			const SceneHit* bestWalkPen = nullptr;
+			float bestWalkDz = FLT_MAX;
+			for (const auto& h : hits) {
+				if (!h.startPenetrating) continue;
+				if (h.normal.z >= walkableCosMin) {
+					float dz = h.point.z - st.z;
+					if (dz >= 0.0f && dz <= stepUpLimit + 0.01f) {
+						if (dz < bestWalkDz) { bestWalkDz = dz; bestWalkPen = &h; }
+					}
+				} else {
+					hasUnwalkablePen = true;
+				}
+			}
+			if (bestWalkPen && hasUnwalkablePen) {
+				// Step up onto the walkable penetrating contact and advance horizontally.
+				G3D::Vector3 moveDirN = DirectionOrFallback(moveDir, G3D::Vector3(1,0,0));
+				st.x += moveDirN.x * intendedDist;
+				st.y += moveDirN.y * intendedDist;
+				st.z = bestWalkPen->point.z;
+				st.isGrounded = true;
+				st.vx = st.vy = 0.0f;
+				st.groundNormal = bestWalkPen->normal.directionOrZero();
+				LogDecisionSummary("StepUpPen(Start)");
+				return;
+			}
+
+			// Default behavior: slide along the walkable plane when only walkable penetration exists.
 			G3D::Vector3 n = firstHit.normal.directionOrZero();
 			if (n.magnitude() < TOL) n = G3D::Vector3(0,0,1);
 			G3D::Vector3 moveDirN = DirectionOrFallback(moveDir, G3D::Vector3(1,0,0));
@@ -515,10 +543,8 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 				newZ = (-D - n.x * newX - n.y * newY) / n.z;
 			}
 			float dzSlide = newZ - st.z;
-			// PHYS_INFO(PHYS_MOVE, "[GroundMove] Slide calc travel=" << travel << " slideDir=(" << slideDir.x << "," << slideDir.y << "," << slideDir.z << ") newXY=(" << newX << "," << newY << ") newZ=" << newZ << " dzSlide=" << dzSlide); // commented out per request
 			if (dzSlide > stepUpLimit) newZ = st.z + stepUpLimit; else if (dzSlide < -stepDownLimit) newZ = st.z - stepDownLimit;
 			st.x = newX; st.y = newY; st.z = newZ; st.isGrounded = true; st.groundNormal = n; st.vx = st.vy = 0.0f;
-			// PHYS_INFO(PHYS_MOVE, "[GroundMove] Result SlideStartPen pos=(" << st.x << "," << st.y << "," << st.z << ")"); // commented out per request
 			LogDecisionSummary("SlideStartPen");
 			return;
 		}

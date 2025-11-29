@@ -14,7 +14,7 @@ namespace PathfindingService.Tests
     public class PhysicsEngineTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
     {
         private readonly Navigation _nav = fixture.Navigation;
-        private const float Dt = 0.60f; // one tick = 100 ms
+        private const float Dt = 0.05f; // one tick = 100 ms
 
         // Helper to compare PhysicsOutput with tolerance
         private static void AssertEqual(PhysicsOutput exp, PhysicsOutput act)
@@ -22,7 +22,7 @@ namespace PathfindingService.Tests
             Console.WriteLine($"Movement Flags: {(MovementFlags)act.moveFlags}");
             Assert.Equal(exp.x, act.x, 3);
             Assert.Equal(exp.y, act.y, 3);
-            Assert.InRange(act.z, exp.z - 1, exp.z + 1);
+            Assert.Equal(exp.z, act.z, 3);
             Assert.Equal(exp.vx, act.vx, 3);
             Assert.Equal(exp.vy, act.vy, 3);
             Assert.Equal(exp.vz, act.vz, 3);
@@ -30,46 +30,54 @@ namespace PathfindingService.Tests
         }
 
         [Theory]
-        // mapId,      x,           y,           z,           race,         adtGroundZ,     adtLiquidZ
-        [InlineData(1u, -562.225f, -4189.092f, 70.789f, -562.225f, -4189.092f, 70.789f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(0u, -8949.950000f, -132.490000f, 83.229485f, -8949.950000f, -132.490000f, 83.229485f, Race.Human, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(0u, -6240.320000f, 331.033000f, 382.619171f, -6240.320000f, 331.033000f, 382.619171f, Race.Human, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(0u, 524.311279f, 312.037323f, 31.260843f, 524.311279f, 312.037323f, 31.260843f, Race.Orc, 0.002989f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(0u, 537.798401f, 279.534973f, 31.208981f, 537.798401f, 279.534973f, 31.208981f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(0u, 538.0f, 279.0f, 31.237110f, 538.0f, 279.0f, 31.237110f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(0u, 582.693848f, 342.985321f, 31.149933f, 582.693848f, 342.985321f, 31.149933f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_SWIMMING)]
-        [InlineData(0u, 623.246948f, 349.184143f, 31.149933f, 623.246948f, 349.184143f, 31.149933f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_SWIMMING)]
-        [InlineData(0u, 623.683838f, 349.455780f, 31.245306f, 623.683838f, 349.455780f, 31.245306f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, -2917.580000f, -257.980000f, 53.362350f, -2917.580000f, -257.980000f, 53.362350f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, -618.518f, -4251.67f, 38.718f, -618.518f, -4251.67f, 38.718f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, -601.294000f, -4296.760000f, 37.811500f, -601.294000f, -4296.760000f, 37.811500f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, -582.580383f, -4236.643970f, 38.044630f, -582.580383f, -4236.643970f, 38.044630f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, -576.927856f, -4242.207030f, 37.980587f, -576.927856f, -4242.207030f, 37.980587f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, -550.47998f, -4194.069824f, 49.271198f, -550.47998f, -4194.069824f, 49.271198f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, -535.382019f, -4204.233398f, 74.716393f, -535.382019f, -4204.233398f, 74.716393f, Race.Orc, 5.853496f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, -557.773926f, -4181.990723f, 72.576546f, -557.773926f, -4181.990723f, 72.576546f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, 1629.359985f, -4373.380377f, 31.255800f, 1629.359985f, -4373.380377f, 31.255800f, Race.Orc, 3.548300f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, 10334.000000f, 833.902000f, 1326.110000f, 10334.000000f, 833.902000f, 1326.110000f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(1u, 1632.825562f, -4372.532715f, 29.364128f, 1632.825562f, -4372.532715f, 29.364128f, Race.Orc, 3.524822f, MovementFlags.MOVEFLAG_FORWARD, MovementFlags.MOVEFLAG_FORWARD)] // Step up blocked on Orgrimmar bank
-        [InlineData(1u, 1636.211426f, -4375.267090f, 28.748974f, 1636.211426f, -4375.267090f, 28.748974f, Race.Orc, 0.925152f, MovementFlags.MOVEFLAG_FORWARD, MovementFlags.MOVEFLAG_FORWARD)] // Forward movement blocked by spike on Orgrimmar bank
-        [InlineData(1u, 1661.377075f, -4369.652344f, 24.740832f, 1661.377075f, -4369.652344f, 24.740832f, Race.Orc, 0.245782f, MovementFlags.MOVEFLAG_FORWARD, MovementFlags.MOVEFLAG_FORWARD)] // Origmmar terrain block
-        [InlineData(1u, 1662.314819f, -4371.963867f, 24.925331f, 1661.377075f, -4369.652344f, 24.740832f, Race.Orc, 0.791637f, MovementFlags.MOVEFLAG_FORWARD, MovementFlags.MOVEFLAG_FORWARD)] // Origmmar terrain step-up and slide down
-        [InlineData(1u, 1679.552124f, -4372.284180f, 27.385866f, 1661.377075f, -4369.652344f, 24.740832f, Race.Orc, 6.151880f, MovementFlags.MOVEFLAG_FORWARD, MovementFlags.MOVEFLAG_FORWARD)] // Origmmar terrain step-up and slide down
-        [InlineData(389u, -247.728561f, -30.644503f, -58.082531f, -247.728561f, -30.644503f, -58.082531f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(389u, -158.395340f, 5.857921f, -42.873611f, -158.395340f, 5.857921f, -42.873611f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)]
-        [InlineData(389u, -212.988327f, -58.457249f, -65.660034f, -158.395340f, 5.857921f, -42.873611f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE, MovementFlags.MOVEFLAG_NONE)] // Standing in VMAP lava
-        public void StepPhysics_SingleFrameUpdate(
+        [InlineData(1, 1u, -601.518f, -4602.816f, 41.294f, MovementFlags.MOVEFLAG_FORWARD, 1.612f, Gender.Female, Race.Orc, -601.817f, -4595.827f, 41.065f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -562.225f, -4189.092f, 70.789f, MovementFlags.MOVEFLAG_FORWARD, 6.175f, Gender.Female, Race.Orc, -555.441f, -4190.048f, 72.641f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -535.151f, -4200.184f, 76.994f, MovementFlags.MOVEFLAG_FORWARD, 0.126f, Gender.Female, Race.Orc, -528.697f, -4199.830f, 76.993f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)]
+        [InlineData(1, 0u, -8949.95f, -132.49f, 83.23f, MovementFlags.MOVEFLAG_FORWARD, 0.0f, Gender.Female, Race.Human, -8942.958f, -132.485f, 83.679f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)]  // North facing
+        [InlineData(1, 0u, -8949.95f, -132.49f, 83.23f, MovementFlags.MOVEFLAG_FORWARD, 1.570f, Gender.Female, Race.Human, -8949.930f, -125.498f, 83.332f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)] // East facing  
+        [InlineData(1, 0u, -8949.95f, -132.49f, 83.23f, MovementFlags.MOVEFLAG_FORWARD, 3.141f, Gender.Female, Race.Human, -8956.923f, -132.509f, 82.927f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)] // South facing
+        [InlineData(1, 0u, -8949.95f, -132.49f, 83.23f, MovementFlags.MOVEFLAG_FORWARD, -1.570f, Gender.Female, Race.Human, -8949.949f, -139.487f, 83.467f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)] // West facing
+        [InlineData(1, 1u, -562.225f, -4189.092f, 70.789f, MovementFlags.MOVEFLAG_FORWARD, 0f, Gender.Female, Race.Orc, -562.225f, -4189.092f, 70.789f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 0u, -8949.950f, -132.490f, 83.229f, MovementFlags.MOVEFLAG_FORWARD, 0f, Gender.Female, Race.Human, -8949.950f, -132.490f, 83.229f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 0u, -6240.320f, 331.033f, 382.619f, MovementFlags.MOVEFLAG_FORWARD, 0f, Gender.Female, Race.Human, -6240.320f, 331.033f, 382.619f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 0u, 524.311f, 312.037f, 31.260f, MovementFlags.MOVEFLAG_NONE, 0.002f, Gender.Female, Race.Orc, 524.311f, 312.037f, 31.260f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 0u, 537.798f, 279.534f, 31.208f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, 537.798f, 279.534f, 31.208f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 0u, 538.0f, 279.0f, 31.237f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, 538.0f, 279.0f, 31.237f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 0u, 582.693f, 342.985f, 31.149f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, 582.693f, 342.985f, 31.149f, MovementFlags.MOVEFLAG_SWIMMING, 0f, 0f, 0f)]
+        [InlineData(1, 0u, 623.246f, 349.184f, 31.149f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, 623.246f, 349.184f, 31.149f, MovementFlags.MOVEFLAG_SWIMMING, 0f, 0f, 0f)]
+        [InlineData(1, 0u, 623.683f, 349.455f, 31.245f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, 623.683f, 349.455f, 31.245f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -2917.580f, -257.980f, 53.362f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -2917.580f, -257.980f, 53.362f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -618.518f, -4251.67f, 38.718f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -618.518f, -4251.67f, 38.718f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -601.294f, -4296.760f, 37.811f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -601.294f, -4296.760f, 37.811f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -582.580f, -4236.643f, 38.044f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -582.580f, -4236.643f, 38.044f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -576.927f, -4242.207f, 37.980f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -576.927f, -4242.207f, 37.980f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -550.479f, -4194.069f, 49.271f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -550.479f, -4194.069f, 49.271f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -535.382f, -4204.233f, 74.716f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -535.382f, -4204.233f, 74.716f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, -557.773f, -4181.990f, 72.576f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -557.773f, -4181.990f, 72.576f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, 1629.359f, -4373.380f, 31.255f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, 1629.359f, -4373.380f, 31.255f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, 10334.000f, 833.902f, 1326.110f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, 10334.000f, 833.902f, 1326.110f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 1u, 1632.825f, -4372.532f, 29.364f, MovementFlags.MOVEFLAG_FORWARD, 0f, Gender.Female, Race.Orc, 1629.129f, -4374.037f, 30.674f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)] // Step up blocked on Orgrimmar bank
+        [InlineData(1, 1u, 1636.211f, -4375.267f, 28.748f, MovementFlags.MOVEFLAG_FORWARD, 0f, Gender.Female, Race.Orc, 1636.211f, -4375.267f, 28.748f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)] // Forward movement blocked by spike on Orgrimmar bank
+        [InlineData(1, 1u, 1661.377f, -4369.652f, 24.740f, MovementFlags.MOVEFLAG_FORWARD, 0f, Gender.Female, Race.Orc, 1661.377f, -4369.652f, 24.740f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)] // Origmmar terrain block
+        [InlineData(1, 1u, 1662.314f, -4371.963f, 24.925f, MovementFlags.MOVEFLAG_FORWARD, 0f, Gender.Female, Race.Orc, 1661.377f, -4369.652f, 24.740f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)] // Origmmar terrain step-up and slide down
+        [InlineData(1, 1u, 1679.552f, -4372.284f, 27.385f, MovementFlags.MOVEFLAG_FORWARD, 6.151f, Gender.Female, Race.Orc, 1661.377f, -4369.652f, 24.740f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f)] // Origmmar terrain step-up and slide down
+        [InlineData(1, 389u, -247.728f, -30.644f, -58.082f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -247.728f, -30.644f, -58.082f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 389u, -158.395f, 5.857f, -42.873f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -158.395f, 5.857f, -42.873f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)]
+        [InlineData(1, 389u, -212.988f, -58.457f, -65.660f, MovementFlags.MOVEFLAG_NONE, 0f, Gender.Female, Race.Orc, -212.988f, -58.457f, -65.660f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f)] // Standing in VMAP lava
+        public void StepPhysics_FrameMovement(
+            uint frames,
             uint mapId,
             float startX, float startY, float startZ,
-            float expX, float expY, float expZ,
-            Race race,
-            float orientation,
             MovementFlags startFlags,
-            MovementFlags expFlags)
+            float orientation,
+            Gender gender,
+            Race race,
+            float expX, float expY, float expZ,
+            MovementFlags expFlags,
+            float expVX, float expVY, float expVZ)
         {
-            // derive capsule dims and expected swimming flag
-            var (radius, height) = RaceDimensions.GetCapsuleForRace(race, Gender.Male);
-
+            var (radius, height) = RaceDimensions.GetCapsuleForRace(race, gender);
+            // Setup input with FORWARD movement flag
             var input = new PhysicsInput
             {
                 mapId = mapId,
@@ -80,62 +88,6 @@ namespace PathfindingService.Tests
                 moveFlags = (uint)startFlags,
                 radius = radius,
                 height = height,
-                //gravity = 19.29f,
-                walkSpeed = 2.5f,
-                runSpeed = 7f,
-                //runBackSpeed = 4.5f,
-                swimSpeed = 6.45f,
-                //swimBackSpeed = 3.14f,
-            };
-
-            var expected = new PhysicsOutput
-            {
-                x = expX,
-                y = expY,
-                z = expZ,
-                vx = 0f,
-                vy = 0f,
-                vz = 0f,
-                moveFlags = (uint)expFlags
-            };
-
-            var actual = _nav.StepPhysics(input, Dt);
-            AssertEqual(expected, actual);
-        }
-
-        [Theory]
-        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -601.817322f, -4595.82764f, 41.0653114)] // Your exact scenario
-        [InlineData(1u, -562.225f, -4189.092f, 70.789f, 6.175373f, Race.Orc, -555.441589f, -4190.04834f, 72.6371841f)] // Your exact scenario
-        [InlineData(1u, -535.151367f, -4200.184082f, 74.552f, 0.126206f, Race.Orc, -528.697388f, -4199.83057f, 76.9935532f)]
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8942.95801f, -132.485428f, 83.6792374f)]  // North facing
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8949.93066f, -125.49894f, 83.3325424f)] // East facing  
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8956.92383f, -132.509186f, 82.9271317f)] // South facing
-        [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8949.94922f, -139.487244f, 83.467598f)] // West facing
-        public void StepPhysics_ForwardMovement(
-            uint mapId,
-            float startX, float startY, float startZ,
-            float orientation,
-            Race race,
-            float expectedX, float expectedY, float expectedZ)
-        {
-
-            // Simulate 1 second of movement
-            float totalTime = 1.0f;
-            float dt = 0.05f; // 50ms ticks
-            int steps = (int)(totalTime / dt);
-
-            var (radius, height) = RaceDimensions.GetCapsuleForRace(race, Gender.Male);
-            // Setup input with FORWARD movement flag
-            var input = new PhysicsInput
-            {
-                mapId = mapId,
-                x = startX,
-                y = startY,
-                z = startZ,
-                orientation = orientation,
-                moveFlags = (uint)MovementFlags.MOVEFLAG_FORWARD,
-                radius = radius,
-                height = height,
                 walkSpeed = 2.5f,
                 runSpeed = 7.0f,
                 runBackSpeed = 4.5f,
@@ -143,57 +95,34 @@ namespace PathfindingService.Tests
                 flightSpeed = 2.5f,
             };
 
-            PhysicsOutput output = new();
-            for (int i = 0; i < steps; i++)
+
+            PhysicsOutput expectedFinalOutput = new()
             {
-                output = _nav.StepPhysics(input, dt);
+                x = expX,
+                y = expY,
+                z = expZ,
+                vx = expVX,
+                vy = expVY,
+                vz = expVZ,
+                moveFlags = (uint)expFlags
+            };
+
+            PhysicsOutput actualOutput = new();
+            for (int i = 0; i < frames; i++)
+            {
+                actualOutput = _nav.StepPhysics(input, Dt);
 
                 // Update input for next iteration
-                input.x = output.x;
-                input.y = output.y;
-                input.z = output.z;
-                input.moveFlags = output.moveFlags;
-                // ground tracking fields removed from interop; rely on engine state
+                input.x = actualOutput.x;
+                input.y = actualOutput.y;
+                input.z = actualOutput.z;
+                input.vx = actualOutput.vx;
+                input.vy = actualOutput.vy;
+                input.vz = actualOutput.vz;
+                input.moveFlags = actualOutput.moveFlags;
             }
 
-            // After 1 second of forward movement at run speed (7.0 units/sec)
-            // We should have moved approximately 7 units in the facing direction
-
-            // Calculate expected movement based on orientation
-            float expectedDistance = input.runSpeed * totalTime;
-            float actualDistance = MathF.Sqrt(
-                MathF.Pow(output.x - startX, 2) +
-                MathF.Pow(output.y - startY, 2) +
-                MathF.Pow(output.z - startZ, 2));
-
-            // Verify we moved approximately the right distance
-            Assert.InRange(actualDistance, expectedDistance - 1, expectedDistance + 1); // Within 1 unit tolerance
-
-            // Verify movement flags still indicate forward movement
-            Assert.True((output.moveFlags & (uint)MovementFlags.MOVEFLAG_FORWARD) != 0,
-                "Should still have FORWARD flag set");
-
-            // Verify we're moving in the right direction based on orientation
-            // In WoW: orientation 0 = North (+Y), π/2 = East (+X), π = South (-Y), 3π/2 = West (-X)
-            float deltaX = output.x - startX;
-            float deltaY = output.y - startY;
-
-            // The movement direction should match our facing
-            // Use atan2(deltaX, deltaY) to match WoW's coordinate system where 0 = North
-            float moveAngle = MathF.Atan2(deltaY, deltaX);
-
-            // Log the movement for debugging
-            Console.WriteLine($"Movement Summary:");
-            Console.WriteLine($"  Start: ({startX:F2}, {startY:F2}, {startZ:F2})");
-            Console.WriteLine($"  End: ({output.x:F2}, {output.y:F2}, {output.z:F2})");
-            Console.WriteLine($"  Distance: {actualDistance:F2} (expected: {expectedDistance:F2})");
-            Console.WriteLine($"  Orientation: {orientation:F3} rad");
-            Console.WriteLine($"  Movement angle: {moveAngle:F3} rad");
-            Console.WriteLine($"  Velocity: ({output.vx:F2}, {output.vy:F2}, {output.vz:F2})");
-
-            Assert.Equal(expectedZ, output.z);
-            Assert.Equal(expectedY, output.y);
-            Assert.Equal(expectedX, output.x);
+            AssertEqual(expectedFinalOutput, actualOutput);
         }
     }
 }
