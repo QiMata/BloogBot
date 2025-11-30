@@ -13,6 +13,7 @@ namespace PathfindingService
     public class PathfindingSocketServer(string ipAddress, int port, ILogger logger) : ProtobufSocketServer<PathfindingRequest, PathfindingResponse>(ipAddress, port, logger)
     {
         private readonly Navigation _navigation = new();
+        private readonly Physics _physics = new();
 
         protected override PathfindingResponse HandleRequest(PathfindingRequest request)
         {
@@ -33,13 +34,6 @@ namespace PathfindingService
             }
         }
 
-        private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
-        {
-            var physicsInput = step.ToPhysicsInput();
-            var physicsOutput = _navigation.StepPhysics(physicsInput, step.DeltaTime);
-            return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
-        }
-
         private PathfindingResponse HandlePath(CalculatePathRequest req)
         {
             if (!CheckPosition(req.MapId, req.Start, req.End, out var err))
@@ -55,6 +49,13 @@ namespace PathfindingService
             return new PathfindingResponse { Path = resp };
         }
 
+        private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
+        {
+            var physicsInput = step.ToPhysicsInput();
+            var physicsOutput = _physics.StepPhysics(physicsInput, step.DeltaTime);
+            return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
+        }
+
         private PathfindingResponse HandleLineOfSight(LineOfSightRequest req)
         {
             if (!CheckPosition(req.MapId, req.From, req.To, out var err))
@@ -63,7 +64,7 @@ namespace PathfindingService
             var from = new XYZ(req.From.X, req.From.Y, req.From.Z);
             var to = new XYZ(req.To.X, req.To.Y, req.To.Z);
 
-            bool hasLOS = _navigation.LineOfSight(req.MapId, from, to);
+            bool hasLOS = _physics.LineOfSight(req.MapId, from, to);
 
             return new PathfindingResponse
             {
@@ -154,9 +155,7 @@ namespace PathfindingService
                 MovementFlags = nav.moveFlags,
                 Orientation = nav.orientation,
                 Pitch = nav.pitch,
-                IsGrounded = nav.isGrounded,
-                IsSwimming = nav.isSwimming,
-                IsFlying = nav.isFlying,
+                // Removed deprecated state flags
                 FallTime = nav.fallTime,
                 CurrentSplineIndex = nav.currentSplineIndex,
                 SplineProgress = nav.splineProgress

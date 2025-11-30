@@ -594,7 +594,6 @@ namespace VMAP
                         uint32_t liqType = info.hitModel->GetLiquidType();
                         // New: support both entry-id and index representations
                         uint32_t liqMask = GetLiquidMaskUnified(liqType);
-                        const char* liqName = GetLiquidNameUnified(liqType);
                         // PHYS_TRACE(PHYS_PERF, "[Liquid] liqH=" << liqH << " liqType=" << liqType << " (" << liqName << ") liqMask=0x" << std::hex << liqMask << std::dec << " reqMask=0x" << (unsigned)ReqLiquidTypeMask);
                         if ((liqMask & ReqLiquidTypeMask) != 0)
                         {

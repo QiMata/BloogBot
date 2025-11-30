@@ -224,7 +224,7 @@ bool GridMap::loadHeightData(FILE* in, uint32_t offset, uint32_t size)
 
         for (int i = 0; i < V9_SIZE_SQ; i++)
         {
-            if (m_V9[i] > INVALID_HEIGHT_VALUE && m_V9[i] < 10000.0f)
+            if (m_V9[i] > INVALID_HEIGHT && m_V9[i] < 10000.0f)
             {
                 validCount++;
                 if (m_V9[i] < minHeight) minHeight = m_V9[i];
@@ -700,7 +700,7 @@ bool GridMap::isHole(int row, int col) const
 float GridMap::getLiquidLevel(float x, float y) const
 {
     if (!m_liquidHeader || !m_liquidHeight)
-        return INVALID_HEIGHT;
+        return VMAP::VMAP_INVALID_LIQUID_HEIGHT; // unified sentinel
 
     x = MAP_RESOLUTION * (32 - x / SIZE_OF_GRIDS);
     y = MAP_RESOLUTION * (32 - y / SIZE_OF_GRIDS);
@@ -709,10 +709,10 @@ float GridMap::getLiquidLevel(float x, float y) const
     int cy_int = ((int)y & (MAP_RESOLUTION - 1)) - m_liquidHeader->offsetX;
 
     if (cx_int < 0 || cx_int >= m_liquidHeader->height)
-        return INVALID_HEIGHT;
+        return VMAP::VMAP_INVALID_LIQUID_HEIGHT;
 
     if (cy_int < 0 || cy_int >= m_liquidHeader->width)
-        return INVALID_HEIGHT;
+        return VMAP::VMAP_INVALID_LIQUID_HEIGHT;
 
     return m_liquidHeight[cx_int * m_liquidHeader->width + cy_int];
 }
@@ -895,9 +895,9 @@ void GridMap::getTerrainTriangles(std::vector<TerrainTriangle>& out) const
             float h3 = sampleV9Height(xi,     yi + 1);
             float h4 = sampleV9Height(xi + 1, yi + 1);
             float h5 = sampleV8Center(xi, yi);
-            if (h1 <= INVALID_HEIGHT_VALUE || h2 <= INVALID_HEIGHT_VALUE ||
-                h3 <= INVALID_HEIGHT_VALUE || h4 <= INVALID_HEIGHT_VALUE ||
-                h5 <= INVALID_HEIGHT_VALUE)
+            if (h1 <= INVALID_HEIGHT || h2 <= INVALID_HEIGHT ||
+                h3 <= INVALID_HEIGHT || h4 <= INVALID_HEIGHT ||
+                h5 <= INVALID_HEIGHT)
             {
                 continue;
             }
@@ -962,9 +962,9 @@ void GridMap::getTerrainTrianglesInAABB(float minX, float minY, float maxX, floa
             float h3 = sampleV9Height(xi,     yi + 1);
             float h4 = sampleV9Height(xi + 1, yi + 1);
             float h5 = sampleV8Center(xi, yi);
-            if (h1 <= INVALID_HEIGHT_VALUE || h2 <= INVALID_HEIGHT_VALUE ||
-                h3 <= INVALID_HEIGHT_VALUE || h4 <= INVALID_HEIGHT_VALUE ||
-                h5 <= INVALID_HEIGHT_VALUE)
+            if (h1 <= INVALID_HEIGHT || h2 <= INVALID_HEIGHT ||
+                h3 <= INVALID_HEIGHT || h4 <= INVALID_HEIGHT ||
+                h5 <= INVALID_HEIGHT)
             {
                 continue;
             }
@@ -1247,7 +1247,7 @@ float MapLoader::GetLiquidLevel(uint32_t mapId, float x, float y)
 
     if (!LoadMapTile(mapId, gridY, gridX))
     {
-        return INVALID_HEIGHT;
+        return VMAP::VMAP_INVALID_LIQUID_HEIGHT;
     }
 
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -1255,7 +1255,7 @@ float MapLoader::GetLiquidLevel(uint32_t mapId, float x, float y)
     auto it = m_loadedTiles.find(makeKey(mapId, gridY, gridX));
     if (it == m_loadedTiles.end())
     {
-        return INVALID_HEIGHT;
+        return VMAP::VMAP_INVALID_LIQUID_HEIGHT;
     }
 
     float liquidLevel = it->second->getLiquidLevel(x, y);
@@ -1485,8 +1485,8 @@ bool GridMap::getSquareHeights(int xi, int yi, float& h1, float& h2, float& h3, 
     h3 = sampleV9Height(xi,     yi + 1);
     h4 = sampleV9Height(xi + 1, yi + 1);
     h5 = sampleV8Center(xi, yi);
-    if (h1 <= INVALID_HEIGHT_VALUE || h2 <= INVALID_HEIGHT_VALUE || h3 <= INVALID_HEIGHT_VALUE ||
-        h4 <= INVALID_HEIGHT_VALUE || h5 <= INVALID_HEIGHT_VALUE)
+    if (h1 <= INVALID_HEIGHT || h2 <= INVALID_HEIGHT || h3 <= INVALID_HEIGHT ||
+        h4 <= INVALID_HEIGHT || h5 <= INVALID_HEIGHT)
         return false;
     return true;
 }

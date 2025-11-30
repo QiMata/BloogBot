@@ -28,8 +28,6 @@ using namespace VMAP;
 int gPhysLogLevel = 3;           // 0=ERR,1=INFO,2=DBG,3=TRACE
 uint32_t gPhysLogMask = PHYS_ALL; // enable everything initially
 
-static uint64_t gPhysFrameCounter = 0;
-
 // Human-readable movement flags
 static std::string FormatMoveFlags(uint32_t flags)
 {
@@ -197,7 +195,7 @@ float PhysicsEngine::GetLiquidHeight(uint32_t mapId, float x, float y, float z, 
 	if (m_mapLoader && m_mapLoader->IsInitialized())
 	{
 		float level = m_mapLoader->GetLiquidLevel(mapId, x, y);
-		if (level > INVALID_HEIGHT)
+		if (VMAP::IsValidLiquidLevel(level))
 		{
 			liquidType = m_mapLoader->GetLiquidType(mapId, x, y);
 			return level;
@@ -214,7 +212,7 @@ float PhysicsEngine::GetLiquidHeight(uint32_t mapId, float x, float y, float z, 
 		}
 	}
 
-	return INVALID_HEIGHT;
+	return VMAP::VMAP_INVALID_LIQUID_HEIGHT;
 }
 
 G3D::Vector3 PhysicsEngine::ComputeTerrainNormal(uint32_t mapId, float x, float y)
@@ -333,27 +331,37 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			downHits = m_vmapManager->SweepCapsuleAll(input.mapId, cap, downDir, settleDist);
 		PHYS_INFO(PHYS_MOVE, "[GroundMove] DownwardSweep count=" << downHits.size() << " dist=" << settleDist);
 
-		// Prefer the earliest non-penetrating walkable surface
-		const SceneHit* bestNP = nullptr;
+		 // Single-pass evaluation: track earliest valid non-penetrating walkable and best penetrating surface simultaneously.
+		const SceneHit* bestNP = nullptr; // earliest non-penetrating walkable hit
+		const SceneHit* bestPen = nullptr; // highest penetrating upward-facing contact
+		float bestPenZ = -FLT_MAX;
 		for (size_t i = 0; i < downHits.size(); ++i) {
 			const auto& h = downHits[i];
 			PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownHit idx=" << i << " startPen=" << (h.startPenetrating?1:0) << " dist=" << h.distance << " nZ=" << h.normal.z << " pZ=" << h.point.z);
-			if (h.startPenetrating) { PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownReject idx=" << i << " reason=StartPenetrating"); continue; }
+			if (h.startPenetrating) {
+				// penetrating: consider for bestPen if upward facing
+				if (h.normal.z >= 0.0f && h.point.z > bestPenZ) {
+					bestPenZ = h.point.z; bestPen = &h; PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownPenCandidate idx=" << i << " pZ=" << h.point.z);
+				}
+				continue; // cannot be bestNP
+			}
+			// non-penetrating candidate for walkable surface
 			if (h.normal.z < walkableCosMin) { PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownReject idx=" << i << " reason=Unwalkable nZ=" << h.normal.z); continue; }
-			bestNP = &h;
-			break;
+			bestNP = &h; // earliest due to input ordering
+			PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownSelectNonPen idx=" << i);
+			break; // earliest acceptable
 		}
 
-		// Otherwise, if penetrating at start, choose highest up-facing contact
-		const SceneHit* bestPen = nullptr; float bestPenZ = -FLT_MAX;
-		for (size_t i = 0; i < downHits.size(); ++i) {
-			const auto& h = downHits[i];
-			PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownHitPen idx=" << i << " startPen=" << (h.startPenetrating?1:0) << " nZ=" << h.normal.z << " pZ=" << h.point.z);
-			if (!h.startPenetrating) continue;
-			if (h.normal.z < 0.0f) { PHYS_TRACE(PHYS_MOVE, "[GroundMove] DownReject idx=" << i << " reason=PenetratingDownFacing"); continue; }
-			if (h.point.z > bestPenZ) { bestPenZ = h.point.z; bestPen = &h; }
+		if (bestNP) {
+			// Snap to non-penetrating walkable surface (do not allow upward beyond step height here since sweep already constrained)
+			st.z = bestNP->point.z;
+			st.isGrounded = true;
+			st.groundNormal = bestNP->normal.directionOrZero();
+			PHYS_INFO(PHYS_MOVE, "[GroundMove] Settle result: NonPenetrating z=" << st.z << " nZ=" << st.groundNormal.z);
+			return;
 		}
 		if (bestPen) {
+			// Penetrating fallback: adjust up to highest penetrating upward-facing contact
 			st.z = bestPen->point.z;
 			st.isGrounded = true;
 			st.groundNormal = bestPen->normal.directionOrZero();
@@ -598,11 +606,6 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			st.groundNormal = rampN;
 			st.isGrounded = true;
 			st.vx = st.vy = 0.0f;
-			// Ramp interpolation persistence removed; snap to targetZ within limits and rely on per-frame sweeps
-			// st.rampActive = true;
-			// st.rampN = rampN; st.rampD = rampD;
-			// st.rampStart = oldPos; st.rampEnd = steppedPoint; st.rampDir = moveDirN;
-			// st.rampLength = (steppedPoint - oldPos).dot(moveDirN);
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Result StepUp pos=(" << st.x << "," << st.y << "," << st.z << ") rampActive=0");
 			LogDecisionSummary("StepUp");
 			return;
@@ -644,36 +647,6 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		}
 		return;
 	}
-
-	// --- No hits: move full horizontal distance and try ADT height fallback ---
-	PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=NoHits moveIntendedDist=" << intendedDist);
-	st.x += moveDir.x * intendedDist;
-	st.y += moveDir.y * intendedDist;
-	PHYS_INFO(PHYS_MOVE, "[GroundMove] Result NoHits newXY=(" << st.x << "," << st.y << ")");
-	float vmapZ = INVALID_HEIGHT;
-	if (m_vmapManager) { vmapZ = INVALID_HEIGHT; }
-	float adtZ = GetTerrainHeight(input.mapId, st.x, st.y);
-	if (vmapZ > INVALID_HEIGHT)
-	{
-		PHYS_INFO(PHYS_MOVE, std::string("[GroundMove] VMAP height probed (diagnostic only): z=") << vmapZ);
-	}
-	float bestZ = st.z; bool found = false;
-	if (adtZ > INVALID_HEIGHT) {
-		float diff = adtZ - st.z;
-		PHYS_TRACE(PHYS_MOVE, "[GroundMove] ADT snap eval diff=" << diff << " stepUpLimit=" << stepUpLimit << " stepDownLimit=" << stepDownLimit);
-		if (((diff >= 0.0f && diff <= stepUpLimit) || (diff < 0.0f && diff >= -stepDownLimit))) {
-			bestZ = adtZ; found = true; PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=ADTHeightSnap z=" << adtZ);
-		} else {
-			PHYS_TRACE(PHYS_MOVE, "[GroundMove] ADT snap reject reason=OutOfRange diff=" << diff);
-		}
-	}
-	if (found) {
-		st.z = bestZ;
-		st.groundNormal = G3D::Vector3(0, 0, 1);
-		st.isGrounded = true;
-		PHYS_INFO(PHYS_MOVE, "[GroundMove] Result ADTHeightSnap newZ=" << st.z);
-	}
-	LogDecisionSummary(found ? "ADTHeightSnap" : "NoHits");
 }
 
 // =====================================================================================
@@ -739,11 +712,7 @@ void PhysicsEngine::ProcessSwimMovement(const PhysicsInput& input, const Movemen
 // =====================================================================================
 PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 {
-	++gPhysFrameCounter;
-	PHYS_TRACE(PHYS_MOVE,
-		std::string("[Step] frame=") << gPhysFrameCounter
-		<< " map=" << input.mapId
-		<< " dt=" << dt << "\n"
+	PHYS_TRACE(PHYS_MOVE, " map=" << input.mapId << " dt=" << dt << "\n"
 		<< "  Input pos=(" << input.x << "," << input.y << "," << input.z << ") vel=(" << input.vx << "," << input.vy << "," << input.vz << ")\n"
 		<< "  flags=" << FormatMoveFlags(input.moveFlags) << " (0x" << std::hex << input.moveFlags << std::dec << ")\n"
 		<< "  orient=" << input.orientation << " pitch=" << input.pitch << "\n"
@@ -780,38 +749,41 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	float prevZ = st.z;
 
 	// Query for all liquid types immediately after intent is built
-	float adtLiquidLevel = INVALID_HEIGHT; uint32_t adtLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	float adtLiquidLevel = VMAP_INVALID_LIQUID_HEIGHT; uint32_t adtLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
 	if (m_mapLoader && m_mapLoader->IsInitialized()) {
 		adtLiquidLevel = m_mapLoader->GetLiquidLevel(input.mapId, st.x, st.y);
-		if (adtLiquidLevel > INVALID_HEIGHT)
+		if (MapFormat::IsValidLiquidLevel(adtLiquidLevel))
 			adtLiquidType = m_mapLoader->GetLiquidType(input.mapId, st.x, st.y);
 	}
-	float vmapLiquidLevel = INVALID_HEIGHT; uint32_t vmapLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	float vmapLiquidLevel = VMAP_INVALID_LIQUID_HEIGHT; uint32_t vmapLiquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	bool vmapHasLevel = false;
 	if (m_vmapManager) {
 		float level, floor; uint32_t type;
 		if (m_vmapManager->GetLiquidLevel(input.mapId, st.x, st.y, st.z + 2.0f, VMAP::MAP_LIQUID_TYPE_ALL_LIQUIDS, level, floor, type)) {
-			vmapLiquidLevel = level; vmapLiquidType = type;
+			vmapLiquidLevel = level; 
+			vmapLiquidType = type; 
+			vmapHasLevel = true;
 		}
 	}
 	// Choose primary liquid measure for swimming decision (prefer VMAP when available)
-	uint32_t liquidType = (vmapLiquidLevel > INVALID_HEIGHT) ? vmapLiquidType : adtLiquidType;
-	float liquidLevel = (vmapLiquidLevel > INVALID_HEIGHT) ? vmapLiquidLevel : adtLiquidLevel;
+	uint32_t liquidType = vmapHasLevel ? GetLiquidEnumUnified(vmapLiquidType, true) : GetLiquidEnumUnified(adtLiquidType, false);
+	float liquidLevel = vmapHasLevel ? vmapLiquidLevel : adtLiquidLevel;
+	bool liquidFromVmap = vmapHasLevel;
 
+	// Simplified swimming detection: only compare current Z vs liquid height; no immersion threshold and no downward snap.
 	bool isSwimming = false;
-	float swimImmersion = -9999.0f; // diagnostic: liquidLevel - (feet + radius)
-	const float swimImmersionThreshold = 1.0f; // new threshold for entering swim state
-	if (liquidLevel > PhysicsConstants::INVALID_HEIGHT)
+	float swimImmersion = -9999.0f; // liquidLevel - currentZ
+	const float swimImmersionThreshold = 0.0f; // unused (kept for log formatting)
+	if (VMAP::IsValidLiquidLevel(liquidLevel))
 	{
-		float refZ = st.z + r; // reference point (top of lower sphere)
-		swimImmersion = liquidLevel - refZ;
-		if (swimImmersion > swimImmersionThreshold)
+		// immersion is how far water surface is above current position
+		swimImmersion = liquidLevel - st.z;
+		if (swimImmersion > 0.0f && liquidType == LIQUID_TYPE_WATER)
 		{
 			isSwimming = true;
 			st.isSwimming = true;
 		}
 	}
-	// NEW: capture ADT terrain height for diagnostics
-	float adtTerrainZ = GetTerrainHeight(input.mapId, st.x, st.y);
 
 	// Build diagnostic summary of capsule sweep (VMAP) and ADT terrain triangles (capsule AABB)
 	// Compute intended movement distance using current decision for swim/ground speed
@@ -881,8 +853,7 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 		std::string("[Step] SurfaceSummary\n")
 		<< "  posZ=" << st.z
 		<< " radius=" << r
-		<< " refZ=" << (st.z + r)
-		<< " adtTerrainZ=" << adtTerrainZ << "\n"
+		<< " refZ=" << (st.z + r) << "\n"
 		<< "  Liquids: ADT=" << adtLiquidLevel << "(t=" << (unsigned)adtLiquidType << ")"
 		<< " VMAP=" << vmapLiquidLevel << "(t=" << (unsigned)vmapLiquidType << ")"
 		<< " chosen=" << liquidLevel << "(t=" << (unsigned)liquidType << ")"
@@ -923,30 +894,29 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 
 	// Re-query liquid at the final position to report current standing liquid type/level
 	// Perform the liquid sweep AFTER movement placement so PhysicsOutput reflects the surface at the final position.
-	float finalAdtLevel = INVALID_HEIGHT; uint32_t finalAdtType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	float finalAdtLevel = VMAP_INVALID_LIQUID_HEIGHT; uint32_t finalAdtType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
 	if (m_mapLoader && m_mapLoader->IsInitialized()) {
 		finalAdtLevel = m_mapLoader->GetLiquidLevel(input.mapId, st.x, st.y);
-		if (finalAdtLevel > INVALID_HEIGHT)
+		if (VMAP::IsValidLiquidLevel(finalAdtLevel))
 			finalAdtType = m_mapLoader->GetLiquidType(input.mapId, st.x, st.y);
 	}
-	float finalVmapLevel = INVALID_HEIGHT; uint32_t finalVmapType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	float finalVmapLevel = VMAP_INVALID_LIQUID_HEIGHT; uint32_t finalVmapType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+	bool finalVmapHasLevel = false;
 	if (m_vmapManager) {
 		float level, floor; uint32_t type;
 		if (m_vmapManager->GetLiquidLevel(input.mapId, st.x, st.y, st.z + 2.0f, VMAP::MAP_LIQUID_TYPE_ALL_LIQUIDS, level, floor, type)) {
-			finalVmapLevel = level; finalVmapType = type;
+			finalVmapLevel = level; finalVmapType = type; finalVmapHasLevel = true;
 		}
 	}
-	uint32_t finalLiquidType = (finalVmapLevel > INVALID_HEIGHT) ? finalVmapType : finalAdtType;
-	float finalLiquidLevel = (finalVmapLevel > INVALID_HEIGHT) ? finalVmapLevel : finalAdtLevel;
+	uint32_t finalLiquidType = finalVmapHasLevel ? GetLiquidEnumUnified(finalVmapType, true) : GetLiquidEnumUnified(finalAdtType, false);
+	float finalLiquidLevel = finalVmapHasLevel ? finalVmapLevel : finalAdtLevel;
 
-	// Determine swimming based on final placement and liquid level relative to capsule feet/top of lower sphere
-	// Use same immersion threshold as earlier decision
-	const float finalImmersionThreshold = 1.0f;
+	// Determine swimming based on final placement and liquid level relative to current Z (no threshold)
+	const float finalImmersionThreshold = 0.0f; // unused, for logging
 	bool finalSwimming = false;
-	if (finalLiquidLevel > PhysicsConstants::INVALID_HEIGHT) {
-		float refZ = st.z + r; // top of lower sphere (feet reference)
-		float immersion = finalLiquidLevel - refZ;
-		finalSwimming = immersion > finalImmersionThreshold;
+	if (VMAP::IsValidLiquidLevel(finalLiquidLevel)) {
+		float immersion = finalLiquidLevel - st.z;
+		finalSwimming = immersion > 0.0f && finalLiquidType == LIQUID_TYPE_WATER;
 	}
 
 	// Output final state
@@ -955,40 +925,40 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	out.z = st.z;
 	out.orientation = st.orientation;
 	out.pitch = st.pitch;
-	// Assign calculated actual velocity instead of internal st.v* for reliable reporting
 	out.vx = actualV.x;
 	out.vy = actualV.y;
 	out.vz = actualV.z;
-	out.moveFlags = input.moveFlags; // start from input flags
-	// Set / clear swimming flag based on final swimming state
+	out.moveFlags = input.moveFlags;
 	if (finalSwimming)
+	{
+		const uint32_t incompatibleSwim =
+			MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR | MOVEFLAG_FLYING | MOVEFLAG_ROOT |
+			MOVEFLAG_PENDING_STOP | MOVEFLAG_PENDING_UNSTRAFE | MOVEFLAG_PENDING_FORWARD |
+			MOVEFLAG_PENDING_BACKWARD | MOVEFLAG_PENDING_STR_LEFT | MOVEFLAG_PENDING_STR_RGHT;
 		out.moveFlags |= MOVEFLAG_SWIMMING;
+		out.moveFlags &= ~incompatibleSwim;
+		if (intent.hasInput && !(out.moveFlags & (MOVEFLAG_FORWARD | MOVEFLAG_BACKWARD | MOVEFLAG_STRAFE_LEFT | MOVEFLAG_STRAFE_RIGHT)))
+			out.moveFlags |= MOVEFLAG_FORWARD;
+	}
 	else
+	{
 		out.moveFlags &= ~MOVEFLAG_SWIMMING;
-	// Propagate ramp state diagnostics (extend PhysicsOutput later if needed)
-	out.isGrounded = st.isGrounded;
-	out.groundZ = st.z; // simplification
-	// Provide liquid diagnostics (final position)
+	}
+	out.groundZ = st.z;
 	out.liquidZ = finalLiquidLevel;
 	out.liquidType = finalLiquidType;
-	// Initialize ground identification defaults
-	out.groundNx = st.groundNormal.x;
-	out.groundNy = st.groundNormal.y;
-	out.groundNz = st.groundNormal.z;
-	// Also fill explicit swim boolean to match flags
-	out.isSwimming = finalSwimming;
-
-	// Consolidated output summary
-	const char* liquidName = VMAP::GetLiquidNameUnified(out.liquidType);
+	const char* liquidName = VMAP::GetLiquidTypeName(out.liquidType);
+	const char* primarySrc = liquidFromVmap ? "VMAP" : "ADT";
+	const char* finalSrc = finalVmapHasLevel ? "VMAP" : "ADT";
 	PHYS_INFO(PHYS_MOVE,
 		std::string("[Step] OutputSummary\n")
-		<< "  pos=(" << out.x << "," << out.y << "," << out.z << ")\n"
-		<< "  vel=(" << out.vx << "," << out.vy << "," << out.vz << ")\n"
+		<< "  pos=" << "(" << out.x << "," << out.y << "," << out.z << ")\n"
+		<< "  vel=" << "(" << out.vx << "," << out.vy << "," << out.vz << ")\n"
 		<< "  flags=" << FormatMoveFlags(out.moveFlags) << " (0x" << std::hex << out.moveFlags << std::dec << ")\n"
-		<< "  grounded=" << (out.isGrounded?1:0) << " swim=" << (out.isSwimming?1:0) << " fly=" << (out.isFlying?1:0) << " coll=" << (out.collided?1:0) << "\n"
 		<< "  orient=" << out.orientation << " pitch=" << out.pitch << "\n"
 		<< "  groundZ=" << out.groundZ << " groundN=(" << out.groundNx << "," << out.groundNy << "," << out.groundNz << ")\n"
-		<< "  liquidZ=" << out.liquidZ << " type=" << liquidName);
-
+		<< "  liquidZ=" << out.liquidZ << " type=" << liquidName
+		<< " primarySrc=" << primarySrc
+		<< " finalSrc=" << finalSrc << " normalized=" << out.liquidType);
 	return out;
 }

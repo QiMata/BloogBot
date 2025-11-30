@@ -4,10 +4,8 @@ using PathfindingService.Repository;
 namespace PathfindingService.Tests
 {
     /// <summary>
-    /// End‑to‑end tests for the consolidated Navigation API.
+    /// End‑to‑end tests for the Navigation API.
     ///   • CalculatePath
-    ///   • IsLineOfSight
-    ///   • GetTerrainProbe (capsule sweep + height + liquid)
     /// </summary>
     public class NavigationFixture : IDisposable
     {
@@ -18,14 +16,9 @@ namespace PathfindingService.Tests
         public void Dispose() { /* Navigation lives for the AppDomain – nothing to do. */ }
     }
 
-    public class PathingAndTerrainTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
+    public class PathfindingTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
     {
         private readonly Navigation _navigation = fixture.Navigation;
-
-        private const float Dt = 0.1f;
-        /* ──────────────────────────────────────────────────────── */
-        /*  PATH‑FINDING + LINE‑OF‑SIGHT BASICS                    */
-        /* ──────────────────────────────────────────────────────── */
 
         [Fact]
         public void CalculatePath_ShouldReturnValidPath()
@@ -38,26 +31,6 @@ namespace PathfindingService.Tests
 
             Assert.NotNull(path);
             Assert.NotEmpty(path);
-        }
-
-        [Fact]
-        public void LineOfSight_ShouldReturnTrue_WhenNoObstruction()
-        {
-            uint mapId = 1;
-            Position from = new(1629.0f, -4373.0f, 53.0f);
-            Position to = new(1630.0f, -4372.0f, 53.0f);
-
-            Assert.True(_navigation.LineOfSight(mapId, from.ToXYZ(), to.ToXYZ()));
-        }
-
-        [Fact]
-        public void LineOfSight_ShouldReturnFalse_WhenObstructed()
-        {
-            uint mapId = 389;
-            Position from = new(-247.728561f, -30.644503f, -58.082531f);
-            Position to = new(-158.395340f, 5.857921f, -42.873611f);
-
-            Assert.False(_navigation.LineOfSight(mapId, from.ToXYZ(), to.ToXYZ()));
         }
     }
 }

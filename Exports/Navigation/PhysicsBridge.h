@@ -51,6 +51,10 @@ enum MovementFlags
     MOVEFLAG_MASK_XZ = MOVEFLAG_FORWARD | MOVEFLAG_BACKWARD | MOVEFLAG_STRAFE_LEFT | MOVEFLAG_STRAFE_RIGHT
 };
 
+// Forward declare unified LiquidType values (matches GameData.Core.Enums.LiquidType)
+// Values may be either ADT indices (0..3) or WMO entry IDs (1,2,3,4,21).
+// 21 (NaxxSlime) is treated as Slime for mask logic.
+
 // Physics input from the game
 struct PhysicsInput
 {
@@ -120,16 +124,10 @@ struct PhysicsOutput
     // Updated movement flags
     uint32_t moveFlags;
 
-    // State flags
-    bool isGrounded;
-    bool isSwimming;
-    bool isFlying;
-    bool collided;
-
     // Height information
     float groundZ;             // Ground height at position
     float liquidZ;             // Liquid surface height (if any)
-    uint32_t liquidType;       // Liquid type identifier (from VMAP/ADT)
+    uint32_t liquidType;       // Unified liquid identifier (see LiquidType enum) from VMAP/ADT
 
     // Ground surface identification
     float groundNx;                // ground surface normal X

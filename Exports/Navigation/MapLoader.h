@@ -32,8 +32,9 @@ namespace MapFormat
     constexpr char MAP_LIQUID_MAGIC[] = "MLIQ";
 
     constexpr float INVALID_HEIGHT = -100000.0f;
-    constexpr float INVALID_HEIGHT_VALUE = INVALID_HEIGHT;
+    constexpr float INVALID_LIQUID_HEIGHT = -500.0f;
     constexpr float MAX_HEIGHT = 100000.0f;
+    inline bool IsValidLiquidLevel(float h) { return std::isfinite(h) && h > INVALID_LIQUID_HEIGHT; }
 
     // Height flags
     constexpr uint32_t MAP_HEIGHT_NO_HEIGHT = 0x0001;
