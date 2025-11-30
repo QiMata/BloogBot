@@ -19,6 +19,9 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern PhysicsOutput PhysicsStep(ref PhysicsInput input);
 
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
+        private static extern bool NativeLineOfSight(uint mapId, XYZ from, XYZ to);
+
         // ===============================
         // PUBLIC METHODS
         // ===============================
@@ -38,7 +41,7 @@ namespace PathfindingService.Repository
         // For backwards compatibility - maps to CalculatePath
         public bool LineOfSight(uint mapId, XYZ from, XYZ to)
         {
-            return false;
+            return NativeLineOfSight(mapId, from, to);
         }
     }
 
