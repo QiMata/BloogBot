@@ -89,8 +89,7 @@ PhysicsEngine* PhysicsEngine::s_instance = nullptr;
 
 PhysicsEngine::PhysicsEngine()
 	: m_vmapManager(nullptr),
-	m_initialized(false),
-	m_walkableCosMin(DEFAULT_WALKABLE_MIN_NORMAL_Z) {
+	m_initialized(false) {
 }
 
 PhysicsEngine::~PhysicsEngine()
@@ -109,12 +108,6 @@ void PhysicsEngine::Destroy()
 {
 	delete s_instance;
 	s_instance = nullptr;
-}
-
-
-float PhysicsEngine::GetWalkableCosMin() const
-{
-	return m_walkableCosMin;
 }
 
 // Expose MapLoader for read-only terrain queries
@@ -183,13 +176,6 @@ void PhysicsEngine::EnsureMapLoaded(uint32_t mapId)
 	}
 }
 
-float PhysicsEngine::GetTerrainHeight(uint32_t mapId, float x, float y)
-{
-	if (!m_mapLoader || !m_mapLoader->IsInitialized())
-		return INVALID_HEIGHT;
-	return m_mapLoader->GetHeight(mapId, x, y);
-}
-
 float PhysicsEngine::GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType)
 {
 	if (m_mapLoader && m_mapLoader->IsInitialized())
@@ -213,22 +199,6 @@ float PhysicsEngine::GetLiquidHeight(uint32_t mapId, float x, float y, float z, 
 	}
 
 	return VMAP::VMAP_INVALID_LIQUID_HEIGHT;
-}
-
-G3D::Vector3 PhysicsEngine::ComputeTerrainNormal(uint32_t mapId, float x, float y)
-{
-	const float s = 0.75f;
-	float hL = GetTerrainHeight(mapId, x - s, y);
-	float hR = GetTerrainHeight(mapId, x + s, y);
-	float hD = GetTerrainHeight(mapId, x, y - s);
-	float hU = GetTerrainHeight(mapId, x, y + s);
-	if (hL <= INVALID_HEIGHT || hR <= INVALID_HEIGHT || hD <= INVALID_HEIGHT || hU <= INVALID_HEIGHT)
-		return { 0, 0, 1 };
-	G3D::Vector3 dx(2 * s, 0, hR - hL);
-	G3D::Vector3 dy(0, 2 * s, hU - hD);
-	G3D::Vector3 n = dx.cross(dy);
-	float len = n.magnitude();
-	return (len < 0.0001f) ? G3D::Vector3(0, 0, 1) : n / len;
 }
 
 // =====================================================================================
@@ -366,16 +336,6 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 			st.isGrounded = true;
 			st.groundNormal = bestPen->normal.directionOrZero();
 			PHYS_INFO(PHYS_MOVE, "[GroundMove] Settle result: Penetrating adjust to z=" << st.z << " nZ=" << st.groundNormal.z);
-			return;
-		}
-
-		// ADT terrain fallback
-		float adtZ = GetTerrainHeight(input.mapId, st.x, st.y);
-		if (adtZ > PhysicsConstants::INVALID_HEIGHT) {
-			st.z = adtZ;
-			st.isGrounded = true;
-			st.groundNormal = G3D::Vector3(0, 0, 1);
-			PHYS_INFO(PHYS_MOVE, "[GroundMove] Settle result: ADT fallback z=" << st.z);
 			return;
 		}
 
@@ -786,69 +746,12 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	}
 
 	// Build diagnostic summary of capsule sweep (VMAP) and ADT terrain triangles (capsule AABB)
-	// Compute intended movement distance using current decision for swim/ground speed
 	float diagSpeed = CalculateMoveSpeed(input, isSwimming);
 	G3D::Vector3 diagMoveDir = intent.hasInput ? G3D::Vector3(intent.dir.x, intent.dir.y, 0.0f) : G3D::Vector3(0,0,0);
 	float diagIntendedDist = (diagMoveDir.magnitude() > 0.0f) ? (diagSpeed * dt) : 0.0f;
 
-	// Diagnostic capsule spanning step up/down around feet
-	float capBottom = (st.z + r) - STEP_DOWN_HEIGHT;
-	float capTop = (st.z + r) + STEP_HEIGHT;
-	float fullSegLen = (h - 2.0f * r);
-	float desiredSegLen = capTop - capBottom;
-	if (desiredSegLen > fullSegLen) {
-		float overflow = desiredSegLen - fullSegLen;
-		capBottom += overflow * 0.5f;
-		capTop -= overflow * 0.5f;
-	}
-	CapsuleCollision::Capsule diagCap;
-	diagCap.p0 = CapsuleCollision::Vec3(st.x, st.y, capBottom);
-	diagCap.p1 = CapsuleCollision::Vec3(st.x, st.y, capTop);
-	diagCap.r = r;
+	SweepDiagnostics sweepDiag = ComputeCapsuleSweepDiagnostics(input.mapId, st.x, st.y, st.z, r, h, diagMoveDir, diagIntendedDist);
 
-	// VMAP sweep
-	std::vector<SceneHit> sweepHits;
-	if (m_vmapManager && diagIntendedDist > 0.0f)
-		sweepHits = m_vmapManager->SweepCapsuleAll(input.mapId, diagCap, diagMoveDir, diagIntendedDist);
-	// Compute summary stats for VMAP hits
-	size_t hitCount = sweepHits.size();
-	size_t penCount = 0, nonPenCount = 0, walkableNP = 0;
-	float earliestNP = FLT_MAX;
-	float hitMinZ = FLT_MAX, hitMaxZ = -FLT_MAX;
-	std::set<uint32_t> uniqueInst;
-	for (const auto& hHit : sweepHits) {
-		if (hHit.startPenetrating) penCount++; else nonPenCount++;
-		if (!hHit.startPenetrating) {
-			earliestNP = std::min(earliestNP, hHit.distance);
-			if (hHit.normal.z >= m_walkableCosMin) walkableNP++;
-		}
-		hitMinZ = std::min(hitMinZ, hHit.point.z);
-		hitMaxZ = std::max(hitMaxZ, hHit.point.z);
-		uniqueInst.insert(hHit.instanceId);
-	}
-	if (earliestNP == FLT_MAX) earliestNP = -1.0f;
-	if (hitCount == 0) { hitMinZ = 0.0f; hitMaxZ = 0.0f; }
-
-	// ADT terrain triangles within swept AABB
-	float endX = st.x + diagMoveDir.x * diagIntendedDist;
-	float endY = st.y + diagMoveDir.y * diagIntendedDist;
-	float minX = std::min(st.x, endX) - r;
-	float minY = std::min(st.y, endY) - r;
-	float maxX = std::max(st.x, endX) + r;
-	float maxY = std::max(st.y, endY) + r;
-	std::vector<MapFormat::TerrainTriangle> triBuf;
-	if (m_mapLoader && m_mapLoader->IsInitialized()) {
-		m_mapLoader->GetTerrainTriangles(input.mapId, minX, minY, maxX, maxY, triBuf);
-	}
-	size_t triCount = triBuf.size();
-	float triMinZ = FLT_MAX, triMaxZ = -FLT_MAX;
-	for (const auto& t : triBuf) {
-		triMinZ = std::min(triMinZ, std::min(t.az, std::min(t.bz, t.cz)));
-		triMaxZ = std::max(triMaxZ, std::max(t.az, std::max(t.bz, t.cz)));
-	}
-	if (triCount == 0) { triMinZ = 0.0f; triMaxZ = 0.0f; }
-
-	// Consolidated summary log replacing old WaterDiag
 	PHYS_INFO(PHYS_MOVE,
 		std::string("[Step] SurfaceSummary\n")
 		<< "  posZ=" << st.z
@@ -858,10 +761,15 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 		<< " VMAP=" << vmapLiquidLevel << "(t=" << (unsigned)vmapLiquidType << ")"
 		<< " chosen=" << liquidLevel << "(t=" << (unsigned)liquidType << ")"
 		<< " immersion=" << swimImmersion << " thr=" << swimImmersionThreshold << " swim=" << (isSwimming?1:0) << "\n"
-		<< "  VMAP Sweep: hits=" << hitCount << " nonPen=" << nonPenCount << " pen=" << penCount
-		<< " earliestNP=" << earliestNP << " zRange=[" << hitMinZ << "," << hitMaxZ << "] walkableNP=" << walkableNP
-		<< " instances=" << uniqueInst.size() << "\n"
-		<< "  ADT Tris: count=" << triCount << " zRange=[" << triMinZ << "," << triMaxZ << "]");
+		<< "  VMAP OverlapHits: count=" << sweepDiag.vmapHitCount << " nonPen=" << sweepDiag.vmapNonPenCount << " pen=" << sweepDiag.vmapPenCount
+		<< " earliestNP=" << sweepDiag.vmapEarliestNonPen << " zRange=[" << sweepDiag.vmapHitMinZ << "," << sweepDiag.vmapHitMaxZ << "] walkableNP=" << sweepDiag.vmapWalkableNonPen
+		<< " instances=" << sweepDiag.vmapUniqueInstanceCount << "\n"
+		<< "  ADT Triangles: count=" << sweepDiag.terrainTriCount << " zRange=[" << sweepDiag.terrainMinZ << "," << sweepDiag.terrainMaxZ << "]"
+		<< "  ADT OverlapHits: count=" << sweepDiag.adtPenetratingHitCount << " zRange=[" << sweepDiag.adtHitMinZ << "," << sweepDiag.adtHitMaxZ << "]\n"
+		<< "  Selection: standFound=" << (sweepDiag.standFound?1:0)
+		<< " standZ=" << sweepDiag.standZ
+		<< " source=" << (sweepDiag.standSource == SweepDiagnostics::StandSource::VMAP ? "VMAP" : sweepDiag.standSource == SweepDiagnostics::StandSource::ADT ? "ADT" : "None")
+	);
 
 	// 3. Delegate movement to the appropriate helper method
 	float moveSpeed = CalculateMoveSpeed(input, isSwimming);
@@ -961,4 +869,201 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 		<< " primarySrc=" << primarySrc
 		<< " finalSrc=" << finalSrc << " normalized=" << out.liquidType);
 	return out;
+}
+
+// =====================================================================================
+// Diagnostic helpers
+// =====================================================================================
+PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
+    uint32_t mapId,
+    float x,
+    float y,
+    float z,
+    float r,
+    float h,
+    const G3D::Vector3& moveDir,
+    float intendedDist)
+{
+    SweepDiagnostics diag{};
+
+    // Build diagnostic capsule spanning step up/down around feet
+    float capBottom = (z + r);
+    float capTop = (z - r) + h;
+    CapsuleCollision::Capsule diagCap;
+    diagCap.p0 = CapsuleCollision::Vec3(x, y, capBottom);
+    diagCap.p1 = CapsuleCollision::Vec3(x, y, capTop);
+    diagCap.r = r + 0.02f;
+
+    // VMAP sweep
+    std::vector<SceneHit> vmapHits;
+    if (m_vmapManager && intendedDist > 0.0f)
+        vmapHits = m_vmapManager->SweepCapsuleAll(mapId, diagCap, moveDir, intendedDist);
+
+    // ADT terrain triangles within swept AABB
+    float endX = x + moveDir.x * intendedDist;
+    float endY = y + moveDir.y * intendedDist;
+    float minX = std::min(x, endX) - r;
+    float minY = std::min(y, endY) - r;
+    float maxX = std::max(x, endX) + r;
+    float maxY = std::max(y, endY) + r;
+    std::vector<MapFormat::TerrainTriangle> triBuf;
+    if (m_mapLoader && m_mapLoader->IsInitialized()) {
+        m_mapLoader->GetTerrainTriangles(mapId, minX, minY, maxX, maxY, triBuf);
+    }
+
+    // Evaluate ADT triangles against the diagnostic capsule and append penetrating hits
+    std::vector<SceneHit> adtHits;
+    if (!triBuf.empty())
+    {
+        CapsuleCollision::Capsule Cw; Cw.p0 = { x, y, capBottom }; Cw.p1 = { x, y, capTop }; Cw.r = r;
+        for (size_t tIdx = 0; tIdx < triBuf.size(); ++tIdx)
+        {
+            const auto& tw = triBuf[tIdx];
+            CapsuleCollision::Triangle Tterrain; Tterrain.a = { tw.ax, tw.ay, tw.az }; Tterrain.b = { tw.bx, tw.by, tw.bz }; Tterrain.c = { tw.cx, tw.cy, tw.cz }; Tterrain.doubleSided = false; Tterrain.collisionMask = 0xFFFFFFFFu;
+            CapsuleCollision::Hit chW;
+            if (CapsuleCollision::intersectCapsuleTriangle(Cw, Tterrain, chW))
+            {
+                G3D::Vector3 wA(tw.ax, tw.ay, tw.az), wB(tw.bx, tw.by, tw.bz), wC(tw.cx, tw.cy, tw.cz);
+                G3D::Vector3 wN = (wB - wA).cross(wC - wA).directionOrZero();
+                if (wN.z < 0.0f) wN = -wN;
+                G3D::Vector3 wPoint(chW.point.x, chW.point.y, chW.point.z);
+                SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = wN; h.point = wPoint; h.triIndex = (int)tIdx; h.instanceId = 0; h.startPenetrating = true; h.penetrationDepth = chW.depth; h.normalFlipped = false;
+                adtHits.push_back(h);
+            }
+        }
+    }
+
+    // Combined hits for aggregate stats
+    std::vector<SceneHit> sweepHits;
+    sweepHits.reserve(vmapHits.size() + adtHits.size());
+    sweepHits.insert(sweepHits.end(), vmapHits.begin(), vmapHits.end());
+    sweepHits.insert(sweepHits.end(), adtHits.begin(), adtHits.end());
+
+    // VMAP-only stats
+    diag.vmapHitCount = vmapHits.size();
+    float vmapMinZ = FLT_MAX, vmapMaxZ = -FLT_MAX;
+    size_t vmapPen = 0, vmapNonPen = 0, vmapWalkNP = 0; float vmapEarliest = FLT_MAX; std::set<uint32_t> vmapInst;
+    for (const auto& hHit : vmapHits) {
+        if (hHit.startPenetrating) vmapPen++; else vmapNonPen++;
+        if (!hHit.startPenetrating) {
+            vmapEarliest = std::min(vmapEarliest, hHit.distance);
+            if (hHit.normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) vmapWalkNP++;
+        }
+        vmapMinZ = std::min(vmapMinZ, hHit.point.z);
+        vmapMaxZ = std::max(vmapMaxZ, hHit.point.z);
+        vmapInst.insert(hHit.instanceId);
+    }
+    if (vmapEarliest == FLT_MAX) vmapEarliest = -1.0f;
+    if (diag.vmapHitCount == 0) { vmapMinZ = 0.0f; vmapMaxZ = 0.0f; }
+    diag.vmapPenCount = vmapPen;
+    diag.vmapNonPenCount = vmapNonPen;
+    diag.vmapWalkableNonPen = vmapWalkNP;
+    diag.vmapEarliestNonPen = vmapEarliest;
+    diag.vmapHitMinZ = vmapMinZ;
+    diag.vmapHitMaxZ = vmapMaxZ;
+    diag.vmapUniqueInstanceCount = vmapInst.size();
+
+    // ADT terrain diagnostics (triangle z-range)
+    diag.terrainTriCount = triBuf.size();
+    float triMinZ = FLT_MAX, triMaxZ = -FLT_MAX;
+    for (const auto& t : triBuf) {
+        triMinZ = std::min(triMinZ, std::min(t.az, std::min(t.bz, t.cz)));
+        triMaxZ = std::max(triMaxZ, std::max(t.az, std::max(t.bz, t.cz)));
+    }
+    if (diag.terrainTriCount == 0) { triMinZ = 0.0f; triMaxZ = 0.0f; }
+    diag.terrainMinZ = triMinZ;
+    diag.terrainMaxZ = triMaxZ;
+
+    // ADT overlap hits (penetrating-only) stats
+    diag.adtPenetratingHitCount = adtHits.size();
+    float adtMinZ = FLT_MAX, adtMaxZ = -FLT_MAX;
+    for (const auto& hHit : adtHits) {
+        adtMinZ = std::min(adtMinZ, hHit.point.z);
+        adtMaxZ = std::max(adtMaxZ, hHit.point.z);
+    }
+    if (diag.adtPenetratingHitCount == 0) { adtMinZ = 0.0f; adtMaxZ = 0.0f; }
+    diag.adtHitMinZ = adtMinZ;
+    diag.adtHitMaxZ = adtMaxZ;
+
+    // Combined stats for sweepHits
+    diag.hitCount = sweepHits.size();
+    float hitMinZ = FLT_MAX, hitMaxZ = -FLT_MAX;
+    size_t penCount = 0, nonPenCount = 0, walkableNP = 0; float earliestNP = FLT_MAX; std::set<uint32_t> uniqueInst;
+    for (const auto& hHit : sweepHits) {
+        if (hHit.startPenetrating) penCount++; else nonPenCount++;
+        if (!hHit.startPenetrating) {
+            earliestNP = std::min(earliestNP, hHit.distance);
+            if (hHit.normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) walkableNP++;
+        }
+        hitMinZ = std::min(hitMinZ, hHit.point.z);
+        hitMaxZ = std::max(hitMaxZ, hHit.point.z);
+        uniqueInst.insert(hHit.instanceId);
+    }
+    if (earliestNP == FLT_MAX) earliestNP = -1.0f;
+    if (diag.hitCount == 0) { hitMinZ = 0.0f; hitMaxZ = 0.0f; }
+    diag.penCount = penCount;
+    diag.nonPenCount = nonPenCount;
+    diag.walkableNonPen = walkableNP;
+    diag.earliestNonPen = earliestNP;
+    diag.hitMinZ = hitMinZ;
+    diag.hitMaxZ = hitMaxZ;
+    diag.uniqueInstanceCount = uniqueInst.size();
+
+    // New: emulate ProcessGroundMovement selection to report which surface height would be used
+    // Use the same thresholds
+    const float stepUpLimit = PhysicsConstants::STEP_HEIGHT;
+    const float stepDownLimit = PhysicsConstants::STEP_DOWN_HEIGHT;
+    const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+
+    auto selectStandFromHits = [&](const std::vector<SceneHit>& hits, SweepDiagnostics::StandSource src) {
+        if (hits.empty()) return false;
+        // 1) Start penetration on walkable surface
+        const SceneHit& firstHit = hits.front();
+        if (firstHit.startPenetrating && firstHit.normal.z >= walkableCosMin) {
+            // Prefer stepping up onto the closest walkable penetrating contact if mixed penetration exists
+            bool hasUnwalkablePen = false; const SceneHit* bestWalkPen = nullptr; float bestWalkDz = FLT_MAX;
+            for (const auto& h : hits) {
+                if (!h.startPenetrating) continue;
+                if (h.normal.z >= walkableCosMin) {
+                    float dz = h.point.z - z;
+                    if (dz >= 0.0f && dz <= stepUpLimit + 0.01f) {
+                        if (dz < bestWalkDz) { bestWalkDz = dz; bestWalkPen = &h; }
+                    }
+                } else {
+                    hasUnwalkablePen = true;
+                }
+            }
+            if (bestWalkPen && hasUnwalkablePen) {
+                diag.standFound = true; diag.standZ = bestWalkPen->point.z; diag.standSource = src; return true;
+            }
+            // Otherwise slide along plane -> target Z computed from plane; for diagnostics, use contact point height
+            diag.standFound = true; diag.standZ = firstHit.point.z; diag.standSource = src; return true;
+        }
+        // 2) Earliest walkable non-penetrating step candidate
+        for (const auto& h : hits) {
+            if (h.startPenetrating) continue;
+            if (h.distance <= 1e-4f) continue;
+            if (h.normal.z < walkableCosMin) continue;
+            float dz = h.point.z - z;
+            if (!(dz >= 0.0f && dz <= stepUpLimit)) continue;
+            diag.standFound = true; diag.standZ = h.point.z; diag.standSource = src; return true;
+        }
+        // 3) Obstruction branch: walkable normal within step ranges
+        const SceneHit& hit = hits.front();
+        if (hit.normal.z >= walkableCosMin) {
+            float dz = hit.point.z - z;
+            if ((dz >= 0.0f && dz <= stepUpLimit) || (dz < 0.0f && -dz <= stepDownLimit)) {
+                diag.standFound = true; diag.standZ = hit.point.z; diag.standSource = src; return true;
+            }
+        }
+        return false;
+    };
+
+    // Try VMAP hits first, then ADT penetrating hits
+    bool decided = selectStandFromHits(vmapHits, SweepDiagnostics::StandSource::VMAP);
+    if (!decided) {
+        decided = selectStandFromHits(adtHits, SweepDiagnostics::StandSource::ADT);
+    }
+
+    return diag;
 }

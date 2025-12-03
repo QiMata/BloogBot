@@ -64,10 +64,6 @@ public:
     // Main physics step - completely stateless
     PhysicsOutput Step(const PhysicsInput& input, float dt);
 
-    // Configuration: walkable slope threshold (cosine of max slope angle)
-    void SetWalkableCosMin(float cosMin);
-    float GetWalkableCosMin() const;
-
     // Surface information
     enum class SurfaceSource
     {
@@ -87,6 +83,56 @@ public:
     // New: expose MapLoader for read-only terrain queries
     MapLoader* GetMapLoader() const;
 
+    // New: diagnostic summary for capsule sweep and terrain triangles
+    struct SweepDiagnostics
+    {
+        // Combined summary (VMAP + ADT hits appended)
+        size_t hitCount = 0;
+        size_t penCount = 0;
+        size_t nonPenCount = 0;
+        size_t walkableNonPen = 0;
+        float earliestNonPen = -1.0f;
+        float hitMinZ = 0.0f;
+        float hitMaxZ = 0.0f;
+        size_t uniqueInstanceCount = 0;
+
+        // VMAP-only summary
+        size_t vmapHitCount = 0;
+        size_t vmapPenCount = 0;
+        size_t vmapNonPenCount = 0;
+        size_t vmapWalkableNonPen = 0;
+        float vmapEarliestNonPen = -1.0f;
+        float vmapHitMinZ = 0.0f;
+        float vmapHitMaxZ = 0.0f;
+        size_t vmapUniqueInstanceCount = 0;
+
+        // ADT terrain diagnostics
+        size_t terrainTriCount = 0;
+        float terrainMinZ = 0.0f;
+        float terrainMaxZ = 0.0f;
+        // ADT overlap hits (penetrating) summary
+        size_t adtPenetratingHitCount = 0;
+        float adtHitMinZ = 0.0f;
+        float adtHitMaxZ = 0.0f;
+
+        // Selected standing placement using inflated radius (+0.02)
+        bool standFound = false;
+        float standZ = 0.0f;
+        enum class StandSource { None, VMAP, ADT };
+        StandSource standSource = StandSource::None;
+    };
+
+    // Compute capsule sweep diagnostics and terrain triangle stats within the swept AABB
+    SweepDiagnostics ComputeCapsuleSweepDiagnostics(
+        uint32_t mapId,
+        float x,
+        float y,
+        float z,
+        float radius,
+        float height,
+        const G3D::Vector3& moveDir,
+        float intendedDist);
+
 private:
     PhysicsEngine();
     ~PhysicsEngine();
@@ -100,9 +146,6 @@ private:
     VMAP::VMapManager2* m_vmapManager;
     std::unique_ptr<MapLoader> m_mapLoader;
     bool m_initialized;
-
-    // Tunables
-    float m_walkableCosMin; // cosine of max slope angle considered walkable
 
     // Movement state (created fresh each Step call)
     struct MovementState
@@ -175,7 +218,6 @@ private:
 
     // Core height/collision methods
     void EnsureMapLoaded(uint32_t mapId);
-    float GetTerrainHeight(uint32_t mapId, float x, float y);
     float GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType);
 
     // Movement processing (simplified authentic style)
@@ -187,13 +229,6 @@ private:
     // Helper methods
     float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming);
     void ApplyGravity(MovementState& state, float dt);
-
-    // Create player cylinder at position with specified dimensions
-    VMAP::Cylinder CreatePlayerCylinder(float x, float y, float z,
-        float radius, float height) const;
-
-    // New helpers (non-const to allow calling non-const queries)
-    G3D::Vector3 ComputeTerrainNormal(uint32_t mapId, float x, float y);
 
     // Phase 1 extracted helpers
     MovementIntent BuildMovementIntent(const PhysicsInput& input, float orientation) const;
