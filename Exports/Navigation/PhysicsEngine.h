@@ -4,6 +4,7 @@
 #include "PhysicsBridge.h"
 #include <memory>
 #include <cmath>
+#include <vector>
 #include "Vector3.h" // Needed for by-value usage of G3D::Vector3
 
 // Forward declarations
@@ -120,6 +121,28 @@ public:
         float standZ = 0.0f;
         enum class StandSource { None, VMAP, ADT };
         StandSource standSource = StandSource::None;
+
+        // Movement manifold built from collective triangle hits
+        struct ContactPlane {
+            G3D::Vector3 normal; // unit normal
+            G3D::Vector3 point;  // point on plane (world)
+            bool walkable;       // normal.z >= walkable threshold
+            bool penetrating;    // came from start penetration
+        };
+        std::vector<ContactPlane> planes;       // all contact planes considered
+        std::vector<ContactPlane> walkablePlanes; // subset of planes that are walkable
+        G3D::Vector3 slideDir;                  // projected movement direction along the primary plane
+        bool slideDirValid = false;             // whether slideDir was computed
+        ContactPlane primaryPlane;              // the plane chosen for movement resolution
+        bool hasPrimaryPlane = false;
+
+        // Extended manifold diagnostics
+        G3D::Vector3 intersectionLineDir;       // when two walkable planes found, their intersection direction
+        bool hasIntersectionLine = false;       // true if intersectionLineDir was computed
+        float xyReduction = 1.0f;               // horizontal reduction factor when sliding on slope
+        float suggestedXYDist = 0.0f;           // suggested XY travel distance respecting manifold projection
+        int constraintIterations = 0;           // number of projection iterations that would be used
+        float slopeClampThresholdZ = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z; // threshold used for clamping
     };
 
     // Compute capsule sweep diagnostics and terrain triangle stats within the swept AABB
@@ -132,6 +155,18 @@ public:
         float height,
         const G3D::Vector3& moveDir,
         float intendedDist);
+
+    // New: liquid evaluation result
+    struct LiquidInfo {
+        float level = 0.0f;
+        uint32_t type = 0u;
+        bool fromVmap = false;
+        bool hasLevel = false;
+        bool isSwimming = false;
+    };
+
+    // Evaluate liquid at a position and determine swimming (water-only), preferring VMAP
+    LiquidInfo EvaluateLiquidAt(uint32_t mapId, float x, float y, float z) const;
 
 private:
     PhysicsEngine();
