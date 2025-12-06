@@ -128,6 +128,7 @@ public:
             G3D::Vector3 point;  // point on plane (world)
             bool walkable;       // normal.z >= walkable threshold
             bool penetrating;    // came from start penetration
+            StandSource source = StandSource::None; // origin of plane (VMAP or ADT)
         };
         std::vector<ContactPlane> planes;       // all contact planes considered
         std::vector<ContactPlane> walkablePlanes; // subset of planes that are walkable
@@ -143,6 +144,25 @@ public:
         float suggestedXYDist = 0.0f;           // suggested XY travel distance respecting manifold projection
         int constraintIterations = 0;           // number of projection iterations that would be used
         float slopeClampThresholdZ = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z; // threshold used for clamping
+
+        // Continuous collision detection & depenetration diagnostics
+        float minTOI = -1.0f;                   // minimum time of impact in [0,1]
+        G3D::Vector3 depenetration;             // accumulated depenetration vector from penetrating contacts
+        float depenetrationMagnitude = 0.0f;    // length of depenetration
+        float suggestedSkinWidth = 0.0f;        // small inset to avoid immediate re-penetration
+
+        // Liquid diagnostics (start/end of sweep)
+        bool liquidStartHasLevel = false;
+        float liquidStartLevel = 0.0f;
+        uint32_t liquidStartType = 0u;
+        bool liquidStartFromVmap = false;
+        bool liquidStartSwimming = false;
+
+        bool liquidEndHasLevel = false;
+        float liquidEndLevel = 0.0f;
+        uint32_t liquidEndType = 0u;
+        bool liquidEndFromVmap = false;
+        bool liquidEndSwimming = false;
     };
 
     // Compute capsule sweep diagnostics and terrain triangle stats within the swept AABB

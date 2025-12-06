@@ -830,6 +830,59 @@ namespace CapsuleCollision
         return false;
     }
 
+    // New: Convenience wrapper for TOI-based moving capsule vs triangle test.
+    // Returns true if a collision occurs within [0,1] along the sweep.
+    // Outputs:
+    //  - toi: time of impact in [0,1]
+    //  - normal: contact normal at impact (world/local depending on triangle space used by caller)
+    //  - point: impact point on triangle
+    //  - penetrationDepth: depth at time of impact (0 for non-penetrating TOI; if starting overlapped, depth > 0).
+    inline bool intersectMovingCapsuleTriangle(const Capsule& start,
+                                               const Vec3& dir,
+                                               float distance,
+                                               const Triangle& T,
+                                               float& toi,
+                                               Vec3& point,
+                                               Vec3& normal,
+                                               float& penetrationDepth)
+    {
+        toi = -1.0f;
+        penetrationDepth = 0.0f;
+        point = T.a;
+        normal = Vec3(0, 1, 0);
+        if (distance <= 0.0f)
+            return false;
+        Vec3 vel = Vec3::normalizeSafe(dir, Vec3(1,0,0)) * distance;
+
+        // If initially overlapping, report t=0 with penetration depth
+        Hit h0;
+        if (intersectCapsuleTriangle(start, T, h0))
+        {
+            toi = 0.0f;
+            point = h0.point;
+            normal = h0.normal;
+            penetrationDepth = h0.depth;
+            return true;
+        }
+
+        float t; Vec3 n; Vec3 p;
+        if (capsuleTriangleSweep(start, vel, T, t, n, p))
+        {
+            toi = cc_clamp(t, 0.0f, 1.0f);
+            point = p;
+            normal = n;
+            // For non-penetrating TOI, approximate depth at impact with discrete check at impact pose
+            Capsule impact = start; impact.p0 = impact.p0 + vel * toi; impact.p1 = impact.p1 + vel * toi;
+            Hit hImp;
+            if (intersectCapsuleTriangle(impact, T, hImp))
+                penetrationDepth = hImp.depth;
+            else
+                penetrationDepth = 0.0f;
+            return true;
+        }
+        return false;
+    }
+
     // BEGIN: Wicked helpers
     using Vector3 = G3D::Vector3; // re-expose engine Vector3 without changing ABI
 

@@ -281,6 +281,21 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	MovementState& st, float dt, float speed,
 	float radius, float height)
 {
+	// Suppress GroundMove-specific InputSummary; consolidated one is emitted in Step
+	/*PHYS_INFO(PHYS_MOVE,
+		std::string("[GroundMove] InputSummary\n")
+		<< "  map=" << input.mapId << " dt=" << dt << "\n"
+		<< "  pos=(" << st.x << "," << st.y << "," << st.z << ")\n"
+		<< "  velIn=(" << input.vx << "," << input.vy << "," << input.vz << ")\n"
+		<< "  intentV=(" << st.vx << "," << st.vy << ") intendedDist=" << intendedDist << "\n"
+		<< "  flags=" << FormatMoveFlags(input.moveFlags) << " (0x" << std::hex << input.moveFlags << std::dec << ")\n"
+		<< "  orient=" << input.orientation << " pitch=" << input.pitch << "\n"
+		<< "  size: radius=" << radius << " height=" << height << "\n"
+		<< "  speeds[wlk=" << input.walkSpeed << " run=" << input.runSpeed << " back=" << input.runBackSpeed
+		<< " swim=" << input.swimSpeed << " swimBack=" << input.swimBackSpeed << " fly=" << input.flightSpeed << "]\n"
+		<< "  fallTime=" << input.fallTime << " transportGuid=" << input.transportGuid << "\n"
+		<< "  spline=" << (input.hasSplinePath?1:0) << " splineSpeed=" << input.splineSpeed << " curSplineIdx=" << input.currentSplineIndex);*/
+
 	// PHYS_INFO(PHYS_MOVE, "[GroundMove] Start pos=" << st.x << "," << st.y << "," << st.z << " vel=" << st.vx << "," << st.vy << " dt=" << dt);
 
 	// Track previous position for actual velocity reporting in summary
@@ -383,7 +398,7 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 	// PHYS_INFO(PHYS_MOVE, "intendedDist=" << intendedDist);
 
 	// Consolidated input summary (replaces individual logs above)
-	PHYS_INFO(PHYS_MOVE,
+	/*PHYS_INFO(PHYS_MOVE,
 		std::string("[GroundMove] InputSummary\n")
 		<< "  map=" << input.mapId << " dt=" << dt << "\n"
 		<< "  pos=(" << st.x << "," << st.y << "," << st.z << ")\n"
@@ -395,7 +410,7 @@ void PhysicsEngine::ProcessGroundMovement(const PhysicsInput& input, const Movem
 		<< "  speeds[wlk=" << input.walkSpeed << " run=" << input.runSpeed << " back=" << input.runBackSpeed
 		<< " swim=" << input.swimSpeed << " swimBack=" << input.swimBackSpeed << " fly=" << input.flightSpeed << "]\n"
 		<< "  fallTime=" << input.fallTime << " transportGuid=" << input.transportGuid << "\n"
-		<< "  spline=" << (input.hasSplinePath?1:0) << " splineSpeed=" << input.splineSpeed << " curSplineIdx=" << input.currentSplineIndex);
+		<< "  spline=" << (input.hasSplinePath?1:0) << " splineSpeed=" << input.splineSpeed << " curSplineIdx=" << input.currentSplineIndex);*/
 
 	if (intendedDist <= 0.0f) {
 		PHYS_INFO(PHYS_MOVE, "[GroundMove] Decision=ZeroDistance");
@@ -701,14 +716,15 @@ void PhysicsEngine::ProcessSwimMovement(const PhysicsInput& input, const Movemen
 // =====================================================================================
 PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 {
-	PHYS_TRACE(PHYS_MOVE, " map=" << input.mapId << " dt=" << dt << "\n"
+	// Suppress per-mode input logs; provide a consolidated input summary
+	/*PHYS_TRACE(PHYS_MOVE, " map=" << input.mapId << " dt=" << dt << "\n"
 		<< "  Input pos=(" << input.x << "," << input.y << "," << input.z << ") vel=(" << input.vx << "," << input.vy << "," << input.vz << ")\n"
 		<< "  flags=" << FormatMoveFlags(input.moveFlags) << " (0x" << std::hex << input.moveFlags << std::dec << ")\n"
 		<< "  orient=" << input.orientation << " pitch=" << input.pitch << "\n"
 		<< "  size: radius=" << input.radius << " height=" << input.height << "\n"
 		<< "  speeds[wlk=" << input.walkSpeed << " run=" << input.runSpeed << " back=" << input.runBackSpeed
 		<< " swim=" << input.swimSpeed << " swimBack=" << input.swimBackSpeed << " fly=" << input.flightSpeed << "]\n"
-		<< "  fallTime=" << input.fallTime);
+		<< "  fallTime=" << input.fallTime);*/
 
 	PhysicsOutput out{};
 	if (!m_initialized)
@@ -732,6 +748,26 @@ PhysicsOutput PhysicsEngine::Step(const PhysicsInput& input, float dt)
 	st.fallTime = input.fallTime;
 	st.groundNormal = { 0, 0, 1 };
 	MovementIntent intent = BuildMovementIntent(input, st.orientation);
+
+	// Consolidated InputSummary (independent of movement mode)
+	{
+		float moveSpeed = CalculateMoveSpeed(input, false);
+		G3D::Vector3 intentV = intent.hasInput ? G3D::Vector3(intent.dir.x * moveSpeed, intent.dir.y * moveSpeed, 0.0f) : G3D::Vector3(0,0,0);
+		float intendedDist = (intent.hasInput ? std::sqrt(intentV.x * intentV.x + intentV.y * intentV.y) * dt : 0.0f);
+		PHYS_INFO(PHYS_MOVE,
+			std::string("[Step] InputSummary\n")
+			<< "  map=" << input.mapId << " dt=" << dt << "\n"
+			<< "  pos=(" << st.x << "," << st.y << "," << st.z << ")\n"
+			<< "  velIn=(" << input.vx << "," << input.vy << "," << input.vz << ")\n"
+			<< "  intentV=(" << intentV.x << "," << intentV.y << ") intendedDist=" << intendedDist << "\n"
+			<< "  flags=" << FormatMoveFlags(input.moveFlags) << " (0x" << std::hex << input.moveFlags << std::dec << ")\n"
+			<< "  orient=" << input.orientation << " pitch=" << input.pitch << "\n"
+			<< "  size: radius=" << r << " height=" << h << "\n"
+			<< "  speeds[wlk=" << input.walkSpeed << " run=" << input.runSpeed << " back=" << input.runBackSpeed
+			<< " swim=" << input.swimSpeed << " swimBack=" << input.swimBackSpeed << " fly=" << input.flightSpeed << "]\n"
+			<< "  fallTime=" << input.fallTime << " transportGuid=" << input.transportGuid << "\n"
+			<< "  spline=" << (input.hasSplinePath?1:0) << " splineSpeed=" << input.splineSpeed << " curSplineIdx=" << input.currentSplineIndex);
+	}
 
 	// Capture previous position to compute actual velocity at end of step
 	G3D::Vector3 prevPos(st.x, st.y, st.z);
@@ -852,21 +888,23 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
     diagCap.p1 = CapsuleCollision::Vec3(x, y, capTop);
     diagCap.r = r + 1e-6f;
 
-    // Special case: no input / zero intended distance -> prefer downward sweep
+    // Evaluate liquid at start to determine swimming; used to suppress ground constraints
+    LiquidInfo liqStart = EvaluateLiquidAt(mapId, x, y, z);
+    bool startSwimming = liqStart.isSwimming;
+
+    // Special case: no input / zero intended distance -> prefer downward sweep (only if not swimming)
     const bool noInput = intendedDist <= 0.0f || moveDir.magnitude() <= 1e-6f;
     std::vector<SceneHit> vmapHits;
-    if (m_vmapManager && !noInput && intendedDist > 0.0f)
+    if (m_vmapManager && !noInput && intendedDist > 0.0f && !startSwimming)
         vmapHits = m_vmapManager->SweepCapsuleAll(mapId, diagCap, moveDir, intendedDist);
 
-    // If no input, gather top-down VMAP contacts using downward sweep
+    // If no input, gather top-down VMAP contacts using downward sweep (only if not swimming)
     std::vector<SceneHit> vmapDownHits;
-    if (m_vmapManager && noInput) {
+    if (m_vmapManager && noInput && !startSwimming) {
         G3D::Vector3 downDir(0,0,-1);
         float settleDist = std::max(3.0f, h + 2.0f);
         vmapDownHits = m_vmapManager->SweepCapsuleAll(mapId, diagCap, downDir, settleDist);
-        // Prefer highest upward-facing contact for stand
         if (!vmapDownHits.empty()) {
-            // Replace vmapHits contents with downward hits for manifold processing
             vmapHits = vmapDownHits;
         }
     }
@@ -893,14 +931,12 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
             if (toi < 0.0f) toi = 0.0f; else if (toi > 1.0f) toi = 1.0f;
             h.time = toi;
         }
-        // Order VMAP hits: penetrating first (t=0), then ascending TOI
         std::stable_sort(vmapHits.begin(), vmapHits.end(), [](const SceneHit& a, const SceneHit& b) {
             if (a.startPenetrating != b.startPenetrating)
                 return a.startPenetrating > b.startPenetrating;
             return a.time < b.time;
         });
     } else if (noInput) {
-        // Downward sweep: sort by point.z descending to prefer highest surfaces
         std::stable_sort(vmapHits.begin(), vmapHits.end(), [](const SceneHit& a, const SceneHit& b) {
             if (std::fabs(a.point.z - b.point.z) > 1e-4f) return a.point.z > b.point.z;
             return a.triIndex < b.triIndex;
@@ -918,7 +954,6 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
     if (m_mapLoader && m_mapLoader->IsInitialized()) {
         m_mapLoader->GetTerrainTriangles(mapId, minX, minY, maxX, maxY, triBuf);
     }
-    // Populate terrain triangle diagnostics
     {
         diag.terrainTriCount = triBuf.size();
         float tMinZ = FLT_MAX, tMaxZ = -FLT_MAX;
@@ -930,9 +965,25 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
         diag.terrainMinZ = tMinZ; diag.terrainMaxZ = tMaxZ;
     }
 
+    // Liquid diagnostics at start/end of sweep
+    {
+        diag.liquidStartHasLevel = liqStart.hasLevel;
+        diag.liquidStartLevel = liqStart.level;
+        diag.liquidStartType = liqStart.type;
+        diag.liquidStartFromVmap = liqStart.fromVmap;
+        diag.liquidStartSwimming = liqStart.isSwimming;
+
+        LiquidInfo liqEnd = noInput ? liqStart : EvaluateLiquidAt(mapId, endX, endY, z);
+        diag.liquidEndHasLevel = liqEnd.hasLevel;
+        diag.liquidEndLevel = liqEnd.level;
+        diag.liquidEndType = liqEnd.type;
+        diag.liquidEndFromVmap = liqEnd.fromVmap;
+        diag.liquidEndSwimming = liqEnd.isSwimming;
+    }
+
     // Evaluate ADT triangles against the diagnostic capsule and append penetrating hits
     std::vector<SceneHit> adtHits;
-    if (!triBuf.empty())
+    if (!triBuf.empty() && !startSwimming)
     {
         CapsuleCollision::Capsule Cw; Cw.p0 = { x, y, capBottom }; Cw.p1 = { x, y, capTop }; Cw.r = r;
         for (size_t tIdx = 0; tIdx < triBuf.size(); ++tIdx)
@@ -951,7 +1002,6 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
             }
         }
     }
-    // Populate ADT penetrating hit stats
     {
         diag.adtPenetratingHitCount = adtHits.size();
         float aMinZ = FLT_MAX, aMaxZ = -FLT_MAX;
@@ -960,204 +1010,165 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
         diag.adtHitMinZ = aMinZ; diag.adtHitMaxZ = aMaxZ;
     }
 
-    // Combined hits for aggregate stats
+    // Combined hits for aggregate stats (skip if swimming to avoid ground resolution)
     std::vector<SceneHit> sweepHits;
-    sweepHits.reserve(vmapHits.size() + adtHits.size());
-    sweepHits.insert(sweepHits.end(), vmapHits.begin(), vmapHits.end());
-    sweepHits.insert(sweepHits.end(), adtHits.begin(), adtHits.end());
+    if (!startSwimming) {
+        sweepHits.reserve(vmapHits.size() + adtHits.size());
+        sweepHits.insert(sweepHits.end(), vmapHits.begin(), vmapHits.end());
+        sweepHits.insert(sweepHits.end(), adtHits.begin(), adtHits.end());
+    }
 
-    // Modern ordered lists for resolution
     std::vector<SceneHit> orderedNonPen;
     std::vector<SceneHit> orderedPen;
-    orderedNonPen.reserve(sweepHits.size());
-    orderedPen.reserve(sweepHits.size());
-    for (const auto& h : sweepHits) {
-        if (h.startPenetrating) orderedPen.push_back(h); else orderedNonPen.push_back(h);
-    }
-    if (!noInput) {
-        std::stable_sort(orderedNonPen.begin(), orderedNonPen.end(), [](const SceneHit& a, const SceneHit& b) { return a.time < b.time; });
-    } else {
-        // no-input: non-penetrating list unused; keep empty
-        orderedNonPen.clear();
-    }
-
-    // Diagnostics: log continuous collision summary and sample ordered lists
-    PHYS_INFO(PHYS_SURF,
-        std::string("[SweepDiag] Continuous\n")
-        << "  map=" << mapId << " pos=(" << x << "," << y << "," << z << ") r=" << r << " h=" << h << "\n"
-        << "  moveDir=(" << moveDir.x << "," << moveDir.y << "," << moveDir.z << ") dist=" << intendedDist << "\n"
-        << "  counts: vmap=" << vmapHits.size() << " adtPen=" << adtHits.size() << " sweepCombined=" << sweepHits.size() << "\n"
-        << "  ordered: pen=" << orderedPen.size() << " nonPen=" << orderedNonPen.size());
-
-    size_t samplePen = std::min<size_t>(orderedPen.size(), 8);
-    for (size_t i = 0; i < samplePen; ++i) {
-        const auto& h = orderedPen[i];
-        PHYS_TRACE(PHYS_SURF, "[SweepPen] idx=" << i << " tri=" << h.triIndex << " inst=" << h.instanceId
-            << " toi=" << h.time << " dist=" << h.distance
-            << " n=(" << h.normal.x << "," << h.normal.y << "," << h.normal.z << ")"
-            << " p=(" << h.point.x << "," << h.point.y << "," << h.point.z << ")");
-    }
-    size_t sampleNP = std::min<size_t>(orderedNonPen.size(), 8);
-    for (size_t i = 0; i < sampleNP; ++i) {
-        const auto& h = orderedNonPen[i];
-        PHYS_TRACE(PHYS_SURF, "[SweepNP] idx=" << i << " tri=" << h.triIndex << " inst=" << h.instanceId
-            << " toi=" << h.time << " dist=" << h.distance
-            << " n=(" << h.normal.x << "," << h.normal.y << "," << h.normal.z << ")"
-            << " p=(" << h.point.x << "," << h.point.y << "," << h.point.z << ")");
+    if (!startSwimming) {
+        orderedNonPen.reserve(sweepHits.size());
+        orderedPen.reserve(sweepHits.size());
+        for (const auto& h : sweepHits) {
+            if (h.startPenetrating) orderedPen.push_back(h); else orderedNonPen.push_back(h);
+        }
+        if (!noInput) {
+            std::stable_sort(orderedNonPen.begin(), orderedNonPen.end(), [](const SceneHit& a, const SceneHit& b) { return a.time < b.time; });
+        } else {
+            orderedNonPen.clear();
+        }
     }
 
     // Combined stats for sweepHits
-    diag.hitCount = sweepHits.size();
-    float hitMinZ = FLT_MAX, hitMaxZ = -FLT_MAX;
-    size_t penCount = 0, nonPenCount = 0, walkableNP = 0; float earliestNP = FLT_MAX; std::set<uint32_t> uniqueInst;
-    for (const auto& hHit : sweepHits) {
-        if (hHit.startPenetrating) penCount++; else nonPenCount++;
-        if (!hHit.startPenetrating) {
-            earliestNP = std::min(earliestNP, hHit.distance);
-            if (hHit.normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) walkableNP++;
+    if (!startSwimming) {
+        diag.hitCount = sweepHits.size();
+        float hitMinZ = FLT_MAX, hitMaxZ = -FLT_MAX;
+        size_t penCount = 0, nonPenCount = 0, walkableNP = 0; float earliestNP = FLT_MAX; std::set<uint32_t> uniqueInst;
+        for (const auto& hHit : sweepHits) {
+            if (hHit.startPenetrating) penCount++; else nonPenCount++;
+            if (!hHit.startPenetrating) {
+                earliestNP = std::min(earliestNP, hHit.distance);
+                if (hHit.normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) walkableNP++;
+            }
+            hitMinZ = std::min(hitMinZ, hHit.point.z);
+            hitMaxZ = std::max(hitMaxZ, hHit.point.z);
+            uniqueInst.insert(hHit.instanceId);
         }
-        hitMinZ = std::min(hitMinZ, hHit.point.z);
-        hitMaxZ = std::max(hitMaxZ, hHit.point.z);
-        uniqueInst.insert(hHit.instanceId);
+        if (earliestNP == FLT_MAX) earliestNP = -1.0f;
+        if (diag.hitCount == 0) { hitMinZ = 0.0f; hitMaxZ = 0.0f; }
+        diag.penCount = penCount;
+        diag.nonPenCount = nonPenCount;
+        diag.walkableNonPen = walkableNP;
+        diag.earliestNonPen = earliestNP;
+        diag.hitMinZ = hitMinZ;
+        diag.hitMaxZ = hitMaxZ;
+        diag.uniqueInstanceCount = uniqueInst.size();
+    } else {
+        // Swimming: clear combined stats
+        diag.hitCount = 0;
+        diag.penCount = 0;
+        diag.nonPenCount = 0;
+        diag.walkableNonPen = 0;
+        diag.earliestNonPen = -1.0f;
+        diag.hitMinZ = 0.0f;
+        diag.hitMaxZ = 0.0f;
+        diag.uniqueInstanceCount = 0;
     }
-    if (earliestNP == FLT_MAX) earliestNP = -1.0f;
-    if (diag.hitCount == 0) { hitMinZ = 0.0f; hitMaxZ = 0.0f; }
-    diag.penCount = penCount;
-    diag.nonPenCount = nonPenCount;
-    diag.walkableNonPen = walkableNP;
-    diag.earliestNonPen = earliestNP;
-    diag.hitMinZ = hitMinZ;
-    diag.hitMaxZ = hitMaxZ;
-    diag.uniqueInstanceCount = uniqueInst.size();
 
-    const float stepUpLimit = PhysicsConstants::STEP_HEIGHT;
-    const float stepDownLimit = PhysicsConstants::STEP_DOWN_HEIGHT;
-    const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-
-    auto selectStandFromHits = [&](const std::vector<SceneHit>& hits, SweepDiagnostics::StandSource src) {
-        if (hits.empty()) return false;
-        // 1) Start penetration on walkable surface
-        const SceneHit& firstHit = hits.front();
-        if (firstHit.startPenetrating && firstHit.normal.z >= walkableCosMin) {
-            // Prefer stepping up onto the closest walkable penetrating contact if mixed penetration exists
-            bool hasUnwalkablePen = false; const SceneHit* bestWalkPen = nullptr; float bestWalkDz = FLT_MAX;
-            for (const auto& h : hits) {
-                if (!h.startPenetrating) continue;
-                if (h.normal.z >= walkableCosMin) {
-                    float dz = h.point.z - z;
-                    if (dz >= 0.0f && dz <= stepUpLimit + 0.01f) {
-                        if (dz < bestWalkDz) { bestWalkDz = dz; bestWalkPen = &h; }
+    // Continuous collision detection & depenetration
+    {
+        float minTOI = FLT_MAX;
+        G3D::Vector3 depen(0,0,0);
+        float maxPenDepth = 0.0f;
+        if (!startSwimming) {
+            for (const auto& h : sweepHits) {
+                if (!h.startPenetrating) {
+                    if (!noInput) {
+                        minTOI = std::min(minTOI, h.time);
                     }
                 } else {
-                    hasUnwalkablePen = true;
-                }
-            }
-            if (bestWalkPen && hasUnwalkablePen) {
-                diag.standFound = true; diag.standZ = bestWalkPen->point.z; diag.standSource = src; return true;
-            }
-            // Otherwise slide along plane -> target Z computed from plane; for diagnostics, use contact point height
-            diag.standFound = true; diag.standZ = firstHit.point.z; diag.standSource = src; return true;
-        }
-        // 2) Earliest walkable non-penetrating step candidate (only when moving)
-        if (!noInput) {
-            for (const auto& h : hits) {
-                if (h.startPenetrating) continue;
-                if (h.distance <= 1e-4f) continue;
-                if (h.normal.z < walkableCosMin) continue;
-                float dz = h.point.z - z;
-                if (!(dz >= 0.0f && dz <= stepUpLimit)) continue;
-                diag.standFound = true; diag.standZ = h.point.z; diag.standSource = src; return true;
-            }
-        }
-        // 3) Obstruction branch: walkable normal within step ranges (only meaningful when moving)
-        if (!hits.empty()) {
-            const SceneHit& hit = hits.front();
-            if (hit.normal.z >= walkableCosMin) {
-                float dz = hit.point.z - z;
-                if ((dz >= 0.0f && dz <= stepUpLimit) || (dz < 0.0f && -dz <= stepDownLimit)) {
-                    diag.standFound = true; diag.standZ = hit.point.z; diag.standSource = src; return true;
+                    float d = std::max(0.0f, h.penetrationDepth);
+                    depen += h.normal.directionOrZero() * d;
+                    if (d > maxPenDepth) maxPenDepth = d;
                 }
             }
         }
-        return false;
-    };
-
-    // Prefer downward VMAP hits when no input, else VMAP sweep hits first, then ADT
-    bool decided = false;
-    if (noInput) {
-        decided = selectStandFromHits(vmapHits, SweepDiagnostics::StandSource::VMAP);
-        if (!decided) decided = selectStandFromHits(adtHits, SweepDiagnostics::StandSource::ADT);
-    } else {
-        decided = selectStandFromHits(vmapHits, SweepDiagnostics::StandSource::VMAP);
-        if (!decided) decided = selectStandFromHits(adtHits, SweepDiagnostics::StandSource::ADT);
+        if (minTOI == FLT_MAX) minTOI = -1.0f;
+        diag.minTOI = minTOI;
+        diag.depenetration = depen;
+        diag.depenetrationMagnitude = depen.magnitude();
+        const float baseSkin = std::max(0.001f, r * 0.02f);
+        const float depthSkin = (maxPenDepth > 0.0f) ? std::min(maxPenDepth * 0.5f, r * 0.25f) : 0.0f;
+        diag.suggestedSkinWidth = baseSkin + depthSkin;
     }
 
-    // Modernize diagnostics: sort VMAP hits by time/distance for deterministic processing
     if (!noInput) {
         std::stable_sort(vmapHits.begin(), vmapHits.end(), [](const SceneHit& a, const SceneHit& b) {
             if (a.startPenetrating != b.startPenetrating)
-                return a.startPenetrating > b.startPenetrating; // penetrating first
-            return a.distance < b.distance; // then earliest distance
+                return a.startPenetrating > b.startPenetrating;
+            return a.distance < b.distance;
         });
     }
 
     // Build movement manifold from collective triangle hits (VMAP preferred, ADT supplemental)
-    auto accumulatePlanes = [&](const std::vector<SceneHit>& hits) {
+    auto accumulatePlanes = [&](const std::vector<SceneHit>& hits, SweepDiagnostics::StandSource src) {
         for (const auto& h : hits) {
             SweepDiagnostics::ContactPlane cp;
             cp.normal = h.normal.directionOrZero();
             if (cp.normal.magnitude() <= 1e-5f) cp.normal = G3D::Vector3(0,0,1);
             cp.point = h.point;
-            cp.walkable = (cp.normal.z >= walkableCosMin);
+            cp.walkable = (cp.normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z);
             cp.penetrating = h.startPenetrating;
+            cp.source = src;
             diag.planes.push_back(cp);
             if (cp.walkable) diag.walkablePlanes.push_back(cp);
         }
     };
-    accumulatePlanes(vmapHits);
-    accumulatePlanes(adtHits);
+    if (!startSwimming) {
+        accumulatePlanes(vmapHits, SweepDiagnostics::StandSource::VMAP);
+        accumulatePlanes(adtHits, SweepDiagnostics::StandSource::ADT);
+    }
 
     // Deduplicate nearly-coplanar planes (by normal/point within epsilon)
     auto approximatelyEqual = [](float a, float b, float eps) { return std::fabs(a-b) <= eps; };
-    auto normalsClose = [&](const G3D::Vector3& n0, const G3D::Vector3& n1) {
-        return approximatelyEqual(n0.x, n1.x, 1e-3f) && approximatelyEqual(n0.y, n1.y, 1e-3f) && approximatelyEqual(n0.z, n1.z, 1e-3f);
+    auto normalsClose = [&](const G3D::Vector3& n0, const G3D::Vector3& n1, float epsN) {
+        return approximatelyEqual(n0.x, n1.x, epsN) && approximatelyEqual(n0.y, n1.y, epsN) && approximatelyEqual(n0.z, n1.z, epsN);
     };
+    const float skin = (diag.suggestedSkinWidth > 0.0f ? diag.suggestedSkinWidth : std::max(0.001f, r * 0.02f));
+    const float base = std::max(0.001f, r * 0.01f);
+    const float normalEps = 1e-3f;
+    const float pointZEps = std::max(1e-3f, skin * 0.5f);
+    const float pointXYEps = std::max(1e-3f, base * 0.5f);
     std::vector<SweepDiagnostics::ContactPlane> dedup;
     dedup.reserve(diag.planes.size());
     for (const auto& cp : diag.planes) {
         bool found = false;
         for (auto& d : dedup) {
-            if (normalsClose(cp.normal, d.normal) && approximatelyEqual(cp.point.z, d.point.z, 1e-2f)) {
-                // merge flags (walkable if any says walkable; penetrating if any)
-                d.walkable = d.walkable || cp.walkable;
-                d.penetrating = d.penetrating || cp.penetrating;
-                found = true; break;
+            if (normalsClose(cp.normal, d.normal, normalEps)) {
+                float dx = std::fabs(cp.point.x - d.point.x);
+                float dy = std::fabs(cp.point.y - d.point.y);
+                float dz = std::fabs(cp.point.z - d.point.z);
+                if (dx <= pointXYEps && dy <= pointXYEps && dz <= pointZEps) {
+                    d.walkable = d.walkable || cp.walkable;
+                    d.penetrating = d.penetrating || cp.penetrating;
+                    found = true; break;
+                }
             }
         }
         if (!found) dedup.push_back(cp);
     }
     diag.planes = dedup;
-    // Rebuild walkable subset after dedup
     diag.walkablePlanes.clear();
     for (const auto& cp : diag.planes) if (cp.walkable) diag.walkablePlanes.push_back(cp);
 
     // Choose a primary plane following ProcessGroundMovement preferences
     auto choosePrimary = [&]() {
-        // 1) Walkable start-penetrating plane
+        if (startSwimming) { diag.hasPrimaryPlane = false; return; }
         for (const auto& cp : diag.planes) {
             if (cp.penetrating && cp.walkable) { diag.primaryPlane = cp; diag.hasPrimaryPlane = true; return; }
         }
         if (!noInput) {
-            // 2) Earliest walkable non-penetrating plane (use VMAP ordering already applied)
             for (const auto& cp : diag.planes) {
                 if (!cp.penetrating && cp.walkable) { diag.primaryPlane = cp; diag.hasPrimaryPlane = true; return; }
             }
-            // 3) Any walkable plane (obstruction branch)
             for (const auto& cp : diag.planes) {
                 if (cp.walkable) { diag.primaryPlane = cp; diag.hasPrimaryPlane = true; return; }
             }
         }
-        // 4) Fallback: use highest Z penetrating plane
         float bestZ = -FLT_MAX; size_t bestIdx = (size_t)-1;
         for (size_t i = 0; i < diag.planes.size(); ++i) {
             const auto& cp = diag.planes[i];
@@ -1170,10 +1181,25 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
     // Compute slide direction only if there is input
     diag.slideDirValid = false;
     diag.hasIntersectionLine = false;
+    if (diag.hasPrimaryPlane) {
+        G3D::Vector3 n = diag.primaryPlane.normal.directionOrZero();
+        float dPlane = -(n.dot(diag.primaryPlane.point));
+        float clampZSurface = z;
+        if (std::fabs(n.z) > 1e-6f) {
+            clampZSurface = (-dPlane - n.x * x - n.y * y) / n.z;
+        }
+        // Previously: subtract capsule radius to compute stand Z. Diagnostics should reflect plane Z directly.
+        float standZNoPen = clampZSurface;
+        if (!diag.standFound || diag.primaryPlane.penetrating) {
+            diag.standFound = true;
+            diag.standZ = standZNoPen;
+            diag.standSource = diag.primaryPlane.source;
+        }
+    }
+
     if (!noInput && diag.hasPrimaryPlane) {
         G3D::Vector3 n0 = diag.primaryPlane.normal.directionOrZero();
         G3D::Vector3 mv = moveDir.magnitude() > 1e-6f ? (moveDir * (1.0f / moveDir.magnitude())) : G3D::Vector3(1,0,0);
-        // Find a secondary distinct walkable plane with a different normal
         const SweepDiagnostics::ContactPlane* secondary = nullptr;
         for (const auto& cp : diag.walkablePlanes) {
             G3D::Vector3 n1 = cp.normal.directionOrZero();
@@ -1181,27 +1207,23 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
             if (dotN < 0.995f) { secondary = &cp; break; }
         }
         if (secondary) {
-            // intersection line direction of two planes is cross(n0, n1)
             G3D::Vector3 n1 = secondary->normal.directionOrZero();
             G3D::Vector3 lineDir = n0.cross(n1).directionOrZero();
             if (lineDir.magnitude() > 1e-6f) {
                 diag.intersectionLineDir = lineDir;
                 diag.hasIntersectionLine = true;
-                // project desired movement onto the intersection line
                 G3D::Vector3 slide = (lineDir * (mv.dot(lineDir))).directionOrZero();
                 diag.slideDir = slide;
                 diag.slideDirValid = slide.magnitude() > 1e-6f;
             }
         }
         if (!diag.slideDirValid) {
-            // single-plane projection fallback
             G3D::Vector3 slide = (mv - n0 * mv.dot(n0)).directionOrZero();
             diag.slideDir = slide;
             diag.slideDirValid = slide.magnitude() > 1e-6f;
         }
     }
 
-    // New: compute diagnostic horizontal reduction factor when sliding up/down a plane
     float horizReduction = 1.0f;
     float suggestedXYDist = intendedDist;
     if (!noInput && diag.slideDirValid) {
@@ -1210,64 +1232,96 @@ PhysicsEngine::SweepDiagnostics PhysicsEngine::ComputeCapsuleSweepDiagnostics(
         if (sMag > 1e-6f) {
             float horizLen = std::sqrt(s.x * s.x + s.y * s.y);
             float ratio = (sMag > 0.0f) ? (horizLen / sMag) : 1.0f;
-            horizReduction = ratio; // 0..1 factor to apply to XY to respect travel vector along slope
+            horizReduction = ratio;
             suggestedXYDist = intendedDist * horizReduction;
         }
     }
     diag.xyReduction = horizReduction;
     diag.suggestedXYDist = suggestedXYDist;
-    // Constraint iteration hint
     diag.constraintIterations = 3;
     diag.slopeClampThresholdZ = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
 
-    PHYS_INFO(PHYS_MOVE,
-        std::string("[Step] SurfaceSummary\n")
-        << "  VMAP OverlapHits: count=" << diag.vmapHitCount << " nonPen=" << diag.vmapNonPenCount << " pen=" << diag.vmapPenCount
-        << " earliestNP=" << diag.vmapEarliestNonPen << " zRange=[" << diag.vmapHitMinZ << "," << diag.vmapHitMaxZ << "] walkableNP=" << diag.vmapWalkableNonPen
-        << " instances=" << diag.vmapUniqueInstanceCount << "\n"
-        << "  ADT Triangles: count=" << diag.terrainTriCount << " zRange=[" << diag.terrainMinZ << "," << diag.terrainMaxZ << "]"
-        << "  ADT OverlapHits: count=" << diag.adtPenetratingHitCount << " zRange=[" << diag.adtHitMinZ << "," << diag.adtHitMaxZ << "]\n"
-        << "  Selection: standFound=" << (diag.standFound ? 1 : 0)
-        << " standZ=" << diag.standZ
-        << " source=" << (diag.standSource == SweepDiagnostics::StandSource::VMAP ? "VMAP" : diag.standSource == SweepDiagnostics::StandSource::ADT ? "ADT" : "None") << "\n"
-        << "  Manifold: planes=" << diag.planes.size() << " walkable=" << diag.walkablePlanes.size() << " hasPrimary=" << (diag.hasPrimaryPlane ? 1 : 0)
-        << (diag.hasPrimaryPlane ? (std::string(" primaryN=(") + std::to_string(diag.primaryPlane.normal.x) + "," + std::to_string(diag.primaryPlane.normal.y) + "," + std::to_string(diag.primaryPlane.normal.z) + ") primaryP=(" + std::to_string(diag.primaryPlane.point.x) + "," + std::to_string(diag.primaryPlane.point.y) + "," + std::to_string(diag.primaryPlane.point.z) + ") walkable=" + (diag.primaryPlane.walkable ? "1" : "0") + " penetrating=" + (diag.primaryPlane.penetrating ? "1" : "0")) : std::string(" primary=none")) << "\n"
-        << "    slideDirValid=" << (diag.slideDirValid ? 1 : 0) << " slideDir=(" << diag.slideDir.x << "," << diag.slideDir.y << "," << diag.slideDir.z << ")"
-        << " horizReduction=" << horizReduction << " suggestedXYDist=" << suggestedXYDist
-        << ([&](){
-            if (!noInput && diag.slideDirValid && diag.hasPrimaryPlane && suggestedXYDist > 0.0f) {
-                G3D::Vector3 start(x, y, z);
-                G3D::Vector3 offset = diag.slideDir * suggestedXYDist;
-                float endX = start.x + offset.x;
-                float endY = start.y + offset.y;
-                float endZ = z;
+    // If swimming, clear stand selection to avoid snapping to ground while in liquid
+    if (startSwimming) {
+        diag.standFound = false;
+        diag.standZ = z; // keep current z; Step will handle swim motion
+        diag.standSource = SweepDiagnostics::StandSource::None;
+        diag.hasPrimaryPlane = false;
+        diag.slideDirValid = false;
+        diag.hasIntersectionLine = false;
+    }
+
+    // Consolidated end-of-diagnostics log
+    {
+        std::ostringstream oss;
+        oss << "[SweepDiag] Combined\n"
+            << "  map=" << mapId << " pos=(" << x << "," << y << "," << z << ") r=" << r << " h=" << h << "\n"
+            << "  moveDir=(" << moveDir.x << "," << moveDir.y << "," << moveDir.z << ") dist=" << intendedDist << "\n"
+            << "  counts: vmap=" << diag.vmapHitCount << " adtPen=" << diag.adtPenetratingHitCount << " sweepCombined=" << diag.hitCount << "\n"
+            << "  ordered: pen=" << diag.penCount << " nonPen=" << diag.nonPenCount << "\n"
+            << "  VMAP OverlapHits: nonPen=" << diag.vmapNonPenCount << " pen=" << diag.vmapPenCount
+            << " earliestNP=" << diag.vmapEarliestNonPen << " zRange=[" << diag.vmapHitMinZ << "," << diag.vmapHitMaxZ << "] walkableNP=" << diag.vmapWalkableNonPen << " instances=" << diag.vmapUniqueInstanceCount << "\n"
+            << "  ADT Triangles: count=" << diag.terrainTriCount << " zRange=[" << diag.terrainMinZ << "," << diag.terrainMaxZ << "]"
+            << "  ADT OverlapHits: count=" << diag.adtPenetratingHitCount << " zRange=[" << diag.adtHitMinZ << "," << diag.adtHitMaxZ << "]\n"
+            << "  Selection: standFound=" << (diag.standFound ? 1 : 0) << " standZ=" << diag.standZ
+            << " source=" << (diag.standSource == SweepDiagnostics::StandSource::VMAP ? "VMAP" : diag.standSource == SweepDiagnostics::StandSource::ADT ? "ADT" : "None") << "\n"
+            << "  Manifold: planes=" << diag.planes.size() << " walkable=" << diag.walkablePlanes.size() << " hasPrimary=" << (diag.hasPrimaryPlane ? 1 : 0);
+        if (diag.hasPrimaryPlane) {
+            oss << " primaryN=(" << diag.primaryPlane.normal.x << "," << diag.primaryPlane.normal.y << "," << diag.primaryPlane.normal.z << ")"
+                << " primaryP=(" << diag.primaryPlane.point.x << "," << diag.primaryPlane.point.y << "," << diag.primaryPlane.point.z << ")"
+                << " walkable=" << (diag.primaryPlane.walkable ? 1 : 0) << " penetrating=" << (diag.primaryPlane.penetrating ? 1 : 0);
+        }
+        oss << "\n"
+            << "    slideDirValid=" << (diag.slideDirValid ? 1 : 0) << " slideDir=(" << diag.slideDir.x << "," << diag.slideDir.y << "," << diag.slideDir.z << ")"
+            << " horizReduction=" << diag.xyReduction << " suggestedXYDist=" << diag.suggestedXYDist
+            << " minTOI=" << diag.minTOI << " depenMag=" << diag.depenetrationMagnitude << " skin=" << diag.suggestedSkinWidth;
+        {
+            const char* lStartName = VMAP::GetLiquidTypeName(diag.liquidStartType);
+            LiquidInfo liqEnd = noInput ? liqStart : EvaluateLiquidAt(mapId, endX, endY, z);
+            const char* lEndName = VMAP::GetLiquidTypeName(diag.liquidEndType);
+            oss << "\n"
+                << "  Liquid: start has=" << (diag.liquidStartHasLevel?1:0)
+                << " z=" << diag.liquidStartLevel
+                << " type=" << lStartName
+                << " src=" << (diag.liquidStartFromVmap?"VMAP":"ADT")
+                << " swim=" << (diag.liquidStartSwimming?1:0)
+                << " | end has=" << (diag.liquidEndHasLevel?1:0)
+                << " z=" << diag.liquidEndLevel
+                << " type=" << lEndName
+                << " src=" << (diag.liquidEndFromVmap?"VMAP":"ADT")
+                << " swim=" << (diag.liquidEndSwimming?1:0);
+        }
+        {
+            G3D::Vector3 finalPos(x, y, (!startSwimming && diag.standFound) ? diag.standZ : z);
+            if (!startSwimming && diag.slideDirValid && diag.suggestedXYDist > 0.0f) {
+                G3D::Vector3 s = diag.slideDir.directionOrZero();
+                finalPos.x += s.x * diag.suggestedXYDist;
+                finalPos.y += s.y * diag.suggestedXYDist;
+            }
+            if (!startSwimming && diag.hasPrimaryPlane) {
                 G3D::Vector3 n = diag.primaryPlane.normal.directionOrZero();
                 float dPlane = -(n.dot(diag.primaryPlane.point));
+                float clampZAtNewXY = finalPos.z;
                 if (std::fabs(n.z) > 1e-6f) {
-                    endZ = (-dPlane - n.x * endX - n.y * endY) / n.z;
+                    clampZAtNewXY = (-dPlane - n.x * finalPos.x - n.y * finalPos.y) / n.z;
                 }
-                std::ostringstream oss; oss << " endAlongPlane=(" << endX << "," << endY << "," << endZ << ")";
-                return oss.str();
+                // Diagnostics: report final Z at plane height, no radius subtraction
+                finalPos.z = clampZAtNewXY;
             }
-            return std::string("");
-        })()
-    );
-
-    // Detailed manifold listing: enumerate each contact plane
-    if (!diag.planes.empty()) {
-        PHYS_INFO(PHYS_SURF, std::string("[Manifold] Contacts count=") << diag.planes.size());
-        size_t maxList = std::min<size_t>(diag.planes.size(), 32);
-        for (size_t i = 0; i < maxList; ++i) {
-            const auto& cp = diag.planes[i];
-            PHYS_TRACE(PHYS_SURF, "[ManifoldPlane] idx=" << i
-                << " N=(" << cp.normal.x << "," << cp.normal.y << "," << cp.normal.z << ")"
-                << " P=(" << cp.point.x << "," << cp.point.y << "," << cp.point.z << ")"
-                << " walkable=" << (cp.walkable ? 1 : 0)
-                << " penetrating=" << (cp.penetrating ? 1 : 0));
+            oss << "\n" << "  FinalPos: (" << finalPos.x << "," << finalPos.y << "," << finalPos.z << ")";
+            G3D::Vector3 intendedVel = moveDir * intendedDist;
+            G3D::Vector3 endingVel(0,0,0);
+            if (!startSwimming && diag.slideDirValid) {
+                G3D::Vector3 s = diag.slideDir.directionOrZero();
+                endingVel = s * diag.suggestedXYDist;
+            }
+            G3D::Vector3 overallVel = endingVel;
+            oss << "\n" << "  Velocities: intended=(" << intendedVel.x << "," << intendedVel.y << "," << intendedVel.z
+                << ") ending=(" << endingVel.x << "," << endingVel.y << "," << endingVel.z
+                << ") overall=(" << overallVel.x << "," << overallVel.y << "," << overallVel.z << ")";
         }
-        if (diag.planes.size() > maxList) {
-            PHYS_TRACE(PHYS_SURF, "[Manifold] (" << (diag.planes.size() - maxList) << ") more contacts suppressed");
-        }
+        PHYS_INFO(PHYS_SURF, oss.str());
     }
+
     return diag;
 }

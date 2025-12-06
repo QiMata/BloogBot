@@ -24,6 +24,9 @@ namespace VMAP
         bool traceComplex = true;           // Whether to trace against complex geometry (always true for now)
     };
 
+    // New: feature type classification for precise TOI contact (face/edge/vertex)
+    enum class HitFeatureType : uint8_t { Unknown = 0, Face = 1, Edge = 2, Vertex = 3 };
+
     struct SceneHit
     {
         bool hit = false; // True if an intersection occurred
@@ -37,6 +40,12 @@ namespace VMAP
         uint32_t instanceId = 0; // ModelInstance::ID
         bool startPenetrating = false; // True if the sweep started already overlapping (t=0 overlap)
         bool normalFlipped = false; // True if we flipped normal to enforce upward-facing hemisphere
+        // New: TOI feature classification and physical material hints (optional)
+        HitFeatureType featureType = HitFeatureType::Unknown; // What triangle feature was hit
+        uint32_t physMaterialId = 0;      // Optional physical material ID (0 if unavailable)
+        float staticFriction = 0.0f;      // Optional static friction coefficient (0 if unknown)
+        float dynamicFriction = 0.0f;     // Optional dynamic friction coefficient (0 if unknown)
+        float restitution = 0.0f;         // Optional restitution/bounciness (0 if unknown)
         //
         // Field documentation:
         // hit: True if intersection occurred
@@ -50,6 +59,8 @@ namespace VMAP
         // instanceId: ID of model instance hit
         // startPenetrating: True if query started in penetration
         // normalFlipped: True if normal was flipped to face upward
+        // featureType: Triangle feature classification (face/edge/vertex)
+        // physMaterialId/staticFriction/dynamicFriction/restitution: optional material data if available
     };
 
     class SceneQuery
