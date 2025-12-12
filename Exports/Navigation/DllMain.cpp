@@ -155,6 +155,30 @@ extern "C" __declspec(dllexport) PhysicsOutput PhysicsStep(const PhysicsInput& i
     return output;
 }
 
+extern "C" __declspec(dllexport) PhysicsOutput PhysicsStepV2(const PhysicsInput& input)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    if (auto* physics = PhysicsEngine::Instance())
+        return physics->StepV2(input, input.deltaTime);
+
+    PhysicsOutput output = {};
+    output.x = input.x;
+    output.y = input.y;
+    output.z = input.z;
+    output.orientation = input.orientation;
+    output.pitch = input.pitch;
+    output.vx = input.vx;
+    output.vy = input.vy;
+    output.vz = input.vz;
+    output.moveFlags = input.moveFlags;
+    output.groundZ = -100000.0f;
+    output.liquidZ = -100000.0f;
+    output.liquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
+    return output;
+}
+
 extern "C" __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ to)
 {
     if (!g_initialized)

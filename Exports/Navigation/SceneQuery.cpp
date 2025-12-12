@@ -469,6 +469,56 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
     outHits.clear();
     if (distance <= 0.0f)
     {
+        // Idle settle: single-pass overlap to avoid duplicate traversal/logs
+        const float overlapInflation = 0.01f;
+        CapsuleCollision::Capsule inflCaps = capsuleStart; inflCaps.r += overlapInflation;
+
+        std::vector<SceneHit> overlaps;
+        OverlapCapsule(map, inflCaps, overlaps, includeMask, params);
+
+        // Optional: include terrain overlaps around capsule center
+        std::vector<MapFormat::TerrainTriangle> terrainTris;
+        if (PhysicsEngine::Instance())
+        {
+            if (MapLoader* loader = PhysicsEngine::Instance()->GetMapLoader())
+            {
+                G3D::Vector3 wP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
+                G3D::Vector3 wP1(capsuleStart.p1.x, capsuleStart.p1.y, capsuleStart.p1.z);
+                G3D::Vector3 center = (wP0 + wP1) * 0.5f;
+                float r = inflCaps.r;
+                loader->GetTerrainTriangles(map.GetMapId(), center.x - r, center.y - r, center.x + r, center.y + r, terrainTris);
+                if (!terrainTris.empty())
+                {
+                    CapsuleCollision::Capsule Cw; Cw.p0 = { wP0.x, wP0.y, wP0.z }; Cw.p1 = { wP1.x, wP1.y, wP1.z }; Cw.r = inflCaps.r;
+                    for (size_t tIdx = 0; tIdx < terrainTris.size(); ++tIdx)
+                    {
+                        const auto& tw = terrainTris[tIdx];
+                        CapsuleCollision::Triangle Tterrain; Tterrain.a = { tw.ax, tw.ay, tw.az }; Tterrain.b = { tw.bx, tw.by, tw.bz }; Tterrain.c = { tw.cx, tw.cy, tw.cz }; Tterrain.doubleSided = false; Tterrain.collisionMask = 0xFFFFFFFFu;
+                        CapsuleCollision::Hit chW;
+                        if (CapsuleCollision::intersectCapsuleTriangle(Cw, Tterrain, chW))
+                        {
+                            G3D::Vector3 wPoint(chW.point.x, chW.point.y, chW.point.z);
+                            G3D::Vector3 wA(tw.ax, tw.ay, tw.az), wB(tw.bx, tw.by, tw.bz), wC(tw.cx, tw.cy, tw.cz);
+                            G3D::Vector3 wN = (wB - wA).cross(wC - wA).directionOrZero();
+                            bool flipped = false; G3D::Vector3 chosenN = wN; if (chosenN.z < 0.0f) { chosenN = -chosenN; flipped = true; }
+                            SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = chosenN; h.point = wPoint; h.triIndex = (int)tIdx; h.instanceId = 0; h.startPenetrating = true; h.penetrationDepth = chW.depth; h.normalFlipped = flipped;
+                            overlaps.push_back(h);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!overlaps.empty())
+        {
+            std::sort(overlaps.begin(), overlaps.end(), [](const SceneHit& a, const SceneHit& b) {
+                if (std::fabs(a.point.z - b.point.z) > 1e-4f) return a.point.z > b.point.z;
+                if (std::fabs(a.penetrationDepth - b.penetrationDepth) > 1e-5f) return a.penetrationDepth > b.penetrationDepth;
+                return a.triIndex < b.triIndex;
+            });
+            outHits = overlaps;
+            return (int)outHits.size();
+        }
         return 0;
     }
 
@@ -654,9 +704,7 @@ int SceneQuery::SweepCapsule(const StaticMapTree& map,
                 // Compute world normal from triangle cross
                 G3D::Vector3 wA(tw.ax, tw.ay, tw.az), wB(tw.bx, tw.by, tw.bz), wC(tw.cx, tw.cy, tw.cz);
                 G3D::Vector3 wN = (wB - wA).cross(wC - wA).directionOrZero();
-                bool flipped = false;
-                G3D::Vector3 chosenN = wN;
-                if (chosenN.z < 0.0f) { chosenN = -chosenN; flipped = true; }
+                bool flipped = false; G3D::Vector3 chosenN = wN; if (chosenN.z < 0.0f) { chosenN = -chosenN; flipped = true; }
 
                 SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = chosenN; h.point = wPoint; h.triIndex = (int)tIdx; h.instanceId = 0; h.startPenetrating = true; h.penetrationDepth = chW.depth; h.normalFlipped = flipped;
                 outHits.push_back(h);

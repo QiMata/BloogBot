@@ -52,7 +52,7 @@ namespace PathfindingService
         private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
         {
             var physicsInput = step.ToPhysicsInput();
-            var physicsOutput = _physics.StepPhysics(physicsInput, step.DeltaTime);
+            var physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
             return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
         }
 

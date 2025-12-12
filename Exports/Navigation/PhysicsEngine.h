@@ -65,6 +65,9 @@ public:
     // Main physics step - completely stateless
     PhysicsOutput Step(const PhysicsInput& input, float dt);
 
+    // New: modernized step using diagnostics-driven movement
+    PhysicsOutput StepV2(const PhysicsInput& input, float dt);
+
     // Surface information
     enum class SurfaceSource
     {

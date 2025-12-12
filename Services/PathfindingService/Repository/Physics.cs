@@ -2,6 +2,7 @@
 using GameData.Core.Models;
 using System;
 using System.Runtime.InteropServices;
+using GameData.Core.Enums; // Access MovementFlags for sanitization
 
 namespace PathfindingService.Repository
 {
@@ -19,6 +20,9 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern PhysicsOutput PhysicsStep(ref PhysicsInput input);
 
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern PhysicsOutput PhysicsStepV2(ref PhysicsInput input);
+
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
         private static extern bool NativeLineOfSight(uint mapId, XYZ from, XYZ to);
 
@@ -35,13 +39,45 @@ namespace PathfindingService.Repository
         public PhysicsOutput StepPhysics(PhysicsInput input, float deltaTime)
         {
             input.deltaTime = deltaTime;
-            return PhysicsStep(ref input);
+            var output = PhysicsStep(ref input);
+            return SanitizeOutput(input, output);
+        }
+
+        public PhysicsOutput StepPhysicsV2(PhysicsInput input, float deltaTime)
+        {
+            input.deltaTime = deltaTime;
+            var output = PhysicsStepV2(ref input);
+            return SanitizeOutput(input, output);
         }
 
         // For backwards compatibility - maps to CalculatePath
         public bool LineOfSight(uint mapId, XYZ from, XYZ to)
         {
             return NativeLineOfSight(mapId, from, to);
+        }
+
+        // ===============================
+        // HELPER: sanitize legacy/undesired flags from the native engine
+        // ===============================
+        private static PhysicsOutput SanitizeOutput(PhysicsInput input, PhysicsOutput output)
+        {
+            var startFlags = (MovementFlags)input.moveFlags;
+            var outFlags = (MovementFlags)output.moveFlags;
+
+            // Never use MOVEFLAG_MOVED (legacy client-only flag). Remove if present.
+            outFlags &= ~MovementFlags.MOVEFLAG_MOVED;
+
+            // If there was no intended movement (no XZ or turn/pitch), ensure zero velocities to avoid spurious motion.
+            bool intendedMove = (startFlags & MovementFlags.MOVEFLAG_MASK_MOVING_OR_TURN) != 0;
+            if (!intendedMove)
+            {
+                output.vx = 0f;
+                output.vy = 0f;
+                output.vz = 0f;
+            }
+
+            output.moveFlags = (uint)outFlags;
+            return output;
         }
     }
 
