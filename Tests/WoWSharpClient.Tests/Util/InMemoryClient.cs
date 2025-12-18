@@ -25,5 +25,5 @@ public class InMemoryPathfindingClient(Navigation nav, Physics phy) : Pathfindin
         => _phy.LineOfSight(mapId, from.ToXYZ(), to.ToXYZ());
 
     public override Pathfinding.PhysicsOutput PhysicsStep(PhysicsInput physicsInput)
-        => _phy.StepPhysics(physicsInput.ToPhysicsInput(), physicsInput.DeltaTime).ToPhysicsOutput();
+        => _phy.StepPhysicsV2(physicsInput.ToPhysicsInput(), physicsInput.DeltaTime).ToPhysicsOutput();
 }

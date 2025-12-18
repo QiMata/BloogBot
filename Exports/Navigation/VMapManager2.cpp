@@ -19,22 +19,7 @@
 
 namespace VMAP
 {
-    std::vector<SceneHit> VMapManager2::SweepCapsuleAll(unsigned int pMapId,
-        const CapsuleCollision::Capsule& capsuleStart,
-        const G3D::Vector3& dir,
-        float distance,
-        uint32_t includeMask) const
-    {
-        std::vector<SceneHit> out;
-        auto it = iInstanceMapTrees.find(pMapId);
-        if (it == iInstanceMapTrees.end() || it->second == nullptr)
-            return out;
-        StaticMapTree* tree = it->second;
-        // Forward to SceneQuery implementation which operates on StaticMapTree
-        QueryParams qp; qp.includeMask = includeMask;
-        SceneQuery::SweepCapsule(*tree, capsuleStart, dir, distance, out, includeMask, qp);
-        return out;
-    }
+    
 
     // Global model name to path mapping
     static std::unordered_map<std::string, std::string> modelNameToPath;
@@ -564,9 +549,6 @@ namespace VMAP
     bool VMapManager2::GetLiquidLevel(uint32_t pMapId, float x, float y, float z,
         uint8_t ReqLiquidTypeMask, float& level, float& floor, uint32_t& type) const
     {
-        // PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::GetLiquidLevel map=" << pMapId
-        //     << " worldPos=(" << x << "," << y << "," << z << ") reqMask=0x" << (unsigned)ReqLiquidTypeMask);
-
         // Ensure map has been initialized similar to getHeight path
         if (!isMapInitialized(pMapId))
         {

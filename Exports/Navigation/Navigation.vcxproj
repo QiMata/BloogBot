@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -243,8 +243,14 @@
     <ClInclude Include="Matrix3.h" />
     <ClInclude Include="ModelInstance.h" />
     <ClInclude Include="PhysicsBridge.h" />
+    <ClInclude Include="PhysicsDiagnosticsHelpers.h" />
     <ClInclude Include="PhysicsEngine.h" />
+    <ClInclude Include="PhysicsHelpers.h" />
+    <ClInclude Include="PhysicsLiquidHelpers.h" />
     <ClInclude Include="PhysicsMath.h" />
+    <ClInclude Include="PhysicsSelectHelpers.h" />
+    <ClInclude Include="PhysicsShapeHelpers.h" />
+    <ClInclude Include="PhysicsTolerances.h" />
     <ClInclude Include="QueryHit.h" />
     <ClInclude Include="Ray.h" />
     <ClInclude Include="SceneQuery.h" />
@@ -285,12 +291,16 @@
     <ClCompile Include="MapLoader.cpp" />
     <ClCompile Include="Matrix3.cpp" />
     <ClCompile Include="ModelInstance.cpp" />
+    <ClCompile Include="PhysicsDiagnosticsHelpers.cpp" />
     <ClCompile Include="PhysicsEngine.cpp" />
+    <ClCompile Include="PhysicsHelpers.cpp" />
+    <ClCompile Include="PhysicsLiquidHelpers.cpp" />
     <ClCompile Include="Ray.cpp" />
     <ClCompile Include="SceneQuery.cpp" />
     <ClCompile Include="StaticMapTree.cpp" />
     <ClCompile Include="Vector3.cpp" />
     <ClCompile Include="VMapFactory.cpp" />
+    <ClCompile Include="VMapLog.cpp" />
     <ClCompile Include="VMapManager2.cpp" />
     <ClCompile Include="WorldModel.cpp" />
   </ItemGroup>

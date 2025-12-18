@@ -17,8 +17,9 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern void PreloadMap(uint mapId);
 
-        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern PhysicsOutput PhysicsStep(ref PhysicsInput input);
+        // Removed legacy PhysicsStep import
+        //[DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        //private static extern PhysicsOutput PhysicsStep(ref PhysicsInput input);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern PhysicsOutput PhysicsStepV2(ref PhysicsInput input);
@@ -34,13 +35,6 @@ namespace PathfindingService.Repository
             PreloadMap(0);
             PreloadMap(1);
             PreloadMap(389);
-        }
-
-        public PhysicsOutput StepPhysics(PhysicsInput input, float deltaTime)
-        {
-            input.deltaTime = deltaTime;
-            var output = PhysicsStep(ref input);
-            return SanitizeOutput(input, output);
         }
 
         public PhysicsOutput StepPhysicsV2(PhysicsInput input, float deltaTime)

@@ -74,12 +74,14 @@ namespace VMAP
 
         std::shared_ptr<WorldModel> acquireModelInstance(const std::string& basepath, const std::string& filename);
 
-        // Capsule sweep wrapper using SceneQuery
-        std::vector<SceneHit> SweepCapsuleAll(unsigned int pMapId,
-            const CapsuleCollision::Capsule& capsuleStart,
-            const G3D::Vector3& dir,
-            float distance,
-            uint32_t includeMask = 0xFFFFFFFFu) const;
+        // Capsule sweep via VMapManager is not supported; use `SceneQuery::SweepCapsule` directly with a `StaticMapTree`.
+
+        // Accessor for internal map tree for direct queries
+        StaticMapTree* GetStaticMapTree(uint32_t mapId) const {
+            auto it = iInstanceMapTrees.find(mapId);
+            if (it == iInstanceMapTrees.end()) return nullptr;
+            return it->second;
+        }
 
         // Get height using cylinder for more accurate ground detection
         // NOTE: This is non-const because it calls the non-const getHeight() method

@@ -4,6 +4,8 @@
 #include <iostream>
 #include <sstream>
 #include <cstdint>
+#include <string>
+#include "SceneQuery.h"
 
 // Base legacy enable flags (kept as before – can still be controlled by undefining)
 #define WARN_LOG
@@ -105,6 +107,9 @@ enum PhysLogCat : uint32_t {
 const char* PhysCatName(uint32_t cat);
 const char* PhysLevelName(int lvl);
 
+// Human-readable movement flags
+std::string FormatMoveFlags(uint32_t flags);
+
 // Core macro; msg evaluated only when enabled
 #define PHYS_LOG(lvl, cat, msg) do { \
     if ((gPhysLogMask & (cat)) && (lvl) <= gPhysLogLevel) { \
@@ -125,3 +130,25 @@ const char* PhysLevelName(int lvl);
 #define PHYS_DEEP_TRACE_ENABLED 0
 #endif
 #define PHYS_TRACE_DEEP(cat, msg) do { if (PHYS_DEEP_TRACE_ENABLED) { PHYS_TRACE(cat, msg); } } while(0)
+
+// -----------------------------------------------------------------------------
+// Shared sweep diagnostics logging helper
+// -----------------------------------------------------------------------------
+struct PhysicsInput;                    // from PhysicsBridge.h
+namespace G3D { class Vector3; }
+class SceneQuery;                       // forward decl; nested type used in signature
+
+// Logs a consolidated multi-line sweep diagnostics summary used by physics StepV2
+// Accepts the current position components instead of engine-internal MovementState
+void LogSweepDiagnostics(const PhysicsInput& input,
+                         float stX,
+                         float stY,
+                         float stZ,
+                         const SceneQuery::SweepResults& diag,
+                         const G3D::Vector3& moveDir,
+                         float intendedDist,
+                         bool isSwimming,
+                         float moveSpeed);
+
+// Logs the StepV2 input summary (migrated from PhysicsEngine::StepV2)
+void LogStepInputSummary(const PhysicsInput& input, float dt);
