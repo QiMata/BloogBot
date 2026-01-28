@@ -303,6 +303,24 @@ std::vector<NavPoly> Navigation::CapsuleOverlapSweep(uint32_t mapId,
 
 string Navigation::GetMmapsPath()
 {
+	// Check for BLOOGBOT_DATA_DIR environment variable first
+	char* envDataRoot = nullptr;
+	size_t envSize = 0;
+	if (_dupenv_s(&envDataRoot, &envSize, "BLOOGBOT_DATA_DIR") == 0 && envDataRoot != nullptr)
+	{
+		std::string dataRoot = envDataRoot;
+		free(envDataRoot);
+		if (!dataRoot.empty())
+		{
+			if (dataRoot.back() != '/' && dataRoot.back() != '\\')
+				dataRoot += '\\';
+			std::string mmapsPath = dataRoot + "mmaps\\";
+			if (std::filesystem::exists(mmapsPath))
+				return mmapsPath;
+		}
+	}
+
+	// Fall back to DLL-relative path
 	WCHAR DllPath[MAX_PATH] = { 0 };
 	GetModuleFileNameW((HINSTANCE)&__ImageBase, DllPath, _countof(DllPath));
 	wstring ws(DllPath);

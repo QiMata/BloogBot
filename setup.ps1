@@ -321,7 +321,10 @@ function Show-Summary {
     Write-ColoredOutput "Next Steps:" $ColorInfo
     Write-ColoredOutput "  1. Verify that the bin directory contains all required files" "White"
     Write-ColoredOutput "  2. Configure your BloogBot services to use the bin directory" "White"
-    Write-ColoredOutput "  3. Start the WoW server using the WWoW.Systems AppHost" "White"
+    Write-ColoredOutput "  3. For pathfinding tests, set BLOOGBOT_DATA_DIR environment variable:" "White"
+    Write-ColoredOutput "     `$env:BLOOGBOT_DATA_DIR = '$BinPath'" "Cyan"
+    Write-ColoredOutput "     Or use absolute path to your client directory with nav data" "Cyan"
+    Write-ColoredOutput "  4. Start the WoW server using the WWoW.Systems AppHost" "White"
     
     if (-not $Success) {
         Write-Host ""

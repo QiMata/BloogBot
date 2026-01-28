@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="obs-websocket-dotnet" Version="5.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Exports\GameData.Core\GameData.Core.csproj" />
     <ProjectReference Include="..\Services\BackgroundBotRunner\BackgroundBotRunner.csproj" />
     <ProjectReference Include="..\Services\ForegroundBotRunner\ForegroundBotRunner.csproj" />

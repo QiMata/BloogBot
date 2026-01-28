@@ -8,14 +8,19 @@ using WWoW.RecordedTests.Shared.Abstractions;
 using WWoW.RecordedTests.Shared.Abstractions.I;
 
 // A concrete ITestDescription that orchestrates two IBotRunner instances and an optional screen recorder.
-public sealed class DefaultRecordedWoWTestDescription : ITestDescription
+public class DefaultRecordedWoWTestDescription : ITestDescription
 {
     private readonly Func<IBotRunner> _createForegroundRunner;
     private readonly Func<IBotRunner> _createBackgroundRunner;
     private readonly Func<IScreenRecorder>? _createRecorder;
     private readonly OrchestrationOptions _options;
     private readonly ITestLogger _logger;
+    private readonly IRecordedTestContext? _providedContext;
+    private readonly IServerDesiredState? _desiredState;
 
+    /// <summary>
+    /// Creates a test description with factory functions for runners and recorder.
+    /// </summary>
     public DefaultRecordedWoWTestDescription(
         string name,
         Func<IBotRunner> createForegroundRunner,
@@ -30,13 +35,42 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
         _createRecorder = createRecorder;
         _options = options ?? new OrchestrationOptions();
         _logger = logger ?? new NullTestLogger();
+        _providedContext = null;
+        _desiredState = null;
+    }
+
+    /// <summary>
+    /// Creates a test description with a pre-created context, direct runner instances, and optional server desired state.
+    /// This overload is useful when the context needs to carry additional test-specific data (e.g., PathingRecordedTestContext).
+    /// </summary>
+    public DefaultRecordedWoWTestDescription(
+        IRecordedTestContext context,
+        IBotRunner foregroundRunner,
+        IBotRunner backgroundRunner,
+        IServerDesiredState? desiredState,
+        IScreenRecorder? recorder = null,
+        ITestLogger? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(foregroundRunner);
+        ArgumentNullException.ThrowIfNull(backgroundRunner);
+
+        Name = context.TestName;
+        _providedContext = context;
+        _desiredState = desiredState;
+        _createForegroundRunner = () => foregroundRunner;
+        _createBackgroundRunner = () => backgroundRunner;
+        _createRecorder = recorder != null ? () => recorder : null;
+        _options = new OrchestrationOptions();
+        _logger = logger ?? new NullTestLogger();
     }
 
     public string Name { get; }
 
     public async Task<OrchestrationResult> ExecuteAsync(ServerInfo server, CancellationToken cancellationToken)
     {
-        var context = new RecordedTestContext(Name, server);
+        // Use provided context or create a new one
+        var context = _providedContext ?? new RecordedTestContext(Name, server);
 
         Directory.CreateDirectory(_options.ArtifactsRootDirectory);
         var testDir = Path.Combine(_options.ArtifactsRootDirectory, SanitizeFileName(Name), context.StartedAt.ToString("yyyyMMdd_HHmmss"));
@@ -68,9 +102,16 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
                 await recorder.ConfigureTargetAsync(target, cancellationToken);
             }
 
-            // Prepare server state using GM (foreground)
+            // Prepare server state - use desired state if provided, otherwise delegate to runner
             _logger.Info("[Test] Preparing server state (GM)...");
-            await fg.PrepareServerStateAsync(context, cancellationToken);
+            if (_desiredState != null)
+            {
+                await _desiredState.ApplyAsync(fg, context, cancellationToken);
+            }
+            else
+            {
+                await fg.PrepareServerStateAsync(context, cancellationToken);
+            }
 
             // Start recording before background test
             if (recorder != null)
@@ -90,9 +131,16 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
                 await recorder.StopAsync(cancellationToken);
             }
 
-            // Reset server state with GM (foreground)
+            // Reset server state - use desired state if provided, otherwise delegate to runner
             _logger.Info("[Test] Resetting server state (GM)...");
-            await fg.ResetServerStateAsync(context, cancellationToken);
+            if (_desiredState != null)
+            {
+                await _desiredState.RevertAsync(fg, context, cancellationToken);
+            }
+            else
+            {
+                await fg.ResetServerStateAsync(context, cancellationToken);
+            }
 
             // Optional double stop to ensure OBS is stopped
             if (recorder != null && _options.DoubleStopRecorderForSafety)
@@ -143,7 +191,14 @@ public sealed class DefaultRecordedWoWTestDescription : ITestDescription
             try
             {
                 _logger.Info("[Test] Cleanup: resetting server state (GM)...");
-                await fg.ResetServerStateAsync(context, CancellationToken.None);
+                if (_desiredState != null)
+                {
+                    await _desiredState.RevertAsync(fg, context, CancellationToken.None);
+                }
+                else
+                {
+                    await fg.ResetServerStateAsync(context, CancellationToken.None);
+                }
             }
             catch { }
             try
