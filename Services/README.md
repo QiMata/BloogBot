@@ -1,6 +1,6 @@
 # BloogBot Services
 
-An ecosystem of intelligent, distributed services for World of Warcraft automation, providing AI-driven bot coordination, navigation, decision-making, and execution capabilities.
+An ecosystem of intelligent, distributed services for World of Warcraft automation, providing AI-driven bot coordination, navigation, decision-making, and execution capabilities. For end-to-end recorded regression testing, pair these services with the [`WWoW.RecordedTests.Shared`](../WWoW.RecordedTests.Shared/README.md) orchestration library which handles server readiness checks and artifact capture.
 
 ## Overview
 
