@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
+using BloogBot.AI.Observable;
 using BloogBot.AI.States;
+using BloogBot.AI.Transitions;
 using GameData.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using Stateless;
@@ -40,22 +42,81 @@ public sealed class BotActivityStateMachine
     ];
 
     private readonly StateMachine<BotActivity, Trigger> _sm;
+    private readonly BotStateObservable _stateObservable;
+    private readonly IForbiddenTransitionRegistry? _forbiddenTransitions;
+    private MinorState _currentMinorState;
+    private Trigger? _lastTrigger;
+
     public BotActivity Current => _sm.State;
+    public MinorState CurrentMinorState => _currentMinorState;
     public IObjectManager ObjectManager { get; private set; }
+    public IBotStateObservable StateObservable => _stateObservable;
     private ILogger Logger;
 
     public BotActivityStateMachine(
         ILoggerFactory loggerFactory,
         IObjectManager objectManager,
-        BotActivity initial = BotActivity.Resting)
+        BotActivity initial = BotActivity.Resting,
+        IForbiddenTransitionRegistry? forbiddenTransitions = null)
     {
         Logger = loggerFactory.CreateLogger<BotActivityStateMachine>();
         ObjectManager = objectManager;
+        _forbiddenTransitions = forbiddenTransitions;
         _sm = new(initial);
+        _stateObservable = new BotStateObservable(initial);
+        _currentMinorState = MinorState.None(initial);
 
         ConfigureGlobalTransitions();
         ConfigureActivities();
+        ConfigureTransitionCallbacks();
         DecideNextActiveState();
+    }
+
+    /// <summary>
+    /// Sets the current minor state within the current activity.
+    /// Publishes the change to the state observable.
+    /// </summary>
+    public void SetMinorState(MinorState minorState, string reason)
+    {
+        if (minorState.ParentActivity != Current)
+        {
+            throw new InvalidOperationException(
+                $"Minor state '{minorState.Name}' belongs to {minorState.ParentActivity}, " +
+                $"but current activity is {Current}");
+        }
+
+        _currentMinorState = minorState;
+        _stateObservable.PublishMinorStateChange(minorState, StateChangeSource.Deterministic, reason);
+        Logger.LogDebug("Minor state changed to {MinorState}: {Reason}", minorState.Name, reason);
+    }
+
+    void ConfigureTransitionCallbacks()
+    {
+        _sm.OnTransitioned(transition =>
+        {
+            var source = _lastTrigger.HasValue
+                ? StateChangeSource.Trigger
+                : StateChangeSource.Deterministic;
+
+            var reason = GetTransitionReason(transition.Source, transition.Destination);
+
+            // Reset minor state to None for new activity
+            _currentMinorState = MinorState.None(transition.Destination);
+
+            _stateObservable.PublishStateChange(
+                transition.Destination,
+                _currentMinorState,
+                source,
+                reason);
+
+            _lastTrigger = null;
+        });
+    }
+
+    string GetTransitionReason(BotActivity from, BotActivity to)
+    {
+        var config = ActivityConfigurations.FirstOrDefault(c => c.Activity == to);
+        return config?.EntryLogMessage ?? $"Transitioned from {from} to {to}";
     }
 
     void ConfigureGlobalTransitions()
@@ -107,6 +168,33 @@ public sealed class BotActivityStateMachine
     }
 
     BotActivity DecideNextActiveState()
+    {
+        var proposedActivity = EvaluateGameStateForActivity();
+
+        // Validate the proposed transition if registry is available
+        if (_forbiddenTransitions != null && proposedActivity != Current)
+        {
+            var context = new TransitionContext(
+                _stateObservable.CurrentState,
+                ObjectManager,
+                null); // Memory will be passed when available
+
+            var check = _forbiddenTransitions.CheckTransition(Current, proposedActivity, context);
+            if (!check.IsAllowed)
+            {
+                Logger.LogWarning(
+                    "Transition from {From} to {To} blocked by rule '{Rule}': {Reason}",
+                    Current, proposedActivity, check.RuleName, check.Reason);
+
+                // Stay in current state when transition is forbidden
+                return Current;
+            }
+        }
+
+        return proposedActivity;
+    }
+
+    BotActivity EvaluateGameStateForActivity()
     {
         if (ObjectManager == null || !ObjectManager.HasEnteredWorld)
         {
@@ -197,6 +285,15 @@ public sealed class BotActivityStateMachine
 
         Logger.LogInformation("Defaulting to Grinding for progression.");
         return BotActivity.Grinding;
+    }
+
+    /// <summary>
+    /// Fires a trigger to potentially cause a state transition.
+    /// </summary>
+    internal void Fire(Trigger trigger)
+    {
+        _lastTrigger = trigger;
+        _sm.Fire(trigger);
     }
 
     private sealed record ActivityConfiguration(BotActivity Activity, string? EntryLogMessage, IReadOnlyList<Trigger> ExitTriggers);

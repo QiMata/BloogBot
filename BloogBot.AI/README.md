@@ -168,7 +168,158 @@ public class CombatPlugin
 }
 ```
 
-## ?? State Machine Behavior
+## Desired-State Architecture
+
+BloogBot.AI implements a sophisticated desired-state strategy with the following core components:
+
+### Global State Observable
+
+The `IBotStateObservable` provides a single source of truth for all state information:
+
+```csharp
+// Subscribe to state changes
+stateObservable.StateChanges.Subscribe(state =>
+{
+    Console.WriteLine($"Activity: {state.Activity}, Minor: {state.MinorState.Name}");
+    Console.WriteLine($"Source: {state.Source}, Reason: {state.Reason}");
+});
+
+// Filter to specific activities
+stateObservable.WhenActivity(BotActivity.Combat).Subscribe(OnCombatState);
+
+// React only to activity changes
+stateObservable.ActivityChanged.Subscribe(OnActivityChanged);
+```
+
+Each `StateChangeEvent` includes:
+- **Activity**: Current major state (e.g., Combat, Questing)
+- **MinorState**: Granular state within activity (e.g., Combat.Engaging)
+- **Source**: What triggered the change (Deterministic, LlmAdvisory, Trigger, etc.)
+- **Reason**: Human-readable explanation
+- **Timestamp**: When the change occurred
+
+### Minor States
+
+Each `BotActivity` has associated minor states for granular tracking:
+
+| Activity | Minor States |
+|----------|-------------|
+| Combat | Approaching, Engaging, Casting, Looting, Fleeing, Recovering |
+| Questing | Accepting, Navigating, Completing, TurningIn, Reading |
+| Grinding | Searching, Pulling, Fighting, Resting |
+| Trading | Initiating, Negotiating, Confirming, Completing |
+
+Access minor states via `MinorStateDefinitions`:
+```csharp
+var combatStates = MinorStateDefinitions.ForActivity(BotActivity.Combat);
+stateMachine.SetMinorState(MinorStateDefinitions.Combat.Engaging, "Engaging target");
+```
+
+### LLM Advisory System
+
+LLM decisions are **advisory only** - deterministic logic has final authority:
+
+```csharp
+// LLM suggests an activity
+var advisory = LlmAdvisoryResult.Create(
+    BotActivity.Questing,
+    MinorStateDefinitions.Questing.Navigating,
+    "Player should continue questing",
+    confidence: 0.8);
+
+// Deterministic validation may override
+var resolution = advisoryValidator.Validate(advisory, currentState, objectManager);
+
+if (resolution.WasOverridden)
+{
+    Console.WriteLine($"LLM overridden by {resolution.OverrideRule}: {resolution.OverrideReason}");
+}
+```
+
+Override rules include:
+- **Combat Safety**: Enter combat if aggressors present
+- **Health Safety**: Rest if health < 40%
+- **Forbidden Transitions**: Block invalid state combinations
+- **UI Frame Priority**: Active UI frames take precedence
+
+### Forbidden Transitions
+
+Configure transition rules with templates:
+
+```csharp
+// Block specific transition
+registry.RegisterRule(ForbiddenTransitionRule.Block(
+    "CombatToChat",
+    BotActivity.Combat,
+    BotActivity.Chatting,
+    "Cannot chat during combat"));
+
+// Conditional blocking
+registry.RegisterRule(ForbiddenTransitionRule.BlockWhen(
+    "GhostFormRestriction",
+    ForbiddenTransitionRule.Any,  // wildcard
+    BotActivity.Combat,
+    ctx => ctx.ObjectManager.Player?.InGhostForm == true,
+    "Cannot combat in ghost form"));
+```
+
+### Decision Invocation Control
+
+Configure decision timing with precedence: **CLI > Environment > appsettings > Defaults**
+
+```bash
+# CLI
+--decision-interval=10 --reset-timer-on-adhoc
+
+# Environment
+export WWOW_DECISION_INTERVAL_SECONDS=10
+
+# appsettings.json
+{
+  "DecisionInvocation": {
+    "DefaultIntervalSeconds": 5,
+    "ResetTimerOnAdHocInvocation": true,
+    "EnableAutomaticInvocation": true
+  }
+}
+```
+
+### Distilled Summary Pipeline
+
+Multi-pass LLM summarization for context:
+
+```csharp
+var summary = await summaryPipeline.DistillAsync(context);
+
+// Pass 1: Extract key facts
+// Pass 2: Compress and prioritize
+// Pass 3: Generate summaries
+
+Console.WriteLine(summary.CompactSummary);   // Max 200 chars
+Console.WriteLine(summary.DetailedSummary);  // Max 2000 chars
+foreach (var insight in summary.KeyInsights)
+    Console.WriteLine($"- {insight}");
+```
+
+### Persistent Memory
+
+Character memory with lazy loading and batch persistence to PostgreSQL:
+
+```csharp
+// Lazy load (only loads when first accessed)
+var memory = await memoryService.GetOrLoadAsync(characterId, "MyCharacter", "MyRealm");
+
+// Add facts and memories
+memoryService.AddFact(characterId, "preferred_weapon", "sword");
+memoryService.AddMemoryEntry(characterId, MemoryEntry.CreatePermanent(
+    "Defeated rare mob in Westfall",
+    MemoryCategory.Combat,
+    importance: 0.9));
+
+// Batch persisted automatically every minute
+```
+
+## State Machine Behavior
 
 ### Global Triggers
 All activities respond to universal triggers:
@@ -276,17 +427,50 @@ public async Task StateMachine_CombatTrigger_TransitionsToCombat()
 ### Project Structure
 ```
 BloogBot.AI/
-??? States/                    # Activity and trigger definitions
-?   ??? BotActivity.cs        # Comprehensive activity enumeration
-?   ??? Trigger.cs            # State transition triggers
-??? StateMachine/             # State management
-?   ??? BotActivityStateMachine.cs  # Core state orchestration
-??? Semantic/                 # AI integration
-?   ??? KernelCoordinator.cs  # AI plugin coordination
-?   ??? PluginCatalog.cs      # Plugin discovery and management
-?   ??? DictionaryExtensions.cs  # Utility extensions
-??? Annotations/              # Metadata attributes
-    ??? ActivityPluginAttribute.cs  # Plugin registration
++-- States/                    # Activity and state definitions
+|   +-- BotActivity.cs        # Major activity enumeration (24 states)
+|   +-- MinorState.cs         # Minor state record type
+|   +-- MinorStateDefinitions.cs  # All minor states per activity
++-- StateMachine/             # State management
+|   +-- BotActivityStateMachine.cs  # Core state orchestration
+|   +-- Trigger.cs            # State transition triggers
++-- Observable/               # Reactive state streams
+|   +-- IBotStateObservable.cs    # Observable contract
+|   +-- BotStateObservable.cs     # Observable implementation
+|   +-- StateChangeEvent.cs       # State change record
+|   +-- StateChangeSource.cs      # Change source enum
++-- Transitions/              # Transition validation
+|   +-- IForbiddenTransitionRegistry.cs  # Registry contract
+|   +-- ForbiddenTransitionRegistry.cs   # Registry implementation
+|   +-- ForbiddenTransitionRule.cs       # Rule definition
+|   +-- TransitionContext.cs             # Context for predicates
++-- Advisory/                 # LLM advisory system
+|   +-- IAdvisoryValidator.cs     # Validator contract
+|   +-- AdvisoryValidator.cs      # Deterministic override logic
+|   +-- LlmAdvisoryResult.cs      # LLM output type
+|   +-- AdvisoryResolution.cs     # Validation result
+|   +-- IAdvisoryOverrideLog.cs   # Audit logging
++-- Configuration/            # Settings and resolution
+|   +-- DecisionInvocationSettings.cs        # Settings POCO
+|   +-- DecisionInvocationSettingsResolver.cs # Precedence resolver
++-- Invocation/               # Decision timing
+|   +-- IDecisionInvoker.cs   # Invoker contract
+|   +-- DecisionInvoker.cs    # Timer-based implementation
++-- Summary/                  # Summarization pipeline
+|   +-- ISummaryPipeline.cs   # Pipeline contract
+|   +-- SummaryPipeline.cs    # Multi-pass implementation
+|   +-- SummaryContext.cs     # Input context types
+|   +-- DistilledSummary.cs   # Output summary type
++-- Memory/                   # Character persistence
+|   +-- CharacterMemory.cs    # Memory model
+|   +-- ICharacterMemoryRepository.cs     # Repository contract
+|   +-- PostgresCharacterMemoryRepository.cs  # PostgreSQL impl
+|   +-- CharacterMemoryService.cs         # Lazy load + batch save
++-- Semantic/                 # AI integration
+|   +-- KernelCoordinator.cs  # AI plugin coordination
+|   +-- PluginCatalog.cs      # Plugin discovery
++-- Annotations/              # Metadata attributes
+    +-- ActivityPluginAttribute.cs  # Plugin registration
 ```
 
 ### Code Style
