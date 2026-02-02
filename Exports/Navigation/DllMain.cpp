@@ -28,6 +28,58 @@ void InitializeAllSystems()
 
     try
     {
+        // Get data root from environment variable if set
+        std::string dataRoot;
+        char* envDataRoot = nullptr;
+        size_t envSize = 0;
+        if (_dupenv_s(&envDataRoot, &envSize, "BLOOGBOT_DATA_DIR") == 0 && envDataRoot != nullptr)
+        {
+            dataRoot = envDataRoot;
+            free(envDataRoot);
+            if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+                dataRoot += '/';
+        }
+
+        // Initialize MapLoader (optional, for terrain data)
+        g_mapLoader = std::make_unique<MapLoader>();
+        std::vector<std::string> mapPaths;
+        if (!dataRoot.empty())
+            mapPaths.push_back(dataRoot + "maps/");
+        mapPaths.push_back("maps/");
+
+        for (const auto& path : mapPaths)
+        {
+            if (std::filesystem::exists(path))
+            {
+                if (g_mapLoader->Initialize(path))
+                    break;
+            }
+        }
+
+        // Initialize VMAP system directly using VMapManager2
+        std::vector<std::string> vmapPaths;
+        if (!dataRoot.empty())
+            vmapPaths.push_back(dataRoot + "vmaps/");
+        vmapPaths.push_back("vmaps/");
+
+        for (const auto& path : vmapPaths)
+        {
+            if (std::filesystem::exists(path))
+            {
+                // Get or create the VMapManager2 instance through factory
+                g_vmapManager = static_cast<VMAP::VMapManager2*>(
+                    VMAP::VMapFactory::createOrGetVMapManager());
+
+                if (g_vmapManager)
+                {
+                    // Initialize factory and set base path
+                    VMAP::VMapFactory::initialize();
+                    g_vmapManager->setBasePath(path);
+                    break;
+                }
+            }
+        }
+
         // Initialize Navigation
         Navigation::GetInstance()->Initialize();
 

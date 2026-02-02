@@ -1,17 +1,25 @@
 # FastCall - x86 Calling Convention Helper DLL
+# FastCall
 
 ## Overview
 
 **FastCall** is a native C++ dynamic-link library (DLL) that provides wrapper functions for invoking game APIs that use calling conventions incompatible with .NET's standard P/Invoke mechanisms. Specifically, it bridges the gap between managed C# code and native x86 `__fastcall` convention functions used in legacy game clients.
+FastCall is a native C++ DLL project that provides a bridge between managed .NET code and unmanaged game client functions for the BloogBot World of Warcraft automation framework. It serves as a critical interop layer that enables the bot to interact with the game client's internal functions through fast calling conventions.
 
 This component is essential for the **ForegroundBotRunner** when targeting the **Vanilla (1.12.1)** client, where many internal game functions use the `__fastcall` convention that passes the first two arguments in CPU registers (ECX and EDX) rather than on the stack.
 
 ## Purpose
 
 The FastCall DLL solves a fundamental interoperability problem:
+The FastCall DLL exports wrapper functions that:
+- Enable calling game client functions with proper calling conventions (__fastcall, __stdcall)
+- Provide a stable interface for interacting with WoW client internals
+- Handle memory marshaling between managed and unmanaged code
+- Support various game operations like Lua execution, object interaction, and vendor transactions
 
 1. **The Problem**: .NET's `Marshal.GetDelegateForFunctionPointer` cannot properly handle true x86 `__fastcall` calling conventions where arguments are passed in registers
 2. **The Solution**: Export `__stdcall` functions from a native DLL that accept the target function pointer as a parameter, then internally call the target using the correct `__fastcall` convention
+## Project Structure
 
 This allows managed C# code to call game functions indirectly through FastCall, which handles the register setup and calling convention translation.
 
@@ -32,11 +40,26 @@ This allows managed C# code to call game functions indirectly through FastCall, 
 ?                            ????????????????                             ?
 ?                                                                         ?
 ???????????????????????????????????????????????????????????????????????????
+Exports/FastCall/
+??? FastCall.vcxproj     # Visual Studio C++ project file
+??? dllmain.cpp          # Main DLL implementation with exported functions
+??? stdafx.h             # Precompiled header with Windows includes
+??? stdafx.cpp           # Precompiled header implementation
+??? targetver.h          # Windows target version definitions
+??? README.md            # This documentation
 ```
 
 ## Technical Details
+## Build Configuration
 
 ### Build Configuration
+- **Project Type**: Dynamic Library (DLL)
+- **Platform Toolset**: v143 (Visual Studio 2022)
+- **Language Standard**: C++14
+- **Character Set**: Unicode
+- **Output Directory**: `..\..\Bot\$(Configuration)\net8.0`
+- **Supported Platforms**: Win32, x64
+- **Configurations**: Debug, Release
 
 | Property | Value |
 |----------|-------|
@@ -66,10 +89,19 @@ This allows managed C# code to call game functions indirectly through FastCall, 
 ## Exported Functions
 
 All exports use `__stdcall` convention for easy P/Invoke from C#:
+The DLL exports the following functions used by the bot's managed code:
 
 ### `EnumerateVisibleObjects`
+### Lua Execution
+- **`LuaCall`**: Executes Lua code within the game client
+  - Parameters: `char* code`, `unsigned int ptr`
+  - Used for: Game commands, UI interactions, spell casting
 
 Enumerates all visible game objects in the world.
+### Object Enumeration
+- **`EnumerateVisibleObjects`**: Enumerates visible game objects
+  - Parameters: `unsigned int callback`, `int filter`, `unsigned int ptr`
+  - Used for: Finding targets, NPCs, and interactive objects
 
 ```cpp
 void __stdcall EnumerateVisibleObjects(
@@ -78,12 +110,26 @@ void __stdcall EnumerateVisibleObjects(
     unsigned int ptr        // Game function address
 );
 ```
+### Item and Inventory Management
+- **`LootSlot`**: Loots items from a specific slot
+  - Parameters: `int slot`, `unsigned int ptr`
+  - Used for: Automated looting after combat
 
 **Usage**: Called to populate the object manager with game entities (players, NPCs, items, etc.)
+- **`SellItemByGuid`**: Sells items to vendors
+  - Parameters: `unsigned int itemCount`, `unsigned long long vendorGuid`, `unsigned long long itemGuid`, `unsigned int ptr`
+  - Used for: Automated vendor interactions
 
 ### `LuaCall`
+- **`BuyVendorItem`**: Purchases items from vendors
+  - Parameters: `int itemIndex`, `int quantity`, `unsigned long long vendorGuid`, `unsigned int ptr`
+  - Used for: Buying consumables and equipment
 
 Executes Lua script in the game's Lua environment.
+### Text and Variable Access
+- **`GetText`**: Retrieves text values from game variables
+  - Parameters: `char* varName`, `unsigned int ptr`
+  - Used for: Reading Lua variable values
 
 ```cpp
 void __stdcall LuaCall(
@@ -91,10 +137,21 @@ void __stdcall LuaCall(
     unsigned int ptr        // Game function address
 );
 ```
+### Spatial Operations
+- **`Intersect`**: Performs 3D intersection testing
+  - Parameters: `XYZXYZ* points`, `float* distance`, `Intersection* intersection`, `unsigned int flags`, `unsigned int ptr`
+  - Used for: Collision detection and pathfinding
 
 **Usage**: Executes arbitrary Lua commands for game actions not directly accessible via memory
+- **`Intersect2`**: Alternative intersection testing
+  - Parameters: `XYZ* p1`, `XYZ* p2`, `XYZ* intersection`, `float* distance`, `unsigned int flags`, `unsigned int ptr`
+  - Used for: Line-of-sight calculations
 
 ### `GetText`
+### Object Management
+- **`GetObjectPtr`**: Retrieves object pointers by GUID
+  - Parameters: `int typemask`, `unsigned long long objectGuid`, `int line`, `char* file`, `unsigned int ptr`
+  - Used for: Object reference management
 
 Retrieves the value of a Lua global variable as a string.
 
@@ -194,23 +251,34 @@ struct XYZ {
     float Y; 
     float Z; 
 };
+The DLL defines several structures for 3D operations:
 
 // Ray (two 3D points)
+```cpp
 struct XYZXYZ { 
     float X1; float Y1; float Z1;  // Start point
     float X2; float Y2; float Z2;  // End point
+    float X1; float Y1; float Z1; 
+    float X2; float Y2; float Z2; 
 };
 
 // Intersection result
 struct Intersection { 
     float X; float Y; float Z;     // Intersection point
     float R;                       // Radius/distance
+    float X; float Y; float Z; float R; 
+};
+
+struct XYZ { 
+    float X; float Y; float Z; 
 };
 ```
 
 ## C# Integration
+## Integration with .NET Code
 
 ### P/Invoke Declarations
+The FastCall DLL is consumed by the `Functions` class in `Services/ForegroundBotRunner/Mem/Functions.cs`, which provides managed wrappers using P/Invoke declarations:
 
 ```csharp
 // In ForegroundBotRunner/Mem/Functions.cs
@@ -249,6 +317,7 @@ public static void BuyVendorItem(ulong vendorGuid, int itemId, int quantity)
     BuyVendorItemFunction(itemId, quantity, vendorGuid, 
         MemoryAddresses.BuyVendorItemFunPtr);
 }
+private static extern void LuaCallFunction(string code, int ptr);
 
 public static void LuaCall(string code)
 {
@@ -257,6 +326,8 @@ public static void LuaCall(string code)
         LuaCallFunction(code, MemoryAddresses.LuaCallFunPtr);
     }
 }
+[DllImport("FastCall.dll", EntryPoint = "LootSlot")]
+private static extern byte LootSlotFunction(int slot, nint ptr);
 ```
 
 ### LuaCallWithResult Pattern
@@ -279,6 +350,7 @@ public static string[] LuaCallWithResult(string code)
 
     // Execute the Lua code
     LuaCall(code);
+## Usage in Bot Framework
 
     // Read back the results via GetText
     var results = new List<string>();
@@ -287,16 +359,26 @@ public static string[] LuaCallWithResult(string code)
         var address = GetText(varName);
         results.Add(MemoryManager.ReadString(address));
     }
+The FastCall functions are used throughout the bot for:
 
     return results.ToArray();
 }
+1. **Combat Operations**: Casting spells, targeting enemies
+2. **Movement**: Pathfinding and collision detection
+3. **Inventory Management**: Looting, selling, buying items
+4. **Game State Queries**: Reading player status, object information
+5. **UI Interaction**: Executing Lua commands for game interface
 
 // Usage:
 var results = Functions.LuaCallWithResult("{0} = UnitHealth('player')");
 int health = int.Parse(results[0]);
 ```
+## Dependencies
 
 ## File Structure
+- **Windows SDK**: Required for Windows API headers
+- **Visual C++ Runtime**: For DLL runtime support
+- **Game Client**: Functions operate on memory addresses within the WoW client process
 
 ```
 Exports/FastCall/
@@ -308,27 +390,45 @@ Exports/FastCall/
 ??? targetver.h                # Windows SDK targeting
 ??? README.md                  # This documentation
 ```
+## Build Instructions
 
 ## Building
+1. Open the solution in Visual Studio 2022 or compatible
+2. Ensure the Windows 10 SDK is installed
+3. Build the project for the desired platform (Win32/x64)
+4. The output DLL will be placed in the Bot output directory
+5. Ensure the DLL is available to the .NET application at runtime
 
 ### Prerequisites
+## Thread Safety
 
 - Visual Studio 2022 with C++ Desktop Development workload
 - Windows 10/11 SDK
+The DLL functions are designed to be called from the game client's main thread. The calling .NET code handles thread synchronization to ensure proper execution context.
 
 ### Build Steps
+## Performance Considerations
 
 1. Open `BloogBot.sln` in Visual Studio 2022
 2. Select **Win32** platform (required for x86 `__fastcall` support)
 3. Select desired configuration (Debug/Release)
 4. Build the FastCall project: **Build ? Build FastCall**
 5. Output DLL will be in the configured output directory
+- Functions use optimized calling conventions (__fastcall, __stdcall) for performance
+- Minimal parameter marshaling to reduce overhead
+- Direct memory access patterns for efficiency
+- Compiled with optimization flags in Release builds
 
 ### Important Notes
+## Maintenance Notes
 
 - **Must be built for Win32 (x86)** - The `__fastcall` calling convention is x86-specific
 - FastCall.dll must be deployed alongside the managed bot assembly
 - The DLL is typically embedded as a resource in ForegroundBotRunner
+- Memory addresses are managed by the calling .NET code via `MemoryAddresses` class
+- Function pointers are resolved at runtime by the managed layer
+- No direct game client dependencies in the DLL itself
+- Functions act as thin wrappers around game client calls
 
 ## Version Compatibility
 
@@ -402,3 +502,4 @@ FastCall.dll provides a clean, maintainable solution that:
 ---
 
 *This component is part of the WWoW (Westworld of Warcraft) simulation platform. See [ARCHITECTURE.md](../../ARCHITECTURE.md) for system-wide documentation.*
+This DLL is designed for specific versions of the World of Warcraft client. Memory addresses and function signatures may need updates for different client versions or patches.

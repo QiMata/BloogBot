@@ -1,4 +1,10 @@
-﻿using BotRunner.Clients;
+﻿using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using BotRunner.Clients;
+using BotRunner.Combat;
+using BotRunner.Movement;
 using Communication;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
@@ -12,23 +18,30 @@ namespace BotRunner
         private readonly IObjectManager _objectManager;
 
         private readonly CharacterStateUpdateClient _characterStateUpdateClient;
-        private readonly PathfindingClient _pathfindingClient;
+        private readonly ITargetEngagementService _targetEngagementService;
+        private readonly ILootingService _lootingService;
+        private readonly ITargetPositioningService _targetPositioningService;
 
         private ActivitySnapshot _activitySnapshot;
 
-        private Task _asyncBotTaskRunnerTask;
+        private Task? _asyncBotTaskRunnerTask;
 
-        private IBehaviourTreeNode _behaviorTree;
+        private IBehaviourTreeNode? _behaviorTree;
+        private BehaviourTreeStatus _behaviorTreeStatus = BehaviourTreeStatus.Success;
 
         public BotRunnerService(IObjectManager objectManager,
                                  CharacterStateUpdateClient characterStateUpdateClient,
-                                 PathfindingClient pathfindingClient)
+                                 ITargetEngagementService targetEngagementService,
+                                 ILootingService lootingService,
+                                 ITargetPositioningService targetPositioningService)
         {
-            _objectManager = objectManager;
+            _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
             _activitySnapshot = new() { AccountName = "?" };
 
-            _pathfindingClient = pathfindingClient;
-            _characterStateUpdateClient = characterStateUpdateClient;
+            _characterStateUpdateClient = characterStateUpdateClient ?? throw new ArgumentNullException(nameof(characterStateUpdateClient));
+            _targetEngagementService = targetEngagementService ?? throw new ArgumentNullException(nameof(targetEngagementService));
+            _lootingService = lootingService ?? throw new ArgumentNullException(nameof(lootingService));
+            _targetPositioningService = targetPositioningService ?? throw new ArgumentNullException(nameof(targetPositioningService));
         }
 
         public void Start()
@@ -39,131 +52,141 @@ namespace BotRunner
 
         private async Task StartBotTaskRunnerAsync()
         {
-            var _status = BehaviourTreeStatus.Success;
-
             while (true)
             {
                 try
                 {
                     var incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
-                    if (_behaviorTree == null || _status != BehaviourTreeStatus.Running)
+
+                    UpdateBehaviorTree(incomingActivityMemberState);
+
+                    if (_behaviorTree != null)
                     {
-                        if (_objectManager.LoginScreen.IsLoggedIn)
-                        {
-                            if (_objectManager.RealmSelectScreen.CurrentRealm != null)
-                            {
-                                if (_objectManager.CharacterSelectScreen.HasReceivedCharacterList)
-                                {
-                                    if (_objectManager.CharacterSelectScreen.CharacterSelects.Count > 0)
-                                    {
-                                        if (_objectManager.HasEnteredWorld)
-                                        {
-                                            if (_objectManager.Players.Any(x => x.Name == "Dallawha"))
-                                            {
-                                                IWoWUnit woWUnit = _objectManager.Units.First(x => x.Name == "Dallawha");
-
-                                                float pathingDistance = _pathfindingClient.GetPathingDistance(_objectManager.Player.MapId, _objectManager.Player.Position, woWUnit.Position);
-                                                float directDistance = _objectManager.Player.Position.DistanceTo(woWUnit.Position);
-
-                                                //Console.WriteLine($"[BOT] Target: Dallawha | PathDist: {pathingDistance:F2} | DirectDist: {directDistance:F2} | PlayerPos: ({_objectManager.Player.Position.X:F2}, {_objectManager.Player.Position.Y:F2}, {_objectManager.Player.Position.Z:F2}) | TargetPos: ({woWUnit.Position.X:F2}, {woWUnit.Position.Y:F2}, {woWUnit.Position.Z:F2})");
-
-                                                if (pathingDistance > 5)
-                                                {
-                                                    //Console.WriteLine($"[BOT] MOVING - Distance {pathingDistance:F2} > 25, requesting path...");
-
-                                                    Position[] positions = _pathfindingClient.GetPath(_objectManager.Player.MapId, _objectManager.Player.Position, woWUnit.Position, true);
-
-                                                    //Console.WriteLine($"[BOT] Path received with {positions.Length} waypoints");
-
-                                                    if (positions.Length > 0)
-                                                    {
-                                                        //Console.WriteLine($"[BOT] Moving to waypoint[1]: ({positions[1].X:F2}, {positions[1].Y:F2}, {positions[1].Z:F2})");
-                                                        _objectManager.MoveToward(positions[1]);
-                                                    }
-                                                    else
-                                                    {
-                                                        //Console.WriteLine($"[BOT] ERROR: Path has no waypoints!");
-                                                    }
-                                                }
-                                                else if (!_objectManager.Player.IsFacing(woWUnit))
-                                                {
-                                                    //Console.WriteLine($"[BOT] FACING - Distance {pathingDistance:F2} <= 25, adjusting facing...");
-                                                    //Console.WriteLine($"[BOT] Current facing: {_objectManager.Player.Facing:F2}, Target direction: {Math.Atan2(woWUnit.Position.Y - _objectManager.Player.Position.Y, woWUnit.Position.X - _objectManager.Player.Position.X):F2}");
-                                                    _objectManager.Face(woWUnit.Position);
-                                                }
-                                                else
-                                                {
-                                                    //Console.WriteLine($"[BOT] STOPPED - Distance {pathingDistance:F2} <= 25 and facing target");
-                                                    //Console.WriteLine($"[BOT] Movement flags: {_objectManager.Player.MovementFlags}");
-                                                    _objectManager.StopAllMovement();
-                                                }
-                                            }
-                                            else
-                                            {
-                                                //Console.WriteLine($"[BOT] Dallawha not found in Players list. Total players: {_objectManager.Players.Count()}");
-                                                //if (_objectManager.Units.Any(x => x.Name == "Dallawha"))
-                                                //{
-                                                //    Console.WriteLine($"[BOT] WARNING: Dallawha found in Units but not in Players!");
-                                                //}
-                                                _behaviorTree = BuildWaitSequence(0);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            _behaviorTree = BuildEnterWorldSequence(_objectManager.CharacterSelectScreen.CharacterSelects[0].Guid);
-                                        }
-                                    }
-                                    else
-                                    {
-
-                                        Class @class = WoWNameGenerator.ParseClassCode(_activitySnapshot.AccountName.Substring(2, 2));
-                                        Race race = WoWNameGenerator.ParseRaceCode(_activitySnapshot.AccountName[..2]);
-                                        Gender gender = WoWNameGenerator.DetermineGender(@class);
-
-                                        _behaviorTree = BuildCreateCharacterSequence(
-                                            [
-                                                WoWNameGenerator.GenerateName(race, gender),
-                                                race,
-                                                gender,
-                                                @class,
-                                                0,
-                                                0,
-                                                0,
-                                                0,
-                                                0
-                                            ]
-                                        );
-                                    }
-                                }
-                                else
-                                {
-                                    if (!_objectManager.CharacterSelectScreen.HasRequestedCharacterList)
-                                        _behaviorTree = BuildRequestCharacterSequence();
-                                }
-                            }
-                            else
-                            {
-                                _behaviorTree = BuildRealmSelectionSequence();
-                            }
-                        }
-                        else
-                        {
-                            _behaviorTree = BuildLoginSequence(incomingActivityMemberState.AccountName, "PASSWORD");
-                        }
-
-                        // Tick the behavior tree to execute the current task
-                        _behaviorTree.Tick(new TimeData(0.1f));
+                        _behaviorTreeStatus = _behaviorTree.Tick(new TimeData(0.1f));
                     }
 
+                    await ProcessCombatAsync(CancellationToken.None);
+
                     _activitySnapshot = incomingActivityMemberState;
-                    // Delay to control the frequency of task processing
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[BOT RUNNER] {ex}");
                 }
+
                 await Task.Delay(100);
             }
+        }
+
+        private void UpdateBehaviorTree(ActivitySnapshot incomingActivityMemberState)
+        {
+            if (_behaviorTree != null && _behaviorTreeStatus == BehaviourTreeStatus.Running)
+            {
+                return;
+            }
+
+            if (!_objectManager.LoginScreen.IsLoggedIn)
+            {
+                _behaviorTree = BuildLoginSequence(incomingActivityMemberState.AccountName, "PASSWORD");
+                return;
+            }
+
+            if (_objectManager.RealmSelectScreen.CurrentRealm == null)
+            {
+                _behaviorTree = BuildRealmSelectionSequence();
+                return;
+            }
+
+            if (!_objectManager.CharacterSelectScreen.HasReceivedCharacterList)
+            {
+                if (!_objectManager.CharacterSelectScreen.HasRequestedCharacterList)
+                {
+                    _behaviorTree = BuildRequestCharacterSequence();
+                }
+
+                return;
+            }
+
+            if (_objectManager.CharacterSelectScreen.CharacterSelects.Count == 0)
+            {
+                Class @class = WoWNameGenerator.ParseClassCode(_activitySnapshot.AccountName.Substring(2, 2));
+                Race race = WoWNameGenerator.ParseRaceCode(_activitySnapshot.AccountName[..2]);
+                Gender gender = WoWNameGenerator.DetermineGender(@class);
+
+                _behaviorTree = BuildCreateCharacterSequence(
+                    [
+                        WoWNameGenerator.GenerateName(race, gender),
+                        race,
+                        gender,
+                        @class,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ]
+                );
+
+                return;
+            }
+
+            if (!_objectManager.HasEnteredWorld)
+            {
+                _behaviorTree = BuildEnterWorldSequence(_objectManager.CharacterSelectScreen.CharacterSelects[0].Guid);
+                return;
+            }
+
+            if (!_objectManager.Players.Any(x => x.Name == "Dallawha"))
+            {
+                _behaviorTree = BuildWaitSequence(0);
+                return;
+            }
+
+            _behaviorTree ??= BuildWaitSequence(0);
+        }
+
+        private async Task ProcessCombatAsync(CancellationToken cancellationToken)
+        {
+            if (!_objectManager.HasEnteredWorld)
+            {
+                return;
+            }
+
+            var target = _objectManager.Units.FirstOrDefault(x => x.Name == "Dallawha");
+
+            if (target == null)
+            {
+                return;
+            }
+
+            if (target.Health <= 0)
+            {
+                _objectManager.StopAllMovement();
+                await _lootingService.TryLootAsync(target.Guid, cancellationToken);
+                return;
+            }
+
+            if (_targetPositioningService.EnsureInCombatRange(target))
+            {
+                await _targetEngagementService.EngageAsync(target, cancellationToken);
+            }
+        }
+
+        internal static Position? ResolveNextWaypoint(Position[]? positions, Action<string>? logAction = null)
+        {
+            if (positions == null || positions.Length == 0)
+            {
+                logAction?.Invoke("Path contained no waypoints. Skipping movement.");
+                return null;
+            }
+
+            if (positions.Length == 1)
+            {
+                logAction?.Invoke("Path contained a single waypoint. Using waypoint[0].");
+                return positions[0];
+            }
+
+            return positions[1];
         }
 
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)

@@ -67,7 +67,7 @@ namespace StateManager
 
             CreateHostBuilder(args)
                 .Build()
-                .Run();
+                .RunAsync();
         }
 
         private static Process LaunchPathfindingService()
@@ -215,6 +215,9 @@ namespace StateManager
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
+                    services.Configure<PathfindingServiceOptions>(hostContext.Configuration.GetSection("PathfindingService"));
+                    services.AddHostedService<PathfindingServiceBootstrapper>();
+                    services.AddPromptHandlingServices(hostContext.Configuration);
                     services.AddHostedService<StateManagerWorker>();
                     services.AddHostedService<DecisionEngineWorker>();
                     services.AddHostedService<PromptHandlingServiceWorker>();

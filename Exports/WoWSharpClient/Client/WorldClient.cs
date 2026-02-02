@@ -1,196 +1,139 @@
-﻿using GameData.Core.Enums;
+using System;
 using System.Collections.Concurrent;
-using System.Net;
-using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+using GameData.Core.Enums;
+using WoWSharpClient.Networking.Abstractions;
+using WoWSharpClient.Networking.Implementation;
+using WoWSharpClient.Networking.I;
+using System.IO;
 using System.Text;
-using WowSrp.Header;
+using System.Reactive;
+using System.Reactive.Subjects;
+using System.Reactive.Linq;
 
 namespace WoWSharpClient.Client
 {
-    internal class WorldClient(OpCodeDispatcher opCodeDispatcher) : IDisposable
+    /// <summary>
+    /// High-level world server client that composes the networking stack.
+    /// Handles the world server protocol without direct socket management.
+    /// </summary>
+    public sealed class WorldClient : IWorldClient
     {
-        private readonly OpCodeDispatcher _opCodeDispatcher = opCodeDispatcher;
+        private readonly PacketPipeline<Opcode> _pipeline;
+        private readonly IConnection _connection;
+        private IEncryptor _encryptor;
+        private bool _disposed;
+        private uint _lastPingTime;
+        
+        // Authentication state
+        private string _username = string.Empty;
+        private byte[] _sessionKey = [];
+        private bool _isAuthenticated = false;
 
-        //TODO: Take in from constructor
-        private IPAddress _ipAddress = IPAddress.Loopback;
-        private int _port = 0;
+        // Reactive subjects
+        private readonly Subject<Unit> _authenticationSucceeded = new();
+        private readonly Subject<byte> _authenticationFailed = new();
+        private readonly Subject<(ulong Guid, string Name, byte Race, byte Class, byte Gender)> _characterFound = new();
+        private readonly Subject<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)> _attackStateChanged = new();
+        private readonly Subject<string> _attackErrors = new();
 
-        private TcpClient? _client = null;
-        private VanillaDecryption _vanillaDecryption;
-        private VanillaEncryption _vanillaEncryption;
-        private NetworkStream _stream = null;
-        private Task _asyncListener;
-        private readonly uint _lastPingTime;
+        // Dynamic opcode subjects registry
+        private readonly ConcurrentDictionary<Opcode, ISubject<ReadOnlyMemory<byte>>> _opcodeStreams = new();
 
-        private readonly ConcurrentQueue<Func<Task>> _sendQueue = new();
-        private readonly SemaphoreSlim _sendSemaphore = new(1, 1);
-        private bool _isSending = false;
-
-        public void Dispose()
+        public WorldClient(
+            IConnection connection,
+            IMessageFramer framer,
+            IEncryptor encryptor,
+            IPacketCodec<Opcode> codec,
+            IMessageRouter<Opcode> router)
         {
-            _client?.Close();
+            _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+            _encryptor = encryptor ?? throw new ArgumentNullException(nameof(encryptor));
+            
+            _pipeline = new PacketPipeline<Opcode>(connection, encryptor, framer, codec, router);
+            
+            RegisterWorldHandlers();
         }
 
-        public bool IsConnected => _client != null && _client.Connected;
+        public bool IsConnected => _pipeline.IsConnected;
+        public bool IsAuthenticated => _isAuthenticated;
 
-        public void Connect(string username, IPAddress ipAddress, byte[] sessionKey, int port = 8085)
+        // Reactive opcode registration: returns an observable stream per opcode
+        public IObservable<ReadOnlyMemory<byte>> RegisterOpcodeHandler(Opcode opcode)
         {
-            try
+            var subject = (ISubject<ReadOnlyMemory<byte>>)_opcodeStreams.GetOrAdd(opcode, _ => new Subject<ReadOnlyMemory<byte>>());
+            _pipeline.RegisterHandler(opcode, payload =>
             {
-                _ipAddress = ipAddress;
-                _port = port;
-
-                _vanillaDecryption = new VanillaDecryption(sessionKey);
-                _vanillaEncryption = new VanillaEncryption(sessionKey);
-
-                _client?.Close();
-                _client = new TcpClient(AddressFamily.InterNetwork);
-                _client.Connect(_ipAddress, _port);
-
-                _stream = _client.GetStream();
-
-                HandleAuthChallenge(username, sessionKey);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex);
-            }
-        }
-
-        private void SendPacket(byte[] packetData, Opcode opcode)
-        {
-            EnqueueSend(async () =>
-            {
-                Console.WriteLine($"[WorldClient] Sending packet: {opcode} ({packetData.Length} bytes)");
-                await _stream.WriteAsync(packetData);
+                subject.OnNext(payload);
+                return Task.CompletedTask;
             });
+            return subject.AsObservable();
         }
-        public void HandleAuthChallenge(string username, byte[] sessionKey)
-        {
-            using var reader = new BinaryReader(_stream, Encoding.UTF8, true);
-            byte[] header = reader.ReadBytes(4);
 
-            if (header.Length < 4)
+        public async Task ConnectAsync(string username, string host, byte[] sessionKey, int port = 8085, CancellationToken cancellationToken = default)
+        {
+            _username = username ?? throw new ArgumentNullException(nameof(username));
+            _sessionKey = sessionKey ?? throw new ArgumentNullException(nameof(sessionKey));
+            _isAuthenticated = false;
+
+            Console.WriteLine($"[NewWorldClient] Connecting to world server {host}:{port} for user '{username}'");
+            
+            await _pipeline.ConnectAsync(host, port, cancellationToken);
+            
+            Console.WriteLine("[NewWorldClient] Connected to world server. Waiting for SMSG_AUTH_CHALLENGE...");
+        }
+
+        public Task DisconnectAsync(CancellationToken cancellationToken = default)
+        {
+            _isAuthenticated = false;
+            _username = string.Empty;
+            _sessionKey = [];
+            
+            Console.WriteLine("[NewWorldClient] Disconnecting from world server");
+            return _pipeline.DisconnectAsync(cancellationToken);
+        }
+
+        public async Task SendCharEnumAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_isAuthenticated)
             {
-                Console.WriteLine($"[WorldClient] Received incomplete SMSG_AUTH_CHALLENGE header.");
+                Console.WriteLine("[NewWorldClient] Cannot send character enum - not authenticated");
                 return;
             }
 
-            ushort size = BitConverter.ToUInt16([.. header.Take(2).Reverse()], 0);
-            ushort opcode = BitConverter.ToUInt16([.. header.Skip(2).Take(2)], 0);
+            await _pipeline.SendAsync(Opcode.CMSG_CHAR_ENUM, ReadOnlyMemory<byte>.Empty, cancellationToken);
+        }
 
-            byte[] serverSeed = reader.ReadBytes(size - sizeof(ushort));
-            if (serverSeed.Length < 4)
+        public async Task SendPingAsync(uint sequence, CancellationToken cancellationToken = default)
+        {
+            var payload = new byte[8];
+            BitConverter.GetBytes(sequence).CopyTo(payload, 0);
+            BitConverter.GetBytes(0u).CopyTo(payload, 4);
+            await _pipeline.SendAsync(Opcode.CMSG_PING, payload, cancellationToken);
+        }
+
+        public async Task SendQueryTimeAsync(CancellationToken cancellationToken = default)
+            => await _pipeline.SendAsync(Opcode.CMSG_QUERY_TIME, ReadOnlyMemory<byte>.Empty, cancellationToken);
+
+        public async Task SendPlayerLoginAsync(ulong guid, CancellationToken cancellationToken = default)
+        {
+            if (!_isAuthenticated)
             {
-                Console.WriteLine($"[WorldClient] Incomplete SMSG_AUTH_CHALLENGE packet.");
+                Console.WriteLine("[NewWorldClient] Cannot send player login - not authenticated");
                 return;
             }
 
-            SendCMSGAuthSession(username, serverSeed, sessionKey);
+            var payload = new byte[8];
+            BitConverter.GetBytes(guid).CopyTo(payload, 0);
+            await _pipeline.SendAsync(Opcode.CMSG_PLAYER_LOGIN, payload, cancellationToken);
         }
 
-        private void SendCMSGAuthSession(string username, byte[] serverSeed, byte[] sessionKey)
-        {
-            try
-            {
-                using var memoryStream = new MemoryStream();
-                using var writer = new BinaryWriter(memoryStream, Encoding.UTF8, true);
-
-                uint opcode = (uint)Opcode.CMSG_AUTH_SESSION;
-                uint build = 5875;
-                uint serverId = 1;
-                uint clientSeed = (uint)new Random().Next(int.MinValue, int.MaxValue);
-
-                byte[] clientProof = PacketManager.GenerateClientProof(username, clientSeed, serverSeed, sessionKey);
-                byte[] decompressedAddonInfo = PacketManager.GenerateAddonInfo();
-                byte[] compressedAddonInfo = PacketManager.Compress(decompressedAddonInfo);
-                uint decompressedAddonInfoSize = (uint)decompressedAddonInfo.Length;
-
-                ushort packetSize = (ushort)(4 + 4 + 4 + username.Length + 1 + 4 + clientProof.Length + 4 + compressedAddonInfo.Length);
-
-                writer.Write(BitConverter.GetBytes(packetSize).Reverse().ToArray());
-                writer.Write(opcode);
-                writer.Write(build);
-                writer.Write(serverId);
-                writer.Write(Encoding.UTF8.GetBytes(username));
-                writer.Write((byte)0);
-                writer.Write(clientSeed);
-                writer.Write(clientProof);
-                writer.Write(decompressedAddonInfoSize);
-                writer.Write(compressedAddonInfo);
-
-                writer.Flush();
-                byte[] packetData = memoryStream.ToArray();
-                SendPacket(packetData, Opcode.CMSG_AUTH_SESSION);
-
-                _asyncListener = Task.Run(HandleNetworkMessagesAsync);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WorldClient] An error occurred while sending CMSG_AUTH_SESSION: {ex}");
-            }
-        }
-
-        public void SendCMSGCharEnum()
-        {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader(4, (uint)Opcode.CMSG_CHAR_ENUM);
-            writer.Write(header);
-            writer.Flush();
-            SendPacket(ms.ToArray(), Opcode.CMSG_CHAR_ENUM);
-        }
-
-        public void SendCMSGQueryTime()
-        {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader(4, (uint)Opcode.CMSG_QUERY_TIME);
-            writer.Write(header);
-            writer.Flush();
-            SendPacket(ms.ToArray(), Opcode.CMSG_QUERY_TIME);
-        }
-
-        public void SendCMSGPing(uint sequence)
-        {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader(12, (uint)Opcode.CMSG_PING);
-            writer.Write(header);
-            writer.Write(sequence);
-            writer.Write((uint)0);
-            writer.Flush();
-            SendPacket(ms.ToArray(), Opcode.CMSG_PING);
-        }
-
-        public void SendCMSGPlayerLogin(ulong guid)
-        {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader(12, (uint)Opcode.CMSG_PLAYER_LOGIN);
-            writer.Write(header);
-            writer.Write(guid);
-            writer.Flush();
-            SendPacket(ms.ToArray(), Opcode.CMSG_PLAYER_LOGIN);
-        }
-
-        public void SendCMSGNameTypeQuery(Opcode opcode, ulong guid)
-        {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader(12, (uint)opcode);
-            writer.Write(header);
-            writer.Write(guid);
-            writer.Flush();
-            SendPacket(ms.ToArray(), opcode);
-        }
-
-        public void SendCMSGMessageChat(ChatMsg type, Language language, string destinationName, string message)
+        public async Task SendChatMessageAsync(ChatMsg type, Language language, string destinationName, string message, CancellationToken cancellationToken = default)
         {
             using var ms = new MemoryStream();
             using var writer = new BinaryWriter(ms, Encoding.UTF8, true);
-            byte[] header = _vanillaEncryption.CreateClientHeader(12 + ((uint)message.Length + 1) + (uint)(type == ChatMsg.CHAT_MSG_WHISPER || type == ChatMsg.CHAT_MSG_CHANNEL ? destinationName.Length + 1 : 0), (uint)Opcode.CMSG_MESSAGECHAT);
-            writer.Write(header);
+            
             writer.Write((uint)type);
             writer.Write((uint)language);
 
@@ -204,129 +147,264 @@ namespace WoWSharpClient.Client
             writer.Write((byte)0);
 
             writer.Flush();
-            SendPacket(ms.ToArray(), Opcode.CMSG_MESSAGECHAT);
+            await _pipeline.SendAsync(Opcode.CMSG_MESSAGECHAT, ms.ToArray(), cancellationToken);
         }
 
-        public void SendMSGMoveWorldportAck()
+        public async Task SendNameQueryAsync(ulong guid, CancellationToken cancellationToken = default)
         {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader(4, (uint)Opcode.MSG_MOVE_WORLDPORT_ACK);
-            writer.Write(header);
-            writer.Flush();
-            SendPacket(ms.ToArray(), Opcode.MSG_MOVE_WORLDPORT_ACK);
+            var payload = new byte[8];
+            BitConverter.GetBytes(guid).CopyTo(payload, 0);
+            await _pipeline.SendAsync(Opcode.CMSG_NAME_QUERY, payload, cancellationToken);
         }
 
-        public void SendCMSGSetActiveMover(ulong guid)
+        public async Task SendMoveWorldPortAckAsync(CancellationToken cancellationToken = default)
+            => await _pipeline.SendAsync(Opcode.MSG_MOVE_WORLDPORT_ACK, ReadOnlyMemory<byte>.Empty, cancellationToken);
+
+        public async Task SendSetActiveMoverAsync(ulong guid, CancellationToken cancellationToken = default)
         {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader(12, (uint)Opcode.CMSG_SET_ACTIVE_MOVER);
-            writer.Write(header);
-            writer.Write(guid);
-            writer.Flush();
-            SendPacket(ms.ToArray(), Opcode.CMSG_SET_ACTIVE_MOVER);
+            var payload = new byte[8];
+            BitConverter.GetBytes(guid).CopyTo(payload, 0);
+            await _pipeline.SendAsync(Opcode.CMSG_SET_ACTIVE_MOVER, payload, cancellationToken);
         }
 
-        public void SendMSGMove(Opcode opcode, byte[] movementInfo)
+        public async Task SendOpcodeAsync(Opcode opcode, byte[] payload, CancellationToken cancellationToken = default)
+            => await _pipeline.SendAsync(opcode, payload, cancellationToken);
+
+        public void UpdateEncryptor(IEncryptor newEncryptor)
         {
-            //Console.WriteLine($"[SendMSGMove] {opcode} {BitConverter.ToString(movementInfo)}");
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader((uint)(4 + movementInfo.Length), (uint)opcode);
-            writer.Write(header);
-            writer.Write(movementInfo);
-            writer.Flush();
-            SendPacket(ms.ToArray(), opcode);
+            _encryptor = newEncryptor ?? throw new ArgumentNullException(nameof(newEncryptor));
+            _pipeline.Encryptor = newEncryptor;
+            Console.WriteLine($"[NewWorldClient] Updated encryptor to {newEncryptor.GetType().Name}");
         }
 
-        public void SendMSGPacked(Opcode opcode, byte[] payload)
+        private void RegisterWorldHandlers()
         {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms);
-            var header = _vanillaEncryption.CreateClientHeader((uint)(4 + payload.Length), (uint)opcode);
-            writer.Write(header);
-            writer.Write(payload);
-            writer.Flush();
-            SendPacket(ms.ToArray(), opcode);
+            _pipeline.RegisterHandler(Opcode.SMSG_AUTH_CHALLENGE, HandleAuthChallenge);
+            _pipeline.RegisterHandler(Opcode.SMSG_AUTH_RESPONSE, HandleAuthResponse);
+            _pipeline.RegisterHandler(Opcode.SMSG_CHAR_ENUM, HandleCharEnum);
+            _pipeline.RegisterHandler(Opcode.SMSG_PONG, HandlePong);
+            _pipeline.RegisterHandler(Opcode.SMSG_QUERY_TIME_RESPONSE, HandleQueryTimeResponse);
+            _pipeline.RegisterHandler(Opcode.SMSG_LOGIN_VERIFY_WORLD, HandleLoginVerifyWorld);
+            _pipeline.RegisterHandler(Opcode.SMSG_NEW_WORLD, HandleNewWorld);
+            _pipeline.RegisterHandler(Opcode.SMSG_TRANSFER_PENDING, HandleTransferPending);
+            _pipeline.RegisterHandler(Opcode.SMSG_CHARACTER_LOGIN_FAILED, HandleCharacterLoginFailed);
+            _pipeline.RegisterHandler(Opcode.SMSG_MESSAGECHAT, HandleMessageChat);
+            _pipeline.RegisterHandler(Opcode.SMSG_NAME_QUERY_RESPONSE, HandleNameQueryResponse);
+            _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSTART, HandleAttackStart);
+            _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSTOP, HandleAttackStop);
+            _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_NOTINRANGE, HandleAttackSwingNotInRange);
+            _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_BADFACING, HandleAttackSwingBadFacing);
+            _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_NOTSTANDING, HandleAttackSwingNotStanding);
+            _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_DEADTARGET, HandleAttackSwingDeadTarget);
+            _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_CANT_ATTACK, HandleAttackSwingCantAttack);
         }
 
-        public void SendCMSGCreateCharacter(string name, Race race, Class clazz, Gender gender, byte skin, byte face, byte hairStyle, byte hairColor, byte facialHair, byte outfitId)
-        {
-            using var ms = new MemoryStream();
-            using var writer = new BinaryWriter(ms, Encoding.UTF8, true);
-            byte[] header = _vanillaEncryption.CreateClientHeader((uint)(4 + name.Length + 10), (uint)Opcode.CMSG_CHAR_CREATE);
-            writer.Write(header);
-            writer.Write(Encoding.UTF8.GetBytes(name + "\0"));
-            writer.Write((byte)race);
-            writer.Write((byte)clazz);
-            writer.Write((byte)gender);
-            writer.Write(skin);
-            writer.Write(face);
-            writer.Write(hairStyle);
-            writer.Write(hairColor);
-            writer.Write(facialHair);
-            writer.Write(outfitId);
-            writer.Flush();
-            SendPacket(ms.ToArray(), Opcode.CMSG_CHAR_CREATE);
-        }
+        // Reactive IWorldClient streams (forward or expose)
+        public IObservable<Unit> WhenConnected => _pipeline.WhenConnected;
+        public IObservable<Exception?> WhenDisconnected => _pipeline.WhenDisconnected;
+        public IObservable<Unit> AuthenticationSucceeded => _authenticationSucceeded;
+        public IObservable<byte> AuthenticationFailed => _authenticationFailed;
+        public IObservable<(ulong Guid, string Name, byte Race, byte Class, byte Gender)> CharacterFound => _characterFound;
+        public IObservable<(bool IsAttacking, ulong AttackerGuid, ulong VictimGuid)> AttackStateChanged => _attackStateChanged;
+        public IObservable<string> AttackErrors => _attackErrors;
 
-        private async Task HandleNetworkMessagesAsync()
+        // --- Handlers ---
+        private async Task HandleAuthChallenge(ReadOnlyMemory<byte> payload)
         {
-            WoWSharpEventEmitter.Instance.FireOnWorldSessionStart();
-            using var reader = new BinaryReader(_stream, Encoding.UTF8, true);
-            byte[] body = [];
-            while (true)
+            Console.WriteLine($"[NewWorldClient] Received SMSG_AUTH_CHALLENGE ({payload.Length} bytes)");
+            if (payload.Length < 4)
             {
-                try
-                {
-                    byte[] header = PacketManager.Read(reader, 4);
-                    if (header.Length == 0)
-                    {
-                        WoWSharpEventEmitter.Instance.FireOnWorldSessionEnd();
-                        break;
-                    }
-
-                    HeaderData headerData = _vanillaDecryption.ReadServerHeader(header);
-                    body = PacketManager.Read(reader, (int)(headerData.Size - sizeof(ushort)));
-                    _opCodeDispatcher.Dispatch((Opcode)headerData.Opcode, body);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[WorldClient][HandleNetworkMessages] An error occurred while handling network messages: {ex} {BitConverter.ToString(body)}");
-                }
+                Console.WriteLine("[NewWorldClient] Incomplete SMSG_AUTH_CHALLENGE packet.");
+                return;
             }
-            await Task.Delay(10);
-        }
-        private void EnqueueSend(Func<Task> sendAction)
-        {
-            _sendQueue.Enqueue(sendAction);
-            if (!_isSending)
+
+            var serverSeed = payload.Slice(0, 4).ToArray();
+            try
             {
-                _isSending = true;
-                _ = Task.Run(ProcessSendQueueAsync);
+                await SendAuthSessionAsync(serverSeed);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[NewWorldClient] Error sending CMSG_AUTH_SESSION: {ex}");
             }
         }
 
-        private async Task ProcessSendQueueAsync()
+        private async Task SendAuthSessionAsync(byte[] serverSeed)
         {
-            while (_sendQueue.TryDequeue(out var action))
+            if (string.IsNullOrEmpty(_username) || _sessionKey.Length == 0)
             {
-                try
+                Console.WriteLine("[NewWorldClient] Cannot send auth session - missing username or session key");
+                return;
+            }
+
+            using var memoryStream = new MemoryStream();
+            using var writer = new BinaryWriter(memoryStream, Encoding.UTF8, true);
+
+            const uint build = 5875; // 1.12.1
+            const uint serverId = 1;
+
+            var random = new Random();
+            uint clientSeed = (uint)random.Next(int.MinValue, int.MaxValue);
+
+            byte[] clientProof = PacketManager.GenerateClientProof(_username, clientSeed, serverSeed, _sessionKey);
+            byte[] decompressedAddonInfo = PacketManager.GenerateAddonInfo();
+            byte[] compressedAddonInfo = PacketManager.Compress(decompressedAddonInfo);
+            uint decompressedAddonInfoSize = (uint)decompressedAddonInfo.Length;
+
+            writer.Write(build);
+            writer.Write(serverId);
+            writer.Write(Encoding.UTF8.GetBytes(_username));
+            writer.Write((byte)0);
+            writer.Write(clientSeed);
+            writer.Write(clientProof);
+            writer.Write(decompressedAddonInfoSize);
+            writer.Write(compressedAddonInfo);
+
+            writer.Flush();
+            byte[] payload = memoryStream.ToArray();
+
+            Console.WriteLine($"[NewWorldClient] -> CMSG_AUTH_SESSION [{payload.Length} bytes] for user '{_username}'");
+
+            await _pipeline.SendAsync(Opcode.CMSG_AUTH_SESSION, payload);
+        }
+
+        private Task HandleAuthResponse(ReadOnlyMemory<byte> payload)
+        {
+            Console.WriteLine($"[NewWorldClient] Received SMSG_AUTH_RESPONSE ({payload.Length} bytes)");
+
+            if (payload.Length > 0)
+            {
+                var result = payload.Span[0];
+                if (result == 0x0C) // AUTH_OK
                 {
-                    await _sendSemaphore.WaitAsync();
-                    await action();
+                    _isAuthenticated = true;
+                    Console.WriteLine("[NewWorldClient] World authentication successful!");
+                    _authenticationSucceeded.OnNext(Unit.Default);
                 }
-                catch (Exception ex)
+                else
                 {
-                    Console.WriteLine("[WorldClient] Error during send: " + ex);
-                }
-                finally
-                {
-                    _sendSemaphore.Release();
+                    _isAuthenticated = false;
+                    Console.WriteLine($"[NewWorldClient] World authentication failed with code: {result:X2}");
+                    _authenticationFailed.OnNext(result);
                 }
             }
-            _isSending = false;
+            else
+            {
+                _isAuthenticated = false;
+                Console.WriteLine("[NewWorldClient] Received empty SMSG_AUTH_RESPONSE");
+                _authenticationFailed.OnNext(0xFF);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        // --- Minimal handler stubs for the rest ---
+        private Task HandleCharEnum(ReadOnlyMemory<byte> payload)
+        {
+            // TODO: Parse character list entries and push to _characterFound
+            return Task.CompletedTask;
+        }
+
+        private Task HandlePong(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+        private Task HandleQueryTimeResponse(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+        private Task HandleLoginVerifyWorld(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+        private Task HandleNewWorld(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+        private Task HandleTransferPending(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+        private Task HandleCharacterLoginFailed(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+        private Task HandleMessageChat(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+        private Task HandleNameQueryResponse(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
+
+        private Task HandleAttackStart(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                if (payload.Length >= 16)
+                {
+                    var attacker = BitConverter.ToUInt64(payload.Span[0..8]);
+                    var victim = BitConverter.ToUInt64(payload.Span[8..16]);
+                    _attackStateChanged.OnNext((true, attacker, victim));
+                }
+                else
+                {
+                    _attackStateChanged.OnNext((true, 0, 0));
+                }
+            }
+            catch (Exception ex)
+            {
+                _attackErrors.OnNext($"Error parsing ATTACKSTART: {ex.Message}");
+            }
+            return Task.CompletedTask;
+        }
+
+        private Task HandleAttackStop(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                if (payload.Length >= 16)
+                {
+                    var attacker = BitConverter.ToUInt64(payload.Span[0..8]);
+                    var victim = BitConverter.ToUInt64(payload.Span[8..16]);
+                    _attackStateChanged.OnNext((false, attacker, victim));
+                }
+                else
+                {
+                    _attackStateChanged.OnNext((false, 0, 0));
+                }
+            }
+            catch (Exception ex)
+            {
+                _attackErrors.OnNext($"Error parsing ATTACKSTOP: {ex.Message}");
+            }
+            return Task.CompletedTask;
+        }
+
+        private Task HandleAttackSwingNotInRange(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Not in range.");
+            return Task.CompletedTask;
+        }
+        private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Bad facing.");
+            return Task.CompletedTask;
+        }
+        private Task HandleAttackSwingNotStanding(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Not standing.");
+            return Task.CompletedTask;
+        }
+        private Task HandleAttackSwingDeadTarget(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Target is dead.");
+            return Task.CompletedTask;
+        }
+        private Task HandleAttackSwingCantAttack(ReadOnlyMemory<byte> payload)
+        {
+            _attackErrors.OnNext("Attack failed: Can't attack.");
+            return Task.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _pipeline?.Dispose();
+                _authenticationSucceeded.OnCompleted();
+                _authenticationFailed.OnCompleted();
+                _characterFound.OnCompleted();
+                _attackStateChanged.OnCompleted();
+                _attackErrors.OnCompleted();
+                foreach (var kv in _opcodeStreams)
+                {
+                    kv.Value.OnCompleted();
+                }
+                _authenticationSucceeded.Dispose();
+                _authenticationFailed.Dispose();
+                _characterFound.Dispose();
+                _attackStateChanged.Dispose();
+                _attackErrors.Dispose();
+                _disposed = true;
+            }
         }
     }
 }
