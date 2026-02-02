@@ -581,19 +581,20 @@ namespace WoWSharpClient
                 {
                     while (_pendingUpdates.Count > 0)
                     {
+                        var update = _pendingUpdates.Dequeue();
+                        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+                        var elapsedMs = _worldTimeTracker?.NowMS.TotalMilliseconds ?? 0;
+
+                        Console.WriteLine(
+                            $"[{timestamp}][{elapsedMs:F1}ms][ProcessUpdates] Op={update.Operation} Type={update.ObjectType} Guid={update.Guid:X}"
+                        );
+
                         try
                         {
-                            var update = _pendingUpdates.Dequeue();
-                            var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
-                            var elapsedMs = _worldTimeTracker?.NowMS.TotalMilliseconds ?? 0;
-
-                            Console.WriteLine(
-                                $"[{timestamp}][{elapsedMs:F1}ms][ProcessUpdates] Op={update.Operation} Type={update.ObjectType} Guid={update.Guid:X}"
-                            );
-
                             switch (update.Operation)
                             {
                                 case ObjectUpdateOperation.Add:
+                                {
                                     var newObject = CreateObjectFromFields(
                                         update.ObjectType,
                                         update.Guid,
@@ -601,11 +602,10 @@ namespace WoWSharpClient
                                     );
                                     _objects.Add(newObject);
 
-                                    if (update.MovementData != null && newObject is WoWUnit or WoWPlayer or WoWLocalPlayer)
+                                    if (update.MovementData != null && newObject is WoWUnit)
                                     {
                                         ApplyMovementData((WoWUnit)newObject, update.MovementData);
 
-                                        // Log movement data for analysis
                                         Console.WriteLine(
                                             $"[{timestamp}][{elapsedMs:F1}ms][Movement-Add] Guid={update.Guid:X} " +
                                             $"Pos=({update.MovementData.X:F2}, {update.MovementData.Y:F2}, {update.MovementData.Z:F2}) " +
@@ -614,7 +614,7 @@ namespace WoWSharpClient
                                         );
                                     }
 
-                                    if (newObject is WoWPlayer player)
+                                    if (newObject is WoWPlayer)
                                     {
                                         _woWClient.SendNameQuery(update.Guid);
 
@@ -626,74 +626,82 @@ namespace WoWSharpClient
                                             _isBeingTeleported = false;
                                         }
                                     }
+
                                     break;
+                                }
 
                                 case ObjectUpdateOperation.Update:
+                                {
                                     var index = _objects.FindIndex(o => o.Guid == update.Guid);
-
-                                    if (index != -1)
-                                    {
-                                        var obj = _objects[index];
-                                        var oldPos = obj is WoWUnit unit ? new { unit.Position.X, unit.Position.Y, unit.Position.Z } : null;
-                                        var oldFlags = obj is WoWUnit u ? u.MovementFlags : MovementFlags.MOVEFLAG_NONE;
-
-                                        ApplyFieldDiffs(obj, update.UpdatedFields);
-
-                                        if (update.MovementData != null && obj is WoWUnit or WoWPlayer or WoWLocalPlayer)
-                                        {
-                                            ApplyMovementData((WoWUnit)obj, update.MovementData);
-
-                                            // Calculate position delta if available
-                                            string deltaStr = "";
-                                            if (oldPos != null)
-                                            {
-                                                var dx = update.MovementData.X - oldPos.X;
-                                                var dy = update.MovementData.Y - oldPos.Y;
-                                                var dz = update.MovementData.Z - oldPos.Z;
-                                                var dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                                                deltaStr = $"Delta={dist:F3}y ";
-                                            }
-
-                                            // Log movement updates with timing info
-                                            Console.WriteLine(
-                                                $"[{timestamp}][{elapsedMs:F1}ms][Movement-Update] Guid={update.Guid:X} " +
-                                                $"Pos=({update.MovementData.X:F2}, {update.MovementData.Y:F2}, {update.MovementData.Z:F2}) " +
-                                                $"{deltaStr}" +
-                                                $"Flags=0x{(uint)update.MovementData.MovementFlags:X8} " +
-                                                $"(was 0x{(uint)oldFlags:X8}) " +
-                                                $"Time={update.MovementData.LastUpdated} " +
-                                                (obj is WoWLocalPlayer ? "[LOCAL]" : "")
-                                            );
-
-                                            if (obj is WoWLocalPlayer)
-                                            {
-                                                var timeSinceLastUpdate = update.MovementData.LastUpdated - _lastSentTime;
-                                                Console.WriteLine(
-                                                    $"[{timestamp}][{elapsedMs:F1}ms][LocalPlayer-Update] " +
-                                                    $"TimeSinceLastSent={timeSinceLastUpdate}ms " +
-                                                    $"(Server teleport check)"
-                                                );
-                                            }
-                                        }
-                                    }
-                                    else
+                                    if (index == -1)
                                     {
                                         Console.WriteLine($"[{timestamp}][{elapsedMs:F1}ms][Warning] Update for unknown object {update.Guid:X}");
+                                        break;
                                     }
+
+                                    var obj = _objects[index];
+                                    var oldPos = obj is WoWUnit oldUnit
+                                        ? new { oldUnit.Position.X, oldUnit.Position.Y, oldUnit.Position.Z }
+                                        : null;
+                                    var oldFlags = obj is WoWUnit oldUnit2
+                                        ? oldUnit2.MovementFlags
+                                        : MovementFlags.MOVEFLAG_NONE;
+
+                                    ApplyFieldDiffs(obj, update.UpdatedFields);
+
+                                    if (update.MovementData != null && obj is WoWUnit)
+                                    {
+                                        var allowLocalPlayerPositionWrite = !(_isInControl && !_isBeingTeleported);
+                                        ApplyMovementData((WoWUnit)obj, update.MovementData, allowLocalPlayerPositionWrite);
+
+                                        string deltaStr = "";
+                                        if (oldPos != null)
+                                        {
+                                            var dx = update.MovementData.X - oldPos.X;
+                                            var dy = update.MovementData.Y - oldPos.Y;
+                                            var dz = update.MovementData.Z - oldPos.Z;
+                                            var dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                                            deltaStr = $"Delta={dist:F3}y ";
+                                        }
+
+                                        Console.WriteLine(
+                                            $"[{timestamp}][{elapsedMs:F1}ms][Movement-Update] Guid={update.Guid:X} " +
+                                            $"Pos=({update.MovementData.X:F2}, {update.MovementData.Y:F2}, {update.MovementData.Z:F2}) " +
+                                            $"{deltaStr}" +
+                                            $"Flags=0x{(uint)update.MovementData.MovementFlags:X8} " +
+                                            $"(was 0x{(uint)oldFlags:X8}) " +
+                                            $"Time={update.MovementData.LastUpdated} " +
+                                            (obj is WoWLocalPlayer ? "[LOCAL]" : "")
+                                        );
+
+                                        if (obj is WoWLocalPlayer)
+                                        {
+                                            var timeSinceLastUpdate = update.MovementData.LastUpdated - _lastSentTime;
+                                            Console.WriteLine(
+                                                $"[{timestamp}][{elapsedMs:F1}ms][LocalPlayer-Update] " +
+                                                $"TimeSinceLastSent={timeSinceLastUpdate}ms " +
+                                                $"(Server teleport check)"
+                                            );
+                                        }
+                                    }
+
+                                    _objects[index] = obj;
                                     break;
+                                }
 
                                 case ObjectUpdateOperation.Remove:
+                                {
                                     var removed = _objects.RemoveAll(x => x.Guid == update.Guid);
                                     Console.WriteLine(
                                         $"[{timestamp}][{elapsedMs:F1}ms][Remove] Guid={update.Guid:X} " +
                                         $"(removed {removed} object{(removed != 1 ? "s" : "")})"
                                     );
                                     break;
+                                }
                             }
                         }
                         catch (Exception ex)
                         {
-                            var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
                             Console.WriteLine($"[{timestamp}][ProcessUpdates-ERROR] {ex.Message}");
                             Console.WriteLine($"  Stack: {ex.StackTrace}");
                         }
@@ -704,7 +712,58 @@ namespace WoWSharpClient
                     _updateSemaphore.Release();
                 }
 
-                await Task.Delay(10, token); // Process updates every 10ms
+                await Task.Delay(10, token);
+            }
+        }
+
+        private static void ApplyMovementData(WoWUnit unit, MovementInfoUpdate data, bool allowPositionWrite)
+        {
+            unit.MovementFlags = data.MovementFlags;
+            unit.LastUpdated = data.LastUpdated;
+
+            if (allowPositionWrite)
+            {
+                unit.Position.X = data.X;
+                unit.Position.Y = data.Y;
+                unit.Position.Z = data.Z;
+            }
+
+            unit.Facing = data.Facing;
+            unit.TransportGuid = data.TransportGuid ?? 0;
+            unit.TransportOffset = data.TransportOffset ?? unit.TransportOffset;
+            unit.TransportOrientation = data.TransportOrientation ?? 0f;
+            unit.TransportLastUpdated = data.TransportLastUpdated ?? 0;
+            unit.SwimPitch = data.SwimPitch ?? 0f;
+            unit.FallTime = data.FallTime;
+            unit.JumpVerticalSpeed = data.JumpVerticalSpeed ?? 0f;
+            unit.JumpSinAngle = data.JumpSinAngle ?? 0f;
+            unit.JumpCosAngle = data.JumpCosAngle ?? 0f;
+            unit.JumpHorizontalSpeed = data.JumpHorizontalSpeed ?? 0f;
+            unit.SplineElevation = data.SplineElevation ?? 0f;
+
+            if (data.MovementBlockUpdate != null)
+            {
+                unit.WalkSpeed = data.MovementBlockUpdate.WalkSpeed;
+                unit.RunSpeed = data.MovementBlockUpdate.RunSpeed;
+                unit.RunBackSpeed = data.MovementBlockUpdate.RunBackSpeed;
+                unit.SwimSpeed = data.MovementBlockUpdate.SwimSpeed;
+                unit.SwimBackSpeed = data.MovementBlockUpdate.SwimBackSpeed;
+                unit.TurnRate = data.MovementBlockUpdate.TurnRate;
+                unit.SplineFlags = data.MovementBlockUpdate.SplineFlags ?? SplineFlags.None;
+                unit.SplineFinalPoint = data.MovementBlockUpdate.SplineFinalPoint ?? unit.SplineFinalPoint;
+                unit.SplineTargetGuid = data.MovementBlockUpdate.SplineTargetGuid ?? 0;
+                unit.SplineFinalOrientation = data.MovementBlockUpdate.SplineFinalOrientation ?? 0f;
+                unit.SplineTimePassed = data.MovementBlockUpdate.SplineTimePassed ?? 0;
+                unit.SplineDuration = data.MovementBlockUpdate.SplineDuration ?? 0;
+                unit.SplineId = data.MovementBlockUpdate.SplineId ?? 0;
+                unit.SplineNodes = data.MovementBlockUpdate.SplineNodes ?? [];
+                unit.SplineFinalDestination = data.MovementBlockUpdate.SplineFinalDestination ?? unit.SplineFinalDestination;
+                unit.SplineType = data.MovementBlockUpdate.SplineType;
+                unit.SplineTargetGuid = data.MovementBlockUpdate.FacingTargetGuid;
+                unit.FacingAngle = data.MovementBlockUpdate.FacingAngle;
+                unit.FacingSpot = data.MovementBlockUpdate.FacingSpot;
+                unit.SplineTimestamp = data.MovementBlockUpdate.SplineTimestamp;
+                unit.SplinePoints = data.MovementBlockUpdate.SplinePoints;
             }
         }
 
@@ -1845,16 +1904,14 @@ namespace WoWSharpClient
                 unit.SwimBackSpeed = data.MovementBlockUpdate.SwimBackSpeed;
                 unit.TurnRate = data.MovementBlockUpdate.TurnRate;
                 unit.SplineFlags = data.MovementBlockUpdate.SplineFlags ?? SplineFlags.None;
-                unit.SplineFinalPoint =
-                    data.MovementBlockUpdate.SplineFinalPoint ?? unit.SplineFinalPoint;
+                unit.SplineFinalPoint = data.MovementBlockUpdate.SplineFinalPoint ?? unit.SplineFinalPoint;
                 unit.SplineTargetGuid = data.MovementBlockUpdate.SplineTargetGuid ?? 0;
                 unit.SplineFinalOrientation = data.MovementBlockUpdate.SplineFinalOrientation ?? 0f;
                 unit.SplineTimePassed = data.MovementBlockUpdate.SplineTimePassed ?? 0;
                 unit.SplineDuration = data.MovementBlockUpdate.SplineDuration ?? 0;
                 unit.SplineId = data.MovementBlockUpdate.SplineId ?? 0;
                 unit.SplineNodes = data.MovementBlockUpdate.SplineNodes ?? [];
-                unit.SplineFinalDestination =
-                    data.MovementBlockUpdate.SplineFinalDestination ?? unit.SplineFinalDestination;
+                unit.SplineFinalDestination = data.MovementBlockUpdate.SplineFinalDestination ?? unit.SplineFinalDestination;
                 unit.SplineType = data.MovementBlockUpdate.SplineType;
                 unit.SplineTargetGuid = data.MovementBlockUpdate.FacingTargetGuid;
                 unit.FacingAngle = data.MovementBlockUpdate.FacingAngle;

@@ -46,7 +46,7 @@ namespace PathfindingService.Tests
         }
 
         [Theory]
-        [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1632.825f, -4372.532f, 29.364f, 0f, Gender.Female, Race.Orc, 1629.129f, -4374.037f, 30.674f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.Water, 0f)] // Step up blocked on Orgrimmar bank
+        [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1632.120f, -4372.715f, 30.786f, 0.5f, Gender.Male, Race.Orc, 1629.129f, -4374.037f, 30.674f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.Water, 0f)] // Step down on top of Orgrimmar bank
         [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1636.211f, -4375.267f, 28.748f, 0f, Gender.Female, Race.Orc, 1636.211f, -4375.267f, 28.748f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.Water, 0f)] // Forward movement blocked by spike on Orgrimmar bank
         [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1661.377f, -4369.652f, 24.740f, 0f, Gender.Female, Race.Orc, 1661.377f, -4369.652f, 24.740f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.Water, 0f)] // Origmmar terrain block
         [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1662.314f, -4371.963f, 24.925f, 0f, Gender.Female, Race.Orc, 1661.377f, -4369.652f, 24.740f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.Water, 0f)] // Origmmar terrain step-up and slide down
@@ -60,25 +60,27 @@ namespace PathfindingService.Tests
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 0u, 623.246f, 349.184f, 31.149f, 0f, Gender.Female, Race.Orc, 623.246f, 349.184f, 31.149f, MovementFlags.MOVEFLAG_SWIMMING, 0f, 0f, 0f, LiquidType.Water, 32.934f)]
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 0u, 623.683f, 349.455f, 31.245f, 0f, Gender.Female, Race.Orc, 623.683f, 349.455f, 31.245f, MovementFlags.MOVEFLAG_SWIMMING, 0f, 0f, 0f, LiquidType.Water, 32.934f)]
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, 10334.000f, 833.902f, 1326.110f, 0f, Gender.Female, Race.Orc, 10334.000f, 833.902f, 1326.107f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
-        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, 1629.359f, -4373.380f, 31.255f, 0f, Gender.Female, Race.Orc, 1629.359f, -4373.380f, 31.275f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
+        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, 1629.359f, -4373.390f, 31.275f, 0f, Gender.Male, Race.Orc, 1629.359f, -4373.390f, 31.275f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)] // Resting on top of Orgrimmar bank
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -2917.580f, -257.980f, 53.362f, 0f, Gender.Female, Race.Orc, -2917.580f, -257.980f, 53.362f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
-        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -535.151f, -4200.184f, 76.994f, 0.126f, Gender.Female, Race.Orc, -535.151f, -4200.184f, 74.456f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
-        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -535.382f, -4204.233f, 74.716f, 0f, Gender.Female, Race.Orc, -535.382f, -4204.233f, 74.716f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
+        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -535.382f, -4204.233f, 76.994f, 0.126f, Gender.Male, Race.Orc, -535.382f, -4204.233f, 74.716f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
+        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -535.382f, -4204.233f, 74.716f, 0f, Gender.Male, Race.Orc, -535.382f, -4204.233f, 74.716f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -550.479f, -4194.069f, 49.271f, 0f, Gender.Female, Race.Orc, -550.479f, -4194.069f, 49.286f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
-        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -557.773f, -4181.990f, 72.576f, 0f, Gender.Female, Race.Orc, -557.773f, -4181.990f, 72.5f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
+        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -557.773f, -4181.990f, 72.576f, 0f, Gender.Female, Race.Orc, -557.773f, -4181.990f, 72.499f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -562.225f, -4189.092f, 70.789f, 0f, Gender.Female, Race.Orc, -562.225f, -4189.092f, 70.79f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -576.927f, -4242.207f, 37.980f, 0f, Gender.Female, Race.Orc, -576.927f, -4242.207f, 38.203f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -582.580f, -4236.643f, 38.044f, 0f, Gender.Female, Race.Orc, -582.580f, -4236.643f, 38.141f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -601.294f, -4296.760f, 37.811f, 0f, Gender.Female, Race.Orc, -601.294f, -4296.760f, 37.811f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
-        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -618.518f, -4251.67f, 38.718f, 0f, Gender.Female, Race.Orc, -618.518f, -4251.67f, 38.728f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
-        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 389u, -158.395f, 5.857f, -42.873f, 0f, Gender.Male, Race.Orc, -158.395f, 5.857f, -42.873f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.Magma, -64.49f)]
+        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 1u, -618.518f, -4251.67f, 38.718f, 0f, Gender.Female, Race.Orc, -618.518f, -4251.67f, 38.718f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
+        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 389u, -158.395f, 5.857f, -42.873f, 0f, Gender.Male, Race.Orc, -158.395f, 5.857f, -43.699f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.Magma, -64.49f)]
         [InlineData(1, MovementFlags.MOVEFLAG_NONE, 389u, -212.988f, -58.457f, -65.660f, 0f, Gender.Male, Race.Orc, -212.988f, -58.457f, -65.660f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.Magma, -64.49f)] // Standing in VMAP lava
-        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 389u, -247.728f, -30.644f, -58.082f, 0f, Gender.Male, Race.Orc, -247.728f, -30.644f, -58.082f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
-        [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1681.015f, -4371.367f, 26.54f, 2.6133f, Gender.Male, Race.Orc, 1681.015f, -4371.367f, 26.54f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.None, -500f)] //Running into non-walkable wall in Orgrimmar. Should negate all intended movement.
+        [InlineData(1, MovementFlags.MOVEFLAG_NONE, 389u, -247.728f, -30.644f, -58.082f, 0f, Gender.Male, Race.Orc, -247.728f, -30.644f, -59.043f, MovementFlags.MOVEFLAG_NONE, 0f, 0f, 0f, LiquidType.None, -500f)]
+        [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1680.99f, -4371.30f, 26.54f, 2.6133f, Gender.Male, Race.Orc, 1680.99f, -4371.30f, 26.54f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.None, -500f)] //Running into non-walkable wall in Orgrimmar. Should negate all intended movement.
+        [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1680.99f, -4371.30f, 26.54f, 4.1833f, Gender.Male, Race.Orc, 1680.99f, -4371.30f, 26.54f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.None, -500f)] //Running into non-walkable wall in Orgrimmar at an angle. Should negate some movement.
+        [InlineData(1, MovementFlags.MOVEFLAG_FORWARD, 1u, 1661.31f, -4343.53f, 26.54f, 4.2828f, Gender.Male, Race.Orc, 1681.015f, -4371.367f, 26.54f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.None, -500f)] //Running off of flight tower in Orgrimmar.
         [InlineData(5, MovementFlags.MOVEFLAG_FORWARD, 1u, 1679.552f, -4372.284f, 27.385f, 6.151f, Gender.Female, Race.Orc, 1661.377f, -4369.652f, 24.740f, MovementFlags.MOVEFLAG_FORWARD, 0f, 0f, 0f, LiquidType.Water, 0f)] // Origmmar terrain step-up and slide down
         [InlineData(20, MovementFlags.MOVEFLAG_FORWARD, 0u, -8949.95f, -132.49f, 83.23f, 0.0f, Gender.Female, Race.Human, -8942.958f, -132.484f, 83.679f, MovementFlags.MOVEFLAG_FORWARD, 6.992f, -0.002f, 0f, LiquidType.None, -500f)]  // North facing
-        [InlineData(20, MovementFlags.MOVEFLAG_FORWARD, 0u, -8949.95f, -132.49f, 83.23f, 1.570f, Gender.Female, Race.Human, -8949.929f, -125.499f, 83.319f, MovementFlags.MOVEFLAG_FORWARD, 0f, 7f, 0f, LiquidType.None, -500f)] // East facing  
-        [InlineData(20, MovementFlags.MOVEFLAG_FORWARD, 0u, -8949.95f, -132.49f, 83.23f, -1.570f, Gender.Female, Race.Human, -8949.947f, -139.487f, 83.468f, MovementFlags.MOVEFLAG_FORWARD, 0.02f, -6.988f, 0f, LiquidType.None, -500f)] // West facing
+        [InlineData(20, MovementFlags.MOVEFLAG_FORWARD, 0u, -8949.95f, -132.49f, 83.23f, 1.570f, Gender.Female, Race.Human, -8949.95f, -125.499f, 83.319f, MovementFlags.MOVEFLAG_FORWARD, 0f, 7f, 0f, LiquidType.None, -500f)] // East facing  
+        [InlineData(20, MovementFlags.MOVEFLAG_FORWARD, 0u, -8949.95f, -132.49f, 83.23f, -1.570f, Gender.Female, Race.Human, -8949.95f, -139.487f, 83.468f, MovementFlags.MOVEFLAG_FORWARD, 0.02f, -6.988f, 0f, LiquidType.None, -500f)] // West facing
         [InlineData(20, MovementFlags.MOVEFLAG_FORWARD, 0u, -8949.95f, -132.49f, 83.23f, 3.141f, Gender.Female, Race.Human, -8956.924f, -132.505f, 82.927f, MovementFlags.MOVEFLAG_FORWARD, -6.973f, -0.026f, 0f, LiquidType.None, -500f)] // South facing
         [InlineData(20, MovementFlags.MOVEFLAG_FORWARD, 1u, -562.225f, -4189.092f, 70.789f, 6.175f, Gender.Female, Race.Orc, -555.371f, -4189.969f, 72.64f, MovementFlags.MOVEFLAG_FORWARD, 6.947f, -0.752f, 0f, LiquidType.None, -500f)]
         [InlineData(20, MovementFlags.MOVEFLAG_FORWARD, 1u, -601.518f, -4602.816f, 41.294f, 1.612f, Gender.Female, Race.Orc, -601.813f, -4595.829f, 41.065f, MovementFlags.MOVEFLAG_FORWARD, -0.308f, 6.982f, 0f, LiquidType.None, -500f)]
@@ -113,6 +115,7 @@ namespace PathfindingService.Tests
                 runBackSpeed = 4.5f,
                 swimSpeed = 4.72f,
                 flightSpeed = 2.5f,
+                frameCounter = 1,
             };
 
             PhysicsOutput expectedFinalOutput = new()
@@ -141,6 +144,7 @@ namespace PathfindingService.Tests
                 input.vy = actualOutput.vy;
                 input.vz = actualOutput.vz;
                 input.moveFlags = actualOutput.moveFlags;
+                input.frameCounter++;
             }
 
             AssertEqual(expectedFinalOutput, actualOutput);

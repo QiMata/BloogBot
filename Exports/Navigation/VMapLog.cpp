@@ -29,7 +29,7 @@ void LogStepInputSummary(const PhysicsInput& input, float dt)
 {
     PHYS_INFO(PHYS_MOVE,
         std::string("[StepV2] InputSummary\n")
-        << "  map=" << input.mapId << " dt=" << dt << "\n"
+        << "  frame=" << input.frameCounter << " map=" << input.mapId << " dt=" << dt << "\n"
         << "  pos=(" << input.x << "," << input.y << "," << input.z << ")\n"
         << "  velIn=(" << input.vx << "," << input.vy << "," << input.vz << ")\n"
         << "  flags=" << FormatMoveFlags(input.moveFlags) << " (0x" << std::hex << input.moveFlags << std::dec << ")\n"
@@ -71,7 +71,7 @@ void LogSweepDiagnostics(const PhysicsInput& input,
     }
     oss << "\n"
         << "    slideDirValid=" << (diag.slideDirValid ? 1 : 0) << " slideDir=(" << diag.slideDir.x << "," << diag.slideDir.y << "," << diag.slideDir.z << ")"
-        << " minTOI=" << diag.minTOI << " depenMag=" << diag.depenetrationMagnitude << " skin=" << diag.suggestedSkinWidth;
+        << " minTOI=" << diag.minTOI << " depenMag=" << diag.depenetrationMagnitude;
     {
         const char* lStartName = VMAP::GetLiquidTypeName(diag.liquidStartType);
         const char* lEndName = VMAP::GetLiquidTypeName(diag.liquidEndType);

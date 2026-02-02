@@ -32,6 +32,9 @@ struct SceneHit
     float staticFriction = 0.0f;      // Optional static friction coefficient (0 if unknown)
     float dynamicFriction = 0.0f;     // Optional dynamic friction coefficient (0 if unknown)
     float restitution = 0.0f;         // Optional restitution/bounciness (0 if unknown)
+    // Capsule contact region along the axial segment
+    enum class CapsuleRegion : uint8_t { Unknown = 0, Cap0 = 1, Side = 2, Cap1 = 3 };
+    CapsuleRegion region = CapsuleRegion::Unknown;
     // Field documentation preserved from previous namespace-scoped definition
 };
 
@@ -83,6 +86,8 @@ class SceneQuery
                 bool walkable;       // normal.z >= walkable threshold
                 bool penetrating;    // came from start penetration
                 StandSource source = StandSource::None; // origin of plane (VMAP or ADT)
+                // Capsule region for the original contact(s) that formed this plane
+                SceneHit::CapsuleRegion region = SceneHit::CapsuleRegion::Unknown;
             };
             std::vector<ContactPlane> planes;       // all contact planes considered
             std::vector<ContactPlane> walkablePlanes; // subset of planes that are walkable
@@ -103,7 +108,6 @@ class SceneQuery
             float minTOI = -1.0f;                   // minimum time of impact in [0,1]
             G3D::Vector3 depenetration;             // accumulated depenetration vector from penetrating contacts
             float depenetrationMagnitude = 0.0f;    // length of depenetration
-            float suggestedSkinWidth = 0.0f;        // small inset to avoid immediate re-penetration
 
             // Liquid diagnostics (start/end of sweep)
             bool liquidStartHasLevel = false;
@@ -194,7 +198,8 @@ class SceneQuery
                                 const CapsuleCollision::Capsule& capsuleStart,
                                 const G3D::Vector3& dir,
                                 float distance,
-                                std::vector<SceneHit>& outHits);
+                                std::vector<SceneHit>& outHits,
+                                const G3D::Vector3& playerForward);
 
         // Line of sight test combining VMAP and ADT terrain checks
         // Returns true if there is clear LOS between `from` and `to` on the given map

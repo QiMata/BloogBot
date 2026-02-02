@@ -243,13 +243,17 @@
     <ClInclude Include="Matrix3.h" />
     <ClInclude Include="ModelInstance.h" />
     <ClInclude Include="PhysicsBridge.h" />
+    <ClInclude Include="PhysicsCollideSlide.h" />
     <ClInclude Include="PhysicsDiagnosticsHelpers.h" />
     <ClInclude Include="PhysicsEngine.h" />
+    <ClInclude Include="PhysicsGroundSnap.h" />
     <ClInclude Include="PhysicsHelpers.h" />
     <ClInclude Include="PhysicsLiquidHelpers.h" />
     <ClInclude Include="PhysicsMath.h" />
+    <ClInclude Include="PhysicsMovement.h" />
     <ClInclude Include="PhysicsSelectHelpers.h" />
     <ClInclude Include="PhysicsShapeHelpers.h" />
+    <ClInclude Include="PhysicsThreePass.h" />
     <ClInclude Include="PhysicsTolerances.h" />
     <ClInclude Include="QueryHit.h" />
     <ClInclude Include="Ray.h" />
@@ -291,10 +295,15 @@
     <ClCompile Include="MapLoader.cpp" />
     <ClCompile Include="Matrix3.cpp" />
     <ClCompile Include="ModelInstance.cpp" />
+    <ClCompile Include="PhysicsCollideSlide.cpp" />
     <ClCompile Include="PhysicsDiagnosticsHelpers.cpp" />
     <ClCompile Include="PhysicsEngine.cpp" />
+    <ClCompile Include="PhysicsGroundSnap.cpp" />
     <ClCompile Include="PhysicsHelpers.cpp" />
     <ClCompile Include="PhysicsLiquidHelpers.cpp" />
+    <ClCompile Include="PhysicsMovement.cpp" />
+    <ClCompile Include="PhysicsTestExports.cpp" />
+    <ClCompile Include="PhysicsThreePass.cpp" />
     <ClCompile Include="Ray.cpp" />
     <ClCompile Include="SceneQuery.cpp" />
     <ClCompile Include="StaticMapTree.cpp" />
@@ -306,6 +315,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="BIH.inl" />
+    <None Include="README.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

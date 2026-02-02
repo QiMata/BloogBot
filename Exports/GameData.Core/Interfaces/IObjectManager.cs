@@ -1,5 +1,4 @@
-﻿using Communication;
-using GameData.Core.Enums;
+﻿using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Models;
 
@@ -174,11 +173,11 @@ namespace GameData.Core.Interfaces
         void EquipItem(int bagSlot, int slotId, EquipSlot? equipSlot = null);
         void UnequipItem(EquipSlot slot);
         void AcceptResurrect();
-        void UpdateSnapshot(ActivitySnapshot activitySnapshot)
-        {
+                void UpdateSnapshot(IActivitySnapshot activitySnapshot)
+                {
 
+                }
+
+                void EnterWorld(ulong characterGuid);
+            }
         }
-
-        void EnterWorld(ulong characterGuid);
-    }
-}

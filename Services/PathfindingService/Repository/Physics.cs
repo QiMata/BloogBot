@@ -99,6 +99,7 @@ namespace PathfindingService.Repository
         public uint fallTime;
         public float height;
         public float radius;
+        [MarshalAs(UnmanagedType.I1)]
         public bool hasSplinePath;
         public float splineSpeed;
         public IntPtr splinePoints;
@@ -109,8 +110,21 @@ namespace PathfindingService.Repository
         public float prevGroundNx;               // previous ground normal X
         public float prevGroundNy;               // previous ground normal Y
         public float prevGroundNz;               // previous ground normal Z
+
+		// Pending depenetration (mirrors PhysicsBridge.h)
+		public float pendingDepenX;
+		public float pendingDepenY;
+		public float pendingDepenZ;
+
+		// Ride-on touched object (mirrors PhysicsBridge.h)
+		public uint standingOnInstanceId;
+		public float standingOnLocalX;
+		public float standingOnLocalY;
+		public float standingOnLocalZ;
+
         public uint mapId;
         public float deltaTime;
+        public uint frameCounter;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -129,6 +143,18 @@ namespace PathfindingService.Repository
         public float groundNx;                   // ground surface normal X
         public float groundNy;                   // ground surface normal Y
         public float groundNz;                   // ground surface normal Z
+
+		// Pending depenetration (mirrors PhysicsBridge.h)
+		public float pendingDepenX;
+		public float pendingDepenY;
+		public float pendingDepenZ;
+
+		// Ride-on touched object (mirrors PhysicsBridge.h)
+		public uint standingOnInstanceId;
+		public float standingOnLocalX;
+		public float standingOnLocalY;
+		public float standingOnLocalZ;
+
         public float fallDistance;
         public float fallTime;
         public int currentSplineIndex;

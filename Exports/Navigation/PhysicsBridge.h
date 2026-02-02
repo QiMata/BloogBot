@@ -105,9 +105,25 @@ struct PhysicsInput
     float prevGroundNy;             // previous ground normal Y
     float prevGroundNz;             // previous ground normal Z (usually >= walkable cos threshold)
 
+	// Pending depenetration (fed back from last PhysicsOutput)
+	// PhysX CCT may defer overlap recovery when it cannot fully resolve penetration in one tick.
+	float pendingDepenX;
+	float pendingDepenY;
+	float pendingDepenZ;
+
+	// Ride-on touched object (fed back from last PhysicsOutput)
+	// 0 means none/terrain. Non-zero corresponds to `SceneHit::instanceId`.
+	uint32_t standingOnInstanceId;
+	// Local point on the touched object that served as our standing reference.
+	float standingOnLocalX;
+	float standingOnLocalY;
+	float standingOnLocalZ;
+
     // Context
     uint32_t mapId;            // Current map ID
     float deltaTime;           // Time since last update
+
+    uint32_t frameCounter;
 };
 
 // Physics output back to the game
@@ -133,6 +149,17 @@ struct PhysicsOutput
     float groundNx;                // ground surface normal X
     float groundNy;                // ground surface normal Y
     float groundNz;                // ground surface normal Z
+
+	// Pending depenetration to be applied next tick (if overlap recovery could not fully resolve).
+	float pendingDepenX;
+	float pendingDepenY;
+	float pendingDepenZ;
+
+	// Standing-on (ride) reference for moving bases.
+	uint32_t standingOnInstanceId;
+	float standingOnLocalX;
+	float standingOnLocalY;
+	float standingOnLocalZ;
 
     // Fall damage info
     float fallDistance;

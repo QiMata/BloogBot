@@ -6,7 +6,8 @@ namespace PathfindingService
         private readonly ILoggerFactory _loggerFactory;
         private readonly IConfiguration _configuration;
 
-        private readonly PathfindingSocketServer _pathfindingSocketServer;
+        private PathfindingSocketServer _pathfindingSocketServer;
+
         public PathfindingServiceWorker(
             ILogger<PathfindingServiceWorker> logger,
             ILoggerFactory loggerFactory,
@@ -15,24 +16,32 @@ namespace PathfindingService
             _logger = logger;
             _loggerFactory = loggerFactory;
             _configuration = configuration;
-
-            _pathfindingSocketServer = new PathfindingSocketServer(
-                configuration["PathfindingService:IpAddress"],
-                int.Parse(configuration["PathfindingService:Port"]),
-                _loggerFactory.CreateLogger<PathfindingSocketServer>()
-            );
-
-            _logger.LogInformation($"Started PathfindingService| {_configuration["PathfindingService:IpAddress"]}:{_configuration["PathfindingService:Port"]}");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // Start the socket server first so StateManager can connect immediately
+            var ipAddress = _configuration["PathfindingService:IpAddress"];
+            var port = int.Parse(_configuration["PathfindingService:Port"]);
+
+            _logger.LogInformation($"Starting PathfindingService socket server on {ipAddress}:{port}...");
+
+            _pathfindingSocketServer = new PathfindingSocketServer(
+                ipAddress,
+                port,
+                _loggerFactory.CreateLogger<PathfindingSocketServer>()
+            );
+
+            _logger.LogInformation($"PathfindingService socket server started. Now loading navigation and physics data...");
+
+            // Load nav/physics in background - this is the slow part
+            await Task.Run(() => _pathfindingSocketServer.InitializeNavigation(), stoppingToken);
+
+            _logger.LogInformation("PathfindingService fully initialized and ready to handle requests.");
+
+            // Main service loop
             while (!stoppingToken.IsCancellationRequested)
             {
-                //if (_logger.IsEnabled(LogLevel.Information))
-                //{
-                //    _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-                //}
                 await Task.Delay(1000, stoppingToken);
             }
         }

@@ -168,10 +168,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="dllmain.cpp" />
+    <ClInclude Include="..\FastCall\targetver.h" />
+    <ClInclude Include="nethost_helpers.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\FastCall\targetver.h" />
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dllmain.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

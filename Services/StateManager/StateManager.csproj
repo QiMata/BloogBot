@@ -24,7 +24,6 @@
   <ItemGroup>
     <ProjectReference Include="..\BackgroundBotRunner\BackgroundBotRunner.csproj" />
     <ProjectReference Include="..\DecisionEngineService\DecisionEngineService.csproj" />
-    <ProjectReference Include="..\ForegroundBotRunner\ForegroundBotRunner.csproj" />
     <ProjectReference Include="..\PathfindingService\PathfindingService.csproj" />
   </ItemGroup>
 </Project>

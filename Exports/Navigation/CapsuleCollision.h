@@ -698,6 +698,9 @@ namespace CapsuleCollision
 
         // 1. Face contact: sweep segment against triangle plane, check if intersection is inside triangle
         Vec3 Ntri; float dtri; trianglePlane(T, Ntri, dtri);
+
+        // Note: We treat world triangles as double-sided in this project.
+        // Do not reject backfaces based on winding; always generate contacts so the controller can ride along surfaces.
         float seg0_dist = signedDistanceToPlane(start.p0, Ntri, dtri);
         float seg1_dist = signedDistanceToPlane(start.p1, Ntri, dtri);
         float vel_dot_n = Vec3::dot(Ntri, vel);
@@ -733,88 +736,78 @@ namespace CapsuleCollision
             }
         }
 
-        // 2. Edge contact: sweep capsule segment against each triangle edge (segment-segment sweep)
-        auto segmentSegmentSweep = [](const Vec3& p0, const Vec3& p1, const Vec3& q0, const Vec3& q1, const Vec3& v, float radius, float& outT, Vec3& outN, Vec3& outP) -> bool {
-            // Relative motion: move q0-q1 by -v, p0-p1 is stationary
-            Vec3 r = q0 - p0;
-            Vec3 d1 = p1 - p0;
-            Vec3 d2 = q1 - q0;
-            Vec3 v_rel = -v;
+        // 2/3) Edge & vertex contact:
+        // Replace the prior fixed-step approximation with a conservative advancement approach.
+        // We sweep a *sphere* of radius r along vel against the triangle's feature set, where the
+        // swept sphere center is allowed anywhere on the capsule axis segment.
+        // Implementation strategy:
+        // - At each iteration, compute closest points between: (capsule axis segment) and (triangle)
+        //   at current time t.
+        // - If distance <= r -> contact found.
+        // - Otherwise advance time by (distance - r) / max( dot(n, velDir), eps ), where n is the
+        //   separation normal at current configuration.
+        // This is robust, monotonic, and avoids tunneling for WoW-scale velocities.
+        auto conservativeAdvance = [&](float& outT, Vec3& outN, Vec3& outP) -> bool {
+            const float velLen = vel.length();
+            if (velLen <= EPSILON)
+                return false;
+
+            const Vec3 vDir = vel / velLen;
             float t = 0.0f;
-            float s, tseg;
-            Vec3 c1, c2;
-            // Use conservative advancement (subdivide [0,1])
-            const int steps = 8;
-            bool found = false;
-            float bestT = 1.0f;
-            for (int i = 0; i <= steps; ++i) {
-                float alpha = (float)i / steps;
-                Vec3 q0m = q0 + v_rel * alpha;
-                Vec3 q1m = q1 + v_rel * alpha;
-                closestPointsBetweenSegments(p0, p1, q0m, q1m, s, tseg, c1, c2);
-                Vec3 diff = c1 - c2;
-                float dist2 = diff.length2();
-                if (dist2 <= (radius + EPSILON) * (radius + EPSILON)) {
-                    if (alpha < bestT) {
-                        bestT = alpha;
-                        outT = alpha;
-                        outN = Vec3::normalizeSafe(diff);
-                        outP = c2;
-                        found = true;
-                    }
+
+            // Limit iterations for performance (similar to PhysX CCT internal limits)
+            const int kMaxIters = 12;
+            for (int it = 0; it < kMaxIters; ++it)
+            {
+                Capsule C = start;
+                C.p0 = C.p0 + vel * t;
+                C.p1 = C.p1 + vel * t;
+
+                Vec3 onSeg, onTri;
+                if (!closestPoints_Segment_Triangle(C.p0, C.p1, T, onSeg, onTri))
+                    return false;
+
+                Vec3 sep = onSeg - onTri;
+                float dist = sep.length();
+                float sepDist = dist - C.r;
+
+                if (sepDist <= TOUCH_EPS)
+                {
+                    // Contact (or very close). Produce consistent normal.
+                    Vec3 n = (dist > EPSILON) ? (sep / dist) : Ntri;
+                    outT = t;
+                    outN = Vec3::normalizeSafe(n, Ntri);
+                    outP = onTri;
+                    return true;
                 }
+
+                Vec3 n = (dist > EPSILON) ? (sep / dist) : Ntri;
+                float approach = Vec3::dot(n, vDir);
+                // If we're not moving toward the separating direction, we can't close the gap.
+                if (approach <= 1e-5f)
+                    return false;
+
+                float dt = sepDist / (approach * velLen);
+                // Numerical safety; avoid zero progress
+                dt = cc_max(dt, 1e-4f);
+                t += dt;
+                if (t > 1.0f)
+                    return false;
             }
-            return found;
+            return false;
         };
 
-        Vec3 triEdges[3][2] = { {T.a, T.b}, {T.b, T.c}, {T.c, T.a} };
-        for (int i = 0; i < 3; ++i) {
-            float tEdge; Vec3 nEdge, pEdge;
-            if (segmentSegmentSweep(start.p0, start.p1, triEdges[i][0], triEdges[i][1], vel, start.r, tEdge, nEdge, pEdge)) {
-                if (tEdge < toi) {
-                    toi = tEdge;
-                    normal = nEdge;
-                    impactPoint = pEdge;
-                    hit = true;
-                }
-            }
-        }
-
-        // 3. Vertex contact: sweep capsule segment against each triangle vertex (point-segment sweep)
-        auto pointSegmentSweep = [](const Vec3& seg0, const Vec3& seg1, const Vec3& v, const Vec3& pt, float radius, float& outT, Vec3& outN, Vec3& outP) -> bool {
-            // Move pt by -v, segment is stationary
-            Vec3 v_rel = -v;
-            const int steps = 8;
-            bool found = false;
-            float bestT = 1.0f;
-            for (int i = 0; i <= steps; ++i) {
-                float alpha = (float)i / steps;
-                Vec3 ptm = pt + v_rel * alpha;
-                float tseg;
-                Vec3 c = closestPointOnSegment(seg0, seg1, ptm, &tseg);
-                Vec3 diff = c - ptm;
-                float dist2 = diff.length2();
-                if (dist2 <= (radius + EPSILON) * (radius + EPSILON)) {
-                    if (alpha < bestT) {
-                        bestT = alpha;
-                        outT = alpha;
-                        outN = Vec3::normalizeSafe(diff);
-                        outP = ptm;
-                        found = true;
-                    }
-                }
-            }
-            return found;
-        };
-
-        Vec3 triVerts[3] = { T.a, T.b, T.c };
-        for (int i = 0; i < 3; ++i) {
-            float tVert; Vec3 nVert, pVert;
-            if (pointSegmentSweep(start.p0, start.p1, vel, triVerts[i], start.r, tVert, nVert, pVert)) {
-                if (tVert < toi) {
-                    toi = tVert;
-                    normal = nVert;
-                    impactPoint = pVert;
+        // Run CA pass for edge/vertex features as a fallback (it also works for face cases,
+        // but we keep the face candidate computed above because it's cheap and can be earlier).
+        {
+            float tCA; Vec3 nCA, pCA;
+            if (conservativeAdvance(tCA, nCA, pCA))
+            {
+                if (tCA < toi)
+                {
+                    toi = tCA;
+                    normal = nCA;
+                    impactPoint = pCA;
                     hit = true;
                 }
             }
