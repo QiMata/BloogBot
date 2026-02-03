@@ -1,6 +1,7 @@
 // MapLoader.cpp - Complete vMaNGOS-style map loader with separate load methods and detailed logging
 #include "MapLoader.h"
 #include "VMapDefinitions.h"
+#include "CapsuleCollision.h"
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -737,6 +738,105 @@ uint16_t GridMap::getArea(float x, float y) const
     int lx = (int)x & 15;
     int ly = (int)y & 15;
     return m_areaMap[lx * 16 + ly];
+}
+
+// Helper to sample V9 heights regardless of storage type
+float GridMap::sampleV9Height(int xi, int yi) const
+{
+    if (xi < 0 || xi >= V9_SIZE || yi < 0 || yi >= V9_SIZE)
+        return INVALID_HEIGHT;
+
+    int idx = xi * V9_SIZE + yi;
+    if (m_V9)
+        return m_V9[idx];
+    if (m_uint16_V9)
+        return m_uint16_V9[idx] * m_gridIntHeightMultiplier + m_gridHeight;
+    if (m_uint8_V9)
+        return m_uint8_V9[idx] * m_gridIntHeightMultiplier + m_gridHeight;
+    return INVALID_HEIGHT;
+}
+
+// New: compute surface normal at world position (returns false if invalid / hole)
+bool GridMap::getNormal(float x, float y, float& nx, float& ny, float& nz) const
+{
+    // Only support float height for now (expand as needed)
+    if (!m_V9 || !m_V8)
+        return false;
+
+    // vMaNGOS transformation - expects WORLD coordinates
+    float tx = MAP_RESOLUTION * (32 - x / SIZE_OF_GRIDS);
+    float ty = MAP_RESOLUTION * (32 - y / SIZE_OF_GRIDS);
+
+    int x_int = (int)tx;
+    int y_int = (int)ty;
+    float x_frac = tx - x_int;
+    float y_frac = ty - y_int;
+    x_int &= (MAP_RESOLUTION - 1);
+    y_int &= (MAP_RESOLUTION - 1);
+
+    if (isHole(x_int, y_int))
+        return false;
+
+    // Find triangle vertices in world coordinates
+    // Each grid square is split into two triangles (see getHeightFromFloat)
+    // Compute the three vertices of the triangle containing (x, y)
+    float wx0 = x_int * GRID_PART_SIZE;
+    float wy0 = y_int * GRID_PART_SIZE;
+    float wx1 = (x_int + 1) * GRID_PART_SIZE;
+    float wy1 = (y_int + 1) * GRID_PART_SIZE;
+
+    // Indices for V9 and V8
+    int v9_idx1 = x_int * 129 + y_int;
+    int v9_idx2 = (x_int + 1) * 129 + y_int;
+    int v9_idx3 = x_int * 129 + (y_int + 1);
+    int v9_idx4 = (x_int + 1) * 129 + (y_int + 1);
+    int v8_idx = x_int * 128 + y_int;
+
+    CapsuleCollision::Vec3 a, b, c;
+    if (x_frac + y_frac < 1)
+    {
+        if (x_frac > y_frac)
+        {
+            // Triangle 1: (h1, h2, h5)
+            a = CapsuleCollision::Vec3(wx0, wy0, m_V9[v9_idx1]);
+            b = CapsuleCollision::Vec3(wx1, wy0, m_V9[v9_idx2]);
+            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, 2 * m_V8[v8_idx] / 2.0f);
+        }
+        else
+        {
+            // Triangle 2: (h1, h3, h5)
+            a = CapsuleCollision::Vec3(wx0, wy0, m_V9[v9_idx1]);
+            b = CapsuleCollision::Vec3(wx0, wy1, m_V9[v9_idx3]);
+            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, 2 * m_V8[v8_idx] / 2.0f);
+        }
+    }
+    else
+    {
+        if (x_frac > y_frac)
+        {
+            // Triangle 3: (h2, h4, h5)
+            a = CapsuleCollision::Vec3(wx1, wy0, m_V9[v9_idx2]);
+            b = CapsuleCollision::Vec3(wx1, wy1, m_V9[v9_idx4]);
+            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, 2 * m_V8[v8_idx] / 2.0f);
+        }
+        else
+        {
+            // Triangle 4: (h3, h4, h5)
+            a = CapsuleCollision::Vec3(wx0, wy1, m_V9[v9_idx3]);
+            b = CapsuleCollision::Vec3(wx1, wy1, m_V9[v9_idx4]);
+            c = CapsuleCollision::Vec3((wx0 + wx1) * 0.5f, (wy0 + wy1) * 0.5f, 2 * m_V8[v8_idx] / 2.0f);
+        }
+    }
+
+    // Compute normal (right-handed, z-up)
+    CapsuleCollision::Vec3 ab = b - a;
+    CapsuleCollision::Vec3 ac = c - a;
+    CapsuleCollision::Vec3 n = CapsuleCollision::Vec3::cross(ab, ac);
+    n = CapsuleCollision::Vec3::normalizeSafe(n, CapsuleCollision::Vec3(0, 0, 1));
+    nx = n.x;
+    ny = n.y;
+    nz = n.z;
+    return true;
 }
 
 // ==================== MapLoader Implementation ====================

@@ -1,4 +1,4 @@
-// WorldModel.h - Complete with all required classes
+// WorldModel.h - Complete with cylinder collision support
 #pragma once
 
 #include <vector>
@@ -9,6 +9,7 @@
 #include "Ray.h"
 #include "BIH.h"
 #include "G3D/BoundsTrait.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -66,13 +67,11 @@ namespace VMAP
 
         static bool readFromFile(FILE* rf, WmoLiquid*& liquid);
 
-        void getPosInfo(uint32_t& tilesX, uint32_t& tilesY, G3D::Vector3& corner) const;
-
     private:
         WmoLiquid() : iTilesX(0), iTilesY(0), iCorner(), iType(0), iHeight(nullptr), iFlags(nullptr) {}
     };
 
-    // GroupModel class definition
+    // GroupModel class definition with cylinder collision support
     class GroupModel
     {
     private:
@@ -87,6 +86,8 @@ namespace VMAP
         GroupModel(const GroupModel& other) = delete;
         GroupModel& operator=(const GroupModel& other) = delete;
 
+        // Last triangle index hit by the most recent IntersectRay call (local to this group's triangles)
+        mutable int m_lastHitTriangle = -1;
 
     public:
         GroupModel() : iMogpFlags(0), iGroupWMOID(0), iLiquid(nullptr) {}
@@ -109,17 +110,19 @@ namespace VMAP
 
         ~GroupModel() { delete iLiquid; }
 
-        void setMeshData(std::vector<G3D::Vector3>& vert, std::vector<MeshTriangle>& tri);
         void setLiquidData(WmoLiquid* liquid) { iLiquid = liquid; }
         uint32_t IntersectRay(const G3D::Ray& ray, float& distance, bool stopAtFirstHit, bool ignoreM2Model) const;
         bool IsInsideObject(const G3D::Vector3& pos, const G3D::Vector3& down, float& z_dist) const;
         bool GetLiquidLevel(const G3D::Vector3& pos, float& liqHeight) const;
         uint32_t GetLiquidType() const;
-        bool writeToFile(FILE* wf) const;
-        bool readFromFile(FILE* rf); 
+        bool readFromFile(FILE* rf);
         const G3D::AABox& GetBound() const { return iBound; }
         uint32_t GetMogpFlags() const { return iMogpFlags; }
         uint32_t GetWmoID() const { return iGroupWMOID; }
+
+        // Mesh data access for external collision testing
+        const std::vector<G3D::Vector3>& GetVertices() const { return vertices; }
+        const std::vector<MeshTriangle>& GetTriangles() const { return triangles; }
 
         static bool IntersectTriangle(const MeshTriangle& tri,
             std::vector<G3D::Vector3>::const_iterator vertices,
@@ -127,26 +130,30 @@ namespace VMAP
 
         struct GModelRayCallback
         {
-            GModelRayCallback(std::vector<MeshTriangle> const& tris, std::vector<G3D::Vector3> const& vert) :
-                vertices(vert.begin()), triangles(tris.begin()), hit(0) {
+            GModelRayCallback(std::vector<MeshTriangle> const& tris, std::vector<G3D::Vector3> const& vert, GroupModel* parentPtr) :
+                vertices(vert.begin()), triangles(tris.begin()), hit(0), parent(parentPtr), lastHitIndex(-1) {
             }
 
             bool operator()(G3D::Ray const& ray, uint32_t entry, float& distance, bool /*stopAtFirstHit*/, bool /*ignoreM2Model*/)
             {
-                LOG_TRACE("[GModelRayCallback] Testing triangle entry " << entry
-                    << " with distance " << distance);
+                const MeshTriangle& mt = triangles[entry];
+                G3D::Vector3 mv0 = vertices[mt.idx0];
+                G3D::Vector3 mv1 = vertices[mt.idx1];
+                G3D::Vector3 mv2 = vertices[mt.idx2];
 
-                bool result = GroupModel::IntersectTriangle(triangles[entry], vertices, ray, distance);
+                // Compute triangle normal and area (kept for potential future use)
+                G3D::Vector3 triNormal = (mv1 - mv0).cross(mv2 - mv0);
+                float triArea = triNormal.magnitude() * 0.5f;
+                if (triArea > 0.00001f) triNormal = triNormal / (2.0f * triArea);
+                else triNormal = { 0,0,0 };
+
+                bool result = GroupModel::IntersectTriangle(mt, vertices, ray, distance);
 
                 if (result)
                 {
                     ++hit;
-                    LOG_INFO("[GModelRayCallback] Triangle " << entry << " HIT! Total hits: " << hit
-                        << " New distance: " << distance);
-                }
-                else
-                {
-                    LOG_TRACE("[GModelRayCallback] Triangle " << entry << " miss");
+                    lastHitIndex = (int)entry;
+                    if (parent) parent->m_lastHitTriangle = lastHitIndex;
                 }
 
                 return result;
@@ -155,10 +162,14 @@ namespace VMAP
             std::vector<G3D::Vector3>::const_iterator vertices;
             std::vector<MeshTriangle>::const_iterator triangles;
             uint32_t hit;
+            int lastHitIndex;
+            GroupModel* parent;
         };
+
+        int GetLastHitTriangle() const { return m_lastHitTriangle; }
     };
 
-    // WorldModel class
+    // WorldModel class with cylinder collision support
     class WorldModel
     {
     public:
@@ -174,6 +185,19 @@ namespace VMAP
         bool readFile(const std::string& filename);
         void setModelFlags(uint32_t newFlags) { modelFlags = newFlags; }
         uint32_t getModelFlags() const { return modelFlags; }
+
+        // Mesh data extraction for external use
+        bool GetAllMeshData(std::vector<G3D::Vector3>& outVertices,
+            std::vector<uint32_t>& outIndices) const;
+        bool GetMeshDataInBounds(const G3D::AABox& bounds,
+            std::vector<G3D::Vector3>& outVertices,
+            std::vector<uint32_t>& outIndices) const;
+
+        // Access a specific group model (read-only) for triangle enrichment
+        inline const GroupModel* GetGroupModel(uint32_t index) const
+        {
+            return (index < groupModels.size()) ? &groupModels[index] : nullptr;
+        }
 
     protected:
         uint32_t RootWMOID;

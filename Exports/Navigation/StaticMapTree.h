@@ -1,13 +1,15 @@
-// StaticMapTree.h - Add this method declaration
+// StaticMapTree.h - Enhanced with cylinder collision support
 #pragma once
 
 #include <unordered_map>
 #include <string>
 #include <memory>
+#include <vector>
 #include "BIH.h"
 #include "Vector3.h"
 #include "Ray.h"
 #include "ModelInstance.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -29,7 +31,7 @@ namespace VMAP
         std::unordered_map<uint32_t, uint32_t> iLoadedSpawns;
         std::unordered_map<uint32_t, bool> iLoadedTiles;
 
-        // NEW: Preload all tiles for maximum performance
+        // Preload all tiles for maximum performance
         bool PreloadAllTiles(VMapManager2* vm);
 
     public:
@@ -41,7 +43,7 @@ namespace VMAP
         void UnloadMapTile(uint32_t tileX, uint32_t tileY, VMapManager2* vm);
         void UnloadMap(VMapManager2* vm);
 
-        // Collision and height queries
+        // Original collision and height queries
         bool isInLineOfSight(const G3D::Vector3& pos1, const G3D::Vector3& pos2, bool ignoreM2Model) const;
         bool getObjectHitPos(const G3D::Vector3& pos1, const G3D::Vector3& pos2,
             G3D::Vector3& resultHitPos, float modifyDist) const;
@@ -53,6 +55,7 @@ namespace VMAP
 
         bool getIntersectionTime(const G3D::Ray& ray, float& maxDist,
             bool stopAtFirstHit, bool ignoreM2Model) const;
+        // Removed extended variant with extra output parameters for WoW emulator compatibility
 
         ModelInstance* FindCollisionModel(const G3D::Vector3& pos1, const G3D::Vector3& pos2);
 
@@ -65,6 +68,11 @@ namespace VMAP
         // Getters
         bool isTiled() const;
         uint32_t numLoadedTiles() const;
+
+        // New lightweight accessors for query facade (read-only)
+        inline const BIH* GetBIHTree() const { return &iTree; }
+        inline const ModelInstance* GetInstancesPtr() const { return iTreeValues; }
+        inline uint32_t GetInstanceCount() const { return iNTreeValues; }
 
 #ifdef MMAP_GENERATOR
         void getModelInstances(ModelInstance*& models, uint32_t& count);

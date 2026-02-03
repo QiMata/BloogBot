@@ -7,6 +7,8 @@
 #include <memory>
 #include <mutex>
 #include <cstdio>
+#include <vector>
+#include "CapsuleCollision.h"
 
 // Map file format constants (matching vMaNGOS)
 namespace MapFormat
@@ -92,6 +94,14 @@ namespace MapFormat
     };
 #pragma pack(pop)
 
+    // Simple terrain triangle representation (world coords)
+    struct TerrainTriangle
+    {
+        float ax, ay, az;
+        float bx, by, bz;
+        float cx, cy, cz;
+    };
+
     // GridMap class - holds one map tile
     class GridMap
     {
@@ -149,6 +159,9 @@ namespace MapFormat
         bool loadHolesData(FILE* in, uint32_t offset, uint32_t size);
         bool loadLiquidData(FILE* in, uint32_t offset, uint32_t size);
 
+        // Helper to sample V9 heights regardless of storage type
+        float sampleV9Height(int xi, int yi) const;
+
     public:
         GridMap() = default;
         ~GridMap();
@@ -160,6 +173,12 @@ namespace MapFormat
         float getLiquidLevel(float x, float y) const;
         uint8_t getLiquidType(float x, float y) const;
         uint16_t getArea(float x, float y) const;
+
+        // New: extract terrain triangles (world coordinates) for this tile
+        void getTerrainTriangles(std::vector<TerrainTriangle>& out) const;
+
+        // New: compute surface normal at world position (returns false if invalid / hole)
+        bool getNormal(float x, float y, float& nx, float& ny, float& nz) const;
     };
 }
 
@@ -198,4 +217,16 @@ public:
     size_t GetLoadedTileCount() const;
     bool IsTileLoaded(uint32_t mapId, uint32_t x, uint32_t y) const;
     bool IsInitialized() const { return m_initialized; }
+
+    void WorldToGridCoords(float worldX, float worldY, uint32_t& gridX, uint32_t& gridY) const { worldToGridCoords(worldX, worldY, gridX, gridY); }
+
+    // Helper to get a pointer to the loaded GridMap for a tile (returns nullptr if not loaded)
+    MapFormat::GridMap* GetGridMap(uint32_t mapId, uint32_t x, uint32_t y)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto it = m_loadedTiles.find(makeKey(mapId, x, y));
+        if (it != m_loadedTiles.end())
+            return it->second.get();
+        return nullptr;
+    }
 };

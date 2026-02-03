@@ -7,6 +7,7 @@
 #include <string>
 #include <iomanip>
 #include <cmath>
+#include "CoordinateTransforms.h"
 
 // Ray intersection template implementation
 template<typename RayCallback>
@@ -74,6 +75,7 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
     int nodesVisited = 0;
     int leavesProcessed = 0;
     int objectsTested = 0;
+    int hitsAccepted = 0;
 
     while (true)
     {
@@ -119,10 +121,17 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
                     }
 
                     // push back node
+                    if (stackPos < MAX_STACK_SIZE)
+                    {
                     stack[stackPos].node = back;
                     stack[stackPos].tnear = (tb >= intervalMin) ? tb : intervalMin;
                     stack[stackPos].tfar = intervalMax;
                     ++stackPos;
+                    }
+                    else
+                    {
+                        return;
+                    }
 
                     // update ray interval for front node
                     intervalMax = (tf <= intervalMax) ? tf : intervalMax;
@@ -137,13 +146,22 @@ void BIH::intersectRay(const G3D::Ray& r, RayCallback& intersectCallback,
                     while (n > 0)
                     {
                         objectsTested++;
-                        uint32_t objIdx = objects[offset];
-
+                        uint32_t srcIdx = objects[offset];
+                        uint32_t objIdx = mapObjectIndex(srcIdx);
+                        if (objIdx != 0xFFFFFFFFu)
+                        {
                         bool hit = intersectCallback(r, objIdx, maxDist, stopAtFirstHit, ignoreM2Model);
-
+                            if (hit)
+                            {
+                                ++hitsAccepted;
+                                // Compute hit point in internal space and convert to world for additional logging
+                                G3D::Vector3 hitI = r.origin() + r.direction() * maxDist;
+                                G3D::Vector3 hitW = NavCoord::InternalToWorld(hitI);
+                            }
                         if (stopAtFirstHit && hit)
                         {
                             return;
+                        }
                         }
                         --n;
                         ++offset;
@@ -255,32 +273,37 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
                     {
                         continue;
                     }
-
-                    // push back right node
+                    if (stackPos < MAX_STACK_SIZE)
+                    {
                     stack[stackPos].node = right;
                     ++stackPos;
-
+                    }
+                    else
+                    {
+                        return;
+                    }
                     continue;
                 }
                 else
                 {
                     leavesChecked++;
                     int n = tree[node + 1];
-
+                    uint32_t off = offset;
                     while (n > 0)
                     {
                         objectsTested++;
-                        uint32_t objIdx = objects[offset];
-
+                        uint32_t srcIdx = objects[off];
+                        uint32_t objIdx = mapObjectIndex(srcIdx);
+                        if (objIdx != 0xFFFFFFFFu)
+                        {
                         intersectCallback(p, objIdx);
-
-                        --n;
-                        ++offset;
+                        }
+                        --n; ++off;
                     }
                     break;
                 }
             }
-            else // BVH2 node (empty space cut off left and right)
+            else // BVH2
             {
                 if (axis > 2)
                 {
@@ -299,7 +322,7 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
 
                 continue;
             }
-        } // traversal loop
+        }
 
         // Pop from stack
         if (stackPos == 0)
@@ -310,4 +333,139 @@ void BIH::intersectPoint(const G3D::Vector3& p, IsectCallback& intersectCallback
         --stackPos;
         node = stack[stackPos].node;
     }
+}
+
+// AABB query implementation
+inline bool BIH::QueryAABB(const G3D::AABox& query, uint32_t* outIndices, uint32_t& outCount, uint32_t maxCount) const
+{
+    outCount = 0;
+
+    // Validate inputs and early outs
+    if (tree.empty() || objects.empty()) {
+        return false; }
+    if (!bounds.intersects(query)) {
+        return false; }
+    if (maxCount == 0 || outIndices == nullptr) {
+        return false; }
+
+    // Traversal stack
+    StackNode stack[MAX_STACK_SIZE];
+    int stackPos = 0;
+    uint32_t node = 0;
+
+    // Diagnostics counters
+    int nodesVisited = 0;
+    int leavesVisited = 0;
+    int objectsEnumerated = 0;
+
+    while (true)
+    {
+        while (true)
+        {
+            ++nodesVisited;
+            uint32_t tn = tree[node];
+            uint32_t axis = (tn >> 30) & 3;
+            bool const BVH2 = tn & (1 << 29);
+            uint32_t offset = tn & ~(7u << 29);
+
+            if (!BVH2)
+            {
+                if (axis < 3)
+                {
+                    // interior node with clipping planes
+                    float tl = VMAP::intBitsToFloat(tree[node + 1]);
+                    float tr = VMAP::intBitsToFloat(tree[node + 2]);
+
+                    bool goLeft = query.low()[axis] <= tr;   // overlaps left if min <= right clip
+                    bool goRight = query.high()[axis] >= tl; // overlaps right if max >= left clip
+
+                    if (goLeft && goRight)
+                    {
+                        uint32_t right = offset + 3;
+                        if (stackPos >= MAX_STACK_SIZE)
+                            return outCount > 0; // avoid overflow
+                        stack[stackPos++].node = right;
+                        node = offset; // left child
+                        continue;
+                    }
+                    else if (goLeft)
+                    {
+                        node = offset;
+                        continue;
+                    }
+                    else if (goRight)
+                    {
+                        node = offset + 3;
+                        continue;
+                    }
+                    else
+                    {
+                        uint32_t right = offset + 3;
+                        if (stackPos < MAX_STACK_SIZE)
+                        {
+                            stack[stackPos++].node = right;
+                            node = offset;
+                            continue;
+                        }
+                        else
+                        {
+                            return outCount > 0;
+                        }
+}
+                }
+                else
+                {
+                    ++leavesVisited;
+                    uint32_t n = tree[node + 1];
+                    uint32_t off = offset;
+                    while (n > 0)
+                    {
+                        uint32_t srcIdx = objects[off];
+                        uint32_t objIdx = mapObjectIndex(srcIdx);
+                        if (objIdx != 0xFFFFFFFFu)
+                        {
+                            if (outCount < maxCount)
+                            {
+                                outIndices[outCount++] = objIdx;
+                            }
+                            else
+                            {
+                                return true;
+                            }
+                        }
+                        ++objectsEnumerated;
+                        ++off;
+                        --n;
+                    }
+                    break;
+                }
+            }
+            else
+            {
+                if (axis > 2)
+                {
+                    return outCount > 0;
+                }
+
+                float tl = VMAP::intBitsToFloat(tree[node + 1]);
+                float tr = VMAP::intBitsToFloat(tree[node + 2]);
+
+                if (query.low()[axis] <= tr && query.high()[axis] >= tl)
+                {
+                    node = offset;
+                    continue;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+
+        if (stackPos == 0)
+            break;
+        node = stack[--stackPos].node;
+    }
+
+    return outCount > 0;
 }

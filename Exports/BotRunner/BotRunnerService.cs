@@ -88,7 +88,7 @@ namespace BotRunner
 
                                                 //Console.WriteLine($"[BOT] Target: Dallawha | PathDist: {pathingDistance:F2} | DirectDist: {directDistance:F2} | PlayerPos: ({_objectManager.Player.Position.X:F2}, {_objectManager.Player.Position.Y:F2}, {_objectManager.Player.Position.Z:F2}) | TargetPos: ({woWUnit.Position.X:F2}, {woWUnit.Position.Y:F2}, {woWUnit.Position.Z:F2})");
 
-                                                if (pathingDistance > 25)
+                                                if (pathingDistance > 5)
                                                 {
                                                     //Console.WriteLine($"[BOT] MOVING - Distance {pathingDistance:F2} > 25, requesting path...");
 

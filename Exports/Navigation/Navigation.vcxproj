@@ -237,6 +237,7 @@
     <ClInclude Include="..\Navigation\PathFinder.h" />
     <ClInclude Include="AABox.h" />
     <ClInclude Include="BIH.h" />
+    <ClInclude Include="CoordinateTransforms.h" />
     <ClInclude Include="IVMapManager.h" />
     <ClInclude Include="MapLoader.h" />
     <ClInclude Include="Matrix3.h" />
@@ -244,7 +245,9 @@
     <ClInclude Include="PhysicsBridge.h" />
     <ClInclude Include="PhysicsEngine.h" />
     <ClInclude Include="PhysicsMath.h" />
+    <ClInclude Include="QueryHit.h" />
     <ClInclude Include="Ray.h" />
+    <ClInclude Include="SceneQuery.h" />
     <ClInclude Include="StaticMapTree.h" />
     <ClInclude Include="Vector3.h" />
     <ClInclude Include="VMapDefinitions.h" />
@@ -284,6 +287,7 @@
     <ClCompile Include="ModelInstance.cpp" />
     <ClCompile Include="PhysicsEngine.cpp" />
     <ClCompile Include="Ray.cpp" />
+    <ClCompile Include="SceneQuery.cpp" />
     <ClCompile Include="StaticMapTree.cpp" />
     <ClCompile Include="Vector3.cpp" />
     <ClCompile Include="VMapFactory.cpp" />

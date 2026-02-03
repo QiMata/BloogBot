@@ -36,6 +36,7 @@ namespace PathfindingService.Tests
 
         [Theory]
         // mapId,      x,           y,           z,           race,         adtGroundZ,     adtLiquidZ
+        [InlineData(1u, -562.225f, -4189.092f, 70.789f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(0u, -8949.950000f, -132.490000f, 83.229485f, Race.Human, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(0u, -6240.320000f, 331.033000f, 382.619171f, Race.Human, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(0u, 524.311279f, 312.037323f, 31.260843f, Race.Orc, 0.002989f, MovementFlags.MOVEFLAG_NONE)]
@@ -50,6 +51,8 @@ namespace PathfindingService.Tests
         [InlineData(1u, -582.580383f, -4236.643970f, 38.044630f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(1u, -576.927856f, -4242.207030f, 37.980587f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(1u, -550.47998f, -4194.069824f, 49.271198f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
+        [InlineData(1u, -535.382019f, -4204.233398f, 74.716393f, Race.Orc, 5.853496f, MovementFlags.MOVEFLAG_NONE)]
+        [InlineData(1u, -557.773926f, -4181.990723f, 72.576546f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(1u, 1629.359985f, -4373.380377f, 31.255800f, Race.Orc, 3.548300f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(1u, 10334.000000f, 833.902000f, 1326.110000f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
         [InlineData(389u, -247.728561f, -30.644503f, -58.082531f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]
@@ -98,18 +101,25 @@ namespace PathfindingService.Tests
         }
 
         [Theory]
-        [InlineData(1u, -601.518f, -4602.816f, 37.600f, 1.612760f, Race.Orc, -598.668f, -4601.770f, 37.614f)] // Your exact scenario
+        [InlineData(1u, -601.518f, -4602.816f, 41.294189f, 1.612760f, Race.Orc, -598.668f, -4601.770f, 37.614f)] // Your exact scenario
+        [InlineData(1u, -562.225f, -4189.092f, 70.789f, 6.175373f, Race.Orc, -555.043f, -4189.869f, 72.656f)] // Your exact scenario
         [InlineData(0u, -8949.95f, -132.49f, 83.23f, 0.0f, Race.Human, -8949.95f, -125.49f, 83.23f)]  // North facing
         [InlineData(0u, -8949.95f, -132.49f, 83.23f, 1.5708f, Race.Human, -8942.95f, -132.49f, 83.23f)] // East facing  
         [InlineData(0u, -8949.95f, -132.49f, 83.23f, 3.14159f, Race.Human, -8949.95f, -139.49f, 83.23f)] // South facing
         [InlineData(0u, -8949.95f, -132.49f, 83.23f, -1.5708f, Race.Human, -8956.95f, -132.49f, 83.23f)] // West facing
         public void StepPhysics_ForwardMovement(
-    uint mapId,
-    float startX, float startY, float startZ,
-    float orientation,
-    Race race,
-    float expectedX, float expectedY, float expectedZ)
+            uint mapId,
+            float startX, float startY, float startZ,
+            float orientation,
+            Race race,
+            float expectedX, float expectedY, float expectedZ)
         {
+
+            // Simulate 1 second of movement
+            float totalTime = 1.0f;
+            float dt = 0.05f; // 50ms ticks
+            int steps = (int)(totalTime / dt);
+
             var (radius, height) = RaceDimensions.GetCapsuleForRace(race, Gender.Male);
             // Setup input with FORWARD movement flag
             var input = new PhysicsInput
@@ -128,11 +138,6 @@ namespace PathfindingService.Tests
                 swimSpeed = 4.72f,
                 flightSpeed = 2.5f
             };
-
-            // Simulate 1 second of movement
-            float totalTime = 1.0f;
-            float dt = 0.05f; // 50ms ticks
-            int steps = (int)(totalTime / dt);
 
             PhysicsOutput output = new();
             for (int i = 0; i < steps; i++)
@@ -179,6 +184,8 @@ namespace PathfindingService.Tests
             Console.WriteLine($"  Orientation: {orientation:F3} rad");
             Console.WriteLine($"  Movement angle: {moveAngle:F3} rad");
             Console.WriteLine($"  Velocity: ({output.vx:F2}, {output.vy:F2}, {output.vz:F2})");
+
+            Assert.Equal(expectedZ, output.z);
         }
     }
 }

@@ -1,11 +1,12 @@
-﻿using System.Text;
+﻿using System;
+using System.IO;
+using System.Text;
+using System.Collections.Generic;
 using GameData.Core.Enums;
 
 namespace GameData.Core.Constants
 {
-    /// <summary>
-    /// Druid shapeshift forms
-    /// </summary>
+    // Druid shapeshift forms (subset for vanilla)
     public enum DruidForm
     {
         Human = 0,
@@ -773,7 +774,7 @@ namespace GameData.Core.Constants
             public float FootprintTextureLength { get; private set; }
             public float FootprintTextureWidth { get; private set; }
             public float FootprintParticleScale { get; private set; }
-            public uint FoleyMaterialId { get; private set; }
+            public uint FoleyMaterialId { get; private set; } // restored
             public uint FootstepShakeSize { get; private set; }
             public uint DeathThudShakeSize { get; private set; }
             public uint SoundData { get; private set; }
@@ -804,7 +805,7 @@ namespace GameData.Core.Constants
                 FootprintTextureLength = reader.ReadSingle();
                 FootprintTextureWidth = reader.ReadSingle();
                 FootprintParticleScale = reader.ReadSingle();
-                FoleyMaterialId = reader.ReadUInt32();
+                FoleyMaterialId = reader.ReadUInt32(); // restored assignment
                 FootstepShakeSize = reader.ReadUInt32();
                 DeathThudShakeSize = reader.ReadUInt32();
                 SoundData = reader.ReadUInt32();

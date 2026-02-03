@@ -2,6 +2,10 @@
 #include "ModelInstance.h"
 #include "WorldModel.h"
 #include "VMapDefinitions.h"
+#include <iostream>
+#include <algorithm>
+#include "VMapLog.h"
+#include "CoordinateTransforms.h"
 
 namespace VMAP
 {
@@ -88,14 +92,20 @@ namespace VMAP
 	ModelInstance::ModelInstance(const ModelSpawn& spawn, std::shared_ptr<WorldModel> model)
 		: ModelSpawn(spawn), iModel(model)
 	{
+        // Compute world->model rotation from spawn Euler angles (degrees)
+        const G3D::Vector3& eulerDeg = this->ModelSpawn::iRot;
 		iInvRot = G3D::Matrix3::fromEulerAnglesZYX(
-			G3D::pi() * iRot.y / 180.f,  // z rotation
-			G3D::pi() * iRot.x / 180.f,  // y rotation  
-			G3D::pi() * iRot.z / 180.f   // x rotation
+            G3D::pi() * eulerDeg.y / 180.f,  // z rotation
+            G3D::pi() * eulerDeg.x / 180.f,  // y rotation  
+            G3D::pi() * eulerDeg.z / 180.f   // x rotation
 		).inverse();
+        // Cache model->world rotation once
+        iRot = iInvRot.inverse();
+        // Precompute inverse scale
 		iInvScale = 1.f / iScale;
 	}
 
+    // Simplified to match reference server implementation
 	bool ModelInstance::intersectRay(const G3D::Ray& ray, float& maxDist,
 		bool stopAtFirstHit, bool ignoreM2Model) const
 	{
@@ -143,15 +153,13 @@ namespace VMAP
 		// child bounds are defined in object space:
 		G3D::Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
 		G3D::Vector3 zDirModel = iInvRot * G3D::Vector3(0, 0, -1);  // Vector3::down()
-		float zDist = 10000.0f;;
+        float zDist = 10000.0f;
 
 		if (iModel->IntersectPoint(pModel, zDirModel, zDist, info))
 		{
 			G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-			// Transform back to world space. Note that:
-			// Mat * vec == vec * Mat.transpose()
-			// and for rotation matrices: Mat.inverse() == Mat.transpose()
-			float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
+            // Transform back to world space using model->world rotation (iRot)
+            float world_Z = TransformToWorld(modelGround).z;
 			if (info.ground_Z < world_Z)
 			{
 				info.ground_Z = world_Z;
@@ -169,13 +177,13 @@ namespace VMAP
 
 		G3D::Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
 		G3D::Vector3 zDirModel = iInvRot * G3D::Vector3(0, 0, -1);
-		float zDist = 10000.0f;;
+        float zDist = 10000.0f;
 		GroupLocationInfo groupInfo;
 
 		if (iModel->GetLocationInfo(pModel, zDirModel, zDist, groupInfo))
 		{
 			G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-			float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
+            float world_Z = TransformToWorld(modelGround).z;
 			if (info.ground_Z < world_Z)
 			{
 				info.rootId = groupInfo.rootId;
@@ -197,7 +205,8 @@ namespace VMAP
 		G3D::Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
 		if (info.hitModel->GetLiquidLevel(pModel, liqHeight))
 		{
-			liqHeight = (G3D::Vector3(pModel.x, pModel.y, liqHeight) * iInvRot * iScale + iPos).z;
+            // Use TransformToWorld to correctly compute world-space z
+            liqHeight = TransformToWorld(G3D::Vector3(pModel.x, pModel.y, liqHeight)).z;
 			return true;
 		}
 		return false;
@@ -225,9 +234,17 @@ namespace VMAP
 			groupId = info.groupId;
 
 			G3D::Vector3 modelGround = pModel + zDirModel * zDist;
-			float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
+            float world_Z = TransformToWorld(modelGround).z;
 			if (pos.z > world_Z)
 				pos.z = world_Z;
 		}
+    }
+
+    // Transform a vertex from model space to world space (now returns true world-space coords)
+    G3D::Vector3 ModelInstance::TransformToWorld(const G3D::Vector3& modelVertex) const
+    {
+        // Compute internal-space global position then convert to world-space
+        G3D::Vector3 internalPos = (modelVertex * iScale) * iRot + iPos;
+        return NavCoord::InternalToWorld(internalPos);
 	}
 }
