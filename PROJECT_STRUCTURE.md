@@ -11,6 +11,20 @@ BloogBot/
 ??? ARCHITECTURE.md                 # High-level architecture documentation
 ??? PROJECT_STRUCTURE.md            # This file
 ??? DEVELOPMENT_GUIDE.md            # Developer onboarding guide
+??? CODING_STANDARDS.md             # C# coding conventions
+??? IPC_COMMUNICATION.md            # Inter-process communication
+?
+??? docs/                           # Technical documentation
+?   ??? README.md                   # Documentation index
+?   ??? physics/                    # PhysX CCT-style physics docs
+?       ??? README.md               # Physics system overview
+?       ??? 01_CALL_GRAPH.md        # Character Controller call graph
+?       ??? ...                     # Numbered physics documentation
+?
+??? .github/                        # GitHub configuration
+?   ??? CONTRIBUTING.md             # Contribution guidelines
+?   ??? COPILOT_CONTEXT.md          # Copilot quick reference
+?   ??? COPILOT_INSTRUCTIONS.md     # Copilot instructions
 ?
 ??? BloogBot.AI/                    # AI coordination module
 ??? Exports/                        # Core libraries and native components
@@ -634,6 +648,7 @@ Tests/
 | WoW protocol handling | `Exports/WoWSharpClient/` |
 | Navigation/pathfinding | `Exports/Navigation/Navigation.cpp`, `Services/PathfindingService/` |
 | Physics simulation | `Exports/Navigation/PhysicsEngine.cpp` + Physics* modules |
+| Physics documentation | `docs/physics/` |
 | Physics constants | `Exports/Navigation/PhysicsTolerances.h` |
 | Scene geometry queries | `Exports/Navigation/SceneQuery.cpp` |
 | Game object models | `Exports/GameData.Core/Models/` |

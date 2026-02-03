@@ -358,6 +358,8 @@ Both implementations share:
 
 The `Navigation.dll` provides both A* pathfinding and a PhysX-style physics simulation for character movement.
 
+> **See [docs/physics/README.md](docs/physics/README.md) for detailed physics system documentation.**
+
 ### PathfindingService Integration
 
 ```

@@ -283,5 +283,6 @@ _botStates.Pop();
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | High-level system design, BotRunner architecture diagram |
 | [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | Detailed file/folder layouts for all projects |
 | [DEVELOPMENT_GUIDE.md](../DEVELOPMENT_GUIDE.md) | Setup instructions, coding patterns, contribution guide |
+| [docs/physics/](../docs/physics/README.md) | PhysX CCT-style physics system documentation |
 
 *This reference is optimized for GitHub Copilot context. For detailed documentation, see links above.*
