@@ -1,6 +1,5 @@
 using BotRunner;
 using BotRunner.Clients;
-using PromptHandlingService;
 using WoWSharpClient;
 using WoWSharpClient.Client;
 
@@ -9,8 +8,6 @@ namespace BackgroundBotRunner
     public class BackgroundBotWorker : BackgroundService
     {
         private readonly ILogger<BackgroundBotWorker> _logger;
-
-        private readonly IPromptRunner _promptRunner;
 
         private readonly PathfindingClient _pathfindingClient;
         private readonly WoWClient _wowClient;
@@ -23,8 +20,6 @@ namespace BackgroundBotRunner
         public BackgroundBotWorker(ILoggerFactory loggerFactory, IConfiguration configuration)
         {
             _logger = loggerFactory.CreateLogger<BackgroundBotWorker>();
-
-            _promptRunner = PromptRunnerFactory.GetOllamaPromptRunner(new Uri(configuration["Ollama:BaseUri"]), configuration["Ollama:Model"]);
 
             _pathfindingClient = new PathfindingClient(configuration["PathfindingService:IpAddress"], int.Parse(configuration["PathfindingService:Port"]), loggerFactory.CreateLogger<PathfindingClient>());
             _characterStateUpdateClient = new CharacterStateUpdateClient(configuration["CharacterStateListener:IpAddress"], int.Parse(configuration["CharacterStateListener:Port"]), loggerFactory.CreateLogger<CharacterStateUpdateClient>());

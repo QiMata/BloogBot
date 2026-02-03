@@ -1,8 +1,8 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
-namespace MageArcane.Tasks
+namespace MageFire.Tasks
 {
     internal class ConjureItemsTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
@@ -22,7 +22,8 @@ namespace MageArcane.Tasks
             }
 
             if (ObjectManager.CountFreeSlots(false) == 0 ||
-                (foodItem != null || !ObjectManager.Player.IsSpellReady(ConjureFood)) && (drinkItem != null || !ObjectManager.Player.IsSpellReady(ConjureWater)))
+                (foodItem != null || !ObjectManager.Player.IsSpellReady(ConjureFood)) &&
+                (drinkItem != null || !ObjectManager.Player.IsSpellReady(ConjureWater)))
             {
                 BotTasks.Pop();
 
@@ -33,12 +34,13 @@ namespace MageArcane.Tasks
             }
 
             uint foodCount = foodItem == null ? 0 : ObjectManager.GetItemCount(foodItem.ItemId);
-            if ((foodItem == null || foodCount <= 2) && Wait.For("ArcaneMageConjureFood", 3000))
+            if ((foodItem == null || foodCount <= 2) && Wait.For("FireMageConjureFood", 3000))
                 ObjectManager.Player.CastSpell(ConjureFood);
 
             uint drinkCount = drinkItem == null ? 0 : ObjectManager.GetItemCount(drinkItem.ItemId);
-            if ((drinkItem == null || drinkCount <= 2) && Wait.For("ArcaneMageConjureDrink", 3000))
+            if ((drinkItem == null || drinkCount <= 2) && Wait.For("FireMageConjureDrink", 3000))
                 ObjectManager.Player.CastSpell(ConjureWater);
         }
     }
 }
+

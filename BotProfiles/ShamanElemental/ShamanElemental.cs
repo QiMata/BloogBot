@@ -4,38 +4,30 @@ using BotRunner.Interfaces;
 using Communication;
 using ShamanElemental.Tasks;
 
+using BotProfiles.Common;
 namespace ShamanElemental
 {
     [Export(typeof(IBot))]
-    internal class ShamanElemental : IBot
+    internal class ShamanElemental : BotBase
     {
-        public string Name => "Elemental Shaman";
+        public override string Name => "Elemental Shaman";
 
-        public string FileName => "ShamanElemental.dll";
+        public override string FileName => "ShamanElemental.dll";
 
-        public IClassContainer GetClassContainer(ActivityMemberState probe) =>
-            new ClassContainer(
-                Name,
-                CreateRestTask,
-                CreateBuffTask,
-                CreateMoveToTargetTask,
-                CreatePvERotationTask,
-                CreatePvPRotationTask,
-                probe);
 
-        public IBotTask CreateRestTask(IBotContext botContext) =>
+        public override IBotTask CreateRestTask(IBotContext botContext) =>
             new RestTask(botContext);
 
-        public IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
+        public override IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
             new PullTargetTask(botContext);
 
-        public IBotTask CreateBuffTask(IBotContext botContext) =>
+        public override IBotTask CreateBuffTask(IBotContext botContext) =>
             new BuffTask(botContext);
 
-        public IBotTask CreatePvERotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvERotationTask(IBotContext botContext) =>
             new PvERotationTask(botContext);
 
-        public IBotTask CreatePvPRotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvPRotationTask(IBotContext botContext) =>
             new PvERotationTask(botContext);
     }
 }

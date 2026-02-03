@@ -25,7 +25,7 @@ namespace StateManager
             catch (FileNotFoundException ex)
             {
                 Console.WriteLine($"FATAL: appsettings.json not found in '{baseDir}'. Ensure it is marked Copy to Output Directory = PreserveNewest. Exception: {ex.Message}");
-                return; // Abort early – host builder would fail the same way
+                return; // Abort early â€“ host builder would fail the same way
             }
 
             // Launch PathfindingService if not already running and wait for it to be ready
