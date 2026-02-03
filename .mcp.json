@@ -1,7 +1,23 @@
 {
   "servers": {
+    "cpp-intelligence": {
+      "type": "sse",
+      "url": "http://localhost:5002/sse",
+      "headers": {}
+    },
+    "logging": {
+      "type": "sse",
+      "url": "http://localhost:5001/sse",
+      "headers": {}
+    },
     "memorizer": {
-      "url": "http://localhost:5000/sse"
+      "type": "sse",
+      "url": "http://localhost:5000/sse",
+      "headers": {}
+    },
+    "microsoft.docs.mcp": {
+      "type": "http",
+      "url": "https://learn.microsoft.com/api/mcp"
     }
   }
 }

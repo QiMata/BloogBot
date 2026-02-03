@@ -1,0 +1,41 @@
+{
+  "ConnectionStrings": {
+    "CharacterDatabase": "Server=localhost;Database=characters;Uid=mangos;Pwd=mangos;Port=3306;",
+    "AuthDatabase": "Server=localhost;Database=realmd;Uid=mangos;Pwd=mangos;Port=3306;",
+    "MangosDatabase": "Server=localhost;Database=mangos;Uid=mangos;Pwd=mangos;Port=3306;"
+  },
+  "MangosSOAP": {
+    "IpAddress": "http://127.0.0.1:7878"
+  },
+  "PathfindingService": {
+    "IpAddress": "127.0.0.1",
+    "Port": "5000"
+  },
+  "CharacterStateListener": {
+    "IpAddress": "127.0.0.1",
+    "Port": "8081"
+  },
+  "StateManagerListener": {
+    "IpAddress": "127.0.0.1",
+    "Port": "8080"
+  },
+  "RealmEndpoint": {
+    "IpAddress": "127.0.0.1"
+  },
+  "GameClient": {
+    "ExecutablePath": "C:\\Games\\World of Warcraft\\WoW.exe"
+  },
+  "LoaderDllPath": "Exports\\Bot\\Release\\net8.0\\Loader.dll",
+  "Injection": {
+    "AllocateConsole": "true"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information",
+      "StateManager": "Debug",
+      "BotRunner": "Debug"
+    }
+  }
+}

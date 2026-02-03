@@ -1,4 +1,5 @@
 ﻿using GameData.Core.Models;
+using Microsoft.Extensions.Configuration;
 using PathfindingService.Repository;
 
 namespace PathfindingService.Tests
@@ -13,7 +14,22 @@ namespace PathfindingService.Tests
     {
         public Navigation Navigation { get; }
 
-        public NavigationFixture() => Navigation = new Navigation();
+        public NavigationFixture() 
+        {
+            // Create a mock configuration for testing
+            var configDict = new Dictionary<string, string?>
+            {
+                ["Navigation:DllPath"] = Environment.GetEnvironmentVariable("NAVIGATION_DLL_PATH") 
+                    ?? @"C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Navigation.dll"
+            };
+
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(configDict)
+                .AddEnvironmentVariables()
+                .Build();
+
+            Navigation = new Navigation(configuration);
+        }
 
         public void Dispose() { /* Navigation lives for the AppDomain – nothing to do. */ }
     }

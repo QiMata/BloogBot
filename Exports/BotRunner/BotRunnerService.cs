@@ -16,7 +16,8 @@ namespace BotRunner
 
         private ActivitySnapshot _activitySnapshot;
 
-        private Task _asyncBotTaskRunnerTask;
+        private Task? _asyncBotTaskRunnerTask;
+        private CancellationTokenSource? _cts;
 
         private IBehaviourTreeNode _behaviorTree;
 
@@ -34,14 +35,34 @@ namespace BotRunner
         public void Start()
         {
             if (_asyncBotTaskRunnerTask == null || _asyncBotTaskRunnerTask.IsCompleted)
-                _asyncBotTaskRunnerTask = StartBotTaskRunnerAsync();
+            {
+                _cts = new CancellationTokenSource();
+                _asyncBotTaskRunnerTask = StartBotTaskRunnerAsync(_cts.Token);
+            }
         }
 
-        private async Task StartBotTaskRunnerAsync()
+        public void Stop()
+        {
+            try
+            {
+                _cts?.Cancel();
+                _asyncBotTaskRunnerTask?.Wait(1000);
+            }
+            catch { }
+            finally
+            {
+                _asyncBotTaskRunnerTask?.Dispose();
+                _asyncBotTaskRunnerTask = null;
+                _cts?.Dispose();
+                _cts = null;
+            }
+        }
+
+        private async Task StartBotTaskRunnerAsync(CancellationToken cancellationToken)
         {
             var _status = BehaviourTreeStatus.Success;
 
-            while (true)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
@@ -157,10 +178,12 @@ namespace BotRunner
 
                     _activitySnapshot = incomingActivityMemberState;
                     // Delay to control the frequency of task processing
+                    await Task.Delay(100);
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[BOT RUNNER] {ex}");
+                    await Task.Delay(200, cancellationToken);
                 }
                 await Task.Delay(100);
             }
