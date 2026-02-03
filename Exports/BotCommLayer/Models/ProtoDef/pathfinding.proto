@@ -1,68 +1,129 @@
 ﻿syntax = "proto3";
 
 package pathfinding;
+option csharp_namespace = "Pathfinding";
 
-import "game.proto";          // re-uses game.Position (x,y,z)
+import "game.proto";
 
-/* ────────── atomic request / response types ────────── */
+// Main request message - simplified
+message PathfindingRequest {
+    oneof payload {
+        CalculatePathRequest path = 1;
+        LineOfSightRequest los = 2;
+        PhysicsInput step = 3;
+    }
+}
 
+// Main response message - simplified
+message PathfindingResponse {
+    oneof payload {
+        CalculatePathResponse path = 1;
+        LineOfSightResponse los = 2;
+        PhysicsOutput step = 3;
+        Error error = 99;
+    }
+}
+
+// Error message
+message Error {
+    string message = 1;
+}
+
+// Path calculation
 message CalculatePathRequest {
-  uint32        map_id   = 1;
-  game.Position start    = 2;
-  game.Position end      = 3;
-  bool          straight = 4;   // Detour “straight path” mode
+    uint32 map_id = 1;
+    game.Position start = 2;
+    game.Position end = 3;
+    bool straight = 4;  // smooth path
 }
 
 message CalculatePathResponse {
-  repeated game.Position corners = 1;
+    repeated game.Position corners = 1;
 }
 
+// Line of sight check
 message LineOfSightRequest {
-  uint32        map_id = 1;
-  game.Position from   = 2;
-  game.Position to     = 3;
-}
-message LineOfSightResponse { bool in_los = 1; }
-
-message TerrainProbeRequest {
-  uint32        map_id         = 1;
-  game.Position position       = 2;
-  float         capsule_radius = 3;
-  float         capsule_height = 4;
+    uint32 map_id = 1;
+    game.Position from = 2;
+    game.Position to = 3;
 }
 
-message NavPolyHit {
-  uint64              ref_id  = 1;
-  uint32              area    = 2;
-  uint32              flags   = 3;
-  repeated game.Position verts = 4;
+message LineOfSightResponse {
+    bool in_los = 1;
 }
 
-message TerrainProbeResponse {
-  float               ground_z      = 1;
-  float               liquid_z      = 2;
-  uint32              terrain_flags = 3;   // see NavTerrain in C#
-  repeated NavPolyHit overlaps      = 4;
+// Physics input
+message PhysicsInput {
+    // Movement state
+    uint32 movement_flags = 1;
+    
+    // Position & orientation
+    float pos_x = 2;
+    float pos_y = 3;
+    float pos_z = 4;
+    float facing = 5;
+    
+    // Transport
+    uint64 transport_guid = 6;
+    float transport_offset_x = 7;
+    float transport_offset_y = 8;
+    float transport_offset_z = 9;
+    float transport_orientation = 10;
+    
+    // Swimming/flying
+    float swim_pitch = 11;
+    
+    // Falling/jumping
+    float fall_time = 12;
+    
+    // Spline
+    float spline_elevation = 13;
+    
+    // Current velocity
+    float vel_x = 14;
+    float vel_y = 15;
+    float vel_z = 16;
+    
+    // Movement speeds
+    float walk_speed = 17;
+    float run_speed = 18;
+    float run_back_speed = 19;
+    float swim_speed = 20;
+    float swim_back_speed = 21;
+    
+    // Collision
+    uint32 race = 22;
+    uint32 gender = 23;
+    
+    // Context
+    uint32 map_id = 24;
+    float delta_time = 25;
 }
 
-/* ────────── error helper ────────── */
-message Error { string message = 1; }
-
-/* ────────── wrapper envelopes ────────── */
-
-message PathfindingRequest {
-  oneof payload {
-    CalculatePathRequest path     = 1;
-    LineOfSightRequest   los      = 2;
-    TerrainProbeRequest  terrain  = 3;
-  }
-}
-
-message PathfindingResponse {
-  oneof payload {
-    CalculatePathResponse path     = 1;
-    LineOfSightResponse   los      = 2;
-    TerrainProbeResponse  terrain  = 3;
-    Error                 error    = 4;
-  }
+// Physics output
+message PhysicsOutput {
+    // New position
+    float new_pos_x = 1;
+    float new_pos_y = 2;
+    float new_pos_z = 3;
+    
+    // New velocity
+    float new_vel_x = 4;
+    float new_vel_y = 5;
+    float new_vel_z = 6;
+    
+    // Updated state
+    uint32 movement_flags = 7;
+    float orientation = 8;
+    float pitch = 9;
+    
+    // Status flags
+    bool is_grounded = 10;
+    bool is_swimming = 11;
+    bool is_flying = 12;
+    float fall_time = 13;
+    
+    // Spline progress (if following path)
+    int32 current_spline_index = 14;
+    float spline_progress = 15;
 }

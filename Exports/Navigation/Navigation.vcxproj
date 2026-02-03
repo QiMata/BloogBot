@@ -235,6 +235,26 @@
     <ClInclude Include="..\Navigation\MoveMapSharedDefines.h" />
     <ClInclude Include="..\Navigation\Navigation.h" />
     <ClInclude Include="..\Navigation\PathFinder.h" />
+    <ClInclude Include="AABox.h" />
+    <ClInclude Include="BIH.h" />
+    <ClInclude Include="CoordinateTransforms.h" />
+    <ClInclude Include="IVMapManager.h" />
+    <ClInclude Include="MapLoader.h" />
+    <ClInclude Include="Matrix3.h" />
+    <ClInclude Include="ModelInstance.h" />
+    <ClInclude Include="PhysicsBridge.h" />
+    <ClInclude Include="PhysicsEngine.h" />
+    <ClInclude Include="PhysicsMath.h" />
+    <ClInclude Include="QueryHit.h" />
+    <ClInclude Include="Ray.h" />
+    <ClInclude Include="SceneQuery.h" />
+    <ClInclude Include="StaticMapTree.h" />
+    <ClInclude Include="Vector3.h" />
+    <ClInclude Include="VMapDefinitions.h" />
+    <ClInclude Include="VMapFactory.h" />
+    <ClInclude Include="VMapLog.h" />
+    <ClInclude Include="VMapManager2.h" />
+    <ClInclude Include="WorldModel.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\Navigation\Detour\Source\DetourAlloc.cpp" />
@@ -260,6 +280,22 @@
     <ClCompile Include="..\Navigation\MoveMap.cpp" />
     <ClCompile Include="..\Navigation\Navigation.cpp" />
     <ClCompile Include="..\Navigation\PathFinder.cpp" />
+    <ClCompile Include="AABox.cpp" />
+    <ClCompile Include="BIH.cpp" />
+    <ClCompile Include="MapLoader.cpp" />
+    <ClCompile Include="Matrix3.cpp" />
+    <ClCompile Include="ModelInstance.cpp" />
+    <ClCompile Include="PhysicsEngine.cpp" />
+    <ClCompile Include="Ray.cpp" />
+    <ClCompile Include="SceneQuery.cpp" />
+    <ClCompile Include="StaticMapTree.cpp" />
+    <ClCompile Include="Vector3.cpp" />
+    <ClCompile Include="VMapFactory.cpp" />
+    <ClCompile Include="VMapManager2.cpp" />
+    <ClCompile Include="WorldModel.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="BIH.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

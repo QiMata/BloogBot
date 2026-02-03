@@ -1,0 +1,159 @@
+2025-09-07 13:46:53.197 +01:00 [INF] === C++ Intelligence MCP Server Starting ===
+2025-09-07 13:46:53.689 +01:00 [INF] Process ID: 14600
+2025-09-07 13:46:53.745 +01:00 [INF] Working Directory: C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP
+2025-09-07 13:46:53.779 +01:00 [INF] Command Line Args: ["C:\\Users\\WowAdmin\\source\\repos\\sethrhod\\BloogBot\\Services\\CppCodeIntelligenceMCP\\Build\\net8.0\\BloogBot.CppCodeIntelligenceMCP.dll"]
+2025-09-07 13:46:54.104 +01:00 [INF] Checking for config at: C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP\appsettings.json
+2025-09-07 13:46:54.318 +01:00 [INF] Found config file at: C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP\appsettings.json
+2025-09-07 13:46:54.333 +01:00 [INF] Configuration built successfully
+2025-09-07 13:46:54.365 +01:00 [INF] Registering C++ analysis services...
+2025-09-07 13:46:54.388 +01:00 [INF] Registering MCP server with HTTP transport...
+2025-09-07 13:46:54.426 +01:00 [INF] Building application...
+2025-09-07 13:46:54.726 +01:00 [INF] Mapping MCP endpoints...
+2025-09-07 13:46:55.286 +01:00 [INF] User profile is available. Using 'C:\Users\WowAdmin\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2025-09-07 13:46:55.361 +01:00 [INF] Starting BloogBot C++ Intelligence MCP Server on http://localhost:5002
+2025-09-07 13:46:55.398 +01:00 [INF] MCP SSE endpoint available at: http://localhost:5002/sse
+2025-09-07 13:46:55.427 +01:00 [INF] Health check endpoint: http://localhost:5002/health
+2025-09-07 13:46:55.449 +01:00 [INF] Server is ready to accept connections...
+2025-09-07 13:46:55.464 +01:00 [DBG] Hosting starting
+2025-09-07 13:46:55.534 +01:00 [DBG] Reading data from file 'C:\Users\WowAdmin\AppData\Local\ASP.NET\DataProtection-Keys\key-1e6c0df7-8c9b-4be0-a5b4-c9815ca548c2.xml'.
+2025-09-07 13:46:55.644 +01:00 [DBG] Found key {1e6c0df7-8c9b-4be0-a5b4-c9815ca548c2}.
+2025-09-07 13:46:55.690 +01:00 [DBG] Considering key {1e6c0df7-8c9b-4be0-a5b4-c9815ca548c2} with expiration date 2025-12-03 21:46:37Z as default key.
+2025-09-07 13:46:55.740 +01:00 [DBG] Forwarded activator type request from Microsoft.AspNetCore.DataProtection.XmlEncryption.DpapiXmlDecryptor, Microsoft.AspNetCore.DataProtection, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60 to Microsoft.AspNetCore.DataProtection.XmlEncryption.DpapiXmlDecryptor, Microsoft.AspNetCore.DataProtection, Culture=neutral, PublicKeyToken=adb9793829ddae60
+2025-09-07 13:46:55.827 +01:00 [DBG] Decrypting secret element using Windows DPAPI.
+2025-09-07 13:46:55.895 +01:00 [DBG] Forwarded activator type request from Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel.AuthenticatedEncryptorDescriptorDeserializer, Microsoft.AspNetCore.DataProtection, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60 to Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel.AuthenticatedEncryptorDescriptorDeserializer, Microsoft.AspNetCore.DataProtection, Culture=neutral, PublicKeyToken=adb9793829ddae60
+2025-09-07 13:46:55.919 +01:00 [DBG] Opening CNG algorithm 'AES' from provider 'null' with chaining mode CBC.
+2025-09-07 13:46:55.944 +01:00 [DBG] Opening CNG algorithm 'SHA256' from provider 'null' with HMAC.
+2025-09-07 13:46:56.882 +01:00 [DBG] Using key {1e6c0df7-8c9b-4be0-a5b4-c9815ca548c2} as the default key.
+2025-09-07 13:46:58.334 +01:00 [DBG] Key ring with default key {1e6c0df7-8c9b-4be0-a5b4-c9815ca548c2} was loaded during application startup.
+2025-09-07 13:46:59.613 +01:00 [INF] Now listening on: http://localhost:5002
+2025-09-07 13:47:00.238 +01:00 [DBG] Loaded hosting startup assembly BloogBot.CppCodeIntelligenceMCP
+2025-09-07 13:47:00.339 +01:00 [INF] Application started. Press Ctrl+C to shut down.
+2025-09-07 13:47:00.450 +01:00 [INF] Hosting environment: Development
+2025-09-07 13:47:00.861 +01:00 [INF] Content root path: C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP
+2025-09-07 13:47:01.040 +01:00 [DBG] Hosting started
+2025-09-07 18:45:21.595 +01:00 [DBG] Connection id "0HNFE6P8KKGBI" accepted.
+2025-09-07 18:45:21.608 +01:00 [DBG] Connection id "0HNFE6P8KKGBI" started.
+2025-09-07 18:45:21.693 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5002/sse - application/json; charset=utf-8 null
+2025-09-07 18:45:21.715 +01:00 [DBG] Wildcard detected, all requests with hosts will be allowed.
+2025-09-07 18:45:21.871 +01:00 [DBG] 1 candidate(s) found for the request path '/sse'
+2025-09-07 18:45:21.879 +01:00 [DBG] Request matched endpoint '405 HTTP Method Not Supported'
+2025-09-07 18:45:21.888 +01:00 [INF] Executing endpoint '405 HTTP Method Not Supported'
+2025-09-07 18:45:21.893 +01:00 [INF] Executed endpoint '405 HTTP Method Not Supported'
+2025-09-07 18:45:21.901 +01:00 [DBG] Connection id "0HNFE6P8KKGBI" completed keep alive response.
+2025-09-07 18:45:21.909 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5002/sse - 405 0 null 219.6334ms
+2025-09-07 18:45:21.928 +01:00 [DBG] Connection id "0HNFE6P8KKGBI", Request id "0HNFE6P8KKGBI:00000001": started reading request body.
+2025-09-07 18:45:21.938 +01:00 [DBG] Connection id "0HNFE6P8KKGBI", Request id "0HNFE6P8KKGBI:00000001": done reading request body.
+2025-09-07 18:45:21.944 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5002/sse - null null
+2025-09-07 18:45:21.965 +01:00 [DBG] 1 candidate(s) found for the request path '/sse'
+2025-09-07 18:45:21.971 +01:00 [DBG] Request matched endpoint 'MCP HTTP with SSE | HTTP: GET /sse'
+2025-09-07 18:45:21.976 +01:00 [INF] Executing endpoint 'MCP HTTP with SSE | HTTP: GET /sse'
+2025-09-07 18:45:22.023 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ" accepted.
+2025-09-07 18:45:22.028 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ" started.
+2025-09-07 18:45:22.035 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - application/json; charset=utf-8 null
+2025-09-07 18:45:22.051 +01:00 [DBG] 1 candidate(s) found for the request path '/message'
+2025-09-07 18:45:22.057 +01:00 [DBG] Request matched endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.063 +01:00 [INF] Executing endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.088 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ", Request id "0HNFE6P8KKGBJ:00000001": started reading request body.
+2025-09-07 18:45:22.098 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ", Request id "0HNFE6P8KKGBJ:00000001": done reading request body.
+2025-09-07 18:45:22.123 +01:00 [INF] Executed endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.129 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ" completed keep alive response.
+2025-09-07 18:45:22.133 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - 202 null null 98.6662ms
+2025-09-07 18:45:22.192 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0) read JsonRpcRequest message from channel.
+2025-09-07 18:45:22.206 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0) method 'initialize' request handler called.
+2025-09-07 18:45:22.219 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) method 'initialize' request handler completed.
+2025-09-07 18:45:22.234 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) sending message.
+2025-09-07 18:45:22.258 +01:00 [DBG] Connection id "0HNFE6P8KKGBK" accepted.
+2025-09-07 18:45:22.262 +01:00 [DBG] Connection id "0HNFE6P8KKGBK" started.
+2025-09-07 18:45:22.267 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - application/json; charset=utf-8 null
+2025-09-07 18:45:22.277 +01:00 [DBG] 1 candidate(s) found for the request path '/message'
+2025-09-07 18:45:22.281 +01:00 [DBG] Request matched endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.287 +01:00 [INF] Executing endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.294 +01:00 [DBG] Connection id "0HNFE6P8KKGBK", Request id "0HNFE6P8KKGBK:00000001": started reading request body.
+2025-09-07 18:45:22.299 +01:00 [DBG] Connection id "0HNFE6P8KKGBK", Request id "0HNFE6P8KKGBK:00000001": done reading request body.
+2025-09-07 18:45:22.307 +01:00 [INF] Executed endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.308 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) read JsonRpcNotification message from channel.
+2025-09-07 18:45:22.313 +01:00 [DBG] Connection id "0HNFE6P8KKGBK" completed keep alive response.
+2025-09-07 18:45:22.313 +01:00 [DBG] Connection id "0HNFE6P8KKGBL" accepted.
+2025-09-07 18:45:22.324 +01:00 [DBG] Connection id "0HNFE6P8KKGBL" started.
+2025-09-07 18:45:22.321 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - 202 null null 53.9069ms
+2025-09-07 18:45:22.327 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - application/json; charset=utf-8 null
+2025-09-07 18:45:22.349 +01:00 [DBG] 1 candidate(s) found for the request path '/message'
+2025-09-07 18:45:22.354 +01:00 [DBG] Request matched endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.358 +01:00 [INF] Executing endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.362 +01:00 [DBG] Connection id "0HNFE6P8KKGBL", Request id "0HNFE6P8KKGBL:00000001": started reading request body.
+2025-09-07 18:45:22.369 +01:00 [DBG] Connection id "0HNFE6P8KKGBL", Request id "0HNFE6P8KKGBL:00000001": done reading request body.
+2025-09-07 18:45:22.374 +01:00 [INF] Executed endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.374 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) read JsonRpcRequest message from channel.
+2025-09-07 18:45:22.378 +01:00 [DBG] Connection id "0HNFE6P8KKGBL" completed keep alive response.
+2025-09-07 18:45:22.382 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) method 'tools/list' request handler called.
+2025-09-07 18:45:22.386 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - 202 null null 58.322ms
+2025-09-07 18:45:22.404 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) method 'tools/list' request handler completed.
+2025-09-07 18:45:22.408 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) sending message.
+2025-09-07 18:45:22.426 +01:00 [DBG] Connection id "0HNFE6P8KKGBM" accepted.
+2025-09-07 18:45:22.435 +01:00 [DBG] Connection id "0HNFE6P8KKGBM" started.
+2025-09-07 18:45:22.441 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - application/json; charset=utf-8 null
+2025-09-07 18:45:22.452 +01:00 [DBG] 1 candidate(s) found for the request path '/message'
+2025-09-07 18:45:22.456 +01:00 [DBG] Request matched endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.460 +01:00 [INF] Executing endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.467 +01:00 [DBG] Connection id "0HNFE6P8KKGBM", Request id "0HNFE6P8KKGBM:00000001": started reading request body.
+2025-09-07 18:45:22.473 +01:00 [DBG] Connection id "0HNFE6P8KKGBM", Request id "0HNFE6P8KKGBM:00000001": done reading request body.
+2025-09-07 18:45:22.479 +01:00 [INF] Executed endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:22.479 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) read JsonRpcRequest message from channel.
+2025-09-07 18:45:22.483 +01:00 [DBG] Connection id "0HNFE6P8KKGBM" completed keep alive response.
+2025-09-07 18:45:22.488 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) method 'tools/call' request handler called.
+2025-09-07 18:45:22.492 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - 202 null null 50.9208ms
+2025-09-07 18:45:22.535 +01:00 [INF] Analyzing C++ file: Exports/Loader/dllmain.cpp
+2025-09-07 18:45:22.541 +01:00 [ERR] Error analyzing file Exports/Loader/dllmain.cpp
+System.IO.FileNotFoundException: File not found: ../../..\Exports/Loader/dllmain.cpp
+   at CppCodeIntelligenceMCP.Services.CppAnalysisService.AnalyzeFileAsync(String filePath) in C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP\Services\CppAnalysisService.cs:line 42
+2025-09-07 18:45:22.578 +01:00 [ERR] Error analyzing C++ file: Exports/Loader/dllmain.cpp
+System.IO.FileNotFoundException: File not found: ../../..\Exports/Loader/dllmain.cpp
+   at CppCodeIntelligenceMCP.Services.CppAnalysisService.AnalyzeFileAsync(String filePath) in C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP\Services\CppAnalysisService.cs:line 42
+   at CppCodeIntelligenceMCP.Tools.CppAnalysisTools.AnalyzeCppFile(String filePath) in C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP\Tools\CppAnalysisTools.cs:line 40
+2025-09-07 18:45:22.591 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) method 'tools/call' request handler completed.
+2025-09-07 18:45:22.596 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) sending message.
+2025-09-07 18:45:25.785 +01:00 [DBG] Connection id "0HNFE6P8KKGBL" reset.
+2025-09-07 18:45:25.785 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ" reset.
+2025-09-07 18:45:25.785 +01:00 [DBG] Connection id "0HNFE6P8KKGBM" reset.
+2025-09-07 18:45:25.786 +01:00 [DBG] Connection id "0HNFE6P8KKGBK" reset.
+2025-09-07 18:45:25.811 +01:00 [DBG] Connection id "0HNFE6P8KKGBL" disconnecting.
+2025-09-07 18:45:25.824 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ" disconnecting.
+2025-09-07 18:45:25.836 +01:00 [DBG] Connection id "0HNFE6P8KKGBL" sending FIN because: "The Socket transport's send loop completed gracefully."
+2025-09-07 18:45:25.855 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ" sending FIN because: "The Socket transport's send loop completed gracefully."
+2025-09-07 18:45:25.866 +01:00 [DBG] Connection id "0HNFE6P8KKGBM" disconnecting.
+2025-09-07 18:45:25.871 +01:00 [DBG] Connection id "0HNFE6P8KKGBL" stopped.
+2025-09-07 18:45:25.871 +01:00 [DBG] Connection id "0HNFE6P8KKGBJ" stopped.
+2025-09-07 18:45:25.876 +01:00 [DBG] Connection id "0HNFE6P8KKGBM" sending FIN because: "The Socket transport's send loop completed gracefully."
+2025-09-07 18:45:25.896 +01:00 [DBG] Connection id "0HNFE6P8KKGBK" disconnecting.
+2025-09-07 18:45:25.906 +01:00 [DBG] Connection id "0HNFE6P8KKGBK" sending FIN because: "The Socket transport's send loop completed gracefully."
+2025-09-07 18:45:25.915 +01:00 [DBG] Connection id "0HNFE6P8KKGBK" stopped.
+2025-09-07 18:45:25.917 +01:00 [DBG] Connection id "0HNFE6P8KKGBM" stopped.
+2025-09-07 18:45:36.859 +01:00 [DBG] Connection id "0HNFE6P8KKGBN" accepted.
+2025-09-07 18:45:36.864 +01:00 [DBG] Connection id "0HNFE6P8KKGBN" started.
+2025-09-07 18:45:36.875 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - application/json; charset=utf-8 null
+2025-09-07 18:45:36.885 +01:00 [DBG] 1 candidate(s) found for the request path '/message'
+2025-09-07 18:45:36.891 +01:00 [DBG] Request matched endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:36.895 +01:00 [INF] Executing endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:36.904 +01:00 [DBG] Connection id "0HNFE6P8KKGBN", Request id "0HNFE6P8KKGBN:00000001": started reading request body.
+2025-09-07 18:45:36.909 +01:00 [DBG] Connection id "0HNFE6P8KKGBN", Request id "0HNFE6P8KKGBN:00000001": done reading request body.
+2025-09-07 18:45:36.917 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) read JsonRpcRequest message from channel.
+2025-09-07 18:45:36.917 +01:00 [INF] Executed endpoint 'MCP HTTP with SSE | HTTP: POST /message'
+2025-09-07 18:45:36.922 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) method 'tools/call' request handler called.
+2025-09-07 18:45:36.926 +01:00 [DBG] Connection id "0HNFE6P8KKGBN" completed keep alive response.
+2025-09-07 18:45:36.936 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5002/message?sessionId=_4Mig8J5TZ7b8_Xz2yrIYQ - 202 null null 61.2762ms
+2025-09-07 18:45:36.936 +01:00 [INF] Getting compilation errors for: Exports\Loader\dllmain.cpp
+2025-09-07 18:45:36.954 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) method 'tools/call' request handler completed.
+2025-09-07 18:45:36.959 +01:00 [DBG] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) sending message.
+2025-09-07 18:46:31.440 +01:00 [DBG] Connection id "0HNFE6P8KKGBN" reset.
+2025-09-07 18:46:31.478 +01:00 [DBG] Connection id "0HNFE6P8KKGBN" sending FIN because: "The Socket transport's send loop completed gracefully."
+2025-09-07 18:46:31.506 +01:00 [DBG] Connection id "0HNFE6P8KKGBN" disconnecting.
+2025-09-07 18:46:31.516 +01:00 [DBG] Connection id "0HNFE6P8KKGBN" stopped.
+2025-09-07 23:38:59.729 +01:00 [DBG] Connection id "0HNFE6P8KKGBI" reset.
+2025-09-07 23:38:59.829 +01:00 [DBG] Connection id "0HNFE6P8KKGBI" sending FIN because: "The Socket transport's send loop completed gracefully."
+2025-09-07 23:38:59.886 +01:00 [DBG] Connection id "0HNFE6P8KKGBI" disconnecting.
+2025-09-07 23:38:59.919 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) message processing canceled.
+2025-09-07 23:38:59.958 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) shutting down.
+2025-09-07 23:38:59.985 +01:00 [INF] Server (BloogBot.CppCodeIntelligenceMCP 1.0.0.0), Client (VisualStudio 1.0) shut down.
+2025-09-07 23:39:00.006 +01:00 [INF] Executed endpoint 'MCP HTTP with SSE | HTTP: GET /sse'
+2025-09-07 23:39:00.105 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5002/sse - 200 null text/event-stream 17617963.6275ms
+2025-09-07 23:39:00.170 +01:00 [DBG] Connection id "0HNFE6P8KKGBI" stopped.

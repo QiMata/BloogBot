@@ -8,7 +8,7 @@ using BotProfiles.Common;
 namespace RogueCombat
 {
     [Export(typeof(IBot))]
-    internal class RogueAssassin : BotBase
+    internal class RogueCombat : IBot
     {
         public override string Name => "Combat Rogue";
 

@@ -8,7 +8,7 @@ using BotProfiles.Common;
 namespace HunterMarksmanship
 {
     [Export(typeof(IBot))]
-    internal class DruidBalance : BotBase
+    internal class HunterMarksmanship : IBot
     {
         public override string Name => "Marksmanship Hunter";
 

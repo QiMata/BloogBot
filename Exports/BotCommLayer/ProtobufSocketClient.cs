@@ -9,23 +9,70 @@ namespace BotCommLayer
         where TRequest : IMessage<TRequest>, new()
         where TResponse : IMessage<TResponse>, new()
     {
-        private readonly TcpClient _client;
-        private readonly NetworkStream _stream;
-        private readonly ILogger _logger;
+        private readonly TcpClient? _client;
+        private readonly NetworkStream? _stream;
+        private readonly ILogger? _logger;
         private readonly object _lock = new(); 
+        
         public ProtobufSocketClient() { }
+        
         public ProtobufSocketClient(string ipAddress, int port, ILogger logger)
         {
             _logger = logger;
             _client = new TcpClient();
-            _client.Connect(IPAddress.Parse(ipAddress), port);
+            
+            // Retry connection with exponential backoff
+            ConnectWithRetry(ipAddress, port);
+            
             _stream = _client.GetStream();
             _stream.ReadTimeout = 5000;
             _stream.WriteTimeout = 5000;
         }
 
+        private void ConnectWithRetry(string ipAddress, int port)
+        {
+            const int maxRetries = 10;
+            const int baseDelayMs = 500;
+            
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    _logger?.LogInformation($"Attempting to connect to {ipAddress}:{port} (attempt {attempt}/{maxRetries})...");
+                    _client?.Connect(IPAddress.Parse(ipAddress), port);
+                    _logger?.LogInformation($"Successfully connected to {ipAddress}:{port}");
+                    return;
+                }
+                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionRefused)
+                {
+                    if (attempt == maxRetries)
+                    {
+                        _logger?.LogError($"Failed to connect to {ipAddress}:{port} after {maxRetries} attempts. Service may not be running.");
+                        throw new InvalidOperationException(
+                            $"Unable to connect to service at {ipAddress}:{port}. " +
+                            $"Please ensure the service is running and accessible. " +
+                            $"Last error: {ex.Message}", ex);
+                    }
+                    
+                    int delay = baseDelayMs * (int)Math.Pow(2, attempt - 1); // Exponential backoff
+                    _logger?.LogWarning($"Connection attempt {attempt} failed: {ex.Message}. Retrying in {delay}ms...");
+                    Thread.Sleep(delay);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError($"Unexpected error connecting to {ipAddress}:{port}: {ex.Message}");
+                    throw;
+                }
+            }
+        }
+
         public TResponse SendMessage(TRequest request)
         {
+            if (_stream == null)
+            {
+                throw new InvalidOperationException("Client is not connected. Cannot send message.");
+            }
+
             lock (_lock)
             {
                 try
@@ -50,7 +97,7 @@ namespace BotCommLayer
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError($"Error sending message: {ex}");
+                    _logger?.LogError($"Error sending message: {ex}");
                     throw;
                 }
             }
@@ -70,8 +117,8 @@ namespace BotCommLayer
 
         public void Close()
         {
-            _stream.Close();
-            _client.Close();
+            _stream?.Close();
+            _client?.Close();
         }
     }
 }

@@ -1,5 +1,5 @@
-﻿using System.Diagnostics;
-using System.Net.Sockets;
+﻿using PathfindingService.Repository;
+using System.Diagnostics;
 
 namespace PathfindingService
 {
@@ -16,39 +16,33 @@ namespace PathfindingService
             Host.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration((context, builder) =>
                 {
-                    builder.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+                    builder.AddJsonFile("appsettings.PathfindingService.json", optional: false, reloadOnChange: true);
+                    builder.AddJsonFile($"appsettings.PathfindingService.{context.HostingEnvironment.EnvironmentName}.json", optional: true, reloadOnChange: true);
                     builder.AddEnvironmentVariables();
                     if (args != null)
                         builder.AddCommandLine(args);
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
+                    var configuration = hostContext.Configuration;
+                    
+                    // Register Navigation as a singleton since it loads the native DLL
+                    services.AddSingleton<Navigation>();
+                    
+                    // Register PathfindingSocketServer as a singleton
+                    services.AddSingleton<PathfindingSocketServer>(serviceProvider =>
+                    {
+                        var logger = serviceProvider.GetRequiredService<ILogger<PathfindingSocketServer>>();
+                        var navigation = serviceProvider.GetRequiredService<Navigation>();
+                        
+                        var ipAddress = configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
+                        var port = int.Parse(configuration["PathfindingService:Port"] ?? "5000");
+                        
+                        return new PathfindingSocketServer(ipAddress, port, logger, navigation);
+                    });
+                    
+                    // Register the hosted service
                     services.AddHostedService<PathfindingServiceWorker>();
                 });
-
-        /// <summary>
-        /// Launches the PathfindingService as an external process
-        /// </summary>
-        public static void LaunchServiceFromCommandLine()
-        {
-            try
-            {
-                var processInfo = new ProcessStartInfo
-                {
-                    FileName = "dotnet",
-                    Arguments = "PathfindingService.dll",
-                    UseShellExecute = true,
-                    CreateNoWindow = false,
-                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
-                };
-
-                Process.Start(processInfo);
-                Console.WriteLine("PathfindingService has been launched externally.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to launch PathfindingService: {ex.Message}");
-            }
-        }
     }
 }

@@ -21,6 +21,7 @@
     <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
+    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
   </ItemGroup>
 
   <ItemGroup>

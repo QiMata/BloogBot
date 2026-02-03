@@ -1,0 +1,38 @@
+<Project>
+  <!-- Solution-wide build output configuration -->
+  <PropertyGroup>
+    <!-- Common settings -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TargetFramework>net8.0</TargetFramework>
+    
+    <!-- Unified output structure: Build\{Platform}\{Configuration}\ -->
+    <OutputPath>$(SolutionDir)Build\$(Platform)\$(Configuration)\</OutputPath>
+    
+    <!-- Ensure runtime configs are generated for executables -->
+    <GenerateRuntimeConfigurationFiles Condition="'$(OutputType)' == 'Exe'">true</GenerateRuntimeConfigurationFiles>
+    
+    <!-- Ensure proper reference resolution -->
+    <ProduceOnlyReferenceAssembly>false</ProduceOnlyReferenceAssembly>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  
+  <!-- Platform-specific configurations -->
+  <PropertyGroup Condition="'$(Platform)' == 'x86'">
+    <PlatformTarget>x86</PlatformTarget>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(Platform)' == 'x64'">
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(Platform)' == 'AnyCPU'">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <!-- Default platform if not specified -->
+  <PropertyGroup Condition="'$(Platform)' == ''">
+    <Platform>AnyCPU</Platform>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+</Project>

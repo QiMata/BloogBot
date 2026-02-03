@@ -1,131 +1,143 @@
-﻿using GameData.Core.Models;
-using Pathfinding;
-using System.Reflection;
+﻿using GameData.Core.Constants;
+using GameData.Core.Models;
+using System;
 using System.Runtime.InteropServices;
-using Position = GameData.Core.Models.Position;
 
 namespace PathfindingService.Repository
 {
-    public unsafe class Navigation
+    public class Navigation
     {
-        /* ─────────────── Structs ─────────────── */
+        private const string DLL_NAME = "Navigation.dll";
 
-        [StructLayout(LayoutKind.Sequential)]
-        public struct NavPoly
+        // ===============================
+        // ESSENTIAL IMPORTS ONLY
+        // ===============================
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void PreloadMap(uint mapId);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr FindPath(uint mapId, XYZ start, XYZ end, bool smoothPath, out int length);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void PathArrFree(IntPtr pathArr);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern PhysicsOutput PhysicsStep(ref PhysicsInput input);
+
+        // ===============================
+        // PUBLIC METHODS
+        // ===============================
+        static Navigation()
         {
-            public ulong RefId;
-            public uint Area;
-            public uint Flags;
-            public uint VertCount;
-
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)]
-            public XYZ[] Verts;
+            PreloadMap(0);
+            PreloadMap(1);
         }
 
-        /* ─────────────── Native delegates ─────────────── */
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate XYZ* CalculatePathDelegate(uint mapId, XYZ start, XYZ end,
-                                                    bool straightPath, out int length);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate void FreePathArrDelegate(XYZ* pathArr);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate bool LineOfSightDelegate(uint mapId, XYZ from, XYZ to);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate IntPtr CapsuleOverlapDelegate(uint mapId, XYZ position,
-                                                       float radius, float height, out int count);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate void FreeNavPolyArrDelegate(IntPtr ptr);
-
-        /* ─────────────── Function pointers ─────────────── */
-
-        private readonly CalculatePathDelegate calculatePath;
-        private readonly FreePathArrDelegate freePathArr;
-        private readonly LineOfSightDelegate lineOfSight;
-        private readonly CapsuleOverlapDelegate capsuleOverlap;
-        private readonly FreeNavPolyArrDelegate freeNavPolyArr;
-
-        /* ─────────────── Constructor: bind all exports ─────────────── */
-
-        private readonly AdtGroundZLoader _adtGroundZLoader;
-
-        public Navigation()
+        public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
         {
-            var binFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
-            var dllPath = Path.Combine(binFolder, "Navigation.dll");
-            var mod = WinProcessImports.LoadLibrary(dllPath);
+            IntPtr pathPtr = FindPath(mapId, start, end, smoothPath, out int length);
 
-            if (mod == IntPtr.Zero)
-                throw new FileNotFoundException("Failed to load Navigation.dll", dllPath);
+            if (pathPtr == IntPtr.Zero || length == 0)
+                return Array.Empty<XYZ>();
 
-            calculatePath = Marshal.GetDelegateForFunctionPointer<CalculatePathDelegate>(
-                WinProcessImports.GetProcAddress(mod, "CalculatePath"));
-            freePathArr = Marshal.GetDelegateForFunctionPointer<FreePathArrDelegate>(
-                WinProcessImports.GetProcAddress(mod, "FreePathArr"));
-            lineOfSight = Marshal.GetDelegateForFunctionPointer<LineOfSightDelegate>(
-                WinProcessImports.GetProcAddress(mod, "LineOfSight"));
-            capsuleOverlap = Marshal.GetDelegateForFunctionPointer<CapsuleOverlapDelegate>(
-                WinProcessImports.GetProcAddress(mod, "CapsuleOverlap"));
-            freeNavPolyArr = Marshal.GetDelegateForFunctionPointer<FreeNavPolyArrDelegate>(
-                WinProcessImports.GetProcAddress(mod, "FreeNavPolyArr"));
-
-            _adtGroundZLoader = new AdtGroundZLoader([Path.Combine(binFolder, @"Data\terrain.MPQ")]);
-        }
-
-        /* ─────────────── High-level API ─────────────── */
-
-        public Position[] CalculatePath(uint mapId, Position start, Position end, bool straightPath)
-        {
-            var ptr = calculatePath(mapId, start.ToXYZ(), end.ToXYZ(), straightPath, out int len);
-            var path = new Position[len];
-            for (int i = 0; i < len; ++i)
-                path[i] = new Position(ptr[i]);
-            freePathArr(ptr);
-            return path;
-        }
-
-        public bool IsLineOfSight(uint mapId, Position from, Position to)
-        {
-            return lineOfSight(mapId, from.ToXYZ(), to.ToXYZ());
-        }
-
-        public TerrainProbeResponse GetTerrainProbe(uint mapId, Game.Position pos, float radius, float height)
-        {
-            TerrainProbeResponse response = new();
-
-            _adtGroundZLoader.TryGetZ((int)mapId, pos.X, pos.Y, out float z, out float liqZ);
-            response.GroundZ = z;
-            response.LiquidZ = liqZ;
-
-            IntPtr ptr = capsuleOverlap(mapId, pos.ToXYZ(), radius, height, out int count);
-            if (ptr == IntPtr.Zero || count == 0)
-                return response;
-
-            int size = Marshal.SizeOf<NavPoly>();
-            for (int i = 0; i < count; i++)
+            try
             {
-                IntPtr curr = IntPtr.Add(ptr, i * size);
-                var poly = Marshal.PtrToStructure<NavPoly>(curr);
-                NavPolyHit navPolyHit = new() { RefId = poly.RefId, Area = poly.Area, Flags = poly.Flags };
-                foreach (var vert in poly.Verts)
-                    navPolyHit.Verts.Add(vert.ToProto());
-                response.Overlaps.Add(navPolyHit);
+                XYZ[] path = new XYZ[length];
+                for (int i = 0; i < length; i++)
+                {
+                    IntPtr currentPtr = IntPtr.Add(pathPtr, i * Marshal.SizeOf<XYZ>());
+                    path[i] = Marshal.PtrToStructure<XYZ>(currentPtr);
+                }
+                return path;
             }
+            finally
+            {
+                PathArrFree(pathPtr);
+            }
+        }
 
-            freeNavPolyArr(ptr);
-            return response;
+        public PhysicsOutput StepPhysics(PhysicsInput input, float deltaTime)
+        {
+            input.deltaTime = deltaTime;
+            return PhysicsStep(ref input);
+        }
+
+        // For backwards compatibility - maps to CalculatePath
+        public bool LineOfSight(uint mapId, XYZ from, XYZ to)
+        {
+            // Simple check: if path is straight line, we have LOS
+            var path = CalculatePath(mapId, from, to, false);
+            return path.Length == 2; // Only start and end points means direct path
+        }
+
+        // For backwards compatibility - use physics system
+        public float GetGroundHeight(uint mapId, float x, float y, float z, float maxSearchDist = 50.0f)
+        {
+            var input = new PhysicsInput
+            {
+                mapId = mapId,
+                x = x,
+                y = y,
+                z = z,
+                deltaTime = 0.0f
+            };
+
+            var output = StepPhysics(input, 0.0f);
+            return output.groundZ;
         }
     }
-    public static class NavTerrain
+
+    // ===============================
+    // DATA STRUCTURES
+    // ===============================
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PhysicsInput
     {
-        public const uint Empty = 0x00;
-        public const uint Ground = 0x01;
-        public const uint Magma = 0x02;
-        public const uint Slime = 0x04;
-        public const uint Water = 0x08;
+        public uint moveFlags;
+        public float x, y, z;
+        public float orientation;
+        public float pitch;
+        public float vx, vy, vz;
+        public float walkSpeed;
+        public float runSpeed;
+        public float runBackSpeed;
+        public float swimSpeed;
+        public float swimBackSpeed;
+        public float flightSpeed;
+        public float turnSpeed;
+        public ulong transportGuid;
+        public float transportX, transportY, transportZ, transportO;
+        public uint fallTime;
+        public float height;
+        public float radius;
+        public bool hasSplinePath;
+        public float splineSpeed;
+        public IntPtr splinePoints;
+        public int splinePointCount;
+        public int currentSplineIndex;
+        public uint mapId;
+        public float deltaTime;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PhysicsOutput
+    {
+        public float x, y, z;
+        public float orientation;
+        public float pitch;
+        public float vx, vy, vz;
+        public uint moveFlags;
+        public bool isGrounded;
+        public bool isSwimming;
+        public bool isFlying;
+        public bool collided;
+        public float groundZ;
+        public float liquidZ;
+        public float fallDistance;
+        public float fallTime;
+        public int currentSplineIndex;
+        public float splineProgress;
     }
 }

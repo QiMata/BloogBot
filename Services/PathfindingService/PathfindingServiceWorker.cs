@@ -1,40 +1,41 @@
+using PathfindingService.Repository;
+
 namespace PathfindingService
 {
     public class PathfindingServiceWorker : BackgroundService
     {
         private readonly ILogger<PathfindingServiceWorker> _logger;
-        private readonly ILoggerFactory _loggerFactory;
-        private readonly IConfiguration _configuration;
-
         private readonly PathfindingSocketServer _pathfindingSocketServer;
+
         public PathfindingServiceWorker(
             ILogger<PathfindingServiceWorker> logger,
-            ILoggerFactory loggerFactory,
-            IConfiguration configuration)
+            PathfindingSocketServer pathfindingSocketServer)
         {
             _logger = logger;
-            _loggerFactory = loggerFactory;
-            _configuration = configuration;
+            _pathfindingSocketServer = pathfindingSocketServer;
 
-            _pathfindingSocketServer = new PathfindingSocketServer(
-                configuration["PathfindingService:IpAddress"],
-                int.Parse(configuration["PathfindingService:Port"]),
-                _loggerFactory.CreateLogger<PathfindingSocketServer>()
-            );
-
-            _logger.LogInformation($"Started PathfindingService| {_configuration["PathfindingService:IpAddress"]}:{_configuration["PathfindingService:Port"]}");
+            _logger.LogInformation("PathfindingServiceWorker initialized with dependency injection");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            _logger.LogInformation("PathfindingServiceWorker starting...");
+            
             while (!stoppingToken.IsCancellationRequested)
             {
-                //if (_logger.IsEnabled(LogLevel.Information))
-                //{
-                //    _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-                //}
+                // The PathfindingSocketServer runs its own socket listener loop
+                // This worker just keeps the service alive
                 await Task.Delay(1000, stoppingToken);
             }
+            
+            _logger.LogInformation("PathfindingServiceWorker stopping...");
+        }
+
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("PathfindingServiceWorker stop requested...");
+            await base.StopAsync(cancellationToken);
+            _logger.LogInformation("PathfindingServiceWorker stopped.");
         }
     }
 }

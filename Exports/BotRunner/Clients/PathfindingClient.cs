@@ -1,18 +1,20 @@
 ﻿using BotCommLayer;
-using GameData.Core.Constants;
-using GameData.Core.Enums;
 using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
 using Pathfinding;
-using System.ComponentModel.DataAnnotations;
+using System;
+using System.Linq;
 
 namespace BotRunner.Clients
 {
-    public class PathfindingClient: ProtobufSocketClient<PathfindingRequest, PathfindingResponse>
+    public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>
     {
         public PathfindingClient() : base() { }
-        public PathfindingClient(string ipAddress, int port, ILogger logger) : base(ipAddress, port, logger) { }
-        public Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false)
+
+        public PathfindingClient(string ipAddress, int port, ILogger logger)
+            : base(ipAddress, port, logger) { }
+
+        public virtual Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false)
         {
             var request = new PathfindingRequest
             {
@@ -30,12 +32,12 @@ namespace BotRunner.Clients
             if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                 throw new Exception(response.Error.Message);
 
-            return [.. response.Path
-                .Corners
-                .Select(p => new Position(p.X, p.Y, p.Z))];
+            return response.Path.Corners
+                .Select(p => new Position(p.X, p.Y, p.Z))
+                .ToArray();
         }
 
-        public float GetPathingDistance(uint mapId, Position start, Position end)
+        public virtual float GetPathingDistance(uint mapId, Position start, Position end)
         {
             var path = GetPath(mapId, start, end);
             float distance = 0f;
@@ -46,7 +48,7 @@ namespace BotRunner.Clients
             return distance;
         }
 
-        public bool IsInLineOfSight(uint mapId, Position from, Position to)
+        public virtual bool IsInLineOfSight(uint mapId, Position from, Position to)
         {
             var request = new PathfindingRequest
             {
@@ -66,37 +68,24 @@ namespace BotRunner.Clients
             return response.Los.InLos;
         }
 
-        public TerrainProbeResponse ProbeTerrain(uint mapId, Position feet, Race race)
+        public virtual PhysicsOutput PhysicsStep(PhysicsInput physicsInput)
         {
-            var (radius, height) = RaceDimensions.GetCapsuleForRace(race);
-
             var request = new PathfindingRequest
             {
-                Terrain = new TerrainProbeRequest
-                {
-                    MapId = mapId,
-                    Position = feet.ToProto(),
-                    CapsuleRadius = radius,
-                    CapsuleHeight = height,
-                }
+                Step = physicsInput
             };
 
             var response = SendMessage(request);
+
             if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                 throw new Exception(response.Error.Message);
 
-            return response.Terrain;
+            return response.Step;
         }
     }
 
     public static class ProtoInteropExtensions
     {
-        public static Game.Position ToProto(this XYZ xyz) =>
-            new() { X = xyz.X, Y = xyz.Y, Z = xyz.Z };
-
-        public static XYZ ToXYZ(this Game.Position p) =>
-            new(p.X, p.Y, p.Z);
-
         public static Game.Position ToProto(this Position p) =>
             new() { X = p.X, Y = p.Y, Z = p.Z };
     }
