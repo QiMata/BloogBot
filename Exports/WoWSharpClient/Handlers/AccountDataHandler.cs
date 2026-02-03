@@ -1,5 +1,6 @@
 ﻿using GameData.Core.Enums;
 using System.Text;
+using Serilog;
 
 namespace WoWSharpClient.Handlers
 {
@@ -18,7 +19,7 @@ namespace WoWSharpClient.Handlers
                     HandleUpdateAccountData(data);
                     break;
                 default:
-                    Console.WriteLine($"Unhandled AccountData opcode: {opcode}");
+                    Log.Error($"Unhandled AccountData opcode: {opcode}");
                     break;
             }
         }
@@ -27,7 +28,7 @@ namespace WoWSharpClient.Handlers
         {
             if (data.Length < 36)
             {
-                Console.WriteLine("Invalid SMSG_ACCOUNT_DATA_TIMES packet size.");
+                Log.Error("Invalid SMSG_ACCOUNT_DATA_TIMES packet size.");
                 return;
             }
 
@@ -39,7 +40,7 @@ namespace WoWSharpClient.Handlers
 
             for (int i = 0; i < 8; i++)
             {
-                //Console.WriteLine($"[AccountDataTimes] Type {i}: Timestamp = {_accountDataTimestamps[i]}");
+                //Log.Error($"[AccountDataTimes] Type {i}: Timestamp = {_accountDataTimestamps[i]}");
             }
 
             //_woWSharpEventEmitter.Emit("AccountDataTimesReceived", _accountDataTimestamps);
@@ -49,7 +50,7 @@ namespace WoWSharpClient.Handlers
         {
             if (data.Length < 16)
             {
-                Console.WriteLine("Invalid SMSG_UPDATE_ACCOUNT_DATA packet size.");
+                Log.Error("Invalid SMSG_UPDATE_ACCOUNT_DATA packet size.");
                 return;
             }
 
@@ -60,7 +61,7 @@ namespace WoWSharpClient.Handlers
 
             if (data.Length < 16 + size)
             {
-                Console.WriteLine($"SMSG_UPDATE_ACCOUNT_DATA: Declared size {size} exceeds actual packet size.");
+                Log.Error($"SMSG_UPDATE_ACCOUNT_DATA: Declared size {size} exceeds actual packet size.");
                 return;
             }
 

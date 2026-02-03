@@ -32,7 +32,9 @@ namespace StateManager
             _serviceProvider = serviceProvider;
             _configuration = configuration;
 
-            _mangosSOAPClient = new MangosSOAPClient(configuration["MangosSOAP:IpAddress"]);
+            _mangosSOAPClient = new MangosSOAPClient(
+                configuration["MangosSOAP:IpAddress"],
+                _loggerFactory.CreateLogger<MangosSOAPClient>());
 
             _activityMemberSocketListener = new CharacterStateSocketListener(
                 StateManagerSettings.Instance.CharacterDefinitions,
@@ -88,9 +90,18 @@ namespace StateManager
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Here you can add logic to start/stop services based on certain conditions.
-                await ApplyDesiredWorkerState();
-                await Task.Delay(100, stoppingToken);
+                try
+                {
+                    if (_logger.IsEnabled(LogLevel.Information))
+                        _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+
+                    await ApplyDesiredWorkerState();
+                    await Task.Delay(100, stoppingToken);
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException && stoppingToken.IsCancellationRequested))
+                {
+                    _logger.LogError(ex, "Error occurred in StateManagerServiceWorker loop.");
+                }
             }
 
             foreach (var (Service, TokenSource, Task) in _managedServices.Values)
@@ -101,15 +112,33 @@ namespace StateManager
 
         private void OnWorldStateUpdate(AsyncRequest dataMessage)
         {
+            _logger.LogInformation($"Received world state update message with ID {dataMessage.Id}.");
+
             StateChangeRequest stateChange = dataMessage.StateChange;
 
             if (stateChange != null)
             {
+                string? parameterDetails = null;
+                if (stateChange.RequestParameter != null)
+                {
+                    RequestParameter param = stateChange.RequestParameter;
+                    parameterDetails = param.ParameterCase switch
+                    {
+                        RequestParameter.ParameterOneofCase.FloatParam => param.FloatParam.ToString(),
+                        RequestParameter.ParameterOneofCase.IntParam => param.IntParam.ToString(),
+                        RequestParameter.ParameterOneofCase.LongParam => param.LongParam.ToString(),
+                        RequestParameter.ParameterOneofCase.StringParam => param.StringParam,
+                        _ => null
+                    };
+                }
 
+                _logger.LogInformation(
+                    $"State change request received: ChangeType={stateChange.ChangeType}, Parameter={parameterDetails ?? "<none>"}");
             }
 
             StateChangeResponse stateChangeResponse = new();
             _worldStateManagerSocketListener.SendMessageToClient(dataMessage.Id, stateChangeResponse);
+            _logger.LogInformation($"StateChangeResponse dispatched to {dataMessage.Id}.");
         }
 
         private async Task<bool> ApplyDesiredWorkerState()

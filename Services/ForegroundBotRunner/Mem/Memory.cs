@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using Serilog;
 
 namespace ForegroundBotRunner.Mem
 {
@@ -84,12 +85,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Byte");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type Byte");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -109,12 +110,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Short");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type Short");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -134,12 +135,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Int");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type Int");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -159,12 +160,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Uint");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type Uint");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -184,12 +185,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Ulong");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type Ulong");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -209,12 +210,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type IntPtr");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type IntPtr");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -234,12 +235,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type Float");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type Float");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -268,12 +269,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type string");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type string");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return "";
             }
         }
@@ -307,7 +308,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -324,12 +325,12 @@ namespace ForegroundBotRunner.Mem
             }
             catch (AccessViolationException)
             {
-                Console.WriteLine("Access Violation on " + address.ToString("X") + " with type ItemCacheEntry");
+                Log.Error("Access Violation on " + address.ToString("X") + " with type ItemCacheEntry");
                 return default;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
+                Log.Error($"[MEMORY]{e.Message}{e.InnerException.StackTrace}");
                 return default;
             }
         }
@@ -382,7 +383,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (FasmAssemblerException ex)
             {
-                Console.WriteLine(ex.StackTrace);
+                Log.Error(ex.StackTrace);
             }
 
             var start = Marshal.AllocHGlobal(byteCode.Length);

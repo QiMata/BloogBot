@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using Serilog;
 
 namespace ForegroundBotRunner.Mem
 {
@@ -38,7 +39,7 @@ namespace ForegroundBotRunner.Mem
 
         public void Apply()
         {
-            Console.WriteLine($"[DETOUR] Hack applied {Name}");
+            Log.Information($"[DETOUR] Hack applied {Name}");
             MemoryManager.WriteBytes(target, [.. newBytes]);
         }
 

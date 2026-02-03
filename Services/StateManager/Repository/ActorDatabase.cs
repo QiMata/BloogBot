@@ -1,6 +1,7 @@
 ﻿using GameData.Core.Enums;
 using Microsoft.Data.Sqlite;
 using System.Text;
+using Serilog;
 
 namespace StateManager.Repository
 {
@@ -114,7 +115,7 @@ namespace StateManager.Repository
                     );";
 
             tableCommand.ExecuteNonQuery();
-            Console.WriteLine("Actor table created successfully in Actors DB.");
+            Log.Information("Actor table created successfully in Actors DB.");
         }
 
         // Generate random personality values based on archetypes

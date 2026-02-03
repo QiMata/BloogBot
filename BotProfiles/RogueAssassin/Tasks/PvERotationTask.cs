@@ -2,6 +2,7 @@ using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
+using Serilog;
 
 namespace RogueAssassin.Tasks
 {
@@ -48,10 +49,10 @@ namespace RogueAssassin.Tasks
                 IWoWItem OffHand = ObjectManager.GetEquippedItem(EquipSlot.OffHand);
                 IWoWItem SwapSlotWeap = ObjectManager.GetItem(4, 1);
 
-                //Console.WriteLineVerbose("Mainhand Item Type:  " + MainHand.Info.ItemSubclass);
-                //Console.WriteLineVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
-                //Console.WriteLineVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
-                //Console.WriteLineVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
+                //Log.InformationVerbose("Mainhand Item Type:  " + MainHand.Info.ItemSubclass);
+                //Log.InformationVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
+                //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
+                //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
 
                 // Check to see if a Dagger is Equipped in the mainhand
 
@@ -93,7 +94,7 @@ namespace RogueAssassin.Tasks
                 if (SwapMaceOrSwordReady == true)
                 {
                     ObjectManager.UseContainerItem(4, 21);
-                    Console.WriteLine(MainHand.Info.Name + "Swapped Into Mainhand!");
+                    Log.Information(MainHand.Info.Name + "Swapped Into Mainhand!");
                 }
 
             // set secondaryTarget

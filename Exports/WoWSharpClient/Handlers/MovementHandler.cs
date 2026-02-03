@@ -4,6 +4,7 @@ using GameData.Core.Models;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Parsers;
+using Serilog;
 using WoWSharpClient.Utils;
 
 namespace WoWSharpClient.Handlers
@@ -81,19 +82,19 @@ namespace WoWSharpClient.Handlers
                             break;
                         case Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE:
                             ulong splineRunGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Console.WriteLine($"{splineRunGuid} Now running");
+                            Log.Information($"{splineRunGuid} Now running");
                             break;
                         case Opcode.SMSG_SPLINE_MOVE_SET_WALK_MODE:
                             ulong splineWalkGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Console.WriteLine($"{splineWalkGuid} Now walking");
+                            Log.Information($"{splineWalkGuid} Now walking");
                             break;
                         case Opcode.SMSG_SPLINE_MOVE_ROOT:
                             ulong splineMoveRootGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Console.WriteLine($"{splineMoveRootGuid} Now rooted");
+                            Log.Information($"{splineMoveRootGuid} Now rooted");
                             break;
                         case Opcode.SMSG_SPLINE_MOVE_UNROOT:
                             ulong splineMoveUnrootGuid = ReaderUtils.ReadPackedGuid(reader);
-                            Console.WriteLine($"{splineMoveUnrootGuid} Now unrooted");
+                            Log.Information($"{splineMoveUnrootGuid} Now unrooted");
                             break;
                         case Opcode.MSG_MOVE_TIME_SKIPPED:
                             WoWSharpEventEmitter.Instance.FireOnMoveTimeSkipped(
@@ -164,13 +165,13 @@ namespace WoWSharpClient.Handlers
                             ParseMessageMove(reader);
                             break;
                         default:
-                            Console.WriteLine($"{opcode} not handled");
+                            Log.Information($"{opcode} not handled");
                             break;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MovementHandler] {ex}");
+                    Log.Information($"[MovementHandler] {ex}");
                 }
             }
         }
@@ -231,7 +232,7 @@ namespace WoWSharpClient.Handlers
             var compressedOpCode = (Opcode)reader.ReadUInt16();
             var guid = ReaderUtils.ReadPackedGuid(reader);
 
-            //Console.WriteLine($"[MovementHandler] {compressedOpCode}");
+            //Log.Information($"[MovementHandler] {compressedOpCode}");
             switch (compressedOpCode)
             {
                 case Opcode.SMSG_MONSTER_MOVE:
