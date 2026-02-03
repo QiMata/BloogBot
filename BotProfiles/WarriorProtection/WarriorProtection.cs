@@ -4,38 +4,30 @@ using Communication;
 using System.ComponentModel.Composition;
 using WarriorProtection.Tasks;
 
+using BotProfiles.Common;
 namespace WarriorProtection
 {
     [Export(typeof(IBot))]
-    internal class WarriorProtection : IBot
+    internal class WarriorProtection : BotBase
     {
-        public string Name => "Protection Warrior";
+        public override string Name => "Protection Warrior";
 
-        public string FileName => "WarriorProtection.dll";
+        public override string FileName => "WarriorProtection.dll";
 
-        public IClassContainer GetClassContainer(ActivityMemberState probe) =>
-            new ClassContainer(
-                Name,
-                CreateRestTask,
-                CreateBuffTask,
-                CreateMoveToTargetTask,
-                CreatePvERotationTask,
-                CreatePvPRotationTask,
-                probe);
 
-        public IBotTask CreateRestTask(IBotContext botContext) =>
+        public override IBotTask CreateRestTask(IBotContext botContext) =>
             new RestTask(botContext);
 
-        public IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
+        public override IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
             new PullTargetTask(botContext);
 
-        public IBotTask CreateBuffTask(IBotContext botContext) =>
+        public override IBotTask CreateBuffTask(IBotContext botContext) =>
             new BuffTask(botContext);
 
-        public IBotTask CreatePvERotationTask(IBotContext botContext) =>
-            new PvERotationTask(botContext);
+        public override IBotTask CreatePvERotationTask(IBotContext botContext) =>
+            new PvERotationTask(botContext, botContext.ObjectManager.Player.Position);
 
-        public IBotTask CreatePvPRotationTask(IBotContext botContext) =>
-            new PvERotationTask(botContext);
+        public override IBotTask CreatePvPRotationTask(IBotContext botContext) =>
+            new PvPRotationTask(botContext);
     }
 }

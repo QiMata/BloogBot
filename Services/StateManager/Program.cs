@@ -220,7 +220,6 @@ namespace StateManager
                     services.AddPromptHandlingServices(hostContext.Configuration);
                     services.AddHostedService<StateManagerWorker>();
                     services.AddHostedService<DecisionEngineWorker>();
-                    services.AddHostedService<PromptHandlingServiceWorker>();
                     services.AddTransient<BackgroundBotWorker>();
                 });
     }

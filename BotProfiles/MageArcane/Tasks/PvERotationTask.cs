@@ -22,7 +22,6 @@ namespace MageArcane.Tasks
             if (frostNovaBackpedaling)
                 return;
 
-
             if (!ObjectManager.Aggressors.Any())
             {
                 BotTasks.Pop();
@@ -34,6 +33,32 @@ namespace MageArcane.Tasks
                 ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
+            ExecuteRotation();
+        }
+
+        public override void PerformCombatRotation()
+        {
+            if (frostNovaBackpedaling && Environment.TickCount - frostNovaBackpedalStartTime > 1500)
+            {
+                ObjectManager.Player.StopMovement(ControlBits.Back);
+                frostNovaBackpedaling = false;
+            }
+            if (frostNovaBackpedaling)
+                return;
+
+            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
+            {
+                if (ObjectManager.Aggressors.Any())
+                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                else
+                    return;
+            }
+
+            ExecuteRotation();
+        }
+
+        private void ExecuteRotation()
+        {
             if (Update(30))
                 return;
 
@@ -54,14 +79,15 @@ namespace MageArcane.Tasks
 
             TryCastSpell(FrostNova, 0, 10, !ObjectManager.Units.Any(u => u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Health > 0 && u.Position.DistanceTo(ObjectManager.Player.Position) < 15), callback: FrostNovaCallback);
 
+            TryCastSpell(ArcaneExplosion, 0, 10, ObjectManager.Aggressors.Count() > 2);
+
+            TryCastSpell(Flamestrike, 0, 30, ObjectManager.Aggressors.Count() > 2);
+
+            TryCastSpell(ArcaneBarrage, 0, 30, ObjectManager.Player.Level >= 40);
+
             TryCastSpell(Fireball, 0, 34, ObjectManager.Player.Level < 15 || ObjectManager.Player.HasBuff(PresenceOfMind));
 
             TryCastSpell(ArcaneMissiles, 0, 29, ObjectManager.Player.Level >= 15);
-        }
-
-        public override void PerformCombatRotation()
-        {
-            throw new NotImplementedException();
         }
 
         private Action FrostNovaCallback => () =>

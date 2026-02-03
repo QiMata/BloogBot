@@ -4,38 +4,30 @@ using BotRunner.Interfaces;
 using Communication;
 using PriestShadow.Tasks;
 
+using BotProfiles.Common;
 namespace PriestShadow
 {
     [Export(typeof(IBot))]
-    internal class PriestShadow : IBot
+    internal class PriestShadow : BotBase
     {
-        public string Name => "Shadow Priest";
+        public override string Name => "Shadow Priest";
 
-        public string FileName => "PriestShadow.dll";
+        public override string FileName => "PriestShadow.dll";
 
-        public IClassContainer GetClassContainer(ActivityMemberState probe) =>
-            new ClassContainer(
-                Name,
-                CreateRestTask,
-                CreateBuffTask,
-                CreateMoveToTargetTask,
-                CreatePvERotationTask,
-                CreatePvPRotationTask,
-                probe);
 
-        public IBotTask CreateRestTask(IBotContext botContext) =>
+        public override IBotTask CreateRestTask(IBotContext botContext) =>
             new RestTask(botContext);
 
-        public IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
+        public override IBotTask CreateMoveToTargetTask(IBotContext botContext) =>
             new PullTargetTask(botContext);
 
-        public IBotTask CreateBuffTask(IBotContext botContext) =>
+        public override IBotTask CreateBuffTask(IBotContext botContext) =>
             new BuffTask(botContext);
 
-        public IBotTask CreatePvERotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvERotationTask(IBotContext botContext) =>
             new PvERotationTask(botContext);
 
-        public IBotTask CreatePvPRotationTask(IBotContext botContext) =>
+        public override IBotTask CreatePvPRotationTask(IBotContext botContext) =>
             new PvERotationTask(botContext);
     }
 }
