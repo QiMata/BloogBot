@@ -4,8 +4,6 @@ using WoWSharpClient.Client;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
-using Xunit;
-using System; // for IDisposable
 using System.Reactive.Linq; // for Subscribe overloads
 
 namespace WoWSharpClient.Tests.Agent

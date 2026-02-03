@@ -1,12 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
-using Xunit;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
-using System; // for IDisposable
-using System.Reactive; // for Unit
 using System.Reactive.Linq; // for Subscribe
 
 namespace WoWSharpClient.Tests.Agent

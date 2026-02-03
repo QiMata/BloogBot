@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidBalance.Tasks
@@ -11,7 +11,7 @@ namespace DruidBalance.Tasks
         private readonly IWoWItem drinkItem;
         public RestTask(IBotContext botContext) : base(botContext)
         {
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {
@@ -30,14 +30,14 @@ namespace DruidBalance.Tasks
             if (ObjectManager.Player.IsInCombat)
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
             }
             if (HealthOk && ManaOk)
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
 
                 uint drinkCount = drinkItem == null ? 0 : ObjectManager.GetItemCount(drinkItem.ItemId);
@@ -69,18 +69,18 @@ namespace DruidBalance.Tasks
 
             if (ObjectManager.Player.HealthPercent < 60 && !ObjectManager.Player.HasBuff(Regrowth) && Wait.For("SelfHealDelay", 5000, true))
             {
-                if (!ObjectManager.Player.HasBuff(MoonkinForm) && ObjectManager.Player.IsSpellReady(MoonkinForm))
-                    ObjectManager.Player.CastSpell(MoonkinForm);
+                if (!ObjectManager.Player.HasBuff(MoonkinForm) && ObjectManager.IsSpellReady(MoonkinForm))
+                    ObjectManager.CastSpell(MoonkinForm);
 
-                ObjectManager.Player.CastSpell(Regrowth);
+                ObjectManager.CastSpell(Regrowth);
             }
 
             if (ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation) && !ObjectManager.Player.HasBuff(Regrowth) && Wait.For("SelfHealDelay", 5000, true))
             {
-                if (!ObjectManager.Player.HasBuff(MoonkinForm) && ObjectManager.Player.IsSpellReady(MoonkinForm))
-                    ObjectManager.Player.CastSpell(MoonkinForm);
+                if (!ObjectManager.Player.HasBuff(MoonkinForm) && ObjectManager.IsSpellReady(MoonkinForm))
+                    ObjectManager.CastSpell(MoonkinForm);
 
-                ObjectManager.Player.CastSpell(Rejuvenation);
+                ObjectManager.CastSpell(Rejuvenation);
             }
 
             if (ObjectManager.Player.Level >= 6 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60)

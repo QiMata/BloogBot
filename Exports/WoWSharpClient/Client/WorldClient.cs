@@ -1,12 +1,8 @@
-using System;
 using System.Collections.Concurrent;
-using System.Threading;
-using System.Threading.Tasks;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.Abstractions;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
-using System.IO;
 using System.Text;
 using System.Reactive;
 using System.Reactive.Subjects;

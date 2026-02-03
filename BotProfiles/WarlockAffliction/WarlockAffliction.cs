@@ -1,8 +1,6 @@
 ﻿using WarlockAffliction.Tasks;
 using System.ComponentModel.Composition;
-using BotRunner;
 using BotRunner.Interfaces;
-using Communication;
 
 using BotProfiles.Common;
 namespace WarlockAffliction

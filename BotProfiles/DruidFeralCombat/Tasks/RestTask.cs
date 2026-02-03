@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidFeral.Tasks
@@ -12,7 +12,7 @@ namespace DruidFeral.Tasks
         private readonly IWoWItem drinkItem;
         public RestTask(IBotContext botContext) : base(botContext)
         {
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {
@@ -31,7 +31,7 @@ namespace DruidFeral.Tasks
             if (InCombat)
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
             }
@@ -39,13 +39,13 @@ namespace DruidFeral.Tasks
             if (HealthOk && ManaOk)
             {
                 if (ObjectManager.Player.HasBuff(BearForm) && Wait.For("BearFormDelay", 1000, true))
-                    ObjectManager.Player.CastSpell(BearForm);
+                    ObjectManager.CastSpell(BearForm);
                 else if (ObjectManager.Player.HasBuff(CatForm) && Wait.For("CatFormDelay", 1000, true))
-                    ObjectManager.Player.CastSpell(CatForm);
+                    ObjectManager.CastSpell(CatForm);
                 else
                 {
                     Wait.RemoveAll();
-                    ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                    ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                     BotTasks.Pop();
 
                     uint drinkCount = drinkItem == null ? 0 : ObjectManager.GetItemCount(drinkItem.ItemId);
@@ -76,16 +76,16 @@ namespace DruidFeral.Tasks
             }
 
             if (ObjectManager.Player.CurrentShapeshiftForm == BearForm)
-                ObjectManager.Player.CastSpell(BearForm);
+                ObjectManager.CastSpell(BearForm);
 
             if (ObjectManager.Player.CurrentShapeshiftForm == CatForm)
-                ObjectManager.Player.CastSpell(CatForm);
+                ObjectManager.CastSpell(CatForm);
 
             if (ObjectManager.Player.HealthPercent < 60 && ObjectManager.Player.CurrentShapeshiftForm == HumanForm && !ObjectManager.Player.HasBuff(Regrowth) && Wait.For("SelfHealDelay", 5000, true))
-                ObjectManager.Player.CastSpell(Regrowth);
+                ObjectManager.CastSpell(Regrowth);
 
             if (ObjectManager.Player.HealthPercent < 80 && ObjectManager.Player.CurrentShapeshiftForm == HumanForm && !ObjectManager.Player.HasBuff(Rejuvenation) && !ObjectManager.Player.HasBuff(Regrowth) && Wait.For("SelfHealDelay", 5000, true))
-                ObjectManager.Player.CastSpell(Rejuvenation);
+                ObjectManager.CastSpell(Rejuvenation);
 
             if (ObjectManager.Player.Level > 8 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60 && ObjectManager.Player.CurrentShapeshiftForm == HumanForm)
                 drinkItem.Use();

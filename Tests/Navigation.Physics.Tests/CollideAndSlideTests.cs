@@ -4,7 +4,6 @@
 namespace Navigation.Physics.Tests;
 
 using static NavigationInterop;
-using static GeometryTestHelpers;
 
 /// <summary>
 /// Tests for the collide-and-slide algorithm that handles wall collision and surface sliding.

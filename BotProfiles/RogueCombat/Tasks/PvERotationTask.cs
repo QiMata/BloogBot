@@ -1,5 +1,6 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace RogueCombat.Tasks
@@ -41,9 +42,9 @@ namespace RogueCombat.Tasks
                     return;
                 else
                 {
-                    ObjectManager.Player.StopAllMovement();
-                    ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
-                    ObjectManager.Player.StartMeleeAttack();
+                    ObjectManager.StopAllMovement();
+                    ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+                    ObjectManager.StartMeleeAttack();
 
                     TryUseAbility(AdrenalineRush, 0, ObjectManager.Aggressors.Count() == 3 && ObjectManager.Player.HealthPercent > 80);
 
@@ -59,7 +60,7 @@ namespace RogueCombat.Tasks
 
                     TryUseAbility(Kick, 25, ReadyToInterrupt(ObjectManager.GetTarget(ObjectManager.Player)));
 
-                    TryUseAbility(Gouge, 45, ReadyToInterrupt(ObjectManager.GetTarget(ObjectManager.Player)) && !ObjectManager.Player.IsSpellReady(Kick));
+                    TryUseAbility(Gouge, 45, ReadyToInterrupt(ObjectManager.GetTarget(ObjectManager.Player)) && !ObjectManager.IsSpellReady(Kick));
 
                     bool readyToEviscerate =
                         ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 15 && ObjectManager.Player.ComboPoints >= 2
@@ -72,7 +73,7 @@ namespace RogueCombat.Tasks
                 }
             }
             else
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
         }
 
         private bool ReadyToInterrupt(IWoWUnit target) => ObjectManager.GetTarget(ObjectManager.Player).Mana > 0 && (target.IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling);

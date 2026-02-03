@@ -1,8 +1,4 @@
-﻿using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using BotRunner.Clients;
+﻿using BotRunner.Clients;
 using BotRunner.Combat;
 using BotRunner.Movement;
 using Communication;

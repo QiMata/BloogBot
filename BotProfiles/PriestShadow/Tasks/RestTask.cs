@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -14,30 +13,30 @@ namespace PriestShadow.Tasks
 
             if (InCombat || (HealthOk && ManaOk))
             {
-                if (ObjectManager.Player.IsSpellReady(ShadowForm) && !ObjectManager.Player.HasBuff(ShadowForm) && ObjectManager.Player.IsDiseased)
+                if (ObjectManager.IsSpellReady(ShadowForm) && !ObjectManager.Player.HasBuff(ShadowForm) && ObjectManager.Player.IsDiseased)
                 {
-                    if (ObjectManager.Player.IsSpellReady(AbolishDisease))
-                        ObjectManager.Player.CastSpell(AbolishDisease);
-                    else if (ObjectManager.Player.IsSpellReady(CureDisease))
-                        ObjectManager.Player.CastSpell(CureDisease);
+                    if (ObjectManager.IsSpellReady(AbolishDisease))
+                        ObjectManager.CastSpell(AbolishDisease);
+                    else if (ObjectManager.IsSpellReady(CureDisease))
+                        ObjectManager.CastSpell(CureDisease);
 
                     return;
                 }
 
-                if (ObjectManager.Player.IsSpellReady(ShadowForm) && !ObjectManager.Player.HasBuff(ShadowForm))
-                    ObjectManager.Player.CastSpell(ShadowForm);
+                if (ObjectManager.IsSpellReady(ShadowForm) && !ObjectManager.Player.HasBuff(ShadowForm))
+                    ObjectManager.CastSpell(ShadowForm);
 
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                     BotTasks.Push(new BuffTask(BotContext));
 
                 return;
             }
             else
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
 
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null) return;
 
@@ -66,24 +65,24 @@ namespace PriestShadow.Tasks
 
             if (!ObjectManager.Player.IsDrinking && Wait.For("HealSelfDelay", 3500, true))
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
 
                 if (ObjectManager.Player.HealthPercent < 70)
                 {
                     if (ObjectManager.Player.HasBuff(ShadowForm))
-                        ObjectManager.Player.CastSpell(ShadowForm);
+                        ObjectManager.CastSpell(ShadowForm);
                 }
 
                 if (ObjectManager.Player.HealthPercent < 50)
                 {
-                    if (ObjectManager.Player.IsSpellReady(Heal))
-                        ObjectManager.Player.CastSpell(Heal);
+                    if (ObjectManager.IsSpellReady(Heal))
+                        ObjectManager.CastSpell(Heal);
                     else
-                        ObjectManager.Player.CastSpell(LesserHeal);
+                        ObjectManager.CastSpell(LesserHeal);
                 }
 
                 if (ObjectManager.Player.HealthPercent < 70)
-                    ObjectManager.Player.CastSpell(LesserHeal, castOnSelf: true);
+                    ObjectManager.CastSpell(LesserHeal, castOnSelf: true);
             }
         }
 

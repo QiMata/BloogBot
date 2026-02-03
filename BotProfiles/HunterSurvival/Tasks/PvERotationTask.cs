@@ -1,4 +1,3 @@
-using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
@@ -20,12 +19,12 @@ namespace HunterSurvival.Tasks
             }
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
 
             if (Update(34))
                 return;
 
-            ObjectManager.Player.StopAllMovement();
+            ObjectManager.StopAllMovement();
             IWoWItem ranged = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
             bool canShoot = ranged != null && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5 &&
                              ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 34;

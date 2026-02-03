@@ -1,5 +1,3 @@
-using GameData.Core.Enums;
-
 namespace WoWSharpClient.Networking.ClientComponents.Models
 {
     /// <summary>

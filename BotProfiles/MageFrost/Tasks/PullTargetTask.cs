@@ -1,6 +1,5 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace MageFrost.Tasks
@@ -13,7 +12,7 @@ namespace MageFrost.Tasks
 
         internal PullTargetTask(IBotContext botContext) : base(botContext)
         {
-            if (ObjectManager.Player.IsSpellReady(Frostbolt))
+            if (ObjectManager.IsSpellReady(Frostbolt))
                 pullingSpell = Frostbolt;
             else
                 pullingSpell = Fireball;
@@ -28,7 +27,7 @@ namespace MageFrost.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player).TappedByOther)
             {
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
                 BotTasks.Pop();
                 return;
             }
@@ -37,15 +36,15 @@ namespace MageFrost.Tasks
             if (distanceToTarget <= range && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
             {
                 if (ObjectManager.Player.IsMoving)
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
 
                 if (Wait.For(waitKey, 250))
                 {
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
                     Wait.Remove(waitKey);
 
                     if (!ObjectManager.Player.IsInCombat)
-                        ObjectManager.Player.CastSpell(pullingSpell);
+                        ObjectManager.CastSpell(pullingSpell);
 
                     BotTasks.Pop();
                     BotTasks.Push(new PvERotationTask(BotContext));
@@ -55,7 +54,7 @@ namespace MageFrost.Tasks
             else
             {
                 Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                ObjectManager.Player.MoveToward(nextWaypoint[0]);
+                ObjectManager.MoveToward(nextWaypoint[0]);
             }
         }
     }

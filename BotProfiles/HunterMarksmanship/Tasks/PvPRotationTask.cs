@@ -1,7 +1,5 @@
-using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using GameData.Core.Enums;
 using static BotRunner.Constants.Spellbook;
 
 namespace HunterMarksmanship.Tasks
@@ -20,12 +18,12 @@ namespace HunterMarksmanship.Tasks
             }
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null)
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
 
             if (Update(34))
                 return;
 
-            ObjectManager.Player.StopAllMovement();
+            ObjectManager.StopAllMovement();
             var target = ObjectManager.GetTarget(ObjectManager.Player);
             if (target == null) return;
 

@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidBalance.Tasks
@@ -34,7 +34,7 @@ namespace DruidBalance.Tasks
                     ObjectManager.Player.StartMovement(ControlBits.Back);
                 }
 
-                ObjectManager.Player.SetTarget(ObjectManager.GetTarget(ObjectManager.Player).Guid);
+                ObjectManager.SetTarget(ObjectManager.GetTarget(ObjectManager.Player).Guid);
                 castingEntanglingRoots = false;
             }
 
@@ -48,7 +48,7 @@ namespace DruidBalance.Tasks
                 return;
 
             // heal self if we're injured
-            if (ObjectManager.Player.HealthPercent < 30 && (ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HealingTouch) || ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(Rejuvenation)))
+            if (ObjectManager.Player.HealthPercent < 30 && (ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HealingTouch) || ObjectManager.Player.Mana >= ObjectManager.GetManaCost(Rejuvenation)))
             {
                 Wait.RemoveAll();
                 BotTasks.Push(new HealTask(BotContext));
@@ -63,7 +63,7 @@ namespace DruidBalance.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(30))
@@ -75,7 +75,7 @@ namespace DruidBalance.Tasks
 
             if (secondaryTarget != null && !secondaryTarget.HasDebuff(EntanglingRoots))
             {
-                ObjectManager.Player.SetTarget(secondaryTarget.Guid);
+                ObjectManager.SetTarget(secondaryTarget.Guid);
                 TryCastSpell(EntanglingRoots, 0, 30, !secondaryTarget.HasDebuff(EntanglingRoots), EntanglingRootsCallback);
             }
 

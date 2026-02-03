@@ -1,4 +1,3 @@
-using System.Linq;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using WoWSharpClient.Handlers;

@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace WoWSharpClient.Networking.I
+﻿namespace WoWSharpClient.Networking.I
 {
     /// <summary>
     /// Handles framing and de-framing of messages from raw byte streams.

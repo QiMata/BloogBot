@@ -3,7 +3,7 @@ using BotRunner.Tasks;
 
 namespace MageFire.Tasks
 {
-    internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
+    internal class PvPRotationTask : CombatRotationTask, IBotTask
     {
         private readonly PvERotationTask pveRotation;
 

@@ -4,7 +4,6 @@ using WoWSharpClient.Client;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.Models;
-using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {

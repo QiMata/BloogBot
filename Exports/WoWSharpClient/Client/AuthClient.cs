@@ -1,19 +1,13 @@
-using System;
 using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using WoWSharpClient.Networking.Abstractions;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
-using System.IO;
 using System.Text;
 using System.Security.Cryptography;
 using WowSrp.Client;
 using Org.BouncyCastle.Utilities;
-using System.Linq;
-using System.Collections.Generic;
 
 namespace WoWSharpClient.Client
 {

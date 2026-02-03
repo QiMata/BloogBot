@@ -9,7 +9,7 @@ namespace BotProfiles.Common
         public abstract string Name { get; }
         public abstract string FileName { get; }
 
-        public virtual IClassContainer GetClassContainer(ActivityMemberState probe) =>
+        public virtual IClassContainer GetClassContainer(ActivitySnapshot probe) =>
             new ClassContainer(
                 Name,
                 CreateRestTask,

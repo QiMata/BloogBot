@@ -1,6 +1,4 @@
-﻿using BotRunner;
-using BotRunner.Interfaces;
-using Communication;
+﻿using BotRunner.Interfaces;
 using DruidFeral.Tasks;
 using System.ComponentModel.Composition;
 

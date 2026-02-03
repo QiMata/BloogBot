@@ -1,14 +1,9 @@
-using BotRunner;
 using BotRunner.Combat;
 using BotRunner.Movement;
 using BotRunner.Clients;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BotRunner.Tests

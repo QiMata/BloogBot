@@ -1,12 +1,9 @@
 ﻿using BotRunner.Clients;
-using GameData.Core.Constants;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
-using Google.Protobuf.WellKnownTypes;
 using Microsoft.Extensions.Logging;
-using Pathfinding;
 using System.Numerics;
 using System.Text;
 using System.Timers;
@@ -2205,6 +2202,16 @@ namespace WoWSharpClient
         }
 
         public void StopAttack()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void StartMeleeAttack()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void StartRangedAttack()
         {
             throw new NotImplementedException();
         }

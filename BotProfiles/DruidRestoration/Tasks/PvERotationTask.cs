@@ -33,8 +33,8 @@ namespace DruidRestoration.Tasks
 
         public override void PerformCombatRotation()
         {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
             // keep ourselves alive
             TryCastSpell(Rejuvenation, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);

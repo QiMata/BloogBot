@@ -1,5 +1,4 @@
-﻿using GameData.Core.Constants;
-using GameData.Core.Enums;
+﻿using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using WoWSharpClient.Models;

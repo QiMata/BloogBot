@@ -1,14 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using WoWSharpClient.Networking.Abstractions;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
-using System.Reactive;
 
 namespace WoWSharpClient.Client
 {

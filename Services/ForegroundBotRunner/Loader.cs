@@ -1,6 +1,4 @@
-﻿using System.Runtime.InteropServices;
-
-namespace ForegroundBotRunner
+﻿namespace ForegroundBotRunner
 {
     /// <summary>
     /// Entry point class for the native .NET 8 host (Loader.dll).

@@ -4,7 +4,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using WWoW.RecordedTests.Shared.Abstractions;
-using WWoW.RecordedTests.Shared.Abstractions.I;
 
 public sealed class RecordedTestRunner
 {

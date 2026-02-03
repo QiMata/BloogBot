@@ -1,13 +1,6 @@
-using Xunit;
-using System.Threading.Tasks;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
-using System;
-using System.IO;
-using WoWSharpClient.Networking.Abstractions;
-using WoWSharpClient.Networking.I;
-using System.Threading;
 
 namespace WowSharpClient.NetworkTests
 {

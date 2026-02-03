@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 
 namespace ShamanElemental.Tasks
@@ -23,8 +23,8 @@ namespace ShamanElemental.Tasks
         }
         public override void PerformCombatRotation()
         {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
             TryCastSpell(GroundingTotem, 0, int.MaxValue, ObjectManager.Aggressors.Any(a => a.IsCasting));
             TryCastSpell(EarthShock, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting);

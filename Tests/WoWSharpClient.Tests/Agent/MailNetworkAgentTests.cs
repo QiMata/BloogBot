@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
-using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {

@@ -2,8 +2,6 @@
 using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
 using Pathfinding;
-using System;
-using System.Linq;
 namespace BotRunner.Clients
 {
     public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>

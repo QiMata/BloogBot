@@ -1,4 +1,3 @@
-using System;
 using BotRunner.Clients;
 using GameData.Core.Interfaces;
 

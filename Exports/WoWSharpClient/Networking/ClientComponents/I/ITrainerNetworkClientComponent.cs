@@ -1,4 +1,3 @@
-using System;
 using System.Reactive; // for Unit
 
 namespace WoWSharpClient.Networking.ClientComponents.I

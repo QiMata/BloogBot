@@ -1,8 +1,5 @@
 using GameData.Core.Enums;
-using System;
 using System.Reactive; // for Unit
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
 {

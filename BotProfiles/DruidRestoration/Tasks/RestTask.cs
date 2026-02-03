@@ -1,4 +1,3 @@
-using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -18,7 +17,7 @@ namespace DruidRestoration.Tasks
             if (ObjectManager.Player.IsInCombat)
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
             }
@@ -26,7 +25,7 @@ namespace DruidRestoration.Tasks
             if (HealthOk && ManaOk)
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 BotTasks.Push(new BuffTask(BotContext));
                 return;
@@ -34,13 +33,13 @@ namespace DruidRestoration.Tasks
 
             if (ObjectManager.Player.HealthPercent < 60 && Wait.For("HealTouch", 5000, true))
             {
-                ObjectManager.Player.CastSpell(HealingTouch);
+                ObjectManager.CastSpell(HealingTouch);
                 return;
             }
 
             if (ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation) && Wait.For("Rejuvenation", 5000, true))
             {
-                ObjectManager.Player.CastSpell(Rejuvenation);
+                ObjectManager.CastSpell(Rejuvenation);
             }
         }
 

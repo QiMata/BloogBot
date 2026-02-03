@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 
@@ -13,12 +12,12 @@ namespace WarriorProtection.Tasks
                 ObjectManager.Player.IsInCombat ||
                 ObjectManager.Units.Any(u => u.TargetGuid == ObjectManager.Player.Guid))
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
             }
 
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {

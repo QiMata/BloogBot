@@ -2,11 +2,9 @@ using BotRunner;
 using BotRunner.Clients;
 using BotRunner.Combat;
 using BotRunner.Movement;
-using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
-using WoWSharpClient.Client;
 using Xunit.Abstractions;
 
 namespace WoWSharpClient.Tests.Integration;

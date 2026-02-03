@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 
 namespace ShamanRestoration.Tasks
@@ -17,7 +17,7 @@ namespace ShamanRestoration.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(12))
@@ -28,8 +28,8 @@ namespace ShamanRestoration.Tasks
 
         public override void PerformCombatRotation()
         {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
             TryCastSpell(HealingWave, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 50, castOnSelf: true);
 

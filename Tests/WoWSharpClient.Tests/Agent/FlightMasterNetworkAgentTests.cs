@@ -4,7 +4,6 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
-using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {

@@ -1,6 +1,5 @@
 using BackgroundBotRunner;
 using DecisionEngineService;
-using PromptHandlingService;
 using System.Diagnostics;
 
 namespace StateManager
@@ -217,7 +216,6 @@ namespace StateManager
                 {
                     services.Configure<PathfindingServiceOptions>(hostContext.Configuration.GetSection("PathfindingService"));
                     services.AddHostedService<PathfindingServiceBootstrapper>();
-                    services.AddPromptHandlingServices(hostContext.Configuration);
                     services.AddHostedService<StateManagerWorker>();
                     services.AddHostedService<DecisionEngineWorker>();
                     services.AddTransient<BackgroundBotWorker>();

@@ -2,9 +2,6 @@
 using GameData.Core.Models;
 using Pathfinding;
 using PathfindingService.Repository;
-using System;
-using System.Linq;
-using Microsoft.Extensions.Logging;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
 

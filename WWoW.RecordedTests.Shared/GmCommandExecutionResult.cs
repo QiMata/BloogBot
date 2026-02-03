@@ -1,5 +1,3 @@
-using System;
-
 namespace WWoW.RecordedTests.Shared;
 
 public readonly record struct GmCommandExecutionResult(bool Success, string? ErrorMessage = null)

@@ -1,10 +1,6 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Reactive;
 using System.Reactive.Subjects;
-using System.Threading;
-using System.Threading.Tasks;
 using WoWSharpClient.Networking.Abstractions;
 
 namespace WoWSharpClient.Networking.Implementation

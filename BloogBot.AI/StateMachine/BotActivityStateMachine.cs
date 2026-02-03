@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using BloogBot.AI.Observable;
 using BloogBot.AI.States;
 using BloogBot.AI.Transitions;

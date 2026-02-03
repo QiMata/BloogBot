@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 
 namespace ShamanEnhancement.Tasks
@@ -22,9 +22,9 @@ namespace ShamanEnhancement.Tasks
         }
         public override void PerformCombatRotation()
         {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            ObjectManager.Player.StartMeleeAttack();
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            ObjectManager.StartMeleeAttack();
 
             TryCastSpell(GroundingTotem, 0, int.MaxValue, ObjectManager.Aggressors.Any(a => a.IsCasting));
             TryCastSpell(EarthShock, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting);

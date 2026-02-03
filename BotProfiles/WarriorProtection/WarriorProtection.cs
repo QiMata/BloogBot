@@ -1,6 +1,4 @@
-﻿using BotRunner;
-using BotRunner.Interfaces;
-using Communication;
+﻿using BotRunner.Interfaces;
 using System.ComponentModel.Composition;
 using WarriorProtection.Tasks;
 

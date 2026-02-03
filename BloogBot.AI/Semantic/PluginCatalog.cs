@@ -1,9 +1,7 @@
 using System.Reflection;
-using System.Linq;
 using BloogBot.AI.Annotations;
 using BloogBot.AI.States;
 using Microsoft.SemanticKernel;
-using System.Threading;
 
 namespace BloogBot.AI.Semantic;
 

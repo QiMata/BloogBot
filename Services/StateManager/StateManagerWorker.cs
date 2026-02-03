@@ -4,7 +4,6 @@ using StateManager.Clients;
 using StateManager.Listeners;
 using StateManager.Repository;
 using StateManager.Settings;
-using System; // for IObservable
 
 namespace StateManager
 {

@@ -1,5 +1,3 @@
-using System;
-
 namespace WoWSharpClient.Networking.ClientComponents.Models
 {
     /// <summary>

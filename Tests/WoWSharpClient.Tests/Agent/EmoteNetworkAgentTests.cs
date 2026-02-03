@@ -1,15 +1,10 @@
-using System;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Threading;
-using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
-using WoWSharpClient.Networking.ClientComponents.Models;
-using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {

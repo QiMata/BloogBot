@@ -3,7 +3,6 @@ using Moq;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
-using Xunit;
 
 namespace WoWSharpClient.Tests.Agent
 {

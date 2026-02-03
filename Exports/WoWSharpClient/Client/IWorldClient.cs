@@ -1,4 +1,3 @@
-using System;
 using System.Reactive;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.Abstractions;

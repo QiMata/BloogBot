@@ -1,5 +1,4 @@
-﻿using Communication;
-using ForegroundBotRunner.Mem;
+﻿using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using GameData.Core.Enums;
 using GameData.Core.Frames;

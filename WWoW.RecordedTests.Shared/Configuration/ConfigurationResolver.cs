@@ -1,5 +1,3 @@
-using WWoW.RecordedTests.Shared.Abstractions;
-
 namespace WWoW.RecordedTests.Shared.Configuration;
 
 /// <summary>

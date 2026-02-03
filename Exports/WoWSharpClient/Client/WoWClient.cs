@@ -1,8 +1,6 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Models;
-using System.Net;
 using System.Text;
-using System.IO;
 
 namespace WoWSharpClient.Client
 {

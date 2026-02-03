@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace ForegroundBotRunner;
 

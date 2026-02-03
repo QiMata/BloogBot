@@ -1,7 +1,4 @@
-﻿using System;
-using System.IO;
-using System.Text;
-using System.Collections.Generic;
+﻿using System.Text;
 using GameData.Core.Enums;
 
 namespace GameData.Core.Constants

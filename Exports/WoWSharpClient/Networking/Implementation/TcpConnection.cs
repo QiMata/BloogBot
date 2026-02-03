@@ -1,10 +1,7 @@
-using System;
 using System.Buffers;
 using System.Net.Sockets;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Threading;
-using System.Threading.Tasks;
 using WoWSharpClient.Networking.Abstractions;
 
 namespace WoWSharpClient.Networking.Implementation

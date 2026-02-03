@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -16,7 +16,7 @@ namespace PaladinProtection.Tasks
         public void Update()
         {
             if (ObjectManager.Player.HealthPercent < 30 &&
-                ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HolyLight))
+                ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HolyLight))
             {
                 BotTasks.Push(new HealTask(BotContext));
                 return;
@@ -31,7 +31,7 @@ namespace PaladinProtection.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null ||
                 ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(3))

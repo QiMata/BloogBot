@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace RogueAssassin.Tasks
@@ -36,7 +36,7 @@ namespace RogueAssassin.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(3))
@@ -102,8 +102,8 @@ namespace RogueAssassin.Tasks
 
             //if (secondaryTarget != null && !secondaryTarget.HasDebuff(Blind))
             // {
-            //    ObjectManager.Player.SetTarget(secondaryTarget.Guid);
-            //     TryUseAbility(Blind, 30, ObjectManager.Player.IsSpellReady(Blind) && !secondaryTarget.HasDebuff(Blind));
+            //    ObjectManager.SetTarget(secondaryTarget.Guid);
+            //     TryUseAbility(Blind, 30, ObjectManager.IsSpellReady(Blind) && !secondaryTarget.HasDebuff(Blind));
             // }
 
             // ----- COMBAT ROTATION -----
@@ -120,11 +120,11 @@ namespace RogueAssassin.Tasks
 
             // TryUseAbility(ExposeArmor, 25, ObjectManager.Player.HasBuff(SliceAndDice) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 && ObjectManager.Player.ComboPoints <= 2 && ObjectManager.Player.ComboPoints >= 1);
 
-            TryUseAbility(SinisterStrike, 45, !ObjectManager.Player.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
+            TryUseAbility(SinisterStrike, 45, !ObjectManager.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
         
-            TryUseAbility(GhostlyStrike, 40, ObjectManager.Player.IsSpellReady(GhostlyStrike) && ObjectManager.Player.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
+            TryUseAbility(GhostlyStrike, 40, ObjectManager.IsSpellReady(GhostlyStrike) && ObjectManager.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
 
-            TryUseAbilityById(BloodFury, 3, 0, ObjectManager.Player.IsSpellReady(BloodFury) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
+            TryUseAbilityById(BloodFury, 3, 0, ObjectManager.IsSpellReady(BloodFury) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
 
             TryUseAbility(Evasion, 0, ObjectManager.Aggressors.Count() > 1);
 
@@ -138,9 +138,9 @@ namespace RogueAssassin.Tasks
 
             // we use Kidneyshot (with 1 or 2 combo points only) before Gouge as Gouge has a longer cooldown and requires more energy, so sometimes gouge doesn't fire before casting is done.
             
-            TryUseAbility(KidneyShot, 25, ReadyToInterrupt() && !ObjectManager.Player.IsSpellReady(Kick) && ObjectManager.Player.ComboPoints >= 1 && ObjectManager.Player.ComboPoints <=2);
+            TryUseAbility(KidneyShot, 25, ReadyToInterrupt() && !ObjectManager.IsSpellReady(Kick) && ObjectManager.Player.ComboPoints >= 1 && ObjectManager.Player.ComboPoints <=2);
                         
-            TryUseAbility(Gouge, 45, ReadyToInterrupt() && !ObjectManager.Player.IsSpellReady(Kick));
+            TryUseAbility(Gouge, 45, ReadyToInterrupt() && !ObjectManager.IsSpellReady(Kick));
         }
 
         private void OnParryCallback(object sender, EventArgs e)

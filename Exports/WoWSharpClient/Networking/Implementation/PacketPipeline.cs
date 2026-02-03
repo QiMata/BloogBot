@@ -1,7 +1,3 @@
-using System;
-using System.Reactive;
-using System.Threading;
-using System.Threading.Tasks;
 using WoWSharpClient.Networking.Abstractions;
 using WoWSharpClient.Networking.I;
 

@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Reactive; // for Unit
-using System.Threading;
-using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents.I

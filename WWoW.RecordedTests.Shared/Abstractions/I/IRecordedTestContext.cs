@@ -1,5 +1,3 @@
-using System;
-
 namespace WWoW.RecordedTests.Shared.Abstractions.I;
 
 public interface IRecordedTestContext

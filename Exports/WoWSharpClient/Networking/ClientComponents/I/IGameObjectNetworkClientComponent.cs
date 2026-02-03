@@ -1,5 +1,4 @@
 using GameData.Core.Enums;
-using System;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
 {

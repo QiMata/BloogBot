@@ -1,5 +1,3 @@
-using GameData.Core.Enums;
-
 namespace WoWSharpClient.Networking.ClientComponents.Models
 {
     // Note: Basic quest data models are now defined as records in AgentData.cs

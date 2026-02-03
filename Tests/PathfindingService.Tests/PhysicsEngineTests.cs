@@ -1,8 +1,6 @@
 ﻿using GameData.Core.Constants;
 using GameData.Core.Enums;
 using PathfindingService.Repository; // Navigation wrapper
-using static PathfindingService.Repository.Navigation;
-using Xunit;
 using MovementFlags = GameData.Core.Enums.MovementFlags;
 using GameData.Core.Models;
 

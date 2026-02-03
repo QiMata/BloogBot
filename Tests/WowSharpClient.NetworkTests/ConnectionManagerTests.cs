@@ -1,8 +1,4 @@
-using Xunit;
-using System.Threading.Tasks;
 using WoWSharpClient.Networking.Implementation;
-using WoWSharpClient.Networking.Abstractions;
-using System;
 
 namespace WowSharpClient.NetworkTests
 {

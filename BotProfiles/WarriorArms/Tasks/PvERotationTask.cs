@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -28,7 +27,7 @@ namespace WarriorArms.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(3))
@@ -42,7 +41,7 @@ namespace WarriorArms.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
                 if (ObjectManager.Aggressors.Any())
-                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
                 else
                     return;
             }
@@ -84,17 +83,17 @@ namespace WarriorArms.Tasks
             {
                 TryUseAbility(IntimidatingShout, 25, !(ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(IntimidatingShout) || ObjectManager.Player.HasBuff(Retaliation)) && ObjectManager.Aggressors.All(a => a.Position.DistanceTo(ObjectManager.Player.Position) < 10) && !ObjectManager.Units.Any(u => u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Position.DistanceTo(ObjectManager.Player.Position) < 10 && u.UnitReaction == UnitReaction.Neutral));
 
-                TryUseAbility(Retaliation, 0, ObjectManager.Player.IsSpellReady(Retaliation) && ObjectManager.Aggressors.All(a => a.Position.DistanceTo(ObjectManager.Player.Position) < 10) && !ObjectManager.Aggressors.Any(a => a.HasDebuff(IntimidatingShout)));
+                TryUseAbility(Retaliation, 0, ObjectManager.IsSpellReady(Retaliation) && ObjectManager.Aggressors.All(a => a.Position.DistanceTo(ObjectManager.Player.Position) < 10) && !ObjectManager.Aggressors.Any(a => a.HasDebuff(IntimidatingShout)));
 
-                TryUseAbility(DemoralizingShout, 10, ObjectManager.Aggressors.Any(a => !a.HasDebuff(DemoralizingShout) && a.HealthPercent > 50) && ObjectManager.Aggressors.All(a => a.Position.DistanceTo(ObjectManager.Player.Position) < 10) && (!ObjectManager.Player.IsSpellReady(IntimidatingShout) || ObjectManager.Player.HasBuff(Retaliation)) && !ObjectManager.Units.Any(u => (u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Position.DistanceTo(ObjectManager.Player.Position) < 10 && u.UnitReaction == UnitReaction.Neutral) || u.HasDebuff(IntimidatingShout)));
+                TryUseAbility(DemoralizingShout, 10, ObjectManager.Aggressors.Any(a => !a.HasDebuff(DemoralizingShout) && a.HealthPercent > 50) && ObjectManager.Aggressors.All(a => a.Position.DistanceTo(ObjectManager.Player.Position) < 10) && (!ObjectManager.IsSpellReady(IntimidatingShout) || ObjectManager.Player.HasBuff(Retaliation)) && !ObjectManager.Units.Any(u => (u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Position.DistanceTo(ObjectManager.Player.Position) < 10 && u.UnitReaction == UnitReaction.Neutral) || u.HasDebuff(IntimidatingShout)));
 
-                TryUseAbility(ThunderClap, 20, ObjectManager.Aggressors.Any(a => !a.HasDebuff(ThunderClap) && a.HealthPercent > 50) && ObjectManager.Aggressors.All(a => a.Position.DistanceTo(ObjectManager.Player.Position) < 8) && (!ObjectManager.Player.IsSpellReady(IntimidatingShout) || ObjectManager.Player.HasBuff(Retaliation)) && !ObjectManager.Units.Any(u => (u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Position.DistanceTo(ObjectManager.Player.Position) < 8 && u.UnitReaction == UnitReaction.Neutral) || u.HasDebuff(IntimidatingShout)));
+                TryUseAbility(ThunderClap, 20, ObjectManager.Aggressors.Any(a => !a.HasDebuff(ThunderClap) && a.HealthPercent > 50) && ObjectManager.Aggressors.All(a => a.Position.DistanceTo(ObjectManager.Player.Position) < 8) && (!ObjectManager.IsSpellReady(IntimidatingShout) || ObjectManager.Player.HasBuff(Retaliation)) && !ObjectManager.Units.Any(u => (u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Position.DistanceTo(ObjectManager.Player.Position) < 8 && u.UnitReaction == UnitReaction.Neutral) || u.HasDebuff(IntimidatingShout)));
 
                 TryUseAbility(SweepingStrikes, 30, !ObjectManager.Player.HasBuff(SweepingStrikes) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 30);
 
-                bool thunderClapCondition = ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(ThunderClap) || !ObjectManager.Player.IsSpellReady(ThunderClap) || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 50;
-                bool demoShoutCondition = ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(DemoralizingShout) || !ObjectManager.Player.IsSpellReady(DemoralizingShout) || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 50;
-                bool sweepingStrikesCondition = ObjectManager.Player.HasBuff(SweepingStrikes) || !ObjectManager.Player.IsSpellReady(SweepingStrikes);
+                bool thunderClapCondition = ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(ThunderClap) || !ObjectManager.IsSpellReady(ThunderClap) || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 50;
+                bool demoShoutCondition = ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(DemoralizingShout) || !ObjectManager.IsSpellReady(DemoralizingShout) || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 50;
+                bool sweepingStrikesCondition = ObjectManager.Player.HasBuff(SweepingStrikes) || !ObjectManager.IsSpellReady(SweepingStrikes);
                 if (thunderClapCondition && demoShoutCondition && sweepingStrikesCondition)
                 {
                     TryUseAbility(Rend, 10, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Rend) && ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Elemental && ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Undead);

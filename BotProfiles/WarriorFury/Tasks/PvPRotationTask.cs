@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -20,7 +19,7 @@ namespace WarriorFury.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null ||
                 ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(5))
@@ -35,9 +34,9 @@ namespace WarriorFury.Tasks
             if (target == null)
                 return;
 
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(target.Position);
-            ObjectManager.Player.StartMeleeAttack();
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(target.Position);
+            ObjectManager.StartMeleeAttack();
 
             string stance = ObjectManager.Player.CurrentStance;
 

@@ -1,4 +1,3 @@
-using System.Reactive;
 using System.Reactive.Linq;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
