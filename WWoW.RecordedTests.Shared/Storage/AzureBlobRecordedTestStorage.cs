@@ -28,9 +28,16 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
         // _blobServiceClient = new BlobServiceClient(_configuration.ConnectionString);
         // _containerClient = _blobServiceClient.GetBlobContainerClient(_configuration.ContainerName);
         // await _containerClient.CreateIfNotExistsAsync();
-    }
+        }
 
-    public async Task<string> UploadArtifactAsync(
+        public Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
+        {
+            // Azure Blob storage implementation should use UploadArtifactAsync for individual artifacts
+            _logger?.Warn("StoreAsync is not directly implemented for Azure Blob Storage. Use UploadArtifactAsync for individual artifacts.");
+            return Task.CompletedTask;
+        }
+
+        public async Task<string> UploadArtifactAsync(
         TestArtifact artifact,
         string testName,
         DateTimeOffset timestamp,

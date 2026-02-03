@@ -127,3 +127,7 @@ None currently - add reference to BotRunner for testing:
 ## Related Documentation
 
 - See `Exports/BotRunner/README.md` for library details
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

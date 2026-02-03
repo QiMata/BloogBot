@@ -19,10 +19,19 @@ public class PathingRecordedTestContext : RecordedTestContext
     /// </summary>
     /// <param name="testDefinition">The pathing test definition</param>
     /// <param name="serverInfo">The server connection information</param>
+    /// <param name="artifactsRootDirectory">Root directory for test artifacts</param>
     public PathingRecordedTestContext(
         PathingTestDefinition testDefinition,
-        ServerInfo serverInfo)
-        : base(testDefinition.Name, serverInfo)
+        ServerInfo serverInfo,
+        string? artifactsRootDirectory = null)
+        : base(
+            testDefinition.Name,
+            ArtifactPathHelper.SanitizeName(testDefinition.Name),
+            serverInfo,
+            DateTimeOffset.UtcNow,
+            artifactsRootDirectory ?? Path.Combine(Path.GetTempPath(), "PathingTests"),
+            Path.Combine(artifactsRootDirectory ?? Path.Combine(Path.GetTempPath(), "PathingTests"), ArtifactPathHelper.SanitizeName(testDefinition.Name)),
+            Path.Combine(artifactsRootDirectory ?? Path.Combine(Path.GetTempPath(), "PathingTests"), ArtifactPathHelper.SanitizeName(testDefinition.Name), DateTimeOffset.UtcNow.ToString("yyyyMMdd_HHmmss")))
     {
         TestDefinition = testDefinition;
     }

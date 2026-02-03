@@ -7,6 +7,11 @@ namespace WWoW.RecordedTests.Shared.Abstractions.I;
 public interface IServerDesiredState
 {
     /// <summary>
+    /// Gets the name of this desired state for logging and identification.
+    /// </summary>
+    string Name { get; }
+
+    /// <summary>
     /// Applies this desired state to the server using the provided bot runner.
     /// </summary>
     /// <param name="runner">The bot runner to use for applying state changes.</param>

@@ -1,10 +1,10 @@
-# BloogBot Services
+# WWoW Services
 
 An ecosystem of intelligent, distributed services for World of Warcraft automation, providing AI-driven bot coordination, navigation, decision-making, and execution capabilities. For end-to-end recorded regression testing, pair these services with the [`WWoW.RecordedTests.Shared`](../WWoW.RecordedTests.Shared/README.md) orchestration library which handles server readiness checks and artifact capture.
 
 ## Overview
 
-The BloogBot Services layer forms the backbone of a sophisticated multi-bot automation platform. Each service is designed as a .NET 8 Worker Service, providing specific capabilities that work together to create intelligent, autonomous World of Warcraft characters.
+The WWoW Services layer forms the backbone of a sophisticated multi-bot automation platform. Each service is designed as a .NET 8 Worker Service, providing specific capabilities that work together to create intelligent, autonomous World of Warcraft characters.
 
 ### Service Architecture
 
@@ -281,7 +281,7 @@ dotnet test Tests/ --filter Category=Integration
 ## Additional Resources
 
 ### Related Documentation
-- **[BloogBot.AI](../BloogBot.AI/README.md)**: Core AI behavior coordination
+- **[WWoW.AI](../BloogBot.AI/README.md)**: Core AI behavior coordination
 - **[Exports Layer](../Exports/README.md)**: Shared libraries and communication
 - **[UI Components](../UI/README.md)**: Management and monitoring interfaces
 
@@ -299,8 +299,8 @@ dotnet test Tests/ --filter Category=Integration
 
 ## License
 
-This project is part of the BloogBot ecosystem. Please refer to the main project license for usage terms.
+This project is part of the WWoW ecosystem. Please refer to the main project license for usage terms.
 
 ---
 
-*The BloogBot Services layer provides a robust, scalable foundation for intelligent World of Warcraft automation, combining cutting-edge AI, sophisticated pathfinding, and advanced process interaction techniques to create autonomous, intelligent game characters.*
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

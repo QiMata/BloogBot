@@ -75,9 +75,9 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <OutDir>..\Bot\$(Configuration)\net8.0</OutDir>
+    <OutDir>..\..\Bot\$(Configuration)\net8.0\</OutDir>
     <TargetExt>.dll</TargetExt>
-    <IntDir>..\Bot\$(Configuration)</IntDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <TargetName>$(ProjectName)</TargetName>
     <IncludePath>..\Navigation\Detour\Include;$(IncludePath)</IncludePath>
   </PropertyGroup>

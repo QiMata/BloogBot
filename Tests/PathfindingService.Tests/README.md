@@ -130,3 +130,7 @@ Tests are configured for x64 platform to match the native Navigation.dll depende
 
 - See `Services/PathfindingService/README.md` for service details
 - See `Exports/Navigation/` for native pathfinding library
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

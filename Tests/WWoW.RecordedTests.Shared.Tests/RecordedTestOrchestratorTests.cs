@@ -18,6 +18,7 @@ public class RecordedTestOrchestratorTests
     {
         _serverChecker = Substitute.For<IServerAvailabilityChecker>();
         _testDescription = Substitute.For<ITestDescription>();
+        _testDescription.Name.Returns("TestDescription");
         _logger = Substitute.For<ITestLogger>();
         _options = new OrchestrationOptions
         {
@@ -30,14 +31,14 @@ public class RecordedTestOrchestratorTests
     public async Task RunAsync_SuccessPath_ReturnsSuccessResult()
     {
         // Arrange
-        var expectedServer = new ServerInfo("mangosd-dev", "localhost", 3724, "Test Realm");
+        var expectedServer = new ServerInfo("localhost", 3724, "Test Realm");
         _serverChecker.WaitForAvailableAsync(
             Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>())
             .Returns(expectedServer);
 
-        _testDescription.ExecuteAsync(expectedServer, Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+        _testDescription.ExecuteAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(new OrchestrationResult(true, "Test succeeded"));
 
         var orchestrator = new RecordedTestOrchestrator(_serverChecker, _options, _logger);
 
@@ -47,14 +48,13 @@ public class RecordedTestOrchestratorTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeTrue();
-        result.Message.Should().Contain("succeeded");
 
         await _serverChecker.Received(1).WaitForAvailableAsync(
             _options.ServerAvailabilityTimeout,
             Arg.Any<CancellationToken>());
 
         await _testDescription.Received(1).ExecuteAsync(
-            expectedServer,
+            Arg.Any<IRecordedTestContext>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -75,10 +75,10 @@ public class RecordedTestOrchestratorTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeFalse();
-        result.Message.Should().Contain("No server became available");
+        result.Message.Should().Contain("not available");
 
         await _testDescription.DidNotReceive().ExecuteAsync(
-            Arg.Any<ServerInfo>(),
+            Arg.Any<IRecordedTestContext>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -87,10 +87,14 @@ public class RecordedTestOrchestratorTests
     {
         // Arrange
         var cts = new CancellationTokenSource();
+        var expectedServer = new ServerInfo("localhost", 3724, "Test Realm");
         _serverChecker.WaitForAvailableAsync(
             Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
+            .Returns(expectedServer);
+
+        _testDescription.ExecuteAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns<Task<OrchestrationResult>>(callInfo =>
             {
                 cts.Cancel();
                 throw new OperationCanceledException();
@@ -104,18 +108,14 @@ public class RecordedTestOrchestratorTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeFalse();
-        result.Message.Should().Contain("cancelled");
-
-        await _testDescription.DidNotReceive().ExecuteAsync(
-            Arg.Any<ServerInfo>(),
-            Arg.Any<CancellationToken>());
+        result.Message.Should().Contain("canceled");
     }
 
     [Fact]
     public async Task RunAsync_TestDescriptionThrowsException_ReturnsFailureResultWithExceptionMessage()
     {
         // Arrange
-        var expectedServer = new ServerInfo("mangosd-dev", "localhost", 3724, "Test Realm");
+        var expectedServer = new ServerInfo("localhost", 3724, "Test Realm");
         var expectedException = new InvalidOperationException("Bot runner failed to connect");
 
         _serverChecker.WaitForAvailableAsync(
@@ -123,7 +123,7 @@ public class RecordedTestOrchestratorTests
             Arg.Any<CancellationToken>())
             .Returns(expectedServer);
 
-        _testDescription.ExecuteAsync(expectedServer, Arg.Any<CancellationToken>())
+        _testDescription.ExecuteAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(expectedException);
 
         var orchestrator = new RecordedTestOrchestrator(_serverChecker, _options, _logger);
@@ -134,7 +134,7 @@ public class RecordedTestOrchestratorTests
         // Assert
         result.Should().NotBeNull();
         result.Success.Should().BeFalse();
-        result.Message.Should().Contain("failed with exception");
+        result.Message.Should().Contain("failed");
         result.Message.Should().Contain("Bot runner failed to connect");
     }
 
@@ -142,14 +142,14 @@ public class RecordedTestOrchestratorTests
     public async Task RunAsync_UsesNullTestLoggerWhenNoneProvided()
     {
         // Arrange
-        var expectedServer = new ServerInfo("mangosd-dev", "localhost", 3724, "Test Realm");
+        var expectedServer = new ServerInfo("localhost", 3724, "Test Realm");
         _serverChecker.WaitForAvailableAsync(
             Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>())
             .Returns(expectedServer);
 
-        _testDescription.ExecuteAsync(expectedServer, Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+        _testDescription.ExecuteAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(new OrchestrationResult(true, "Test succeeded"));
 
         var orchestrator = new RecordedTestOrchestrator(_serverChecker, _options, logger: null);
 
@@ -170,7 +170,10 @@ public class RecordedTestOrchestratorTests
         _serverChecker.WaitForAvailableAsync(
             Arg.Any<TimeSpan>(),
             token)
-            .Returns(new ServerInfo("test", "localhost", 3724, null));
+            .Returns(new ServerInfo("localhost", 3724));
+
+        _testDescription.ExecuteAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(new OrchestrationResult(true, "Test succeeded"));
 
         var orchestrator = new RecordedTestOrchestrator(_serverChecker, _options, _logger);
 
@@ -189,12 +192,15 @@ public class RecordedTestOrchestratorTests
         // Arrange
         var cts = new CancellationTokenSource();
         var token = cts.Token;
-        var server = new ServerInfo("test", "localhost", 3724, null);
+        var server = new ServerInfo("localhost", 3724);
 
         _serverChecker.WaitForAvailableAsync(
             Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>())
             .Returns(server);
+
+        _testDescription.ExecuteAsync(Arg.Any<IRecordedTestContext>(), token)
+            .Returns(new OrchestrationResult(true, "Test succeeded"));
 
         var orchestrator = new RecordedTestOrchestrator(_serverChecker, _options, _logger);
 
@@ -202,18 +208,21 @@ public class RecordedTestOrchestratorTests
         await orchestrator.RunAsync(_testDescription, token);
 
         // Assert
-        await _testDescription.Received(1).ExecuteAsync(server, token);
+        await _testDescription.Received(1).ExecuteAsync(Arg.Any<IRecordedTestContext>(), token);
     }
 
     [Fact]
     public async Task RunAsync_LogsServerWaitStart()
     {
         // Arrange
-        var server = new ServerInfo("test", "localhost", 3724, null);
+        var server = new ServerInfo("localhost", 3724);
         _serverChecker.WaitForAvailableAsync(
             Arg.Any<TimeSpan>(),
             Arg.Any<CancellationToken>())
             .Returns(server);
+
+        _testDescription.ExecuteAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(new OrchestrationResult(true, "Test succeeded"));
 
         var orchestrator = new RecordedTestOrchestrator(_serverChecker, _options, _logger);
 

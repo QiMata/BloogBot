@@ -14,16 +14,24 @@ public sealed class GmCommandServerDesiredState : IServerDesiredState
     private IGmCommandExecutor? _executor;
 
     /// <summary>
+    /// Gets the name of this desired state for logging and identification.
+    /// </summary>
+    public string Name { get; }
+
+    /// <summary>
     /// Creates a new GM command-based desired state.
     /// </summary>
+    /// <param name="name">Name of this desired state for logging.</param>
     /// <param name="setupCommands">GM commands to execute during setup/apply phase.</param>
     /// <param name="teardownCommands">GM commands to execute during teardown/revert phase.</param>
     /// <param name="logger">Optional logger for command execution.</param>
     public GmCommandServerDesiredState(
+        string name,
         string[] setupCommands,
         string[] teardownCommands,
         ITestLogger? logger = null)
     {
+        Name = name ?? throw new ArgumentNullException(nameof(name));
         _setupCommands = setupCommands ?? Array.Empty<string>();
         _teardownCommands = teardownCommands ?? Array.Empty<string>();
         _logger = logger;

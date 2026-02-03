@@ -14,6 +14,7 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
 {
     private readonly string _rootDirectory;
     private readonly ITestLogger _logger;
+    private bool _disposed;
 
     public FileSystemRecordedTestStorage(string rootDirectory, ITestLogger? logger = null)
     {
@@ -24,6 +25,105 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
 
         _rootDirectory = rootDirectory;
         _logger = logger ?? new NullTestLogger();
+    }
+
+    public async Task<string> UploadArtifactAsync(
+        TestArtifact artifact,
+        string testName,
+        DateTimeOffset timestamp,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        if (string.IsNullOrWhiteSpace(testName))
+        {
+            throw new ArgumentException("Test name must be provided.", nameof(testName));
+        }
+
+        var sanitizedName = ArtifactPathHelper.SanitizeName(testName);
+        var timestampStr = timestamp.ToUniversalTime().ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
+        var destinationDir = Path.Combine(_rootDirectory, sanitizedName, timestampStr);
+
+        Directory.CreateDirectory(destinationDir);
+
+        var destinationPath = Path.Combine(destinationDir, artifact.Name);
+        
+        if (File.Exists(artifact.FullPath))
+        {
+            File.Copy(artifact.FullPath, destinationPath, overwrite: true);
+        }
+
+        _logger.Info($"[Storage] Uploaded artifact '{artifact.Name}' to '{destinationPath}'.");
+        return destinationPath;
+    }
+
+    public Task DownloadArtifactAsync(
+        string storageLocation,
+        string localDestinationPath,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(storageLocation))
+        {
+            throw new ArgumentException("Storage location must be provided.", nameof(storageLocation));
+        }
+        if (string.IsNullOrWhiteSpace(localDestinationPath))
+        {
+            throw new ArgumentException("Local destination path must be provided.", nameof(localDestinationPath));
+        }
+
+        if (!File.Exists(storageLocation))
+        {
+            throw new FileNotFoundException($"Artifact not found at '{storageLocation}'.", storageLocation);
+        }
+
+        var destinationDir = Path.GetDirectoryName(localDestinationPath);
+        if (!string.IsNullOrEmpty(destinationDir))
+        {
+            Directory.CreateDirectory(destinationDir);
+        }
+
+        File.Copy(storageLocation, localDestinationPath, overwrite: true);
+        _logger.Info($"[Storage] Downloaded artifact from '{storageLocation}' to '{localDestinationPath}'.");
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<string>> ListArtifactsAsync(
+        string testName,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(testName))
+        {
+            throw new ArgumentException("Test name must be provided.", nameof(testName));
+        }
+
+        var sanitizedName = ArtifactPathHelper.SanitizeName(testName);
+        var testDir = Path.Combine(_rootDirectory, sanitizedName);
+
+        if (!Directory.Exists(testDir))
+        {
+            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+        }
+
+        var artifacts = Directory.EnumerateFiles(testDir, "*", SearchOption.AllDirectories).ToList();
+        return Task.FromResult<IReadOnlyList<string>>(artifacts);
+    }
+
+    public Task DeleteArtifactAsync(
+        string storageLocation,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(storageLocation))
+        {
+            throw new ArgumentException("Storage location must be provided.", nameof(storageLocation));
+        }
+
+        if (File.Exists(storageLocation))
+        {
+            File.Delete(storageLocation);
+            _logger.Info($"[Storage] Deleted artifact at '{storageLocation}'.");
+        }
+
+        return Task.CompletedTask;
     }
 
     public async Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
@@ -131,5 +231,16 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
         });
 
         await File.WriteAllTextAsync(metadataPath, json, cancellationToken).ConfigureAwait(false);
-    }
-}
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                // No unmanaged resources to release
+            }
+        }

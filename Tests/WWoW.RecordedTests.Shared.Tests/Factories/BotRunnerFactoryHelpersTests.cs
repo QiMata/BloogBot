@@ -4,6 +4,8 @@ using WWoW.RecordedTests.Shared.Abstractions;
 using WWoW.RecordedTests.Shared.Abstractions.I;
 using WWoW.RecordedTests.Shared.Factories;
 
+using IBotRunnerFactory = WWoW.RecordedTests.Shared.Abstractions.I.IBotRunnerFactory;
+
 namespace WWoW.RecordedTests.Shared.Tests.Factories;
 
 public class BotRunnerFactoryHelpersTests

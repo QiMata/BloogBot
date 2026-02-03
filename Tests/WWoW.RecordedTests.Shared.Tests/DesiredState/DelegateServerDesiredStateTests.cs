@@ -16,6 +16,7 @@ public class DelegateServerDesiredStateTests
         var applyCalled = false;
 
         var desiredState = new DelegateServerDesiredState(
+            name: "TestState",
             applyAsync: (runner, context, ct) =>
             {
                 applyCalled = true;
@@ -38,6 +39,7 @@ public class DelegateServerDesiredStateTests
         var revertCalled = false;
 
         var desiredState = new DelegateServerDesiredState(
+            name: "TestState",
             revertAsync: (runner, context, ct) =>
             {
                 revertCalled = true;
@@ -58,7 +60,7 @@ public class DelegateServerDesiredStateTests
         var mockRunner = Substitute.For<IBotRunner>();
         var mockContext = Substitute.For<IRecordedTestContext>();
 
-        var desiredState = new DelegateServerDesiredState(applyAsync: null);
+        var desiredState = new DelegateServerDesiredState(name: "TestState", applyAsync: null);
 
         // Act & Assert
         await desiredState.ApplyAsync(mockRunner, mockContext, CancellationToken.None);
@@ -71,7 +73,7 @@ public class DelegateServerDesiredStateTests
         var mockRunner = Substitute.For<IBotRunner>();
         var mockContext = Substitute.For<IRecordedTestContext>();
 
-        var desiredState = new DelegateServerDesiredState(revertAsync: null);
+        var desiredState = new DelegateServerDesiredState(name: "TestState", revertAsync: null);
 
         // Act & Assert
         await desiredState.RevertAsync(mockRunner, mockContext, CancellationToken.None);
@@ -90,6 +92,7 @@ public class DelegateServerDesiredStateTests
         CancellationToken capturedToken = default;
 
         var desiredState = new DelegateServerDesiredState(
+            name: "TestState",
             applyAsync: (runner, context, ct) =>
             {
                 capturedRunner = runner;
@@ -120,6 +123,7 @@ public class DelegateServerDesiredStateTests
         CancellationToken capturedToken = default;
 
         var desiredState = new DelegateServerDesiredState(
+            name: "TestState",
             revertAsync: (runner, context, ct) =>
             {
                 capturedRunner = runner;
@@ -147,6 +151,7 @@ public class DelegateServerDesiredStateTests
         var revertCallCount = 0;
 
         var desiredState = new DelegateServerDesiredState(
+            name: "TestState",
             applyAsync: (runner, context, ct) =>
             {
                 applyCallCount++;
@@ -176,6 +181,7 @@ public class DelegateServerDesiredStateTests
         var completed = false;
 
         var desiredState = new DelegateServerDesiredState(
+            name: "TestState",
             applyAsync: async (runner, context, ct) =>
             {
                 await Task.Delay(50, ct);
@@ -199,6 +205,7 @@ public class DelegateServerDesiredStateTests
         cts.Cancel();
 
         var desiredState = new DelegateServerDesiredState(
+            name: "TestState",
             applyAsync: async (runner, context, ct) =>
             {
                 await Task.Delay(1000, ct);

@@ -11,7 +11,7 @@ The repository is organized into several large subsystems. Each has its own READ
 | [Services](./Services/README.md) | Distributed worker services that coordinate bots, navigation, prompts, and decision making. |
 | [Exports](./Exports/README.md) | Core libraries and native components injected into the WoW client or consumed by services. |
 | [UI](./UI/README.md) | User interfaces for orchestrating bots and monitoring systems. |
-| [BloogBot.AI](./BloogBot.AI/README.md) | Experimental AI agents and supporting tooling. |
+| [WWoW.AI](./BloogBot.AI/README.md) | Experimental AI agents and supporting tooling. |
 | [Recorded Tests Shared Library](./WWoW.RecordedTests.Shared/README.md) | Orchestration primitives for automated, recorded integration tests. |
 | [Recorded Test Ideas](./WWoW.RecordedTests.Shared/RECORDED_TEST_IDEAS.md) | Backlog of high-value encounters to automate and film. |
 

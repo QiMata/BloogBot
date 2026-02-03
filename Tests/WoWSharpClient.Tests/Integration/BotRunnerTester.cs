@@ -1,6 +1,9 @@
 using BotRunner;
 using BotRunner.Clients;
+using BotRunner.Combat;
+using BotRunner.Movement;
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -106,10 +109,18 @@ public class BotRunnerTester : IAsyncLifetime
 
         Log("Starting BotRunnerService...");
 
+        // Create stub services for testing - the actual combat/looting/positioning
+        // behaviors are not tested through this integration tester
+        var targetEngagementService = new StubTargetEngagementService();
+        var lootingService = new StubLootingService();
+        var targetPositioningService = new StubTargetPositioningService();
+
         _botRunner = new BotRunnerService(
             ObjectManager,
             _characterStateUpdateClient!,
-            _serverFixture.PathfindingClient
+            targetEngagementService,
+            lootingService,
+            targetPositioningService
         );
 
         _botCancellation = new CancellationTokenSource();
@@ -400,4 +411,39 @@ public record PlayerStateSnapshot
 
     public float HealthPercent => MaxHealth > 0 ? (float)Health / MaxHealth * 100 : 0;
     public float ManaPercent => MaxMana > 0 ? (float)Mana / MaxMana * 100 : 0;
+}
+
+/// <summary>
+/// Stub implementation of ITargetEngagementService for testing.
+/// </summary>
+internal class StubTargetEngagementService : ITargetEngagementService
+{
+    public ulong? CurrentTargetGuid => null;
+
+    public Task EngageAsync(IWoWUnit target, CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Stub implementation of ILootingService for testing.
+/// </summary>
+internal class StubLootingService : ILootingService
+{
+    public Task<bool> TryLootAsync(ulong targetGuid, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(false);
+    }
+}
+
+/// <summary>
+/// Stub implementation of ITargetPositioningService for testing.
+/// </summary>
+internal class StubTargetPositioningService : ITargetPositioningService
+{
+    public bool EnsureInCombatRange(IWoWUnit target)
+    {
+        return true;
+    }
 }

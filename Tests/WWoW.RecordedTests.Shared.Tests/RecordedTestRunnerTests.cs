@@ -132,20 +132,34 @@ public sealed class RecordedTestRunnerTests
     }
 
     private sealed class SpyStorage : IRecordedTestStorage
-    {
-        private readonly IRecordedTestStorage _inner;
-
-        public SpyStorage(IRecordedTestStorage inner)
         {
-            _inner = inner;
-        }
+            private readonly IRecordedTestStorage _inner;
 
-        public RecordedTestStorageContext? CapturedContext { get; private set; }
+            public SpyStorage(IRecordedTestStorage inner)
+            {
+                _inner = inner;
+            }
 
-        public async Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
-        {
-            CapturedContext = context;
-            await _inner.StoreAsync(context, cancellationToken).ConfigureAwait(false);
+            public RecordedTestStorageContext? CapturedContext { get; private set; }
+
+            public async Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
+            {
+                CapturedContext = context;
+                await _inner.StoreAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+
+            public Task<string> UploadArtifactAsync(TestArtifact artifact, string testName, DateTimeOffset timestamp, CancellationToken cancellationToken)
+                => _inner.UploadArtifactAsync(artifact, testName, timestamp, cancellationToken);
+
+            public Task DownloadArtifactAsync(string storageLocation, string localDestinationPath, CancellationToken cancellationToken)
+                => _inner.DownloadArtifactAsync(storageLocation, localDestinationPath, cancellationToken);
+
+            public Task<IReadOnlyList<string>> ListArtifactsAsync(string testName, CancellationToken cancellationToken)
+                => _inner.ListArtifactsAsync(testName, cancellationToken);
+
+            public Task DeleteArtifactAsync(string storageLocation, CancellationToken cancellationToken)
+                => _inner.DeleteArtifactAsync(storageLocation, cancellationToken);
+
+            public void Dispose() => _inner.Dispose();
         }
     }
-}

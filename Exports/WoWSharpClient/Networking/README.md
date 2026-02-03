@@ -292,3 +292,7 @@ The architecture supports easy extension:
 - Advanced encryption schemes
 - Custom reconnection policies
 - Protocol-specific codecs
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

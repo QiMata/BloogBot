@@ -1,119 +1,102 @@
 # ForegroundBotRunner
 
-In-process bot execution service that runs directly inside the World of Warcraft 1.12.1 client via DLL injection. Provides direct memory access to game objects and function hooking for seamless bot integration.
-A .NET 8 console application that provides direct memory interaction and foreground automation for World of Warcraft through process injection and memory manipulation. This service enables real-time bot execution with direct game client integration using memory hooks, detours, and anti-detection mechanisms.
+A .NET 8 console application that provides direct memory interaction and foreground automation for World of Warcraft through process injection and memory manipulation.
 
 ## Overview
 
-ForegroundBotRunner is a Windows executable that:
-- **Injects into WoW.exe**: Loads bot DLL into the game process
-- **Reads Game Memory**: Direct access to object manager, player state, etc.
-- **Hooks Game Functions**: Intercepts game events for responsive automation
-- **Manages Hacks**: Enables/disables memory patches for bot functionality
-- **Bypasses Warden**: Anti-cheat evasion (for private servers)
-ForegroundBotRunner is designed as an injectable library that operates directly within the WoW game process. It provides low-level access to game objects, memory manipulation, and direct function calling for advanced bot automation scenarios where network-based solutions are insufficient.
+ForegroundBotRunner operates directly inside the World of Warcraft 1.12.1 client process via DLL injection, providing low-level access to game objects, memory manipulation, and direct function calling for advanced bot automation scenarios. Unlike BackgroundBotRunner which uses network protocols, ForegroundBotRunner reads and writes game memory directly for maximum control and responsiveness.
+
+The service is designed as an injectable library that loads into the WoW game process, providing real-time enumeration of game objects, direct memory reading and writing with protection mechanisms, native function hooking and detours, thread synchronization for safe main-thread execution, and anti-Warden protection against detection systems.
+
+This approach enables capabilities not possible through network-based automation: instant object enumeration without network latency, direct manipulation of player state and actions, precise control over character movement and facing, interception of game events before they reach the server, and seamless integration with the game's rendering pipeline.
 
 ## Architecture
-### Key Features
 
-- **Process Injection**: Designed for injection into the WoW game process using the Loader DLL
-- **Memory Management**: Direct memory reading/writing with protection mechanisms
-- **Object Manager**: Real-time enumeration and management of game objects
-- **Anti-Warden**: Protection against Blizzard's anti-cheat detection systems
-- **Function Hooking**: Native function detours and calling convention support
-- **Thread Synchronization**: Safe execution of operations on the main game thread
+```
++------------------------------------------------------------------+
+|                     ForegroundBotRunner                           |
++------------------------------------------------------------------+
+|                                                                   |
+|  +-----------------------------------------------------------+   |
+|  |                    Loader.cs                              |   |
+|  |           DLL injection orchestrator and entry point      |   |
+|  +-----------------------------------------------------------+   |
+|                              |                                    |
+|  +-----------------------------------------------------------+   |
+|  |                    Program.cs                             |   |
+|  |               Main execution thread (STA)                 |   |
+|  +-----------------------------------------------------------+   |
+|                              |                                    |
+|         +--------------------+--------------------+               |
+|         |                    |                    |               |
+|  +--------------+    +----------------+    +---------------+     |
+|  | Memory       |    | Object         |    | Hack          |     |
+|  | Management   |    | Manager        |    | Manager       |     |
+|  |              |    |                |    |               |     |
+|  | - Read/Write |    | - Enumeration  |    | - Patches     |     |
+|  | - Protection |    | - Filtering    |    | - Anti-Warden |     |
+|  | - P/Invoke   |    | - LocalPlayer  |    | - Enable/     |     |
+|  |              |    |                |    |   Disable     |     |
+|  +--------------+    +----------------+    +---------------+     |
+|         |                    |                    |               |
+|  +-----------------------------------------------------------+   |
+|  |                    Native Layer                            |   |
+|  |  +-----------------+    +--------------------------+       |   |
+|  |  | Functions.cs    |    | Detour.cs                |       |   |
+|  |  | (Game Funcs)    |    | (Hook Management)        |       |   |
+|  |  +-----------------+    +--------------------------+       |   |
+|  +-----------------------------------------------------------+   |
+|                              |                                    |
+|                              v                                    |
+|                    +-------------------+                          |
+|                    | WoW.exe Process   |                          |
+|                    | (Direct Memory)   |                          |
+|                    +-------------------+                          |
++------------------------------------------------------------------+
+```
 
 ## Project Structure
 
 ```
-ForegroundBotRunner/
-??? Program.cs                    # Entry point
-??? Loader.cs                     # DLL injection orchestrator
-??? Mem/
-?   ??? Memory.cs                 # Memory read/write utilities
-?   ??? MemoryAddresses.cs        # Static game addresses
-?   ??? Offsets.cs                # Structure field offsets
-?   ??? Functions.cs              # Game function pointers
-?   ??? Hack.cs                   # Memory patch definition
-?   ??? HackManager.cs            # Patch enable/disable
-?   ??? Detour.cs                 # Function hook management
-?   ??? ThreadSynchronizer.cs     # Main thread execution
-??? Mem/                          # Memory management and protection
-?   ??? AntiWarden/
-?   ?   ??? WardenDisabler.cs     # Anti-cheat protection
-?   ??? Hooks/
-?   ?   ??? SignalEventManager.cs # Event hook system
-?   ??? AntiWarden/
-?       ??? WardenDisabler.cs     # Anti-cheat bypass
-??? Objects/
-?   ??? WoWObject.cs              # Base object reader
-?   ??? WoWUnit.cs                # Unit memory reader
-?   ??? WoWPlayer.cs              # Player memory reader
-?   ??? LocalPlayer.cs            # Local player with actions
-?   ??? LocalPet.cs               # Pet control
-?   ??? WoWItem.cs                # Item memory reader
-?   ??? WoWContainer.cs           # Bag memory reader
-?   ??? WoWGameObject.cs          # World object reader
-?   ??? ItemCacheInfo.cs          # Item cache parsing
-??? Statics/
-?   ??? ObjectManager.cs          # Central object registry
-?   ??? WoWEventHandler.cs        # Game event dispatcher
-??? Frames/
-    ??? DialogFrame.cs            # UI frame interaction
-?   ?   ??? SignalEventManager.cs # Event hooking system
-?   ??? HackManager.cs            # Memory patch management
-?   ??? Memory.cs                 # Core memory operations
-?   ??? MemoryAddresses.cs        # Static memory addresses
-?   ??? Offsets.cs                # Dynamic memory offsets
-?   ??? Functions.cs              # Native function calls
-?   ??? Detour.cs                 # Function detouring
-?   ??? Hack.cs                   # Memory hack definitions
-?   ??? ThreadSynchronizer.cs     # Main thread synchronization
-??? Objects/                      # Game object representations
-?   ??? WoWObject.cs              # Base game object
-?   ??? LocalPlayer.cs            # Local player implementation
-?   ??? LocalPet.cs               # Pet object management
-?   ??? WoWPlayer.cs              # Other players
-?   ??? WoWUnit.cs                # NPCs and creatures
-?   ??? WoWItem.cs                # Item objects
-?   ??? WoWContainer.cs           # Bag and container objects
-?   ??? WoWGameObject.cs          # Interactive game objects
-?   ??? ItemCacheInfo.cs          # Item data caching
-??? Statics/                      # Global managers
-?   ??? ObjectManager.cs          # Central object enumeration
-?   ??? WoWEventHandler.cs        # Game event processing
-??? Frames/                       # UI frame management
-?   ??? DialogFrame.cs            # Dialog interaction
-??? Program.cs                    # Main entry point
-??? Loader.cs                     # Thread-safe loader
-??? README.md                     # This documentation
+Services/ForegroundBotRunner/
++-- ForegroundBotRunner.csproj  # .NET 8 Console Application project
++-- Program.cs                  # Main entry point
++-- Loader.cs                   # Thread-safe DLL injection loader
++-- Mem/                        # Memory management and protection
+|   +-- Memory.cs               # Core memory operations (read/write)
+|   +-- MemoryAddresses.cs      # Static memory addresses for WoW 1.12.1
+|   +-- Offsets.cs              # Dynamic memory offsets for structures
+|   +-- Functions.cs            # Native function calls (CastSpell, CTM, etc.)
+|   +-- Detour.cs               # Function detouring and hooking
+|   +-- Hack.cs                 # Memory hack definitions
+|   +-- HackManager.cs          # Memory patch management
+|   +-- ThreadSynchronizer.cs   # Main thread synchronization
+|   +-- AntiWarden/
+|       +-- WardenDisabler.cs   # Anti-cheat bypass protection
+|   +-- Hooks/
+|       +-- SignalEventManager.cs  # Event hooking system
++-- Objects/                    # Game object representations
+|   +-- WoWObject.cs            # Base game object reader
+|   +-- WoWUnit.cs              # NPC and creature objects
+|   +-- WoWPlayer.cs            # Other player objects
+|   +-- LocalPlayer.cs          # Local player implementation with actions
+|   +-- LocalPet.cs             # Pet object management
+|   +-- WoWItem.cs              # Item objects
+|   +-- WoWContainer.cs         # Bag and container objects
+|   +-- WoWGameObject.cs        # Interactive game objects (chests, nodes, etc.)
+|   +-- ItemCacheInfo.cs        # Item data caching
++-- Statics/                    # Global managers
+|   +-- ObjectManager.cs        # Central object enumeration
+|   +-- WoWEventHandler.cs      # Game event processing
++-- Frames/                     # UI frame management
+|   +-- DialogFrame.cs          # Dialog interaction
++-- README.md                   # This documentation
 ```
 
 ## Key Components
-## Architecture
-
-The ForegroundBotRunner operates through direct memory access and function injection:
-
-```mermaid
-graph TD
-    A[Loader DLL] --> B[ForegroundBotRunner]
-    B --> C[Memory Manager]
-    B --> D[Object Manager]
-    B --> E[Hack Manager]
-    B --> F[Thread Synchronizer]
-    
-    C --> G[Game Process Memory]
-    D --> H[Object Enumeration]
-    E --> I[Memory Patches]
-    F --> J[Main Game Thread]
-    
-    K[Anti-Warden] --> L[Protection Systems]
-    M[Event Handler] --> N[Game Events]
-```
-
-## Core Components
 
 ### Memory Management
+
 The memory subsystem provides safe access to game process memory:
 
 ```csharp
@@ -123,12 +106,11 @@ var position = Memory.Read<Position>(unitBase + Offsets.Position);
 
 // Write game memory
 Memory.Write<int>(playerBase + Offsets.TargetGuid, targetGuid);
-// Example memory operations
-var playerHealth = MemoryManager.ReadInt(playerPtr + HealthOffset);
-MemoryManager.WriteFloat(playerPtr + FacingOffset, newFacing);
+Memory.Write<float>(playerBase + Offsets.Facing, newFacing);
 ```
 
 ### Object Manager
+
 Central hub for game object enumeration and management:
 
 ```csharp
@@ -138,19 +120,26 @@ public class ObjectManager : IObjectManager
     public IEnumerable<IWoWObject> Objects { get; }
     public IEnumerable<IWoWUnit> Units { get; }
     public IEnumerable<IWoWPlayer> Players { get; }
-    // ... additional collections
+    public IEnumerable<IWoWItem> Items { get; }
+    public IEnumerable<IWoWGameObject> GameObjects { get; }
 }
 ```
 
-### Hack Manager
-Manages memory patches and hooks:
+Usage example:
 
 ```csharp
 // Access game objects
 var player = ObjectManager.LocalPlayer;
 var target = ObjectManager.GetUnitByGuid(targetGuid);
-var nearbyUnits = ObjectManager.Units.Where(u => 
+var nearbyUnits = ObjectManager.Units.Where(u =>
     u.Position.DistanceTo(player.Position) < 40);
+```
+
+### Hack Manager
+
+Manages memory patches and hooks:
+
+```csharp
 internal static class HackManager
 {
     static internal void AddHack(Hack hack)
@@ -159,31 +148,63 @@ internal static class HackManager
         Hacks.Add(hack);
         EnableHack(hack);
     }
+
+    static internal void EnableHack(Hack hack)
+    {
+        // Apply memory patch
+        Memory.Write(hack.Address, hack.NewBytes);
+    }
+
+    static internal void DisableHack(Hack hack)
+    {
+        // Restore original bytes
+        Memory.Write(hack.Address, hack.OriginalBytes);
+    }
 }
+```
+
+### Thread Synchronizer
+
+Ensures game operations execute on the main thread:
+
+```csharp
+ThreadSynchronizer.RunOnMainThread(() =>
+{
+    // This executes during EndScene hook
+    player.CastSpell(spellId);
+    // Safe execution of game operations
+});
 ```
 
 ## Dependencies
 
 ### NuGet Packages
-- **Fasm.NET (1.70.3.2)**: Flat Assembler .NET wrapper for runtime code generation
-- **Newtonsoft.Json (13.0.3)**: JSON serialization and configuration
-- **System.Memory (4.6.3)**: Advanced memory operations and spans
-- **Vcpkg.Nuget (1.5.0)**: Native dependency management
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| Fasm.NET | 1.70.3.2 | Flat Assembler .NET wrapper for runtime code generation |
+| Newtonsoft.Json | 13.0.3 | JSON serialization and configuration |
+| System.Memory | 4.6.3 | Advanced memory operations and spans |
+| Vcpkg.Nuget | 1.5.0 | Native dependency management |
 
 ### Project References
+
 - **BotRunner**: Core automation engine integration
 - **GameData.Core**: Shared data structures and interfaces
 
 ### External Dependencies
+
 - **FastCall.dll**: Native calling convention bridge
 - **Fasm.NET.dll**: Runtime assembly generation
 
 ### Framework References
+
 - **System.ComponentModel.Composition**: MEF composition for plugin architecture
 
 ## Usage
 
 ### Process Injection
+
 The ForegroundBotRunner is typically loaded via the Loader DLL:
 
 ```cpp
@@ -199,9 +220,38 @@ int Load(string args)
 }
 ```
 
-### Function Hooking
 ### Object Enumeration
-Access to real-time game objects:
+
+Access real-time game objects:
+
+```csharp
+// Get all hostile units in range
+var hostiles = ObjectManager.Units
+    .Where(u => u.Health > 0)
+    .Where(u => u.UnitReaction == UnitReaction.Hostile)
+    .Where(u => u.DistanceToPlayer < 30);
+
+// Target and attack
+ObjectManager.SetTarget(hostile.Guid);
+ObjectManager.StartMeleeAttack();
+```
+
+### Movement Control
+
+Direct movement through memory manipulation:
+
+```csharp
+// Start movement in specific direction
+ObjectManager.StartMovement(ControlBits.Front);
+
+// Set precise facing
+ObjectManager.SetFacing(MathHelper.ToRadians(90));
+
+// Stop all movement
+ObjectManager.StopAllMovement();
+```
+
+### Function Hooking
 
 ```csharp
 // Hook EndScene for main thread execution
@@ -211,34 +261,10 @@ var hook = new Detour(
     5 // instruction length
 );
 hook.Apply();
-// Get all hostile units in range
-var hostiles = objectManager.Units
-    .Where(u => u.Health > 0)
-    .Where(u => u.UnitReaction == UnitReaction.Hostile)
-    .Where(u => u.DistanceToPlayer < 30);
-
-// Target and attack
-objectManager.SetTarget(hostile.Guid);
-objectManager.StartMeleeAttack();
 ```
 
-### Thread Synchronization
-### Movement Control
-Direct movement through memory manipulation:
-
-```csharp
-// Start movement in specific direction
-objectManager.StartMovement(ControlBits.Front);
-
-// Set precise facing
-objectManager.SetFacing(MathHelper.ToRadians(90));
-
-// Stop all movement
-objectManager.StopAllMovement();
-```
-
-Game functions must be called from the main thread:
 ### Memory Patches
+
 Apply runtime memory modifications:
 
 ```csharp
@@ -255,16 +281,17 @@ HackManager.AddHack(antiAfkHack);
 
 ## Configuration
 
-The project uses compile-time configuration through project properties:
-
 ### Build Settings
+
+The project uses compile-time configuration through project properties:
 - **Target Framework**: .NET 8.0
 - **Output Type**: Console Application (Exe)
 - **Unsafe Blocks**: Enabled for memory operations
 - **Base Output Path**: `../../Bot` (shared ecosystem directory)
 
 ### Memory Addresses
-Static memory addresses are defined in `MemoryAddresses.cs`:
+
+Static memory addresses are defined in `MemoryAddresses.cs` for WoW 1.12.1:
 
 ```csharp
 public static class MemoryAddresses
@@ -272,6 +299,8 @@ public static class MemoryAddresses
     public const int LocalPlayerSpellsBase = 0x00C0D788;
     public const int LastHardwareAction = 0x00B4B424;
     public const int ZoneTextPtr = 0x00B42140;
+    public const int ObjectManager = 0x00B41414;
+    public const int LocalPlayerGuid = 0x00B41408;
     // ... additional addresses
 }
 ```
@@ -279,42 +308,28 @@ public static class MemoryAddresses
 ## Safety & Anti-Detection
 
 ### Anti-Warden System
+
 Protection against Blizzard's anti-cheat mechanisms:
 
 ```csharp
 // WardenDisabler.cs provides protection against:
 // - Memory scan detection
-// - Code injection detection  
+// - Code injection detection
 // - Suspicious API call monitoring
 ```
 
 ### Thread Safety
-All game interactions are synchronized to the main thread:
 
-```csharp
-ThreadSynchronizer.RunOnMainThread(() =>
-{
-    // This executes during EndScene hook
-    player.CastSpell(spellId);
-    // Safe execution of game operations
-    var playerPtr = Functions.GetObjectPtr(playerGuid);
-    // ... perform operations
-});
-```
+All game interactions are synchronized to the main thread to prevent race conditions and crashes.
 
-## Memory Addresses
 ### Memory Protection
-Careful memory management to avoid crashes:
 
-Key addresses defined in `MemoryAddresses.cs`:
-- Object Manager base pointer
-- Local player GUID pointer
-- Function addresses (CastSpell, CTM, etc.)
-- Frame script execution
+Careful memory management to avoid access violations:
+
 ```csharp
 try
 {
-    var value = MemoryManager.ReadInt(address);
+    var value = Memory.Read<int>(address);
     return value;
 }
 catch (Exception)
@@ -324,58 +339,35 @@ catch (Exception)
 }
 ```
 
-## Integration with BloogBot Ecosystem
+## Integration with WWoW Ecosystem
 
-## Dependencies
 ### StateManager Integration
-ForegroundBotRunner is managed by the StateManager service:
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| Fasm.NET | 1.70.3.2 | x86 assembly generation |
-| Newtonsoft.Json | 13.0.3 | Configuration |
-| System.Memory | 4.6.3 | Memory span utilities |
-| Vcpkg.Nuget | 1.5.0 | Native dependency management |
-```csharp
-// StateManager can launch foreground bot instances
-// for direct memory access scenarios
-public void StartForegroundBotRunner(string accountName)
-{
-    // Injection and initialization logic
-}
-```
+ForegroundBotRunner can be managed by the StateManager service for direct memory access scenarios where network-based automation is insufficient.
 
-## Resources
 ### BotRunner Coordination
-Works alongside BotRunner for hybrid automation:
 
-The project includes:
-- `Resources/Fasm.NET.dll` - Assembly compiler
-- `Resources/FastCall.dll` - Native call marshaling
+Works alongside BotRunner for hybrid automation:
 - **ForegroundBotRunner**: Direct memory access and real-time operations
 - **BotRunner**: High-level behavior trees and decision making
 - **Communication**: Shared interfaces and data structures
 
-## Project References
 ## Development Guidelines
 
-- **BotRunner**: Behavior tree framework
-- **GameData.Core**: Shared interfaces
 ### Memory Safety
+
 - Always validate memory addresses before access
 - Use try-catch blocks for memory operations
 - Implement proper cleanup and disposal patterns
 
-## Running
 ### Threading
+
 - Use ThreadSynchronizer for main thread operations
 - Avoid blocking the main game thread
 - Implement proper cancellation tokens
 
-1. Start WoW.exe (1.12.1 client)
-2. Run ForegroundBotRunner.exe
-3. Bot injects and begins operation
 ### Error Handling
+
 - Log all exceptions with context
 - Graceful degradation on memory access failures
 - Comprehensive error recovery mechanisms
@@ -383,63 +375,65 @@ The project includes:
 ## Performance Considerations
 
 ### Memory Efficiency
+
 - Minimize memory allocations in hot paths
 - Use object pooling for frequently created objects
 - Careful management of native resources
 
 ### Real-time Operations
+
 - 50ms enumeration cycles for object updates
 - Efficient object filtering and querying
 - Optimized memory reading patterns
 
 ### CPU Usage
+
 - Balanced between responsiveness and CPU usage
 - Efficient native function calling
 - Minimal overhead on game performance
 
 ## Security Considerations
 
-?? **Warning**: 
-- This is designed for private servers only
-- Do not use on official Blizzard servers
-- Memory manipulation may trigger anti-cheat on some servers
-- The Warden bypass is specific to 1.12.1 and may not work on all private servers
-?? **Important Security Notes**:
+**Important Security Notes**:
 
-## Related Documentation
 ### Legal Compliance
+
 - This code is for educational and research purposes
 - Users must ensure compliance with applicable terms of service
 - No warranty provided for detection avoidance
 
-- See `Exports/WinImports/README.md` for P/Invoke declarations
-- See `Exports/FastCall/` for native call assembly
-- See `ARCHITECTURE.md` for system overview
 ### Process Injection
+
 - Requires elevated privileges for memory access
 - May trigger antivirus software warnings
 - Should only be used in controlled environments
 
 ### Anti-Cheat Awareness
+
 - Anti-Warden system for educational understanding
 - Detection methods evolve continuously
 - No guarantee of undetectability
+- Designed for private servers only
+- Do not use on official Blizzard servers
 
 ## Educational Value
 
 The ForegroundBotRunner serves as a comprehensive example of:
 
 ### Advanced Windows Programming
+
 - Process injection and DLL loading
 - Memory management and protection
 - Native function calling and hooking
 
 ### Game Development Concepts
+
 - Object management systems
 - Event-driven architectures
 - Real-time performance optimization
 
 ### Security Research
+
 - Anti-cheat system analysis
 - Memory protection mechanisms
 - Code injection techniques
@@ -473,26 +467,27 @@ Console.WriteLine($"[OBJECT MANAGER] {objectCount} objects enumerated");
 Console.WriteLine($"[HACK MANAGER] Adding hack {hack.Name}");
 ```
 
-## Related Projects
+## Resources
 
-- **[Loader](../../Exports/Loader/README.md)**: Process injection and CLR hosting
-- **[FastCall](../../Exports/FastCall/README.md)**: Native function calling bridge
-- **[BotRunner](../../Exports/BotRunner/README.md)**: High-level automation engine
-- **[StateManager](../StateManager/README.md)**: Multi-bot coordination service
-- **[GameData.Core](../../Exports/GameData.Core/README.md)**: Shared data structures
+The project includes:
+- `Resources/Fasm.NET.dll` - Assembly compiler
+- `Resources/FastCall.dll` - Native call marshaling
 
-## Contributing
+## Running
 
-1. **Memory Safety**: Ensure all memory operations are safe and validated
-2. **Thread Safety**: Use proper synchronization for main thread operations
-3. **Error Handling**: Implement comprehensive exception handling
-4. **Documentation**: Document memory addresses and offset meanings
-5. **Testing**: Test thoroughly in controlled environments
+1. Start WoW.exe (1.12.1 client)
+2. Run ForegroundBotRunner.exe
+3. Bot injects and begins operation
 
-## License
+## Related Documentation
 
-This project is part of the BloogBot ecosystem. Please refer to the main project license for usage terms.
+- See [Loader README](../../Exports/Loader/README.md) for process injection and CLR hosting
+- See [FastCall README](../../Exports/FastCall/README.md) for native function calling bridge
+- See [BotRunner README](../../Exports/BotRunner/README.md) for high-level automation engine
+- See [StateManager README](../StateManager/README.md) for multi-bot coordination service
+- See [GameData.Core README](../../Exports/GameData.Core/README.md) for shared data structures
+- See `ARCHITECTURE.md` for system overview
 
 ---
 
-*ForegroundBotRunner provides direct memory access capabilities for advanced World of Warcraft automation scenarios, serving as both a functional tool and educational resource for understanding game process interaction and memory manipulation techniques.*
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

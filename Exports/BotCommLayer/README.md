@@ -1,109 +1,89 @@
 # BotCommLayer
 
-The **BotCommLayer** project provides Protobuf-based inter-process communication (IPC) infrastructure for the WWoW system. It enables typed, efficient message passing between services using socket-based communication.
-A robust inter-service communication library for the BloogBot ecosystem, providing Protocol Buffers-based messaging over TCP sockets with support for both synchronous and asynchronous communication patterns.
+A robust inter-service communication library providing Protocol Buffers-based messaging over TCP sockets with support for both synchronous and asynchronous communication patterns.
 
 ## Overview
 
-This library contains:
-- **Protobuf Message Definitions**: Strongly-typed message contracts for all IPC communication
-- **Socket Infrastructure**: Synchronous and asynchronous socket servers/clients
-- **Model Categories**: Game state, pathfinding, communication, and database models
-BotCommLayer serves as the foundational communication infrastructure for BloogBot services, enabling reliable data exchange between different components of the bot automation system. It uses Google Protocol Buffers for efficient binary serialization and provides both client-server socket patterns for different communication needs.
+BotCommLayer serves as the foundational communication infrastructure for WWoW services, enabling reliable data exchange between different components of the bot automation system. It uses Google Protocol Buffers for efficient binary serialization and provides both client-server socket patterns for different communication needs.
+
+The library contains strongly-typed message contracts for all IPC communication, synchronous and asynchronous socket servers/clients, and comprehensive data models organized into categories: game state, pathfinding, communication protocols, and database schemas.
+
+Key capabilities include type-safe generic protobuf message communication, thread-safe multi-threaded operations, built-in auto-reconnection and error handling, comprehensive World of Warcraft data models, and System.Reactive integration for event-driven architectures.
+
+## Architecture
+
+```
++------------------------------------------------------------------+
+|                        BotCommLayer                              |
++------------------------------------------------------------------+
+|                                                                  |
+|  +-----------------------------------------------------------+  |
+|  |              Core Communication Classes                    |  |
+|  |                                                            |  |
+|  |  +---------------------+    +-------------------------+   |  |
+|  |  | ProtobufSocket      |    | ProtobufAsyncSocket     |   |  |
+|  |  | Server<TReq, TResp> |    | Server                  |   |  |
+|  |  |                     |    |                         |   |  |
+|  |  | - HandleRequest()   |    | - Async operations      |   |  |
+|  |  | - ThreadPool mgmt   |    | - High throughput       |   |  |
+|  |  +---------------------+    +-------------------------+   |  |
+|  |                                                            |  |
+|  |  +---------------------+                                   |  |
+|  |  | ProtobufSocket      |                                   |  |
+|  |  | Client<TReq, TResp> |                                   |  |
+|  |  |                     |                                   |  |
+|  |  | - SendMessage()     |                                   |  |
+|  |  | - Connection mgmt   |                                   |  |
+|  |  +---------------------+                                   |  |
+|  +-----------------------------------------------------------+  |
+|                              |                                   |
+|         +--------------------+--------------------+              |
+|         |                    |                    |              |
+|  +-------------+      +-------------+      +-------------+       |
+|  | Game Models |      | Communication|      | Pathfinding |       |
+|  |             |      | Models      |      | Models      |       |
+|  | - WoWObject |      | - AsyncReq  |      | - PathReq   |       |
+|  | - WoWUnit   |      | - ActionMsg |      | - LOSReq    |       |
+|  | - WoWPlayer |      | - StateChg  |      | - Physics   |       |
+|  +-------------+      +-------------+      +-------------+       |
+|                                                                  |
++------------------------------------------------------------------+
+```
 
 ## Project Structure
-## Features
 
 ```
 BotCommLayer/
-??? BotCommLayer.csproj
-??? README.md
-??? ProtobufSocketServer.cs          # Synchronous socket server
-??? ProtobufAsyncSocketServer.cs     # Async socket server
-??? ProtobufSocketClient.cs          # Socket client
-??? Models/
-    ??? Communication.cs              # Generated from communication.proto
-    ??? Database.cs                   # Generated from database.proto
-    ??? Game.cs                       # Generated from game.proto
-    ??? Pathfinding.cs                # Generated from pathfinding.proto
-    ??? ProtoDef/                     # Source .proto files
-        ??? protocsharp.bat           # Build script for C# generation
-        ??? communication.proto
-        ??? database.proto
-        ??? game.proto
-        ??? pathfinding.proto
++-- BotCommLayer.csproj
++-- README.md
++-- ProtobufSocketServer.cs          # Synchronous socket server
++-- ProtobufAsyncSocketServer.cs     # Async socket server
++-- ProtobufSocketClient.cs          # Socket client
++-- Models/
+    +-- Communication.cs              # Generated from communication.proto
+    +-- Database.cs                   # Generated from database.proto
+    +-- Game.cs                       # Generated from game.proto
+    +-- Pathfinding.cs                # Generated from pathfinding.proto
+    +-- ProtoDef/                     # Source .proto files
+        +-- protocsharp.bat           # Build script for C# generation
+        +-- communication.proto
+        +-- database.proto
+        +-- game.proto
+        +-- pathfinding.proto
 ```
-- **Protocol Buffers Integration**: Efficient binary serialization using Google.Protobuf
-- **Generic Socket Communication**: Type-safe client-server communication with generic protobuf message types
-- **Synchronous and Asynchronous Patterns**: Support for both blocking and non-blocking communication modes
-- **World of Warcraft Data Models**: Comprehensive protobuf definitions for WoW game objects, players, items, and actions
-- **System.Reactive Integration**: Reactive programming support for event-driven architectures
-- **Thread-Safe Operations**: Safe multi-threaded communication with proper locking mechanisms
-- **Auto-Reconnection**: Built-in connection management and error handling
 
-## Protobuf Code Generation
-## Architecture
+## Key Components
 
-### Prerequisites
-The library is organized into several key components:
-
-Install the Protobuf compiler (`protoc`). Options:
-- **Windows**: Download from [GitHub Releases](https://github.com/protocolbuffers/protobuf/releases) and add to PATH
-- **Chocolatey**: `choco install protoc`
-- **Scoop**: `scoop install protobuf`
 ### Core Communication Classes
 
-### Regenerating C# Files
-- **`ProtobufSocketServer<TRequest, TResponse>`**: Generic TCP server for handling protobuf-based request-response patterns
-- **`ProtobufSocketClient<TRequest, TResponse>`**: Generic TCP client for sending protobuf messages and receiving responses
-- **`ProtobufAsyncSocketServer`**: Asynchronous server implementation for high-throughput scenarios
+**ProtobufSocketServer&lt;TRequest, TResponse&gt;**
 
-When you modify any `.proto` file in `Models/ProtoDef/`, regenerate the C# code using the provided batch script.
-### Data Models
-
-**From the repository root directory:**
-#### Game Object Models (`Models/Game.cs`)
-Comprehensive protobuf definitions for World of Warcraft entities:
-
-```powershell
-.\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat .\ .\.. "C:\path\to\protoc.exe"
-```
-- **`WoWObject`**: Base game object with position, GUID, map/zone information
-- **`WoWGameObject`**: Extended objects with state and faction data
-- **`WoWUnit`**: Living entities with health, mana, stats, auras, and combat properties
-- **`WoWPlayer`**: Player characters with inventory, skills, quests, and progression data
-- **`WoWItem`**: Items with durability, enchantments, and properties
-- **`WoWContainer`**: Bags and containers with slot management
-- **`Position`**: 3D coordinates for world positioning
-
-**Example with VS Code's protoc:**
-```powershell
-.\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat .\ .\.. "C:\Microsoft VS Code\bin\protoc.exe"
-#### Communication Models (`Models/Communication.cs`)
-Messaging infrastructure for bot coordination:
-
-- **`AsyncRequest`**: Asynchronous message wrapper with request IDs
-- **`ActionMessage`**: Bot action definitions with parameters and results
-- **`ActivitySnapshot`**: Complete game state snapshot with player and environment data
-- **`StateChangeRequest/Response`**: Character personality and behavior modifications
-- **`CharacterDefinition`**: AI personality traits using Big Five model (Openness, Conscientiousness, etc.)
-
-#### Additional Models
-- **Database Models** (`Models/Database.cs`): Data persistence schemas
-- **Pathfinding Models** (`Models/Pathfinding.cs`): Navigation and movement data structures
-
-## Usage Examples
-
-### Creating a Simple Server
+Generic TCP server for handling protobuf-based request-response patterns:
 
 ```csharp
-using BotCommLayer;
-using Microsoft.Extensions.Logging;
-
-// Define your request and response message types
 public class MyServer : ProtobufSocketServer<MyRequest, MyResponse>
 {
-    public MyServer(string ipAddress, int port, ILogger logger) 
+    public MyServer(string ipAddress, int port, ILogger logger)
         : base(ipAddress, port, logger)
     {
     }
@@ -118,50 +98,57 @@ public class MyServer : ProtobufSocketServer<MyRequest, MyResponse>
         };
     }
 }
-
-// Start the server
-var logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<MyServer>();
-var server = new MyServer("127.0.0.1", 8080, logger);
 ```
 
-### Batch Script Parameters
-### Creating a Client
+**ProtobufSocketClient&lt;TRequest, TResponse&gt;**
 
-| Parameter | Purpose | Default |
-|-----------|---------|---------|
-| `%1` | Path to `.proto` files (relative to script location) | `.` (current directory) |
-| `%2` | Output directory for generated C# files | `..` (parent directory) |
-| `%3` | Path to `protoc.exe` | `C:\protoc\bin\protoc.exe` |
+Generic TCP client for sending protobuf messages and receiving responses:
+
 ```csharp
-using BotCommLayer;
-using Microsoft.Extensions.Logging;
-
-### Manual Generation (Alternative)
-var logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<ProtobufSocketClient<MyRequest, MyResponse>>();
+var logger = LoggerFactory.Create(builder => builder.AddConsole())
+    .CreateLogger<ProtobufSocketClient<MyRequest, MyResponse>>();
 var client = new ProtobufSocketClient<MyRequest, MyResponse>("127.0.0.1", 8080, logger);
 
-If you prefer to run protoc directly:
-// Send a request and get response
 var request = new MyRequest { Data = "Hello Server" };
 var response = client.SendMessage(request);
 
-```powershell
-# Navigate to the proto definitions folder
-cd Exports\BotCommLayer\Models\ProtoDef
 Console.WriteLine($"Server responded: {response.Message}");
-
-# Generate all proto files
-protoc --csharp_out=.. --proto_path=. communication.proto database.proto game.proto pathfinding.proto
-// Clean up
 client.Close();
 ```
 
-### Proto File Dependencies
-### Working with Game Objects
+**ProtobufAsyncSocketServer**
 
-The proto files have the following import dependencies:
+Asynchronous server implementation for high-throughput scenarios:
+
 ```csharp
-using Communication;
+var server = new ProtobufAsyncSocketServer<AsyncRequest, StateChangeResponse>(port: 5001);
+server.OnMessageReceived += async (request) =>
+{
+    // Process async request
+    return new StateChangeResponse { Response = ResponseResult.Success };
+};
+await server.StartAsync();
+```
+
+### Data Models
+
+#### Game Object Models (Models/Game.cs)
+
+Comprehensive protobuf definitions for World of Warcraft entities:
+
+| Model | Description |
+|-------|-------------|
+| **WoWObject** | Base game object with position, GUID, map/zone information |
+| **WoWGameObject** | Extended objects with state and faction data |
+| **WoWUnit** | Living entities with health, mana, stats, auras, and combat properties |
+| **WoWPlayer** | Player characters with inventory, skills, quests, and progression data |
+| **WoWItem** | Items with durability, enchantments, and properties |
+| **WoWContainer** | Bags and containers with slot management |
+| **Position** | 3D coordinates for world positioning |
+
+Example usage:
+
+```csharp
 using Game;
 
 // Create a player snapshot
@@ -183,6 +170,27 @@ var player = new WoWPlayer
     PlayerXP = 15420,
     Coinage = 50000
 };
+```
+
+#### Communication Models (Models/Communication.cs)
+
+Messaging infrastructure for bot coordination:
+
+| Model | Description |
+|-------|-------------|
+| **AsyncRequest** | Asynchronous message wrapper with request IDs |
+| **ActionMessage** | Bot action definitions with parameters and results |
+| **ActivitySnapshot** | Complete game state snapshot with player and environment data |
+| **StateChangeRequest/Response** | Character personality and behavior modifications |
+| **CharacterDefinition** | AI personality traits using Big Five model (Openness, Conscientiousness, etc.) |
+| **ActionType** | Enum with 56 predefined action types |
+
+Action types include movement (GOTO, START_MELEE_ATTACK), interaction (INTERACT_WITH, ACCEPT_QUEST), combat (CAST_SPELL, USE_ITEM), social (SEND_GROUP_INVITE, ACCEPT_TRADE), and system (LOGIN, LOGOUT, CREATE_CHARACTER).
+
+Example usage:
+
+```csharp
+using Communication;
 
 // Create an activity snapshot
 var snapshot = new ActivitySnapshot
@@ -196,16 +204,6 @@ var snapshot = new ActivitySnapshot
         ActionResult = ResponseResult.Success
     }
 };
-```
-communication.proto ? imports game.proto
-pathfinding.proto  ? imports game.proto
-database.proto     ? standalone
-game.proto         ? standalone
-
-### Implementing Bot Actions
-
-```csharp
-using Communication;
 
 // Define a bot action
 var moveAction = new ActionMessage
@@ -217,50 +215,131 @@ var moveAction = new ActionMessage
         new RequestParameter { FloatParam = 20.0f }   // Z coordinate
     }
 };
-
-// Create an async request
-var asyncRequest = new AsyncRequest
-{
-    Id = 12345,
-    ActivitySnapshot = snapshot
-};
 ```
 
-**Build order** (if generating one at a time):
+#### Character Personality Traits
+
+Based on the Big Five personality model:
+
+| Trait | Description | Range |
+|-------|-------------|-------|
+| **Openness** | Creativity and curiosity | 0.0-1.0 |
+| **Conscientiousness** | Organization and discipline | 0.0-1.0 |
+| **Extraversion** | Social energy and assertiveness | 0.0-1.0 |
+| **Agreeableness** | Cooperation and trust | 0.0-1.0 |
+| **Neuroticism** | Emotional stability | 0.0-1.0 |
+
+#### Pathfinding Models (Models/Pathfinding.cs)
+
+Navigation and physics:
+
+| Model | Description |
+|-------|-------------|
+| **PathfindingRequest/Response** | Main request/response wrapper |
+| **CalculatePathRequest/Response** | A* pathfinding |
+| **LineOfSightRequest/Response** | Line-of-sight checks |
+| **PhysicsInput/Output** | Client physics simulation state |
+
+#### Database Models (Models/Database.cs)
+
+Game database access including area triggers, creature spawns, NPC AI data, battleground templates, and many more game data types.
+
+## Protobuf Code Generation
+
+### Prerequisites
+
+Install the Protobuf compiler (`protoc`):
+
+- **Windows**: Download from [GitHub Releases](https://github.com/protocolbuffers/protobuf/releases) and add to PATH
+- **Chocolatey**: `choco install protoc`
+- **Scoop**: `scoop install protobuf`
+
+### Regenerating C# Files
+
+When you modify any `.proto` file in `Models/ProtoDef/`, regenerate the C# code using the provided batch script.
+
+From the repository root directory:
+
+```powershell
+.\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat .\ .\.. "C:\path\to\protoc.exe"
+```
+
+Example with VS Code's protoc:
+
+```powershell
+.\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat .\ .\.. "C:\Microsoft VS Code\bin\protoc.exe"
+```
+
+### Batch Script Parameters
+
+| Parameter | Purpose | Default |
+|-----------|---------|---------|
+| `%1` | Path to `.proto` files (relative to script location) | `.` (current directory) |
+| `%2` | Output directory for generated C# files | `..` (parent directory) |
+| `%3` | Path to `protoc.exe` | `C:\protoc\bin\protoc.exe` |
+
+### Manual Generation (Alternative)
+
+If you prefer to run protoc directly:
+
+```powershell
+# Navigate to the proto definitions folder
+cd Exports\BotCommLayer\Models\ProtoDef
+
+# Generate all proto files
+protoc --csharp_out=.. --proto_path=. communication.proto database.proto game.proto pathfinding.proto
+```
+
+### Proto File Dependencies
+
+The proto files have the following import dependencies:
+
+```
+communication.proto → imports game.proto
+pathfinding.proto  → imports game.proto
+database.proto     → standalone
+game.proto         → standalone
+```
+
+Build order (if generating one at a time):
 1. `game.proto` (base types)
 2. `database.proto` (independent)
 3. `communication.proto` (depends on game)
 4. `pathfinding.proto` (depends on game)
-## Configuration
 
-## Message Categories
-### Project Dependencies
+### Proto3 Syntax Reference
 
-### Game Messages (`game.proto` ? `Game.cs`)
-The library requires the following NuGet packages:
+```protobuf
+syntax = "proto3";
 
-Core game object representations:
-- `Position` - 3D coordinates (X, Y, Z)
-- `WoWObject` - Base game object with GUID, position, facing
-- `WoWGameObject` - Game objects (chests, doors, etc.)
-- `WoWUnit` - NPCs and creatures with health, auras, flags
-- `WoWPlayer` - Player characters with inventory, quests, skills
-- `WoWItem` - Items with enchantments, durability
-- `WoWContainer` - Bags with item slots
-```xml
-<PackageReference Include="Google.Protobuf" Version="3.27.3" />
-<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
-<PackageReference Include="System.Reactive" Version="6.0.1" />
+package mypackage;
+option csharp_namespace = "MyNamespace";  // Optional: override C# namespace
+
+import "game.proto";  // Import other proto files
+
+message MyMessage {
+    string name = 1;           // Required field number
+    uint32 id = 2;
+    repeated Position path = 3; // List/array
+    map<string, int32> data = 4; // Dictionary
+
+    oneof payload {            // Union type
+        TypeA a = 10;
+        TypeB b = 11;
+    }
+}
+
+enum MyEnum {
+    UNKNOWN = 0;  // First enum value must be 0
+    VALUE_A = 1;
+    VALUE_B = 2;
+}
 ```
 
-### Pathfinding Messages (`pathfinding.proto` ? `Pathfinding.cs`)
+## Configuration
+
 ### Network Configuration
 
-Navigation and physics:
-- `PathfindingRequest` / `PathfindingResponse` - Main request/response wrapper
-- `CalculatePathRequest` / `CalculatePathResponse` - A* pathfinding
-- `LineOfSightRequest` / `LineOfSightResponse` - LoS checks
-- `PhysicsInput` / `PhysicsOutput` - Client physics simulation state
 Default socket settings can be customized:
 
 ```csharp
@@ -275,86 +354,63 @@ var server = new ProtobufSocketServer<TRequest, TResponse>("0.0.0.0", 8080, logg
 // Uses ThreadPool for client handling
 ```
 
-## Protocol Buffer Schema
+### Thread Safety
 
-The communication protocol defines several key message types:
-
-### Action Types
-Over 50 predefined action types including:
-- Movement: `GOTO`, `START_MELEE_ATTACK`, `STOP_ATTACK`
-- Interaction: `INTERACT_WITH`, `SELECT_GOSSIP`, `ACCEPT_QUEST`
-- Combat: `CAST_SPELL`, `USE_ITEM`, `STOP_CAST`
-- Social: `SEND_GROUP_INVITE`, `ACCEPT_TRADE`, `OFFER_ITEM`
-- System: `LOGIN`, `LOGOUT`, `CREATE_CHARACTER`
-
-### Communication Messages (`communication.proto` ? `Communication.cs`)
-### Character Personality Traits
-Based on the Big Five personality model:
-- **Openness**: Creativity and curiosity (0.0-1.0)
-- **Conscientiousness**: Organization and discipline (0.0-1.0)
-- **Extraversion**: Social energy and assertiveness (0.0-1.0)
-- **Agreeableness**: Cooperation and trust (0.0-1.0)
-- **Neuroticism**: Emotional stability (0.0-1.0)
-
-Bot coordination and actions:
-- `AsyncRequest` - Async message wrapper
-- `ActionMessage` / `ActionType` - Game action definitions (56 action types)
-- `StateChangeRequest` / `StateChangeResponse` - Bot state mutations
-- `ActivitySnapshot` - Complete bot state snapshot for AI decisions
-- `CharacterDefinition` - Bot personality traits (Big Five model)
-## Thread Safety
-
-### Database Messages (`database.proto` ? `Database.cs`)
 All communication classes implement thread-safe operations:
 
-Game database access:
-- `DatabaseRequest` / `DatabaseResponse` - Generic DB queries
-- `AreaTrigger*` - Area trigger definitions
-- `Creature*` - NPC spawn and AI data
-- `BattlegroundTemplate` - PvP battleground config
-- And many more game data types...
 - **ProtobufSocketClient**: Uses object-level locking for `SendMessage()` operations
 - **ProtobufSocketServer**: Handles multiple clients concurrently using ThreadPool
 - **Message Serialization**: Protocol Buffers provides thread-safe serialization
 
-## Usage Examples
 ## Error Handling
 
-### Socket Server (Service Side)
 The library provides comprehensive error handling:
 
 ```csharp
-using BotCommLayer;
-using Pathfinding;
-
-// Create and start server
-var server = new ProtobufSocketServer<PathfindingRequest, PathfindingResponse>(port: 5000);
-server.OnMessageReceived += (request) =>
 try
 {
-    // Handle request and return response
-    return new PathfindingResponse
     var response = client.SendMessage(request);
     // Handle successful response
 }
 catch (IOException ex)
 {
-        Path = new CalculatePathResponse
     // Handle network errors
     logger.LogError($"Network error: {ex.Message}");
 }
 catch (Exception ex)
 {
-            Corners = { /* path points */ }
     // Handle other errors
     logger.LogError($"Unexpected error: {ex.Message}");
 }
-    };
-};
-server.Start();
 ```
 
-### Socket Client (Consumer Side)
+### Common Issues
+
+**Connection Refused**
+- Verify server is listening on correct IP/port
+- Check firewall settings
+- Ensure network connectivity
+
+**Serialization Errors**
+- Verify protobuf message compatibility
+- Check for null required fields
+- Validate message size limits
+
+**Threading Issues**
+- Use proper locking when sharing clients
+- Dispose connections properly
+- Handle concurrent access patterns
+
+### Debug Logging
+
+Enable detailed logging for troubleshooting:
+
+```csharp
+var loggerFactory = LoggerFactory.Create(builder =>
+    builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
+var logger = loggerFactory.CreateLogger<ProtobufSocketClient<TRequest, TResponse>>();
+```
+
 ## Performance Considerations
 
 - **Binary Serialization**: Protocol Buffers provide efficient binary encoding
@@ -362,15 +418,48 @@ server.Start();
 - **Memory Management**: Automatic buffer management with proper disposal patterns
 - **Concurrent Processing**: Server handles multiple clients simultaneously
 
-## Integration with BloogBot Services
+## Dependencies
 
-BotCommLayer integrates with various BloogBot components:
+| Package | Version | Purpose |
+|---------|---------|---------|
+| Google.Protobuf | 3.27.3 | Protobuf runtime serialization |
+| Microsoft.Extensions.Hosting.Abstractions | 8.0.0 | Hosting integration |
+| System.Reactive | 6.0.1 | Reactive extensions for event streams |
+
+## Project References
+
+BotCommLayer integrates with various WWoW components:
 
 - **PromptHandlingService**: AI command processing and natural language understanding
 - **StateManager**: Bot state synchronization and behavior coordination
 - **PathfindingService**: Navigation data exchange
 - **DecisionEngineService**: High-level decision making coordination
 - **UI Components**: Real-time bot monitoring and control
+
+## Testing
+
+Unit testing with the communication layer:
+
+```csharp
+using BotCommLayer;
+using Communication;
+
+[Test]
+public void TestMessageSerialization()
+{
+    var original = new ActionMessage
+    {
+        ActionType = ActionType.CastSpell,
+        ActionResult = ResponseResult.Success
+    };
+
+    var bytes = original.ToByteArray();
+    var deserialized = ActionMessage.Parser.ParseFrom(bytes);
+
+    Assert.AreEqual(original.ActionType, deserialized.ActionType);
+    Assert.AreEqual(original.ActionResult, deserialized.ActionResult);
+}
+```
 
 ## Development and Extension
 
@@ -386,6 +475,7 @@ BotCommLayer integrates with various BloogBot components:
 ```csharp
 using BotCommLayer;
 using Pathfinding;
+
 public class CustomBotServer : ProtobufSocketServer<BotRequest, BotResponse>
 {
     private readonly IBotService _botService;
@@ -396,127 +486,22 @@ public class CustomBotServer : ProtobufSocketServer<BotRequest, BotResponse>
         _botService = botService;
     }
 
-// Create client and send request
-var client = new ProtobufSocketClient<PathfindingRequest, PathfindingResponse>("localhost", 5000);
-var response = await client.SendAsync(new PathfindingRequest
     protected override BotResponse HandleRequest(BotRequest request)
     {
-    Path = new CalculatePathRequest
         return request.RequestType switch
         {
-        MapId = 0,
-        Start = new Game.Position { X = 0, Y = 0, Z = 0 },
-        End = new Game.Position { X = 100, Y = 100, Z = 0 }
             BotRequestType.GetStatus => _botService.GetStatus(),
             BotRequestType.ExecuteAction => _botService.ExecuteAction(request.Action),
             _ => new BotResponse { Success = false, Error = "Unknown request type" }
         };
     }
 }
-});
 ```
 
-### Async Server
-## Testing
-
-Unit testing with the communication layer:
-
-```csharp
-using BotCommLayer;
-using Communication;
-
-var server = new ProtobufAsyncSocketServer<AsyncRequest, StateChangeResponse>(port: 5001);
-server.OnMessageReceived += async (request) =>
-[Test]
-public void TestMessageSerialization()
-{
-    var original = new ActionMessage
-    {
-    // Process async request
-    return new StateChangeResponse { Response = ResponseResult.Success };
-        ActionType = ActionType.CastSpell,
-        ActionResult = ResponseResult.Success
-    };
-await server.StartAsync();
-
-    var bytes = original.ToByteArray();
-    var deserialized = ActionMessage.Parser.ParseFrom(bytes);
-
-    Assert.AreEqual(original.ActionType, deserialized.ActionType);
-    Assert.AreEqual(original.ActionResult, deserialized.ActionResult);
-}
-```
-
-## Dependencies
-## Troubleshooting
-
-### Common Issues
-
-**Connection Refused**
-- Verify server is listening on correct IP/port
-- Check firewall settings
-- Ensure network connectivity
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| Google.Protobuf | 3.27.3 | Protobuf runtime serialization |
-| Microsoft.Extensions.Hosting.Abstractions | 8.0.0 | Hosting integration |
-| System.Reactive | 6.0.1 | Reactive extensions for event streams |
-**Serialization Errors**
-- Verify protobuf message compatibility
-- Check for null required fields
-- Validate message size limits
-
-## Adding New Messages
-**Threading Issues**
-- Use proper locking when sharing clients
-- Dispose connections properly
-- Handle concurrent access patterns
-
-1. **Create/modify `.proto` file** in `Models/ProtoDef/`
-2. **Regenerate C# code** using the protoc command above
-3. **Update consumers** to use the new message types
-4. **Build solution** to verify compilation
-### Debug Logging
-
-### Proto3 Syntax Reference
-Enable detailed logging for troubleshooting:
-
-```protobuf
-syntax = "proto3";
-```csharp
-var loggerFactory = LoggerFactory.Create(builder =>
-    builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
-var logger = loggerFactory.CreateLogger<ProtobufSocketClient<TRequest, TResponse>>();
-```
-
-package mypackage;
-option csharp_namespace = "MyNamespace";  // Optional: override C# namespace
-## License
-
-import "game.proto";  // Import other proto files
-This project is part of the BloogBot ecosystem and follows the same licensing terms as the main project.
-
-message MyMessage {
-    string name = 1;           // Required field number
-    uint32 id = 2;
-    repeated Position path = 3; // List/array
-    map<string, int32> data = 4; // Dictionary
 ## Contributing
 
-    oneof payload {            // Union type
-        TypeA a = 10;
-        TypeB b = 11;
-    }
-}
 When contributing to BotCommLayer:
 
-enum MyEnum {
-    UNKNOWN = 0;  // First enum value must be 0
-    VALUE_A = 1;
-    VALUE_B = 2;
-}
-```
 1. Maintain protocol buffer schema compatibility
 2. Follow thread-safety patterns established in existing code
 3. Add comprehensive logging for debugging
@@ -524,9 +509,11 @@ enum MyEnum {
 5. Update documentation for new communication patterns
 
 ## Related Documentation
----
 
 - [Protocol Buffers Language Guide](https://protobuf.dev/programming-guides/proto3/)
 - [C# Generated Code Guide](https://protobuf.dev/reference/csharp/csharp-generated/)
 - See `ARCHITECTURE.md` for system-wide communication patterns
-BotCommLayer provides the essential communication infrastructure that enables BloogBot's distributed architecture, allowing seamless integration between AI services, game interfaces, and management tools.
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

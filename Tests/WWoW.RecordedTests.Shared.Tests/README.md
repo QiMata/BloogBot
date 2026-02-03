@@ -242,3 +242,7 @@ When adding new functionality to WWoW.RecordedTests.Shared:
 - [ ] Implement code coverage reporting
 - [ ] Add mutation testing for test quality validation
 - [ ] Create test data builders for complex scenarios
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

@@ -23,9 +23,56 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
         _logger = logger;
 
         Directory.CreateDirectory(_rootDirectory);
-    }
+        }
 
-    public Task<string> UploadArtifactAsync(
+        public async Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(context);
+
+            var sanitizedTestName = SanitizeFileName(context.TestName);
+            var timestampFolder = context.CompletedAt.ToString("yyyyMMdd_HHmmss");
+            var testDirectory = Path.Combine(_rootDirectory, sanitizedTestName, timestampFolder);
+
+            Directory.CreateDirectory(testDirectory);
+
+            _logger?.Info($"Storing test artifacts for '{context.TestName}' in {testDirectory}");
+
+            // Copy test run directory contents if specified
+            if (!string.IsNullOrWhiteSpace(context.TestRunDirectory) && Directory.Exists(context.TestRunDirectory))
+            {
+                foreach (var file in Directory.GetFiles(context.TestRunDirectory))
+                {
+                    var destPath = Path.Combine(testDirectory, Path.GetFileName(file));
+                    File.Copy(file, destPath, overwrite: true);
+                }
+            }
+
+            // Copy recording artifact if present
+            if (context.RecordingArtifact is not null && File.Exists(context.RecordingArtifact.FullPath))
+            {
+                var destPath = Path.Combine(testDirectory, context.RecordingArtifact.Name);
+                File.Copy(context.RecordingArtifact.FullPath, destPath, overwrite: true);
+            }
+
+            // Write metadata
+            var metadataPath = Path.Combine(testDirectory, "metadata.json");
+            var metadata = new Dictionary<string, object?>
+            {
+                ["testName"] = context.TestName,
+                ["automationRunId"] = context.AutomationRunId,
+                ["success"] = context.Success,
+                ["message"] = context.Message,
+                ["startedAt"] = context.StartedAt,
+                ["completedAt"] = context.CompletedAt
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(metadata, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(metadataPath, json, cancellationToken);
+
+            _logger?.Info($"Test artifacts stored successfully");
+        }
+
+        public Task<string> UploadArtifactAsync(
         TestArtifact artifact,
         string testName,
         DateTimeOffset timestamp,

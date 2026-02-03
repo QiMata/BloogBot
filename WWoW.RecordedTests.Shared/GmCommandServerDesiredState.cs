@@ -68,13 +68,30 @@ public sealed class GmCommandServerDesiredState : IServerDesiredState
             resolvedCommands.Add((text, description));
         }
 
-        var visitor = new GmCommandSequenceVisitor(Name, resolvedCommands, _logger);
-        var executed = await gmRunner.AcceptVisitorAsync(visitor, cancellationToken).ConfigureAwait(false);
-
-        if (!executed)
+        // Check if the runner supports GM commands directly
+        if (gmRunner is IGmCommandHost gmHost)
+        {
+            foreach (var (command, description) in resolvedCommands)
+            {
+                _logger.Info($"[DesiredState:{Name}] Executing GM command {description}");
+                var result = await gmHost.ExecuteGmCommandAsync(command, cancellationToken).ConfigureAwait(false);
+                if (!result.Success)
+                {
+                    throw new InvalidOperationException($"GM command '{command}' failed while applying desired state '{Name}': {result.ErrorMessage}");
+                }
+            }
+        }
+        else
         {
             throw new InvalidOperationException("GM runner must support GM command execution to use this desired state.");
         }
+    }
+
+    public Task RevertAsync(IBotRunner runner, IRecordedTestContext context, CancellationToken cancellationToken)
+    {
+        // GM commands typically don't have automatic revert logic
+        // Subclasses can override if they need specific revert behavior
+        return Task.CompletedTask;
     }
 
     public sealed class GmCommandStep
@@ -99,43 +116,9 @@ public sealed class GmCommandServerDesiredState : IServerDesiredState
         public string? Description { get; }
 
         public string Resolve(IRecordedTestContext context)
-        {
-            ArgumentNullException.ThrowIfNull(context);
-            return _commandFactory(context);
-        }
-    }
-
-    private sealed class GmCommandSequenceVisitor : IGmCommandRunnerVisitor<bool>
-    {
-        private readonly string _stateName;
-        private readonly IReadOnlyList<(string Command, string Description)> _commands;
-        private readonly ITestLogger _logger;
-
-        public GmCommandSequenceVisitor(string stateName, IReadOnlyList<(string Command, string Description)> commands, ITestLogger logger)
-        {
-            _stateName = stateName;
-            _commands = commands;
-            _logger = logger;
-        }
-
-        public async Task<bool> VisitAsync(IGmCommandHost runner, CancellationToken cancellationToken)
-        {
-            foreach (var (command, description) in _commands)
-            {
-                _logger.Info($"[DesiredState:{_stateName}] Executing GM command {description}");
-                var result = await runner.ExecuteGmCommandAsync(command, cancellationToken).ConfigureAwait(false);
-                if (!result.Success)
                 {
-                    throw new InvalidOperationException($"GM command '{command}' failed while applying desired state '{_stateName}': {result.ErrorMessage}");
+                    ArgumentNullException.ThrowIfNull(context);
+                    return _commandFactory(context);
                 }
             }
-
-            return true;
         }
-
-        public Task<bool> VisitAsync(IBotRunner runner, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(false);
-        }
-    }
-}

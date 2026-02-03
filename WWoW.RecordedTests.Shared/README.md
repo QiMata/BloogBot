@@ -189,3 +189,7 @@ When promoting a recorded test to automation, make sure to:
 - [`RECORDED_TEST_IDEAS.md`](./RECORDED_TEST_IDEAS.md) captures scenario ideas that can be scripted with this library.
 - Browse the `Services/*BotRunner` projects for concrete bot runner implementations that plug into the orchestrator.
 - Review the repository root `README.md` for an overview of the larger WWoW simulation platform.
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

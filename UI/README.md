@@ -1,10 +1,10 @@
-# BloogBot UI Layer
+# WWoW UI Layer
 
-A comprehensive suite of user interface components and orchestration tools for the BloogBot World of Warcraft automation ecosystem. The UI layer provides desktop management interfaces, containerized development environments, and shared service infrastructure for monitoring and controlling bot operations. Review the root [Documentation Map](../README.md#documentation-map) for context on how these UI pieces pair with services, exports, and recorded testing utilities.
+A comprehensive suite of user interface components and orchestration tools for the WWoW World of Warcraft automation ecosystem. The UI layer provides desktop management interfaces, containerized development environments, and shared service infrastructure for monitoring and controlling bot operations. Review the root [Documentation Map](../README.md#documentation-map) for context on how these UI pieces pair with services, exports, and recorded testing utilities.
 
 ## Overview
 
-The BloogBot UI layer consists of three primary components that work together to provide complete user interaction, development infrastructure, and operational management capabilities:
+The WWoW UI layer consists of three primary components that work together to provide complete user interaction, development infrastructure, and operational management capabilities:
 
 ### [StateManagerUI](StateManagerUI/README.md) - Desktop Control Center
 **Technology**: WPF (.NET 8) Desktop Application  
@@ -99,7 +99,7 @@ dotnet run
 
 ### 3. Service Configuration
 ```csharp
-// Add to any BloogBot service
+// Add to any WWoW service
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults(); // Adds telemetry, resilience, discovery
 ```
@@ -121,7 +121,7 @@ builder.AddServiceDefaults(); // Adds telemetry, resilience, discovery
 5. **Monitor Services** using built-in observability features
 
 ### DevOps Workflow
-1. **Use ServiceDefaults** in all BloogBot services for consistency
+1. **Use ServiceDefaults** in all WWoW services for consistency
 2. **Monitor Health Endpoints** for service status (/health, /alive)
 3. **Collect Telemetry** through OpenTelemetry standardization
 4. **Implement Resilience** with automatic retry and circuit breaker patterns
@@ -294,7 +294,7 @@ curl http://localhost:5000/alive
 5. **Security**: Follow container security best practices
 
 ### Service Integration
-1. **Add ServiceDefaults**: Include in all new BloogBot services
+1. **Add ServiceDefaults**: Include in all new WWoW services
 2. **Health Endpoints**: Implement comprehensive health checks
 3. **Telemetry**: Use structured logging with proper categorization
 4. **Resilience**: Implement retry policies for external dependencies
@@ -327,9 +327,9 @@ docker-compose -f test-compose.yml up
 
 ## Related Documentation
 
-### Core BloogBot Ecosystem
+### Core WWoW Ecosystem
 - **[Services Layer](../Services/README.md)**: Backend automation services
-- **[BloogBot.AI](../BloogBot.AI/README.md)**: AI behavior coordination
+- **[WWoW.AI](../BloogBot.AI/README.md)**: AI behavior coordination
 - **[Exports Layer](../Exports/README.md)**: Shared libraries and communication
 
 ### External Dependencies
@@ -354,8 +354,8 @@ docker-compose -f test-compose.yml up
 
 ## License
 
-This project is part of the BloogBot ecosystem. Please refer to the main project license for usage terms.
+This project is part of the WWoW ecosystem. Please refer to the main project license for usage terms.
 
 ---
 
-*The BloogBot UI layer provides comprehensive user interfaces and development infrastructure for the World of Warcraft automation ecosystem, combining desktop management tools with containerized development environments and shared service configuration patterns.*
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

@@ -7,6 +7,13 @@ namespace WWoW.RecordedTests.Shared.Abstractions.I;
 public interface IRecordedTestStorage : IDisposable
 {
     /// <summary>
+    /// Stores all artifacts from a test run to the storage backend.
+    /// </summary>
+    /// <param name="context">The storage context containing test artifacts and metadata.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Uploads a test artifact to the storage backend.
     /// </summary>
     /// <param name="artifact">The artifact to upload.</param>

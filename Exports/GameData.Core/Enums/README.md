@@ -241,3 +241,7 @@ When adding new enums or modifying existing ones:
 4. Include `[Flags]` attribute for bitwise enums
 5. Add `[Description]` attributes where user-friendly names are needed
 6. Maintain alphabetical organization within categories
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

@@ -1094,3 +1094,7 @@ public async Task AgentFactory_ShouldCreateAllAgents()
 3. **Use cancellation tokens** - Support cancellation for long-running operations
 4. **Implement retry logic** - Handle transient network errors gracefully
 5. **Create reactive chains** - Build complex workflows using observable composition
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

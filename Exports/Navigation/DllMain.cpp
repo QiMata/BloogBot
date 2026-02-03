@@ -18,6 +18,8 @@
 // Global instances
 static bool g_initialized = false;
 static std::mutex g_initMutex;
+static std::unique_ptr<MapLoader> g_mapLoader;
+static VMAP::VMapManager2* g_vmapManager = nullptr;
 
 void InitializeAllSystems()
 {

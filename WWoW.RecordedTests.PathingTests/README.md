@@ -318,4 +318,8 @@ When adding new tests:
 
 ## License
 
-Same as parent BloogBot project.
+Same as parent WWoW project.
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

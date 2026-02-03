@@ -163,3 +163,7 @@ Tests/
    - Place unit tests in the root of test projects
    - Place integration tests in `Integration/` folder
    - Use descriptive test names: `MethodName_Scenario_ExpectedResult`
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

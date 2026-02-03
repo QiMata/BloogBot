@@ -91,19 +91,9 @@ internal sealed class ScriptedBotRunner : IBotRunner, IGmCommandHost
         _log.Info($"[{_role}] GM Command: {command}");
         _gmCommands.Add(command);
         return Task.FromResult(GmCommandExecutionResult.Succeeded);
-    }
-
-    async Task<TResult> IBotRunner.AcceptVisitorAsync<TResult>(IBotRunnerVisitor<TResult> visitor, CancellationToken cancellationToken)
-    {
-        if (visitor is IGmCommandRunnerVisitor<TResult> gmVisitor)
-        {
-            return await gmVisitor.VisitAsync(this, cancellationToken).ConfigureAwait(false);
         }
 
-        return await visitor.VisitAsync(this, cancellationToken).ConfigureAwait(false);
-    }
-
-    public ValueTask DisposeAsync()
+        public ValueTask DisposeAsync()
     {
         _disposed = true;
         return ValueTask.CompletedTask;

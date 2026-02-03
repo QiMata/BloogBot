@@ -1,157 +1,191 @@
 # BackgroundBotRunner
 
-Background worker service that executes bot logic using the WoWSharpClient network implementation. Runs as a standalone service without requiring the game client, communicating purely via network protocols.
-A .NET 8 Worker Service that provides background execution of World of Warcraft bot automation through the BloogBot ecosystem. This service orchestrates bot behavior, pathfinding, character state management, and AI-driven decision making in a background service architecture.
+A .NET 8 Worker Service that provides background execution of bot automation through the WWoW ecosystem using pure network protocol implementation.
 
 ## Overview
 
-BackgroundBotRunner is a .NET Worker Service that:
-- **Runs Headless**: No game client required
-- **Uses Network Protocol**: Pure network-based game interaction via WoWSharpClient
-- **Integrates AI**: Connects to PromptHandlingService for decision making
-- **Scales Horizontally**: Run multiple instances for multiple characters
-BackgroundBotRunner is designed as a library project that encapsulates bot automation logic within a `BackgroundService` implementation. It integrates multiple BloogBot components to provide autonomous character control with intelligent behavior trees, pathfinding, and state synchronization.
+BackgroundBotRunner is a headless worker service that executes bot logic without requiring the game client to be running. It operates entirely through network protocols via WoWSharpClient, making it ideal for server-side automation, multi-boxing scenarios, and automated testing environments.
+
+The service integrates with multiple WWoW components to provide autonomous character control with intelligent behavior trees, pathfinding, state synchronization, and AI-driven decision making. Unlike ForegroundBotRunner which injects into the game process, BackgroundBotRunner runs as a standalone service and scales horizontally - you can run multiple instances to control multiple characters simultaneously.
+
+Key capabilities include AI integration through PromptHandlingService for intelligent decision making, coordination with PathfindingService for navigation, real-time state management through StateManager, and pure C# WoW network protocol implementation for game communication.
 
 ## Architecture
-### Key Features
 
-- **Background Service Architecture**: Built on .NET 8 Worker Service framework for reliable background execution
-- **AI Integration**: Supports Ollama AI models for intelligent decision making
-- **Multi-Service Coordination**: Integrates with PathfindingService, StateManager, and character state listeners
-- **WoW Network Protocol**: Pure C# implementation through WoWSharpClient for game communication
-- **Behavior Trees**: Advanced decision-making system for complex bot behaviors
-- **Real-time State Management**: Continuous character state updates and synchronization
+```
++------------------------------------------------------------------+
+|                     BackgroundBotRunner                           |
++------------------------------------------------------------------+
+|                                                                   |
+|  +-----------------------------------------------------------+   |
+|  |         BackgroundBotWorker (BackgroundService)           |   |
+|  |              Main service execution loop                  |   |
+|  +-----------------------------------------------------------+   |
+|                              |                                    |
+|         +--------------------+--------------------+               |
+|         |                    |                    |               |
+|  +--------------+    +----------------+    +---------------+     |
+|  | BotRunner    |    | WoWClient      |    | Prompt        |     |
+|  | Service      |    | (Network)      |    | Runner        |     |
+|  |              |    |                |    | (AI)          |     |
+|  | - Behavior   |    | - Auth/Login   |    | - Decision    |     |
+|  | - State      |    | - World Comms  |    | - Context     |     |
+|  | - Actions    |    | - Protocol     |    |               |     |
+|  +--------------+    +----------------+    +---------------+     |
+|         |                    |                    |               |
+|  +-----------------------------------------------------------+   |
+|  |                    External Clients                        |   |
+|  |  +-----------------+    +--------------------------+       |   |
+|  |  | Pathfinding     |    | Character State Update   |       |   |
+|  |  | Client          |    | Client                   |       |   |
+|  |  +-----------------+    +--------------------------+       |   |
+|  +-----------------------------------------------------------+   |
+|                              |                                    |
+|                              v                                    |
+|                    +-------------------+                          |
+|                    | Game Server       |                          |
+|                    | (Network Protocol)|                          |
+|                    +-------------------+                          |
++------------------------------------------------------------------+
+```
 
 ## Project Structure
 
 ```
-BackgroundBotRunner/
-??? BackgroundBotWorker.cs    # Main background service
-??? BackgroundBotWorker.cs     # Main background service implementation
-??? BackgroundBotRunner.csproj # Project configuration
-??? README.md                  # This documentation
+Services/BackgroundBotRunner/
++-- BackgroundBotRunner.csproj  # .NET 8 Worker Service project
++-- BackgroundBotWorker.cs      # Main BackgroundService implementation
++-- README.md                   # This documentation
 ```
 
-## How It Works
-## Dependencies
+## Key Components
 
-```
-???????????????????????     ????????????????????
-? BackgroundBotRunner ???????   WoWSharpClient ?
-?   (Worker Service)  ?     ? (Network Client) ?
-???????????????????????     ????????????????????
-         ?                           ?
-         ?                           ?
-         ?                  ??????????????????
-         ?                  ?  Game Server   ?
-         ?                  ?  (1.12.1)      ?
-         ?                  ??????????????????
-         ?
-         ?
-???????????????????????
-?PromptHandlingService?
-?   (AI Decisions)    ?
-???????????????????????
-```
-### NuGet Packages
-- **Newtonsoft.Json (13.0.3)**: JSON serialization for configuration and communication
+### BackgroundBotWorker
 
-## Implementation
-### Project References
-- **BotRunner**: Core bot automation engine with behavior trees
-- **WoWSharpClient**: Pure C# WoW network protocol implementation
-- **PromptHandlingService**: AI prompt processing and response handling
-
-The `BackgroundBotWorker` inherits from `BackgroundService`:
-### External Services
-- **PathfindingService**: Advanced navigation and collision detection
-- **StateManager**: Multi-character state coordination
-- **Character State Listener**: Real-time character state updates
-- **Ollama AI Service**: Large language model integration for intelligent decisions
+The main `BackgroundService` that orchestrates all bot operations:
 
 ```csharp
 public class BackgroundBotWorker : BackgroundService
 {
-    private readonly ILogger<BackgroundBotWorker> _logger;
-    private readonly WoWClient _client;
-## Architecture
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Initialize clients
+        await InitializeServicesAsync();
+
         // Connect to game server
         await _client.ConnectAsync();
         await _client.LoginAsync(username, password);
         await _client.EnterWorldAsync(characterName);
-The BackgroundBotWorker orchestrates several key components:
 
-        // Main bot loop
+        // Main bot execution loop
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Process game state
             await ProcessGameTickAsync();
-```mermaid
-graph TD
-    A[BackgroundBotWorker] --> B[BotRunnerService]
-    A --> C[WoWClient]
-    A --> D[PathfindingClient]
-    A --> E[CharacterStateUpdateClient]
-    A --> F[PromptRunner]
-    
-            // Execute bot logic
             await ExecuteBotDecisionAsync();
-            
             await Task.Delay(100, stoppingToken);
         }
     }
 }
-    B --> G[WoWSharpObjectManager]
-    C --> H[Game Server]
-    D --> I[PathfindingService]
-    E --> J[StateManager]
-    F --> K[Ollama AI]
 ```
+
+### BotRunnerService
+
+Orchestrates bot behavior using behavior trees:
+- Quest execution and tracking
+- Combat management
+- Trading and economy interactions
+- Social interactions and chat
+- Integrates with pathfinding for intelligent movement
+
+### WoWSharpObjectManager
+
+Manages game object state and updates:
+- Game object tracking and lifecycle
+- Unit and player management
+- Interface to WoW game world
+- Real-time object enumeration
+
+### Client Integrations
+
+| Client | Purpose |
+|--------|---------|
+| **PathfindingClient** | Navigation and collision detection |
+| **CharacterStateUpdateClient** | Real-time state synchronization with StateManager |
+| **WoWClient** | Direct game server communication via network protocol |
+
+### AI Integration
+
+Uses PromptRunner to interface with Ollama AI models:
+- Intelligent decision making based on game state
+- Adaptive behavior patterns
+- Natural language command processing
+- Configurable model selection and endpoint management
+
+## Agent Factory
+
+Once connected to the realm and established a world session, the network client component factory provides a comprehensive catalog of agents for gameplay automation:
+
+| Category | Agents |
+|----------|--------|
+| **Combat** | TargetingAgent, AttackAgent, SpellCastingAgent |
+| **Progression** | QuestAgent, TrainerAgent, TalentAgent, ProfessionsAgent |
+| **Economy** | LootingAgent, VendorAgent, AuctionHouseAgent, BankAgent |
+| **Social** | ChatAgent, GuildAgent, PartyAgent, MailAgent |
+| **Travel & Utility** | FlightMasterAgent, GameObjectAgent, InventoryAgent, ItemUseAgent, EquipmentAgent, EmoteAgent |
+
+Each agent can be retrieved from the current `IAgentFactory` instance:
+
+```csharp
+var targetingAgent = agentFactory.TargetingAgent;
+var vendorAgent = agentFactory.VendorAgent;
+var lootingAgent = agentFactory.LootingAgent;
+```
+
+## Dependencies
+
+### NuGet Packages
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| Newtonsoft.Json | 13.0.3 | JSON serialization for configuration |
+
+### Project References
+
+- **BotRunner**: Core bot automation engine with behavior trees
+- **WoWSharpClient**: Pure C# WoW network protocol implementation
+- **PromptHandlingService**: AI prompt processing and response handling
+
+### External Services
+
+- **PathfindingService**: Advanced navigation and collision detection (port 5000)
+- **StateManager**: Multi-character state coordination (port 5001)
+- **Character State Listener**: Real-time character state updates (port 8081)
+- **Ollama AI Service**: Large language model integration for intelligent decisions
 
 ## Configuration
 
 Configure via `appsettings.json`:
-The service requires configuration for multiple endpoints and AI integration:
-
-### appsettings.json Example
 
 ```json
 {
-  "GameServer": {
-    "Host": "logon.server.com",
-    "AuthPort": 3724,
-    "WorldPort": 8085
   "Ollama": {
     "BaseUri": "http://localhost:11434",
     "Model": "llama2"
   },
   "PathfindingService": {
     "IpAddress": "127.0.0.1",
-    "Port": 8080
+    "Port": 5000
   },
-  "Account": {
-    "Username": "botaccount",
-    "Password": "password",
-    "Character": "BotChar"
   "CharacterStateListener": {
     "IpAddress": "127.0.0.1",
     "Port": 8081
   },
-  "Services": {
-    "PathfindingHost": "localhost",
-    "PathfindingPort": 5000,
-    "StateManagerHost": "localhost",
-    "StateManagerPort": 5001
   "RealmEndpoint": {
     "IpAddress": "127.0.0.1"
   }
 }
 ```
 
-## Dependencies
 ### Configuration Parameters
 
 | Section | Parameter | Description |
@@ -181,121 +215,48 @@ public void StartBackgroundBotWorker(string accountName)
         _configuration
     );
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| Newtonsoft.Json | 13.0.3 | Configuration parsing |
     var task = Task.Run(async () => await service.StartAsync(tokenSource.Token));
     _managedServices.Add(accountName, (service, tokenSource, task));
 }
 ```
 
-## Project References
 ### Standalone Usage
 
-- **BotRunner**: Behavior tree framework and pathfinding client
-- **WoWSharpClient**: Network game client implementation
-- **PromptHandlingService**: AI decision integration
-For development or testing, the service can be used independently:
+For development or testing:
 
-## Running as a Service
 ```csharp
 var configuration = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json")
     .Build();
 
-### Development
-var loggerFactory = LoggerFactory.Create(builder => 
+var loggerFactory = LoggerFactory.Create(builder =>
     builder.AddConsole());
 
-```bash
-dotnet run --project Services/BackgroundBotRunner
 var worker = new BackgroundBotWorker(loggerFactory, configuration);
 await worker.StartAsync(CancellationToken.None);
 ```
 
-### Production (Windows Service)
-### Agent Factory Reference
-
-Once the worker has connected to the realm and established a world session the network
-client component factory exposes a rich catalog of agents for gameplay automation. The
-most commonly used agents include:
-
-| Category | Agents |
-|----------|--------|
-| Combat | `TargetingAgent`, `AttackAgent`, `SpellCastingAgent` |
-| Progression | `QuestAgent`, `TrainerAgent`, `TalentAgent`, `ProfessionsAgent` |
-| Economy | `LootingAgent`, `VendorAgent`, `AuctionHouseAgent`, `BankAgent` |
-| Social | `ChatAgent`, `GuildAgent`, `PartyAgent`, `MailAgent` |
-| Travel & Utility | `FlightMasterAgent`, `GameObjectAgent`, `InventoryAgent`, `ItemUseAgent`, `EquipmentAgent`, `EmoteAgent` |
-
-Each agent can be retrieved from the current `IAgentFactory` instance exposed inside the
-worker loop, for example:
-
-```csharp
-var targetingAgent = agentFactory.TargetingAgent;
-var vendorAgent = agentFactory.VendorAgent;
-var lootingAgent = agentFactory.LootingAgent;
-```
-
-These agents mirror the commented examples that previously lived in the worker source and
-serve as a quick reference for future feature work.
-
 ### Service Lifecycle
 
-The BackgroundBotWorker follows the standard .NET hosted service lifecycle:
-
-1. **Initialization**: Clients and services are configured during construction
-2. **Startup**: `ExecuteAsync` is called when the service starts
-3. **Execution**: The bot runner operates continuously until cancellation
-4. **Shutdown**: Graceful shutdown when cancellation is requested
-
-## Core Components
-
-### BotRunnerService
-- Orchestrates bot behavior using behavior trees
-- Handles quest execution, combat, trading, and social interactions
-- Integrates with pathfinding for intelligent movement
-
-### WoWSharpObjectManager
-- Manages game object state and updates
-- Provides interface to WoW game world
-- Handles object tracking and lifecycle management
-
-### Client Integrations
-- **PathfindingClient**: Navigation and collision detection
-- **CharacterStateUpdateClient**: State synchronization
-- **WoWClient**: Direct game server communication
-
-### AI Integration
-- **PromptRunner**: Interfaces with Ollama AI models
-- Supports intelligent decision making and adaptive behavior
-- Configurable model selection and endpoint management
+1. **Initialization**: Clients and services configured during construction
+2. **Startup**: `ExecuteAsync` called when service starts
+3. **Execution**: Bot runner operates continuously until cancellation
+4. **Shutdown**: Graceful shutdown when cancellation requested
 
 ## Development
 
 ### Building the Project
 
 ```bash
-# Publish
-dotnet publish -c Release -o ./publish
 # Build the project
 dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj
 
-# Install as service
-sc create BackgroundBot binPath="C:\path\to\BackgroundBotRunner.exe"
-sc start BackgroundBot
-# Output location
-# Bot/Debug/net8.0/ (or Release)
+# Run in development
+dotnet run --project Services/BackgroundBotRunner
 ```
 
-### Docker
 ### Project Configuration
 
-```dockerfile
-FROM mcr.microsoft.com/dotnet/runtime:8.0
-WORKDIR /app
-COPY publish/ .
-ENTRYPOINT ["dotnet", "BackgroundBotRunner.dll"]
 The project is configured as a library (`OutputType=Library`) with:
 - **.NET 8** target framework
 - **Nullable reference types** enabled
@@ -305,7 +266,7 @@ The project is configured as a library (`OutputType=Library`) with:
 
 ### Testing
 
-While this project doesn't include direct unit tests, it integrates with:
+Integration with test projects:
 - **BotRunner.Tests**: Tests for core bot automation logic
 - **WoWSharpClient.Tests**: Tests for network protocol implementation
 - **PromptHandlingService.Tests**: Tests for AI integration
@@ -314,12 +275,12 @@ While this project doesn't include direct unit tests, it integrates with:
 
 ### Service Dependencies
 
-The BackgroundBotRunner coordinates with several ecosystem services:
-
-1. **PathfindingService**: Provides navigation meshes and pathfinding algorithms
-2. **StateManager**: Orchestrates multiple bot instances and character state
-3. **DecisionEngineService**: Advanced decision making and strategy planning
-4. **PromptHandlingService**: AI-driven behavior and response generation
+| Service | Purpose |
+|---------|---------|
+| **PathfindingService** | Navigation meshes and pathfinding algorithms |
+| **StateManager** | Multi-bot orchestration and character state |
+| **DecisionEngineService** | Advanced decision making and strategy planning |
+| **PromptHandlingService** | AI-driven behavior and response generation |
 
 ### Communication Protocols
 
@@ -330,13 +291,13 @@ The BackgroundBotRunner coordinates with several ecosystem services:
 
 ## Error Handling
 
-The service implements comprehensive error handling:
+Comprehensive error handling implementation:
 
 ```csharp
 try
 {
     _botRunner.Start();
-    
+
     while (!stoppingToken.IsCancellationRequested)
     {
         await Task.Delay(100, stoppingToken);
@@ -348,8 +309,8 @@ catch (Exception ex)
 }
 ```
 
-## Use Cases
 ### Common Error Scenarios
+
 - **Service Connectivity**: PathfindingService or StateManager unavailable
 - **Network Issues**: WoW server disconnections or timeouts
 - **AI Service Errors**: Ollama service unavailable or model loading issues
@@ -370,45 +331,33 @@ catch (Exception ex)
 
 ## Logging
 
-The service provides comprehensive logging through Microsoft.Extensions.Logging:
-
+Comprehensive logging through Microsoft.Extensions.Logging:
 - **Information**: Service startup, client initialization, state changes
 - **Error**: Exception details, connection failures, service errors
 - **Debug**: Detailed operation tracing (in debug builds)
 
-## Related Projects
+## Use Cases
 
-- **[BotRunner](../../Exports/BotRunner/README.md)**: Core automation engine
-- **[WoWSharpClient](../../Exports/WoWSharpClient/README.md)**: Network protocol implementation
-- **[StateManager](../StateManager/README.md)**: Multi-bot coordination service
-- **[PathfindingService](../PathfindingService/README.md)**: Navigation and pathfinding
-- **[PromptHandlingService](../PromptHandlingService/README.md)**: AI integration service
-
-## Contributing
-
-1. **Multi-boxing**: Run multiple characters without multiple game clients
-2. **Server-side Bots**: Run bots on a headless server
-3. **Testing**: Test bot logic without game client overhead
-4. **CI/CD**: Automated testing of bot behaviors
-1. Follow .NET 8 coding standards and conventions
-2. Maintain async/await patterns for network operations
-3. Add comprehensive error handling and logging
-4. Update configuration documentation for new parameters
-5. Ensure proper resource disposal and lifecycle management
+- **Multi-boxing**: Run multiple characters without multiple game clients
+- **Server-side Bots**: Run bots on a headless server
+- **Testing**: Test bot logic without game client overhead
+- **CI/CD**: Automated testing of bot behaviors
 
 ## Limitations
-## License
 
 - No visual feedback (headless operation)
 - Cannot interact with game UI directly
 - Movement is server-authoritative (no client prediction)
 - Some private servers may detect pure network clients
-This project is part of the BloogBot ecosystem. Please refer to the main project license for usage terms.
 
 ## Related Documentation
+
+- See [WoWSharpClient README](../../Exports/WoWSharpClient/README.md) for network client details
+- See [PromptHandlingService README](../PromptHandlingService/README.md) for AI integration
+- See [StateManager README](../StateManager/README.md) for multi-bot coordination
+- See [BotRunner README](../../Exports/BotRunner/README.md) for behavior tree framework
+- See `ARCHITECTURE.md` for system overview
+
 ---
 
-- See `Exports/WoWSharpClient/README.md` for network client details
-- See `Services/PromptHandlingService/README.md` for AI integration
-- See `ARCHITECTURE.md` for system overview
-*BackgroundBotRunner serves as the execution engine for autonomous WoW character control, providing a robust foundation for intelligent bot automation within the BloogBot ecosystem.*
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

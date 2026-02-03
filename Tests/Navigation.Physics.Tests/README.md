@@ -96,3 +96,7 @@ Use the helper classes:
 - `Exports/Navigation/CapsuleCollision.h` - Collision primitives
 - `Exports/Navigation/PhysicsThreePass.cpp` - Three-pass implementation
 - `ARCHITECTURE.md` - Overall system architecture
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

@@ -148,3 +148,7 @@ Test packets were captured on 2024-08-15 and represent actual server communicati
 
 - See `Exports/WoWSharpClient/README.md` for client implementation
 - See `Exports/BotCommLayer/README.md` for message definitions
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

@@ -2,7 +2,6 @@ using WWoW.RecordedTests.PathingTests.Context;
 using WWoW.RecordedTests.PathingTests.Models;
 using WWoW.RecordedTests.Shared;
 using WWoW.RecordedTests.Shared.Abstractions.I;
-using WWoW.RecordedTests.Shared.DesiredState;
 
 namespace WWoW.RecordedTests.PathingTests.Descriptions;
 
@@ -47,10 +46,11 @@ public class PathingRecordedTestDescription : DefaultRecordedWoWTestDescription
         IBotRunner foregroundRunner,
         ITestLogger logger)
     {
-        var desiredState = new GmCommandServerDesiredState(
-            testDefinition.SetupCommands,
-            testDefinition.TeardownCommands,
-            logger);
+        var desiredState = new Shared.DesiredState.GmCommandServerDesiredState(
+        $"PathingTest_{testDefinition.Name}",
+        testDefinition.SetupCommands,
+        testDefinition.TeardownCommands,
+        logger);
 
         // Wire up the GM command executor if the foreground runner implements it
         if (foregroundRunner is IGmCommandExecutor executor)

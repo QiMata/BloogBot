@@ -140,3 +140,7 @@ mockClient.Setup(c => c.GetCompletionAsync(It.IsAny<string>()))
 
 - See `Services/PromptHandlingService/README.md` for service details
 - See `Services/DecisionEngineService/README.md` for decision engine
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

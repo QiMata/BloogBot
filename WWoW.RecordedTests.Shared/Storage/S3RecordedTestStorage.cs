@@ -33,9 +33,16 @@ public sealed class S3RecordedTestStorage : IRecordedTestStorage
         //         ServiceURL = configuration.ServiceUrl,
         //         ForcePathStyle = configuration.UsePathStyle
         //     });
-    }
+        }
 
-    public async Task<string> UploadArtifactAsync(
+        public Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
+        {
+            // S3 storage implementation should use UploadArtifactAsync for individual artifacts
+            _logger?.Warn("StoreAsync is not directly implemented for S3 Storage. Use UploadArtifactAsync for individual artifacts.");
+            return Task.CompletedTask;
+        }
+
+        public async Task<string> UploadArtifactAsync(
         TestArtifact artifact,
         string testName,
         DateTimeOffset timestamp,
