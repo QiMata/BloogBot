@@ -11,18 +11,18 @@ namespace DruidRestoration.Tasks
     {
         public void Update()
         {
-            if ((ObjectManager.Player.HasBuff(MarkOfTheWild) || !ObjectManager.Player.IsSpellReady(MarkOfTheWild)) &&
-                (ObjectManager.Player.HasBuff(Thorns) || !ObjectManager.Player.IsSpellReady(Thorns)))
+            if ((ObjectManager.Player.HasBuff(MarkOfTheWild) || !ObjectManager.IsSpellReady(MarkOfTheWild)) &&
+                (ObjectManager.Player.HasBuff(Thorns) || !ObjectManager.IsSpellReady(Thorns)))
             {
                 BotTasks.Pop();
                 return;
             }
 
             if (!ObjectManager.Player.HasBuff(MarkOfTheWild))
-                ObjectManager.Player.CastSpell(MarkOfTheWild);
+                ObjectManager.CastSpell(MarkOfTheWild);
 
             if (!ObjectManager.Player.HasBuff(Thorns))
-                ObjectManager.Player.CastSpell(Thorns);
+                ObjectManager.CastSpell(Thorns);
         }
     }
 }

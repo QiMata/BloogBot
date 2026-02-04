@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet test:*)",
+      "Bash(pwsh -Command:*)",
+      "Bash(find:*)",
+      "Bash(d:)",
+      "Bash(findstr:*)"
+    ]
+  }
+}

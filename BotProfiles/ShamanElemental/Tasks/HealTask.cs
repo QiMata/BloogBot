@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -10,16 +10,16 @@ namespace ShamanElemental.Tasks
         {
             if (ObjectManager.Player.IsCasting) return;
 
-            if (ObjectManager.Player.HealthPercent > 70 || ObjectManager.Player.Mana < ObjectManager.Player.GetManaCost(HealingWave))
+            if (ObjectManager.Player.HealthPercent > 70 || ObjectManager.Player.Mana < ObjectManager.GetManaCost(HealingWave))
             {
                 BotTasks.Pop();
                 return;
             }
 
-            if (ObjectManager.Player.IsSpellReady(WarStomp))
-                ObjectManager.Player.CastSpell(WarStomp);
+            if (ObjectManager.IsSpellReady(WarStomp))
+                ObjectManager.CastSpell(WarStomp);
 
-            ObjectManager.Player.CastSpell(HealingWave, castOnSelf: true);
+            ObjectManager.CastSpell(HealingWave, castOnSelf: true);
         }
     }
 }

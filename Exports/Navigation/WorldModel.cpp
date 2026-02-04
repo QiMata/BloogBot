@@ -181,6 +181,35 @@ namespace VMAP
             delete liquid;
             liquid = nullptr;
         }
+        else
+        {
+            // Successful read: gather summary stats for logging
+            uint32_t heightCount = (liquid->iTilesX + 1) * (liquid->iTilesY + 1);
+            uint32_t tileCount = liquid->iTilesX * liquid->iTilesY;
+            float minH = heightCount ? liquid->iHeight[0] : 0.0f;
+            float maxH = minH;
+            for (uint32_t i = 1; i < heightCount; ++i)
+            {
+                float h = liquid->iHeight[i];
+                if (h < minH) minH = h;
+                if (h > maxH) maxH = h;
+            }
+            uint32_t enabledTiles = 0; // Tiles that are not disabled by 0x0F in lower 4 bits
+            for (uint32_t t = 0; t < tileCount; ++t)
+            {
+                if ((liquid->iFlags[t] & 0x0F) != 0x0F)
+                    ++enabledTiles;
+            }
+            // Sample a few heights (up to 4) for quick inspection
+            std::ostringstream sampleStream;
+            sampleStream << std::fixed << std::setprecision(2);
+            uint32_t samples = std::min<uint32_t>(4, heightCount);
+            for (uint32_t s = 0; s < samples; ++s)
+            {
+                sampleStream << liquid->iHeight[s];
+                if (s + 1 < samples) sampleStream << ",";
+            }
+        }
         out = liquid;
         return result;
     }
@@ -236,6 +265,7 @@ namespace VMAP
         {
             PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRay] no hit wmoId=" << iGroupWMOID);
         }
+
         return callback.hit;
     }
 
@@ -588,7 +618,6 @@ namespace VMAP
                 result = groupModels[i].readFromFile(rf);
                 ++i;
             }
-
             // Read GBIH chunk (BIH tree)
             if (result && !readChunk(rf, chunk, "GBIH", 4))
             {
@@ -795,9 +824,9 @@ namespace VMAP
                         info.rootId = RootWMOID;
                         hit = true;
 
-                        LOG_INFO("[WorldModel::GetLocationInfo] New location found - Group:" << groupIdx
-                            << " Distance:" << groupDist
-                            << " RootId:" << info.rootId);
+                        // LOG_INFO("[WorldModel::GetLocationInfo] New location found - Group:" << groupIdx
+                        //     << " Distance:" << groupDist
+                        //     << " RootId:" << info.rootId);
 
                         // Update the distance for subsequent checks
                         currentDist = groupDist;
@@ -813,10 +842,10 @@ namespace VMAP
         if (hit)
         {
             dist = minDist;
-            LOG_INFO("[WorldModel::GetLocationInfo] Final location - Distance:" << dist
-                << " RootId:" << info.rootId
-                << " Groups tested:" << groupsTested
-                << " Groups hit:" << groupsHit);
+            // LOG_INFO("[WorldModel::GetLocationInfo] Final location - Distance:" << dist
+            //     << " RootId:" << info.rootId
+            //     << " Groups tested:" << groupsTested
+            //     << " Groups hit:" << groupsHit);
         }
         else
         {

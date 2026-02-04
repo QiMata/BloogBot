@@ -1,7 +1,5 @@
 ﻿using System.ComponentModel.Composition;
-using BotRunner;
 using BotRunner.Interfaces;
-using Communication;
 using HunterSurvival.Tasks;
 
 using BotProfiles.Common;

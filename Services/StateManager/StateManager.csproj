@@ -1,10 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
-	<PropertyGroup>
-		<UserSecretsId>dotnet-StateManagerService-7f14e0e4-8dd1-4062-9c6f-3bf08fcf4e1d</UserSecretsId>
-		<Platforms>AnyCPU;x86</Platforms>
-		<OutputType>Exe</OutputType>
-	</PropertyGroup>
+<PropertyGroup>
+<TargetFramework>net8.0-windows</TargetFramework>
+<UserSecretsId>dotnet-StateManagerService-7f14e0e4-8dd1-4062-9c6f-3bf08fcf4e1d</UserSecretsId>
+<Platforms>AnyCPU;x86</Platforms>
+<OutputType>Exe</OutputType>
+</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
 		<IsPublishable>False</IsPublishable>
@@ -31,6 +32,9 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.Sqlite.Core" Version="8.0.8" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="Serilog" Version="3.1.1" />
+		<PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+		<PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -38,5 +42,6 @@
 		<ProjectReference Include="..\DecisionEngineService\DecisionEngineService.csproj" />
 		<ProjectReference Include="..\ForegroundBotRunner\ForegroundBotRunner.csproj" />
 		<ProjectReference Include="..\PathfindingService\PathfindingService.csproj" />
+		<ProjectReference Include="..\PromptHandlingService\PromptHandlingService.csproj" />
 	</ItemGroup>
 </Project>

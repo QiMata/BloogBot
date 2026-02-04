@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -9,13 +9,13 @@ namespace HunterBeastMastery.Tasks
 
         public void Update()
         {
-            if (!ObjectManager.Player.IsSpellReady(AspectOfTheHawk) || ObjectManager.Player.HasBuff(AspectOfTheHawk))
+            if (!ObjectManager.IsSpellReady(AspectOfTheHawk) || ObjectManager.Player.HasBuff(AspectOfTheHawk))
             {
                 BotTasks.Pop();
                 return;
             }
 
-            ObjectManager.Player.CastSpell(AspectOfTheHawk);
+            ObjectManager.CastSpell(AspectOfTheHawk);
         }
     }
 }

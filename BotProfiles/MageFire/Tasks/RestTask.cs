@@ -1,6 +1,6 @@
-using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 
 namespace MageFire.Tasks
 {
@@ -14,14 +14,14 @@ namespace MageFire.Tasks
         {
             if (InCombat)
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
             }
 
             if (HealthOk && ManaOk)
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 BotTasks.Push(new BuffTask(BotContext));
                 return;
@@ -30,13 +30,13 @@ namespace MageFire.Tasks
             if (ObjectManager.Player.IsChanneling)
                 return;
 
-            if (ObjectManager.Player.ManaPercent < 20 && ObjectManager.Player.IsSpellReady(Evocation))
+            if (ObjectManager.Player.ManaPercent < 20 && ObjectManager.IsSpellReady(Evocation))
             {
-                ObjectManager.Player.CastSpell(Evocation);
+                ObjectManager.CastSpell(Evocation);
                 return;
             }
 
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {

@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 
 namespace WarriorFury.Tasks
 {
@@ -10,7 +10,7 @@ namespace WarriorFury.Tasks
         private readonly IWoWItem foodItem;
         public RestTask(IBotContext botContext) : base(botContext)
         {
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {
@@ -29,7 +29,7 @@ namespace WarriorFury.Tasks
                 ObjectManager.Units.Any(u => u.TargetGuid == ObjectManager.Player.Guid))
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
 
                 uint foodCount = foodItem == null ? 0 : ObjectManager.GetItemCount(foodItem.ItemId);

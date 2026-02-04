@@ -4,12 +4,20 @@ using System.Threading;
 
 namespace ForegroundBotRunner
 {
+    /// <summary>
+    /// Entry point class for the native .NET 8 host (Loader.dll).
+    /// 
+    /// The Load method is called by the native host after initializing the CLR.
+    /// It must match the ComponentEntryPoint delegate signature expected by
+    /// load_assembly_and_get_function_pointer when delegate_type_name is null:
+    ///   public delegate int ComponentEntryPoint(IntPtr args, int sizeBytes);
+    /// </summary>
     public class Loader
     {
-        private static Thread? thread;
-        private static bool isInitialized = false;
-        private static int firstChanceReentrancy = 0;
-        private static int firstChanceLogged = 0;
+        private static Thread? _mainThread;
+        private static bool _isInitialized = false;
+        private static int _firstChanceReentrancy = 0;
+        private static int _firstChanceLogged = 0;
         private const int FirstChanceLogLimit = 50;
         private static readonly string LogDirectory = InitLogDirectory();
         private static string InjectionLog => Path.Combine(LogDirectory, "injection.log");
@@ -34,85 +42,70 @@ namespace ForegroundBotRunner
             {
                 AppDomain.CurrentDomain.FirstChanceException += (s, e) =>
                 {
-                    if (firstChanceLogged >= FirstChanceLogLimit) return;
-                    if (Interlocked.Exchange(ref firstChanceReentrancy, 1) == 1) return;
+                    if (_firstChanceLogged >= FirstChanceLogLimit) return;
+                    if (Interlocked.Exchange(ref _firstChanceReentrancy, 1) == 1) return;
                     try
                     {
-                        firstChanceLogged++;
-                        File.AppendAllText(FirstChanceLog, $"[{DateTime.Now:HH:mm:ss}] FirstChance({firstChanceLogged}): {e.Exception.GetType()}: {e.Exception.Message}\n");
+                        _firstChanceLogged++;
+                        File.AppendAllText(FirstChanceLog, $"[{DateTime.Now:HH:mm:ss}] FirstChance({_firstChanceLogged}): {e.Exception.GetType()}: {e.Exception.Message}\n");
                     }
                     catch { }
-                    finally { Interlocked.Exchange(ref firstChanceReentrancy, 0); }
+                    finally { Interlocked.Exchange(ref _firstChanceReentrancy, 0); }
                 };
             }
             catch { }
         }
 
-#if NET8_0_OR_GREATER
-        [System.Runtime.InteropServices.UnmanagedCallersOnly(EntryPoint = "LoadUnmanaged")]
-        public static int LoadUnmanaged(System.IntPtr argsPtr, int size)
+        /// <summary>
+        /// Entry point called by the native .NET 8 host.
+        /// </summary>
+        /// <param name="args">Pointer to arguments (unused)</param>
+        /// <param name="sizeBytes">Size of arguments in bytes (unused)</param>
+        /// <returns>0 on success, non-zero on failure</returns>
+        public static int Load(IntPtr args, int sizeBytes)
         {
             try
             {
-                string args = "NONE";
-                if (argsPtr != System.IntPtr.Zero)
-                {
-                    try { args = System.Runtime.InteropServices.Marshal.PtrToStringAnsi(argsPtr) ?? "NONE"; } catch { }
-                }
-            }
-            catch { }
-            return Load("NONE");
-        }
-#else
-        public static int LoadUnmanaged(System.IntPtr argsPtr, int size) => Load("NONE");
-#endif
+                File.AppendAllText(InjectionLog, $"\n=== Loader.Load() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\nProcess: {System.Diagnostics.Process.GetCurrentProcess().ProcessName}\nThread ID: {Thread.CurrentThread.ManagedThreadId}\n");
+                Console.WriteLine("[Loader] Managed entry point called");
 
-        public static int Load(string args)
-        {
-            try
-            {
-                File.AppendAllText(InjectionLog, $"\n=== Loader.Load() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\nArguments: {args}\nProcess: {System.Diagnostics.Process.GetCurrentProcess().ProcessName}\nThread ID: {Thread.CurrentThread.ManagedThreadId}\n");
-                Console.WriteLine($"Loader.Load invoked. LogDir={LogDirectory}");
-
-                if (isInitialized)
+                if (_isInitialized)
                 {
                     File.AppendAllText(InjectionLog, "Loader already initialized, skipping.\n");
-                    return 1;
+                    return 0;
                 }
-                isInitialized = true;
-
-#if NETFRAMEWORK && !NET8_0_OR_GREATER
-                // Start the injected bot host (net48 minimal loop)
-                InjectedBotHost.Start();
-                File.AppendAllText(InjectionLog, "InjectedBotHost.Start() invoked.\n");
-#endif
-
-                // Keep a small heartbeat thread for visibility
-                thread = new Thread(() => HeartbeatLoop()) { IsBackground = true, Name = "ForegroundHeartbeat" };
-                thread.Start();
-
+                _isInitialized = true;
+                
+                // Start the main application thread
+                // We use STA apartment state for WPF/WinForms compatibility if needed
+                _mainThread = new Thread(() =>
+                {
+                    try
+                    {
+                        Console.WriteLine("[Loader] Starting main application thread...");
+                        Program.Main([]);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[Loader] Exception in main thread: {ex}");
+                        try { File.AppendAllText(InjectionLog, $"[Loader] Exception in main thread: {ex}\n"); } catch { }
+                    }
+                });
+                
+                _mainThread.SetApartmentState(ApartmentState.STA);
+                _mainThread.IsBackground = false; // Keep process alive
+                _mainThread.Name = "ForegroundBotRunner.Main";
+                _mainThread.Start();
+                
+                Console.WriteLine("[Loader] Main thread started successfully");
                 File.AppendAllText(InjectionLog, "Loader.Load completed successfully.\n");
-                return 1;
+                return 0; // Success
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in Loader.Load(): {ex}");
+                Console.WriteLine($"[Loader] Failed to start: {ex}");
                 try { File.AppendAllText(InjectionLog, $"Error in Loader.Load(): {ex}\n"); } catch { }
-                return 0;
-            }
-        }
-
-        private static void HeartbeatLoop()
-        {
-            int counter = 0;
-            while (true)
-            {
-                Thread.Sleep(10000);
-                counter++;
-                if (counter % 6 == 0)
-                {
-                    try { File.AppendAllText(InjectionLog, $"[{DateTime.Now:HH:mm:ss}] Loader heartbeat #{counter}\n"); } catch { }
-                }
+                return 1; // Failure
             }
         }
     }

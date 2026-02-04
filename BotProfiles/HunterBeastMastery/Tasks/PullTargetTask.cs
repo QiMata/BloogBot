@@ -1,6 +1,5 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
 
 namespace HunterBeastMastery.Tasks
 {
@@ -17,14 +16,14 @@ namespace HunterBeastMastery.Tasks
 
                 if (potentialNewTarget != null && potentialNewTarget.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid)
                 {
-                    ObjectManager.Player.SetTarget(potentialNewTarget.TargetGuid);
+                    ObjectManager.SetTarget(potentialNewTarget.TargetGuid);
                 }
             }
 
             if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 28)
             {
-                ObjectManager.Player.StopAllMovement();
-                ObjectManager.Player.StartRangedAttack();
+                ObjectManager.StopAllMovement();
+                ObjectManager.StartRangedAttack();
 
                 BotTasks.Pop();
                 BotTasks.Push(Container.CreatePvERotationTask(BotContext));
@@ -32,7 +31,7 @@ namespace HunterBeastMastery.Tasks
             } else
             {
                 Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                ObjectManager.Player.MoveToward(nextWaypoint[1]);
+                ObjectManager.MoveToward(nextWaypoint[1]);
             }
         }
     }

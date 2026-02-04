@@ -74,7 +74,7 @@ namespace VMAP
         G3D::Vector3 TransformToWorld(const G3D::Vector3& modelVertex) const;
 
     private:
-        // Per-instance collision mask (default: all bits set). Later may map from materials.
+        // Per-instance collision mask (default: all bits set). May map from materials in future.
         uint32_t collisionMask = 0xFFFFFFFFu;
     };
 }

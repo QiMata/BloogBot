@@ -5,6 +5,7 @@
 #include "PhysicsEngine.h"
 #include "PhysicsBridge.h"
 #include "MapLoader.h"
+#include "SceneQuery.h"
 
 #define NOMINMAX
 #include <windows.h>
@@ -15,10 +16,10 @@
 #include <vector>
 
 // Global instances
-static VMAP::VMapManager2* g_vmapManager = nullptr;  // Direct pointer to VMapManager2
-static std::unique_ptr<MapLoader> g_mapLoader = nullptr;
 static bool g_initialized = false;
 static std::mutex g_initMutex;
+static std::unique_ptr<MapLoader> g_mapLoader;
+static VMAP::VMapManager2* g_vmapManager = nullptr;
 
 void InitializeAllSystems()
 {
@@ -29,9 +30,24 @@ void InitializeAllSystems()
 
     try
     {
+        // Get data root from environment variable if set
+        std::string dataRoot;
+        char* envDataRoot = nullptr;
+        size_t envSize = 0;
+        if (_dupenv_s(&envDataRoot, &envSize, "BLOOGBOT_DATA_DIR") == 0 && envDataRoot != nullptr)
+        {
+            dataRoot = envDataRoot;
+            free(envDataRoot);
+            if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+                dataRoot += '/';
+        }
+
         // Initialize MapLoader (optional, for terrain data)
         g_mapLoader = std::make_unique<MapLoader>();
-        std::vector<std::string> mapPaths = { "maps/" };
+        std::vector<std::string> mapPaths;
+        if (!dataRoot.empty())
+            mapPaths.push_back(dataRoot + "maps/");
+        mapPaths.push_back("maps/");
 
         for (const auto& path : mapPaths)
         {
@@ -43,7 +59,11 @@ void InitializeAllSystems()
         }
 
         // Initialize VMAP system directly using VMapManager2
-        std::vector<std::string> vmapPaths = { "vmaps/" };
+        std::vector<std::string> vmapPaths;
+        if (!dataRoot.empty())
+            vmapPaths.push_back(dataRoot + "vmaps/");
+        vmapPaths.push_back("vmaps/");
+
         for (const auto& path : vmapPaths)
         {
             if (std::filesystem::exists(path))
@@ -85,20 +105,6 @@ extern "C" __declspec(dllexport) void PreloadMap(uint32_t mapId)
     if (!g_initialized)
         InitializeAllSystems();
 
-    // Preload VMAP data directly using VMapManager2
-    if (g_vmapManager)
-    {
-        try
-        {
-            // Initialize the map if not already done
-            if (!g_vmapManager->isMapInitialized(mapId))
-            {
-                g_vmapManager->initializeMap(mapId);
-            }
-        }
-        catch (...) {}
-    }
-
     // Preload navigation mesh
     try
     {
@@ -106,8 +112,11 @@ extern "C" __declspec(dllexport) void PreloadMap(uint32_t mapId)
         if (navigation)
         {
             MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
+            
             navigation->GetQueryForMap(mapId);
         }
+
+        SceneQuery::EnsureMapLoaded(mapId);
     }
     catch (...) {}
 }
@@ -130,15 +139,16 @@ extern "C" __declspec(dllexport) void PathArrFree(XYZ* pathArr)
     delete[] pathArr;
 }
 
-extern "C" __declspec(dllexport) PhysicsOutput PhysicsStep(const PhysicsInput& input)
+// Removed legacy PhysicsStep export. Use PhysicsStepV2 only.
+
+extern "C" __declspec(dllexport) PhysicsOutput PhysicsStepV2(const PhysicsInput& input)
 {
     if (!g_initialized)
         InitializeAllSystems();
 
     if (auto* physics = PhysicsEngine::Instance())
-        return physics->Step(input, input.deltaTime);
+        return physics->StepV2(input, input.deltaTime);
 
-    // Return passthrough if physics isn't available
     PhysicsOutput output = {};
     output.x = input.x;
     output.y = input.y;
@@ -149,12 +159,19 @@ extern "C" __declspec(dllexport) PhysicsOutput PhysicsStep(const PhysicsInput& i
     output.vy = input.vy;
     output.vz = input.vz;
     output.moveFlags = input.moveFlags;
-    output.isGrounded = false;
-    output.isSwimming = false;
-    output.isFlying = (input.moveFlags & MOVEFLAG_FLYING) != 0;
     output.groundZ = -100000.0f;
     output.liquidZ = -100000.0f;
+    output.liquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
     return output;
+}
+
+extern "C" __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ to)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    // Delegate to SceneQuery implementation
+    return SceneQuery::LineOfSight(mapId, G3D::Vector3(from.X, from.Y, from.Z), G3D::Vector3(to.X, to.Y, to.Z));
 }
 
 // DLL Entry Point
@@ -168,9 +185,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     {
         if (lpReserved == nullptr)  // FreeLibrary was called
         {
-            // Don't delete g_vmapManager as it's managed by the factory
-            g_vmapManager = nullptr;
-            g_mapLoader.reset();
             PhysicsEngine::Destroy();
             VMAP::VMapFactory::clear();  // Clean up the factory
         }

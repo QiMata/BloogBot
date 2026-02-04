@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
@@ -21,12 +20,12 @@ namespace HunterMarksmanship.Tasks
             }
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
 
             if (Update(34))
                 return;
 
-            ObjectManager.Player.StopAllMovement();
+            ObjectManager.StopAllMovement();
 
             IWoWItem bow = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
             bool ranged = bow != null && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5 &&

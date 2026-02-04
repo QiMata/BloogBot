@@ -1,11 +1,11 @@
-﻿using Communication;
-using ForegroundBotRunner.Mem;
+﻿using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Runtime.InteropServices;
+using Serilog;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -27,7 +27,7 @@ namespace ForegroundBotRunner.Statics
         public LoginStates LoginState => (LoginStates)Enum.Parse(typeof(LoginStates), MemoryManager.ReadString(Offsets.CharacterScreen.LoginState));
         private readonly EnumerateVisibleObjectsCallbackVanilla CallbackDelegate;
         private readonly nint callbackPtr;
-        private readonly ActivitySnapshot _characterState;
+        private readonly IActivitySnapshot _characterState;
         public IEnumerable<IWoWObject> Objects
         {
             get
@@ -41,7 +41,7 @@ namespace ForegroundBotRunner.Statics
         internal IList<WoWObject> ObjectsBuffer = [];
 
         private readonly object _objectsLock = new();
-        public ObjectManager(IWoWEventHandler eventHandler, ActivitySnapshot parProbe)
+        public ObjectManager(IWoWEventHandler eventHandler, IActivitySnapshot parProbe)
         {
             _characterState = parProbe;
 
@@ -590,7 +590,7 @@ namespace ForegroundBotRunner.Statics
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"[OBJECT MANAGER] {e}");
+                    Log.Error($"[OBJECT MANAGER] {e}");
                 }
             }
         }
@@ -729,7 +729,7 @@ namespace ForegroundBotRunner.Statics
             }
             catch (Exception e)
             {
-                Console.WriteLine($"OBJECT MANAGER: CallbackInternal => {e.StackTrace}");
+                Log.Error($"OBJECT MANAGER: CallbackInternal => {e.StackTrace}");
             }
 
             return 1;
@@ -927,7 +927,7 @@ namespace ForegroundBotRunner.Statics
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[OBJECT MANAGER]{ex.Message} {ex.StackTrace}");
+                Log.Error($"[OBJECT MANAGER]{ex.Message} {ex.StackTrace}");
             }
         }
 
@@ -1102,7 +1102,7 @@ namespace ForegroundBotRunner.Statics
             throw new NotImplementedException();
         }
 
-        public void Initialize(ActivitySnapshot parProbe)
+        public void Initialize(IActivitySnapshot parProbe)
         {
             throw new NotImplementedException();
         }

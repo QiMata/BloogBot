@@ -98,6 +98,25 @@ message PhysicsInput {
     // Context
     uint32 map_id = 24;
     float delta_time = 25;
+
+    uint32 frame_counter = 26;
+
+	// Previous ground normal (from prior tick output)
+	float prev_ground_z = 27;
+	float prev_ground_nx = 28;
+	float prev_ground_ny = 29;
+	float prev_ground_nz = 30;
+
+	// Pending depenetration vector (from prior tick output)
+	float pending_depen_x = 31;
+	float pending_depen_y = 32;
+	float pending_depen_z = 33;
+
+	// Standing-on (ride) reference
+	uint32 standing_on_instance_id = 34;
+	float standing_on_local_x = 35;
+	float standing_on_local_y = 36;
+	float standing_on_local_z = 37;
 }
 
 // Physics output
@@ -126,4 +145,23 @@ message PhysicsOutput {
     // Spline progress (if following path)
     int32 current_spline_index = 14;
     float spline_progress = 15;
+
+	// Ground surface details
+	float ground_z = 16;
+	float ground_nx = 17;
+	float ground_ny = 18;
+	float ground_nz = 19;
+	float liquid_z = 20;
+	uint32 liquid_type = 21;
+
+	// Pending depenetration vector for next tick
+	float pending_depen_x = 22;
+	float pending_depen_y = 23;
+	float pending_depen_z = 24;
+
+	// Standing-on (ride) reference
+	uint32 standing_on_instance_id = 25;
+	float standing_on_local_x = 26;
+	float standing_on_local_y = 27;
+	float standing_on_local_z = 28;
 }

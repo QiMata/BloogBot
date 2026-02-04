@@ -2,26 +2,33 @@
 
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <Platforms>AnyCPU;x86</Platforms>
-    <TargetFrameworks>net8.0;net48</TargetFrameworks>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="BehaviourTree" Version="1.0.73" />
     <PackageReference Include="BehaviourTree.FluentBuilder" Version="1.0.70" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="Stateless" Version="5.16.0" />
+    <PackageReference Include="System.Composition" Version="8.0.0" />
     <PackageReference Include="Xas.FluentBehaviourTree" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\GameData.Core\GameData.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)'=='net48'">
-    <Reference Include="System.ComponentModel.Composition">
-      <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8.1\System.ComponentModel.Composition.dll</HintPath>
-    </Reference>
+  <ItemGroup>
+    <ProjectReference Include="..\WoWSharpClient\WoWSharpClient.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Clients\PathfindingClient.cs" />
+    <Compile Remove="Clients\CharacterStateUpdateClient.cs" />
   </ItemGroup>
 
   <ItemGroup>

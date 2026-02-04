@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -19,7 +19,7 @@ namespace ShamanElemental.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
                 if (ObjectManager.Aggressors.Any())
-                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
                 else
                     return;
             }
@@ -37,10 +37,10 @@ namespace ShamanElemental.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
-            if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HealingWave))
+            if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HealingWave))
             {
                 BotTasks.Push(new HealTask(BotContext));
                 return;
@@ -86,12 +86,12 @@ namespace ShamanElemental.Tasks
 
             TryCastSpell(LightningShield, 0, int.MaxValue, !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && !ObjectManager.Player.HasBuff(LightningShield));
 
-            TryCastSpell(RockbiterWeapon, 0, int.MaxValue, ObjectManager.Player.IsSpellReady(RockbiterWeapon) && (FireImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) || !ObjectManager.Player.MainhandIsEnchanted && !ObjectManager.Player.IsSpellReady(FlametongueWeapon)));
+            TryCastSpell(RockbiterWeapon, 0, int.MaxValue, ObjectManager.IsSpellReady(RockbiterWeapon) && (FireImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) || !ObjectManager.Player.MainhandIsEnchanted && !ObjectManager.IsSpellReady(FlametongueWeapon)));
 
-            TryCastSpell(FlametongueWeapon, 0, int.MaxValue, ObjectManager.Player.IsSpellReady(FlametongueWeapon) && !ObjectManager.Player.MainhandIsEnchanted && !FireImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name));
+            TryCastSpell(FlametongueWeapon, 0, int.MaxValue, ObjectManager.IsSpellReady(FlametongueWeapon) && !ObjectManager.Player.MainhandIsEnchanted && !FireImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name));
 
             if (ObjectManager.Player.ManaPercent < 5)
-                ObjectManager.Player.StartMeleeAttack();
+                ObjectManager.StartMeleeAttack();
         }
     }
 }

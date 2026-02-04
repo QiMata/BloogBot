@@ -1,14 +1,36 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Library</OutputType>
-    <AssemblyName>ForegroundBotRunner</AssemblyName>
-    <Platforms>x86</Platforms>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <BaseOutputPath>..\..\Bot</BaseOutputPath>
+    <!-- Output to same folder as Loader.dll (net8.0) -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>..\..\Bot\$(Configuration)\net8.0\</OutputPath>
+    <!-- Generate runtimeconfig.json for native hosting -->
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Enable native hosting -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!-- Roll forward to latest patch/minor for flexibility -->
+    <RollForward>LatestMinor</RollForward>
   </PropertyGroup>
 
-  <!-- Add required project references for BotRunnerService integration -->
+  <ItemGroup>
+    <PackageReference Include="Fasm.NET" Version="1.70.3.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="Vcpkg.Nuget" Version="1.5.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
@@ -17,18 +39,13 @@
     <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
   </ItemGroup>
 
-  <!-- Add required NuGet packages -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+    <Resource Include="Resources\Fasm.NET.dll" />
+    <Resource Include="Resources\FastCall.dll" />
   </ItemGroup>
 
-  <!-- Remove ALL items that might cause issues -->
+  <!-- Remove items that might cause issues -->
   <ItemGroup>
-    <Compile Remove="Program.cs" />
-    <Compile Remove="ForegroundBotWorker.cs" />
-    <Compile Remove="Loader.cs" />
     <Compile Remove="Frames\**\*.cs" />
     <Compile Remove="Mem\**\*.cs" />
     <Compile Remove="Objects\**\*.cs" />

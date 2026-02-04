@@ -152,6 +152,8 @@ namespace GameData.Core.Interfaces
         void RetrieveCorpse();
         void SetTarget(ulong guid);
         void StopAttack();
+        void StartMeleeAttack();
+        void StartRangedAttack();
         void SetFacing(float facing);
         void StartMovement(ControlBits bits);
         void StopMovement(ControlBits bits);

@@ -1,6 +1,5 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
 
 namespace DruidBalance.Tasks
 {
@@ -21,7 +20,7 @@ namespace DruidBalance.Tasks
             else
                 range = 34;
 
-            if (ObjectManager.Player.IsSpellReady(Starfire))
+            if (ObjectManager.IsSpellReady(Starfire))
                 pullingSpell = Starfire;
             else
                 pullingSpell = Wrath;
@@ -39,24 +38,24 @@ namespace DruidBalance.Tasks
             if (ObjectManager.Player.IsCasting)
                 return;
 
-            if (ObjectManager.Player.IsSpellReady(MoonkinForm) && !ObjectManager.Player.HasBuff(MoonkinForm))
+            if (ObjectManager.IsSpellReady(MoonkinForm) && !ObjectManager.Player.HasBuff(MoonkinForm))
             {
-                ObjectManager.Player.CastSpell(MoonkinForm);
+                ObjectManager.CastSpell(MoonkinForm);
             }
 
-            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < range && ObjectManager.Player.IsCasting && ObjectManager.Player.IsSpellReady(pullingSpell) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
+            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < range && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(pullingSpell) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
             {
                 if (ObjectManager.Player.IsMoving)
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
 
                 if (Wait.For("BalanceDruidPullDelay", 100))
                 {
                     if (!ObjectManager.Player.IsInCombat)
-                        ObjectManager.Player.CastSpell(pullingSpell);
+                        ObjectManager.CastSpell(pullingSpell);
 
                     if (ObjectManager.Player.IsCasting || ObjectManager.Player.IsInCombat)
                     {
-                        ObjectManager.Player.StopAllMovement();
+                        ObjectManager.StopAllMovement();
                         Wait.RemoveAll();
                         BotTasks.Pop();
                         BotTasks.Push(new PvERotationTask(BotContext));
@@ -66,7 +65,7 @@ namespace DruidBalance.Tasks
             }
 
             Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            ObjectManager.Player.MoveToward(nextWaypoint[0]);
+            ObjectManager.MoveToward(nextWaypoint[0]);
         }
     }
 }

@@ -4,6 +4,8 @@
 using WoWSharpClient;
 using BotRunner;
 using BotRunner.Clients;
+using BotRunner.Combat;
+using BotRunner.Movement;
 using Communication;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -118,11 +120,37 @@ namespace ForegroundBotRunner
             _logger.LogInformation("Initializing bot components...");
             var activitySnapshot = new ActivitySnapshot();
             WoWSharpObjectManager.Instance.Initialize(_wowClient, _pathfindingClient, _loggerFactory.CreateLogger<WoWSharpObjectManager>());
-            _botRunner = new BotRunnerService(WoWSharpObjectManager.Instance, _characterStateUpdateClient, _pathfindingClient);
+            
+            // Create combat and positioning services
+            var objectManager = WoWSharpObjectManager.Instance;
+            var targetPositioningService = new TargetPositioningService(objectManager, _pathfindingClient);
+            
+            // Use stub implementations for services that require IAgentFactory (network-based)
+            var targetEngagementService = new StubTargetEngagementService();
+            var lootingService = new StubLootingService();
+            
+            _botRunner = new BotRunnerService(
+                objectManager, 
+                _characterStateUpdateClient, 
+                targetEngagementService,
+                lootingService,
+                targetPositioningService);
             _logger.LogInformation("BotRunnerService initialized, starting bot...");
             _botRunner.Start();
             _logger.LogInformation("Bot started successfully. Bot is now running injected in WoW process...");
             await Task.Delay(1000);
+        }
+
+        // Stub implementations for foreground injection mode
+        private sealed class StubTargetEngagementService : ITargetEngagementService
+        {
+            public ulong? CurrentTargetGuid => null;
+            public Task EngageAsync(IWoWUnit target, CancellationToken cancellationToken) => Task.CompletedTask;
+        }
+
+        private sealed class StubLootingService : ILootingService
+        {
+            public Task<bool> TryLootAsync(ulong targetGuid, CancellationToken cancellationToken) => Task.FromResult(false);
         }
 
         private async Task MonitorBotHealth()

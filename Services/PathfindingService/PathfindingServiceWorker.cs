@@ -5,26 +5,44 @@ namespace PathfindingService
     public class PathfindingServiceWorker : BackgroundService
     {
         private readonly ILogger<PathfindingServiceWorker> _logger;
-        private readonly PathfindingSocketServer _pathfindingSocketServer;
+        private readonly ILoggerFactory _loggerFactory;
+        private readonly IConfiguration _configuration;
+        private PathfindingSocketServer? _pathfindingSocketServer;
 
         public PathfindingServiceWorker(
             ILogger<PathfindingServiceWorker> logger,
-            PathfindingSocketServer pathfindingSocketServer)
+            ILoggerFactory loggerFactory,
+            IConfiguration configuration)
         {
             _logger = logger;
-            _pathfindingSocketServer = pathfindingSocketServer;
-
-            _logger.LogInformation("PathfindingServiceWorker initialized with dependency injection");
+            _loggerFactory = loggerFactory;
+            _configuration = configuration;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("PathfindingServiceWorker starting...");
-            
+            // Start the socket server first so StateManager can connect immediately
+            var ipAddress = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
+            var port = int.Parse(_configuration["PathfindingService:Port"] ?? "5001");
+
+            _logger.LogInformation($"Starting PathfindingService socket server on {ipAddress}:{port}...");
+
+            _pathfindingSocketServer = new PathfindingSocketServer(
+                ipAddress,
+                port,
+                _loggerFactory.CreateLogger<PathfindingSocketServer>()
+            );
+
+            _logger.LogInformation($"PathfindingService socket server started. Now loading navigation and physics data...");
+
+            // Load nav/physics in background - this is the slow part
+            await Task.Run(() => _pathfindingSocketServer.InitializeNavigation(), stoppingToken);
+
+            _logger.LogInformation("PathfindingService fully initialized and ready to handle requests.");
+
+            // Main service loop
             while (!stoppingToken.IsCancellationRequested)
             {
-                // The PathfindingSocketServer runs its own socket listener loop
-                // This worker just keeps the service alive
                 await Task.Delay(1000, stoppingToken);
             }
             

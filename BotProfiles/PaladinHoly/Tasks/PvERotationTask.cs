@@ -11,9 +11,9 @@ namespace PaladinHoly.Tasks
         public void Update()
         {
             if (ObjectManager.Player.HealthPercent < 40 &&
-                ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HolyLight))
+                ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HolyLight))
             {
-                ObjectManager.Player.CastSpell(HolyLight, castOnSelf: true);
+                ObjectManager.CastSpell(HolyLight, castOnSelf: true);
                 return;
             }
 
@@ -26,7 +26,7 @@ namespace PaladinHoly.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null ||
                 ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(3))

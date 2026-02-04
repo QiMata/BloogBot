@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -15,7 +14,7 @@ namespace WarlockDestruction.Tasks
             if (InCombat || (HealthOk && ManaOk))
             {
                 if (ObjectManager.Player.IsCasting && ObjectManager.Player.ChannelingId == 0)
-                    ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                    ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
 
                 if (InCombat || PetHealthOk)
                 {
@@ -24,17 +23,17 @@ namespace WarlockDestruction.Tasks
 
                     BotTasks.Push(new SummonPetTask(BotContext));
                 }
-                else if (ObjectManager.Player.ChannelingId == 0 && ObjectManager.Player.IsCasting && ObjectManager.Player.IsSpellReady(HealthFunnel) && ObjectManager.Player.HealthPercent > 30)
-                        ObjectManager.Player.CastSpell(HealthFunnel);
+                else if (ObjectManager.Player.ChannelingId == 0 && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(HealthFunnel) && ObjectManager.Player.HealthPercent > 30)
+                        ObjectManager.CastSpell(HealthFunnel);
 
                 return;
             }
             else
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
 
             TryCastSpell(LifeTap, 0, int.MaxValue, ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
 
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {
@@ -82,9 +81,9 @@ namespace WarlockDestruction.Tasks
 
         private void TryCastSpellInternal(string name, int minRange, int maxRange, bool condition = true, Action callback = null, bool castOnSelf = false)
         {
-            if (ObjectManager.Player.IsSpellReady(name) && condition && !ObjectManager.Player.IsStunned && ((!ObjectManager.Player.IsCasting && ObjectManager.Player.ChannelingId == 0) || ObjectManager.Player.Class == Class.Warrior))
+            if (ObjectManager.IsSpellReady(name) && condition && !ObjectManager.Player.IsStunned && ((!ObjectManager.Player.IsCasting && ObjectManager.Player.ChannelingId == 0) || ObjectManager.Player.Class == Class.Warrior))
             {
-                ObjectManager.Player.CastSpell(name, castOnSelf: castOnSelf);
+                ObjectManager.CastSpell(name, castOnSelf: castOnSelf);
                 callback?.Invoke();
             }
         }

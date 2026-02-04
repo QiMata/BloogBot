@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -27,7 +27,7 @@ namespace MageFire.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             ExecuteRotation();
@@ -46,7 +46,7 @@ namespace MageFire.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
                 if (ObjectManager.Aggressors.Any())
-                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
                 else
                     return;
             }

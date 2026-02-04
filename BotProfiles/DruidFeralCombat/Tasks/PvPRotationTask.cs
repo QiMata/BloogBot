@@ -22,7 +22,7 @@ internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botC
         if (MoveBehindTankSpot(15))
             return;
 
-        ObjectManager.Player.StopAllMovement();
+        ObjectManager.StopAllMovement();
         PerformCombatRotation();
     }
 
@@ -32,9 +32,9 @@ internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botC
         if (target == null)
             return;
 
-        ObjectManager.Player.StopAllMovement();
-        ObjectManager.Player.Face(target.Position);
-        ObjectManager.Player.StartMeleeAttack();
+        ObjectManager.StopAllMovement();
+        ObjectManager.Face(target.Position);
+        ObjectManager.StartMeleeAttack();
 
         if (ObjectManager.Player.HealthPercent < 40)
         {
@@ -54,26 +54,26 @@ internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botC
 
     private void TryUseBearAbility(string name, int requiredRage = 0, bool condition = true)
     {
-        if (ObjectManager.Player.IsSpellReady(name) &&
+        if (ObjectManager.IsSpellReady(name) &&
             ObjectManager.Player.Rage >= requiredRage &&
             !ObjectManager.Player.IsStunned &&
             ObjectManager.Player.CurrentShapeshiftForm == BearForm &&
             condition)
         {
-            ObjectManager.Player.CastSpell(name);
+            ObjectManager.CastSpell(name);
         }
     }
 
     private void TryUseCatAbility(string name, int requiredEnergy = 0, bool requiresComboPoints = false, bool condition = true)
     {
-        if (ObjectManager.Player.IsSpellReady(name) &&
+        if (ObjectManager.IsSpellReady(name) &&
             ObjectManager.Player.Energy >= requiredEnergy &&
             (!requiresComboPoints || ObjectManager.Player.ComboPoints > 0) &&
             !ObjectManager.Player.IsStunned &&
             ObjectManager.Player.CurrentShapeshiftForm == CatForm &&
             condition)
         {
-            ObjectManager.Player.CastSpell(name);
+            ObjectManager.CastSpell(name);
         }
     }
 
@@ -85,8 +85,8 @@ internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botC
 
         float distanceToTarget = ObjectManager.Player.Position.DistanceTo(target.Position);
 
-        if (ObjectManager.Player.IsSpellReady(name) &&
-            ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(name) &&
+        if (ObjectManager.IsSpellReady(name) &&
+            ObjectManager.Player.Mana >= ObjectManager.GetManaCost(name) &&
             distanceToTarget >= minRange &&
             distanceToTarget <= maxRange &&
             condition &&
@@ -94,7 +94,7 @@ internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botC
             !ObjectManager.Player.IsCasting &&
             ObjectManager.Player.ChannelingId == 0)
         {
-            ObjectManager.Player.CastSpell(name);
+            ObjectManager.CastSpell(name);
         }
     }
 }

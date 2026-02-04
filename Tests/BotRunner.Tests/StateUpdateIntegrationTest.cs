@@ -9,6 +9,7 @@ using StateManager;
 using System.ComponentModel;
 using System.Data;
 using Xunit.Abstractions;
+using Xunit.Sdk;
 using BotRunner;
 using WoWSharpClient;
 using Communication;
@@ -20,6 +21,27 @@ using Xunit;
 
 namespace BotRunner.Tests
 {
+    /// <summary>
+    /// Custom trait attribute to mark tests that require infrastructure.
+    /// Use: dotnet test --filter "Category!=RequiresInfrastructure" to skip these tests in CI.
+    /// </summary>
+    [TraitDiscoverer("BotRunner.Tests.RequiresInfrastructureDiscoverer", "BotRunner.Tests")]
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = true)]
+    public class RequiresInfrastructureAttribute : Attribute, ITraitAttribute
+    {
+    }
+
+    /// <summary>
+    /// Discoverer for the RequiresInfrastructure trait.
+    /// </summary>
+    public class RequiresInfrastructureDiscoverer : ITraitDiscoverer
+    {
+        public IEnumerable<KeyValuePair<string, string>> GetTraits(IAttributeInfo traitAttribute)
+        {
+            yield return new KeyValuePair<string, string>("Category", "RequiresInfrastructure");
+        }
+    }
+
     /// <summary>
     /// End-to-end integration test that demonstrates real bot-driven state changes being tracked in the Mangos server.
     /// This test fulfills the requirement from memory 1b8894ca-271e-4809-a479-c980686c1d84:
@@ -35,7 +57,17 @@ namespace BotRunner.Tests
     /// 5. Real database state tracking
     /// 
     /// NO SIMULATION OR MOCKING - All components must be real and functional.
+    /// 
+    /// To run these tests, you need:
+    /// - Mangos server running with SOAP enabled on port 7878
+    /// - MySQL database with characters, realmd databases accessible
+    /// - WoW.exe client installed and path configured in appsettings.test.json
+    /// - Loader.dll built (run Setup-InjectionDlls.ps1)
+    /// - PathfindingService running
+    /// 
+    /// To skip these tests in CI: dotnet test --filter "Category!=RequiresInfrastructure"
     /// </summary>
+    [RequiresInfrastructure]
     public class MangosServerStateTrackingIntegrationTest : IClassFixture<IntegrationTestFixture>
     {
         private readonly IntegrationTestFixture _fixture;
@@ -822,7 +854,7 @@ namespace BotRunner.Tests
             services.AddSingleton<MangosSOAPClient>(provider =>
             {
                 var soapAddress = Configuration["MangosSOAP:IpAddress"];
-                return new MangosSOAPClient(soapAddress ?? "http://127.0.0.1");
+                return new MangosSOAPClient(soapAddress ?? "http://127.0.0.1", provider.GetRequiredService<ILogger<MangosSOAPClient>>());
             });
 
             var pathfindingIp = Configuration["PathfindingService:IpAddress"];

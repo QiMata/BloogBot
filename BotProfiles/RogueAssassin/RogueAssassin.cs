@@ -1,7 +1,5 @@
 ﻿using System.ComponentModel.Composition;
-using BotRunner;
 using BotRunner.Interfaces;
-using Communication;
 using RogueAssassin.Tasks;
 
 using BotProfiles.Common;

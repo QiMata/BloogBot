@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 
 namespace HunterBeastMastery.Tasks
 {
@@ -9,13 +9,13 @@ namespace HunterBeastMastery.Tasks
     {
         private const int stackCount = 5;
         private const string noPetErrorMessage = "You do not have a pet";
-        private readonly ILocalPet pet;
+        private readonly IWoWLocalPet pet;
         private readonly IWoWItem foodItem;
         private readonly IWoWItem drinkItem;
         private readonly IWoWItem petFood;
         public RestTask(IBotContext botContext) : base(botContext)
         {
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {
@@ -29,14 +29,14 @@ namespace HunterBeastMastery.Tasks
         public void Update()
         {
             // keep pet summoned and happy
-            if (ObjectManager.Pet == null && ObjectManager.Player.IsSpellReady(CallPet))
-                ObjectManager.Player.CastSpell(CallPet);
-            if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 40 && ObjectManager.Player.IsSpellReady(MendPet))
-                ObjectManager.Player.CastSpell(MendPet);
+            if (ObjectManager.Pet == null && ObjectManager.IsSpellReady(CallPet))
+                ObjectManager.CastSpell(CallPet);
+            if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 40 && ObjectManager.IsSpellReady(MendPet))
+                ObjectManager.CastSpell(MendPet);
 
-            if (pet != null && !PetHappy && !PetBeingFed && petFood != null && ObjectManager.Player.IsSpellReady(FeedPet))
+            if (pet != null && !PetHappy && !PetBeingFed && petFood != null && ObjectManager.IsSpellReady(FeedPet))
             {
-                ObjectManager.Player.CastSpell(FeedPet);
+                ObjectManager.CastSpell(FeedPet);
                 petFood.Use();
             }
 
@@ -48,7 +48,7 @@ namespace HunterBeastMastery.Tasks
                 ObjectManager.Units.Any(u => u.TargetGuid == ObjectManager.Player.Guid))
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
 
                 uint foodCount = foodItem == null ? 0 : ObjectManager.GetItemCount(foodItem.ItemId);

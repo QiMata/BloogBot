@@ -1,14 +1,12 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace MageFrost.Tasks
 {
     internal class ConjureItemsTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-        private readonly Stack<IBotTask> botTasks;
-        private readonly IClassContainer container;
-        private readonly ILocalPlayer player;
         private IWoWItem foodItem;
         private IWoWItem drinkItem;
 
@@ -23,7 +21,7 @@ namespace MageFrost.Tasks
             if (ObjectManager.Player.IsCasting)
                 return;
 
-            //ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+            //ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
 
             if (ObjectManager.Player.ManaPercent < 20)
             {
@@ -32,7 +30,7 @@ namespace MageFrost.Tasks
                 return;
             }
 
-            if (ObjectManager.CountFreeSlots(false) == 0 || (foodItem != null || !ObjectManager.Player.IsSpellReady(ConjureFood)) && (drinkItem != null || !ObjectManager.Player.IsSpellReady(ConjureWater)))
+            if (ObjectManager.CountFreeSlots(false) == 0 || (foodItem != null || !ObjectManager.IsSpellReady(ConjureFood)) && (drinkItem != null || !ObjectManager.IsSpellReady(ConjureWater)))
             {
                 BotTasks.Pop();
 
@@ -53,8 +51,8 @@ namespace MageFrost.Tasks
 
         private void TryCastSpell(string name)
         {
-            if (ObjectManager.Player.IsSpellReady(name) && ObjectManager.Player.IsCasting)
-                ObjectManager.Player.CastSpell(name);
+            if (ObjectManager.IsSpellReady(name) && ObjectManager.Player.IsCasting)
+                ObjectManager.CastSpell(name);
         }
     }
 }

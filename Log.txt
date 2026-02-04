@@ -1,0 +1,356 @@
+[PHYS][INF][MOVE] [StepV2] InputSummary
+  frame=11 map=1 dt=0.047
+  pos=(-562.225,-4189.09,70.789)
+  velIn=(0,0,0)
+  flags=FORWARD (0x1)
+  orient=5.91398 pitch=0
+  size: radius=0.4722 height=2.051
+  speeds[wlk=2.5 run=7 back=4.5 swim=4.72222 swimBack=0 fly=7]
+  fallTime=0 transportGuid=0
+  spline=0 splineSpeed=0 curSplineIdx=0
+[PHYS][INF][MOVE] [Intent] hasInput=1 flags=0x1 dir=(0.9326,-0.3609) speed=7.0000 dist=0.3290 dt=0.0470 run
+[PHYS][INF][MOVE] [GroundMove] Starting 3-pass movement dist=0.329
+[PHYS][INF][MOVE] [ThreePass] Starting move dist=0.3290 isJumping=0 hasJumpFlag=0 isGrounded=1 inputVz=0.0000
+[PHYS][INF][MOVE] [Decompose] Added stepOffset=2.125 to upVector
+[PHYS][INF][MOVE] [Decompose] direction=(0.3068,-0.1187,0.0000) up=(0.0000,0.0000,2.1250) side=(0.3068,-0.1187,0.0000) down=(0.0000,0.0000,0.0000) stepOffset=2.1250 isMovingUp=0 hasSide=1 isJumping=0
+[PHYS][INF][MOVE] [UpPass] Starting sweep dist=2.125
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [UpPass] Complete: advance=2.1250 actualDelta=2.1250 clampedStepOffset=2.1250 newZ=72.9140
+[PHYS][INF][MOVE] [SidePass] Starting CollideAndSlide dist=0.329
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-562.225,-4189.09,73.3862) p1=(-562.225,-4189.09,74.4928) r=0.4722 dir=(0.932613,-0.360878,0) dist=0.329
+  Broadphase triCount=174 instCount=122497 sweepBoxI.min=(17628.1,21255.3,72.9093) max=(17629.4,21256.4,74.9697)
+  Summary: hits=0
+  ZWindow capMinZ=72.864 capMaxZ=75.015 terrainTriCount=8
+
+[PHYS][INF][MOVE] [CollideAndSlide] iter=0 NO HIT - moved full 0.3290
+[PHYS][INF][MOVE] [SidePass] Complete: moved=0.3290 remaining=0.0000 iterations=1 hitWall=0 hitCorner=0
+[PHYS][INF][MOVE] [DownPass] Starting: undoStep=2.1250 downMagnitude=0.0000 snapDist=4.0000 totalDown=6.1250
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.918,-4189.21,73.3862) p1=(-561.918,-4189.21,74.4928) r=0.4722 dir=(0,0,-1) dist=6.125
+  Broadphase triCount=174 instCount=122497 sweepBoxI.min=(17628.1,21255.4,66.7843) max=(17629.1,21256.4,74.9697)
+  [Tri] inst=226065 tri=28 A=(-19.5513,9.41116,-4.79666) B=(-28.5615,9.73704,-8.28886) C=(-18.3497,14.4676,-3.85896)
+    [SweepHit] tri=28 inst=226065 t=0.34981 impact=(-561.973,-4189.26,70.7768) zDelta=2.28882e-05 planeDist=-2.29478e-05 cpOk=1 cpDist=0.4722
+    [SlopeDiag] tri=28 inst=226065 slope=-0.0182571 z1=70.7768 z2=70.7585 capWin=[69.3362,74.5428] zHit=70.7768
+    [NormalFlip] tri=28 inst=226065 t=0.34981
+  [TOI] inst=226065 tri=28 t=0.34981 dist=2.14259 pt=(-561.973,-4189.26,70.7768) nZ=0.988641
+  Summary: hits=1 pen=0 nonPen=1 walkableNP=1 earliestNP=0.34981 zMin=70.7768 zMax=70.7768
+  Rejections: vmapProx=172 terrainZWin=0
+
+[PHYS][INF][MOVE] [DownPass] Landed: z=70.7660 normalZ=0.9886 walkable=1
+[PHYS][INF][MOVE] [ThreePass] Complete: pos=(-561.9182,-4189.2104,70.7660) collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 grounded=1
+[PHYS][INF][MOVE] [GroundMove] 3-pass result:  collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 pos=(-561.9182,-4189.2104,70.7660)
+[PHYS][INF][CYL] [OverlapCapsule] tri=28 instId=226065 pointW=(-561.971,-4189.26,70.7767) normalW=(0.114928,0.0968554,0.988641) depth=0.00536215
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.918,-4189.21,71.2382) p1=(-561.918,-4189.21,72.3448) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=1 (idle/settle)
+    [PenOverlap] inst=226065 tri=28 pt=(-561.971,-4189.26,70.7767) nZ=0.988641 depth=0.00536215
+
+[PHYS][INF][MOVE] [StepV2] DownwardSweepCapsule p0=(-561.918,-4189.21,71.2382) p1=(-561.918,-4189.21,72.3448) r=0.4722 fullHeightSegLen=1.10661
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [StepV2] DownwardSweep hits=1 dist=4
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226065 tri=28 zHit=70.77666 nZ=0.98864 startPen=1 walkable=1
+[PHYS][INF][MOVE] [StepV2] StepDown Penetration snap z=70.7661 dz=0.000106812 nZ=0.988641
+[PHYS][INF][CYL] [OverlapCapsule] tri=28 instId=226065 pointW=(-561.971,-4189.26,70.7767) normalW=(0.114931,0.0968558,0.98864) depth=0.00525567
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.918,-4189.21,71.2383) p1=(-561.918,-4189.21,72.3449) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=1 (idle/settle)
+    [PenOverlap] inst=226065 tri=28 pt=(-561.971,-4189.26,70.7767) nZ=0.988641 depth=0.00525567
+
+[PHYS][INF][MOVE] [DepenDiag] post VerticalPlacement overlaps count=1 walkable=1 side=0 maxDepth=0.0053 at pos=(-561.9182,-4189.2104,70.7661)
+[PHYS][INF][MOVE] [StepV2] OutputSummary frame=11
+  pos=(-561.918,-4189.21,70.7661)
+  velOut=(6.52816,-2.52452,0)
+  flags=0x1
+  groundZ=70.7661 liquidZ=-500 liquidType=0
+[PHYS][INF][MOVE] [StepV2] InputSummary
+  frame=12 map=1 dt=0.096
+  pos=(-562.225,-4189.09,70.789)
+  velIn=(0,0,0)
+  flags=FORWARD (0x1)
+  orient=5.91398 pitch=0
+  size: radius=0.4722 height=2.051
+  speeds[wlk=2.5 run=7 back=4.5 swim=4.72222 swimBack=0 fly=7]
+  fallTime=0 transportGuid=0
+  spline=0 splineSpeed=0 curSplineIdx=0
+[PHYS][INF][MOVE] [Intent] hasInput=1 flags=0x1 dir=(0.9326,-0.3609) speed=7.0000 dist=0.6720 dt=0.0960 run
+[PHYS][INF][MOVE] [GroundMove] Starting 3-pass movement dist=0.672
+[PHYS][INF][MOVE] [ThreePass] Starting move dist=0.6720 isJumping=0 hasJumpFlag=0 isGrounded=1 inputVz=0.0000
+[PHYS][INF][MOVE] [Decompose] Added stepOffset=2.125 to upVector
+[PHYS][INF][MOVE] [Decompose] direction=(0.6267,-0.2425,0.0000) up=(0.0000,0.0000,2.1250) side=(0.6267,-0.2425,0.0000) down=(0.0000,0.0000,0.0000) stepOffset=2.1250 isMovingUp=0 hasSide=1 isJumping=0
+[PHYS][INF][MOVE] [UpPass] Starting sweep dist=2.125
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [UpPass] Complete: advance=2.1250 actualDelta=2.1250 clampedStepOffset=2.1250 newZ=72.9140
+[PHYS][INF][MOVE] [SidePass] Starting CollideAndSlide dist=0.672
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-562.225,-4189.09,73.3862) p1=(-562.225,-4189.09,74.4928) r=0.4722 dir=(0.932613,-0.360878,0) dist=0.672
+  Broadphase triCount=174 instCount=122497 sweepBoxI.min=(17627.8,21255.3,72.9093) max=(17629.4,21256.5,74.9697)
+  Summary: hits=0
+  ZWindow capMinZ=72.864 capMaxZ=75.015 terrainTriCount=8
+
+[PHYS][INF][MOVE] [CollideAndSlide] iter=0 NO HIT - moved full 0.6720
+[PHYS][INF][MOVE] [SidePass] Complete: moved=0.6720 remaining=0.0000 iterations=1 hitWall=0 hitCorner=0
+[PHYS][INF][MOVE] [DownPass] Starting: undoStep=2.1250 downMagnitude=0.0000 snapDist=4.0000 totalDown=6.1250
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.598,-4189.33,73.3862) p1=(-561.598,-4189.33,74.4928) r=0.4722 dir=(0,0,-1) dist=6.125
+  Broadphase triCount=174 instCount=122497 sweepBoxI.min=(17627.8,21255.5,66.7843) max=(17628.7,21256.5,74.9697)
+  [Tri] inst=226065 tri=28 A=(-19.5513,9.41116,-4.79666) B=(-28.5615,9.73704,-8.28886) C=(-18.3497,14.4676,-3.85896)
+    [SweepHit] tri=28 inst=226065 t=0.353921 impact=(-561.652,-4189.38,70.7516) zDelta=2.28882e-05 planeDist=-1.98483e-05 cpOk=1 cpDist=0.472201
+    [SlopeDiag] tri=28 inst=226065 slope=-0.0182571 z1=70.7516 z2=70.7333 capWin=[69.3362,74.5428] zHit=70.7516
+    [NormalFlip] tri=28 inst=226065 t=0.353921
+  [TOI] inst=226065 tri=28 t=0.353921 dist=2.16777 pt=(-561.652,-4189.38,70.7516) nZ=0.988641
+  Summary: hits=1 pen=0 nonPen=1 walkableNP=1 earliestNP=0.353921 zMin=70.7516 zMax=70.7516
+  Rejections: vmapProx=172 terrainZWin=0
+
+[PHYS][INF][MOVE] [DownPass] Landed: z=70.7410 normalZ=0.9886 walkable=1
+[PHYS][INF][MOVE] [ThreePass] Complete: pos=(-561.5983,-4189.3345,70.7410) collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 grounded=1
+[PHYS][INF][MOVE] [GroundMove] 3-pass result:  collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 pos=(-561.5983,-4189.3345,70.7410)
+[PHYS][INF][CYL] [OverlapCapsule] tri=28 instId=226065 pointW=(-561.65,-4189.38,70.7515) normalW=(0.114926,0.0968545,0.988641) depth=0.00522283
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.598,-4189.33,71.2132) p1=(-561.598,-4189.33,72.3198) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=1 (idle/settle)
+    [PenOverlap] inst=226065 tri=28 pt=(-561.65,-4189.38,70.7515) nZ=0.988641 depth=0.00522283
+
+[PHYS][INF][MOVE] [StepV2] DownwardSweepCapsule p0=(-561.598,-4189.33,71.2132) p1=(-561.598,-4189.33,72.3198) r=0.4722 fullHeightSegLen=1.10661
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [StepV2] DownwardSweep hits=1 dist=4
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226065 tri=28 zHit=70.75148 nZ=0.98864 startPen=1 walkable=1
+[PHYS][INF][MOVE] [StepV2] StepDown Penetration snap z=70.7411 dz=0.000114441 nZ=0.988641
+[PHYS][INF][CYL] [OverlapCapsule] tri=28 instId=226065 pointW=(-561.65,-4189.38,70.7515) normalW=(0.114927,0.0968558,0.988641) depth=0.00510892
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.598,-4189.33,71.2133) p1=(-561.598,-4189.33,72.3199) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=1 (idle/settle)
+    [PenOverlap] inst=226065 tri=28 pt=(-561.65,-4189.38,70.7515) nZ=0.988641 depth=0.00510892
+
+[PHYS][INF][MOVE] [DepenDiag] post VerticalPlacement overlaps count=1 walkable=1 side=0 maxDepth=0.0051 at pos=(-561.5983,-4189.3345,70.7411)
+[PHYS][INF][MOVE] [StepV2] OutputSummary frame=12
+  pos=(-561.598,-4189.33,70.7411)
+  velOut=(6.52822,-2.52787,0)
+  flags=0x1
+  groundZ=70.7411 liquidZ=-500 liquidType=0
+[PHYS][INF][MOVE] [StepV2] InputSummary
+  frame=13 map=1 dt=0.11
+  pos=(-561.918,-4189.21,70.7661)
+  velIn=(6.52816,-2.52452,0)
+  flags=FORWARD (0x1)
+  orient=5.91398 pitch=0
+  size: radius=0.4722 height=2.051
+  speeds[wlk=2.5 run=7 back=4.5 swim=4.72222 swimBack=0 fly=7]
+  fallTime=0 transportGuid=0
+  spline=0 splineSpeed=0 curSplineIdx=0
+[PHYS][INF][MOVE] [Intent] hasInput=1 flags=0x1 dir=(0.9326,-0.3609) speed=7.0000 dist=0.7700 dt=0.1100 run
+[PHYS][INF][MOVE] [GroundMove] Starting 3-pass movement dist=0.77
+[PHYS][INF][MOVE] [ThreePass] Starting move dist=0.7700 isJumping=0 hasJumpFlag=0 isGrounded=1 inputVz=0.0000
+[PHYS][INF][MOVE] [Decompose] Added stepOffset=2.125 to upVector
+[PHYS][INF][MOVE] [Decompose] direction=(0.7181,-0.2779,0.0000) up=(0.0000,0.0000,2.1250) side=(0.7181,-0.2779,0.0000) down=(0.0000,0.0000,0.0000) stepOffset=2.1250 isMovingUp=0 hasSide=1 isJumping=0
+[PHYS][INF][MOVE] [UpPass] Starting sweep dist=2.125
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [UpPass] Complete: advance=2.1250 actualDelta=2.1250 clampedStepOffset=2.1250 newZ=72.8911
+[PHYS][INF][MOVE] [SidePass] Starting CollideAndSlide dist=0.77
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.918,-4189.21,73.3633) p1=(-561.918,-4189.21,74.4699) r=0.4722 dir=(0.932613,-0.360878,0) dist=0.77
+  Broadphase triCount=174 instCount=122497 sweepBoxI.min=(17627.4,21255.4,72.8864) max=(17629.1,21256.6,74.9468)
+  Summary: hits=0
+  ZWindow capMinZ=72.8411 capMaxZ=74.9921 terrainTriCount=4
+
+[PHYS][INF][MOVE] [CollideAndSlide] iter=0 NO HIT - moved full 0.7700
+[PHYS][INF][MOVE] [SidePass] Complete: moved=0.7700 remaining=0.0000 iterations=1 hitWall=0 hitCorner=0
+[PHYS][INF][MOVE] [DownPass] Starting: undoStep=2.1250 downMagnitude=0.0000 snapDist=4.0000 totalDown=6.1250
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.2,-4189.49,73.3633) p1=(-561.2,-4189.49,74.4699) r=0.4722 dir=(0,0,-1) dist=6.125
+  Broadphase triCount=174 instCount=122497 sweepBoxI.min=(17627.4,21255.7,66.7614) max=(17628.3,21256.6,74.9468)
+  [Tri] inst=226065 tri=28 A=(-19.5513,9.41116,-4.79666) B=(-28.5615,9.73704,-8.28886) C=(-18.3497,14.4676,-3.85896)
+    [SweepHit] tri=28 inst=226065 t=0.355276 impact=(-561.254,-4189.53,70.7204) zDelta=2.28882e-05 planeDist=-2.5183e-05 cpOk=1 cpDist=0.4722
+    [SlopeDiag] tri=28 inst=226065 slope=-0.0182571 z1=70.7204 z2=70.7021 capWin=[69.3133,74.5199] zHit=70.7204
+    [NormalFlip] tri=28 inst=226065 t=0.355276
+  [TOI] inst=226065 tri=28 t=0.355276 dist=2.17606 pt=(-561.254,-4189.53,70.7204) nZ=0.988641
+  Summary: hits=1 pen=0 nonPen=1 walkableNP=1 earliestNP=0.355276 zMin=70.7204 zMax=70.7204
+  Rejections: vmapProx=172 terrainZWin=0
+
+[PHYS][INF][MOVE] [DownPass] Landed: z=70.7097 normalZ=0.9886 walkable=1
+[PHYS][INF][MOVE] [ThreePass] Complete: pos=(-561.2000,-4189.4883,70.7097) collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 grounded=1
+[PHYS][INF][MOVE] [GroundMove] 3-pass result:  collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 pos=(-561.2000,-4189.4883,70.7097)
+[PHYS][INF][CYL] [OverlapCapsule] tri=42 instId=226015 pointW=(-560.898,-4189.25,71.2452) normalW=(-0.786081,-0.618123,0) depth=0.0902729
+[PHYS][INF][CYL] [OverlapCapsule] tri=68 instId=226015 pointW=(-560.898,-4189.25,71.2452) normalW=(-0.786082,-0.618122,0) depth=0.0902731
+[PHYS][INF][SURF] [NormalFixPen] tri=68 instId=226015 flippedUp=1 original=(0.351887,0.176107,-0.919327) -> (-0.351887,-0.176107,0.919327)
+[PHYS][INF][CYL] [OverlapCapsule] tri=28 instId=226065 pointW=(-561.252,-4189.53,70.7203) normalW=(0.114929,0.0968557,0.988641) depth=0.00524226
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.2,-4189.49,71.1819) p1=(-561.2,-4189.49,72.2885) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=3 (idle/settle)
+    [PenOverlap] inst=226015 tri=42 pt=(-560.898,-4189.25,71.2452) nZ=0.125257 depth=0.0902729
+    [PenOverlap] inst=226015 tri=68 pt=(-560.898,-4189.25,71.2452) nZ=0.919327 depth=0.0902731
+    [PenOverlap] inst=226065 tri=28 pt=(-561.252,-4189.53,70.7203) nZ=0.988641 depth=0.00524226
+
+[PHYS][INF][MOVE] [StepV2] DownwardSweepCapsule p0=(-561.2,-4189.49,71.1819) p1=(-561.2,-4189.49,72.2885) r=0.4722 fullHeightSegLen=1.10661
+[PHYS][INF][SURF] [NormalFixPen] tri=68 instId=226015 flippedUp=1 original=(0.351887,0.176107,-0.919327) -> (-0.351887,-0.176107,0.919327)
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [StepV2] DownwardSweep hits=3 dist=4
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226015 tri=42 zHit=71.24523 nZ=0.12526 startPen=1 walkable=0
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226015 tri=68 zHit=71.24523 nZ=0.91933 startPen=1 walkable=1
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226065 tri=28 zHit=70.72028 nZ=0.98864 startPen=1 walkable=1
+[PHYS][INF][MOVE] [StepV2] StepDown Penetration snap z=71.0845 dz=0.374794 nZ=0.919327
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.2,-4189.49,71.5567) p1=(-561.2,-4189.49,72.6633) r=0.4722 dir=(0,0,0) dist=0
+
+[PHYS][INF][MOVE] [StepV2] OutputSummary frame=13
+  pos=(-561.2,-4189.49,71.0845)
+  velOut=(6.52854,-2.52575,0)
+  flags=0x1
+  groundZ=71.0845 liquidZ=-500 liquidType=0
+[PHYS][INF][MOVE] [StepV2] InputSummary
+  frame=15 map=1 dt=0.153
+  pos=(-561.598,-4189.33,70.7411)
+  velIn=(6.52822,-2.52787,0)
+  flags=FORWARD (0x1)
+  orient=5.91398 pitch=0
+  size: radius=0.4722 height=2.051
+  speeds[wlk=2.5 run=7 back=4.5 swim=4.72222 swimBack=0 fly=7]
+  fallTime=0 transportGuid=0
+  spline=0 splineSpeed=0 curSplineIdx=0
+[PHYS][INF][MOVE] [Intent] hasInput=1 flags=0x1 dir=(0.9326,-0.3609) speed=7.0000 dist=1.0710 dt=0.1530 run
+[PHYS][INF][MOVE] [GroundMove] Starting 3-pass movement dist=1.071
+[PHYS][INF][MOVE] [ThreePass] Starting move dist=1.0710 isJumping=0 hasJumpFlag=0 isGrounded=1 inputVz=0.0000
+[PHYS][INF][MOVE] [Decompose] Added stepOffset=2.125 to upVector
+[PHYS][INF][MOVE] [Decompose] direction=(0.9988,-0.3865,0.0000) up=(0.0000,0.0000,2.1250) side=(0.9988,-0.3865,0.0000) down=(0.0000,0.0000,0.0000) stepOffset=2.1250 isMovingUp=0 hasSide=1 isJumping=0
+[PHYS][INF][MOVE] [UpPass] Starting sweep dist=2.125
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [UpPass] Complete: advance=2.1250 actualDelta=2.1250 clampedStepOffset=2.1250 newZ=72.8661
+[PHYS][INF][MOVE] [SidePass] Starting CollideAndSlide dist=1.071
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.598,-4189.33,73.3383) p1=(-561.598,-4189.33,74.4449) r=0.4722 dir=(0.932613,-0.360878,0) dist=1.071
+  Broadphase triCount=270 instCount=122497 sweepBoxI.min=(17626.8,21255.5,72.8613) max=(17628.7,21256.9,74.9218)
+  Summary: hits=0
+  ZWindow capMinZ=72.8161 capMaxZ=74.9671 terrainTriCount=4
+
+[PHYS][INF][MOVE] [CollideAndSlide] iter=0 NO HIT - moved full 1.0710
+[PHYS][INF][MOVE] [SidePass] Complete: moved=1.0710 remaining=0.0000 iterations=1 hitWall=0 hitCorner=0
+[PHYS][INF][MOVE] [DownPass] Starting: undoStep=2.1250 downMagnitude=0.0000 snapDist=4.0000 totalDown=6.1250
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-560.599,-4189.72,73.3383) p1=(-560.599,-4189.72,74.4449) r=0.4722 dir=(0,0,-1) dist=6.125
+  Broadphase triCount=270 instCount=122497 sweepBoxI.min=(17626.8,21255.9,66.7363) max=(17627.7,21256.9,74.9218)
+  [Tri] inst=226065 tri=9 A=(-18.3497,14.4676,-3.85896) B=(-28.5615,9.73704,-8.28886) C=(-19.7111,13.7709,-9.54038)
+    [SweepHit] tri=9 inst=226065 t=0.489102 impact=(-560.428,-4190.3,70.4172) zDelta=-7.62939e-06 planeDist=1.47671e-05 cpOk=1 cpDist=0.568744
+    [SlopeDiag] tri=9 inst=226065 slope=-1.23792 z1=70.4172 z2=69.1793 capWin=[69.2883,74.4949] zHit=70.4172
+    [NormalFlip] tri=9 inst=226065 t=0.489102
+  [Tri] inst=226065 tri=28 A=(-19.5513,9.41116,-4.79666) B=(-28.5615,9.73704,-8.28886) C=(-18.3497,14.4676,-3.85896)
+    [SweepHit] tri=28 inst=226065 t=0.358851 impact=(-560.654,-4189.77,70.6735) zDelta=2.28882e-05 planeDist=-2.34842e-05 cpOk=1 cpDist=0.4722
+    [SlopeDiag] tri=28 inst=226065 slope=-0.0182571 z1=70.6735 z2=70.6552 capWin=[69.2883,74.4949] zHit=70.6735
+    [NormalFlip] tri=28 inst=226065 t=0.358851
+  [TOI] inst=226065 tri=28 t=0.358851 dist=2.19796 pt=(-560.654,-4189.77,70.6735) nZ=0.988641
+  [TOI] inst=226065 tri=9 t=0.489102 dist=2.99575 pt=(-560.428,-4190.3,70.4172) nZ=0.122772
+  Summary: hits=2 pen=0 nonPen=2 walkableNP=1 earliestNP=0.358851 zMin=70.4172 zMax=70.6735
+  Rejections: vmapProx=268 terrainZWin=0
+
+[PHYS][INF][MOVE] [DownPass] Landed: z=70.6627 normalZ=0.9886 walkable=1
+[PHYS][INF][MOVE] [ThreePass] Complete: pos=(-560.5994,-4189.7212,70.6627) collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 grounded=1
+[PHYS][INF][MOVE] [GroundMove] 3-pass result:  collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 pos=(-560.5994,-4189.7212,70.6627)
+[PHYS][INF][CYL] [OverlapCapsule] tri=42 instId=226015 pointW=(-560.557,-4189.69,71.2928) normalW=(-0.78608,-0.618124,0) depth=0.417948
+[PHYS][INF][CYL] [OverlapCapsule] tri=43 instId=226015 pointW=(-560.529,-4189.6,70.6845) normalW=(-0.150908,-0.255677,0.954912) depth=0.000476889
+[PHYS][INF][CYL] [OverlapCapsule] tri=68 instId=226015 pointW=(-560.557,-4189.69,71.2928) normalW=(-0.78609,-0.618112,0) depth=0.417949
+[PHYS][INF][SURF] [NormalFixPen] tri=68 instId=226015 flippedUp=1 original=(0.351887,0.176107,-0.919327) -> (-0.351887,-0.176107,0.919327)
+[PHYS][INF][CYL] [OverlapCapsule] tri=28 instId=226065 pointW=(-560.652,-4189.77,70.6733) normalW=(0.114927,0.0968568,0.988641) depth=0.00531393
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-560.599,-4189.72,71.1349) p1=(-560.599,-4189.72,72.2415) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=4 (idle/settle)
+    [PenOverlap] inst=226015 tri=42 pt=(-560.557,-4189.69,71.2928) nZ=0.125257 depth=0.417948
+    [PenOverlap] inst=226015 tri=68 pt=(-560.557,-4189.69,71.2928) nZ=0.919327 depth=0.417949
+    [PenOverlap] inst=226015 tri=43 pt=(-560.529,-4189.6,70.6845) nZ=0.931226 depth=0.000476889
+    [PenOverlap] inst=226065 tri=28 pt=(-560.652,-4189.77,70.6733) nZ=0.988641 depth=0.00531393
+
+[PHYS][INF][MOVE] [StepV2] DownwardSweepCapsule p0=(-560.599,-4189.72,71.1349) p1=(-560.599,-4189.72,72.2415) r=0.4722 fullHeightSegLen=1.10661
+[PHYS][INF][SURF] [NormalFixPen] tri=68 instId=226015 flippedUp=1 original=(0.351887,0.176107,-0.919327) -> (-0.351887,-0.176107,0.919327)
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [StepV2] DownwardSweep hits=4 dist=4
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226015 tri=42 zHit=71.29283 nZ=0.12526 startPen=1 walkable=0
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226015 tri=68 zHit=71.29283 nZ=0.91933 startPen=1 walkable=1
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226015 tri=43 zHit=70.68447 nZ=0.93123 startPen=1 walkable=1
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226065 tri=28 zHit=70.67334 nZ=0.98864 startPen=1 walkable=1
+[PHYS][INF][MOVE] [StepV2] StepDown Penetration snap z=71.27 dz=0.607277 nZ=0.919327
+[PHYS][INF][CYL] [OverlapCapsule] tri=42 instId=226015 pointW=(-560.533,-4189.72,71.2961) normalW=(-0.147145,-0.00747923,0.989087) depth=0.0212038
+[PHYS][INF][CYL] [OverlapCapsule] tri=68 instId=226015 pointW=(-560.447,-4189.64,71.3432) normalW=(-0.351884,-0.176108,0.919328) depth=0.0381659
+[PHYS][INF][SURF] [NormalFixPen] tri=68 instId=226015 flippedUp=1 original=(0.351887,0.176107,-0.919327) -> (-0.351887,-0.176107,0.919327)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-560.599,-4189.72,71.7422) p1=(-560.599,-4189.72,72.8488) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=2 (idle/settle)
+    [PenOverlap] inst=226015 tri=68 pt=(-560.447,-4189.64,71.3432) nZ=0.919327 depth=0.0381659
+    [PenOverlap] inst=226015 tri=42 pt=(-560.533,-4189.72,71.2961) nZ=0.125257 depth=0.0212038
+
+[PHYS][INF][MOVE] [DepenDiag] post VerticalPlacement overlaps count=2 walkable=1 side=0 maxDepth=0.0382 at pos=(-560.5994,-4189.7212,71.2700)
+[PHYS][INF][MOVE] [StepV2] OutputSummary frame=15
+  pos=(-560.599,-4189.72,71.27)
+  velOut=(6.52837,-2.52757,0)
+  flags=0x1
+  groundZ=71.27 liquidZ=-500 liquidType=0
+[PHYS][INF][MOVE] [StepV2] InputSummary
+  frame=14 map=1 dt=0.156
+  pos=(-561.918,-4189.21,70.7661)
+  velIn=(6.52816,-2.52452,0)
+  flags=FORWARD (0x1)
+  orient=5.91398 pitch=0
+  size: radius=0.4722 height=2.051
+  speeds[wlk=2.5 run=7 back=4.5 swim=4.72222 swimBack=0 fly=7]
+  fallTime=0 transportGuid=0
+  spline=0 splineSpeed=0 curSplineIdx=0
+[PHYS][INF][MOVE] [Intent] hasInput=1 flags=0x1 dir=(0.9326,-0.3609) speed=7.0000 dist=1.0920 dt=0.1560 run
+[PHYS][INF][MOVE] [GroundMove] Starting 3-pass movement dist=1.092
+[PHYS][INF][MOVE] [ThreePass] Starting move dist=1.0920 isJumping=0 hasJumpFlag=0 isGrounded=1 inputVz=0.0000
+[PHYS][INF][MOVE] [Decompose] Added stepOffset=2.125 to upVector
+[PHYS][INF][MOVE] [Decompose] direction=(1.0184,-0.3941,0.0000) up=(0.0000,0.0000,2.1250) side=(1.0184,-0.3941,0.0000) down=(0.0000,0.0000,0.0000) stepOffset=2.1250 isMovingUp=0 hasSide=1 isJumping=0
+[PHYS][INF][MOVE] [UpPass] Starting sweep dist=2.125
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [UpPass] Complete: advance=2.1250 actualDelta=2.1250 clampedStepOffset=2.1250 newZ=72.8911
+[PHYS][INF][MOVE] [SidePass] Starting CollideAndSlide dist=1.092
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-561.918,-4189.21,73.3633) p1=(-561.918,-4189.21,74.4699) r=0.4722 dir=(0.932613,-0.360878,0) dist=1.092
+  Broadphase triCount=174 instCount=122497 sweepBoxI.min=(17627.1,21255.4,72.8864) max=(17629.1,21256.7,74.9468)
+  Summary: hits=0
+  ZWindow capMinZ=72.8411 capMaxZ=74.9921 terrainTriCount=4
+
+[PHYS][INF][MOVE] [CollideAndSlide] iter=0 NO HIT - moved full 1.0920
+[PHYS][INF][MOVE] [SidePass] Complete: moved=1.0920 remaining=0.0000 iterations=1 hitWall=0 hitCorner=0
+[PHYS][INF][MOVE] [DownPass] Starting: undoStep=2.1250 downMagnitude=0.0000 snapDist=4.0000 totalDown=6.1250
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-560.9,-4189.6,73.3633) p1=(-560.9,-4189.6,74.4699) r=0.4722 dir=(0,0,-1) dist=6.125
+  Broadphase triCount=174 instCount=122497 sweepBoxI.min=(17627.1,21255.8,66.7614) max=(17628,21256.7,74.9468)
+  [Tri] inst=226065 tri=28 A=(-19.5513,9.41116,-4.79666) B=(-28.5615,9.73704,-8.28886) C=(-18.3497,14.4676,-3.85896)
+    [SweepHit] tri=28 inst=226065 t=0.359104 impact=(-560.955,-4189.65,70.697) zDelta=2.28882e-05 planeDist=-2.93255e-05 cpOk=1 cpDist=0.4722
+    [SlopeDiag] tri=28 inst=226065 slope=-0.0182571 z1=70.697 z2=70.6787 capWin=[69.3133,74.5199] zHit=70.697
+    [NormalFlip] tri=28 inst=226065 t=0.359104
+  [TOI] inst=226065 tri=28 t=0.359104 dist=2.19951 pt=(-560.955,-4189.65,70.697) nZ=0.988641
+  Summary: hits=1 pen=0 nonPen=1 walkableNP=1 earliestNP=0.359104 zMin=70.697 zMax=70.697
+  Rejections: vmapProx=172 terrainZWin=0
+
+[PHYS][INF][MOVE] [DownPass] Landed: z=70.6862 normalZ=0.9886 walkable=1
+[PHYS][INF][MOVE] [ThreePass] Complete: pos=(-560.8997,-4189.6045,70.6862) collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 grounded=1
+[PHYS][INF][MOVE] [GroundMove] 3-pass result:  collisionUp=0 collisionSide=0 collisionDown=1 hitNonWalkable=0 pos=(-560.8997,-4189.6045,70.6862)
+[PHYS][INF][CYL] [OverlapCapsule] tri=42 instId=226015 pointW=(-560.729,-4189.47,71.2689) normalW=(-0.786081,-0.618124,0) depth=0.253946
+[PHYS][INF][CYL] [OverlapCapsule] tri=68 instId=226015 pointW=(-560.729,-4189.47,71.2689) normalW=(-0.786082,-0.618122,0) depth=0.253946
+[PHYS][INF][SURF] [NormalFixPen] tri=68 instId=226015 flippedUp=1 original=(0.351887,0.176107,-0.919327) -> (-0.351887,-0.176107,0.919327)
+[PHYS][INF][CYL] [OverlapCapsule] tri=28 instId=226065 pointW=(-560.953,-4189.65,70.6968) normalW=(0.114927,0.0968568,0.988641) depth=0.00531393
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-560.9,-4189.6,71.1584) p1=(-560.9,-4189.6,72.265) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=3 (idle/settle)
+    [PenOverlap] inst=226015 tri=42 pt=(-560.729,-4189.47,71.2689) nZ=0.125257 depth=0.253946
+    [PenOverlap] inst=226015 tri=68 pt=(-560.729,-4189.47,71.2689) nZ=0.919327 depth=0.253946
+    [PenOverlap] inst=226065 tri=28 pt=(-560.953,-4189.65,70.6968) nZ=0.988641 depth=0.00531393
+
+[PHYS][INF][MOVE] [StepV2] DownwardSweepCapsule p0=(-560.9,-4189.6,71.1584) p1=(-560.9,-4189.6,72.265) r=0.4722 fullHeightSegLen=1.10661
+[PHYS][INF][SURF] [NormalFixPen] tri=68 instId=226015 flippedUp=1 original=(0.351887,0.176107,-0.919327) -> (-0.351887,-0.176107,0.919327)
+[PHYS][INF][SURF] [NormalFixPen] tri=28 instId=226065 flippedUp=1 original=(-0.114926,-0.0968565,-0.988641) -> (0.114926,0.0968565,0.988641)
+[PHYS][INF][MOVE] [StepV2] DownwardSweep hits=3 dist=4
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226015 tri=42 zHit=71.26891 nZ=0.12526 startPen=1 walkable=0
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226015 tri=68 zHit=71.26891 nZ=0.91933 startPen=1 walkable=1
+[PHYS][INF][SURF] [StepV2][DownHits] instId=226065 tri=28 zHit=70.69682 nZ=0.98864 startPen=1 walkable=1
+[PHYS][INF][MOVE] [StepV2] StepDown Penetration snap z=71.1774 dz=0.491165 nZ=0.919327
+[PHYS][INF][CYL] [OverlapCapsule] tri=42 instId=226015 pointW=(-560.709,-4189.49,71.2717) normalW=(-0.437993,-0.24992,0.86354) depth=0.0346223
+[PHYS][INF][CYL] [OverlapCapsule] tri=68 instId=226015 pointW=(-560.709,-4189.49,71.2717) normalW=(-0.437993,-0.249919,0.86354) depth=0.0346223
+[PHYS][INF][SURF] [NormalFixPen] tri=68 instId=226015 flippedUp=1 original=(0.351887,0.176107,-0.919327) -> (-0.351887,-0.176107,0.919327)
+[PHYS][INF][CYL] [SweepCapsule] map=1 p0=(-560.9,-4189.6,71.6496) p1=(-560.9,-4189.6,72.7562) r=0.4722 dir=(0,0,0) dist=0
+  OverlapHits count=2 (idle/settle)
+    [PenOverlap] inst=226015 tri=42 pt=(-560.709,-4189.49,71.2717) nZ=0.125257 depth=0.0346223
+    [PenOverlap] inst=226015 tri=68 pt=(-560.709,-4189.49,71.2717) nZ=0.919327 depth=0.0346223
+
+[PHYS][INF][MOVE] [DepenDiag] post VerticalPlacement overlaps count=2 walkable=1 side=0 maxDepth=0.0346 at pos=(-560.8997,-4189.6045,71.1774)
+[PHYS][INF][MOVE] [StepV2] OutputSummary frame=14
+  pos=(-560.9,-4189.6,71.1774)
+  velOut=(6.52841,-2.52592,0)
+  flags=0x1
+  groundZ=71.1774 liquidZ=-500 liquidType=0
+[PHYS][INF][MOVE] [StepV2] InputSummary
+  frame=16 map=1 dt=0.139
+  pos=(-561.2,-4189.49,71.0845)
+  velIn=(6.52854,-2.52575,0)
+  flags=FORWARD (0x1)
+  orient=5.91398 pitch=0
+  size: radius=0.4722 height=2.051
+  speeds[wlk=2.5 run=7 back=4.5 swim=4.72222 swimBack=0 fly=7]
+  fallTime=0 transportGuid=0
+  spline=0 splineSpeed=0 curSplineIdx=0

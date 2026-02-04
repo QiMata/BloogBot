@@ -1,5 +1,6 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace MageFire.Tasks
@@ -22,8 +23,8 @@ namespace MageFire.Tasks
             }
 
             if (ObjectManager.CountFreeSlots(false) == 0 ||
-                (foodItem != null || !ObjectManager.Player.IsSpellReady(ConjureFood)) &&
-                (drinkItem != null || !ObjectManager.Player.IsSpellReady(ConjureWater)))
+                (foodItem != null || !ObjectManager.IsSpellReady(ConjureFood)) &&
+                (drinkItem != null || !ObjectManager.IsSpellReady(ConjureWater)))
             {
                 BotTasks.Pop();
 
@@ -35,11 +36,11 @@ namespace MageFire.Tasks
 
             uint foodCount = foodItem == null ? 0 : ObjectManager.GetItemCount(foodItem.ItemId);
             if ((foodItem == null || foodCount <= 2) && Wait.For("FireMageConjureFood", 3000))
-                ObjectManager.Player.CastSpell(ConjureFood);
+                ObjectManager.CastSpell(ConjureFood);
 
             uint drinkCount = drinkItem == null ? 0 : ObjectManager.GetItemCount(drinkItem.ItemId);
             if ((drinkItem == null || drinkCount <= 2) && Wait.For("FireMageConjureDrink", 3000))
-                ObjectManager.Player.CastSpell(ConjureWater);
+                ObjectManager.CastSpell(ConjureWater);
         }
     }
 }

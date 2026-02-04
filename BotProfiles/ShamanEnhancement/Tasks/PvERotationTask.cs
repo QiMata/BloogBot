@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -12,7 +12,7 @@ namespace ShamanEnhancement.Tasks
         public void Update()
         {
             if (ObjectManager.Player.HealthPercent < 30
-                && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HealingWave))
+                && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HealingWave))
             {
                 BotTasks.Push(new HealTask(BotContext));
                 return;
@@ -37,7 +37,7 @@ namespace ShamanEnhancement.Tasks
 
             //    if (nearestHostile.Position.DistanceTo(castingUnit.Position) > 20)
             //    {
-            //        ObjectManager.Player.SetTarget(castingUnit.Guid);
+            //        ObjectManager.SetTarget(castingUnit.Guid);
 
             //        if (ObjectManager.GetTarget(ObjectManager.Player) == null) return;
 
@@ -50,7 +50,7 @@ namespace ShamanEnhancement.Tasks
             //            else
             //            {
             //                Container.State.Action = "Interrupting spellcaster";
-            //                ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            //                ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
             //                TryCastSpell(EarthShock, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling);
             //            }
             //        }
@@ -61,8 +61,8 @@ namespace ShamanEnhancement.Tasks
             //        else
             //        {
             //            Container.State.Action = "In position to interrupt";
-            //            ObjectManager.Player.StopAllMovement();
-            //            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            //            ObjectManager.StopAllMovement();
+            //            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
             //        }
             //    }
             //    else
@@ -87,15 +87,15 @@ namespace ShamanEnhancement.Tasks
 
         public override void PerformCombatRotation()
         {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            ObjectManager.Player.StartMeleeAttack();
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            ObjectManager.StartMeleeAttack();
 
             TryCastSpell(GroundingTotem, 0, int.MaxValue, ObjectManager.Aggressors.Any(a => a.IsCasting && ObjectManager.GetTarget(ObjectManager.Player).Mana > 0));
 
             TryCastSpell(TremorTotem, 0, int.MaxValue, FearingCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && !ObjectManager.Units.Any(u => u.Position.DistanceTo(ObjectManager.Player.Position) < 29 && u.HealthPercent > 0 && u.Name.Contains(TremorTotem)));
 
-            TryCastSpell(WindfuryWeapon, 0, int.MaxValue, !ObjectManager.Player.MainhandIsEnchanted && ObjectManager.Player.IsSpellReady(WindfuryWeapon));
+            TryCastSpell(WindfuryWeapon, 0, int.MaxValue, !ObjectManager.Player.MainhandIsEnchanted && ObjectManager.IsSpellReady(WindfuryWeapon));
 
             TryCastSpell(StoneclawTotem, 0, int.MaxValue,
                 ObjectManager.Aggressors.Count() > 1 &&
@@ -120,13 +120,13 @@ namespace ShamanEnhancement.Tasks
 
             TryUseAbility(Berserking, 0, ObjectManager.Aggressors.Count() > 1);
 
-            //TryCastSpell(EarthShock, 0, 20, !natureImmuneCreatures.Contains(target.Name) && !ObjectManager.Player.IsSpellReady(Stormstrike) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 70 || ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Stormstrike) || ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling || ObjectManager.Player.HasBuff(Clearcasting));
+            //TryCastSpell(EarthShock, 0, 20, !natureImmuneCreatures.Contains(target.Name) && !ObjectManager.IsSpellReady(Stormstrike) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent < 70 || ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Stormstrike) || ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling || ObjectManager.Player.HasBuff(Clearcasting));
 
             TryCastSpell(LightningShield, 0, int.MaxValue, !NatureImmuneCreatures.Contains(ObjectManager.GetTarget(ObjectManager.Player).Name) && !ObjectManager.Player.HasBuff(LightningShield));
 
-            TryCastSpell(RockbiterWeapon, 0, int.MaxValue, !ObjectManager.Player.MainhandIsEnchanted && ObjectManager.Player.IsSpellReady(RockbiterWeapon) && !ObjectManager.Player.IsSpellReady(FlametongueWeapon) && !ObjectManager.Player.IsSpellReady(WindfuryWeapon));
+            TryCastSpell(RockbiterWeapon, 0, int.MaxValue, !ObjectManager.Player.MainhandIsEnchanted && ObjectManager.IsSpellReady(RockbiterWeapon) && !ObjectManager.IsSpellReady(FlametongueWeapon) && !ObjectManager.IsSpellReady(WindfuryWeapon));
 
-            TryCastSpell(FlametongueWeapon, 0, int.MaxValue, !ObjectManager.Player.MainhandIsEnchanted && ObjectManager.Player.IsSpellReady(FlametongueWeapon) && !ObjectManager.Player.IsSpellReady(WindfuryWeapon));
+            TryCastSpell(FlametongueWeapon, 0, int.MaxValue, !ObjectManager.Player.MainhandIsEnchanted && ObjectManager.IsSpellReady(FlametongueWeapon) && !ObjectManager.IsSpellReady(WindfuryWeapon));
         }
     }
 }

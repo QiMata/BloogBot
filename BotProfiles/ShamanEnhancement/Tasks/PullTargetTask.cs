@@ -1,6 +1,5 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace ShamanEnhancement.Tasks
@@ -16,19 +15,19 @@ namespace ShamanEnhancement.Tasks
                 return;
             }
 
-            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 27 && ObjectManager.Player.IsCasting && ObjectManager.Player.IsSpellReady(LightningBolt) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
+            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 27 && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(LightningBolt) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
             {
                 if (ObjectManager.Player.IsMoving)
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
 
                 if (Wait.For("PullWithLightningBoltDelay", 100))
                 {
                     if (!ObjectManager.Player.IsInCombat)
-                        ObjectManager.Player.CastSpell(LightningBolt);
+                        ObjectManager.CastSpell(LightningBolt);
 
                     if (ObjectManager.Player.IsCasting || ObjectManager.Player.IsInCombat)
                     {
-                        ObjectManager.Player.StopAllMovement();
+                        ObjectManager.StopAllMovement();
                         Wait.RemoveAll();
                         BotTasks.Pop();
                         BotTasks.Push(new PvERotationTask(BotContext));
@@ -38,7 +37,7 @@ namespace ShamanEnhancement.Tasks
             }
 
             Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            ObjectManager.Player.MoveToward(nextWaypoint[1]);
+            ObjectManager.MoveToward(nextWaypoint[1]);
         }
     }
 }

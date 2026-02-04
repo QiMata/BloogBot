@@ -1,6 +1,5 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestShadow.Tasks
@@ -16,15 +15,15 @@ namespace PriestShadow.Tasks
             }
 
             IWoWUnit woWUnit = ObjectManager.Aggressors.FirstOrDefault(x => x.TargetGuid == ObjectManager.Player.Guid);
-            if (ObjectManager.PartyMembers.Any(x => x.HealthPercent < 70) && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(LesserHeal))
+            if (ObjectManager.PartyMembers.Any(x => x.HealthPercent < 70) && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(LesserHeal))
             {
                 List<IWoWPlayer> unhealthyMembers = [.. ObjectManager.PartyMembers.Where(x => x.HealthPercent < 70).OrderBy(x => x.Health)];
 
-                if (unhealthyMembers.Count > 0 && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(LesserHeal))
+                if (unhealthyMembers.Count > 0 && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(LesserHeal))
                 {
                     if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).Guid != unhealthyMembers[0].Guid)
                     {
-                        ObjectManager.Player.SetTarget(unhealthyMembers[0].Guid);
+                        ObjectManager.SetTarget(unhealthyMembers[0].Guid);
                         return;
                     }
                 }
@@ -34,15 +33,15 @@ namespace PriestShadow.Tasks
 
                 if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 40 && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
                 {
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
                     ObjectManager.Player.StopWand();
 
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
 
                     if (!ObjectManager.GetTarget(ObjectManager.Player).HasBuff(Renew))
-                        ObjectManager.Player.CastSpell(Renew);
-                    if (ObjectManager.Player.IsSpellReady(LesserHeal))
-                        ObjectManager.Player.CastSpell(LesserHeal);
+                        ObjectManager.CastSpell(Renew);
+                    if (ObjectManager.IsSpellReady(LesserHeal))
+                        ObjectManager.CastSpell(LesserHeal);
 
                     return;
                 }
@@ -52,11 +51,11 @@ namespace PriestShadow.Tasks
 
                     if (nextWaypoint.Length > 1)
                     {
-                        ObjectManager.Player.MoveToward(nextWaypoint[1]);
+                        ObjectManager.MoveToward(nextWaypoint[1]);
                     }
                     else
                     {
-                        ObjectManager.Player.StopAllMovement();
+                        ObjectManager.StopAllMovement();
                     }
                     return;
                 }
@@ -70,12 +69,12 @@ namespace PriestShadow.Tasks
                     if (MoveBehindTankSpot(45))
                         return;
                     else
-                        ObjectManager.Player.StopAllMovement();
+                        ObjectManager.StopAllMovement();
                 }
                 else if (MoveBehindTankSpot(3))
                     return;
                 else
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
             }
             else
             {
@@ -97,8 +96,8 @@ namespace PriestShadow.Tasks
 
         public override void PerformCombatRotation()
         {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(ShadowWordPain) || ObjectManager.Player.ManaPercent < 50)
                 ObjectManager.Player.StartWand();
@@ -115,9 +114,9 @@ namespace PriestShadow.Tasks
 
                 TryCastSpell(DispelMagic, 0, int.MaxValue, ObjectManager.Player.HasMagicDebuff, castOnSelf: true);
 
-                if (ObjectManager.Player.IsSpellReady(AbolishDisease))
+                if (ObjectManager.IsSpellReady(AbolishDisease))
                     TryCastSpell(AbolishDisease, 0, int.MaxValue, ObjectManager.Player.IsDiseased && !ObjectManager.Player.HasBuff(ShadowForm), castOnSelf: true);
-                else if (ObjectManager.Player.IsSpellReady(CureDisease))
+                else if (ObjectManager.IsSpellReady(CureDisease))
                     TryCastSpell(CureDisease, 0, int.MaxValue, ObjectManager.Player.IsDiseased && !ObjectManager.Player.HasBuff(ShadowForm), castOnSelf: true);
 
                 TryCastSpell(InnerFire, 0, int.MaxValue, !ObjectManager.Player.HasBuff(InnerFire));
@@ -128,9 +127,9 @@ namespace PriestShadow.Tasks
 
                 TryCastSpell(MindBlast, 0, 29);
 
-                if (ObjectManager.Player.IsSpellReady(MindFlay) &&
+                if (ObjectManager.IsSpellReady(MindFlay) &&
                     ObjectManager.GetTarget(ObjectManager.Player).Position.DistanceTo(ObjectManager.Player.Position) <= 19 &&
-                    (!ObjectManager.Player.IsSpellReady(PowerWordShield) || ObjectManager.Player.HasBuff(PowerWordShield)))
+                    (!ObjectManager.IsSpellReady(PowerWordShield) || ObjectManager.Player.HasBuff(PowerWordShield)))
                     TryCastSpell(MindFlay, 0, 19);
                 else
                     TryCastSpell(Smite, 0, 29, !ObjectManager.Player.HasBuff(ShadowForm));

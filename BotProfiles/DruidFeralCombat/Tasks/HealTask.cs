@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 
 namespace DruidFeral.Tasks
@@ -20,24 +20,24 @@ namespace DruidFeral.Tasks
             if (ObjectManager.Player.CurrentShapeshiftForm == CatForm && Wait.For("CatFormDelay", 1000, true))
                 CastSpell(CatForm);
 
-            if (ObjectManager.Player.HealthPercent > 70 || ObjectManager.Player.Mana < ObjectManager.Player.GetManaCost(HealingTouch))
+            if (ObjectManager.Player.HealthPercent > 70 || ObjectManager.Player.Mana < ObjectManager.GetManaCost(HealingTouch))
             {
                 Wait.RemoveAll();
                 BotTasks.Pop();
                 return;
             }
 
-            if (ObjectManager.Player.IsSpellReady(WarStomp) && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) <= 8)
-                ObjectManager.Player.CastSpell(WarStomp);
+            if (ObjectManager.IsSpellReady(WarStomp) && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) <= 8)
+                ObjectManager.CastSpell(WarStomp);
 
             CastSpell(HealingTouch, castOnSelf: true);
         }
 
         private void CastSpell(string name, bool castOnSelf = false)
         {
-            if (ObjectManager.Player.IsSpellReady(name))
+            if (ObjectManager.IsSpellReady(name))
             {
-                ObjectManager.Player.CastSpell(name, castOnSelf: castOnSelf);
+                ObjectManager.CastSpell(name, castOnSelf: castOnSelf);
             }
         }
     }

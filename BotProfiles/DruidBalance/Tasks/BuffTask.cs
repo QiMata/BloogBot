@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -8,9 +8,9 @@ namespace DruidBalance.Tasks
     {
         public void Update()
         {
-            if ((ObjectManager.Player.HasBuff(MarkOfTheWild) || !ObjectManager.Player.IsSpellReady(MarkOfTheWild)) &&
-                (ObjectManager.Player.HasBuff(Thorns) || !ObjectManager.Player.IsSpellReady(Thorns)) &&
-                (ObjectManager.Player.HasBuff(OmenOfClarity) || !ObjectManager.Player.IsSpellReady(OmenOfClarity)))
+            if ((ObjectManager.Player.HasBuff(MarkOfTheWild) || !ObjectManager.IsSpellReady(MarkOfTheWild)) &&
+                (ObjectManager.Player.HasBuff(Thorns) || !ObjectManager.IsSpellReady(Thorns)) &&
+                (ObjectManager.Player.HasBuff(OmenOfClarity) || !ObjectManager.IsSpellReady(OmenOfClarity)))
             {
                 BotTasks.Pop();
                 return;
@@ -20,14 +20,14 @@ namespace DruidBalance.Tasks
             {
                 if (ObjectManager.Player.HasBuff(MoonkinForm))
                 {
-                    ObjectManager.Player.CastSpell(MoonkinForm);
+                    ObjectManager.CastSpell(MoonkinForm);
                 }
 
-                ObjectManager.Player.CastSpell(MarkOfTheWild);
+                ObjectManager.CastSpell(MarkOfTheWild);
             }
 
-            ObjectManager.Player.CastSpell(Thorns);
-            ObjectManager.Player.CastSpell(OmenOfClarity);
+            ObjectManager.CastSpell(Thorns);
+            ObjectManager.CastSpell(OmenOfClarity);
         }
     }
 }

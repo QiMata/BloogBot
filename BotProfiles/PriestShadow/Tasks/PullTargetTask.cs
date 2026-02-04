@@ -1,6 +1,7 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
+using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestShadow.Tasks
@@ -13,7 +14,7 @@ namespace PriestShadow.Tasks
         {
             if (ObjectManager.Player.HasBuff(ShadowForm))
                 pullingSpell = MindBlast;
-            else if (ObjectManager.Player.IsSpellReady(HolyFire))
+            else if (ObjectManager.IsSpellReady(HolyFire))
                 pullingSpell = HolyFire;
             else
                 pullingSpell = Smite;
@@ -27,7 +28,7 @@ namespace PriestShadow.Tasks
 
                 if (potentialNewTarget != null && potentialNewTarget.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid)
                 {
-                    ObjectManager.Player.SetTarget(potentialNewTarget.Guid);
+                    ObjectManager.SetTarget(potentialNewTarget.Guid);
                 }
             }
 
@@ -35,28 +36,28 @@ namespace PriestShadow.Tasks
             if (distanceToTarget < 27)
             {
                 if (ObjectManager.Player.IsMoving)
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
 
-                if (ObjectManager.Player.IsCasting && ObjectManager.Player.IsSpellReady(pullingSpell))
+                if (ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(pullingSpell))
                 {
-                    if (!ObjectManager.Player.IsSpellReady(PowerWordShield) || ObjectManager.Player.HasBuff(PowerWordShield) || ObjectManager.Player.IsInCombat)
+                    if (!ObjectManager.IsSpellReady(PowerWordShield) || ObjectManager.Player.HasBuff(PowerWordShield) || ObjectManager.Player.IsInCombat)
                     {
                         if (Wait.For("ShadowPriestPullDelay", 250))
                         {
-                            ObjectManager.Player.SetTarget(ObjectManager.GetTarget(ObjectManager.Player).Guid);
+                            ObjectManager.SetTarget(ObjectManager.GetTarget(ObjectManager.Player).Guid);
                             Wait.Remove("ShadowPriestPullDelay");
 
                             if (!ObjectManager.Player.IsInCombat)
-                                ObjectManager.Player.CastSpell(pullingSpell);
+                                ObjectManager.CastSpell(pullingSpell);
 
-                            ObjectManager.Player.StopAllMovement();
+                            ObjectManager.StopAllMovement();
                             BotTasks.Pop();
                             BotTasks.Push(new PvERotationTask(BotContext));
                         }
                     }
 
-                    if (ObjectManager.Player.IsSpellReady(PowerWordShield) && !ObjectManager.Player.HasDebuff(WeakenedSoul) && !ObjectManager.Player.HasBuff(PowerWordShield))
-                        ObjectManager.Player.CastSpell(PowerWordShield, castOnSelf: true);
+                    if (ObjectManager.IsSpellReady(PowerWordShield) && !ObjectManager.Player.HasDebuff(WeakenedSoul) && !ObjectManager.Player.HasBuff(PowerWordShield))
+                        ObjectManager.CastSpell(PowerWordShield, castOnSelf: true);
 
                     return;
                 }
@@ -70,12 +71,12 @@ namespace PriestShadow.Tasks
                 }
                 else
                 {
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
                     BotTasks.Pop();
                     return;
                 }
 
-                ObjectManager.Player.MoveToward(currentWaypoint);
+                ObjectManager.MoveToward(currentWaypoint);
             }
         }
     }

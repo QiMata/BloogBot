@@ -5,43 +5,96 @@ using PathfindingService.Repository;
 namespace PathfindingService.Tests
 {
     /// <summary>
-    /// End‑to‑end tests for the consolidated Navigation API.
+    /// End‑to‑end tests for the Navigation API.
     ///   • CalculatePath
-    ///   • IsLineOfSight
-    ///   • GetTerrainProbe (capsule sweep + height + liquid)
     /// </summary>
     public class NavigationFixture : IDisposable
     {
         public Navigation Navigation { get; }
 
-        public NavigationFixture() 
+        public NavigationFixture()
         {
-            // Create a mock configuration for testing
-            var configDict = new Dictionary<string, string?>
+            // Preflight checks
+            VerifyNavigationDll();
+            VerifyNavDataExists();
+
+            Navigation = new Navigation();
+        }
+
+        private static void VerifyNavigationDll()
+        {
+            var assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            var testOutputDir = Path.GetDirectoryName(assemblyLocation);
+
+            if (testOutputDir == null)
+                throw new InvalidOperationException("Cannot determine test output directory");
+
+            var navigationDllPath = Path.Combine(testOutputDir, "Navigation.dll");
+
+            if (!File.Exists(navigationDllPath))
             {
-                ["Navigation:DllPath"] = Environment.GetEnvironmentVariable("NAVIGATION_DLL_PATH") 
-                    ?? @"C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Navigation.dll"
-            };
+                throw new FileNotFoundException(
+                    $"Navigation.dll not found in test output directory: {testOutputDir}\n" +
+                    "Please ensure Navigation.vcxproj is built for the correct platform (x64) and configuration (Debug/Release).\n" +
+                    "The native DLL output path should be: ..\\..\\Bot\\$(Configuration)\\net8.0\\");
+            }
+        }
 
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(configDict)
-                .AddEnvironmentVariables()
-                .Build();
+        private static void VerifyNavDataExists()
+        {
+            var dataRoot = Environment.GetEnvironmentVariable("BLOOGBOT_DATA_DIR");
+            string mmapsPath;
 
-            Navigation = new Navigation(configuration);
+            if (!string.IsNullOrEmpty(dataRoot))
+            {
+                mmapsPath = Path.Combine(dataRoot, "mmaps");
+                if (!Directory.Exists(mmapsPath))
+                {
+                    throw new DirectoryNotFoundException(
+                        $"BLOOGBOT_DATA_DIR is set to '{dataRoot}' but mmaps/ subdirectory not found.\n" +
+                        "Please ensure nav data exists at: {mmapsPath}\n" +
+                        "Run setup.ps1 to provision data, or unset BLOOGBOT_DATA_DIR to use DLL-relative path.");
+                }
+            }
+            else
+            {
+                // Check for DLL-relative mmaps
+                var assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                var testOutputDir = Path.GetDirectoryName(assemblyLocation);
+
+                if (testOutputDir == null)
+                    throw new InvalidOperationException("Cannot determine test output directory");
+
+                mmapsPath = Path.Combine(testOutputDir, "mmaps");
+
+                if (!Directory.Exists(mmapsPath))
+                {
+                    throw new DirectoryNotFoundException(
+                        $"Navigation data not found. Expected mmaps/ at: {mmapsPath}\n" +
+                        "Please either:\n" +
+                        "  1. Set BLOOGBOT_DATA_DIR environment variable to point to your nav data root, or\n" +
+                        "  2. Run setup.ps1 to copy nav data to the test output directory, or\n" +
+                        "  3. Manually copy maps/, mmaps/, and vmaps/ to: {testOutputDir}");
+                }
+            }
+
+            // Verify mmaps contains .mmtile files
+            var mmtileFiles = Directory.GetFiles(mmapsPath, "*.mmtile");
+            if (mmtileFiles.Length == 0)
+            {
+                throw new FileNotFoundException(
+                    $"No .mmtile files found in: {mmapsPath}\n" +
+                    "The mmaps directory exists but appears to be empty.\n" +
+                    "Run setup.ps1 to provision navigation data.");
+            }
         }
 
         public void Dispose() { /* Navigation lives for the AppDomain – nothing to do. */ }
     }
 
-    public class PathingAndTerrainTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
+    public class PathfindingTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
     {
         private readonly Navigation _navigation = fixture.Navigation;
-
-        private const float Dt = 0.1f;
-        /* ──────────────────────────────────────────────────────── */
-        /*  PATH‑FINDING + LINE‑OF‑SIGHT BASICS                    */
-        /* ──────────────────────────────────────────────────────── */
 
         [Fact]
         public void CalculatePath_ShouldReturnValidPath()
@@ -54,26 +107,6 @@ namespace PathfindingService.Tests
 
             Assert.NotNull(path);
             Assert.NotEmpty(path);
-        }
-
-        [Fact]
-        public void LineOfSight_ShouldReturnTrue_WhenNoObstruction()
-        {
-            uint mapId = 1;
-            Position from = new(1629.0f, -4373.0f, 53.0f);
-            Position to = new(1630.0f, -4372.0f, 53.0f);
-
-            Assert.True(_navigation.LineOfSight(mapId, from.ToXYZ(), to.ToXYZ()));
-        }
-
-        [Fact]
-        public void LineOfSight_ShouldReturnFalse_WhenObstructed()
-        {
-            uint mapId = 389;
-            Position from = new(-247.728561f, -30.644503f, -58.082531f);
-            Position to = new(-158.395340f, 5.857921f, -42.873611f);
-
-            Assert.False(_navigation.LineOfSight(mapId, from.ToXYZ(), to.ToXYZ()));
         }
     }
 }

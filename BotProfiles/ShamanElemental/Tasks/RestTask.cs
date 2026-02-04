@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace ShamanElemental.Tasks
@@ -11,7 +11,7 @@ namespace ShamanElemental.Tasks
         private readonly IWoWItem drinkItem;
         public RestTask(IBotContext botContext) : base(botContext)
         {
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {
@@ -29,7 +29,7 @@ namespace ShamanElemental.Tasks
             if (InCombat || (HealthOk && ManaOk))
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
 
                 uint drinkCount = drinkItem == null ? 0 : ObjectManager.GetItemCount(drinkItem.ItemId);
@@ -60,17 +60,17 @@ namespace ShamanElemental.Tasks
 
             if (!ObjectManager.Player.IsDrinking && Wait.For("HealSelfDelay", 3500, true))
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
 
                 if (ObjectManager.Player.HealthPercent < 70)
-                    ObjectManager.Player.CastSpell(HealingWave);
+                    ObjectManager.CastSpell(HealingWave);
 
                 if (ObjectManager.Player.HealthPercent > 70 && ObjectManager.Player.HealthPercent < 85)
                 {
                     if (ObjectManager.Player.Level >= 40)
-                        ObjectManager.Player.CastSpell(HealingWave, 3);
+                        ObjectManager.CastSpell(HealingWave, 3);
                     else
-                        ObjectManager.Player.CastSpell(HealingWave, 1);
+                        ObjectManager.CastSpell(HealingWave, 1);
                 }
             }
 

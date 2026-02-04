@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -8,7 +8,7 @@ namespace MageArcane.Tasks
     {
         public void Update()
         {
-            if ((!ObjectManager.Player.IsSpellReady(ArcaneIntellect) || ObjectManager.Player.HasBuff(ArcaneIntellect)) && (ObjectManager.Player.HasBuff(FrostArmor) || ObjectManager.Player.HasBuff(IceArmor)) && (!ObjectManager.Player.IsSpellReady(DampenMagic) || ObjectManager.Player.HasBuff(DampenMagic)))
+            if ((!ObjectManager.IsSpellReady(ArcaneIntellect) || ObjectManager.Player.HasBuff(ArcaneIntellect)) && (ObjectManager.Player.HasBuff(FrostArmor) || ObjectManager.Player.HasBuff(IceArmor)) && (!ObjectManager.IsSpellReady(DampenMagic) || ObjectManager.Player.HasBuff(DampenMagic)))
             {
                 BotTasks.Pop();
                 BotTasks.Push(new ConjureItemsTask(BotContext));
@@ -17,7 +17,7 @@ namespace MageArcane.Tasks
             
             TryCastSpell(ArcaneIntellect, castOnSelf: true);
 
-            if (ObjectManager.Player.IsSpellReady(IceArmor))
+            if (ObjectManager.IsSpellReady(IceArmor))
                 TryCastSpell(IceArmor);
             else
                 TryCastSpell(FrostArmor);
@@ -27,9 +27,9 @@ namespace MageArcane.Tasks
 
         private void TryCastSpell(string name, bool castOnSelf = false)
         {
-            if (!ObjectManager.Player.HasBuff(name) && ObjectManager.Player.IsSpellReady(name) && ObjectManager.Player.IsSpellReady(name))
+            if (!ObjectManager.Player.HasBuff(name) && ObjectManager.IsSpellReady(name) && ObjectManager.IsSpellReady(name))
             {
-                ObjectManager.Player.CastSpell(name,castOnSelf: castOnSelf);
+                ObjectManager.CastSpell(name,castOnSelf: castOnSelf);
             }
         }
     }

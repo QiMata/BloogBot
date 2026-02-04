@@ -1,7 +1,7 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
+using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using System.Diagnostics;
 using static BotRunner.Constants.Spellbook;
 
@@ -36,7 +36,7 @@ namespace WarriorProtection.Tasks
                 return;
             }
 
-            ObjectManager.Player.StartMeleeAttack();
+            ObjectManager.StartMeleeAttack();
 
             List<IWoWUnit> looseUnits = [.. ObjectManager.Aggressors.Where(x => x.TargetGuid != ObjectManager.Player.Guid).OrderBy(x => x.Position.DistanceTo(ObjectManager.Player.Position))];
             IWoWUnit nearestHostile = ObjectManager.Hostiles.Where(x => !x.IsInCombat).OrderBy(x => x.Position.DistanceTo(ObjectManager.Player.Position)).First();
@@ -45,7 +45,7 @@ namespace WarriorProtection.Tasks
             {
                 IWoWUnit looseUnit = looseUnits.First();
 
-                ObjectManager.Player.SetTarget(looseUnit.Guid);
+                ObjectManager.SetTarget(looseUnit.Guid);
 
                 if ((looseUnit.ManaPercent < 10 || looseUnit.Position.DistanceTo(ObjectManager.Player.Position) < 8) && Update(5))
                 {
@@ -53,11 +53,11 @@ namespace WarriorProtection.Tasks
                 }
                 else
                 {
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
 
                     if (ObjectManager.Player.CurrentStance != DefensiveStance)
                         TryCastSpell(DefensiveStance);
-                    else if (ObjectManager.Player.IsSpellReady(Taunt))
+                    else if (ObjectManager.IsSpellReady(Taunt))
                         TryUseAbility(Taunt);
                     else
                         PerformCombatRotation();
@@ -68,7 +68,7 @@ namespace WarriorProtection.Tasks
                 if (ObjectManager.SkullTargetGuid == 0 || !ObjectManager.Hostiles.Any(x => x.Guid == ObjectManager.SkullTargetGuid))
                 {
                     currentDPSTarget = ObjectManager.Aggressors.OrderBy(x => x.Health).Last();
-                    ObjectManager.Player.SetTarget(currentDPSTarget.Guid);
+                    ObjectManager.SetTarget(currentDPSTarget.Guid);
 
                     ObjectManager.SetRaidTarget(currentDPSTarget, TargetMarker.Skull);
                 }
@@ -82,14 +82,14 @@ namespace WarriorProtection.Tasks
                     Position[] locations = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, tankSpot, true);
 
                     if (locations.Length > 1)
-                        ObjectManager.Player.MoveToward(locations[1]);
+                        ObjectManager.MoveToward(locations[1]);
                     else
-                        ObjectManager.Player.StopAllMovement();
+                        ObjectManager.StopAllMovement();
                 }
                 else
                 {
-                    ObjectManager.Player.StopAllMovement();
-                    ObjectManager.Player.Face(currentDPSTarget.Position);
+                    ObjectManager.StopAllMovement();
+                    ObjectManager.Face(currentDPSTarget.Position);
 
                     PerformCombatRotation();
                 }

@@ -12,6 +12,55 @@ namespace PathfindingService
                 .Run();
         }
 
+        /// <summary>
+        /// Launches the PathfindingService as a separate process.
+        /// Used by StateManager when the service isn't already running.
+        /// </summary>
+        public static void LaunchServiceFromCommandLine()
+        {
+            try
+            {
+                var baseDir = AppContext.BaseDirectory;
+                var exePath = Path.Combine(baseDir, "PathfindingService.exe");
+                var dllPath = Path.Combine(baseDir, "PathfindingService.dll");
+
+                ProcessStartInfo psi;
+                if (File.Exists(exePath))
+                {
+                    psi = new ProcessStartInfo
+                    {
+                        FileName = exePath,
+                        WorkingDirectory = baseDir,
+                        UseShellExecute = true,
+                        CreateNoWindow = false
+                    };
+                }
+                else if (File.Exists(dllPath))
+                {
+                    psi = new ProcessStartInfo
+                    {
+                        FileName = "dotnet",
+                        Arguments = $"\"{dllPath}\"",
+                        WorkingDirectory = baseDir,
+                        UseShellExecute = true,
+                        CreateNoWindow = false
+                    };
+                }
+                else
+                {
+                    Console.WriteLine($"PathfindingService not found at {exePath} or {dllPath}");
+                    return;
+                }
+
+                Process.Start(psi);
+                Console.WriteLine("PathfindingService launched as separate process.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to launch PathfindingService: {ex.Message}");
+            }
+        }
+
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .ConfigureAppConfiguration((context, builder) =>
@@ -26,19 +75,15 @@ namespace PathfindingService
                 {
                     var configuration = hostContext.Configuration;
                     
-                    // Register Navigation as a singleton since it loads the native DLL
-                    services.AddSingleton<Navigation>();
-                    
                     // Register PathfindingSocketServer as a singleton
                     services.AddSingleton<PathfindingSocketServer>(serviceProvider =>
                     {
                         var logger = serviceProvider.GetRequiredService<ILogger<PathfindingSocketServer>>();
-                        var navigation = serviceProvider.GetRequiredService<Navigation>();
                         
                         var ipAddress = configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
                         var port = int.Parse(configuration["PathfindingService:Port"] ?? "5000");
                         
-                        return new PathfindingSocketServer(ipAddress, port, logger, navigation);
+                        return new PathfindingSocketServer(ipAddress, port, logger);
                     });
                     
                     // Register the hosted service

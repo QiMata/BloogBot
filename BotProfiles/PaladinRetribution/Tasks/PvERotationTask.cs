@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -15,7 +14,7 @@ namespace PaladinRetribution.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
                 if (ObjectManager.Aggressors.Any())
-                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
                 else
                     return;
             }
@@ -27,7 +26,7 @@ namespace PaladinRetribution.Tasks
         {
             if (ObjectManager.Player.HealthPercent < 30 &&
                 ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 &&
-                ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HolyLight))
+                ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HolyLight))
             {
                 BotTasks.Push(new HealTask(BotContext));
                 return;
@@ -41,7 +40,7 @@ namespace PaladinRetribution.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(3))
@@ -54,9 +53,9 @@ namespace PaladinRetribution.Tasks
         {
             TryCastSpell(Purify, ObjectManager.Player.IsPoisoned || ObjectManager.Player.IsDiseased, castOnSelf: true);
 
-            TryCastSpell(DevotionAura, !ObjectManager.Player.HasBuff(DevotionAura) && !ObjectManager.Player.IsSpellReady(RetributionAura) && !ObjectManager.Player.IsSpellReady(SanctityAura));
+            TryCastSpell(DevotionAura, !ObjectManager.Player.HasBuff(DevotionAura) && !ObjectManager.IsSpellReady(RetributionAura) && !ObjectManager.IsSpellReady(SanctityAura));
 
-            TryCastSpell(RetributionAura, !ObjectManager.Player.HasBuff(RetributionAura) && !ObjectManager.Player.IsSpellReady(SanctityAura));
+            TryCastSpell(RetributionAura, !ObjectManager.Player.HasBuff(RetributionAura) && !ObjectManager.IsSpellReady(SanctityAura));
 
             TryCastSpell(SanctityAura, !ObjectManager.Player.HasBuff(SanctityAura));
 
@@ -66,7 +65,7 @@ namespace PaladinRetribution.Tasks
 
             TryCastSpell(SealOfTheCrusader, !ObjectManager.Player.HasBuff(SealOfTheCrusader) && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(JudgementOfTheCrusader));
 
-            TryCastSpell(SealOfRighteousness, !ObjectManager.Player.HasBuff(SealOfRighteousness) && ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(JudgementOfTheCrusader) && !ObjectManager.Player.IsSpellReady(SealOfCommand));
+            TryCastSpell(SealOfRighteousness, !ObjectManager.Player.HasBuff(SealOfRighteousness) && ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(JudgementOfTheCrusader) && !ObjectManager.IsSpellReady(SealOfCommand));
 
             TryCastSpell(SealOfCommand, !ObjectManager.Player.HasBuff(SealOfCommand) && ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(JudgementOfTheCrusader));
 

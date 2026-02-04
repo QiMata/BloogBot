@@ -197,7 +197,48 @@ namespace VMAP
 
     bool StaticMapTree::GetLocationInfo(const G3D::Vector3& pos, LocationInfo& info) const
     {
-    if (!iTreeValues || iNTreeValues == 0) return false; class LocationInfoCallback { public: LocationInfoCallback(ModelInstance* val) :prims(val), found(false) {} void operator()(const G3D::Vector3& point, uint32_t entry) { if (!prims || !prims[entry].iModel) return; if (prims[entry].GetLocationInfo(point, tempInfo)) found = true; } ModelInstance* prims; LocationInfo tempInfo; bool found; }; LocationInfoCallback cb(iTreeValues); iTree.intersectPoint(pos, cb); if (cb.found) { info = cb.tempInfo; return true; } return false;
+        // Validate tree state
+        if (!iTreeValues || iNTreeValues == 0)
+            return false;
+
+        // Callback functor passed to BIH point intersection.
+        // It iterates candidate ModelInstances at the point and captures
+        // the first (or latest) successful location info.
+        class LocationInfoCallback
+        {
+        public:
+            explicit LocationInfoCallback(ModelInstance* instances)
+                : prims(instances), found(false)
+            {
+            }
+
+            void operator()(const G3D::Vector3& point, uint32_t entry)
+            {
+                // Guard: ensure array and model pointer are valid
+                if (!prims || !prims[entry].iModel)
+                    return;
+
+                // Query location info from this model instance
+                if (prims[entry].GetLocationInfo(point, tempInfo))
+                {
+                    found = true; // mark success; retain latest tempInfo
+                }
+            }
+
+            ModelInstance* prims;   // Instance array provided by BIH
+            LocationInfo    tempInfo; // Latest successful location info
+            bool            found;    // Flag indicating success
+        };
+
+        LocationInfoCallback cb(iTreeValues);
+        iTree.intersectPoint(pos, cb);
+
+        if (cb.found)
+        {
+            info = cb.tempInfo; // copy captured info out
+            return true;
+        }
+        return false;
     }
 
     bool StaticMapTree::getIntersectionTime(G3D::Ray const& pRay, float& pMaxDist, bool pStopAtFirstHit, bool ignoreM2Model) const

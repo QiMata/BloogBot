@@ -51,6 +51,10 @@ enum MovementFlags
     MOVEFLAG_MASK_XZ = MOVEFLAG_FORWARD | MOVEFLAG_BACKWARD | MOVEFLAG_STRAFE_LEFT | MOVEFLAG_STRAFE_RIGHT
 };
 
+// Forward declare unified LiquidType values (matches GameData.Core.Enums.LiquidType)
+// Values may be either ADT indices (0..3) or WMO entry IDs (1,2,3,4,21).
+// 21 (NaxxSlime) is treated as Slime for mask logic.
+
 // Physics input from the game
 struct PhysicsInput
 {
@@ -95,9 +99,31 @@ struct PhysicsInput
     int splinePointCount;
     int currentSplineIndex;
 
+    // Previous ground tracking (fed back from last PhysicsOutput)
+    float prevGroundZ;              // last known ground height (for stabilizing)
+    float prevGroundNx;             // previous ground normal X
+    float prevGroundNy;             // previous ground normal Y
+    float prevGroundNz;             // previous ground normal Z (usually >= walkable cos threshold)
+
+	// Pending depenetration (fed back from last PhysicsOutput)
+	// PhysX CCT may defer overlap recovery when it cannot fully resolve penetration in one tick.
+	float pendingDepenX;
+	float pendingDepenY;
+	float pendingDepenZ;
+
+	// Ride-on touched object (fed back from last PhysicsOutput)
+	// 0 means none/terrain. Non-zero corresponds to `SceneHit::instanceId`.
+	uint32_t standingOnInstanceId;
+	// Local point on the touched object that served as our standing reference.
+	float standingOnLocalX;
+	float standingOnLocalY;
+	float standingOnLocalZ;
+
     // Context
     uint32_t mapId;            // Current map ID
     float deltaTime;           // Time since last update
+
+    uint32_t frameCounter;
 };
 
 // Physics output back to the game
@@ -114,15 +140,26 @@ struct PhysicsOutput
     // Updated movement flags
     uint32_t moveFlags;
 
-    // State flags
-    bool isGrounded;
-    bool isSwimming;
-    bool isFlying;
-    bool collided;
-
     // Height information
     float groundZ;             // Ground height at position
     float liquidZ;             // Liquid surface height (if any)
+    uint32_t liquidType;       // Unified liquid identifier (see LiquidType enum) from VMAP/ADT
+
+    // Ground surface identification
+    float groundNx;                // ground surface normal X
+    float groundNy;                // ground surface normal Y
+    float groundNz;                // ground surface normal Z
+
+	// Pending depenetration to be applied next tick (if overlap recovery could not fully resolve).
+	float pendingDepenX;
+	float pendingDepenY;
+	float pendingDepenZ;
+
+	// Standing-on (ride) reference for moving bases.
+	uint32_t standingOnInstanceId;
+	float standingOnLocalX;
+	float standingOnLocalY;
+	float standingOnLocalZ;
 
     // Fall damage info
     float fallDistance;
@@ -131,4 +168,6 @@ struct PhysicsOutput
     // Spline progress
     int currentSplineIndex;
     float splineProgress;      // 0.0 to 1.0 between current and next point
+
+    // Removed: ramp interpolation diagnostics. Ramp state is no longer persisted across frames.
 };

@@ -19,22 +19,7 @@
 
 namespace VMAP
 {
-    std::vector<SceneHit> VMapManager2::SweepCapsuleAll(unsigned int pMapId,
-        const CapsuleCollision::Capsule& capsuleStart,
-        const G3D::Vector3& dir,
-        float distance,
-        uint32_t includeMask) const
-    {
-        std::vector<SceneHit> out;
-        auto it = iInstanceMapTrees.find(pMapId);
-        if (it == iInstanceMapTrees.end() || it->second == nullptr)
-            return out;
-        StaticMapTree* tree = it->second;
-        // Forward to SceneQuery implementation which operates on StaticMapTree
-        QueryParams qp; qp.includeMask = includeMask;
-        SceneQuery::SweepCapsule(*tree, capsuleStart, dir, distance, out, includeMask, qp);
-        return out;
-    }
+    
 
     // Global model name to path mapping
     static std::unordered_map<std::string, std::string> modelNameToPath;
@@ -515,6 +500,13 @@ namespace VMAP
     float VMapManager2::getHeight(unsigned int pMapId, float x, float y, float z, float maxSearchDist)
     {
         PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::getHeight map=" << pMapId);
+        // Coordinate space notes for this query chain:
+        // 1) (x,y,z) provided by caller are assumed WORLD space. In this project WORLD and INTERNAL share Z; only X/Y are mirrored.
+        // 2) convertPositionToInternalRep -> NavCoord::WorldToInternal: internalPos = (MID - x, MID - y, z). This mirrors X/Y about global MapMid, Z unchanged.
+        // 3) StaticMapTree::getHeight expects INTERNAL space position; it performs a downward ray entirely in INTERNAL space.
+        // 4) During ray traversal each ModelInstance converts INTERNAL -> MODEL-LOCAL (inverse rotation & scale) for triangle tests.
+        // 5) Intersection distance returned is converted back to INTERNAL distance (scale reapplied) and height computed as internalPos.z - hitDistance.
+        // 6) Because Z is invariant between WORLD and INTERNAL, returning internal height directly yields correct WORLD Z.
         if (!isHeightCalcEnabled())
         {
             PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::getHeight -> INVALID (disabled)");
@@ -524,9 +516,9 @@ namespace VMAP
         auto instanceTree = iInstanceMapTrees.find(pMapId);
         if (instanceTree != iInstanceMapTrees.end())
         {
-            G3D::Vector3 pos = convertPositionToInternalRep(x, y, z);
-            // Modern raycast: only accept closest walkable hit
-            h = instanceTree->second->getHeight(pos, maxSearchDist);
+            G3D::Vector3 pos = convertPositionToInternalRep(x, y, z); // WORLD -> INTERNAL (X/Y mirrored, Z preserved)
+            // Modern raycast: only accept closest walkable hit (performed in INTERNAL space)
+            h = instanceTree->second->getHeight(pos, maxSearchDist); // returns INTERNAL Z (== WORLD Z)
             if (!std::isfinite(h)) h = PhysicsConstants::INVALID_HEIGHT;
         }
         PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::getHeight -> " << h);
@@ -557,29 +549,42 @@ namespace VMAP
     bool VMapManager2::GetLiquidLevel(uint32_t pMapId, float x, float y, float z,
         uint8_t ReqLiquidTypeMask, float& level, float& floor, uint32_t& type) const
     {
-        PHYS_TRACE(PHYS_PERF, "ENTER VMapManager2::GetLiquidLevel map=" << pMapId);
-        auto instanceTree = iInstanceMapTrees.find(pMapId);
-        if (instanceTree != iInstanceMapTrees.end())
+        // Ensure map has been initialized similar to getHeight path
+        if (!isMapInitialized(pMapId))
         {
-            G3D::Vector3 pos = NavCoord::WorldToInternal(x, y, z);
-            LocationInfo info;
-            if (instanceTree->second->GetLocationInfo(pos, info) && info.hitModel)
+            PHYS_TRACE(PHYS_PERF, "[Liquid] Map not initialized; initializing map=" << pMapId);
+            const_cast<VMapManager2*>(this)->initializeMap(pMapId);
+        }
+
+        auto instanceTree = iInstanceMapTrees.find(pMapId);
+        if (instanceTree != iInstanceMapTrees.end() && instanceTree->second)
+        {
+            // Use the same conversion helper as getHeight to keep coordinate spaces consistent
+            G3D::Vector3 pos = convertPositionToInternalRep(x, y, z);
+
+            LocationInfo info; bool gotLoc = instanceTree->second->GetLocationInfo(pos, info);
+            if (gotLoc && info.hitModel)
             {
-                float liqH;
-                if (info.hitInstance && info.hitInstance->GetLiquidLevel(pos, const_cast<LocationInfo&>(info), liqH))
+                if (info.hitInstance)
                 {
-                    uint32_t liqType = info.hitModel->GetLiquidType();
-                    uint32_t liqMask = GetLiquidMask(liqType);
-                    if (ReqLiquidTypeMask & liqMask)
+                    float liqH; bool liqOk = info.hitInstance->GetLiquidLevel(pos, const_cast<LocationInfo&>(info), liqH);
+                    if (liqOk)
                     {
-                        level = liqH; floor = info.ground_Z; type = liqType;
-                        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::GetLiquidLevel -> 1");
-                        return true;
+                        uint32_t liqType = info.hitModel->GetLiquidType();
+                        // New: support both entry-id and index representations
+                        uint32_t liqMask = GetLiquidMaskUnified(liqType);
+                        if ((liqMask & ReqLiquidTypeMask) != 0)
+                        {
+                            level = liqH;
+                            floor = info.ground_Z;
+                            type = liqType;
+                            return true;
+                        }
                     }
                 }
             }
         }
-        PHYS_TRACE(PHYS_PERF, "EXIT VMapManager2::GetLiquidLevel -> 0");
+
         return false;
     }
 

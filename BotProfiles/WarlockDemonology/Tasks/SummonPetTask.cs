@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -12,13 +11,13 @@ namespace WarlockDemonology.Tasks
             if (ObjectManager.Player.IsCasting)
                 return;
 
-            ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+            ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
 
-            if ((!ObjectManager.Player.IsSpellReady(SummonImp)
-                && !ObjectManager.Player.IsSpellReady(SummonVoidwalker)
-                && !ObjectManager.Player.IsSpellReady(SummonSuccubus)
-                && !ObjectManager.Player.IsSpellReady(SummonFelhunter)
-                && !ObjectManager.Player.IsSpellReady(SummonFelguard)) || ObjectManager.Pet != null)
+            if ((!ObjectManager.IsSpellReady(SummonImp)
+                && !ObjectManager.IsSpellReady(SummonVoidwalker)
+                && !ObjectManager.IsSpellReady(SummonSuccubus)
+                && !ObjectManager.IsSpellReady(SummonFelhunter)
+                && !ObjectManager.IsSpellReady(SummonFelguard)) || ObjectManager.Pet != null)
             {
                 BotTasks.Pop();
                 BotTasks.Push(new BuffTask(BotContext));
@@ -29,20 +28,20 @@ namespace WarlockDemonology.Tasks
 
             bool needTankPet = ObjectManager.Aggressors.Count() > 1 || ObjectManager.Player.HealthPercent < 50;
 
-            if (needTankPet && ObjectManager.Player.IsSpellReady(SummonVoidwalker) && ObjectManager.Player.IsSpellReady(FelDomination))
+            if (needTankPet && ObjectManager.IsSpellReady(SummonVoidwalker) && ObjectManager.IsSpellReady(FelDomination))
             {
-                ObjectManager.Player.CastSpell(FelDomination);
+                ObjectManager.CastSpell(FelDomination);
                 spellToCast = SummonVoidwalker;
             }
-            else if (ObjectManager.Player.IsSpellReady(SummonFelguard))
+            else if (ObjectManager.IsSpellReady(SummonFelguard))
                 spellToCast = SummonFelguard;
-            else if (ObjectManager.Player.IsSpellReady(SummonSuccubus))
+            else if (ObjectManager.IsSpellReady(SummonSuccubus))
                 spellToCast = SummonSuccubus;
-            else if (ObjectManager.Player.IsSpellReady(SummonFelhunter))
+            else if (ObjectManager.IsSpellReady(SummonFelhunter))
                 spellToCast = SummonFelhunter;
 
-            if (ObjectManager.Player.IsSpellReady(spellToCast))
-                ObjectManager.Player.CastSpell(spellToCast);
+            if (ObjectManager.IsSpellReady(spellToCast))
+                ObjectManager.CastSpell(spellToCast);
         }
     }
 }

@@ -1,7 +1,8 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
+using Serilog;
 
 namespace RogueAssassin.Tasks
 {
@@ -36,7 +37,7 @@ namespace RogueAssassin.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(3))
@@ -48,10 +49,10 @@ namespace RogueAssassin.Tasks
                 IWoWItem OffHand = ObjectManager.GetEquippedItem(EquipSlot.OffHand);
                 IWoWItem SwapSlotWeap = ObjectManager.GetItem(4, 1);
 
-                //Console.WriteLineVerbose("Mainhand Item Type:  " + MainHand.Info.ItemSubclass);
-                //Console.WriteLineVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
-                //Console.WriteLineVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
-                //Console.WriteLineVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
+                //Log.InformationVerbose("Mainhand Item Type:  " + MainHand.Info.ItemSubclass);
+                //Log.InformationVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
+                //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
+                //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
 
                 // Check to see if a Dagger is Equipped in the mainhand
 
@@ -93,7 +94,7 @@ namespace RogueAssassin.Tasks
                 if (SwapMaceOrSwordReady == true)
                 {
                     ObjectManager.UseContainerItem(4, 21);
-                    Console.WriteLine(MainHand.Info.Name + "Swapped Into Mainhand!");
+                    Log.Information(MainHand.Info.Name + "Swapped Into Mainhand!");
                 }
 
             // set secondaryTarget
@@ -102,8 +103,8 @@ namespace RogueAssassin.Tasks
 
             //if (secondaryTarget != null && !secondaryTarget.HasDebuff(Blind))
             // {
-            //    ObjectManager.Player.SetTarget(secondaryTarget.Guid);
-            //     TryUseAbility(Blind, 30, ObjectManager.Player.IsSpellReady(Blind) && !secondaryTarget.HasDebuff(Blind));
+            //    ObjectManager.SetTarget(secondaryTarget.Guid);
+            //     TryUseAbility(Blind, 30, ObjectManager.IsSpellReady(Blind) && !secondaryTarget.HasDebuff(Blind));
             // }
 
             // ----- COMBAT ROTATION -----
@@ -120,11 +121,11 @@ namespace RogueAssassin.Tasks
 
             // TryUseAbility(ExposeArmor, 25, ObjectManager.Player.HasBuff(SliceAndDice) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 && ObjectManager.Player.ComboPoints <= 2 && ObjectManager.Player.ComboPoints >= 1);
 
-            TryUseAbility(SinisterStrike, 45, !ObjectManager.Player.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
+            TryUseAbility(SinisterStrike, 45, !ObjectManager.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
         
-            TryUseAbility(GhostlyStrike, 40, ObjectManager.Player.IsSpellReady(GhostlyStrike) && ObjectManager.Player.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
+            TryUseAbility(GhostlyStrike, 40, ObjectManager.IsSpellReady(GhostlyStrike) && ObjectManager.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
 
-            TryUseAbilityById(BloodFury, 3, 0, ObjectManager.Player.IsSpellReady(BloodFury) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
+            TryUseAbilityById(BloodFury, 3, 0, ObjectManager.IsSpellReady(BloodFury) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
 
             TryUseAbility(Evasion, 0, ObjectManager.Aggressors.Count() > 1);
 
@@ -138,9 +139,9 @@ namespace RogueAssassin.Tasks
 
             // we use Kidneyshot (with 1 or 2 combo points only) before Gouge as Gouge has a longer cooldown and requires more energy, so sometimes gouge doesn't fire before casting is done.
             
-            TryUseAbility(KidneyShot, 25, ReadyToInterrupt() && !ObjectManager.Player.IsSpellReady(Kick) && ObjectManager.Player.ComboPoints >= 1 && ObjectManager.Player.ComboPoints <=2);
+            TryUseAbility(KidneyShot, 25, ReadyToInterrupt() && !ObjectManager.IsSpellReady(Kick) && ObjectManager.Player.ComboPoints >= 1 && ObjectManager.Player.ComboPoints <=2);
                         
-            TryUseAbility(Gouge, 45, ReadyToInterrupt() && !ObjectManager.Player.IsSpellReady(Kick));
+            TryUseAbility(Gouge, 45, ReadyToInterrupt() && !ObjectManager.IsSpellReady(Kick));
         }
 
         private void OnParryCallback(object sender, EventArgs e)

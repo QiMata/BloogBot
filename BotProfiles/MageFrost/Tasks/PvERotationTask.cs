@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -14,7 +13,7 @@ namespace MageFrost.Tasks
 
         internal PvERotationTask(IBotContext botContext) : base(botContext)
         {
-            if (!ObjectManager.Player.IsSpellReady(Frostbolt))
+            if (!ObjectManager.IsSpellReady(Frostbolt))
                 nuke = Fireball;
             else if (ObjectManager.Player.Level >= 8)
                 nuke = Frostbolt;
@@ -50,7 +49,7 @@ namespace MageFrost.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(29 + (ObjectManager.GetTalentRank(3, 11) * 3)))
@@ -65,7 +64,7 @@ namespace MageFrost.Tasks
             {
                 TryCastSpell(SummonWaterElemental, !ObjectManager.Units.Any(u => u.Name == "Water Elemental" && u.SummonedByGuid == ObjectManager.Player.Guid));
 
-                TryCastSpell(ColdSnap, !ObjectManager.Player.IsSpellReady(SummonWaterElemental));
+                TryCastSpell(ColdSnap, !ObjectManager.IsSpellReady(SummonWaterElemental));
 
                 TryCastSpell(IcyVeins, ObjectManager.Aggressors.Count() > 1);
 
@@ -75,7 +74,7 @@ namespace MageFrost.Tasks
 
                 TryCastSpell(Counterspell, 0, 30, ObjectManager.GetTarget(ObjectManager.Player).Mana > 0 && ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
 
-                TryCastSpell(IceBarrier, 0, 50, !ObjectManager.Player.HasBuff(IceBarrier) && (ObjectManager.Aggressors.Count() >= 2 || (!ObjectManager.Player.IsSpellReady(FrostNova) && ObjectManager.Player.HealthPercent < 95 && ObjectManager.Player.ManaPercent > 40 && (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 || ObjectManager.Player.HealthPercent < 10))));
+                TryCastSpell(IceBarrier, 0, 50, !ObjectManager.Player.HasBuff(IceBarrier) && (ObjectManager.Aggressors.Count() >= 2 || (!ObjectManager.IsSpellReady(FrostNova) && ObjectManager.Player.HealthPercent < 95 && ObjectManager.Player.ManaPercent > 40 && (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 || ObjectManager.Player.HealthPercent < 10))));
 
                 TryCastSpell(FrostNova, 0, 9, ObjectManager.GetTarget(ObjectManager.Player).TargetGuid == ObjectManager.Player.Guid && (ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 || ObjectManager.Player.HealthPercent < 30) && !IsTargetFrozen && !ObjectManager.Units.Any(u => u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.HealthPercent > 0 && u.Guid != ObjectManager.Player.Guid && u.Position.DistanceTo(ObjectManager.Player.Position) <= 12), callback: FrostNovaCallback);
 

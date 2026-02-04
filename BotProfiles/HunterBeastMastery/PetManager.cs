@@ -1,5 +1,4 @@
-﻿using BotRunner.Constants;
-using BotRunner.Interfaces;
+﻿using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using HunterBeastMastery.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -13,15 +12,15 @@ namespace HunterBeastMastery
             if (ObjectManager.Player.IsCasting)
                 return;
 
-            if (!ObjectManager.Player.IsSpellReady(CallPet) || ObjectManager.Pet != null)
+            if (!ObjectManager.IsSpellReady(CallPet) || ObjectManager.Pet != null)
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 BotTasks.Push(new BuffTask(BotContext));
                 return;
             }
 
-            ObjectManager.Player.CastSpell(CallPet);
+            ObjectManager.CastSpell(CallPet);
         }
     }
 }

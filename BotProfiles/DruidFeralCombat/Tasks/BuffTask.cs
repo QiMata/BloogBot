@@ -1,4 +1,4 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
 
 namespace DruidFeral.Tasks
@@ -10,14 +10,14 @@ namespace DruidFeral.Tasks
 
         public void Update()
         {
-            if ((ObjectManager.Player.HasBuff(MarkOfTheWild) || !ObjectManager.Player.IsSpellReady(MarkOfTheWild)) && (ObjectManager.Player.HasBuff(Thorns) || !ObjectManager.Player.IsSpellReady(Thorns)))
+            if ((ObjectManager.Player.HasBuff(MarkOfTheWild) || !ObjectManager.IsSpellReady(MarkOfTheWild)) && (ObjectManager.Player.HasBuff(Thorns) || !ObjectManager.IsSpellReady(Thorns)))
             {
                 BotTasks.Pop();
                 return;
             }
             
-            ObjectManager.Player.CastSpell(MarkOfTheWild);
-            ObjectManager.Player.CastSpell(Thorns);
+            ObjectManager.CastSpell(MarkOfTheWild);
+            ObjectManager.CastSpell(Thorns);
         }
     }
 }

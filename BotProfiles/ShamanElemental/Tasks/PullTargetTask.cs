@@ -1,6 +1,7 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
+using GameData.Core.Interfaces;
+using GameData.Core.Models;
 
 namespace ShamanElemental.Tasks
 {
@@ -17,7 +18,7 @@ namespace ShamanElemental.Tasks
         {
             if (ObjectManager.Aggressors.Any())
             {
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
                 BotTasks.Pop();
                 BotTasks.Push(Container.CreatePvERotationTask(BotContext));
                 return;
@@ -30,13 +31,13 @@ namespace ShamanElemental.Tasks
                 if (potentialNewTarget != null && potentialNewTarget.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid)
                 {
                     target = potentialNewTarget;
-                    ObjectManager.Player.SetTarget(potentialNewTarget.Guid);
+                    ObjectManager.SetTarget(potentialNewTarget.Guid);
                 }
             }
 
-            if (ObjectManager.Player.Position.DistanceTo(target.Position) < 30 && !ObjectManager.Player.IsCasting && ObjectManager.Player.IsSpellReady(LightningBolt) && ObjectManager.Player.InLosWith(target))
+            if (ObjectManager.Player.Position.DistanceTo(target.Position) < 30 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(LightningBolt) && ObjectManager.Player.InLosWith(target))
             {
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
 
                 BotTasks.Pop();
                 BotTasks.Push(new PvERotationTask(BotContext));
@@ -47,7 +48,7 @@ namespace ShamanElemental.Tasks
 
             if (locations.Length > 1)
             {
-                ObjectManager.Player.MoveToward(locations[1]);
+                ObjectManager.MoveToward(locations[1]);
             }
         }
     }

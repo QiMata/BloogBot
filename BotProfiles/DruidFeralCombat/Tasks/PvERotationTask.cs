@@ -1,6 +1,5 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidFeral.Tasks
@@ -18,13 +17,13 @@ namespace DruidFeral.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(3))
                 return;
 
-            if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(HealingTouch))
+            if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HealingTouch))
             {
                 if (ObjectManager.Player.CurrentShapeshiftForm == BearForm && Wait.For("BearFormDelay", 1000, true))
                     CastSpell(BearForm);
@@ -39,7 +38,7 @@ namespace DruidFeral.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player).TappedByOther)
             {
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
                 Wait.RemoveAll();
                 BotTasks.Pop();
                 return;
@@ -51,7 +50,7 @@ namespace DruidFeral.Tasks
 
                 if (Wait.For(waitKey, 1500))
                 {
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
                     BotTasks.Pop();
                     BotTasks.Push(new LootTask(BotContext));
                     Wait.Remove(waitKey);
@@ -61,13 +60,13 @@ namespace DruidFeral.Tasks
             }
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
-                ObjectManager.Player.SetTarget(ObjectManager.GetTarget(ObjectManager.Player).Guid);
+                ObjectManager.SetTarget(ObjectManager.GetTarget(ObjectManager.Player).Guid);
 
             // ensure we're facing the ObjectManager.GetTarget(ObjectManager.Player)
-            if (!ObjectManager.Player.IsFacing(ObjectManager.GetTarget(ObjectManager.Player).Position)) ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            if (!ObjectManager.Player.IsFacing(ObjectManager.GetTarget(ObjectManager.Player).Position)) ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
             // ensure auto-attack is turned on
-            ObjectManager.Player.StartMeleeAttack();
+            ObjectManager.StartMeleeAttack();
 
             // if less than level 13, use spellcasting
             if (ObjectManager.Player.Level <= 12)
@@ -75,10 +74,10 @@ namespace DruidFeral.Tasks
                 // if low on mana, move into melee range
                 if (ObjectManager.Player.ManaPercent < 20 && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5)
                 {
-                    ObjectManager.Player.MoveToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
+                    ObjectManager.MoveToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
                     return;
                 }
-                else ObjectManager.Player.StopAllMovement();
+                else ObjectManager.StopAllMovement();
 
                 TryCastSpell(Moonfire, 0, 10, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Moonfire));
 
@@ -91,10 +90,10 @@ namespace DruidFeral.Tasks
                 if ((ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 3 && ObjectManager.Player.CurrentShapeshiftForm == BearForm && ObjectManager.GetTarget(ObjectManager.Player).IsInCombat && !TargetMovingTowardPlayer) || (!ObjectManager.GetTarget(ObjectManager.Player).IsInCombat && ObjectManager.Player.IsCasting))
                 {
                     Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                    ObjectManager.Player.MoveToward(nextWaypoint[0]);
+                    ObjectManager.MoveToward(nextWaypoint[0]);
                 }
                 else
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
 
                 TryCastSpell(BearForm, 0, 50, ObjectManager.Player.CurrentShapeshiftForm != BearForm && Wait.For("BearFormDelay", 1000, true));
 
@@ -114,10 +113,10 @@ namespace DruidFeral.Tasks
                 if ((ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 3 && ObjectManager.Player.CurrentShapeshiftForm == CatForm && ObjectManager.GetTarget(ObjectManager.Player).IsInCombat && !TargetMovingTowardPlayer) || (!ObjectManager.GetTarget(ObjectManager.Player).IsInCombat && ObjectManager.Player.IsCasting))
                 {
                     Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                    ObjectManager.Player.MoveToward(nextWaypoint[0]);
+                    ObjectManager.MoveToward(nextWaypoint[0]);
                 }
                 else
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
 
                 TryCastSpell(CatForm, 0, 50, ObjectManager.Player.CurrentShapeshiftForm != CatForm);
 
@@ -134,34 +133,34 @@ namespace DruidFeral.Tasks
 
         private void TryUseBearAbility(string name, int requiredRage = 0, bool condition = true, Action callback = null)
         {
-            if (ObjectManager.Player.IsSpellReady(name) && ObjectManager.Player.Rage >= requiredRage && !ObjectManager.Player.IsStunned && ObjectManager.Player.CurrentShapeshiftForm == BearForm && condition)
+            if (ObjectManager.IsSpellReady(name) && ObjectManager.Player.Rage >= requiredRage && !ObjectManager.Player.IsStunned && ObjectManager.Player.CurrentShapeshiftForm == BearForm && condition)
             {
-                ObjectManager.Player.CastSpell(name);
+                ObjectManager.CastSpell(name);
                 callback?.Invoke();
             }
         }
 
         private void TryUseCatAbility(string name, int requiredEnergy = 0, bool requiresComboPoints = false, bool condition = true, Action callback = null)
         {
-            if (ObjectManager.Player.IsSpellReady(name) && ObjectManager.Player.Energy >= requiredEnergy && (!requiresComboPoints || ObjectManager.Player.ComboPoints > 0) && !ObjectManager.Player.IsStunned && ObjectManager.Player.CurrentShapeshiftForm == CatForm && condition)
+            if (ObjectManager.IsSpellReady(name) && ObjectManager.Player.Energy >= requiredEnergy && (!requiresComboPoints || ObjectManager.Player.ComboPoints > 0) && !ObjectManager.Player.IsStunned && ObjectManager.Player.CurrentShapeshiftForm == CatForm && condition)
             {
-                ObjectManager.Player.CastSpell(name);
+                ObjectManager.CastSpell(name);
                 callback?.Invoke();
             }
         }
 
         private void CastSpell(string name)
         {
-            if (ObjectManager.Player.IsSpellReady(name) && !ObjectManager.Player.IsCasting)
-                ObjectManager.Player.CastSpell(name);
+            if (ObjectManager.IsSpellReady(name) && !ObjectManager.Player.IsCasting)
+                ObjectManager.CastSpell(name);
         }
 
         private void TryCastSpell(string name, int minRange, int maxRange, bool condition = true, Action callback = null)
         {
             float distanceToTarget = ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
-            if (ObjectManager.Player.IsSpellReady(name) &&
-                ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(name) &&
+            if (ObjectManager.IsSpellReady(name) &&
+                ObjectManager.Player.Mana >= ObjectManager.GetManaCost(name) &&
                 distanceToTarget >= minRange &&
                 distanceToTarget <= maxRange &&
                 condition &&
@@ -169,7 +168,7 @@ namespace DruidFeral.Tasks
                 !ObjectManager.Player.IsCasting &&
                 ObjectManager.Player.ChannelingId == 0)
             {
-                ObjectManager.Player.CastSpell(name);
+                ObjectManager.CastSpell(name);
                 callback?.Invoke();
             }
         }

@@ -1,37 +1,306 @@
-# Services Directory Overview
+# WWoW Services
 
-The `/Services` directory contains the major components of the BloogBot system, each encapsulated as a separate service or executable. These services allow BloogBot to run in different modes (interactive foreground or headless background) and to integrate advanced features like AI-based prompt handling. All service projects target .NET 8.0 and are configured to output their binaries into a common `Bot` folder for unified deployment. Below is an overview of each service component, including its purpose, how to run or test it, and its key dependencies.
+An ecosystem of intelligent, distributed services for World of Warcraft automation, providing AI-driven bot coordination, navigation, decision-making, and execution capabilities. For end-to-end recorded regression testing, pair these services with the [`WWoW.RecordedTests.Shared`](../WWoW.RecordedTests.Shared/README.md) orchestration library which handles server readiness checks and artifact capture.
 
-## ForegroundBotRunner
+## Overview
 
-**Purpose:** The ForegroundBotRunner is a console application (OutputType **Exe**) designed to launch and run a WoW bot in a live game client session. This is the traditional mode where a WoW client is running in the foreground, and the bot attaches to it and controls it in real-time.
+The WWoW Services layer forms the backbone of a sophisticated multi-bot automation platform. Each service is designed as a .NET 8 Worker Service, providing specific capabilities that work together to create intelligent, autonomous World of Warcraft characters.
 
-**Usage:** To run the ForegroundBotRunner, open or attach to a WoW client (logged into the game) and then execute the `ForegroundBotRunner` program (e.g., via Visual Studio or by running the compiled executable from the `Bot` output directory). The service will inject into the WoW process and start the bot routine using the settings provided (e.g. in configuration files like `botSettings.json` and `bootstrapperSettings.json`). For testing, you can use a known bot profile (for example, the included `TestBot`) and observe the bot’s behavior in-game. Ensure you have the necessary config files in place in the `Bot` folder, as the ForegroundBotRunner will read those at startup.
+### Service Architecture
 
-**Dependencies:** This service relies on the core bot logic provided by the **BotRunner** library and game data definitions from **GameData.Core**. It also includes native hooking/injection components to manipulate the game process – notably **Fasm.NET** and **FastCall** are bundled as resource DLLs. These allow the bot to execute in-game actions by injecting assembly code into WoW’s memory. The ForegroundBotRunner does *not* depend on the other services (it does not use the PromptHandling service), and runs standalone for a single bot instance with a visible game client.
+```mermaid
+graph TB
+    A[StateManager] --> B[BackgroundBotRunner]
+    A --> C[ForegroundBotRunner]
+    A --> D[PathfindingService]
+    
+    B --> E[DecisionEngineService]
+    B --> F[PromptHandlingService]
+    B --> D
+    
+    C --> G[Memory & Process Injection]
+    
+    E --> H[Machine Learning Models]
+    F --> I[AI Language Models]
+    D --> J[Navigation Meshes]
+    
+    K[BotCommLayer] --> A
+    K --> B
+    K --> C
+```
 
-## BackgroundBotRunner
+## Core Services
 
-**Purpose:** The BackgroundBotRunner is a background worker service intended to run bots without an active UI, enabling headless or multi-instance bot operation. Unlike the foreground runner, this component can run bots in a non-interactive environment (for example, on a server or in the background of a machine) and is suited for automation scenarios. It’s implemented as a .NET Worker service (SDK `Microsoft.NET.Sdk.Worker`) built as a **class library** (OutputType Library), meaning it is designed to be hosted by a separate process (e.g. a Windows Service or a console host) rather than run on its own.
+### [StateManager](StateManager/README.md) - Central Orchestrator
+**Purpose**: Multi-bot coordination and state management hub
 
-**Usage:** To use the BackgroundBotRunner, you need to host it within a .NET Generic Host or similar environment. In practice, this means writing a small bootstrap (if one is not already provided) that adds the BackgroundBotRunner service into a host and runs it. For example, a custom `Program` could create a host builder, add the BackgroundBotRunner as a hosted service, and run as a Windows Service or console app. Once running, the BackgroundBotRunner will manage the bot lifecycle in the background. For testing or development, you can create a simple console application to invoke this service: register the BackgroundBotRunner’s implementation with `Host.CreateDefaultBuilder`, then run the host to simulate the service’s behavior in a controlled environment. (Ensure that any necessary configuration or game client access is set up for the background session. In some cases, running WoW in the background may require a virtual display or appropriate OS settings since WoW is normally a GUI application.)
+**Key Features**:
+- **Character State Management**: Tracks and manages individual character states and activities
+- **Background Bot Orchestration**: Automatically starts and manages bot instances for each configured character
+- **Socket Communication**: Real-time TCP socket listeners for inter-service communication
+- **Account Management**: Integrates with MaNGOS SOAP API for automatic account creation
+- **Service Coordination**: Automatically launches dependent services like PathfindingService
 
-**Dependencies:** The BackgroundBotRunner depends on several other components of the system. It uses the **BotRunner** library for core bot behavior (behavior trees, state machines, etc.), and the **WoWSharpClient** library to interface with the WoW game process in a headless manner (WoWSharpClient likely contains the logic for memory reading/writing or remote procedure calls into WoW). The BackgroundBotRunner also **integrates the PromptHandlingService** – it references and invokes this service to handle any AI-driven commands or responses (see PromptHandlingService below). Like the foreground runner, it indirectly uses the BotComm layer and game data libraries via those dependencies. The BackgroundBotRunner is intended to run concurrently with the PromptHandlingService in the same host process (it does not directly produce an executable on its own). It does not depend on ForegroundBotRunner at all – instead, it offers an alternative mode of operation.
+**Communication Ports**:
+- Character State Listener: `5002`
+- State Manager Listener: `8088`
+- PathfindingService: `5000`
 
-## PromptHandlingService
+### [BackgroundBotRunner](BackgroundBotRunner/README.md) - Autonomous Execution Engine
+**Purpose**: AI-driven background automation for individual characters
 
-**Purpose:** The PromptHandlingService is an auxiliary service that introduces AI and natural-language capabilities to BloogBot. It is responsible for handling textual prompts or commands (for example, instructions from a user or higher-level AI directives) and translating them into bot actions or replies. This service allows integration with Large Language Models (LLMs) and other AI tools – enabling features like conversational bot commands or AI-generated decision-making.
+**Key Features**:
+- **BotRunner Integration**: Executes behavior trees and automation logic
+- **Network Communication**: Pure C# WoW protocol implementation via WoWSharpClient
+- **AI Integration**: Connects to Ollama for intelligent decision-making
+- **Service Communication**: TCP socket integration with PathfindingService and StateManager
+- **Error Handling**: Comprehensive exception handling and recovery mechanisms
 
-**Usage:** The PromptHandlingService runs as a background component **alongside the BackgroundBotRunner**. It’s implemented as a .NET Worker library (OutputType Library) similar to the background runner. In practice, you don’t run this service by itself; it is loaded into the host process that is running the background bot. When the BackgroundBotRunner requires interpretation of a prompt or needs to produce a response (e.g., a user asks the bot a question or gives a high-level instruction), it will call into this service. For testing this component in isolation, developers can simulate prompt inputs by calling its methods or writing unit tests. For example, you might feed a sample command or question to the PromptHandlingService (with proper configuration for AI access) and verify that it returns a reasonable action or output. Note that to fully test its capabilities, you’ll need access to the configured AI services (e.g., a valid Azure OpenAI API key or a running Ollama server for local models, as required by its settings).
+**Dependencies**:
+- StateManager (coordination)
+- PathfindingService (navigation)
+- PromptHandlingService (AI responses)
+- DecisionEngineService (ML decisions)
 
-**Dependencies:** This service is heavy on external and internal integrations. On the external side, it uses the **Azure.AI.OpenAI** SDK and **OllamaSharp** library for connecting to AI models – this means it can query OpenAI’s services (or a local LLM via Ollama) to generate responses or parse instructions. It also includes **SQLite** via `sqlite-net-pcl`, suggesting it maintains a local database (perhaps for storing conversation history, game state context, or predefined prompt-response mappings). On the internal side, PromptHandlingService relies on the bot communication layer: it references **BotCommLayer** to send or receive data from the bot/game environment. This allows the service to, for example, fetch game state needed to inform the AI, or to dispatch AI-generated commands back to the running bot. The PromptHandlingService is utilized by the BackgroundBotRunner (which calls it as needed); it does not interact with the ForegroundBotRunner at all. In summary, its role is modular – it can be thought of as an optional AI-powered module that extends the background bot’s functionality with natural language understanding and decision support.
+### [ForegroundBotRunner](ForegroundBotRunner/README.md) - Direct Memory Interface
+**Purpose**: Advanced automation through direct memory access and process injection
 
-## Service Interactions and Dependencies
+**Key Features**:
+- **Process Injection**: Designed for injection into the WoW game process using Loader DLL
+- **Memory Management**: Direct memory reading/writing with protection mechanisms
+- **Object Manager**: Real-time enumeration and management of game objects
+- **Anti-Detection**: Protection against Blizzard's anti-cheat systems
+- **Function Hooking**: Native function detours and calling convention support
 
-The services in this directory are designed to work in a complementary fashion, although each addresses a different use case:
+**Security Note**: This service requires elevated privileges and is intended for educational purposes. Users must ensure compliance with applicable terms of service.
 
-* **Foreground vs Background:** The ForegroundBotRunner and BackgroundBotRunner are two separate execution modes for the bot. They do not depend on each other and are not run together – you will choose one or the other depending on your scenario. ForegroundBotRunner is self-contained for a single bot with a visible game client, whereas BackgroundBotRunner is meant for headless or automated operation (potentially enabling multiple bots or running without a user’s direct supervision). Both share the **BotRunner** core library for bot logic, and both ultimately rely on the same underlying game interaction layer (BotComm/WoWSharp), but they instantiate and use these in different contexts.
+### [PathfindingService](PathfindingService/README.md) - Spatial Intelligence
+**Purpose**: Advanced navigation and pathfinding using Detour navigation meshes
 
-* **BackgroundBotRunner & PromptHandlingService:** These two have a close relationship. The PromptHandlingService is essentially an extension of the background bot service – the BackgroundBotRunner references it and invokes it to handle AI prompt processing. They are expected to run within the same host process, where PromptHandlingService operates as a background task/worker that the bot can call into. In terms of deployment, if you enable the background mode with AI features, you would host both of these together. The dependency is one-directional: BackgroundBotRunner depends on PromptHandlingService (for enhanced functionality), but the PromptHandlingService on its own doesn’t require the background runner except as a source of prompts.
+**Key Features**:
+- **A* Pathfinding**: Optimal route calculation using navigation meshes
+- **Multi-Map Support**: Handles all WoW zones with `.mmtile` navigation data
+- **Line-of-Sight**: Accurate visibility and collision detection
+- **TCP Socket API**: High-performance client-server architecture
+- **Sub-5ms Performance**: Optimized for real-time navigation queries
 
-* **Shared Libraries:** All services depend on a set of common libraries (found in the `/Exports` directory and elsewhere). For example, the BotRunner library provides the behavior tree engine and bot state management used by both Foreground and Background runners, and the BotCommLayer (with possibly a gRPC/Protobuf infrastructure) underpins communication with the game for all modes. The GameData.Core library supplies game-specific data or constants (used in bot logic), and native components like FastCall are utilized for low-level memory manipulation in the foreground scenario. These dependencies mean that regardless of which service you run, the core bot behavior and memory interface work consistently across them.
+**API Endpoints**:
+- `CalculatePath`: Point-to-point pathfinding
+- `IsLineOfSightClear`: Visibility checking
+- `GetRandomPoint`: Safe position generation
+
+### [DecisionEngineService](DecisionEngineService/README.md) - Machine Learning Brain
+**Purpose**: AI-powered decision-making using machine learning models
+
+**Key Features**:
+- **ML.NET Integration**: Custom ML models for action prediction
+- **Combat Prediction**: Specialized combat scenario analysis
+- **Real-time Learning**: Continuous model improvement from gameplay data
+- **Data Pipeline**: Automatic processing of binary game state files
+- **Model Persistence**: SQLite-based model storage and versioning
+
+**Learning Capabilities**:
+- Combat action optimization
+- Resource management decisions
+- Threat assessment and response
+- Environmental adaptation
+
+### [PromptHandlingService](PromptHandlingService/README.md) - AI Language Integration
+**Purpose**: Natural language processing and AI-enhanced automation
+
+**Key Features**:
+- **Ollama Integration**: Local LLM support for intelligent responses
+- **Prompt Templates**: Structured prompts for consistent AI behavior
+- **Context Management**: Maintains conversation history and game context
+- **Function Calling**: AI-driven action execution through structured responses
+- **Error Handling**: Graceful degradation and fallback mechanisms
+
+**AI Capabilities**:
+- Natural language command processing
+- Intelligent quest dialogue
+- Social interaction automation
+- Dynamic response generation
+
+## Configuration & Deployment
+
+### Prerequisites
+- **.NET 8 SDK** or later
+- **MySQL Database** (MaNGOS/TrinityCore compatible)
+- **SQLite** for local data storage
+- **Ollama** (optional, for AI features)
+- **Navigation Data** (`.mmtile` files for pathfinding)
+
+### Service Dependencies
+
+```mermaid
+graph LR
+    A[StateManager] --> B[PathfindingService]
+    A --> C[BackgroundBotRunner]
+    A --> D[ForegroundBotRunner]
+    
+    C --> E[DecisionEngineService]
+    C --> F[PromptHandlingService]
+    C --> B
+    
+    E --> G[MaNGOS Database]
+    F --> H[Ollama API]
+    B --> I[Navigation Data]
+```
+
+### Deployment Options
+
+#### Development Environment
+```bash
+# Start core services
+dotnet run --project Services/StateManager
+dotnet run --project Services/PathfindingService
+
+# Services will auto-start additional components
+```
+
+#### Production Deployment
+```bash
+# Windows Service Installation
+sc create StateManager binPath="StateManager.exe"
+sc create PathfindingService binPath="PathfindingService.exe"
+
+# Linux systemd
+sudo systemctl enable statemanager.service
+sudo systemctl enable pathfinding.service
+```
+
+#### Docker Support
+```dockerfile
+# Multi-service deployment available
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+# See individual service README files for specific configurations
+```
+
+## Communication Protocols
+
+### Inter-Service Communication
+- **Protocol Buffers**: Structured messaging via [BotCommLayer](../Exports/BotCommLayer/README.md)
+- **TCP Sockets**: Real-time communication between services
+- **HTTP/REST**: External API integration (Ollama, MaNGOS SOAP)
+
+### Port Allocation
+| Service | Port | Purpose |
+|---------|------|---------|
+| StateManager | 8088 | State management API |
+| Character State | 5002 | Character activity monitoring |
+| PathfindingService | 5000 | Navigation queries |
+| MaNGOS SOAP | 7878 | Game server integration |
+
+## Monitoring & Observability
+
+### Logging
+All services use structured logging with configurable levels:
+- **Information**: Service lifecycle and major operations
+- **Debug**: Detailed operational tracing
+- **Error**: Exception details and recovery actions
+
+### Performance Metrics
+- **Pathfinding**: Sub-5ms response times
+- **Decision Engine**: ML model accuracy tracking
+- **Memory Usage**: Real-time monitoring for process injection
+- **Network Latency**: Communication between services
+
+## Testing
+
+### Unit Tests
+```bash
+# Run all service tests
+dotnet test Tests/PathfindingService.Tests
+dotnet test Tests/BotRunner.Tests
+dotnet test Tests/WoWSharpClient.Tests
+dotnet test Tests/PromptHandlingService.Tests
+```
+
+### Integration Testing
+```bash
+# Full ecosystem testing
+dotnet test Tests/ --filter Category=Integration
+```
+
+## Security Considerations
+
+### Process Injection (ForegroundBotRunner)
+- Requires elevated privileges
+- May trigger antivirus warnings
+- Educational/research purposes only
+- No warranty for detection avoidance
+
+### Network Security
+- Encrypted WoW protocol communication
+- Secure configuration storage using .NET user secrets
+- Service isolation and sandboxing
+
+### Anti-Detection
+- Anti-Warden protection (educational)
+- Randomized timing and behavior patterns
+- Memory protection and cleanup
+
+## Development Guidelines
+
+### Adding New Services
+1. **Create Worker Service**: Use .NET 8 Worker Service template
+2. **Implement IHostedService**: Follow established patterns
+3. **Add Configuration**: Use `appsettings.json` and user secrets
+4. **Communication**: Integrate with BotCommLayer for messaging
+5. **Testing**: Include unit and integration tests
+6. **Documentation**: Follow README template
+
+### Code Standards
+- **.NET 8**: Target framework with C# 12 features
+- **Async/Await**: Non-blocking operations throughout
+- **Nullable References**: Enabled for null safety
+- **Dependency Injection**: Constructor injection pattern
+- **Structured Logging**: Microsoft.Extensions.Logging
+
+### Performance Requirements
+- **Startup Time**: Services should start within 10 seconds
+- **Memory Usage**: Monitor and optimize for long-running operations
+- **CPU Efficiency**: Balance responsiveness with resource usage
+- **Network Optimization**: Minimize bandwidth and latency
+
+## Service Lifecycle
+
+### Startup Sequence
+1. **StateManager** starts and loads configuration
+2. **PathfindingService** launches (auto-started by StateManager)
+3. **Character-specific services** spawn based on configuration
+4. **AI services** initialize models and connections
+5. **Communication channels** establish between all services
+
+### Shutdown Sequence
+1. **Graceful termination** signals sent to all services
+2. **Active operations** complete or timeout
+3. **Resources cleanup** (memory, file handles, connections)
+4. **State persistence** for resumable operations
+
+## Additional Resources
+
+### Related Documentation
+- **[WWoW.AI](../BloogBot.AI/README.md)**: Core AI behavior coordination
+- **[Exports Layer](../Exports/README.md)**: Shared libraries and communication
+- **[UI Components](../UI/README.md)**: Management and monitoring interfaces
+
+### External Dependencies
+- **[Detour Navigation](../Exports/Navigation/README.md)**: C++ pathfinding library
+- **[WoW Protocol](../Exports/WoWSharpClient/README.md)**: Pure C# client implementation
+- **[Process Injection](../Exports/Loader/README.md)**: Native code hosting
+
+### Contributing
+1. **Fork the repository** and create feature branches
+2. **Follow established patterns** and architectural guidelines
+3. **Add comprehensive tests** for new functionality
+4. **Update documentation** including README files
+5. **Performance testing** to ensure scalability
+
+## License
+
+This project is part of the WWoW ecosystem. Please refer to the main project license for usage terms.
+
+---
+
+*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*

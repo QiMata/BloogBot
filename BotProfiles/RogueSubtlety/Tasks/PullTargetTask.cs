@@ -1,7 +1,5 @@
-using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace RogueSubtlety.Tasks
@@ -14,7 +12,7 @@ namespace RogueSubtlety.Tasks
         {
             if (ObjectManager.GetTarget(ObjectManager.Player).TappedByOther)
             {
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
                 BotTasks.Pop();
                 return;
             }
@@ -23,12 +21,12 @@ namespace RogueSubtlety.Tasks
                 ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
             if (distanceToTarget < 25 && !ObjectManager.Player.HasBuff(Stealth)
-                && ObjectManager.Player.IsSpellReady(Garrote) && !ObjectManager.Player.IsInCombat)
+                && ObjectManager.IsSpellReady(Garrote) && !ObjectManager.Player.IsInCombat)
             {
-                ObjectManager.Player.CastSpell(Stealth);
+                ObjectManager.CastSpell(Stealth);
             }
 
-            if (distanceToTarget < 15 && ObjectManager.Player.IsSpellReady(Distract)
+            if (distanceToTarget < 15 && ObjectManager.IsSpellReady(Distract)
                 && ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Totem)
             {
                 //var delta = ObjectManager.GetTarget(ObjectManager.Player).Position - ObjectManager.Player.Position;
@@ -42,28 +40,28 @@ namespace RogueSubtlety.Tasks
                 && !ObjectManager.Player.IsInCombat
                 && ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Totem)
             {
-                if (ObjectManager.Player.IsSpellReady(Ambush) && ObjectManager.Player.IsBehind(ObjectManager.GetTarget(ObjectManager.Player)))
+                if (ObjectManager.IsSpellReady(Ambush) && ObjectManager.Player.IsBehind(ObjectManager.GetTarget(ObjectManager.Player)))
                 {
-                    ObjectManager.Player.CastSpell(Ambush);
+                    ObjectManager.CastSpell(Ambush);
                     return;
                 }
-                else if (ObjectManager.Player.IsSpellReady(Garrote)
+                else if (ObjectManager.IsSpellReady(Garrote)
                     && ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Elemental
                     && ObjectManager.Player.IsBehind(ObjectManager.GetTarget(ObjectManager.Player)))
                 {
-                    ObjectManager.Player.CastSpell(Garrote);
+                    ObjectManager.CastSpell(Garrote);
                     return;
                 }
-                else if (ObjectManager.Player.IsSpellReady(CheapShot))
+                else if (ObjectManager.IsSpellReady(CheapShot))
                 {
-                    ObjectManager.Player.CastSpell(CheapShot);
+                    ObjectManager.CastSpell(CheapShot);
                     return;
                 }
             }
 
             if (distanceToTarget < 3)
             {
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
                 BotTasks.Pop();
                 BotTasks.Push(new PvERotationTask(BotContext));
                 return;
@@ -74,7 +72,7 @@ namespace RogueSubtlety.Tasks
                 ObjectManager.Player.Position,
                 ObjectManager.GetTarget(ObjectManager.Player).Position,
                 true);
-            ObjectManager.Player.MoveToward(nextWaypoint[0]);
+            ObjectManager.MoveToward(nextWaypoint[0]);
         }
     }
 }

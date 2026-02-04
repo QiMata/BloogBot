@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
@@ -55,7 +54,7 @@ namespace WarriorFury.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(5))
@@ -113,7 +112,7 @@ namespace WarriorFury.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
                 if (ObjectManager.Aggressors.Any())
-                    ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
                 else
                     return;
             }
@@ -133,7 +132,7 @@ namespace WarriorFury.Tasks
 
             // TryUseAbility(Rend, 10, (currentStance == BattleStance && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Rend) && (ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Elemental && ObjectManager.GetTarget(ObjectManager.Player).CreatureType != CreatureType.Undead)));
 
-            TryUseAbility(DeathWish, 10, ObjectManager.Player.IsSpellReady(DeathWish) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
+            TryUseAbility(DeathWish, 10, ObjectManager.IsSpellReady(DeathWish) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
 
             TryUseAbility(BattleShout, 10, !ObjectManager.Player.HasBuff(BattleShout));
 
@@ -160,7 +159,7 @@ namespace WarriorFury.Tasks
                 TryUseAbility(Whirlwind, 25, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 20 && currentStance == BerserkerStance && !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(IntimidatingShout) && AggressorsInMelee);
 
                 // if our ObjectManager.GetTarget(ObjectManager.Player) uses melee, but there's a caster attacking us, do not use retaliation
-                TryUseAbility(Retaliation, 0, ObjectManager.Player.IsSpellReady(Retaliation) && !spellcastingAggressors.Any() && currentStance == BattleStance && FacingAllTargets && !ObjectManager.Aggressors.Any(a => a.HasDebuff(IntimidatingShout)));
+                TryUseAbility(Retaliation, 0, ObjectManager.IsSpellReady(Retaliation) && !spellcastingAggressors.Any() && currentStance == BattleStance && FacingAllTargets && !ObjectManager.Aggressors.Any(a => a.HasDebuff(IntimidatingShout)));
             }
 
             // Use these abilities if you are fighting only one mob at a time, or multiple and one or more are not in melee range.

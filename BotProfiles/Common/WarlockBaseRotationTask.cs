@@ -1,6 +1,5 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using ForegroundBotRunner.Mem;
 using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
@@ -29,8 +28,8 @@ namespace BotProfiles.Common
 
         public override void PerformCombatRotation()
         {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
             ObjectManager.Pet?.Attack();
 
             UseCooldowns();
@@ -124,11 +123,11 @@ namespace BotProfiles.Common
             if (ItemReady(trinket2))
                 trinket2.Use();
 
-            if (ObjectManager.Player.IsSpellReady(BloodFury))
-                ObjectManager.Player.CastSpell(BloodFury);
+            if (ObjectManager.IsSpellReady(BloodFury))
+                ObjectManager.CastSpell(BloodFury);
 
-            if (ObjectManager.Player.IsSpellReady(Berserking))
-                ObjectManager.Player.CastSpell(Berserking);
+            if (ObjectManager.IsSpellReady(Berserking))
+                ObjectManager.CastSpell(Berserking);
         }
 
         private bool ItemReady(IWoWItem? item)

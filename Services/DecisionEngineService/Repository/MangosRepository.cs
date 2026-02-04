@@ -3,6 +3,7 @@ using Google.Protobuf.WellKnownTypes;
 using MySql.Data.MySqlClient;
 using MySql.Data.Types;
 using System.Data;
+using Serilog;
 
 namespace DecisionEngineService.Repository
 {
@@ -33,7 +34,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -73,7 +74,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -105,7 +106,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -137,7 +138,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -183,7 +184,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -222,7 +223,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -256,7 +257,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -289,7 +290,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -323,7 +324,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -368,7 +369,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -400,7 +401,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -442,7 +443,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -478,7 +479,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -512,7 +513,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -547,7 +548,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -598,7 +599,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -637,7 +638,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
+                    Log.Error($"[MANGOS REPO]{ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -682,7 +683,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -715,7 +716,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -750,7 +751,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -794,7 +795,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -845,7 +846,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -878,7 +879,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -911,7 +912,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -946,7 +947,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -985,7 +986,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1021,7 +1022,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1068,7 +1069,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1119,7 +1120,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1166,7 +1167,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1213,7 +1214,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1253,7 +1254,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1286,7 +1287,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1414,7 +1415,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1465,7 +1466,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1570,7 +1571,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1609,7 +1610,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1654,7 +1655,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1693,7 +1694,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1744,7 +1745,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1776,7 +1777,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1841,7 +1842,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1885,7 +1886,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1925,7 +1926,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -1959,7 +1960,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2009,7 +2010,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2043,7 +2044,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2076,7 +2077,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2116,7 +2117,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2150,7 +2151,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2184,7 +2185,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2236,7 +2237,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2303,7 +2304,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2345,7 +2346,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2378,7 +2379,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2416,7 +2417,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2449,7 +2450,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2483,7 +2484,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2517,7 +2518,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2555,7 +2556,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2598,7 +2599,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2633,7 +2634,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2669,7 +2670,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2720,7 +2721,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2754,7 +2755,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2800,7 +2801,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2852,7 +2853,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2888,7 +2889,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2923,7 +2924,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2956,7 +2957,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -2990,7 +2991,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3023,7 +3024,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3057,7 +3058,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3097,7 +3098,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3131,7 +3132,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3295,7 +3296,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3335,7 +3336,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3384,7 +3385,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3432,7 +3433,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3472,7 +3473,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3521,7 +3522,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3569,7 +3570,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3609,7 +3610,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3649,7 +3650,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3757,7 +3758,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3797,7 +3798,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3838,7 +3839,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3883,7 +3884,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3911,7 +3912,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3944,7 +3945,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -3992,7 +3993,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4029,7 +4030,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4066,7 +4067,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4101,7 +4102,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4136,7 +4137,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4170,7 +4171,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4206,7 +4207,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4247,7 +4248,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4282,7 +4283,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4322,7 +4323,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4356,7 +4357,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4395,7 +4396,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4431,7 +4432,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4466,7 +4467,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4501,7 +4502,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4536,7 +4537,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4570,7 +4571,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4605,7 +4606,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4639,7 +4640,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4672,7 +4673,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4706,7 +4707,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4745,7 +4746,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4778,7 +4779,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4816,7 +4817,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4854,7 +4855,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4890,7 +4891,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4928,7 +4929,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -4964,7 +4965,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5000,7 +5001,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5038,7 +5039,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5090,7 +5091,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5134,7 +5135,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5186,7 +5187,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5344,7 +5345,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5384,7 +5385,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5418,7 +5419,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5461,7 +5462,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5488,7 +5489,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5521,7 +5522,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5554,7 +5555,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5588,7 +5589,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5634,7 +5635,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5672,7 +5673,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5706,7 +5707,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5741,7 +5742,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5773,7 +5774,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5813,7 +5814,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5845,7 +5846,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5879,7 +5880,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5919,7 +5920,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5956,7 +5957,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -5992,7 +5993,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6034,7 +6035,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6061,7 +6062,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6113,7 +6114,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6146,7 +6147,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6179,7 +6180,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6213,7 +6214,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6246,7 +6247,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6280,7 +6281,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6349,7 +6350,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6383,7 +6384,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6425,7 +6426,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6458,7 +6459,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6510,7 +6511,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6544,7 +6545,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6581,7 +6582,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6785,7 +6786,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6820,7 +6821,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6856,7 +6857,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6891,7 +6892,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 
@@ -6924,7 +6925,7 @@ namespace DecisionEngineService.Repository
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR] {ex.Message} {ex.StackTrace}");
+                    Log.Error($"[ERROR] {ex.Message} {ex.StackTrace}");
                 }
             }
 

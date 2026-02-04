@@ -38,8 +38,8 @@ namespace DruidBalance.Tasks
 
         public override void PerformCombatRotation()
         {
-            ObjectManager.Player.StopAllMovement();
-            ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+            ObjectManager.StopAllMovement();
+            ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
             TryCastSpell(MoonkinForm, !ObjectManager.Player.HasBuff(MoonkinForm));
             TryCastSpell(Innervate, ObjectManager.Player.ManaPercent < 15, castOnSelf: true);

@@ -15,6 +15,10 @@ namespace VMAP
     // Simple helpers
     inline bool IsValidHeight(float h) { return h > PhysicsConstants::INVALID_HEIGHT; }
 
+    // Unified sentinel for no-liquid level across VMAP and ADT
+    constexpr float VMAP_INVALID_LIQUID_HEIGHT = -500.0f;
+    inline bool IsValidLiquidLevel(float h) { return std::isfinite(h) && h > VMAP_INVALID_LIQUID_HEIGHT; }
+
     constexpr float LIQUID_TILE_SIZE = (533.333f / 128.f);
 
     enum VMAPLoadResult
@@ -64,6 +68,26 @@ namespace VMAP
         MAP_LIQUID_TYPE_ALL_LIQUIDS = 0xFF
     };
 
+    // Consolidated WMO liquid entry IDs (match GameData.Core.Enums.LiquidType)
+    enum WmoLiquidEntry : uint32_t
+    {
+        WMO_LIQUID_ENTRY_WATER = 1,
+        WMO_LIQUID_ENTRY_OCEAN = 2,
+        WMO_LIQUID_ENTRY_MAGMA = 3,
+        WMO_LIQUID_ENTRY_SLIME = 4,
+        WMO_LIQUID_ENTRY_NAXXRAMAS_SLIME = 21
+    };
+
+    enum LiquidType : uint32_t
+    {
+        LIQUID_TYPE_NO_WATER = 0, 
+        LIQUID_TYPE_WATER = 1,
+        LIQUID_TYPE_OCEAN = 2,
+        LIQUID_TYPE_MAGMA = 3,
+        LIQUID_TYPE_SLIME = 4,
+        LIQUID_TYPE_NAXXRAMAS_SLIME = 5
+    };
+
     inline uint32_t GetLiquidMask(uint32_t liquidType)
     {
         switch (liquidType)
@@ -73,6 +97,78 @@ namespace VMAP
         case 2: return MAP_LIQUID_TYPE_MAGMA;
         case 3: return MAP_LIQUID_TYPE_SLIME;
         default: return MAP_LIQUID_TYPE_WATER;
+        }
+    }
+
+    // Human-readable name for liqType (0-3)
+    inline const char* GetLiquidTypeName(uint32_t liquidType)
+    {
+        switch (liquidType)
+        {
+        case 0: return "None";
+        case 1: return "Water";
+        case 2: return "Ocean";
+        case 3: return "Magma";
+        case 4: return "Slime";
+        case 5: return "Naxxramas Slime";
+        default: return "Unknown";
+        }
+    }
+
+    inline uint32_t GetLiquidMaskFromEntry(uint32_t entry)
+    {
+        switch (entry)
+        {
+        case WMO_LIQUID_ENTRY_WATER: return MAP_LIQUID_TYPE_WATER;
+        case WMO_LIQUID_ENTRY_OCEAN: return MAP_LIQUID_TYPE_OCEAN;
+        case WMO_LIQUID_ENTRY_MAGMA: return MAP_LIQUID_TYPE_MAGMA;
+        case WMO_LIQUID_ENTRY_SLIME: return MAP_LIQUID_TYPE_SLIME;
+        case WMO_LIQUID_ENTRY_NAXXRAMAS_SLIME: return MAP_LIQUID_TYPE_SLIME;
+        default: return MAP_LIQUID_TYPE_NO_WATER;
+        }
+    }
+
+    // Helper to detect if a liquid type is an entry-id (vmangos exporter), not a 0..3 index
+    inline bool IsLiquidEntryId(uint32_t t)
+    {
+        return t == WMO_LIQUID_ENTRY_WATER ||
+               t == WMO_LIQUID_ENTRY_OCEAN ||
+               t == WMO_LIQUID_ENTRY_MAGMA ||
+               t == WMO_LIQUID_ENTRY_SLIME ||
+               t == WMO_LIQUID_ENTRY_NAXXRAMAS_SLIME;
+    }
+
+    // Unified helpers to get mask/name regardless of representation
+    inline uint32_t GetLiquidMaskUnified(uint32_t t)
+    {
+        return GetLiquidMaskFromEntry(t);
+    }
+
+    inline uint32_t GetLiquidEnumUnified(uint32_t t, bool isVmap)
+    {
+        // If already a known WMO entry id, return as-is
+        if (isVmap)
+        {
+            switch (t)
+            {
+                case 1: return LIQUID_TYPE_WATER;
+                case 2: return LIQUID_TYPE_OCEAN;
+                case 3: return LIQUID_TYPE_MAGMA;
+                case 4: return LIQUID_TYPE_SLIME;
+                case 21: return LIQUID_TYPE_NAXXRAMAS_SLIME;
+                default: return LIQUID_TYPE_NO_WATER;
+            }
+        }
+
+        // Accept ADT indices (0..3)
+        switch (t)
+        {
+            case 0: return LIQUID_TYPE_NO_WATER;  // index 0
+            case 1: return LIQUID_TYPE_MAGMA;  // index 1
+            case 2: return LIQUID_TYPE_OCEAN;  // index 2
+            case 4: return LIQUID_TYPE_SLIME;  // index 3
+            case 8: return LIQUID_TYPE_WATER;
+            default: return LIQUID_TYPE_NO_WATER;
         }
     }
 

@@ -1,5 +1,6 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace RogueSubtlety.Tasks
@@ -37,9 +38,9 @@ namespace RogueSubtlety.Tasks
                     return;
                 else
                 {
-                    ObjectManager.Player.StopAllMovement();
-                    ObjectManager.Player.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
-                    ObjectManager.Player.StartMeleeAttack();
+                    ObjectManager.StopAllMovement();
+                    ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
+                    ObjectManager.StartMeleeAttack();
 
                     TryUseAbility(Evasion, 0, ObjectManager.Aggressors.Count() > 1);
                     TryUseAbility(SliceAndDice, 25, !ObjectManager.Player.HasBuff(SliceAndDice)
@@ -47,8 +48,8 @@ namespace RogueSubtlety.Tasks
                         && ObjectManager.Player.ComboPoints >= 2);
 
                     TryUseAbility(Kick, 25, ReadyToInterrupt(ObjectManager.GetTarget(ObjectManager.Player)));
-                    TryUseAbility(Gouge, 45, ReadyToInterrupt(ObjectManager.GetTarget(ObjectManager.Player)) && !ObjectManager.Player.IsSpellReady(Kick));
-                    TryUseAbility(KidneyShot, 25, ReadyToInterrupt(ObjectManager.GetTarget(ObjectManager.Player)) && !ObjectManager.Player.IsSpellReady(Kick)
+                    TryUseAbility(Gouge, 45, ReadyToInterrupt(ObjectManager.GetTarget(ObjectManager.Player)) && !ObjectManager.IsSpellReady(Kick));
+                    TryUseAbility(KidneyShot, 25, ReadyToInterrupt(ObjectManager.GetTarget(ObjectManager.Player)) && !ObjectManager.IsSpellReady(Kick)
                         && ObjectManager.Player.ComboPoints >= 1 && ObjectManager.Player.ComboPoints <= 2);
 
                     bool readyToEviscerate =
@@ -62,7 +63,7 @@ namespace RogueSubtlety.Tasks
                 }
             }
             else
-                ObjectManager.Player.StopAllMovement();
+                ObjectManager.StopAllMovement();
         }
 
         public override void PerformCombatRotation()

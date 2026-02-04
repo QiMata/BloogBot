@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarlockDestruction.Tasks
@@ -9,9 +9,9 @@ namespace WarlockDestruction.Tasks
     {
         public void Update()
         {
-            ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+            ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
 
-            if ((!ObjectManager.Player.IsSpellReady(DemonSkin) || ObjectManager.Player.HasBuff(DemonSkin)) && (!ObjectManager.Player.IsSpellReady(DemonArmor) || ObjectManager.Player.HasBuff(DemonArmor)))
+            if ((!ObjectManager.IsSpellReady(DemonSkin) || ObjectManager.Player.HasBuff(DemonSkin)) && (!ObjectManager.IsSpellReady(DemonArmor) || ObjectManager.Player.HasBuff(DemonArmor)))
             {
                 if (HasEnoughSoulShards)
                 {
@@ -22,7 +22,7 @@ namespace WarlockDestruction.Tasks
                     DeleteSoulShard();
             }
 
-            if (ObjectManager.Player.IsSpellReady(DemonArmor))
+            if (ObjectManager.IsSpellReady(DemonArmor))
                 TryCastSpell(DemonArmor);
             else
                 TryCastSpell(DemonSkin);
@@ -30,8 +30,8 @@ namespace WarlockDestruction.Tasks
 
         private void TryCastSpell(string name, int requiredLevel = 1)
         {
-            if (!ObjectManager.Player.HasBuff(name) && ObjectManager.Player.Level >= requiredLevel && ObjectManager.Player.IsSpellReady(name))
-                ObjectManager.Player.CastSpell(name);
+            if (!ObjectManager.Player.HasBuff(name) && ObjectManager.Player.Level >= requiredLevel && ObjectManager.IsSpellReady(name))
+                ObjectManager.CastSpell(name);
         }
 
         private void DeleteSoulShard()

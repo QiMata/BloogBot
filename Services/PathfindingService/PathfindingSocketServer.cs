@@ -2,9 +2,6 @@
 using GameData.Core.Models;
 using Pathfinding;
 using PathfindingService.Repository;
-using System;
-using System.Linq;
-using Microsoft.Extensions.Logging;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
 
@@ -12,12 +9,50 @@ namespace PathfindingService
 {
     public class PathfindingSocketServer(string ipAddress, int port, ILogger logger) : ProtobufSocketServer<PathfindingRequest, PathfindingResponse>(ipAddress, port, logger)
     {
-        private readonly Navigation _navigation = new();
+        private Navigation _navigation;
+        private Physics _physics;
+        private volatile bool _isInitialized;
+        private readonly object _initLock = new();
+
+        /// <summary>
+        /// Indicates whether the navigation and physics systems are fully loaded.
+        /// </summary>
+        public bool IsInitialized => _isInitialized;
+
+        /// <summary>
+        /// Initializes the navigation and physics systems. 
+        /// Call this after the socket server is running to allow early connections.
+        /// </summary>
+        public void InitializeNavigation()
+        {
+            lock (_initLock)
+            {
+                if (_isInitialized) return;
+
+                logger.LogInformation("Loading Navigation data...");
+                _navigation = new Navigation();
+
+                logger.LogInformation("Loading Physics data and preloading maps...");
+                _physics = new Physics();
+
+                _isInitialized = true;
+                logger.LogInformation("Navigation and Physics systems initialized.");
+            }
+        }
 
         protected override PathfindingResponse HandleRequest(PathfindingRequest request)
         {
             try
             {
+                // Check if navigation/physics are ready
+                if (!_isInitialized)
+                {
+                    return new PathfindingResponse
+                    {
+                        Error = new Error { Message = "PathfindingService is still initializing. Please wait for navigation data to load." }
+                    };
+                }
+
                 return request.PayloadCase switch
                 {
                     PathfindingRequest.PayloadOneofCase.Path => HandlePath(request.Path),
@@ -31,13 +66,6 @@ namespace PathfindingService
                 logger.LogError($"[PathfindingSocketServer] Error: {ex.Message}\n{ex.StackTrace}");
                 return ErrorResponse($"Internal error: {ex.Message}");
             }
-        }
-
-        private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
-        {
-            var physicsInput = step.ToPhysicsInput();
-            var physicsOutput = _navigation.StepPhysics(physicsInput, step.DeltaTime);
-            return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
         }
 
         private PathfindingResponse HandlePath(CalculatePathRequest req)
@@ -55,6 +83,13 @@ namespace PathfindingService
             return new PathfindingResponse { Path = resp };
         }
 
+        private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
+        {
+            var physicsInput = step.ToPhysicsInput();
+            var physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
+            return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
+        }
+
         private PathfindingResponse HandleLineOfSight(LineOfSightRequest req)
         {
             if (!CheckPosition(req.MapId, req.From, req.To, out var err))
@@ -63,7 +98,7 @@ namespace PathfindingService
             var from = new XYZ(req.From.X, req.From.Y, req.From.Z);
             var to = new XYZ(req.To.X, req.To.Y, req.To.Z);
 
-            bool hasLOS = _navigation.LineOfSight(req.MapId, from, to);
+            bool hasLOS = _physics.LineOfSight(req.MapId, from, to);
 
             return new PathfindingResponse
             {
@@ -136,7 +171,25 @@ namespace PathfindingService
                 currentSplineIndex = 0,
 
                 // Time
-                deltaTime = proto.DeltaTime
+                deltaTime = proto.DeltaTime,
+				frameCounter = proto.FrameCounter,
+
+				// Previous ground tracking
+				prevGroundZ = proto.PrevGroundZ,
+				prevGroundNx = proto.PrevGroundNx,
+				prevGroundNy = proto.PrevGroundNy,
+				prevGroundNz = proto.PrevGroundNz,
+
+				// Pending depenetration
+				pendingDepenX = proto.PendingDepenX,
+				pendingDepenY = proto.PendingDepenY,
+				pendingDepenZ = proto.PendingDepenZ,
+
+				// Standing-on reference
+				standingOnInstanceId = proto.StandingOnInstanceId,
+				standingOnLocalX = proto.StandingOnLocalX,
+				standingOnLocalY = proto.StandingOnLocalY,
+				standingOnLocalZ = proto.StandingOnLocalZ
             };
         }
 
@@ -154,12 +207,26 @@ namespace PathfindingService
                 MovementFlags = nav.moveFlags,
                 Orientation = nav.orientation,
                 Pitch = nav.pitch,
-                IsGrounded = nav.isGrounded,
-                IsSwimming = nav.isSwimming,
-                IsFlying = nav.isFlying,
+                // Removed deprecated state flags
                 FallTime = nav.fallTime,
                 CurrentSplineIndex = nav.currentSplineIndex,
-                SplineProgress = nav.splineProgress
+				SplineProgress = nav.splineProgress,
+
+				GroundZ = nav.groundZ,
+				GroundNx = nav.groundNx,
+				GroundNy = nav.groundNy,
+				GroundNz = nav.groundNz,
+				LiquidZ = nav.liquidZ,
+				LiquidType = nav.liquidType,
+
+				PendingDepenX = nav.pendingDepenX,
+				PendingDepenY = nav.pendingDepenY,
+				PendingDepenZ = nav.pendingDepenZ,
+
+				StandingOnInstanceId = nav.standingOnInstanceId,
+				StandingOnLocalX = nav.standingOnLocalX,
+				StandingOnLocalY = nav.standingOnLocalY,
+				StandingOnLocalZ = nav.standingOnLocalZ
             };
         }
     }

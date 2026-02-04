@@ -19,7 +19,7 @@ namespace PaladinProtection.Tasks
             if (ObjectManager.GetTarget(ObjectManager.Player) == null ||
                 ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(3))

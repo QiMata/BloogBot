@@ -1,6 +1,6 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 
 namespace MageFrost.Tasks
 {
@@ -11,7 +11,7 @@ namespace MageFrost.Tasks
         private readonly IWoWItem drinkItem;
         public RestTask(IBotContext botContext) : base(botContext)
         {
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {
@@ -29,22 +29,22 @@ namespace MageFrost.Tasks
 
             if (InCombat)
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
             }
 
             if (HealthOk && ManaOk)
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 BotTasks.Push(new BuffTask(BotContext));
                 return;
             }
 
-            if (ObjectManager.Player.ManaPercent < 20 && ObjectManager.Player.IsSpellReady(Evocation))
+            if (ObjectManager.Player.ManaPercent < 20 && ObjectManager.IsSpellReady(Evocation))
             {
-                ObjectManager.Player.CastSpell(Evocation);
+                ObjectManager.CastSpell(Evocation);
                 Thread.Sleep(200);
                 return;
             }

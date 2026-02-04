@@ -1,4 +1,3 @@
-﻿using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 
@@ -16,7 +15,7 @@ namespace PaladinProtection.Tasks
             if (InCombat || (HealthOk && ManaOk))
             {
                 Wait.RemoveAll();
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
 
@@ -24,14 +23,14 @@ namespace PaladinProtection.Tasks
             
             if (!ObjectManager.Player.IsDrinking && Wait.For("HealSelfDelay", 3500, true))
             {
-                ObjectManager.Player.DoEmote(Emote.EMOTE_STATE_STAND);
+                ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 if (ObjectManager.Player.HealthPercent < 70)
-                    ObjectManager.Player.CastSpell(HolyLight);
+                    ObjectManager.CastSpell(HolyLight);
                 if (ObjectManager.Player.HealthPercent > 70 && ObjectManager.Player.HealthPercent < 90)
-                    ObjectManager.Player.CastSpell(HolyLight, 1);
+                    ObjectManager.CastSpell(HolyLight, 1);
             }
 
-            ObjectManager.Player.SetTarget(ObjectManager.Player.Guid);
+            ObjectManager.SetTarget(ObjectManager.Player.Guid);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
             {

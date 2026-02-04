@@ -1,5 +1,4 @@
-﻿using BotRunner.Constants;
-using BotRunner.Interfaces;
+﻿using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -19,8 +18,8 @@ namespace HunterBeastMastery.Tasks
         {
             // ensure our pet is helping and alive
             ObjectManager.Pet?.Attack();
-            if (ObjectManager.Pet == null && ObjectManager.Player.IsSpellReady(CallPet))
-                ObjectManager.Player.CastSpell(CallPet);
+            if (ObjectManager.Pet == null && ObjectManager.IsSpellReady(CallPet))
+                ObjectManager.CastSpell(CallPet);
             else if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 40)
                 TryCastSpell(MendPet, castOnSelf: true);
 
@@ -32,23 +31,23 @@ namespace HunterBeastMastery.Tasks
 
             if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
             {
-                ObjectManager.Player.SetTarget(ObjectManager.Aggressors.First().Guid);
+                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
             }
 
             if (Update(28))
                 return;
 
-            ObjectManager.Player.StopAllMovement();
+            ObjectManager.StopAllMovement();
 
             IWoWItem gun = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
             bool canUseRanged = gun != null && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5 && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 34;
             if (gun == null)
             {
-                ObjectManager.Player.StartMeleeAttack();
+                ObjectManager.StartMeleeAttack();
             }
             else if (canUseRanged && ObjectManager.Player.ManaPercent < 60)
             {
-                ObjectManager.Player.StartRangedAttack();
+                ObjectManager.StartRangedAttack();
             }
             else if (canUseRanged)
             {

@@ -1,6 +1,5 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using PathfindingService.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestShadow.Tasks
@@ -9,13 +8,13 @@ namespace PriestShadow.Tasks
     {
         public void Update()
         {
-            if (ObjectManager.PartyMembers.Any(x => x.HealthPercent < 70) && ObjectManager.Player.Mana >= ObjectManager.Player.GetManaCost(LesserHeal))
+            if (ObjectManager.PartyMembers.Any(x => x.HealthPercent < 70) && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(LesserHeal))
             {
                 BotTasks.Push(new HealTask(BotContext));
                 return;
             }
 
-            if (!ObjectManager.Player.IsSpellReady(PowerWordFortitude) || ObjectManager.PartyMembers.All(x => x.HasBuff(PowerWordFortitude)))
+            if (!ObjectManager.IsSpellReady(PowerWordFortitude) || ObjectManager.PartyMembers.All(x => x.HasBuff(PowerWordFortitude)))
             {
                 BotTasks.Pop();
                 return;
@@ -30,20 +29,20 @@ namespace PriestShadow.Tasks
 
                 if (locations.Length > 1)
                 {
-                    ObjectManager.Player.MoveToward(locations[1]);
+                    ObjectManager.MoveToward(locations[1]);
                 }
                 else
                 {
-                    ObjectManager.Player.StopAllMovement();
+                    ObjectManager.StopAllMovement();
                     BotTasks.Pop();
                     return;
                 }
             }
 
-            ObjectManager.Player.SetTarget(woWUnit.Guid);
+            ObjectManager.SetTarget(woWUnit.Guid);
 
-            if (!woWUnit.HasBuff(PowerWordFortitude) && ObjectManager.Player.IsSpellReady(PowerWordFortitude))
-                ObjectManager.Player.CastSpell(PowerWordFortitude);
+            if (!woWUnit.HasBuff(PowerWordFortitude) && ObjectManager.IsSpellReady(PowerWordFortitude))
+                ObjectManager.CastSpell(PowerWordFortitude);
         }
     }
 }
