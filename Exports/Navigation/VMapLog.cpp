@@ -187,6 +187,11 @@ struct VMapLogInit
         // This overrides runtime env vars if they would disable the important TRACE output we added.
         if (gPhysLogLevel < 3) gPhysLogLevel = 3;
         gPhysLogMask |= PHYS_CYL; // ensure cylinder logs are always included
+
+        // Echo the runtime settings to stdout so tests can observe them (from main)
+        std::ostringstream ss;
+        ss << "[PHYS][INFO][INIT] gPhysLogLevel=" << gPhysLogLevel << " gPhysLogMask=0x" << std::hex << gPhysLogMask << std::dec;
+        std::cout << ss.str() << std::endl;
     }
 };
 

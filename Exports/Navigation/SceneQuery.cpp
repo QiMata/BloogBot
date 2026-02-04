@@ -9,6 +9,7 @@
 #include "VMapManager2.h"
 #include "VMapFactory.h"
 #include <filesystem>
+#include "PhysicsEngine.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -20,7 +21,6 @@
 #include "PhysicsDiagnosticsHelpers.h"
 #include "VMapDefinitions.h"
 #include "PhysicsLiquidHelpers.h"
-#include "PhysicsEngine.h"
 #include "PhysicsShapeHelpers.h"
 #include "PhysicsTolerances.h"
 
@@ -511,7 +511,7 @@ namespace
         float d1 = pointToAABBDistSq(b, box);
         return std::min(d0, d1);
     }
-    // Helper function to compute barycentric coordinates for a point on a triangle
+// Helper function to compute barycentric coordinates for a point on a triangle
     static G3D::Vector3 ComputeBarycentric(const G3D::Vector3& p, const G3D::Vector3& a, const G3D::Vector3& b, const G3D::Vector3& c)
     {
         G3D::Vector3 v0 = b - a;
@@ -640,8 +640,7 @@ namespace
                     modelBox.merge(pm);
                 }
 
-
-                std::vector<G3D::Vector3> vertices;
+std::vector<G3D::Vector3> vertices;
                 std::vector<uint32_t> indices;
                 bool haveBoundsData = inst.iModel->GetMeshDataInBounds(modelBox, vertices, indices);
                 if (!haveBoundsData)
@@ -734,7 +733,8 @@ static inline CapsuleCollision::AABB AABBFromAABox(const G3D::AABox& box)
 int SceneQuery::OverlapCapsule(const VMAP::StaticMapTree& map,
     const CapsuleCollision::Capsule& capsule,
     std::vector<SceneHit>& outOverlaps,
-    uint32_t includeMask)
+    uint32_t includeMask,
+    const QueryParams& params)
 {
     outOverlaps.clear();
 
@@ -863,7 +863,8 @@ int SceneQuery::OverlapSphere(const VMAP::StaticMapTree& map,
     const G3D::Vector3& center,
     float radius,
     std::vector<SceneHit>& outOverlaps,
-    uint32_t includeMask)
+    uint32_t includeMask,
+    const QueryParams& params)
 {
     outOverlaps.clear();
 
@@ -908,7 +909,8 @@ int SceneQuery::OverlapSphere(const VMAP::StaticMapTree& map,
 int SceneQuery::OverlapBox(const VMAP::StaticMapTree& map,
     const G3D::AABox& box,
     std::vector<SceneHit>& outOverlaps,
-    uint32_t includeMask)
+    uint32_t includeMask,
+    const QueryParams& params)
 {
     outOverlaps.clear();
 
@@ -925,7 +927,8 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
     const G3D::Vector3& dir,
     float distance,
     std::vector<SceneHit>& outHits,
-    const G3D::Vector3& playerForward)
+    const G3D::Vector3& playerForward,
+    const QueryParams& params)
 {
     // Group all sweep diagnostics into a single multi-line log block
     std::ostringstream sweepLog;

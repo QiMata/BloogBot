@@ -2,12 +2,18 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <BaseOutputPath>..\..\Bot</BaseOutputPath>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Platforms>AnyCPU</Platforms>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Agent\**" />
+    <EmbeddedResource Remove="Agent\**" />
+    <None Remove="Agent\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
@@ -24,18 +30,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="System.ComponentModel.Composition">
-      <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8.1\System.ComponentModel.Composition.dll</HintPath>
-    </Reference>
+    <PackageReference Include="System.ComponentModel.Composition" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="..\BotRunner\Clients\PathfindingClient.cs" Link="Clients\PathfindingClient.cs" />
     <Compile Include="..\BotRunner\Clients\CharacterStateUpdateClient.cs" Link="Clients\CharacterStateUpdateClient.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Agent\" />
   </ItemGroup>
 
 </Project>

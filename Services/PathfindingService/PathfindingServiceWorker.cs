@@ -1,3 +1,5 @@
+using PathfindingService.Repository;
+
 namespace PathfindingService
 {
     public class PathfindingServiceWorker : BackgroundService
@@ -5,8 +7,7 @@ namespace PathfindingService
         private readonly ILogger<PathfindingServiceWorker> _logger;
         private readonly ILoggerFactory _loggerFactory;
         private readonly IConfiguration _configuration;
-
-        private PathfindingSocketServer _pathfindingSocketServer;
+        private PathfindingSocketServer? _pathfindingSocketServer;
 
         public PathfindingServiceWorker(
             ILogger<PathfindingServiceWorker> logger,
@@ -21,8 +22,8 @@ namespace PathfindingService
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             // Start the socket server first so StateManager can connect immediately
-            var ipAddress = _configuration["PathfindingService:IpAddress"];
-            var port = int.Parse(_configuration["PathfindingService:Port"]);
+            var ipAddress = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
+            var port = int.Parse(_configuration["PathfindingService:Port"] ?? "5001");
 
             _logger.LogInformation($"Starting PathfindingService socket server on {ipAddress}:{port}...");
 
@@ -44,6 +45,15 @@ namespace PathfindingService
             {
                 await Task.Delay(1000, stoppingToken);
             }
+            
+            _logger.LogInformation("PathfindingServiceWorker stopping...");
+        }
+
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("PathfindingServiceWorker stop requested...");
+            await base.StopAsync(cancellationToken);
+            _logger.LogInformation("PathfindingServiceWorker stopped.");
         }
     }
 }

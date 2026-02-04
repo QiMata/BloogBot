@@ -66,10 +66,15 @@ namespace VMAP
         void setUnloaded() { iModel = nullptr; }
         void getAreaInfo(G3D::Vector3& pos, uint32_t& flags, int32_t& adtId, int32_t& rootId, int32_t& groupId) const;
 
+        // Collision mask source-of-truth for this instance
+        void SetCollisionMask(uint32_t mask) { collisionMask = mask; }
+        uint32_t GetCollisionMask() const { return collisionMask; }
+
         // Transform vertex from model to world space
         G3D::Vector3 TransformToWorld(const G3D::Vector3& modelVertex) const;
 
     private:
-        // No collision mask; all loaded geometry is collidable.
+        // Per-instance collision mask (default: all bits set). May map from materials in future.
+        uint32_t collisionMask = 0xFFFFFFFFu;
     };
 }

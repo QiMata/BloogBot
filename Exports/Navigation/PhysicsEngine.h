@@ -2,6 +2,7 @@
 #pragma once
 
 #include "PhysicsBridge.h"
+#include "MapLoader.h"
 #include <memory>
 #include <cmath>
 #include <vector>
@@ -10,6 +11,7 @@
 
 // Forward declarations
 namespace VMAP {
+    class VMapManager2;
     struct Cylinder; // match actual declaration
 }
 namespace G3D {
@@ -64,6 +66,10 @@ public:
     // New: modernized step using diagnostics-driven movement
     PhysicsOutput StepV2(const PhysicsInput& input, float dt);
 
+    // Configuration: walkable slope threshold (cosine of max slope angle)
+    void SetWalkableCosMin(float cosMin);
+    float GetWalkableCosMin() const;
+
     // Surface information
     enum class SurfaceSource
     {
@@ -80,11 +86,7 @@ public:
         G3D::Vector3 normal;
     };
 
-
-
     // Perform sweeps via `SceneQuery` directly (no passthrough here).
-
-
     // Liquid evaluation is provided by `SceneQuery` directly.
 
 private:
@@ -96,7 +98,13 @@ private:
     PhysicsEngine& operator=(const PhysicsEngine&) = delete;
 
     static PhysicsEngine* s_instance;
+
+    VMAP::VMapManager2* m_vmapManager;
+    std::unique_ptr<MapLoader> m_mapLoader;
     bool m_initialized;
+
+    // Tunables
+    float m_walkableCosMin; // cosine of max slope angle considered walkable
 
     // Movement state (created fresh each Step call)
     struct MovementState
@@ -169,9 +177,12 @@ private:
 
     // Core height/collision methods
     void EnsureMapLoaded(uint32_t mapId);
+    float GetTerrainHeight(uint32_t mapId, float x, float y);
     float GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType);
 
     // Movement processing (simplified authentic style)
+    void ProcessGroundMovement(const PhysicsInput& input, const MovementIntent& intent, MovementState& state,
+        float dt, float speed, float cylinderRadius, float cylinderHeight);
     void ProcessAirMovement(const PhysicsInput& input, const MovementIntent& intent, MovementState& state, float dt, float speed);
     void ProcessSwimMovement(const PhysicsInput& input, const MovementIntent& intent, MovementState& state, float dt, float speed);
 
@@ -179,8 +190,16 @@ private:
     float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming);
     void ApplyGravity(MovementState& state, float dt);
 
+    // Create player cylinder at position with specified dimensions
+    VMAP::Cylinder CreatePlayerCylinder(float x, float y, float z,
+        float radius, float height) const;
+
+    // New helpers (non-const to allow calling non-const queries)
+    G3D::Vector3 ComputeTerrainNormal(uint32_t mapId, float x, float y);
+
     // Phase 1 extracted helpers
     MovementIntent BuildMovementIntent(const PhysicsInput& input, float orientation) const;
+    float QueryLiquidLevel(uint32_t mapId, float x, float y, float z, uint32_t& liquidType) const;
 
     bool TryDownwardStepSnap(const PhysicsInput& input,
                               MovementState& st,

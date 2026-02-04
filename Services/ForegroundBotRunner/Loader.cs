@@ -1,4 +1,8 @@
-﻿namespace ForegroundBotRunner
+﻿using System;
+using System.IO;
+using System.Threading;
+
+namespace ForegroundBotRunner
 {
     /// <summary>
     /// Entry point class for the native .NET 8 host (Loader.dll).
@@ -8,9 +12,49 @@
     /// load_assembly_and_get_function_pointer when delegate_type_name is null:
     ///   public delegate int ComponentEntryPoint(IntPtr args, int sizeBytes);
     /// </summary>
-    internal class Loader
+    public class Loader
     {
         private static Thread? _mainThread;
+        private static bool _isInitialized = false;
+        private static int _firstChanceReentrancy = 0;
+        private static int _firstChanceLogged = 0;
+        private const int FirstChanceLogLimit = 50;
+        private static readonly string LogDirectory = InitLogDirectory();
+        private static string InjectionLog => Path.Combine(LogDirectory, "injection.log");
+        private static string FirstChanceLog => Path.Combine(LogDirectory, "injection_firstchance.log");
+
+        private static string InitLogDirectory()
+        {
+            try
+            {
+                var env = Environment.GetEnvironmentVariable("BLOOGBOT_INJECT_LOG_DIR");
+                string baseDir = !string.IsNullOrWhiteSpace(env) ? env : (AppDomain.CurrentDomain.BaseDirectory ?? Environment.CurrentDirectory);
+                var dir = Path.Combine(baseDir, "BloogBotLogs");
+                Directory.CreateDirectory(dir);
+                return dir;
+            }
+            catch { return Environment.CurrentDirectory; }
+        }
+
+        static Loader()
+        {
+            try
+            {
+                AppDomain.CurrentDomain.FirstChanceException += (s, e) =>
+                {
+                    if (_firstChanceLogged >= FirstChanceLogLimit) return;
+                    if (Interlocked.Exchange(ref _firstChanceReentrancy, 1) == 1) return;
+                    try
+                    {
+                        _firstChanceLogged++;
+                        File.AppendAllText(FirstChanceLog, $"[{DateTime.Now:HH:mm:ss}] FirstChance({_firstChanceLogged}): {e.Exception.GetType()}: {e.Exception.Message}\n");
+                    }
+                    catch { }
+                    finally { Interlocked.Exchange(ref _firstChanceReentrancy, 0); }
+                };
+            }
+            catch { }
+        }
 
         /// <summary>
         /// Entry point called by the native .NET 8 host.
@@ -22,7 +66,15 @@
         {
             try
             {
+                File.AppendAllText(InjectionLog, $"\n=== Loader.Load() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\nProcess: {System.Diagnostics.Process.GetCurrentProcess().ProcessName}\nThread ID: {Thread.CurrentThread.ManagedThreadId}\n");
                 Console.WriteLine("[Loader] Managed entry point called");
+
+                if (_isInitialized)
+                {
+                    File.AppendAllText(InjectionLog, "Loader already initialized, skipping.\n");
+                    return 0;
+                }
+                _isInitialized = true;
                 
                 // Start the main application thread
                 // We use STA apartment state for WPF/WinForms compatibility if needed
@@ -36,6 +88,7 @@
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[Loader] Exception in main thread: {ex}");
+                        try { File.AppendAllText(InjectionLog, $"[Loader] Exception in main thread: {ex}\n"); } catch { }
                     }
                 });
                 
@@ -45,11 +98,13 @@
                 _mainThread.Start();
                 
                 Console.WriteLine("[Loader] Main thread started successfully");
+                File.AppendAllText(InjectionLog, "Loader.Load completed successfully.\n");
                 return 0; // Success
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Loader] Failed to start: {ex}");
+                try { File.AppendAllText(InjectionLog, $"Error in Loader.Load(): {ex}\n"); } catch { }
                 return 1; // Failure
             }
         }

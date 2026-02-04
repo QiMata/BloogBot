@@ -254,6 +254,8 @@ namespace VMAP
         return cb.didHit();
     }
 
+    // Removed extended getIntersectionTime overload for WoW emulator compatibility
+
     uint32_t StaticMapTree::packTileID(uint32_t tileX, uint32_t tileY) { return (tileX << 16) | tileY; }
     void StaticMapTree::unpackTileID(uint32_t ID, uint32_t& tileX, uint32_t& tileY) { tileX = (ID >> 16); tileY = (ID & 0xFFFF); }
     std::string StaticMapTree::getTileFileName(uint32_t mapID, uint32_t tileX, uint32_t tileY) { char buffer[256]; snprintf(buffer, sizeof(buffer), "%03u_%02u_%02u.vmtile", mapID, tileX, tileY); return std::string(buffer); }

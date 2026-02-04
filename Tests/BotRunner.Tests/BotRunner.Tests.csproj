@@ -1,18 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+<PropertyGroup>
+  <TargetFramework>net8.0-windows</TargetFramework>
+  <ImplicitUsings>enable</ImplicitUsings>
+  <Nullable>enable</Nullable>
 
-    <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
-  </PropertyGroup>
+  <IsPackable>false</IsPackable>
+  <IsTestProject>true</IsTestProject>
+  <Platforms>x86</Platforms>
+</PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.5" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="Moq" Version="4.20.69" />
+    <PackageReference Include="MySql.Data" Version="9.0.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
@@ -23,6 +31,23 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Services\StateManager\StateManager.csproj" />
+    <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
+    <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
+    <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
+    <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
+    <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
+    <ProjectReference Include="..\..\Services\DecisionEngineService\DecisionEngineService.csproj" />
+    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.test.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -9,9 +9,14 @@ namespace GameData.Core.Interfaces
         ulong TargetGuid { get; }
         uint Health { get; }
         uint MaxHealth { get; }
+#if NET8_0_OR_GREATER
         uint HealthPercent => (uint)(Health / (float)MaxHealth * 100);
+#else
+        uint HealthPercent { get; }
+#endif
         Dictionary<Powers, uint> Powers { get; }
         Dictionary<Powers, uint> MaxPowers { get; }
+#if NET8_0_OR_GREATER
         uint Mana => Powers.TryGetValue(Enums.Powers.MANA, out uint value) ? value : 0;
         uint MaxMana => MaxPowers.TryGetValue(Enums.Powers.MANA, out uint value) ? value : 0;
         uint ManaPercent => (uint)(Mana / (float)MaxMana * 100);
@@ -24,6 +29,20 @@ namespace GameData.Core.Interfaces
         uint Focus => Powers.TryGetValue(Enums.Powers.FOCUS, out uint value) ? value : 0;
         uint MaxFocus => MaxPowers.TryGetValue(Enums.Powers.FOCUS, out uint value) ? value : 0;
         uint FocusPercent => (uint)(Focus / (float)MaxFocus * 100);
+#else
+        uint Mana { get; }
+        uint MaxMana { get; }
+        uint ManaPercent { get; }
+        uint Rage { get; }
+        uint MaxRage { get; }
+        uint RagePercent { get; }
+        uint Energy { get; }
+        uint MaxEnergy { get; }
+        uint EnergyPercent { get; }
+        uint Focus { get; }
+        uint MaxFocus { get; }
+        uint FocusPercent { get; }
+#endif
         uint[] Bytes0 { get; }
         uint[] VirtualItemInfo { get; }
         uint[] VirtualItemSlotDisplay { get; }
@@ -71,7 +90,11 @@ namespace GameData.Core.Interfaces
         uint MaxRangedDamage { get; }
         uint[] PowerCostModifers { get; }
         uint[] PowerCostMultipliers { get; }
+#if NET8_0_OR_GREATER
         bool IsPet => SummonedByGuid > 0;
+#else
+        bool IsPet { get; }
+#endif
         ulong SummonedByGuid { get; }
         uint MountDisplayId { get; }
         UnitReaction UnitReaction { get; }
@@ -110,35 +133,45 @@ namespace GameData.Core.Interfaces
         List<Position> SplineNodes { get; set; }
         Position SplineFinalDestination { get; set; }
         IWoWGameObject Transport { get; set; }
+#if NET8_0_OR_GREATER
         bool IsCasting => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_IN_COMBAT);
         bool IsChanneling => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_IN_COMBAT);
         bool IsInCombat => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_IN_COMBAT);
         bool IsStunned => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_STUNNED);
         bool IsConfused => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_CONFUSED);
         bool IsFleeing => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_FLEEING);
-
         bool IsMoving => MovementFlags != MovementFlags.MOVEFLAG_NONE;
         bool IsSwimming => MovementFlags.HasFlag(MovementFlags.MOVEFLAG_SWIMMING);
-
+#else
+        bool IsCasting { get; }
+        bool IsChanneling { get; }
+        bool IsInCombat { get; }
+        bool IsStunned { get; }
+        bool IsConfused { get; }
+        bool IsFleeing { get; }
+        bool IsMoving { get; }
+        bool IsSwimming { get; }
+#endif
         bool DismissBuff(string buffName);
         bool HasBuff(string buffName);
         bool HasDebuff(string debuffName);
         IEnumerable<ISpellEffect> GetDebuffs();
         IEnumerable<ISpellEffect> GetBuffs();
+#if NET8_0_OR_GREATER
         public string CurrentShapeshiftForm
         {
             get
             {
                 if (HasBuff(BearForm))
                     return BearForm;
-
                 if (HasBuff(CatForm))
                     return CatForm;
-
                 return "Human Form";
             }
         }
-
+#else
+        string CurrentShapeshiftForm { get; }
+#endif
         CreatureType CreatureType { get; }
     }
 }

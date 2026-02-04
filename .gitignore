@@ -245,3 +245,7 @@ Tests/PathfindingService.Tests/Data/terrain.MPQ
 *.dll.recipe
 *.vcxproj.FileListAbsolute.txt
 *.idb
+
+# Project Build output directories
+**/Build/
+

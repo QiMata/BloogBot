@@ -10,7 +10,21 @@
 namespace VMAP { class StaticMapTree; class ModelInstance; class VMapManager2; }
 class MapLoader; // forward declaration (global namespace)
 
-// New: feature type classification for precise TOI contact (face/edge/vertex)
+// Unified query parameter set (from main branch - similar conceptually to UE4/UE5 query params)
+// Placed in global namespace to align with SceneQuery/SceneHit architecture
+struct QueryParams
+{
+    float inflation = 0.02f;            // Extra inflation (in world units) applied to broad-phase shape/AABB searches
+    bool backfaceCulling = false;       // If true, ignore back-face hits (currently unused / TODO)
+    uint32_t includeMask = 0xFFFFFFFFu; // Bitmask of collision channels to include (ANDed with per-instance mask)
+    uint32_t excludeMask = 0u;          // Bitmask of collision channels to exclude (applied after include)
+    std::vector<uint32_t> ignoreInstanceIds; // Instance/model IDs to ignore entirely
+    bool returnFaceIndex = true;        // If false, triIndex will be set to -1 in results
+    bool returnPhysMat = false;         // If true, (future) physical material retrieval enabled (not implemented yet)
+    bool traceComplex = true;           // Whether to trace against complex geometry (always true for now)
+};
+
+// Feature type classification for precise TOI contact (face/edge/vertex)
 enum class HitFeatureType : uint8_t { Unknown = 0, Face = 1, Edge = 2, Vertex = 3 };
 
 struct SceneHit
@@ -26,7 +40,7 @@ struct SceneHit
     uint32_t instanceId = 0; // ModelInstance::ID
     bool startPenetrating = false; // True if the sweep started already overlapping (t=0 overlap)
     bool normalFlipped = false; // True if we flipped normal to enforce upward-facing hemisphere
-    // New: TOI feature classification and physical material hints (optional)
+    // TOI feature classification and physical material hints (optional)
     HitFeatureType featureType = HitFeatureType::Unknown; // What triangle feature was hit
     uint32_t physMaterialId = 0;      // Optional physical material ID (0 if unavailable)
     float staticFriction = 0.0f;      // Optional static friction coefficient (0 if unknown)
@@ -176,30 +190,35 @@ class SceneQuery
         static float GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType);
         static LiquidInfo EvaluateLiquidAt(uint32_t mapId, float x, float y, float z);
 
-        // Overlaps
+        // Overlaps - support optional QueryParams from main branch
         static int OverlapCapsule(const VMAP::StaticMapTree& map,
                                   const CapsuleCollision::Capsule& capsule,
                                   std::vector<SceneHit>& outOverlaps,
-                                  uint32_t includeMask = 0xFFFFFFFFu);
+                                  uint32_t includeMask = 0xFFFFFFFFu,
+                                  const QueryParams& params = QueryParams());
 
         static int OverlapSphere(const VMAP::StaticMapTree& map,
                                  const G3D::Vector3& center,
                                  float radius,
                                  std::vector<SceneHit>& outOverlaps,
-                                 uint32_t includeMask = 0xFFFFFFFFu);
+                                 uint32_t includeMask = 0xFFFFFFFFu,
+                                 const QueryParams& params = QueryParams());
 
         static int OverlapBox(const VMAP::StaticMapTree& map,
                               const G3D::AABox& box,
                               std::vector<SceneHit>& outOverlaps,
-                              uint32_t includeMask = 0xFFFFFFFFu);
+                              uint32_t includeMask = 0xFFFFFFFFu,
+                              const QueryParams& params = QueryParams());
 
         // Refactored: accept mapId and use injected VMapManager to access map data
+        // Includes optional QueryParams from main branch
         static int SweepCapsule(uint32_t mapId,
                                 const CapsuleCollision::Capsule& capsuleStart,
                                 const G3D::Vector3& dir,
                                 float distance,
                                 std::vector<SceneHit>& outHits,
-                                const G3D::Vector3& playerForward);
+                                const G3D::Vector3& playerForward,
+                                const QueryParams& params = QueryParams());
 
         // Line of sight test combining VMAP and ADT terrain checks
         // Returns true if there is clear LOS between `from` and `to` on the given map

@@ -1,0 +1,12 @@
+2025-09-05 21:35:24.340 +01:00 [INF] Checking for config at: C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP\appsettings.json
+2025-09-05 21:35:24.452 +01:00 [INF] Found config file at: C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP\appsettings.json
+2025-09-05 21:35:24.475 +01:00 [INF] Configuration built successfully
+2025-09-05 21:35:24.497 +01:00 [INF] Registering C++ analysis services...
+2025-09-05 21:35:24.993 +01:00 [INF] User profile is available. Using 'C:\Users\WowAdmin\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2025-09-05 21:35:25.090 +01:00 [INF] Starting BloogBot C++ Intelligence MCP Server on http://localhost:5002
+2025-09-05 21:35:25.150 +01:00 [INF] MCP SSE endpoint available at: http://localhost:5002/sse
+2025-09-05 21:35:25.421 +01:00 [INF] Now listening on: http://localhost:5002
+2025-09-05 21:35:25.495 +01:00 [INF] Application started. Press Ctrl+C to shut down.
+2025-09-05 21:35:25.535 +01:00 [INF] Hosting environment: Production
+2025-09-05 21:35:25.568 +01:00 [INF] Content root path: C:\Users\WowAdmin\source\repos\sethrhod\BloogBot\Services\CppCodeIntelligenceMCP
+2025-09-05 21:47:20.263 +01:00 [INF] Application is shutting down...

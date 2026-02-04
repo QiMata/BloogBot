@@ -2,7 +2,7 @@
   "profiles": {
     "StateManagerService": {
       "commandName": "Project",
-      "workingDirectory": "..\\..\\Bot\\Debug\\net8.0",
+      "workingDirectory": "..\\..\\Build",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       },

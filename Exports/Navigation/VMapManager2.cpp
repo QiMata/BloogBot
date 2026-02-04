@@ -561,22 +561,18 @@ namespace VMAP
         {
             // Use the same conversion helper as getHeight to keep coordinate spaces consistent
             G3D::Vector3 pos = convertPositionToInternalRep(x, y, z);
-            // PHYS_TRACE(PHYS_PERF, "[Liquid] InternalPos=(" << pos.x << "," << pos.y << "," << pos.z << ")");
 
             LocationInfo info; bool gotLoc = instanceTree->second->GetLocationInfo(pos, info);
-            // PHYS_TRACE(PHYS_PERF, "[Liquid] GetLocationInfo gotLoc=" << (gotLoc?1:0) << " hitModel=" << (info.hitModel?1:0) << " groundZ=" << info.ground_Z);
             if (gotLoc && info.hitModel)
             {
                 if (info.hitInstance)
                 {
                     float liqH; bool liqOk = info.hitInstance->GetLiquidLevel(pos, const_cast<LocationInfo&>(info), liqH);
-                    // PHYS_TRACE(PHYS_PERF, "[Liquid] hitInstance=1 liqOk=" << (liqOk?1:0));
                     if (liqOk)
                     {
                         uint32_t liqType = info.hitModel->GetLiquidType();
                         // New: support both entry-id and index representations
                         uint32_t liqMask = GetLiquidMaskUnified(liqType);
-                        // PHYS_TRACE(PHYS_PERF, "[Liquid] liqH=" << liqH << " liqType=" << liqType << " (" << liqName << ") liqMask=0x" << std::hex << liqMask << std::dec << " reqMask=0x" << (unsigned)ReqLiquidTypeMask);
                         if ((liqMask & ReqLiquidTypeMask) != 0)
                         {
                             level = liqH;
@@ -589,7 +585,6 @@ namespace VMAP
             }
         }
 
-        // PHYS_INFO(PHYS_PERF, "EXIT VMapManager2::GetLiquidLevel -> 0 (no match)");
         return false;
     }
 

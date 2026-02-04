@@ -236,9 +236,35 @@ namespace VMAP
         if (triangles.empty())
             return 0;
 
-        GModelRayCallback callback(triangles, vertices, const_cast<GroupModel*>(this));
+        // Reset last hit tracking
+        m_lastHitTriangle = -1;
 
+        GModelRayCallback callback(triangles, vertices, const_cast<GroupModel*>(this));
+        // Restore original traversal behavior: honor caller's stopAtFirstHit flag.
         meshTree.intersectRay(ray, callback, distance, stopAtFirstHit, ignoreM2Model);
+
+        // Emit PHYS_TRACE so it shows in same channel as other raycast summaries
+        if (m_lastHitTriangle >= 0)
+        {
+            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRay] hits=" << callback.hit << " lastTri=" << m_lastHitTriangle << " dist=" << distance << " wmoId=" << iGroupWMOID);
+
+            // Additional per-triangle diagnostics in model space: hit point, normal.z and barycentric
+            const MeshTriangle& mt = triangles[(size_t)m_lastHitTriangle];
+            const G3D::Vector3& v0 = vertices[(size_t)mt.idx0];
+            const G3D::Vector3& v1 = vertices[(size_t)mt.idx1];
+            const G3D::Vector3& v2 = vertices[(size_t)mt.idx2];
+            G3D::Vector3 n = (v1 - v0).cross(v2 - v0).directionOrZero();
+            float cosZ = n.z; // model-space z component
+            G3D::Vector3 p = ray.origin() + ray.direction() * distance;
+            G3D::Vector3 bary = ComputeBarycentric(p, v0, v1, v2);
+            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRayTri] tri=" << m_lastHitTriangle
+                << " pM=(" << p.x << "," << p.y << "," << p.z << ") nM=(" << n.x << "," << n.y << "," << n.z
+                << ") cosZ_M=" << cosZ << " bary=(" << bary.x << "," << bary.y << "," << bary.z << ")");
+        }
+        else
+        {
+            PHYS_TRACE(PHYS_CYL, "[GroupModel::IntersectRay] no hit wmoId=" << iGroupWMOID);
+        }
 
         return callback.hit;
     }

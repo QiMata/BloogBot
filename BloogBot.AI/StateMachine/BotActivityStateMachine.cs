@@ -42,14 +42,18 @@ public sealed class BotActivityStateMachine
     private readonly StateMachine<BotActivity, Trigger> _sm;
     private readonly BotStateObservable _stateObservable;
     private readonly IForbiddenTransitionRegistry? _forbiddenTransitions;
+    private readonly Queue<BotActivityHistoryEntry> _history = new();
     private MinorState _currentMinorState;
     private Trigger? _lastTrigger;
+    private DateTime _enteredAt;
 
     public BotActivity Current => _sm.State;
     public MinorState CurrentMinorState => _currentMinorState;
     public IObjectManager ObjectManager { get; private set; }
     public IBotStateObservable StateObservable => _stateObservable;
     private ILogger Logger;
+
+    public IReadOnlyList<BotActivityHistoryEntry> History => _history.ToArray();
 
     public BotActivityStateMachine(
         ILoggerFactory loggerFactory,
@@ -63,6 +67,7 @@ public sealed class BotActivityStateMachine
         _sm = new(initial);
         _stateObservable = new BotStateObservable(initial);
         _currentMinorState = MinorState.None(initial);
+        _enteredAt = DateTime.UtcNow;
 
         ConfigureGlobalTransitions();
         ConfigureActivities();
@@ -70,52 +75,63 @@ public sealed class BotActivityStateMachine
         DecideNextActiveState();
     }
 
-    /// <summary>
-    /// Sets the current minor state within the current activity.
-    /// Publishes the change to the state observable.
-    /// </summary>
-    public void SetMinorState(MinorState minorState, string reason)
+/// <summary>
+/// Sets the current minor state within the current activity.
+/// Publishes the change to the state observable.
+/// </summary>
+public void SetMinorState(MinorState minorState, string reason)
+{
+    if (minorState.ParentActivity != Current)
     {
-        if (minorState.ParentActivity != Current)
-        {
-            throw new InvalidOperationException(
-                $"Minor state '{minorState.Name}' belongs to {minorState.ParentActivity}, " +
-                $"but current activity is {Current}");
-        }
-
-        _currentMinorState = minorState;
-        _stateObservable.PublishMinorStateChange(minorState, StateChangeSource.Deterministic, reason);
-        Logger.LogDebug("Minor state changed to {MinorState}: {Reason}", minorState.Name, reason);
+        throw new InvalidOperationException(
+            $"Minor state '{minorState.Name}' belongs to {minorState.ParentActivity}, " +
+            $"but current activity is {Current}");
     }
 
-    void ConfigureTransitionCallbacks()
+    _currentMinorState = minorState;
+    _stateObservable.PublishMinorStateChange(minorState, StateChangeSource.Deterministic, reason);
+    Logger.LogDebug("Minor state changed to {MinorState}: {Reason}", minorState.Name, reason);
+}
+
+void RecordTransition(BotActivity previous)
+{
+    var duration = DateTime.UtcNow - _enteredAt;
+    _history.Enqueue(new BotActivityHistoryEntry(previous, duration));
+    if (_history.Count > 5)
+        _history.Dequeue();
+    _enteredAt = DateTime.UtcNow;
+}
+
+void ConfigureTransitionCallbacks()
+{
+    _sm.OnTransitioned(transition =>
     {
-        _sm.OnTransitioned(transition =>
-        {
-            var source = _lastTrigger.HasValue
-                ? StateChangeSource.Trigger
-                : StateChangeSource.Deterministic;
+        RecordTransition(transition.Source);
 
-            var reason = GetTransitionReason(transition.Source, transition.Destination);
+        var source = _lastTrigger.HasValue
+            ? StateChangeSource.Trigger
+            : StateChangeSource.Deterministic;
 
-            // Reset minor state to None for new activity
-            _currentMinorState = MinorState.None(transition.Destination);
+        var reason = GetTransitionReason(transition.Source, transition.Destination);
 
-            _stateObservable.PublishStateChange(
-                transition.Destination,
-                _currentMinorState,
-                source,
-                reason);
+        // Reset minor state to None for new activity
+        _currentMinorState = MinorState.None(transition.Destination);
 
-            _lastTrigger = null;
-        });
-    }
+        _stateObservable.PublishStateChange(
+            transition.Destination,
+            _currentMinorState,
+            source,
+            reason);
 
-    string GetTransitionReason(BotActivity from, BotActivity to)
-    {
-        var config = ActivityConfigurations.FirstOrDefault(c => c.Activity == to);
-        return config?.EntryLogMessage ?? $"Transitioned from {from} to {to}";
-    }
+        _lastTrigger = null;
+    });
+}
+
+string GetTransitionReason(BotActivity from, BotActivity to)
+{
+    var config = ActivityConfigurations.FirstOrDefault(c => c.Activity == to);
+    return config?.EntryLogMessage ?? $"Transitioned from {from} to {to}";
+}
 
     void ConfigureGlobalTransitions()
     {
