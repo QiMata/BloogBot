@@ -8,7 +8,7 @@ namespace DecisionEngineService
     public class CombatPredictionService
     {
         private readonly MLContext _mlContext;
-        private PredictionEngine<ActivitySnapshot, ActivitySnapshot> _predictionEngine;
+        private PredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot> _predictionEngine;
         private ITransformer _trainedModel;
         private readonly string _connectionString;
         private readonly string _dataDirectory;
@@ -29,7 +29,7 @@ namespace DecisionEngineService
             _trainedModel = LoadModelFromDatabase();
 
             // Create a prediction engine based on the loaded model
-            _predictionEngine = _mlContext.Model.CreatePredictionEngine<ActivitySnapshot, ActivitySnapshot>(_trainedModel);
+            _predictionEngine = _mlContext.Model.CreatePredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>(_trainedModel);
 
             // Start monitoring for new `.bin` files
             MonitorForNewData();
@@ -68,7 +68,7 @@ namespace DecisionEngineService
         }
 
         // Method to predict the action based on input combat data
-        public ActivitySnapshot PredictAction(ActivitySnapshot inputData)
+        public WoWActivitySnapshot PredictAction(WoWActivitySnapshot inputData)
         {
             if (_predictionEngine == null)
             {
@@ -76,7 +76,7 @@ namespace DecisionEngineService
             }
 
             // Predict the action based on the input data
-            ActivitySnapshot prediction = _predictionEngine.Predict(inputData);
+            WoWActivitySnapshot prediction = _predictionEngine.Predict(inputData);
             return prediction;
         }
 
@@ -84,7 +84,7 @@ namespace DecisionEngineService
         public void UpdateModel()
         {
             _trainedModel = LoadModelFromDatabase();
-            _predictionEngine = _mlContext.Model.CreatePredictionEngine<ActivitySnapshot, ActivitySnapshot>(_trainedModel);
+            _predictionEngine = _mlContext.Model.CreatePredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>(_trainedModel);
         }
 
         // Method to monitor the data directory for new `.bin` files
@@ -159,7 +159,7 @@ namespace DecisionEngineService
                 _trainedModel = pipeline.Fit(combinedData);
 
                 // Update the prediction engine with the new model
-                _predictionEngine = _mlContext.Model.CreatePredictionEngine<ActivitySnapshot, ActivitySnapshot>(_trainedModel);
+                _predictionEngine = _mlContext.Model.CreatePredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>(_trainedModel);
 
                 // Save the updated model to the SQLite database
                 SaveModelToDatabase(_trainedModel);

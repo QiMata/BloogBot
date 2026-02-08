@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="8.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.5" />
     <PackageReference Include="Microsoft.ML" Version="3.0.1" />
     <PackageReference Include="MySql.Data" Version="9.0.0" />
     <PackageReference Include="System.Data.SQLite" Version="1.0.118" />

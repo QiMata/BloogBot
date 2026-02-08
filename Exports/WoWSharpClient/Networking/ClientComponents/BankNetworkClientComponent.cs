@@ -11,38 +11,46 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Implementation of the bank network agent for handling personal bank operations.
     /// Manages depositing and withdrawing items or gold from the player's personal bank.
     /// Uses opcode-driven observables instead of events.
+    ///
+    /// MaNGOS 1.12.1 bank slot layout (bag 0xFF):
+    ///   Slots 39-62 = bank item storage (24 slots, BANK_SLOT_ITEM_START..END)
+    ///   Slots 63-68 = purchasable bank bag slots (6 max, BANK_SLOT_BAG_START..END)
+    ///
+    /// Key opcodes:
+    ///   CMSG_BANKER_ACTIVATE       (0x1B7): guid(8)
+    ///   SMSG_SHOW_BANK             (0x1B8): bankerGuid(8)
+    ///   CMSG_BUY_BANK_SLOT         (0x1B9): bankerGuid(8)
+    ///   SMSG_BUY_BANK_SLOT_RESULT  (0x1BA): result(4, uint32)
+    ///   CMSG_AUTOBANK_ITEM         (0x283): srcBag(1) + srcSlot(1) — inventory → bank
+    ///   CMSG_AUTOSTORE_BANK_ITEM   (0x282): srcBag(1) + srcSlot(1) — bank → inventory
+    ///   CMSG_SWAP_ITEM             (0x10C): dstBag(1) + dstSlot(1) + srcBag(1) + srcSlot(1)
+    ///
+    /// Note: Personal gold banking does not exist in vanilla 1.12.1.
+    /// Guild banks (with gold deposit/withdraw) were added in TBC 2.0.
     /// </summary>
     public class BankNetworkClientComponent : NetworkClientComponent, IBankNetworkClientComponent, IDisposable
     {
         private readonly IWorldClient _worldClient;
         private readonly ILogger<BankNetworkClientComponent> _logger;
-        private readonly object _stateLock = new object();
 
-        // Bank state tracking
         private bool _isBankWindowOpen;
         private ulong? _currentBankerGuid;
         private uint _availableBankSlots;
         private uint _purchasedBankBagSlots;
         private bool _disposed;
 
-        // Constants for bank operations
-        private const byte BANK_SLOT_COUNT = 24; // Standard bank slots
-        private const byte MAX_BANK_BAG_SLOTS = 7; // Maximum purchasable bag slots
-        private static readonly uint[] BankSlotCosts = [1000, 7500, 15000, 37500, 75000, 150000, 300000]; // Costs in copper
+        private const byte BANK_SLOT_ITEM_START = 39;
+        private const byte BANK_SLOT_ITEM_COUNT = 24;
+        private const byte BANK_BAG = 0xFF;
+        private const byte MAX_BANK_BAG_SLOTS = 7;
+        private static readonly uint[] BankSlotCosts = [1000, 7500, 15000, 37500, 75000, 150000, 300000];
 
         #region Constructor
 
-        /// <summary>
-        /// Initializes a new instance of the BankNetworkClientComponent class.
-        /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance for the bank agent.</param>
         public BankNetworkClientComponent(IWorldClient worldClient, ILogger<BankNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-            _logger.LogDebug("BankNetworkClientComponent initialized");
         }
 
         #endregion
@@ -61,16 +69,18 @@ namespace WoWSharpClient.Networking.ClientComponents
         #endregion
 
         #region Reactive Observables (lazy, opcode-driven)
+
         public IObservable<ulong> BankWindowOpenedStream => Observable.Defer(() =>
             SafeStream(Opcode.SMSG_SHOW_BANK)
-                .Select(_ =>
-                {
-                    // When server shows bank, mark open state
-                    _isBankWindowOpen = true;
-                    return _currentBankerGuid;
-                })
+                .Select(ParseShowBank)
                 .Where(g => g.HasValue)
-                .Select(g => g!.Value)
+                .Select(g =>
+                {
+                    _isBankWindowOpen = true;
+                    _currentBankerGuid = g!.Value;
+                    _availableBankSlots = BANK_SLOT_ITEM_COUNT;
+                    return g.Value;
+                })
         );
 
         public IObservable<Unit> BankWindowClosedStream => Observable.Defer(() =>
@@ -79,20 +89,20 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public IObservable<ItemMovementData> ItemDepositedStream => Observable.Defer(() =>
             SafeStream(Opcode.SMSG_ITEM_PUSH_RESULT)
-                .Select(payload => ParseItemMovement(payload))
+                .Select(ParseItemMovement)
                 .Where(m => m != null)
                 .Select(m => m!)
         );
 
         public IObservable<ItemMovementData> ItemWithdrawnStream => Observable.Defer(() =>
             SafeStream(Opcode.SMSG_ITEM_PUSH_RESULT)
-                .Select(payload => ParseItemMovement(payload))
+                .Select(ParseItemMovement)
                 .Where(m => m != null)
                 .Select(m => m!)
         );
 
         public IObservable<ItemsSwappedData> ItemsSwappedStream => Observable.Defer(() =>
-            Observable.Empty<ItemsSwappedData>() // No dedicated opcode available; integrators can extend parsing
+            Observable.Empty<ItemsSwappedData>()
         );
 
         public IObservable<uint> GoldDepositedStream => Observable.Empty<uint>();
@@ -116,9 +126,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             SafeStream(Opcode.SMSG_SHOW_BANK)
                 .Select(_ =>
                 {
-                    // Default behavior: server shows bank; set baseline values if unset
                     if (_availableBankSlots == 0)
-                        _availableBankSlots = BANK_SLOT_COUNT;
+                        _availableBankSlots = BANK_SLOT_ITEM_COUNT;
                     return new BankInfoData(_availableBankSlots, _purchasedBankBagSlots);
                 })
         );
@@ -129,6 +138,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Where(r => !r.Success)
                 .Select(r => new BankOperationErrorData(BankOperationType.PurchaseSlot, r.ErrorMessage ?? "Unknown error"))
         );
+
         #endregion
 
         #region Core Bank Operations
@@ -142,16 +152,14 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
 
-                // Send CMSG_BANKER_ACTIVATE to open the bank
+                // CMSG_BANKER_ACTIVATE: guid(8)
                 var payload = new byte[8];
                 BitConverter.GetBytes(bankerGuid).CopyTo(payload, 0);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BANKER_ACTIVATE, payload, cancellationToken);
 
                 _currentBankerGuid = bankerGuid;
                 _isBankWindowOpen = true;
-
-                // Request bank information to update slot counts (best-effort)
-                await RequestBankInfoAsync(cancellationToken);
+                _availableBankSlots = BANK_SLOT_ITEM_COUNT;
 
                 _logger.LogInformation("Bank window opened with banker: {BankerGuid:X}", bankerGuid);
             }
@@ -202,49 +210,59 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public async Task DepositItemAsync(byte bagId, byte slotId, uint quantity = 0, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Depositing item from bag {BagId}:{SlotId}, quantity: {Quantity}", bagId, slotId, quantity);
+            _logger.LogDebug("Depositing item from bag {BagId}:{SlotId}", bagId, slotId);
 
             if (!_isBankWindowOpen)
-            {
-                _logger.LogWarning("Bank window is not open");
-                return;
-            }
-
-            var emptySlot = FindEmptyBankSlot();
-            if (!emptySlot.HasValue)
-            {
-                _logger.LogWarning("No empty bank slots available");
-                return;
-            }
-
-            await DepositItemToSlotAsync(bagId, slotId, emptySlot.Value, quantity, cancellationToken);
-        }
-
-        /// <inheritdoc />
-        public async Task DepositItemToSlotAsync(byte sourceBagId, byte sourceSlotId, byte bankSlot, uint quantity = 0, CancellationToken cancellationToken = default)
-        {
-            _logger.LogDebug("Depositing item from bag {BagId}:{SlotId} to bank slot {BankSlot}, quantity: {Quantity}", 
-                sourceBagId, sourceSlotId, bankSlot, quantity);
-
-            if (!_isBankWindowOpen)
-            {
-                _logger.LogWarning("Bank window is not open");
-                return;
-            }
+                throw new InvalidOperationException("Bank window is not open");
 
             try
             {
                 SetOperationInProgress(true);
 
-                // Send item swap packet from inventory to bank using CMSG_SWAP_INV_ITEM
+                // CMSG_AUTOBANK_ITEM: srcBag(1) + srcSlot(1) = 2 bytes
+                // Server auto-finds an empty bank slot
                 var payload = new byte[2];
-                payload[0] = (byte)(sourceBagId * 16 + sourceSlotId); // source slot
-                payload[1] = (byte)(BANK_SLOT_COUNT + bankSlot); // destination bank slot
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_INV_ITEM, payload, cancellationToken);
+                payload[0] = bagId;
+                payload[1] = slotId;
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUTOBANK_ITEM, payload, cancellationToken);
+
+                _logger.LogInformation("Auto-deposit sent from {BagId}:{SlotId}", bagId, slotId);
+            }
+            catch (Exception ex) when (ex is not InvalidOperationException)
+            {
+                _logger.LogError(ex, "Failed to deposit item from {BagId}:{SlotId}", bagId, slotId);
+                throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task DepositItemToSlotAsync(byte sourceBagId, byte sourceSlotId, byte bankSlot, uint quantity = 0, CancellationToken cancellationToken = default)
+        {
+            _logger.LogDebug("Depositing item from bag {BagId}:{SlotId} to bank slot {BankSlot}",
+                sourceBagId, sourceSlotId, bankSlot);
+
+            if (!_isBankWindowOpen)
+                throw new InvalidOperationException("Bank window is not open");
+
+            try
+            {
+                SetOperationInProgress(true);
+
+                // CMSG_SWAP_ITEM: dstBag(1) + dstSlot(1) + srcBag(1) + srcSlot(1) = 4 bytes
+                var payload = new byte[4];
+                payload[0] = BANK_BAG;                              // dstBag: bank container
+                payload[1] = (byte)(BANK_SLOT_ITEM_START + bankSlot); // dstSlot: bank slot
+                payload[2] = sourceBagId;                           // srcBag: inventory bag
+                payload[3] = sourceSlotId;                          // srcSlot: inventory slot
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_ITEM, payload, cancellationToken);
 
                 _logger.LogInformation("Item deposited from {BagId}:{SlotId} to bank slot {BankSlot}", sourceBagId, sourceSlotId, bankSlot);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 _logger.LogError(ex, "Failed to deposit item from {BagId}:{SlotId} to bank slot {BankSlot}", sourceBagId, sourceSlotId, bankSlot);
                 throw;
@@ -258,26 +276,25 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public async Task WithdrawItemAsync(byte bankSlot, uint quantity = 0, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Withdrawing item from bank slot {BankSlot}, quantity: {Quantity}", bankSlot, quantity);
+            _logger.LogDebug("Withdrawing item from bank slot {BankSlot}", bankSlot);
 
             if (!_isBankWindowOpen)
-            {
-                _logger.LogWarning("Bank window is not open");
-                return;
-            }
+                throw new InvalidOperationException("Bank window is not open");
 
             try
             {
                 SetOperationInProgress(true);
 
-                // Send item move packet from bank to first available inventory slot using CMSG_AUTOBANK_ITEM
-                var payload = new byte[1];
-                payload[0] = (byte)(BANK_SLOT_COUNT + bankSlot);
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUTOBANK_ITEM, payload, cancellationToken);
+                // CMSG_AUTOSTORE_BANK_ITEM: srcBag(1) + srcSlot(1) = 2 bytes
+                // Server auto-finds an empty inventory slot
+                var payload = new byte[2];
+                payload[0] = BANK_BAG;                              // srcBag: bank container
+                payload[1] = (byte)(BANK_SLOT_ITEM_START + bankSlot); // srcSlot: bank slot
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUTOSTORE_BANK_ITEM, payload, cancellationToken);
 
-                _logger.LogInformation("Item withdrawn from bank slot {BankSlot}", bankSlot);
+                _logger.LogInformation("Auto-withdraw sent from bank slot {BankSlot}", bankSlot);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 _logger.LogError(ex, "Failed to withdraw item from bank slot {BankSlot}", bankSlot);
                 throw;
@@ -291,28 +308,27 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public async Task WithdrawItemToSlotAsync(byte bankSlot, byte targetBagId, byte targetSlotId, uint quantity = 0, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Withdrawing item from bank slot {BankSlot} to bag {BagId}:{SlotId}, quantity: {Quantity}", 
-                bankSlot, targetBagId, targetSlotId, quantity);
+            _logger.LogDebug("Withdrawing item from bank slot {BankSlot} to bag {BagId}:{SlotId}",
+                bankSlot, targetBagId, targetSlotId);
 
             if (!_isBankWindowOpen)
-            {
-                _logger.LogWarning("Bank window is not open");
-                return;
-            }
+                throw new InvalidOperationException("Bank window is not open");
 
             try
             {
                 SetOperationInProgress(true);
 
-                // Send item swap packet from bank to specific inventory slot
-                var payload = new byte[2];
-                payload[0] = (byte)(BANK_SLOT_COUNT + bankSlot); // source bank slot
-                payload[1] = (byte)(targetBagId * 16 + targetSlotId); // destination slot
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_INV_ITEM, payload, cancellationToken);
+                // CMSG_SWAP_ITEM: dstBag(1) + dstSlot(1) + srcBag(1) + srcSlot(1) = 4 bytes
+                var payload = new byte[4];
+                payload[0] = targetBagId;                           // dstBag: inventory bag
+                payload[1] = targetSlotId;                          // dstSlot: inventory slot
+                payload[2] = BANK_BAG;                              // srcBag: bank container
+                payload[3] = (byte)(BANK_SLOT_ITEM_START + bankSlot); // srcSlot: bank slot
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_ITEM, payload, cancellationToken);
 
                 _logger.LogInformation("Item withdrawn from bank slot {BankSlot} to {BagId}:{SlotId}", bankSlot, targetBagId, targetSlotId);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 _logger.LogError(ex, "Failed to withdraw item from bank slot {BankSlot} to {BagId}:{SlotId}", bankSlot, targetBagId, targetSlotId);
                 throw;
@@ -329,24 +345,23 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogDebug("Swapping item in {BagId}:{SlotId} with bank slot {BankSlot}", inventoryBagId, inventorySlotId, bankSlot);
 
             if (!_isBankWindowOpen)
-            {
-                _logger.LogWarning("Bank window is not open");
-                return;
-            }
+                throw new InvalidOperationException("Bank window is not open");
 
             try
             {
                 SetOperationInProgress(true);
 
-                // Send item swap packet between inventory and bank
-                var payload = new byte[2];
-                payload[0] = (byte)(inventoryBagId * 16 + inventorySlotId); // inventory slot
-                payload[1] = (byte)(BANK_SLOT_COUNT + bankSlot); // bank slot
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_INV_ITEM, payload, cancellationToken);
+                // CMSG_SWAP_ITEM: dstBag(1) + dstSlot(1) + srcBag(1) + srcSlot(1) = 4 bytes
+                var payload = new byte[4];
+                payload[0] = BANK_BAG;                              // dstBag: bank container
+                payload[1] = (byte)(BANK_SLOT_ITEM_START + bankSlot); // dstSlot: bank slot
+                payload[2] = inventoryBagId;                        // srcBag: inventory bag
+                payload[3] = inventorySlotId;                       // srcSlot: inventory slot
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_ITEM, payload, cancellationToken);
 
                 _logger.LogInformation("Item swapped between {BagId}:{SlotId} and bank slot {BankSlot}", inventoryBagId, inventorySlotId, bankSlot);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 _logger.LogError(ex, "Failed to swap item between {BagId}:{SlotId} and bank slot {BankSlot}", inventoryBagId, inventorySlotId, bankSlot);
                 throw;
@@ -364,61 +379,18 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public async Task DepositGoldAsync(uint amount, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Depositing {Amount} copper to bank", amount);
-
-            if (!_isBankWindowOpen)
-            {
-                _logger.LogWarning("Bank window is not open");
-                return;
-            }
-
-            try
-            {
-                SetOperationInProgress(true);
-
-                // Not implemented - protocol needs clarification
-                _logger.LogWarning("Gold deposit operation not fully implemented - packet structure needs verification");
-                await Task.CompletedTask;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to deposit {Amount} copper to bank", amount);
-                throw;
-            }
-            finally
-            {
-                SetOperationInProgress(false);
-            }
+            // Personal gold banking does not exist in vanilla 1.12.1.
+            // Guild banks with gold deposit/withdraw were added in TBC 2.0.
+            _logger.LogWarning("Gold deposit not available in vanilla 1.12.1 (guild bank feature, TBC+)");
+            await Task.CompletedTask;
         }
 
         /// <inheritdoc />
         public async Task WithdrawGoldAsync(uint amount, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Withdrawing {Amount} copper from bank", amount);
-
-            if (!_isBankWindowOpen)
-            {
-                _logger.LogWarning("Bank window is not open");
-                return;
-            }
-
-            try
-            {
-                SetOperationInProgress(true);
-
-                // Not implemented - protocol needs clarification
-                _logger.LogWarning("Gold withdrawal operation not fully implemented - packet structure needs verification");
-                await Task.CompletedTask;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to withdraw {Amount} copper from bank", amount);
-                throw;
-            }
-            finally
-            {
-                SetOperationInProgress(false);
-            }
+            // Personal gold banking does not exist in vanilla 1.12.1.
+            _logger.LogWarning("Gold withdrawal not available in vanilla 1.12.1 (guild bank feature, TBC+)");
+            await Task.CompletedTask;
         }
 
         #endregion
@@ -430,11 +402,8 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             _logger.LogDebug("Purchasing bank bag slot");
 
-            if (!_isBankWindowOpen)
-            {
-                _logger.LogWarning("Bank window is not open");
-                return;
-            }
+            if (!_isBankWindowOpen || !_currentBankerGuid.HasValue)
+                throw new InvalidOperationException("Bank window is not open");
 
             if (_purchasedBankBagSlots >= MAX_BANK_BAG_SLOTS)
             {
@@ -446,12 +415,14 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
 
-                // Send CMSG_BUY_BANK_SLOT
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_BANK_SLOT, [], cancellationToken);
+                // CMSG_BUY_BANK_SLOT: bankerGuid(8)
+                var payload = new byte[8];
+                BitConverter.GetBytes(_currentBankerGuid.Value).CopyTo(payload, 0);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_BANK_SLOT, payload, cancellationToken);
 
                 _logger.LogInformation("Purchase bank bag slot command sent");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 _logger.LogError(ex, "Failed to purchase bank bag slot");
                 throw;
@@ -465,27 +436,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public async Task RequestBankInfoAsync(CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Requesting bank information");
-
-            try
-            {
-                SetOperationInProgress(true);
-
-                // Typically handled by server responses when opening the bank
-                _availableBankSlots = BANK_SLOT_COUNT;
-                _logger.LogDebug("Bank info updated - Available slots: {Available}, Purchased bag slots: {Purchased}", 
-                    _availableBankSlots, _purchasedBankBagSlots);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to request bank information");
-                throw;
-            }
-            finally
-            {
-                SetOperationInProgress(false);
-            }
-
+            // Bank info is delivered via SMSG_SHOW_BANK (bankerGuid) when opening the bank.
+            // No separate request opcode exists; info comes from the server automatically.
+            _availableBankSlots = BANK_SLOT_ITEM_COUNT;
+            _logger.LogDebug("Bank info set - Available item slots: {Available}, Purchased bag slots: {Purchased}",
+                _availableBankSlots, _purchasedBankBagSlots);
             await Task.CompletedTask;
         }
 
@@ -504,7 +459,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (HasBankSpace())
             {
-                return 0; // Return first available slot (placeholder)
+                return 0; // Placeholder — real slot tracking requires inventory state from SMSG_UPDATE_OBJECT
             }
             return null;
         }
@@ -513,9 +468,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public uint? GetNextBankSlotCost()
         {
             if (_purchasedBankBagSlots >= MAX_BANK_BAG_SLOTS)
-            {
-                return null; // No more slots can be purchased
-            }
+                return null;
 
             return BankSlotCosts[_purchasedBankBagSlots];
         }
@@ -533,141 +486,55 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public async Task QuickDepositAsync(ulong bankerGuid, byte bagId, byte slotId, uint quantity = 0, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Quick deposit from bag {BagId}:{SlotId} with banker {BankerGuid:X}", bagId, slotId, bankerGuid);
+            if (!_isBankWindowOpen)
+                await OpenBankAsync(bankerGuid, cancellationToken);
 
-            try
-            {
-                SetOperationInProgress(true);
-
-                if (!_isBankWindowOpen)
-                {
-                    await OpenBankAsync(bankerGuid, cancellationToken);
-                }
-
-                await DepositItemAsync(bagId, slotId, quantity, cancellationToken);
-                await CloseBankAsync(cancellationToken);
-
-                _logger.LogInformation("Quick deposit completed for bag {BagId}:{SlotId}", bagId, slotId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Quick deposit failed for bag {BagId}:{SlotId}", bagId, slotId);
-                throw;
-            }
-            finally
-            {
-                SetOperationInProgress(false);
-            }
+            await DepositItemAsync(bagId, slotId, quantity, cancellationToken);
+            await CloseBankAsync(cancellationToken);
         }
 
         /// <inheritdoc />
         public async Task QuickWithdrawAsync(ulong bankerGuid, byte bankSlot, uint quantity = 0, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Quick withdraw from bank slot {BankSlot} with banker {BankerGuid:X}", bankSlot, bankerGuid);
+            if (!_isBankWindowOpen)
+                await OpenBankAsync(bankerGuid, cancellationToken);
 
-            try
-            {
-                SetOperationInProgress(true);
-
-                if (!_isBankWindowOpen)
-                {
-                    await OpenBankAsync(bankerGuid, cancellationToken);
-                }
-
-                await WithdrawItemAsync(bankSlot, quantity, cancellationToken);
-                await CloseBankAsync(cancellationToken);
-
-                _logger.LogInformation("Quick withdraw completed for bank slot {BankSlot}", bankSlot);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Quick withdraw failed for bank slot {BankSlot}", bankSlot);
-                throw;
-            }
-            finally
-            {
-                SetOperationInProgress(false);
-            }
+            await WithdrawItemAsync(bankSlot, quantity, cancellationToken);
+            await CloseBankAsync(cancellationToken);
         }
 
         /// <inheritdoc />
         public async Task QuickDepositGoldAsync(ulong bankerGuid, uint amount, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Quick gold deposit of {Amount} copper with banker {BankerGuid:X}", amount, bankerGuid);
+            if (!_isBankWindowOpen)
+                await OpenBankAsync(bankerGuid, cancellationToken);
 
-            try
-            {
-                SetOperationInProgress(true);
-
-                if (!_isBankWindowOpen)
-                {
-                    await OpenBankAsync(bankerGuid, cancellationToken);
-                }
-
-                await DepositGoldAsync(amount, cancellationToken);
-                await CloseBankAsync(cancellationToken);
-
-                _logger.LogInformation("Quick gold deposit completed for {Amount} copper", amount);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Quick gold deposit failed for {Amount} copper", amount);
-                throw;
-            }
-            finally
-            {
-                SetOperationInProgress(false);
-            }
+            await DepositGoldAsync(amount, cancellationToken);
+            await CloseBankAsync(cancellationToken);
         }
 
         /// <inheritdoc />
         public async Task QuickWithdrawGoldAsync(ulong bankerGuid, uint amount, CancellationToken cancellationToken = default)
         {
-            _logger.LogDebug("Quick gold withdraw of {Amount} copper with banker {BankerGuid:X}", amount, bankerGuid);
+            if (!_isBankWindowOpen)
+                await OpenBankAsync(bankerGuid, cancellationToken);
 
-            try
-            {
-                SetOperationInProgress(true);
-
-                if (!_isBankWindowOpen)
-                {
-                    await OpenBankAsync(bankerGuid, cancellationToken);
-                }
-
-                await WithdrawGoldAsync(amount, cancellationToken);
-                await CloseBankAsync(cancellationToken);
-
-                _logger.LogInformation("Quick gold withdraw completed for {Amount} copper", amount);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Quick gold withdraw failed for {Amount} copper", amount);
-                throw;
-            }
-            finally
-            {
-                SetOperationInProgress(false);
-            }
+            await WithdrawGoldAsync(amount, cancellationToken);
+            await CloseBankAsync(cancellationToken);
         }
 
         #endregion
 
         #region Server Response Handlers (state updates only)
 
-        /// <summary>
-        /// Handles bank window opened response from the server.
-        /// </summary>
-        /// <param name="bankerGuid">The GUID of the banker NPC.</param>
         public void HandleBankWindowOpened(ulong bankerGuid)
         {
             _currentBankerGuid = bankerGuid;
             _isBankWindowOpen = true;
+            _availableBankSlots = BANK_SLOT_ITEM_COUNT;
             _logger.LogDebug("Bank window opened event handled for banker: {BankerGuid:X}", bankerGuid);
         }
 
-        /// <summary>
-        /// Handles bank window closed response from the server.
-        /// </summary>
         public void HandleBankWindowClosed()
         {
             _isBankWindowOpen = false;
@@ -675,16 +542,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogDebug("Bank window closed event handled");
         }
 
-        /// <summary>
-        /// Handles bank information update from the server.
-        /// </summary>
-        /// <param name="availableSlots">Number of available bank slots.</param>
-        /// <param name="purchasedBagSlots">Number of purchased bag slots.</param>
         public void HandleBankInfoUpdate(uint availableSlots, uint purchasedBagSlots)
         {
             _availableBankSlots = availableSlots;
             _purchasedBankBagSlots = purchasedBagSlots;
-            _logger.LogDebug("Bank info updated event handled: Available: {Available}, Purchased: {Purchased}", 
+            _logger.LogDebug("Bank info updated: Available: {Available}, Purchased: {Purchased}",
                 availableSlots, purchasedBagSlots);
         }
 
@@ -692,9 +554,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #region IDisposable Implementation
 
-        /// <summary>
-        /// Disposes of the bank network client component and cleans up resources.
-        /// </summary>
         public override void Dispose()
         {
             if (_disposed) return;
@@ -705,28 +564,56 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Parsing helpers and SafeStream
+        #region Parsing helpers
+
         private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
             => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
-        private ItemMovementData? ParseItemMovement(ReadOnlyMemory<byte> payload)
+        /// <summary>
+        /// Parses SMSG_SHOW_BANK: bankerGuid(8)
+        /// </summary>
+        private ulong? ParseShowBank(ReadOnlyMemory<byte> payload)
         {
-            // Heuristic parsing: [itemGuid(8)][itemId(4)][quantity(4)][slot(1)]
             var span = payload.Span;
-            if (span.Length < 17) return null;
-            ulong itemGuid = BitConverter.ToUInt64(span.Slice(0, 8));
-            uint itemId = BitConverter.ToUInt32(span.Slice(8, 4));
-            uint qty = BitConverter.ToUInt32(span.Slice(12, 4));
-            byte slot = span[16];
-            return new ItemMovementData(itemGuid, itemId, qty, slot);
+            if (span.Length < 8) return null;
+            return BitConverter.ToUInt64(span.Slice(0, 8));
         }
 
+        /// <summary>
+        /// Parses SMSG_ITEM_PUSH_RESULT: playerGuid(8) + newItem(4) + createdItem(4) + ...
+        /// Minimal parse — extracts item GUID, entry, count, and destination slot.
+        ///
+        /// MaNGOS WorldSession::SendNewItem format:
+        ///   playerGuid(8) + newItem(4) + createdFromSpell(4) + isCreated(4) +
+        ///   containerSlot(4) + slot(4) + itemEntry(4) + suffixFactor(4) +
+        ///   randomPropertyId(4) + count(4)
+        /// Total: 44 bytes minimum
+        /// </summary>
+        private ItemMovementData? ParseItemMovement(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            if (span.Length < 44) return null;
+
+            // Skip playerGuid(8) + newItem(4) + createdFromSpell(4) + isCreated(4)
+            // containerSlot is at offset 20, slot at 24, itemEntry at 28
+            byte slot = (byte)BitConverter.ToUInt32(span.Slice(24, 4));
+            uint itemEntry = BitConverter.ToUInt32(span.Slice(28, 4));
+            uint count = BitConverter.ToUInt32(span.Slice(40, 4));
+
+            // We don't have the item GUID from this packet — use 0 as placeholder
+            return new ItemMovementData(0, itemEntry, count, slot);
+        }
+
+        /// <summary>
+        /// Parses SMSG_BUY_BANK_SLOT_RESULT: result(4, uint32)
+        /// Result codes: 0=TooMany, 1=InsufficientFunds, 2=NotBanker, 3=OK
+        /// </summary>
         private (bool Success, BuyBankSlotResult Result, string? ErrorMessage) ParseBuyBankSlotResult(ReadOnlyMemory<byte> payload)
         {
-            // Heuristic parsing: first byte is result
             var span = payload.Span;
-            if (span.Length == 0) return (false, BuyBankSlotResult.ERR_BANKSLOT_FAILED_TOO_MANY, "Malformed payload");
-            var result = (BuyBankSlotResult)span[0];
+            if (span.Length < 4) return (false, BuyBankSlotResult.ERR_BANKSLOT_FAILED_TOO_MANY, "Malformed payload");
+
+            var result = (BuyBankSlotResult)BitConverter.ToUInt32(span.Slice(0, 4));
             bool success = result == BuyBankSlotResult.ERR_BANKSLOT_OK;
             string? error = success ? null : result switch
             {
@@ -737,6 +624,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             };
             return (success, result, error);
         }
+
         #endregion
     }
 }

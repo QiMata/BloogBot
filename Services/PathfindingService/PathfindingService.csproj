@@ -8,8 +8,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <OutputType>Exe</OutputType>
     <BaseOutputPath>..\..\Bot</BaseOutputPath>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <Platforms>AnyCPU;x64</Platforms>
+    <!-- PathfindingService runs as x64 standalone (needs >2GB for nav meshes).
+         Output to Bot\Debug\x64\ to avoid overwriting x86 Navigation.dll in Bot\Debug\net8.0\.
+         Map data (mmaps/vmaps/maps) is found via WWOW_DATA_DIR env var. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>..\..\Bot\$(Configuration)\x64\</OutputPath>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>AnyCPU;x64;x86</Platforms>
   </PropertyGroup>
 
   <ItemGroup>

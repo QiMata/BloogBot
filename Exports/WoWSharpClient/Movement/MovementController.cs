@@ -2,6 +2,7 @@
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using Pathfinding;
+using Serilog;
 using System.Numerics;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
@@ -48,32 +49,13 @@ namespace WoWSharpClient.Movement
                 return;
             }
 
-            // Log pre-physics state
-            Console.WriteLine($"\n[Frame {_frameCounter}] === PRE-PHYSICS ===");
-            Console.WriteLine($"  Delta: {deltaSec:F4}s");
-            Console.WriteLine($"  Input Pos: ({_player.Position.X:F3}, {_player.Position.Y:F3}, {_player.Position.Z:F3})");
-            Console.WriteLine($"  Input Vel: ({_velocity.X:F3}, {_velocity.Y:F3}, {_velocity.Z:F3})");
-            Console.WriteLine($"  Flags: {_player.MovementFlags}");
+            Log.Verbose("[MovementController] Frame {Frame} dt={Delta:F4}s Pos=({X:F1},{Y:F1},{Z:F1}) Flags={Flags}",
+                _frameCounter, deltaSec, _player.Position.X, _player.Position.Y, _player.Position.Z, _player.MovementFlags);
 
             // 1. Run physics based on current player state
             var physicsResult = RunPhysics(deltaSec);
 
-            // Log physics output
-            Console.WriteLine($"[Frame {_frameCounter}] === PHYSICS OUTPUT ===");
-            Console.WriteLine($"  Output Pos: ({physicsResult.NewPosX:F3}, {physicsResult.NewPosY:F3}, {physicsResult.NewPosZ:F3})");
-            Console.WriteLine($"  Output Vel: ({physicsResult.NewVelX:F3}, {physicsResult.NewVelY:F3}, {physicsResult.NewVelZ:F3})");
-            Console.WriteLine($"  Output Flags: {(MovementFlags)physicsResult.MovementFlags}");
-
-            // Calculate actual movement
-            var deltaPos = new Vector3(
-                physicsResult.NewPosX - _player.Position.X,
-                physicsResult.NewPosY - _player.Position.Y,
-                physicsResult.NewPosZ - _player.Position.Z
-            );
-            var moveDist = MathF.Sqrt(deltaPos.X * deltaPos.X + deltaPos.Y * deltaPos.Y);
-            Console.WriteLine($"  Movement: {moveDist:F3} units (XY), {deltaPos.Z:F3} units (Z)");
-
-            // Check for position mismatch
+            // Check for position mismatch (external teleport, server correction, etc.)
             var physicsPosDiff = new Vector3(
                 _player.Position.X - _lastPhysicsPosition.X,
                 _player.Position.Y - _lastPhysicsPosition.Y,
@@ -81,9 +63,7 @@ namespace WoWSharpClient.Movement
             );
             if (physicsPosDiff.Length() > 0.01f)
             {
-                Console.WriteLine($"  WARNING: Position changed outside physics by {physicsPosDiff.Length():F3} units!");
-                Console.WriteLine($"    Last physics pos: ({_lastPhysicsPosition.X:F3}, {_lastPhysicsPosition.Y:F3}, {_lastPhysicsPosition.Z:F3})");
-                Console.WriteLine($"    Current pos: ({_player.Position.X:F3}, {_player.Position.Y:F3}, {_player.Position.Z:F3})");
+                Log.Warning("[MovementController] Position changed outside physics by {Dist:F3} units", physicsPosDiff.Length());
             }
 
             ApplyPhysicsResult(physicsResult);
@@ -95,8 +75,6 @@ namespace WoWSharpClient.Movement
             // 2. Send network packet if needed
             if (ShouldSendPacket(gameTimeMs))
             {
-                Console.WriteLine($"[Frame {_frameCounter}] === SENDING PACKET ===");
-                Console.WriteLine($"  Accumulated time: {_accumulatedDelta * 1000f:F1}ms");
                 SendMovementPacket(gameTimeMs);
                 _accumulatedDelta = 0;
             }
@@ -152,14 +130,37 @@ namespace WoWSharpClient.Movement
                 StandingOnLocalZ = _standingOnLocal.Z,
             };
 
-            Console.WriteLine($"  Physics DeltaTime: {deltaSec:F4}s");
-
             return _physics.PhysicsStep(input);
         }
 
         private void ApplyPhysicsResult(PhysicsOutput output)
         {
             var oldPos = _player.Position;
+
+            // Dead-reckoning fallback: if physics engine returned same position but
+            // movement flags indicate we should be moving, apply simple trigonometric movement.
+            float dx = output.NewPosX - oldPos.X;
+            float dy = output.NewPosY - oldPos.Y;
+            if (MathF.Abs(dx) < 0.001f && MathF.Abs(dy) < 0.001f)
+            {
+                var flags = _player.MovementFlags;
+                float facing = _player.Facing;
+                float dt = _accumulatedDelta > 0 ? _accumulatedDelta : 0.05f;
+                // Use last delta from the Update call; _accumulatedDelta may have been reset,
+                // so re-derive from frame counter timing is impractical. Just use 50ms as default.
+                dt = MathF.Min(dt, 0.2f); // cap to prevent jumps
+
+                if (flags.HasFlag(MovementFlags.MOVEFLAG_FORWARD))
+                {
+                    output.NewPosX += MathF.Cos(facing) * _player.RunSpeed * dt;
+                    output.NewPosY += MathF.Sin(facing) * _player.RunSpeed * dt;
+                }
+                if (flags.HasFlag(MovementFlags.MOVEFLAG_BACKWARD))
+                {
+                    output.NewPosX -= MathF.Cos(facing) * _player.RunBackSpeed * dt;
+                    output.NewPosY -= MathF.Sin(facing) * _player.RunBackSpeed * dt;
+                }
+            }
 
             // Update position from physics
             _player.Position = new Position(output.NewPosX, output.NewPosY, output.NewPosZ);
@@ -193,8 +194,8 @@ namespace WoWSharpClient.Movement
             var newPhysicsFlags = (MovementFlags)(output.MovementFlags) & PhysicsFlags;
             _player.MovementFlags = inputFlags | newPhysicsFlags;
 
-            Console.WriteLine($"[Frame {_frameCounter}] === POST-APPLY ===");
-            Console.WriteLine($"  Position changed: ({oldPos.X:F3}, {oldPos.Y:F3}, {oldPos.Z:F3}) -> ({_player.Position.X:F3}, {_player.Position.Y:F3}, {_player.Position.Z:F3})");
+            Log.Verbose("[MovementController] Applied: ({OldX:F1},{OldY:F1},{OldZ:F1}) -> ({NewX:F1},{NewY:F1},{NewZ:F1}) Flags={Flags}",
+                oldPos.X, oldPos.Y, oldPos.Z, _player.Position.X, _player.Position.Y, _player.Position.Z, _player.MovementFlags);
         }
 
         // ======== NETWORKING ========
@@ -224,18 +225,29 @@ namespace WoWSharpClient.Movement
             _lastPacketTime = gameTimeMs;
             _lastSentFlags = _player.MovementFlags;
 
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {opcode} - Pos({_player.Position.X:F1}, {_player.Position.Y:F1}, {_player.Position.Z:F1}) Flags: {_player.MovementFlags}");
+            Log.Debug("[MovementController] {Opcode} Pos=({X:F1},{Y:F1},{Z:F1}) Flags={Flags}",
+                opcode, _player.Position.X, _player.Position.Y, _player.Position.Z, _player.MovementFlags);
         }
 
         private Opcode DetermineOpcode(MovementFlags current, MovementFlags previous)
         {
-            // Stopped moving
+            // Stopped moving entirely
             if (current == MovementFlags.MOVEFLAG_NONE && previous != MovementFlags.MOVEFLAG_NONE)
                 return Opcode.MSG_MOVE_STOP;
 
             // Started jumping
             if (current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && !previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
                 return Opcode.MSG_MOVE_JUMP;
+
+            // Landed
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
+                return Opcode.MSG_MOVE_FALL_LAND;
+
+            // Started/stopped swimming
+            if (current.HasFlag(MovementFlags.MOVEFLAG_SWIMMING) && !previous.HasFlag(MovementFlags.MOVEFLAG_SWIMMING))
+                return Opcode.MSG_MOVE_START_SWIM;
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_SWIMMING) && previous.HasFlag(MovementFlags.MOVEFLAG_SWIMMING))
+                return Opcode.MSG_MOVE_STOP_SWIM;
 
             // Started moving forward
             if (current.HasFlag(MovementFlags.MOVEFLAG_FORWARD) && !previous.HasFlag(MovementFlags.MOVEFLAG_FORWARD))
@@ -248,13 +260,13 @@ namespace WoWSharpClient.Movement
             // Started strafing
             if (current.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT) && !previous.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT))
                 return Opcode.MSG_MOVE_START_STRAFE_LEFT;
-
             if (current.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT) && !previous.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT))
                 return Opcode.MSG_MOVE_START_STRAFE_RIGHT;
 
-            // Landed
-            if (!current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
-                return Opcode.MSG_MOVE_FALL_LAND;
+            // Stopped strafing (while still moving)
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT) && !current.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT)
+                && (previous.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT) || previous.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT)))
+                return Opcode.MSG_MOVE_STOP_STRAFE;
 
             // Default to heartbeat
             return Opcode.MSG_MOVE_HEARTBEAT;
@@ -266,7 +278,7 @@ namespace WoWSharpClient.Movement
             // Called by bot when it changes facing directly
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
             _client.SendMovementOpcode(Opcode.MSG_MOVE_SET_FACING, buffer);
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] MSG_MOVE_SET_FACING - Facing: {_player.Facing:F2}");
+            Log.Debug("[MovementController] MSG_MOVE_SET_FACING Facing={Facing:F2}", _player.Facing);
         }
 
         public void SendStopPacket(uint gameTimeMs)
@@ -276,7 +288,7 @@ namespace WoWSharpClient.Movement
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
             _client.SendMovementOpcode(Opcode.MSG_MOVE_STOP, buffer);
             _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] MSG_MOVE_STOP (forced)");
+            Log.Debug("[MovementController] MSG_MOVE_STOP (forced)");
         }
 
         // ======== STATE MANAGEMENT ========

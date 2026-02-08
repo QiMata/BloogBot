@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace BloogBot.LoggingMCPServer.Services;
+namespace LoggingMCPServer.Services;
 
 public class LoggingMCPService : BackgroundService
 {

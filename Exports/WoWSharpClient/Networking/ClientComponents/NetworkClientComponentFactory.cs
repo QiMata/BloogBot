@@ -41,6 +41,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private IFriendNetworkClientComponent? _friendAgent;
         private IIgnoreNetworkClientComponent? _ignoreAgent;
         private ITradeNetworkClientComponent? _tradeAgent;
+        private ICharacterInitNetworkClientComponent? _characterInitAgent;
 
         // Injected agents constructor (used in unit tests)
         public NetworkClientComponentFactory(
@@ -423,6 +424,19 @@ namespace WoWSharpClient.Networking.ClientComponents
                     _tradeAgent = AgentFactory.CreateTradeNetworkClientComponent(_worldClient!, _loggerFactory!);
                 }
                 return _tradeAgent;
+            }
+        }
+
+        public ICharacterInitNetworkClientComponent CharacterInitAgent
+        {
+            get
+            {
+                if (_characterInitAgent == null)
+                {
+                    EnsureLazyAvailable();
+                    _characterInitAgent = AgentFactory.CreateCharacterInitNetworkClientComponent(_worldClient!, _loggerFactory!);
+                }
+                return _characterInitAgent;
             }
         }
     }

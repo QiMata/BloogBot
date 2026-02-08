@@ -137,6 +137,11 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         ITradeNetworkClientComponent TradeAgent { get; }
 
+        /// <summary>
+        /// Gets the character initialization agent for login-time data (action buttons, proficiencies, bind point, factions, tutorials).
+        /// </summary>
+        ICharacterInitNetworkClientComponent CharacterInitAgent { get; }
+
         #endregion
     }
 }

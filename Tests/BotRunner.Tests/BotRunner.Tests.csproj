@@ -8,6 +8,7 @@
   <IsPackable>false</IsPackable>
   <IsTestProject>true</IsTestProject>
   <Platforms>x86</Platforms>
+  <PlatformTarget>x86</PlatformTarget>
 </PropertyGroup>
 
   <ItemGroup>
@@ -34,7 +35,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Services\StateManager\StateManager.csproj" />
+    <ProjectReference Include="..\..\Services\WoWStateManager\WoWStateManager.csproj" />
     <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
     <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
@@ -42,6 +43,7 @@
     <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
     <ProjectReference Include="..\..\Services\DecisionEngineService\DecisionEngineService.csproj" />
     <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+    <ProjectReference Include="..\Tests.Infrastructure\Tests.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,5 @@
 using ModelContextProtocol.Server;
-using BloogBot.LoggingMCPServer.Tools;
+using LoggingMCPServer.Tools;
 using Serilog;
 
 // Configure Serilog
@@ -76,7 +76,7 @@ app.MapMcp();
 app.MapGet("/health", () => new { 
     status = "healthy", 
     timestamp = DateTime.UtcNow,
-    service = "BloogBot.LoggingMCPServer",
+    service = "LoggingMCPServer",
     version = "1.0.0"
 });
 

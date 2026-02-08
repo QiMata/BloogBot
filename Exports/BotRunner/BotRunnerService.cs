@@ -19,7 +19,7 @@ namespace BotRunner
         private readonly ILootingService _lootingService;
         private readonly ITargetPositioningService _targetPositioningService;
 
-        private ActivitySnapshot _activitySnapshot;
+        private WoWActivitySnapshot _activitySnapshot;
 
         private Task? _asyncBotTaskRunnerTask;
         private CancellationTokenSource? _cts;
@@ -74,6 +74,8 @@ namespace BotRunner
             {
                 try
                 {
+                    PopulateSnapshotFromObjectManager();
+
                     var incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
 
                     UpdateBehaviorTree(incomingActivityMemberState);
@@ -96,7 +98,7 @@ namespace BotRunner
             }
         }
 
-        private void UpdateBehaviorTree(ActivitySnapshot incomingActivityMemberState)
+        private void UpdateBehaviorTree(WoWActivitySnapshot incomingActivityMemberState)
         {
             if (_behaviorTree != null && _behaviorTreeStatus == BehaviourTreeStatus.Running)
             {
@@ -1468,5 +1470,221 @@ namespace BotRunner
                 })
             .End()
             .Build();
+
+        #region Snapshot Building
+
+        private void PopulateSnapshotFromObjectManager()
+        {
+            _activitySnapshot.Timestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            // Detect screen state
+            if (_objectManager.HasEnteredWorld && _objectManager.Player != null)
+            {
+                _activitySnapshot.ScreenState = "InWorld";
+                _activitySnapshot.CharacterName = _objectManager.Player.Name ?? string.Empty;
+            }
+            else if (_objectManager.CharacterSelectScreen?.IsOpen == true)
+            {
+                _activitySnapshot.ScreenState = "CharacterSelect";
+            }
+            else if (_objectManager.LoginScreen?.IsLoggedIn == true)
+            {
+                _activitySnapshot.ScreenState = "RealmSelect";
+            }
+            else
+            {
+                _activitySnapshot.ScreenState = "LoginScreen";
+            }
+
+            // Only populate game data when in world
+            if (_activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null)
+                return;
+
+            var player = _objectManager.Player;
+
+            // Movement data
+            try
+            {
+                var pos = player.Position;
+                _activitySnapshot.MovementData = new Game.MovementData
+                {
+                    MovementFlags = (uint)player.MovementFlags,
+                    FallTime = player.FallTime,
+                    JumpVerticalSpeed = player.JumpVerticalSpeed,
+                    JumpSinAngle = player.JumpSinAngle,
+                    JumpCosAngle = player.JumpCosAngle,
+                    JumpHorizontalSpeed = player.JumpHorizontalSpeed,
+                    SwimPitch = player.SwimPitch,
+                    WalkSpeed = player.WalkSpeed,
+                    RunSpeed = player.RunSpeed,
+                    RunBackSpeed = player.RunBackSpeed,
+                    SwimSpeed = player.SwimSpeed,
+                    SwimBackSpeed = player.SwimBackSpeed,
+                    TurnRate = player.TurnRate,
+                    Facing = player.Facing,
+                    TransportGuid = player.TransportGuid,
+                    TransportOrientation = player.TransportOrientation,
+                };
+                if (pos != null)
+                {
+                    _activitySnapshot.MovementData.Position = new Game.Position
+                    {
+                        X = pos.X,
+                        Y = pos.Y,
+                        Z = pos.Z,
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating movement data: {ex.Message}");
+            }
+
+            // Player protobuf
+            try
+            {
+                _activitySnapshot.Player = BuildPlayerProtobuf(player);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating player: {ex.Message}");
+            }
+
+            // Nearby units (within 40y)
+            try
+            {
+                _activitySnapshot.NearbyUnits.Clear();
+                var playerPos = player.Position;
+                if (playerPos != null)
+                {
+                    foreach (var unit in _objectManager.Units
+                        .Where(u => u.Guid != player.Guid && u.Position != null && u.Position.DistanceTo(playerPos) < 40f))
+                    {
+                        _activitySnapshot.NearbyUnits.Add(BuildUnitProtobuf(unit));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating nearby units: {ex.Message}");
+            }
+
+            // Nearby game objects (within 40y)
+            try
+            {
+                _activitySnapshot.NearbyObjects.Clear();
+                var playerPos = player.Position;
+                if (playerPos != null)
+                {
+                    foreach (var go in _objectManager.GameObjects
+                        .Where(g => g.Position != null && g.Position.DistanceTo(playerPos) < 40f))
+                    {
+                        _activitySnapshot.NearbyObjects.Add(BuildGameObjectProtobuf(go));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating nearby objects: {ex.Message}");
+            }
+        }
+
+        private static Game.WoWPlayer BuildPlayerProtobuf(IWoWUnit unit)
+        {
+            var player = new Game.WoWPlayer
+            {
+                Unit = BuildUnitProtobuf(unit),
+            };
+
+            if (unit is IWoWLocalPlayer lp)
+            {
+                try { player.Coinage = lp.Copper; } catch { }
+            }
+
+            return player;
+        }
+
+        private static Game.WoWUnit BuildUnitProtobuf(IWoWUnit unit)
+        {
+            var pos = unit.Position;
+            var protoUnit = new Game.WoWUnit
+            {
+                GameObject = new Game.WoWGameObject
+                {
+                    Base = new Game.WoWObject
+                    {
+                        Guid = unit.Guid,
+                        ObjectType = (uint)unit.ObjectType,
+                        Facing = unit.Facing,
+                        ScaleX = unit.ScaleX,
+                    },
+                    FactionTemplate = unit.FactionTemplate,
+                    Level = unit.Level,
+                },
+                Health = unit.Health,
+                MaxHealth = unit.MaxHealth,
+                TargetGuid = unit.TargetGuid,
+                UnitFlags = (uint)unit.UnitFlags,
+                DynamicFlags = (uint)unit.DynamicFlags,
+                MovementFlags = (uint)unit.MovementFlags,
+                MountDisplayId = unit.MountDisplayId,
+                ChannelSpellId = unit.ChannelingId,
+                SummonedBy = unit.SummonedByGuid,
+                NpcFlags = (uint)unit.NpcFlags,
+            };
+
+            if (pos != null)
+            {
+                protoUnit.GameObject.Base.Position = new Game.Position { X = pos.X, Y = pos.Y, Z = pos.Z };
+            }
+
+            // Power map: Mana, Rage, Energy
+            try
+            {
+                if (unit.Powers.TryGetValue(Powers.MANA, out uint mana)) protoUnit.Power[0] = mana;
+                if (unit.MaxPowers.TryGetValue(Powers.MANA, out uint maxMana)) protoUnit.MaxPower[0] = maxMana;
+                if (unit.Powers.TryGetValue(Powers.RAGE, out uint rage)) protoUnit.Power[1] = rage;
+                if (unit.MaxPowers.TryGetValue(Powers.RAGE, out uint maxRage)) protoUnit.MaxPower[1] = maxRage;
+                if (unit.Powers.TryGetValue(Powers.ENERGY, out uint energy)) protoUnit.Power[3] = energy;
+                if (unit.MaxPowers.TryGetValue(Powers.ENERGY, out uint maxEnergy)) protoUnit.MaxPower[3] = maxEnergy;
+            }
+            catch { }
+
+            // Auras (from AuraFields - raw spell IDs)
+            try
+            {
+                if (unit.AuraFields != null)
+                {
+                    foreach (var auraSpellId in unit.AuraFields.Where(a => a != 0))
+                        protoUnit.Auras.Add(auraSpellId);
+                }
+            }
+            catch { }
+
+            return protoUnit;
+        }
+
+        private static Game.WoWGameObject BuildGameObjectProtobuf(IWoWGameObject go)
+        {
+            var pos = go.Position;
+            var protoGo = new Game.WoWGameObject
+            {
+                Base = new Game.WoWObject
+                {
+                    Guid = go.Guid,
+                    ObjectType = (uint)go.ObjectType,
+                    Facing = go.Facing,
+                },
+            };
+
+            if (pos != null)
+            {
+                protoGo.Base.Position = new Game.Position { X = pos.X, Y = pos.Y, Z = pos.Z };
+            }
+
+            return protoGo;
+        }
+
+        #endregion
     }
 }

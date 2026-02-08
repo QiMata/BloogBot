@@ -14,7 +14,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WinProcessImports", "Export
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ForegroundBotRunner", "Services\ForegroundBotRunner\ForegroundBotRunner.csproj", "{AF4BA739-45FB-44CD-886C-B0125261FE5B}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "StateManagerUI", "UI\StateManagerUI\StateManagerUI.csproj", "{6DE7B8BF-F51F-49AD-B80D-E28733B86AE2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WoWStateManagerUI", "UI\WoWStateManagerUI\WoWStateManagerUI.csproj", "{6DE7B8BF-F51F-49AD-B80D-E28733B86AE2}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WoWSharpClient", "Exports\WoWSharpClient\WoWSharpClient.csproj", "{0E823F6A-007F-4FAF-9819-B561347525EC}"
 EndProject
@@ -31,7 +31,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BackgroundBotRunner", "Serv
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PathfindingService", "Services\PathfindingService\PathfindingService.csproj", "{BC4B7495-6596-487C-865D-D9AE40A22BC5}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "StateManager", "Services\StateManager\StateManager.csproj", "{DCC89D39-3CF9-4E38-87D7-F473DA500AD0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WoWStateManager", "Services\WoWStateManager\WoWStateManager.csproj", "{DCC89D39-3CF9-4E38-87D7-F473DA500AD0}"
 	ProjectSection(ProjectDependencies) = postProject
 		{905248D9-39DE-447E-962F-9FF023A2F8AC} = {905248D9-39DE-447E-962F-9FF023A2F8AC}
 		{A0659587-35F6-4F91-A65C-8DD264E4DCA1} = {A0659587-35F6-4F91-A65C-8DD264E4DCA1}
@@ -52,15 +52,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BotRunner.Tests", "Tests\Bo
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PromptHandlingService.Tests", "Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj", "{58BB5A51-5928-4A83-9400-AC1C62EA446B}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WWoW.Systems.AppHost", "UI\WWoW.Systems\WWoW.Systems.AppHost\WWoW.Systems.AppHost.csproj", "{90BF97BD-7BF3-47D3-A575-E9AD85FBE336}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Systems.AppHost", "UI\Systems\Systems.AppHost\Systems.AppHost.csproj", "{90BF97BD-7BF3-47D3-A575-E9AD85FBE336}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WWoW.Systems.ServiceDefaults", "UI\WWoW.Systems\WWoW.Systems.ServiceDefaults\WWoW.Systems.ServiceDefaults.csproj", "{7731A959-10DE-4F06-CBE3-2A9C0CE8B9C3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Systems.ServiceDefaults", "UI\Systems\Systems.ServiceDefaults\Systems.ServiceDefaults.csproj", "{7731A959-10DE-4F06-CBE3-2A9C0CE8B9C3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameData.Core", "Exports\GameData.Core\GameData.Core.csproj", "{0CD771AA-583C-4037-93A4-1F5F472934A9}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BloogBot.AI", "BloogBot.AI\BloogBot.AI.csproj", "{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
 	ProjectSection(SolutionItems) = preProject
@@ -82,8 +80,8 @@ Global
 		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|Any CPU.ActiveCfg = Debug|x64
 		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|Win32.ActiveCfg = Release|Win32
 		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|Win32.Build.0 = Release|Win32
-		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|x64.ActiveCfg = Debug|x64
-		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|x64.Build.0 = Debug|x64
+		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|x64.ActiveCfg = Debug|Win32
+		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|x64.Build.0 = Debug|Win32
 		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|x86.ActiveCfg = Debug|Win32
 		{C817858E-0656-4211-934B-C672998EDDB3}.Debug|x86.Build.0 = Debug|Win32
 		{C817858E-0656-4211-934B-C672998EDDB3}.Release|Any CPU.ActiveCfg = Release|x64
@@ -93,14 +91,16 @@ Global
 		{C817858E-0656-4211-934B-C672998EDDB3}.Release|x64.Build.0 = Release|x64
 		{C817858E-0656-4211-934B-C672998EDDB3}.Release|x86.ActiveCfg = Release|Win32
 		{C817858E-0656-4211-934B-C672998EDDB3}.Release|x86.Build.0 = Release|Win32
-		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|Any CPU.Build.0 = Debug|Win32
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|Win32.ActiveCfg = Debug|Win32
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|Win32.Build.0 = Debug|Win32
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|x64.ActiveCfg = Debug|x64
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|x64.Build.0 = Debug|x64
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|x86.ActiveCfg = Debug|Win32
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Debug|x86.Build.0 = Debug|Win32
-		{DB2443BF-7C7E-4E62-BF95-304280073190}.Release|Any CPU.ActiveCfg = Release|x64
+		{DB2443BF-7C7E-4E62-BF95-304280073190}.Release|Any CPU.ActiveCfg = Release|Win32
+		{DB2443BF-7C7E-4E62-BF95-304280073190}.Release|Any CPU.Build.0 = Release|Win32
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Release|Win32.ActiveCfg = Release|Win32
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Release|Win32.Build.0 = Release|Win32
 		{DB2443BF-7C7E-4E62-BF95-304280073190}.Release|x64.ActiveCfg = Release|x64
@@ -409,22 +409,6 @@ Global
 		{0CD771AA-583C-4037-93A4-1F5F472934A9}.Release|x64.Build.0 = Release|Any CPU
 		{0CD771AA-583C-4037-93A4-1F5F472934A9}.Release|x86.ActiveCfg = Release|Any CPU
 		{0CD771AA-583C-4037-93A4-1F5F472934A9}.Release|x86.Build.0 = Release|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Debug|Win32.ActiveCfg = Debug|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Debug|Win32.Build.0 = Debug|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Debug|x64.Build.0 = Debug|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Debug|x86.Build.0 = Debug|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Release|Win32.ActiveCfg = Release|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Release|Win32.Build.0 = Release|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Release|x64.ActiveCfg = Release|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Release|x64.Build.0 = Release|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Release|x86.ActiveCfg = Release|Any CPU
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -451,7 +435,6 @@ Global
 		{90BF97BD-7BF3-47D3-A575-E9AD85FBE336} = {C359E65D-9D40-44E4-A256-4C75A6438CCA}
 		{7731A959-10DE-4F06-CBE3-2A9C0CE8B9C3} = {C359E65D-9D40-44E4-A256-4C75A6438CCA}
 		{0CD771AA-583C-4037-93A4-1F5F472934A9} = {2B5ADD00-9FA5-4839-A06C-21FA6C02FE8E}
-		{58CD6FF8-8AAD-455A-86FA-8678FB8C8C4A} = {A34E454D-EDFF-4AE3-806D-F17D3E19FF66}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1D542335-5812-4666-9874-ACFCC515267C}

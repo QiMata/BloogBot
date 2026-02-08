@@ -16,8 +16,8 @@
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <!-- Enable native hosting -->
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <!-- Roll forward to latest patch/minor for flexibility -->
-    <RollForward>LatestMinor</RollForward>
+    <!-- Roll forward to latest major version for flexibility with .NET 9+ -->
+    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,10 +25,11 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
     <PackageReference Include="Vcpkg.Nuget" Version="1.5.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
   </ItemGroup>
 
   <ItemGroup>
@@ -44,11 +45,10 @@
     <Resource Include="Resources\FastCall.dll" />
   </ItemGroup>
 
-  <!-- Remove items that might cause issues -->
+  <!-- Frames excluded - UI code not needed for injected mode -->
   <ItemGroup>
     <Compile Remove="Frames\**\*.cs" />
-    <Compile Remove="Mem\**\*.cs" />
-    <Compile Remove="Objects\**\*.cs" />
-    <Compile Remove="Statics\**\*.cs" />
   </ItemGroup>
+
+  <!-- Mem, Objects, Statics are the core direct memory implementation - INCLUDE them -->
 </Project>

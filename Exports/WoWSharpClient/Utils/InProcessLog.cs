@@ -20,11 +20,11 @@ namespace WoWSharpClient.Utils
         {
             try
             {
-                var env = Environment.GetEnvironmentVariable("BLOOGBOT_INJECT_LOG_DIR");
+                var env = Environment.GetEnvironmentVariable("WWOW_INJECT_LOG_DIR");
                 string baseDir = !string.IsNullOrWhiteSpace(env)
                     ? env
                     : (AppContext.BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory ?? Environment.CurrentDirectory);
-                var dir = Path.Combine(baseDir, "BloogBotLogs");
+                var dir = Path.Combine(baseDir, "WWoWLogs");
                 Directory.CreateDirectory(dir);
                 return dir;
             }

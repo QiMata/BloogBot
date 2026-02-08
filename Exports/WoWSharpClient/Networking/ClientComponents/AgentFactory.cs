@@ -644,6 +644,31 @@ namespace WoWSharpClient.Networking.ClientComponents
             return new ProfessionsNetworkClientComponent(worldClient, logger);
         }
 
+        // Character Init Agent
+        public static ICharacterInitNetworkClientComponent CreateCharacterInitNetworkClientComponent(IWorldClient worldClient, ILoggerFactory loggerFactory)
+        {
+            ArgumentNullException.ThrowIfNull(worldClient);
+            ArgumentNullException.ThrowIfNull(loggerFactory);
+            var logger = loggerFactory.CreateLogger<CharacterInitNetworkClientComponent>();
+            return new CharacterInitNetworkClientComponent(worldClient, logger);
+        }
+
+        public static ICharacterInitNetworkClientComponent CreateCharacterInitNetworkClientComponent(IWorldClient worldClient, ILogger<CharacterInitNetworkClientComponent> logger)
+        {
+            ArgumentNullException.ThrowIfNull(worldClient);
+            ArgumentNullException.ThrowIfNull(logger);
+            return new CharacterInitNetworkClientComponent(worldClient, logger);
+        }
+
+        public static ICharacterInitNetworkClientComponent CreateCharacterInitNetworkClientComponentForClient(IWorldClient worldClient, ILoggerFactory? loggerFactory = null)
+        {
+            ArgumentNullException.ThrowIfNull(worldClient);
+            if (loggerFactory != null)
+                return CreateCharacterInitNetworkClientComponent(worldClient, loggerFactory);
+            var logger = new ConsoleLogger<CharacterInitNetworkClientComponent>();
+            return new CharacterInitNetworkClientComponent(worldClient, logger);
+        }
+
         // Emote Agent
         public static IEmoteNetworkClientComponent CreateEmoteNetworkClientComponent(IWorldClient worldClient, ILoggerFactory loggerFactory)
         {

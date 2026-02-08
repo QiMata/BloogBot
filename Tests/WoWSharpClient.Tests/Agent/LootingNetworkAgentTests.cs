@@ -3,6 +3,7 @@ using Moq;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
+using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Tests.Agent
@@ -141,11 +142,39 @@ namespace WoWSharpClient.Tests.Agent
             // Act
             await _lootingAgent.CloseLootAsync();
 
-            // Assert
+            // Assert - CMSG_LOOT_RELEASE (1.12.1): ObjectGuid lootGuid (8) = 8 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_LOOT_RELEASE,
-                    It.Is<byte[]>(payload => payload.Length == 0), // Empty payload
+                    It.Is<byte[]>(payload => payload.Length == 8),
+                    It.IsAny<CancellationToken>()
+                ),
+                Times.Once
+            );
+        }
+
+        [Fact]
+        public async Task CloseLootAsync_WithOpenLootWindow_SendsLootTargetGuid()
+        {
+            // Arrange
+            ulong lootTargetGuid = 0x12345678;
+            _mockWorldClient
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            // Open loot window first to set _currentLootTarget
+            _lootingAgent.HandleLootWindowChanged(true, lootTargetGuid);
+
+            // Act
+            await _lootingAgent.CloseLootAsync();
+
+            // Assert - should send the loot target GUID
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    Opcode.CMSG_LOOT_RELEASE,
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 8 &&
+                        BitConverter.ToUInt64(payload, 0) == lootTargetGuid),
                     It.IsAny<CancellationToken>()
                 ),
                 Times.Once
@@ -167,15 +196,15 @@ namespace WoWSharpClient.Tests.Agent
             // Act
             await _lootingAgent.RollForLootAsync(lootGuid, itemSlot, rollType);
 
-            // Assert
+            // Assert - CMSG_LOOT_ROLL (1.12.1): ObjectGuid(8) + uint32 itemSlot(4) + uint8 rollType(1) = 13 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_LOOT_ROLL,
-                    It.Is<byte[]>(payload => 
-                        payload.Length == 10 && 
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 13 &&
                         BitConverter.ToUInt64(payload, 0) == lootGuid &&
-                        payload[8] == itemSlot &&
-                        payload[9] == (byte)rollType),
+                        BitConverter.ToUInt32(payload, 8) == (uint)itemSlot &&
+                        payload[12] == (byte)rollType),
                     It.IsAny<CancellationToken>()
                 ),
                 Times.Once
@@ -457,13 +486,13 @@ namespace WoWSharpClient.Tests.Agent
             // Act
             await _lootingAgent.RollForLootAsync(lootGuid, itemSlot, rollType);
 
-            // Assert
+            // Assert - CMSG_LOOT_ROLL (1.12.1): ObjectGuid(8) + uint32 itemSlot(4) + uint8 rollType(1) = 13 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_LOOT_ROLL,
-                    It.Is<byte[]>(payload => 
-                        payload.Length == 10 && 
-                        payload[9] == (byte)rollType),
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 13 &&
+                        payload[12] == (byte)rollType),
                     It.IsAny<CancellationToken>()
                 ),
                 Times.Once
@@ -612,6 +641,179 @@ namespace WoWSharpClient.Tests.Agent
             Assert.False(result.IsValid);
             Assert.Equal("Loot slot index is out of range", result.ErrorMessage);
         }
+
+        #region Group Loot and Master Loot Protocol Tests
+
+        [Fact]
+        public async Task AssignMasterLootAsync_ValidParameters_SendsCorrectPacket()
+        {
+            // Arrange
+            ulong lootTargetGuid = 0x12345678;
+            byte lootSlot = 2;
+            ulong targetPlayerGuid = 0xAABBCCDD;
+
+            _mockWorldClient
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            // Set up loot window and master looter state
+            _lootingAgent.HandleLootWindowChanged(true, lootTargetGuid);
+            _lootingAgent.HandleGroupLootMethodChanged(GroupLootMethod.MasterLoot, lootTargetGuid, ItemQuality.Uncommon);
+
+            // Act
+            await _lootingAgent.AssignMasterLootAsync(lootSlot, targetPlayerGuid);
+
+            // Assert - CMSG_LOOT_MASTER_GIVE (1.12.1): ObjectGuid lootGuid(8) + uint8 slotId(1) + ObjectGuid targetGuid(8) = 17 bytes
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    Opcode.CMSG_LOOT_MASTER_GIVE,
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 17 &&
+                        BitConverter.ToUInt64(payload, 0) == lootTargetGuid &&
+                        payload[8] == lootSlot &&
+                        BitConverter.ToUInt64(payload, 9) == targetPlayerGuid),
+                    It.IsAny<CancellationToken>()
+                ),
+                Times.Once
+            );
+        }
+
+        [Fact]
+        public async Task AssignMasterLootAsync_NotMasterLooter_ThrowsInvalidOperationException()
+        {
+            // Arrange - don't set up master looter state
+
+            // Act & Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => _lootingAgent.AssignMasterLootAsync(0, 0x12345678));
+        }
+
+        [Fact]
+        public async Task SetGroupLootMethodAsync_ValidMethod_SendsCorrectPacket()
+        {
+            // Arrange
+            var method = GroupLootMethod.RoundRobin;
+
+            _mockWorldClient
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await _lootingAgent.SetGroupLootMethodAsync(method);
+
+            // Assert - CMSG_LOOT_METHOD (1.12.1): uint32 method(4) + ObjectGuid masterGuid(8) + uint32 threshold(4) = 16 bytes
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    Opcode.CMSG_LOOT_METHOD,
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 16 &&
+                        BitConverter.ToUInt32(payload, 0) == (uint)method &&
+                        BitConverter.ToUInt64(payload, 4) == 0UL && // no master looter change
+                        BitConverter.ToUInt32(payload, 12) == (uint)ItemQuality.Uncommon), // default threshold
+                    It.IsAny<CancellationToken>()
+                ),
+                Times.Once
+            );
+        }
+
+        [Fact]
+        public async Task SetLootThresholdAsync_ValidThreshold_SendsCorrectPacket()
+        {
+            // Arrange
+            var threshold = ItemQuality.Rare;
+
+            _mockWorldClient
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await _lootingAgent.SetLootThresholdAsync(threshold);
+
+            // Assert - uses CMSG_LOOT_METHOD with current method preserved
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    Opcode.CMSG_LOOT_METHOD,
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 16 &&
+                        BitConverter.ToUInt32(payload, 0) == (uint)GroupLootMethod.FreeForAll && // default method
+                        BitConverter.ToUInt32(payload, 12) == (uint)threshold),
+                    It.IsAny<CancellationToken>()
+                ),
+                Times.Once
+            );
+        }
+
+        [Fact]
+        public async Task SetMasterLooterAsync_ValidGuid_SendsCorrectPacket()
+        {
+            // Arrange
+            ulong masterLooterGuid = 0xDEADBEEF;
+
+            _mockWorldClient
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await _lootingAgent.SetMasterLooterAsync(masterLooterGuid);
+
+            // Assert - CMSG_LOOT_METHOD with MasterLoot method and the master looter GUID
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    Opcode.CMSG_LOOT_METHOD,
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 16 &&
+                        BitConverter.ToUInt32(payload, 0) == (uint)GroupLootMethod.MasterLoot &&
+                        BitConverter.ToUInt64(payload, 4) == masterLooterGuid &&
+                        BitConverter.ToUInt32(payload, 12) == (uint)ItemQuality.Uncommon), // default threshold
+                    It.IsAny<CancellationToken>()
+                ),
+                Times.Once
+            );
+        }
+
+        [Fact]
+        public async Task ConfirmBindOnPickupAsync_Accept_DelegatesToLootItem()
+        {
+            // Arrange
+            byte lootSlot = 3;
+
+            _mockWorldClient
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await _lootingAgent.ConfirmBindOnPickupAsync(lootSlot, confirm: true);
+
+            // Assert - should delegate to LootItemAsync which sends CMSG_AUTOSTORE_LOOT_ITEM
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    Opcode.CMSG_AUTOSTORE_LOOT_ITEM,
+                    It.Is<byte[]>(payload => payload.Length == 1 && payload[0] == lootSlot),
+                    It.IsAny<CancellationToken>()
+                ),
+                Times.Once
+            );
+        }
+
+        [Fact]
+        public async Task ConfirmBindOnPickupAsync_Decline_DoesNotSendPacket()
+        {
+            // Arrange
+            _mockWorldClient
+                .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            // Act
+            await _lootingAgent.ConfirmBindOnPickupAsync(0, confirm: false);
+
+            // Assert - should not send any packet when declining
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()),
+                Times.Never
+            );
+        }
+
+        #endregion
 
         #region Legacy Method Tests
 

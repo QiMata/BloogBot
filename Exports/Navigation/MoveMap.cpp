@@ -173,9 +173,13 @@ namespace MMAP
 		string fileName = "";
 		getMapName(mapId, fileName);
 		FILE* file = fopen(fileName.c_str(), "rb");
+		if (!file)
+			return false;
 		dtNavMeshParams params;
 		size_t file_read = fread(&params, sizeof(dtNavMeshParams), 1, file);
 		fclose(file);
+		if (file_read != 1)
+			return false;
 
 		dtNavMesh* mesh = dtAllocNavMesh();
 		dtStatus dtResult = mesh->init(&params);
@@ -211,8 +215,11 @@ namespace MMAP
 		getTileName(mapId, x, y, fileName);
 
 		FILE* file = fopen(fileName.c_str(), "rb");
+		if (!file)
+			return false;
 		MmapTileHeader fileHeader;
 		size_t file_read = fread(&fileHeader, sizeof(MmapTileHeader), 1, file);
+		if (file_read != 1) { fclose(file); return false; }
 		unsigned char* data = (unsigned char*)dtAlloc(fileHeader.size, DT_ALLOC_PERM);
 		size_t result = fread(data, fileHeader.size, 1, file);
 		fclose(file);

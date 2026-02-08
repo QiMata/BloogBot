@@ -23,13 +23,16 @@ namespace WoWSharpClient.Handlers
 
                 switch (chatType)
                 {
+                    case ChatMsg.CHAT_MSG_MONSTER_SAY:
+                    case ChatMsg.CHAT_MSG_MONSTER_YELL:
                     case ChatMsg.CHAT_MSG_MONSTER_WHISPER:
+                    case ChatMsg.CHAT_MSG_MONSTER_EMOTE:
                     case ChatMsg.CHAT_MSG_RAID_BOSS_WHISPER:
                     case ChatMsg.CHAT_MSG_RAID_BOSS_EMOTE:
-                    case ChatMsg.CHAT_MSG_MONSTER_EMOTE:
+                        senderGuid = reader.ReadUInt64();
                         reader.ReadUInt32(); // senderNameLength, discard
                         senderName = ReaderUtils.ReadCString(reader);
-                        targetGuid = ReaderUtils.ReadPackedGuid(reader);
+                        targetGuid = reader.ReadUInt64();
                         break;
 
                     case ChatMsg.CHAT_MSG_SAY:
@@ -37,14 +40,6 @@ namespace WoWSharpClient.Handlers
                     case ChatMsg.CHAT_MSG_YELL:
                         senderGuid = reader.ReadUInt64();
                         reader.ReadUInt64(); // duplicate sender GUID, discard
-                        break;
-
-                    case ChatMsg.CHAT_MSG_MONSTER_SAY:
-                    case ChatMsg.CHAT_MSG_MONSTER_YELL:
-                        senderGuid = reader.ReadUInt64();
-                        reader.ReadUInt32(); // senderNameLength, discard
-                        senderName = ReaderUtils.ReadCString(reader);
-                        targetGuid = reader.ReadUInt64();
                         break;
 
                     case ChatMsg.CHAT_MSG_CHANNEL:

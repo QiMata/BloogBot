@@ -20,6 +20,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly List<uint> _availableTaxiNodes = [];
         private readonly Dictionary<uint, uint> _flightCosts = new();
         private bool _disposed;
+        private uint _currentNodeId;
 
         // Reactive opcode-backed observables
         private readonly IObservable<(ulong FlightMasterGuid, IReadOnlyList<uint> Nodes)> _taxiMapOpened;
@@ -95,6 +96,9 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <inheritdoc />
         public IReadOnlyList<uint> AvailableTaxiNodes => _availableTaxiNodes.AsReadOnly();
+
+        /// <summary>Gets the current (nearest) taxi node ID from the last SMSG_SHOWTAXINODES.</summary>
+        public uint? CurrentNodeId => _currentNodeId > 0 ? _currentNodeId : null;
 
         // Explicit interface implementation to expose observables
         IObservable<(ulong FlightMasterGuid, IReadOnlyList<uint> Nodes)> IFlightMasterNetworkClientComponent.TaxiMapOpened => _taxiMapOpened;
@@ -344,8 +348,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                     throw new InvalidOperationException($"Destination node {destinationNodeId} is not available");
                 }
 
-                uint sourceNodeId = 0; // TODO: determine from game state
-                await ActivateFlightAsync(flightMasterGuid, sourceNodeId, destinationNodeId, cancellationToken);
+                if (_currentNodeId == 0)
+                {
+                    throw new InvalidOperationException("Source taxi node not determined. Ensure SMSG_SHOWTAXINODES was received.");
+                }
+                await ActivateFlightAsync(flightMasterGuid, _currentNodeId, destinationNodeId, cancellationToken);
 
                 _logger.LogInformation("Quick flight initiated to node {DestinationNode} via flight master: {FlightMasterGuid:X}", destinationNodeId, flightMasterGuid);
             }
@@ -426,40 +433,73 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #region Parsing Helpers
 
-        private static (ulong FlightMasterGuid, IReadOnlyList<uint> Nodes) ParseShowTaxiNodes(ReadOnlyMemory<byte> payload)
+        /// <summary>
+        /// Parses SMSG_SHOWTAXINODES payload.
+        /// MaNGOS format: uint32(1) + ObjectGuid(8) + uint32(curloc) + bitmask[].
+        /// Each uint32 in bitmask represents 32 taxi nodes as bits.
+        /// </summary>
+        public static (ulong FlightMasterGuid, uint CurrentNodeId, IReadOnlyList<uint> Nodes) ParseShowTaxiNodesPacket(ReadOnlyMemory<byte> payload)
         {
-            // Best-effort parsing: payload format may vary; assume first 8 bytes GUID, then count + list of uints
             try
             {
-                ulong guid = payload.Length >= 8 ? BitConverter.ToUInt64(payload.Span[0..8]) : 0UL;
-                int offset = 8;
+                var span = payload.Span;
+                if (span.Length < 16) return (0UL, 0, Array.Empty<uint>());
+
+                int offset = 0;
+                // uint32 "show" flag (always 1), skip
+                offset += 4;
+                // ObjectGuid(8) - flight master GUID
+                ulong guid = BitConverter.ToUInt64(span.Slice(offset, 8));
+                offset += 8;
+                // uint32 current (nearest) taxi node ID
+                uint currentNodeId = BitConverter.ToUInt32(span.Slice(offset, 4));
+                offset += 4;
+
+                // Remaining bytes are the taxi bitmask (AppendTaximaskTo)
                 List<uint> nodes = new();
-                if (payload.Length >= offset + 4)
+                int bitmaskIndex = 0;
+                while (offset + 4 <= span.Length)
                 {
-                    uint count = BitConverter.ToUInt32(payload.Span[offset..(offset + 4)]);
+                    uint mask = BitConverter.ToUInt32(span.Slice(offset, 4));
                     offset += 4;
-                    for (int i = 0; i < count && payload.Length >= offset + 4; i++)
+                    for (int bit = 0; bit < 32; bit++)
                     {
-                        nodes.Add(BitConverter.ToUInt32(payload.Span[offset..(offset + 4)]));
-                        offset += 4;
+                        if ((mask & (1u << bit)) != 0)
+                        {
+                            uint nodeId = (uint)(bitmaskIndex * 32 + bit);
+                            if (nodeId > 0) // node 0 is not a valid taxi node
+                                nodes.Add(nodeId);
+                        }
                     }
+                    bitmaskIndex++;
                 }
-                return (guid, nodes.AsReadOnly());
+
+                return (guid, currentNodeId, nodes.AsReadOnly());
             }
             catch
             {
-                return (0UL, Array.Empty<uint>());
+                return (0UL, 0, Array.Empty<uint>());
             }
         }
 
-        private static (uint SourceNodeId, uint DestinationNodeId, uint Cost) ParseActivateTaxiReply(ReadOnlyMemory<byte> payload)
+        private (ulong FlightMasterGuid, IReadOnlyList<uint> Nodes) ParseShowTaxiNodes(ReadOnlyMemory<byte> payload)
+        {
+            var (guid, curNode, nodes) = ParseShowTaxiNodesPacket(payload);
+            _currentNodeId = curNode;
+            return (guid, nodes);
+        }
+
+        /// <summary>
+        /// Parses SMSG_ACTIVATETAXIREPLY payload.
+        /// MaNGOS format: uint32 result code (0=OK, 1=ServerError, 2=NoPath, 3=NoMoney, etc.).
+        /// </summary>
+        public static (uint SourceNodeId, uint DestinationNodeId, uint Cost) ParseActivateTaxiReply(ReadOnlyMemory<byte> payload)
         {
             try
             {
-                uint src = payload.Length >= 4 ? BitConverter.ToUInt32(payload.Span[0..4]) : 0u;
-                uint dst = payload.Length >= 8 ? BitConverter.ToUInt32(payload.Span[4..8]) : 0u;
-                uint cost = payload.Length >= 12 ? BitConverter.ToUInt32(payload.Span[8..12]) : 0u;
-                return (src, dst, cost);
+                // MaNGOS only sends uint32 result code; map it to SourceNodeId for compatibility
+                uint result = payload.Length >= 4 ? BitConverter.ToUInt32(payload.Span[0..4]) : 0u;
+                return (result, 0u, 0u);
             }
             catch
             {
@@ -467,13 +507,19 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        private static (uint NodeId, byte Status) ParseTaxiNodeStatus(ReadOnlyMemory<byte> payload)
+        /// <summary>
+        /// Parses SMSG_TAXINODE_STATUS payload.
+        /// MaNGOS format: ObjectGuid(8) + uint8(knownNode) = 9 bytes.
+        /// </summary>
+        public static (uint NodeId, byte Status) ParseTaxiNodeStatus(ReadOnlyMemory<byte> payload)
         {
             try
             {
-                uint node = payload.Length >= 4 ? BitConverter.ToUInt32(payload.Span[0..4]) : 0u;
-                byte status = payload.Length >= 5 ? payload.Span[4] : (byte)0;
-                return (node, status);
+                var span = payload.Span;
+                // ObjectGuid(8) - flight master GUID (store lower 32 bits as NodeId for compat)
+                uint nodeCompat = span.Length >= 4 ? BitConverter.ToUInt32(span[0..4]) : 0u;
+                byte status = span.Length >= 9 ? span[8] : (byte)0;
+                return (nodeCompat, status);
             }
             catch
             {

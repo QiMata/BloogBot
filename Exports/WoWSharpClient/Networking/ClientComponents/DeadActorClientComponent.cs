@@ -20,6 +20,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private bool _isDead;
         private bool _isGhost;
         private bool _hasResurrectionRequest;
+        private ulong _resurrectorGuid;
         private (float X, float Y, float Z)? _corpseLocation;
         private DateTime? _spiritHealerResurrectionTime;
         private bool _disposed;
@@ -98,7 +99,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Attempting to resurrect at corpse");
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_RECLAIM_CORPSE, Array.Empty<byte>(), cancellationToken);
+                // CMSG_RECLAIM_CORPSE (1.12.1): ObjectGuid playerGuid (8)
+                // Server validates this is the player's own GUID.
+                // Send 0 — most servers infer the player from the session.
+                var payload = new byte[8];
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_RECLAIM_CORPSE, payload, cancellationToken);
 
                 _logger.LogInformation("Corpse resurrection request sent");
             }
@@ -119,10 +125,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Accepting resurrection request");
+                _logger.LogDebug("Accepting resurrection request from {ResurrectorGuid:X}", _resurrectorGuid);
 
-                var payload = new byte[1];
-                payload[0] = 1; // Accept flag
+                // CMSG_RESURRECT_RESPONSE (1.12.1): ObjectGuid resurrectorGuid (8) + uint8 status (1) = 9 bytes
+                var payload = new byte[9];
+                BitConverter.GetBytes(_resurrectorGuid).CopyTo(payload, 0);
+                payload[8] = 1; // Accept
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_RESURRECT_RESPONSE, payload, cancellationToken);
 
@@ -146,10 +154,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Declining resurrection request");
+                _logger.LogDebug("Declining resurrection request from {ResurrectorGuid:X}", _resurrectorGuid);
 
-                var payload = new byte[1];
-                payload[0] = 0; // Decline flag
+                // CMSG_RESURRECT_RESPONSE (1.12.1): ObjectGuid resurrectorGuid (8) + uint8 status (1) = 9 bytes
+                var payload = new byte[9];
+                BitConverter.GetBytes(_resurrectorGuid).CopyTo(payload, 0);
+                payload[8] = 0; // Decline
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_RESURRECT_RESPONSE, payload, cancellationToken);
 
@@ -217,16 +227,21 @@ namespace WoWSharpClient.Networking.ClientComponents
         }
 
         /// <inheritdoc />
-        public async Task QueryAreaSpiritHealersAsync(CancellationToken cancellationToken = default)
+        public async Task QueryAreaSpiritHealersAsync(ulong spiritHealerGuid, CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Querying area spirit healers");
+                _logger.LogDebug("Querying area spirit healer: {SpiritHealerGuid:X}", spiritHealerGuid);
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AREA_SPIRIT_HEALER_QUERY, Array.Empty<byte>(), cancellationToken);
+                // CMSG_AREA_SPIRIT_HEALER_QUERY (1.12.1): ObjectGuid spiritHealerGuid (8)
+                // Note: This opcode only works inside battlegrounds.
+                var payload = new byte[8];
+                BitConverter.GetBytes(spiritHealerGuid).CopyTo(payload, 0);
 
-                _logger.LogInformation("Area spirit healer query sent");
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AREA_SPIRIT_HEALER_QUERY, payload, cancellationToken);
+
+                _logger.LogInformation("Area spirit healer query sent for: {SpiritHealerGuid:X}", spiritHealerGuid);
             }
             catch (Exception ex)
             {
@@ -357,9 +372,10 @@ namespace WoWSharpClient.Networking.ClientComponents
                 // Step 4: If still dead and spirit healer is allowed, use spirit healer
                 if (_isDead && allowSpiritHealer)
                 {
-                    _logger.LogDebug("Corpse resurrection failed, querying for spirit healers");
-                    await QueryAreaSpiritHealersAsync(cancellationToken);
-                    await Task.Delay(1000, cancellationToken);
+                    _logger.LogDebug("Corpse resurrection failed, spirit healer fallback requested");
+                    // Area spirit healer query requires a specific GUID and only works in BGs.
+                    // For open-world, use ResurrectWithSpiritHealerAsync with a known spirit healer GUID.
+                    _logger.LogWarning("Auto spirit healer not available — requires specific spirit healer GUID");
                 }
 
                 _logger.LogInformation("Automatic death handling completed");
@@ -398,6 +414,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void HandleResurrectionRequest(ulong resurrectorGuid, string resurrectorName)
         {
             _hasResurrectionRequest = true;
+            _resurrectorGuid = resurrectorGuid;
             _logger.LogDebug("Resurrection request received from: {ResurrectorName} ({ResurrectorGuid:X})", resurrectorName, resurrectorGuid);
         }
 

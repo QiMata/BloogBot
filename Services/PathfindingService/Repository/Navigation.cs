@@ -20,10 +20,6 @@ namespace PathfindingService.Repository
         // ===============================
         // PUBLIC METHODS
         // ===============================
-        static Navigation()
-        {
-
-        }
 
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
         {

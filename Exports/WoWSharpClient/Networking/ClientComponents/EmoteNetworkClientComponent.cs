@@ -149,11 +149,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _isEmoting = true;
                 _logger.LogDebug("Performing text emote: {TextEmote} on target: {Target}", textEmote, targetGuid?.ToString("X") ?? "none");
 
-                // Create CMSG_TEXT_EMOTE packet
-                // Packet structure: uint32 textEmoteId, uint64 targetGuid
-                var packet = new byte[12];
+                // CMSG_TEXT_EMOTE: uint32 textEmoteId + uint32 emoteNum + uint64 targetGuid = 16 bytes
+                var packet = new byte[16];
                 BitConverter.GetBytes((uint)textEmote).CopyTo(packet, 0);
-                BitConverter.GetBytes(targetGuid ?? 0).CopyTo(packet, 4);
+                BitConverter.GetBytes((uint)0).CopyTo(packet, 4); // emoteNum (server resolves animation from EmotesText.dbc)
+                BitConverter.GetBytes(targetGuid ?? 0).CopyTo(packet, 8);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_TEXT_EMOTE, packet, cancellationToken);
 
@@ -346,14 +346,20 @@ namespace WoWSharpClient.Networking.ClientComponents
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
             => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
+        /// <summary>
+        /// Parses SMSG_EMOTE payload.
+        /// MaNGOS format: uint32 emoteId + ObjectGuid(8) = 12 bytes.
+        /// </summary>
         private EmoteData ParseSmsgEmote(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
+                // MaNGOS format: uint32 emoteId + ObjectGuid(8) = 12 bytes
                 uint emoteId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0u;
+                ulong sourceGuid = span.Length >= 12 ? BitConverter.ToUInt64(span.Slice(4, 8)) : 0UL;
                 string name = GetEmoteName((Emote)emoteId);
-                return new EmoteData(emoteId, name, null, null, EmoteType.Animated, DateTime.UtcNow);
+                return new EmoteData(emoteId, name, sourceGuid > 0 ? sourceGuid : null, null, EmoteType.Animated, DateTime.UtcNow);
             }
             catch (Exception ex)
             {
@@ -362,28 +368,31 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// Parses SMSG_TEXT_EMOTE payload.
+        /// MaNGOS format: ObjectGuid(8) + uint32 textEmoteId + uint32 emoteNum + uint32 nameLen + name[].
+        /// </summary>
         private EmoteData ParseSmsgTextEmote(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                // Best-effort: many cores use [uint64 sourceGuid][uint32 textEmote][uint32 emoteNum...]
-                uint emoteId;
-                if (span.Length >= 12)
+                // MaNGOS format: ObjectGuid(8) + uint32 textEmoteId + uint32 emoteNum + uint32 nameLen + name[]
+                ulong sourceGuid = span.Length >= 8 ? BitConverter.ToUInt64(span[..8]) : 0UL;
+                uint emoteId = span.Length >= 12 ? BitConverter.ToUInt32(span.Slice(8, 4)) : 0u;
+                // emoteNum at offset 12 (uint32) - animation ID, informational only
+                string? targetName = null;
+                if (span.Length >= 20)
                 {
-                    emoteId = BitConverter.ToUInt32(span.Slice(8, 4));
-                }
-                else if (span.Length >= 4)
-                {
-                    emoteId = BitConverter.ToUInt32(span[..4]);
-                }
-                else
-                {
-                    emoteId = 0u;
+                    uint nameLen = BitConverter.ToUInt32(span.Slice(16, 4));
+                    if (nameLen > 0 && span.Length >= 20 + (int)nameLen)
+                    {
+                        targetName = System.Text.Encoding.UTF8.GetString(span.Slice(20, (int)nameLen));
+                    }
                 }
 
                 string name = (emoteId != 0) ? GetTextEmoteName((TextEmote)emoteId) : "Unknown";
-                return new EmoteData(emoteId, name, null, null, EmoteType.Text, DateTime.UtcNow);
+                return new EmoteData(emoteId, name, sourceGuid > 0 ? sourceGuid : null, targetName, EmoteType.Text, DateTime.UtcNow);
             }
             catch (Exception ex)
             {

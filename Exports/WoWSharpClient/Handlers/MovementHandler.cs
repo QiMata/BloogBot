@@ -62,17 +62,17 @@ namespace WoWSharpClient.Handlers
                             break;
                         case Opcode.SMSG_FORCE_RUN_SPEED_CHANGE:
                             WoWSharpEventEmitter.Instance.FireOnForceRunSpeedChange(
-                                ParseGuidCounterPacket(reader)
+                                ParseGuidCounterSpeedPacket(reader)
                             );
                             break;
                         case Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE:
                             WoWSharpEventEmitter.Instance.FireOnForceRunBackSpeedChange(
-                                ParseGuidCounterPacket(reader)
+                                ParseGuidCounterSpeedPacket(reader)
                             );
                             break;
                         case Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE:
                             WoWSharpEventEmitter.Instance.FireOnForceSwimSpeedChange(
-                                ParseGuidCounterPacket(reader)
+                                ParseGuidCounterSpeedPacket(reader)
                             );
                             break;
                         case Opcode.SMSG_MOVE_KNOCK_BACK:
@@ -203,6 +203,15 @@ namespace WoWSharpClient.Handlers
             var counter = reader.ReadUInt32();
 
             return new(guid, counter);
+        }
+
+        private static RequiresAcknowledgementArgs ParseGuidCounterSpeedPacket(BinaryReader reader)
+        {
+            var guid = ReaderUtils.ReadPackedGuid(reader);
+            var counter = reader.ReadUInt32();
+            var speed = reader.ReadSingle();
+
+            return new(guid, counter, speed);
         }
 
         private static ulong ParseMessageMove(BinaryReader reader)

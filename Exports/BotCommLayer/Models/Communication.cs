@@ -25,71 +25,76 @@ namespace Communication {
       byte[] descriptorData = global::System.Convert.FromBase64String(
           string.Concat(
             "ChNjb21tdW5pY2F0aW9uLnByb3RvEg1jb21tdW5pY2F0aW9uGgpnYW1lLnBy",
-            "b3RvIqABCgxBc3luY1JlcXVlc3QSCgoCaWQYASABKAQSPAoRYWN0aXZpdHlf",
-            "c25hcHNob3QYAiABKAsyHy5jb21tdW5pY2F0aW9uLkFjdGl2aXR5U25hcHNo",
-            "b3RIABI5CgxzdGF0ZV9jaGFuZ2UYAyABKAsyIS5jb21tdW5pY2F0aW9uLlN0",
-            "YXRlQ2hhbmdlUmVxdWVzdEgAQgsKCXBhcmFtZXRlciKpAQoNQWN0aW9uTWVz",
-            "c2FnZRIuCgthY3Rpb25fdHlwZRgBIAEoDjIZLmNvbW11bmljYXRpb24uQWN0",
-            "aW9uVHlwZRIzCgpwYXJhbWV0ZXJzGAIgAygLMh8uY29tbXVuaWNhdGlvbi5S",
-            "ZXF1ZXN0UGFyYW1ldGVyEjMKDGFjdGlvblJlc3VsdBgDIAEoDjIdLmNvbW11",
-            "bmljYXRpb24uUmVzcG9uc2VSZXN1bHQiOgoJQWN0aW9uTWFwEi0KB2FjdGlv",
-            "bnMYASADKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2UihQEKElN0",
-            "YXRlQ2hhbmdlUmVxdWVzdBIzCgtjaGFuZ2VfdHlwZRgBIAEoDjIeLmNvbW11",
-            "bmljYXRpb24uU3RhdGVDaGFuZ2VUeXBlEjoKEXJlcXVlc3RfcGFyYW1ldGVy",
-            "GAIgASgLMh8uY29tbXVuaWNhdGlvbi5SZXF1ZXN0UGFyYW1ldGVyIkYKE1N0",
-            "YXRlQ2hhbmdlUmVzcG9uc2USLwoIcmVzcG9uc2UYASABKA4yHS5jb21tdW5p",
-            "Y2F0aW9uLlJlc3BvbnNlUmVzdWx0Iq4BChNDaGFyYWN0ZXJEZWZpbml0aW9u",
-            "EhQKDGFjY291bnRfbmFtZRgBIAEoCRIQCghvcGVubmVzcxgCIAEoAhIZChFj",
-            "b25zY2llbnRpb3VzbmVzcxgDIAEoAhIUCgxleHRyYXZlcnNpb24YBCABKAIS",
-            "FQoNYWdyZWVhYmxlbmVzcxgFIAEoAhITCgtuZXVyb3RpY2lzbRgGIAEoAhIS",
-            "CgpzaG91bGRfcnVuGAcgASgIInkKEFJlcXVlc3RQYXJhbWV0ZXISFQoLZmxv",
-            "YXRfcGFyYW0YASABKAJIABITCglpbnRfcGFyYW0YAiABKAVIABIUCgpsb25n",
-            "X3BhcmFtGAMgASgDSAASFgoMc3RyaW5nX3BhcmFtGAQgASgJSABCCwoJcGFy",
-            "YW1ldGVyIpYCChBBY3Rpdml0eVNuYXBzaG90EhEKCXRpbWVzdGFtcBgBIAEo",
-            "DRITCgthY2NvdW50TmFtZRgCIAEoCRIfCgZwbGF5ZXIYAyABKAsyDy5nYW1l",
-            "LldvV1BsYXllchI0Cg5wcmV2aW91c0FjdGlvbhgEIAEoCzIcLmNvbW11bmlj",
-            "YXRpb24uQWN0aW9uTWVzc2FnZRIzCg1jdXJyZW50QWN0aW9uGAUgASgLMhwu",
-            "Y29tbXVuaWNhdGlvbi5BY3Rpb25NZXNzYWdlEioKDW5lYXJieU9iamVjdHMY",
-            "BiADKAsyEy5nYW1lLldvV0dhbWVPYmplY3QSIgoLbmVhcmJ5VW5pdHMYByAD",
-            "KAsyDS5nYW1lLldvV1VuaXQqmQgKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggK",
-            "BEdPVE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBAD",
-            "EhQKEFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1E",
-            "RUNMSU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRF",
-            "X1FVRVNUEAgSDwoLVFJBSU5fU0tJTEwQCRIQCgxUUkFJTl9UQUxFTlQQChIP",
-            "CgtPRkZFUl9UUkFERRALEg4KCk9GRkVSX0dPTEQQDBIOCgpPRkZFUl9JVEVN",
-            "EA0SEAoMQUNDRVBUX1RSQURFEA4SEQoNREVDTElORV9UUkFERRAPEhEKDUVO",
-            "Q0hBTlRfVFJBREUQEBISCg5MT0NLUElDS19UUkFERRAREhIKDlBST01PVEVf",
-            "TEVBREVSEBISFQoRUFJPTU9URV9BU1NJU1RBTlQQExIYChRQUk9NT1RFX0xP",
-            "T1RfTUFOQUdFUhAUEhIKDlNFVF9HUk9VUF9MT09UEBUSDwoLQVNTSUdOX0xP",
-            "T1QQFhISCg5MT09UX1JPTExfTkVFRBAXEhMKD0xPT1RfUk9MTF9HUkVFRBAY",
-            "Eg0KCUxPT1RfUEFTUxAZEhUKEVNFTkRfR1JPVVBfSU5WSVRFEBoSFwoTQUND",
-            "RVBUX0dST1VQX0lOVklURRAbEhgKFERFQ0xJTkVfR1JPVVBfSU5WSVRFEBwS",
-            "DwoLS0lDS19QTEFZRVIQHRIPCgtMRUFWRV9HUk9VUBAeEhEKDURJU0JBTkRf",
-            "R1JPVVAQHxIWChJTVEFSVF9NRUxFRV9BVFRBQ0sQIBIXChNTVEFSVF9SQU5H",
-            "RURfQVRUQUNLECESFQoRU1RBUlRfV0FORF9BVFRBQ0sQIhIPCgtTVE9QX0FU",
-            "VEFDSxAjEg4KCkNBU1RfU1BFTEwQJBINCglTVE9QX0NBU1QQJRIMCghVU0Vf",
-            "SVRFTRAmEg4KCkVRVUlQX0lURU0QJxIQCgxVTkVRVUlQX0lURU0QKBIQCgxE",
-            "RVNUUk9ZX0lURU0QKRINCglNT1ZFX0lURU0QKhIPCgtTUExJVF9TVEFDSxAr",
-            "EgwKCEJVWV9JVEVNECwSEAoMQlVZQkFDS19JVEVNEC0SDQoJU0VMTF9JVEVN",
-            "EC4SDwoLUkVQQUlSX0lURU0QLxIUChBSRVBBSVJfQUxMX0lURU1TEDASEAoM",
-            "RElTTUlTU19CVUZGEDESDQoJUkVTVVJSRUNUEDISCQoFQ1JBRlQQMxIJCgVM",
-            "T0dJThA0EgoKBkxPR09VVBA1EhQKEENSRUFURV9DSEFSQUNURVIQNhIUChBE",
-            "RUxFVEVfQ0hBUkFDVEVSEDcSDwoLRU5URVJfV09STEQQOCp2Cg9TdGF0ZUNo",
-            "YW5nZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNTEAESFQoRQ09OU0NJRU5U",
-            "SU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIRCg1BR1JFRUFCTEVORVNT",
-            "EAQSDwoLTkVVUk9USUNJU00QBSo7Cg5SZXNwb25zZVJlc3VsdBILCgdTVUND",
-            "RVNTEAASCwoHRkFJTFVSRRABEg8KC0lOX1BST0dSRVNTEAJiBnByb3RvMw=="));
+            "b3RvIqMBCgxBc3luY1JlcXVlc3QSCgoCaWQYASABKAQSPwoRYWN0aXZpdHlf",
+            "c25hcHNob3QYAiABKAsyIi5jb21tdW5pY2F0aW9uLldvV0FjdGl2aXR5U25h",
+            "cHNob3RIABI5CgxzdGF0ZV9jaGFuZ2UYAyABKAsyIS5jb21tdW5pY2F0aW9u",
+            "LlN0YXRlQ2hhbmdlUmVxdWVzdEgAQgsKCXBhcmFtZXRlciKpAQoNQWN0aW9u",
+            "TWVzc2FnZRIuCgthY3Rpb25fdHlwZRgBIAEoDjIZLmNvbW11bmljYXRpb24u",
+            "QWN0aW9uVHlwZRIzCgpwYXJhbWV0ZXJzGAIgAygLMh8uY29tbXVuaWNhdGlv",
+            "bi5SZXF1ZXN0UGFyYW1ldGVyEjMKDGFjdGlvblJlc3VsdBgDIAEoDjIdLmNv",
+            "bW11bmljYXRpb24uUmVzcG9uc2VSZXN1bHQiOgoJQWN0aW9uTWFwEi0KB2Fj",
+            "dGlvbnMYASADKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2UihQEK",
+            "ElN0YXRlQ2hhbmdlUmVxdWVzdBIzCgtjaGFuZ2VfdHlwZRgBIAEoDjIeLmNv",
+            "bW11bmljYXRpb24uU3RhdGVDaGFuZ2VUeXBlEjoKEXJlcXVlc3RfcGFyYW1l",
+            "dGVyGAIgASgLMh8uY29tbXVuaWNhdGlvbi5SZXF1ZXN0UGFyYW1ldGVyIkYK",
+            "E1N0YXRlQ2hhbmdlUmVzcG9uc2USLwoIcmVzcG9uc2UYASABKA4yHS5jb21t",
+            "dW5pY2F0aW9uLlJlc3BvbnNlUmVzdWx0IuEBChNDaGFyYWN0ZXJEZWZpbml0",
+            "aW9uEhQKDGFjY291bnRfbmFtZRgBIAEoCRIQCghvcGVubmVzcxgCIAEoAhIZ",
+            "ChFjb25zY2llbnRpb3VzbmVzcxgDIAEoAhIUCgxleHRyYXZlcnNpb24YBCAB",
+            "KAISFQoNYWdyZWVhYmxlbmVzcxgFIAEoAhITCgtuZXVyb3RpY2lzbRgGIAEo",
+            "AhISCgpzaG91bGRfcnVuGAcgASgIEjEKC3J1bm5lcl90eXBlGAggASgOMhwu",
+            "Y29tbXVuaWNhdGlvbi5Cb3RSdW5uZXJUeXBlInkKEFJlcXVlc3RQYXJhbWV0",
+            "ZXISFQoLZmxvYXRfcGFyYW0YASABKAJIABITCglpbnRfcGFyYW0YAiABKAVI",
+            "ABIUCgpsb25nX3BhcmFtGAMgASgDSAASFgoMc3RyaW5nX3BhcmFtGAQgASgJ",
+            "SABCCwoJcGFyYW1ldGVyIu8CChNXb1dBY3Rpdml0eVNuYXBzaG90EhEKCXRp",
+            "bWVzdGFtcBgBIAEoDRITCgthY2NvdW50TmFtZRgCIAEoCRIfCgZwbGF5ZXIY",
+            "AyABKAsyDy5nYW1lLldvV1BsYXllchI0Cg5wcmV2aW91c0FjdGlvbhgEIAEo",
+            "CzIcLmNvbW11bmljYXRpb24uQWN0aW9uTWVzc2FnZRIzCg1jdXJyZW50QWN0",
+            "aW9uGAUgASgLMhwuY29tbXVuaWNhdGlvbi5BY3Rpb25NZXNzYWdlEioKDW5l",
+            "YXJieU9iamVjdHMYBiADKAsyEy5nYW1lLldvV0dhbWVPYmplY3QSIgoLbmVh",
+            "cmJ5VW5pdHMYByADKAsyDS5nYW1lLldvV1VuaXQSFQoNY2hhcmFjdGVyTmFt",
+            "ZRgIIAEoCRITCgtzY3JlZW5TdGF0ZRgJIAEoCRIoCgxtb3ZlbWVudERhdGEY",
+            "CiABKAsyEi5nYW1lLk1vdmVtZW50RGF0YSqZCAoKQWN0aW9uVHlwZRIICgRX",
+            "QUlUEAASCAoER09UTxABEhEKDUlOVEVSQUNUX1dJVEgQAhIRCg1TRUxFQ1Rf",
+            "R09TU0lQEAMSFAoQU0VMRUNUX1RBWElfTk9ERRAEEhAKDEFDQ0VQVF9RVUVT",
+            "VBAFEhEKDURFQ0xJTkVfUVVFU1QQBhIRCg1TRUxFQ1RfUkVXQVJEEAcSEgoO",
+            "Q09NUExFVEVfUVVFU1QQCBIPCgtUUkFJTl9TS0lMTBAJEhAKDFRSQUlOX1RB",
+            "TEVOVBAKEg8KC09GRkVSX1RSQURFEAsSDgoKT0ZGRVJfR09MRBAMEg4KCk9G",
+            "RkVSX0lURU0QDRIQCgxBQ0NFUFRfVFJBREUQDhIRCg1ERUNMSU5FX1RSQURF",
+            "EA8SEQoNRU5DSEFOVF9UUkFERRAQEhIKDkxPQ0tQSUNLX1RSQURFEBESEgoO",
+            "UFJPTU9URV9MRUFERVIQEhIVChFQUk9NT1RFX0FTU0lTVEFOVBATEhgKFFBS",
+            "T01PVEVfTE9PVF9NQU5BR0VSEBQSEgoOU0VUX0dST1VQX0xPT1QQFRIPCgtB",
+            "U1NJR05fTE9PVBAWEhIKDkxPT1RfUk9MTF9ORUVEEBcSEwoPTE9PVF9ST0xM",
+            "X0dSRUVEEBgSDQoJTE9PVF9QQVNTEBkSFQoRU0VORF9HUk9VUF9JTlZJVEUQ",
+            "GhIXChNBQ0NFUFRfR1JPVVBfSU5WSVRFEBsSGAoUREVDTElORV9HUk9VUF9J",
+            "TlZJVEUQHBIPCgtLSUNLX1BMQVlFUhAdEg8KC0xFQVZFX0dST1VQEB4SEQoN",
+            "RElTQkFORF9HUk9VUBAfEhYKElNUQVJUX01FTEVFX0FUVEFDSxAgEhcKE1NU",
+            "QVJUX1JBTkdFRF9BVFRBQ0sQIRIVChFTVEFSVF9XQU5EX0FUVEFDSxAiEg8K",
+            "C1NUT1BfQVRUQUNLECMSDgoKQ0FTVF9TUEVMTBAkEg0KCVNUT1BfQ0FTVBAl",
+            "EgwKCFVTRV9JVEVNECYSDgoKRVFVSVBfSVRFTRAnEhAKDFVORVFVSVBfSVRF",
+            "TRAoEhAKDERFU1RST1lfSVRFTRApEg0KCU1PVkVfSVRFTRAqEg8KC1NQTElU",
+            "X1NUQUNLECsSDAoIQlVZX0lURU0QLBIQCgxCVVlCQUNLX0lURU0QLRINCglT",
+            "RUxMX0lURU0QLhIPCgtSRVBBSVJfSVRFTRAvEhQKEFJFUEFJUl9BTExfSVRF",
+            "TVMQMBIQCgxESVNNSVNTX0JVRkYQMRINCglSRVNVUlJFQ1QQMhIJCgVDUkFG",
+            "VBAzEgkKBUxPR0lOEDQSCgoGTE9HT1VUEDUSFAoQQ1JFQVRFX0NIQVJBQ1RF",
+            "UhA2EhQKEERFTEVURV9DSEFSQUNURVIQNxIPCgtFTlRFUl9XT1JMRBA4Ki8K",
+            "DUJvdFJ1bm5lclR5cGUSDgoKRk9SRUdST1VORBAAEg4KCkJBQ0tHUk9VTkQQ",
+            "ASp2Cg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNTEAES",
+            "FQoRQ09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIRCg1B",
+            "R1JFRUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00QBSo7Cg5SZXNwb25zZVJl",
+            "c3VsdBILCgdTVUNDRVNTEAASCwoHRkFJTFVSRRABEg8KC0lOX1BST0dSRVNT",
+            "EAJiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
-          new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), }, null, new pbr::GeneratedClrTypeInfo[] {
+          new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), }, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.AsyncRequest), global::Communication.AsyncRequest.Parser, new[]{ "Id", "ActivitySnapshot", "StateChange" }, new[]{ "Parameter" }, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionMessage), global::Communication.ActionMessage.Parser, new[]{ "ActionType", "Parameters", "ActionResult" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionMap), global::Communication.ActionMap.Parser, new[]{ "Actions" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeRequest), global::Communication.StateChangeRequest.Parser, new[]{ "ChangeType", "RequestParameter" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActivitySnapshot), global::Communication.ActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData" }, null, null, null, null)
           }));
     }
     #endregion
@@ -154,6 +159,17 @@ namespace Communication {
     [pbr::OriginalName("CREATE_CHARACTER")] CreateCharacter = 54,
     [pbr::OriginalName("DELETE_CHARACTER")] DeleteCharacter = 55,
     [pbr::OriginalName("ENTER_WORLD")] EnterWorld = 56,
+  }
+
+  public enum BotRunnerType {
+    /// <summary>
+    /// Inject into existing WoW process (DLL injection)
+    /// </summary>
+    [pbr::OriginalName("FOREGROUND")] Foreground = 0,
+    /// <summary>
+    /// Headless bot runner (no WoW client)
+    /// </summary>
+    [pbr::OriginalName("BACKGROUND")] Background = 1,
   }
 
   public enum StateChangeType {
@@ -244,8 +260,8 @@ namespace Communication {
     public const int ActivitySnapshotFieldNumber = 2;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public global::Communication.ActivitySnapshot ActivitySnapshot {
-      get { return parameterCase_ == ParameterOneofCase.ActivitySnapshot ? (global::Communication.ActivitySnapshot) parameter_ : null; }
+    public global::Communication.WoWActivitySnapshot ActivitySnapshot {
+      get { return parameterCase_ == ParameterOneofCase.ActivitySnapshot ? (global::Communication.WoWActivitySnapshot) parameter_ : null; }
       set {
         parameter_ = value;
         parameterCase_ = value == null ? ParameterOneofCase.None : ParameterOneofCase.ActivitySnapshot;
@@ -404,7 +420,7 @@ namespace Communication {
       switch (other.ParameterCase) {
         case ParameterOneofCase.ActivitySnapshot:
           if (ActivitySnapshot == null) {
-            ActivitySnapshot = new global::Communication.ActivitySnapshot();
+            ActivitySnapshot = new global::Communication.WoWActivitySnapshot();
           }
           ActivitySnapshot.MergeFrom(other.ActivitySnapshot);
           break;
@@ -440,7 +456,7 @@ namespace Communication {
             break;
           }
           case 18: {
-            global::Communication.ActivitySnapshot subBuilder = new global::Communication.ActivitySnapshot();
+            global::Communication.WoWActivitySnapshot subBuilder = new global::Communication.WoWActivitySnapshot();
             if (parameterCase_ == ParameterOneofCase.ActivitySnapshot) {
               subBuilder.MergeFrom(ActivitySnapshot);
             }
@@ -481,7 +497,7 @@ namespace Communication {
             break;
           }
           case 18: {
-            global::Communication.ActivitySnapshot subBuilder = new global::Communication.ActivitySnapshot();
+            global::Communication.WoWActivitySnapshot subBuilder = new global::Communication.WoWActivitySnapshot();
             if (parameterCase_ == ParameterOneofCase.ActivitySnapshot) {
               subBuilder.MergeFrom(ActivitySnapshot);
             }
@@ -1437,6 +1453,7 @@ namespace Communication {
       agreeableness_ = other.agreeableness_;
       neuroticism_ = other.neuroticism_;
       shouldRun_ = other.shouldRun_;
+      runnerType_ = other.runnerType_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -1530,6 +1547,21 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "runner_type" field.</summary>
+    public const int RunnerTypeFieldNumber = 8;
+    private global::Communication.BotRunnerType runnerType_ = global::Communication.BotRunnerType.Foreground;
+    /// <summary>
+    /// Which bot runner to use
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Communication.BotRunnerType RunnerType {
+      get { return runnerType_; }
+      set {
+        runnerType_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -1552,6 +1584,7 @@ namespace Communication {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(Agreeableness, other.Agreeableness)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(Neuroticism, other.Neuroticism)) return false;
       if (ShouldRun != other.ShouldRun) return false;
+      if (RunnerType != other.RunnerType) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -1566,6 +1599,7 @@ namespace Communication {
       if (Agreeableness != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(Agreeableness);
       if (Neuroticism != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(Neuroticism);
       if (ShouldRun != false) hash ^= ShouldRun.GetHashCode();
+      if (RunnerType != global::Communication.BotRunnerType.Foreground) hash ^= RunnerType.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -1612,6 +1646,10 @@ namespace Communication {
         output.WriteRawTag(56);
         output.WriteBool(ShouldRun);
       }
+      if (RunnerType != global::Communication.BotRunnerType.Foreground) {
+        output.WriteRawTag(64);
+        output.WriteEnum((int) RunnerType);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -1650,6 +1688,10 @@ namespace Communication {
         output.WriteRawTag(56);
         output.WriteBool(ShouldRun);
       }
+      if (RunnerType != global::Communication.BotRunnerType.Foreground) {
+        output.WriteRawTag(64);
+        output.WriteEnum((int) RunnerType);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -1680,6 +1722,9 @@ namespace Communication {
       }
       if (ShouldRun != false) {
         size += 1 + 1;
+      }
+      if (RunnerType != global::Communication.BotRunnerType.Foreground) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) RunnerType);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -1713,6 +1758,9 @@ namespace Communication {
       }
       if (other.ShouldRun != false) {
         ShouldRun = other.ShouldRun;
+      }
+      if (other.RunnerType != global::Communication.BotRunnerType.Foreground) {
+        RunnerType = other.RunnerType;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -1761,6 +1809,10 @@ namespace Communication {
             ShouldRun = input.ReadBool();
             break;
           }
+          case 64: {
+            RunnerType = (global::Communication.BotRunnerType) input.ReadEnum();
+            break;
+          }
         }
       }
     #endif
@@ -1806,6 +1858,10 @@ namespace Communication {
           }
           case 56: {
             ShouldRun = input.ReadBool();
+            break;
+          }
+          case 64: {
+            RunnerType = (global::Communication.BotRunnerType) input.ReadEnum();
             break;
           }
         }
@@ -2220,16 +2276,16 @@ namespace Communication {
   }
 
   [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
-  public sealed partial class ActivitySnapshot : pb::IMessage<ActivitySnapshot>
+  public sealed partial class WoWActivitySnapshot : pb::IMessage<WoWActivitySnapshot>
   #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
       , pb::IBufferMessage
   #endif
   {
-    private static readonly pb::MessageParser<ActivitySnapshot> _parser = new pb::MessageParser<ActivitySnapshot>(() => new ActivitySnapshot());
+    private static readonly pb::MessageParser<WoWActivitySnapshot> _parser = new pb::MessageParser<WoWActivitySnapshot>(() => new WoWActivitySnapshot());
     private pb::UnknownFieldSet _unknownFields;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public static pb::MessageParser<ActivitySnapshot> Parser { get { return _parser; } }
+    public static pb::MessageParser<WoWActivitySnapshot> Parser { get { return _parser; } }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -2245,7 +2301,7 @@ namespace Communication {
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public ActivitySnapshot() {
+    public WoWActivitySnapshot() {
       OnConstruction();
     }
 
@@ -2253,7 +2309,7 @@ namespace Communication {
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public ActivitySnapshot(ActivitySnapshot other) : this() {
+    public WoWActivitySnapshot(WoWActivitySnapshot other) : this() {
       timestamp_ = other.timestamp_;
       accountName_ = other.accountName_;
       player_ = other.player_ != null ? other.player_.Clone() : null;
@@ -2261,13 +2317,16 @@ namespace Communication {
       currentAction_ = other.currentAction_ != null ? other.currentAction_.Clone() : null;
       nearbyObjects_ = other.nearbyObjects_.Clone();
       nearbyUnits_ = other.nearbyUnits_.Clone();
+      characterName_ = other.characterName_;
+      screenState_ = other.screenState_;
+      movementData_ = other.movementData_ != null ? other.movementData_.Clone() : null;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public ActivitySnapshot Clone() {
-      return new ActivitySnapshot(this);
+    public WoWActivitySnapshot Clone() {
+      return new WoWActivitySnapshot(this);
     }
 
     /// <summary>Field number for the "timestamp" field.</summary>
@@ -2352,15 +2411,60 @@ namespace Communication {
       get { return nearbyUnits_; }
     }
 
+    /// <summary>Field number for the "characterName" field.</summary>
+    public const int CharacterNameFieldNumber = 8;
+    private string characterName_ = "";
+    /// <summary>
+    /// Name of the logged-in character (set after world entry)
+    /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public override bool Equals(object other) {
-      return Equals(other as ActivitySnapshot);
+    public string CharacterName {
+      get { return characterName_; }
+      set {
+        characterName_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "screenState" field.</summary>
+    public const int ScreenStateFieldNumber = 9;
+    private string screenState_ = "";
+    /// <summary>
+    /// Current WoW screen state (e.g. "LoginScreen", "CharacterSelect", "InWorld")
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string ScreenState {
+      get { return screenState_; }
+      set {
+        screenState_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "movementData" field.</summary>
+    public const int MovementDataFieldNumber = 10;
+    private global::Game.MovementData movementData_;
+    /// <summary>
+    /// Current movement physics snapshot (speeds, flags, position)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Game.MovementData MovementData {
+      get { return movementData_; }
+      set {
+        movementData_ = value;
+      }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public bool Equals(ActivitySnapshot other) {
+    public override bool Equals(object other) {
+      return Equals(other as WoWActivitySnapshot);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(WoWActivitySnapshot other) {
       if (ReferenceEquals(other, null)) {
         return false;
       }
@@ -2374,6 +2478,9 @@ namespace Communication {
       if (!object.Equals(CurrentAction, other.CurrentAction)) return false;
       if(!nearbyObjects_.Equals(other.nearbyObjects_)) return false;
       if(!nearbyUnits_.Equals(other.nearbyUnits_)) return false;
+      if (CharacterName != other.CharacterName) return false;
+      if (ScreenState != other.ScreenState) return false;
+      if (!object.Equals(MovementData, other.MovementData)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -2388,6 +2495,9 @@ namespace Communication {
       if (currentAction_ != null) hash ^= CurrentAction.GetHashCode();
       hash ^= nearbyObjects_.GetHashCode();
       hash ^= nearbyUnits_.GetHashCode();
+      if (CharacterName.Length != 0) hash ^= CharacterName.GetHashCode();
+      if (ScreenState.Length != 0) hash ^= ScreenState.GetHashCode();
+      if (movementData_ != null) hash ^= MovementData.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -2428,6 +2538,18 @@ namespace Communication {
       }
       nearbyObjects_.WriteTo(output, _repeated_nearbyObjects_codec);
       nearbyUnits_.WriteTo(output, _repeated_nearbyUnits_codec);
+      if (CharacterName.Length != 0) {
+        output.WriteRawTag(66);
+        output.WriteString(CharacterName);
+      }
+      if (ScreenState.Length != 0) {
+        output.WriteRawTag(74);
+        output.WriteString(ScreenState);
+      }
+      if (movementData_ != null) {
+        output.WriteRawTag(82);
+        output.WriteMessage(MovementData);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -2460,6 +2582,18 @@ namespace Communication {
       }
       nearbyObjects_.WriteTo(ref output, _repeated_nearbyObjects_codec);
       nearbyUnits_.WriteTo(ref output, _repeated_nearbyUnits_codec);
+      if (CharacterName.Length != 0) {
+        output.WriteRawTag(66);
+        output.WriteString(CharacterName);
+      }
+      if (ScreenState.Length != 0) {
+        output.WriteRawTag(74);
+        output.WriteString(ScreenState);
+      }
+      if (movementData_ != null) {
+        output.WriteRawTag(82);
+        output.WriteMessage(MovementData);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -2487,6 +2621,15 @@ namespace Communication {
       }
       size += nearbyObjects_.CalculateSize(_repeated_nearbyObjects_codec);
       size += nearbyUnits_.CalculateSize(_repeated_nearbyUnits_codec);
+      if (CharacterName.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(CharacterName);
+      }
+      if (ScreenState.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(ScreenState);
+      }
+      if (movementData_ != null) {
+        size += 1 + pb::CodedOutputStream.ComputeMessageSize(MovementData);
+      }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -2495,7 +2638,7 @@ namespace Communication {
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public void MergeFrom(ActivitySnapshot other) {
+    public void MergeFrom(WoWActivitySnapshot other) {
       if (other == null) {
         return;
       }
@@ -2525,6 +2668,18 @@ namespace Communication {
       }
       nearbyObjects_.Add(other.nearbyObjects_);
       nearbyUnits_.Add(other.nearbyUnits_);
+      if (other.CharacterName.Length != 0) {
+        CharacterName = other.CharacterName;
+      }
+      if (other.ScreenState.Length != 0) {
+        ScreenState = other.ScreenState;
+      }
+      if (other.movementData_ != null) {
+        if (movementData_ == null) {
+          MovementData = new global::Game.MovementData();
+        }
+        MovementData.MergeFrom(other.MovementData);
+      }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -2581,6 +2736,21 @@ namespace Communication {
             nearbyUnits_.AddEntriesFrom(input, _repeated_nearbyUnits_codec);
             break;
           }
+          case 66: {
+            CharacterName = input.ReadString();
+            break;
+          }
+          case 74: {
+            ScreenState = input.ReadString();
+            break;
+          }
+          case 82: {
+            if (movementData_ == null) {
+              MovementData = new global::Game.MovementData();
+            }
+            input.ReadMessage(MovementData);
+            break;
+          }
         }
       }
     #endif
@@ -2635,6 +2805,21 @@ namespace Communication {
           }
           case 58: {
             nearbyUnits_.AddEntriesFrom(ref input, _repeated_nearbyUnits_codec);
+            break;
+          }
+          case 66: {
+            CharacterName = input.ReadString();
+            break;
+          }
+          case 74: {
+            ScreenState = input.ReadString();
+            break;
+          }
+          case 82: {
+            if (movementData_ == null) {
+              MovementData = new global::Game.MovementData();
+            }
+            input.ReadMessage(MovementData);
             break;
           }
         }

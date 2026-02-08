@@ -284,7 +284,12 @@ namespace WoWSharpClient.Tests.Agent
             });
 
             // Act: simulate server quest details packet
-            Emit(Opcode.SMSG_QUESTGIVER_QUEST_DETAILS, BitConverter.GetBytes(questId));
+            // SMSG_QUESTGIVER_QUEST_DETAILS: questGiverGuid(8) + questId(4) + title\0 + details\0 + objectives\0
+            var payload = new byte[15]; // 8 + 4 + 3 null terminators
+            BitConverter.GetBytes((ulong)0xABCDEF).CopyTo(payload, 0); // questGiverGuid
+            BitConverter.GetBytes(questId).CopyTo(payload, 8); // questId
+            // bytes 12-14 are null terminators for title, details, objectives
+            Emit(Opcode.SMSG_QUESTGIVER_QUEST_DETAILS, payload);
 
             // Assert
             Assert.True(eventFired);
@@ -400,12 +405,22 @@ namespace WoWSharpClient.Tests.Agent
 
             var subscription = _questAgent.QuestOperations.Subscribe(_ => eventFired = true);
 
-            // Act
-            Emit(opcode, BitConverter.GetBytes(questId));
+            // Act — SMSG_QUESTGIVER_QUEST_DETAILS needs guid(8)+questId(4)+nulls, others just questId(4)
+            if (opcode == Opcode.SMSG_QUESTGIVER_QUEST_DETAILS)
+            {
+                var payload = new byte[15];
+                BitConverter.GetBytes((ulong)0xABCDEF).CopyTo(payload, 0);
+                BitConverter.GetBytes(questId).CopyTo(payload, 8);
+                Emit(opcode, payload);
+            }
+            else
+            {
+                Emit(opcode, BitConverter.GetBytes(questId));
+            }
 
             // Assert
             Assert.True(eventFired);
-            
+
             subscription.Dispose();
         }
 

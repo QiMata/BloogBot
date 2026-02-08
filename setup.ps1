@@ -19,7 +19,7 @@
     Default: ".\WoW_Client"
 
 .PARAMETER BinDirectory
-    Specifies the target directory where game data files will be copied for BloogBot services.
+    Specifies the target directory where game data files will be copied for WWoW services.
     Default: ".\bin"
 
 .PARAMETER ClientZipUrl
@@ -320,9 +320,9 @@ function Show-Summary {
     Write-Host ""
     Write-ColoredOutput "Next Steps:" $ColorInfo
     Write-ColoredOutput "  1. Verify that the bin directory contains all required files" "White"
-    Write-ColoredOutput "  2. Configure your BloogBot services to use the bin directory" "White"
-    Write-ColoredOutput "  3. For pathfinding tests, set BLOOGBOT_DATA_DIR environment variable:" "White"
-    Write-ColoredOutput "     `$env:BLOOGBOT_DATA_DIR = '$BinPath'" "Cyan"
+    Write-ColoredOutput "  2. Configure your WWoW services to use the bin directory" "White"
+    Write-ColoredOutput "  3. For pathfinding tests, set WWOW_DATA_DIR environment variable:" "White"
+    Write-ColoredOutput "     `$env:WWOW_DATA_DIR = '$BinPath'" "Cyan"
     Write-ColoredOutput "     Or use absolute path to your client directory with nav data" "Cyan"
     Write-ColoredOutput "  4. Start the WoW server using the WWoW.Systems AppHost" "White"
     

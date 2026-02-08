@@ -66,7 +66,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         #endregion
 
         #region Information Requests
-        Task RequestPartyMemberStatsAsync(CancellationToken cancellationToken = default);
+        Task RequestPartyMemberStatsAsync(ulong memberGuid, CancellationToken cancellationToken = default);
         Task InitiateReadyCheckAsync(CancellationToken cancellationToken = default);
         Task RespondToReadyCheckAsync(bool isReady, CancellationToken cancellationToken = default);
         #endregion

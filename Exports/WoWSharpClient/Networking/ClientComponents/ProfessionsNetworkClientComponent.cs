@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Reactive;
 using System.Reactive.Linq;
 using GameData.Core.Enums;
@@ -211,20 +212,19 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        public async Task CloseProfessionTrainerAsync(CancellationToken cancellationToken = default)
+        public Task CloseProfessionTrainerAsync(CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogDebug("Closing profession trainer: {TrainerGuid:X}", CurrentTrainerGuid ?? 0);
 
-                // Send gossip complete to close the trainer window
-                await _worldClient.SendOpcodeAsync(Opcode.SMSG_GOSSIP_COMPLETE, [], cancellationToken);
-
+                // Trainer windows close automatically when moving away from the NPC.
+                // Just update local state. (SMSG_GOSSIP_COMPLETE is server-to-client; never send it.)
                 var previousTrainerGuid = CurrentTrainerGuid;
                 CurrentTrainerGuid = null;
                 CurrentProfession = null;
                 IsTrainerWindowOpen = false;
-                _availableServices.Clear();
+                lock (_stateLock) _availableServices.Clear();
 
                 _logger.LogInformation("Profession trainer closed: {TrainerGuid:X}", previousTrainerGuid ?? 0);
             }
@@ -233,6 +233,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogError(ex, "Failed to close profession trainer");
                 throw;
             }
+            return Task.CompletedTask;
         }
 
         public async Task OpenCraftingWindowAsync(ProfessionType professionType, CancellationToken cancellationToken = default)
@@ -242,10 +243,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Opening crafting window for profession: {ProfessionType}", professionType);
 
                 var spellId = GetCraftingSpellId(professionType);
-                var payload = new byte[4];
-                BitConverter.GetBytes(spellId).CopyTo(payload, 0);
-
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, payload, cancellationToken);
+                await SendCastSpellAsync(spellId, cancellationToken);
 
                 CurrentProfession = professionType;
                 IsCraftingWindowOpen = true;
@@ -267,10 +265,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 for (uint i = 0; i < quantity; i++)
                 {
-                    var payload = new byte[4];
-                    BitConverter.GetBytes(recipeId).CopyTo(payload, 0);
-
-                    await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, payload, cancellationToken);
+                    await SendCastSpellAsync(recipeId, cancellationToken);
 
                     if (quantity > 1 && i < quantity - 1)
                     {
@@ -462,23 +457,97 @@ namespace WoWSharpClient.Networking.ClientComponents
             };
         }
 
+        /// <summary>
+        /// Sends CMSG_CAST_SPELL with the correct MaNGOS 1.12.1 format:
+        /// spellId(4) + targetFlags(2).
+        /// No castCount byte in vanilla 1.12.1 (that's TBC+).
+        /// For self-cast profession spells, targetFlags = 0 (no additional target data).
+        /// </summary>
+        private async Task SendCastSpellAsync(uint spellId, CancellationToken cancellationToken)
+        {
+            var payload = new byte[6]; // spellId(4) + targetFlags(2)
+            BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(0, 4), spellId);
+            // targetFlags = 0 (self-cast) — bytes 4-5 remain zero
+            await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, payload, cancellationToken);
+        }
+
+        /// <summary>
+        /// Parses SMSG_TRAINER_BUY_SUCCEEDED (12 bytes):
+        /// ObjectGuid trainerGuid(8) + uint32 spellId(4).
+        /// No cost field in this opcode.
+        /// </summary>
         private static (uint SpellId, uint Cost) ParseTrainerBuySucceeded(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
-            uint spell = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
-            uint cost = span.Length >= 8 ? BitConverter.ToUInt32(span.Slice(4, 4)) : 0U;
-            return (spell, cost);
+            // trainerGuid at offset 0 (8 bytes), spellId at offset 8 (4 bytes)
+            uint spellId = span.Length >= 12
+                ? BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(8, 4))
+                : (span.Length >= 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span[..4]) : 0U);
+            return (spellId, 0U);
         }
 
+        /// <summary>
+        /// Parses SMSG_TRAINER_LIST (MaNGOS 1.12.1 format):
+        ///   ObjectGuid trainerGuid(8) + uint32 trainerType(4) + uint32 spellCount(4)
+        ///   [per spell, 38 bytes]:
+        ///     uint32 spellId(4), uint8 state(1), uint32 cost(4),
+        ///     uint32 profReq(4), uint32 profConfirm(4), uint8 reqLevel(1),
+        ///     uint32 reqSkill(4), uint32 reqSkillValue(4),
+        ///     uint32 prereq1(4), uint32 prereq2(4), uint32 unk(4)
+        ///   CString title (greeting)
+        /// Maps entries to ProfessionService[].
+        /// </summary>
         private static ProfessionService[] ParseTrainerServices(ReadOnlyMemory<byte> payload)
         {
-            // Placeholder parser: without full spec, return empty list to avoid crashes
-            return Array.Empty<ProfessionService>();
+            var span = payload.Span;
+            if (span.Length < 16) return [];
+
+            int offset = 8; // skip trainerGuid
+            uint trainerType = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+            uint count = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+
+            const int recordSize = 38;
+            var services = new List<ProfessionService>((int)Math.Min(count, 500));
+
+            for (uint i = 0; i < count && offset + recordSize <= span.Length; i++)
+            {
+                uint spellId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4));
+                byte state = span[offset + 4];
+                uint cost = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset + 5, 4));
+                byte reqLevel = span[offset + 17];
+                uint reqSkill = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset + 18, 4));
+                uint reqSkillValue = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset + 22, 4));
+                uint prereq1 = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset + 26, 4));
+                uint prereq2 = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset + 30, 4));
+
+                var prereqs = new List<uint>(2);
+                if (prereq1 != 0) prereqs.Add(prereq1);
+                if (prereq2 != 0) prereqs.Add(prereq2);
+
+                services.Add(new ProfessionService
+                {
+                    SpellId = spellId,
+                    Cost = cost,
+                    RequiredLevel = reqLevel,
+                    IsAvailable = state == 0, // 0=green/can learn
+                    Prerequisites = prereqs.ToArray(),
+                    Name = string.Empty
+                });
+
+                offset += recordSize;
+            }
+
+            return services.ToArray();
         }
 
+        /// <summary>
+        /// SMSG_SPELL_GO is extremely complex (packed GUIDs, variable target info, cast flags, etc.).
+        /// Extracting crafting item results from it requires full spell-effect parsing which is
+        /// beyond the scope of this component. Returns zeros; callers should rely on inventory
+        /// change events or SMSG_ITEM_PUSH_RESULT instead.
+        /// </summary>
         private static (uint ItemId, uint Quantity) ParseCraftResult(ReadOnlyMemory<byte> payload)
         {
-            // Placeholder: we do not parse SMSG_SPELL_GO here. Return zeros.
             return (0U, 0U);
         }
 

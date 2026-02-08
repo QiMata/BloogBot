@@ -54,11 +54,11 @@ namespace WoWSharpClient.Tests.Agent
             // Act
             await _attackClientComponent.StartAttackAsync();
 
-            // Assert
+            // Assert - CMSG_ATTACKSWING (1.12.1): ObjectGuid targetGuid (8) = 8 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_ATTACKSWING,
-                    It.Is<byte[]>(payload => payload.Length == 0), // Empty payload
+                    It.Is<byte[]>(payload => payload.Length == 8),
                     It.IsAny<CancellationToken>()
                 ),
                 Times.Once

@@ -79,7 +79,21 @@ enum class LogLevel
     Error
 };
 
-// Simple logging helper
+// File-based logging for debugging when console isn't visible
+inline std::wstring GetLoaderLogPath()
+{
+    wchar_t modulePath[MAX_PATH];
+    if (GetModuleFileNameW(NULL, modulePath, MAX_PATH))
+    {
+        std::wstring path(modulePath);
+        size_t lastSlash = path.find_last_of(L'\\');
+        if (lastSlash != std::wstring::npos)
+            return path.substr(0, lastSlash + 1) + L"loader_debug.log";
+    }
+    return L"C:\\loader_debug.log";
+}
+
+// Simple logging helper - writes to both console and file
 inline void LogMessage(LogLevel level, const std::wstring& message)
 {
     const wchar_t* prefix = L"";
@@ -90,8 +104,18 @@ inline void LogMessage(LogLevel level, const std::wstring& message)
     case LogLevel::Warning: prefix = L"[WARN]  "; break;
     case LogLevel::Error:   prefix = L"[ERROR] "; break;
     }
-    
+
+    // Console output
     std::wcout << prefix << message << std::endl;
+
+    // File output for debugging
+    static std::wstring logPath = GetLoaderLogPath();
+    FILE* logFile = nullptr;
+    if (_wfopen_s(&logFile, logPath.c_str(), L"a") == 0 && logFile)
+    {
+        fwprintf(logFile, L"%s%s\n", prefix, message.c_str());
+        fclose(logFile);
+    }
 }
 
 inline void LogMessage(LogLevel level, const std::string& message)
@@ -166,10 +190,18 @@ inline bool FindHostFxrPath(std::wstring& outPath, const std::wstring& baseDir)
     }
     
     // Strategy 3: Search common .NET installation paths
+    // For 32-bit processes (like WoW), prefer x86 .NET installation first
+#ifdef _M_IX86
     const wchar_t* dotnetPaths[] = {
-        L"C:\\Program Files\\dotnet\\host\\fxr\\",
+        L"C:\\Program Files (x86)\\dotnet\\host\\fxr\\",  // x86 first for 32-bit
+        L"C:\\Program Files\\dotnet\\host\\fxr\\"
+    };
+#else
+    const wchar_t* dotnetPaths[] = {
+        L"C:\\Program Files\\dotnet\\host\\fxr\\",        // x64 first for 64-bit
         L"C:\\Program Files (x86)\\dotnet\\host\\fxr\\"
     };
+#endif
     
     for (const auto& dotnetPath : dotnetPaths)
     {

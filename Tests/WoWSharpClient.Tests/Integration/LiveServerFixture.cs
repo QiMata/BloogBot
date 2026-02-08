@@ -1,4 +1,7 @@
 using BotRunner.Clients;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
 using System.Net.Sockets;
 using WoWSharpClient.Client;
@@ -206,6 +209,7 @@ public class LiveServerFixture : IAsyncLifetime
 
     /// <summary>
     /// Waits for the character list to be received from the server.
+    /// If no characters exist, automatically creates an Orc Warrior.
     /// </summary>
     public async Task<bool> WaitForCharacterListAsync(CancellationToken cancellationToken = default)
     {
@@ -218,14 +222,84 @@ public class LiveServerFixture : IAsyncLifetime
             await Task.Delay(TestAccountSettings.PollingIntervalMs, cancellationToken);
         }
 
-        if (ObjectManager.CharacterSelectScreen.HasReceivedCharacterList)
+        if (!ObjectManager.CharacterSelectScreen.HasReceivedCharacterList)
         {
-            Log($"Received {ObjectManager.CharacterSelectScreen.CharacterSelects.Count} character(s)");
-            return true;
+            Log("Timeout waiting for character list");
+            return false;
         }
 
-        Log("Timeout waiting for character list");
-        return false;
+        Log($"Received {ObjectManager.CharacterSelectScreen.CharacterSelects.Count} character(s)");
+
+        // Auto-create a character if none exist
+        if (ObjectManager.CharacterSelectScreen.CharacterSelects.Count == 0)
+        {
+            Log("No characters found - creating Orc Warrior 'Testgrunt'...");
+            if (!await CreateTestCharacterAsync(cancellationToken))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Creates a test character (Orc Warrior) and waits for the response.
+    /// </summary>
+    private async Task<bool> CreateTestCharacterAsync(CancellationToken cancellationToken = default)
+    {
+        var createTcs = new TaskCompletionSource<bool>();
+
+        void OnCreateResponse(object? sender, CharCreateResponse response)
+        {
+            Log($"Character create response: {response.Result} (0x{(byte)response.Result:X2})");
+            createTcs.TrySetResult(
+                response.Result == CreateCharacterResult.Success ||
+                response.Result == CreateCharacterResult.InProgress);
+        }
+
+        WoWSharpEventEmitter.Instance.OnCharacterCreateResponse += OnCreateResponse;
+        try
+        {
+            await WoWClient.SendCharacterCreateAsync(
+                "Testgrunt", Race.Orc, Class.Warrior, Gender.Male,
+                1, 1, 1, 0, 1, 0, cancellationToken);
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TestAccountSettings.ConnectionTimeoutMs);
+
+            try
+            {
+                var success = await createTcs.Task.WaitAsync(cts.Token);
+                if (!success)
+                {
+                    Log("Character creation failed");
+                    return false;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Log("Timeout waiting for character create response");
+                return false;
+            }
+
+            // Refresh character list after creation
+            Log("Character created, refreshing character list...");
+            ObjectManager.CharacterSelectScreen.HasReceivedCharacterList = false;
+            await WoWClient.RefreshCharacterSelectsAsync(cancellationToken);
+
+            var startTime = DateTime.UtcNow;
+            while (!ObjectManager.CharacterSelectScreen.HasReceivedCharacterList &&
+                   (DateTime.UtcNow - startTime).TotalMilliseconds < TestAccountSettings.ConnectionTimeoutMs)
+            {
+                await Task.Delay(TestAccountSettings.PollingIntervalMs, cancellationToken);
+            }
+
+            Log($"After creation: {ObjectManager.CharacterSelectScreen.CharacterSelects.Count} character(s)");
+            return ObjectManager.CharacterSelectScreen.CharacterSelects.Count > 0;
+        }
+        finally
+        {
+            WoWSharpEventEmitter.Instance.OnCharacterCreateResponse -= OnCreateResponse;
+        }
     }
 
     /// <summary>
@@ -313,7 +387,7 @@ public class LiveServerFixture : IAsyncLifetime
     /// </summary>
     public async Task TeleportToAsync(uint mapId, float x, float y, float z, CancellationToken cancellationToken = default)
     {
-        await SendGmCommandAsync($".go {mapId} {x} {y} {z}", 2000, cancellationToken);
+        await SendGmCommandAsync($".go xyz {x} {y} {z} {mapId}", 2000, cancellationToken);
     }
 
     /// <summary>

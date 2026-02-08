@@ -1,5 +1,3 @@
-using BotRunner.Clients;
-
 namespace BotRunner.Interfaces;
 
 /// <summary>
@@ -8,7 +6,7 @@ namespace BotRunner.Interfaces;
 public interface IDependencyContainer
 {
     /// <summary>
-    /// Client for pathfinding service.
+    /// Repository for quest-related database lookups.
     /// </summary>
-    PathfindingClient PathfindingClient { get; }
+    IQuestRepository? QuestRepository { get; }
 }

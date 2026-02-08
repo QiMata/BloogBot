@@ -1,8 +1,8 @@
-using BloogBot.Tests.WoWSimulation.Core;
+using WoWSimulation.Tests.Core;
 using FluentAssertions;
 using Xunit;
 
-namespace BloogBot.Tests.WoWSimulation;
+namespace WoWSimulation.Tests;
 
 public class MockMangosServerTests
 {

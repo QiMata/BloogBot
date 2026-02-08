@@ -1,6 +1,4 @@
 using GameData.Core.Enums;
-using Moq;
-using WoWSharpClient.Client;
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Models;
 using WoWSharpClient.Tests.Util;
@@ -23,6 +21,7 @@ namespace WoWSharpClient.Tests.Handlers
             ObjectUpdateHandler.HandleUpdateObject(opcode, data);
 
             WoWSharpObjectManager.Instance.ProcessUpdatesAsync(new CancellationTokenSource().Token);
+            Thread.Sleep(100); // Allow background processing to complete
 
             // Verify that objects with the expected GUIDs were added to the ObjectManager
             Assert.Equal(6, WoWSharpObjectManager.Instance.Objects.Count());
@@ -123,8 +122,6 @@ namespace WoWSharpClient.Tests.Handlers
     public class SMSG_COMPRESSED_UPDATE_OBJECT_Player_Tests(ObjectManagerFixture _)
         : IClassFixture<ObjectManagerFixture>
     {
-        private Mock<WoWClient> _woWClientMock = _._woWClient;
-
         [Fact]
         public void ShouldDecompressAndParsePlayerCharacter()
         {
@@ -136,9 +133,8 @@ namespace WoWSharpClient.Tests.Handlers
             // Call the HandleUpdateObject method on ObjectUpdateHandler
             ObjectUpdateHandler.HandleUpdateObject(opcode, data);
 
-            _woWClientMock.Setup(expression => expression.SendNameQuery(150));
-
             WoWSharpObjectManager.Instance.ProcessUpdatesAsync(new CancellationTokenSource().Token);
+            Thread.Sleep(100); // Allow background processing to complete
 
             // Verify that objects with the expected GUIDs were added to the ObjectManager
             Assert.True(WoWSharpObjectManager.Instance.Objects.Any(o => o.Guid == 150));

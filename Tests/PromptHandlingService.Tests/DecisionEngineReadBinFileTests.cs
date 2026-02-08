@@ -22,8 +22,8 @@ public class DecisionEngineReadBinFileTests
 
         var snapshotsToWrite = new[]
         {
-            new ActivitySnapshot { Timestamp = 1 },
-            new ActivitySnapshot { Timestamp = 2 }
+            new WoWActivitySnapshot { Timestamp = 1 },
+            new WoWActivitySnapshot { Timestamp = 2 }
         };
 
         using var readyForRead = new ManualResetEventSlim(false);
@@ -64,7 +64,7 @@ public class DecisionEngineReadBinFileTests
             startSecondWrite.Set();
             await Task.Delay(10);
 
-            var readTask = Task.Run(() => (List<ActivitySnapshot>)readMethod!.Invoke(null, new object[] { tempFile })!);
+            var readTask = Task.Run(() => (List<WoWActivitySnapshot>)readMethod!.Invoke(null, new object[] { tempFile })!);
             var readSnapshots = await readTask;
 
             Assert.Equal(snapshotsToWrite.Length, readSnapshots.Count);

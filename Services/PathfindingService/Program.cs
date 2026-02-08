@@ -7,6 +7,19 @@ namespace PathfindingService
     {
         public static void Main(string[] args)
         {
+            // PathfindingService runs as x64 from Bot\Debug\x64\.
+            // Map data (mmaps/vmaps/maps) lives in Bot\Debug\net8.0\ alongside the x86 bot.
+            // Set WWOW_DATA_DIR so the native Navigation.dll finds the map files.
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
+            {
+                var dataDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "net8.0"));
+                if (Directory.Exists(Path.Combine(dataDir, "mmaps")))
+                {
+                    Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dataDir + Path.DirectorySeparatorChar);
+                    Console.WriteLine($"[PathfindingService] WWOW_DATA_DIR set to: {dataDir}");
+                }
+            }
+
             CreateHostBuilder(args)
                 .Build()
                 .Run();

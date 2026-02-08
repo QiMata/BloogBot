@@ -5,7 +5,8 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "environmentVariables": {
-        "DOTNET_ENVIRONMENT": "Development"
+        "DOTNET_ENVIRONMENT": "Development",
+        "WWOW_DATA_DIR": "E:/repos/BloogBot/Bot/Debug/net8.0/"
       }
     }
   }

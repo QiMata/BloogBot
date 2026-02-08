@@ -22,7 +22,7 @@ public class ClassContainer : IClassContainer
         Func<IBotContext, IBotTask> createMoveToTargetTask,
         Func<IBotContext, IBotTask> createPvERotationTask,
         Func<IBotContext, IBotTask> createPvPRotationTask,
-        ActivitySnapshot? probe = null)
+        WoWActivitySnapshot? probe = null)
     {
         Name = name;
         CreateRestTask = createRestTask;

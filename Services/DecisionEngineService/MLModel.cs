@@ -11,7 +11,7 @@ public class MLModel
         _weights = initialWeights ?? [];
     }
 
-    public void LearnFromSnapshot(ActivitySnapshot snapshot)
+    public void LearnFromSnapshot(WoWActivitySnapshot snapshot)
     {
         if (snapshot == null)
         {
@@ -21,7 +21,7 @@ public class MLModel
         AdjustWeights(snapshot);
     }
 
-    public static List<ActionMap> Predict(ActivitySnapshot snapshot)
+    public static List<ActionMap> Predict(WoWActivitySnapshot snapshot)
     {
         return GenerateActionMap(snapshot);
     }
@@ -31,7 +31,7 @@ public class MLModel
         return _weights;
     }
 
-    private void AdjustWeights(ActivitySnapshot snapshot)
+    private void AdjustWeights(WoWActivitySnapshot snapshot)
     {
         if (snapshot.CurrentAction == null)
         {
@@ -64,7 +64,7 @@ public class MLModel
         }
     }
 
-    private static List<ActionMap> GenerateActionMap(ActivitySnapshot snapshot)
+    private static List<ActionMap> GenerateActionMap(WoWActivitySnapshot snapshot)
     {
         List<ActionMap> actionMaps = [];
 

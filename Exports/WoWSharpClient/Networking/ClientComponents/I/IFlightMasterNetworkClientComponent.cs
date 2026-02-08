@@ -19,6 +19,11 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// </summary>
         IReadOnlyList<uint> AvailableTaxiNodes { get; }
 
+        /// <summary>
+        /// Gets the current (nearest) taxi node ID from the last SMSG_SHOWTAXINODES, or null.
+        /// </summary>
+        uint? CurrentNodeId { get; }
+
         #region Reactive Observables
 
         /// <summary>

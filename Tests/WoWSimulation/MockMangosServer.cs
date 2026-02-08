@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace BloogBot.Tests.WoWSimulation.Core;
+namespace WoWSimulation.Tests.Core;
 
 /// <summary>
 /// Mock WoW server that simulates mangos server responses without requiring live injection

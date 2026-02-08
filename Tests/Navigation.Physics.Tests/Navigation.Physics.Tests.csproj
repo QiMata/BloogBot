@@ -6,7 +6,6 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <BaseOutputPath>..\..\Bot</BaseOutputPath>
     <PlatformTarget>x64</PlatformTarget>
     <ProduceReferenceAssembly>True</ProduceReferenceAssembly>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -26,11 +25,20 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
     <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+    <ProjectReference Include="..\Tests.Infrastructure\Tests.Infrastructure.csproj" />
   </ItemGroup>
 
-  <!-- Copy Navigation.dll to output for P/Invoke tests -->
-  <ItemGroup>
-    <None Include="..\..\Bot\$(Configuration)\net8.0\Navigation.dll" Link="Navigation.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\Bot\$(Configuration)\net8.0\Navigation.dll')" />
-  </ItemGroup>
+  <!-- Copy x64 Navigation.dll for P/Invoke tests (tests run as x64).
+       Prefers x64 build; falls back to net8.0 build. -->
+  <Target Name="CopyNavigationDll" AfterTargets="Build">
+    <Copy SourceFiles="..\..\Bot\$(Configuration)\x64\Navigation.dll"
+          DestinationFolder="$(OutputPath)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('..\..\Bot\$(Configuration)\x64\Navigation.dll')" />
+    <Copy SourceFiles="..\..\Bot\$(Configuration)\net8.0\Navigation.dll"
+          DestinationFolder="$(OutputPath)"
+          SkipUnchangedFiles="true"
+          Condition="!Exists('..\..\Bot\$(Configuration)\x64\Navigation.dll') AND Exists('..\..\Bot\$(Configuration)\net8.0\Navigation.dll')" />
+  </Target>
 
 </Project>

@@ -61,7 +61,14 @@ namespace WoWSharpClient.Tests.Agent
             _mockEmoteLogger = new Mock<ILogger<EmoteNetworkClientComponent>>();
             _mockNetworkClientComponentFactoryLogger = new Mock<ILogger<NetworkClientComponentFactory>>();
 
-            // Setup the factory to return our specific loggers
+            // Catch-all: return a usable mock logger for any component type not explicitly configured below
+            // (covers ChatNetworkClientComponent, GossipNetworkClientComponent, FriendNetworkClientComponent,
+            //  IgnoreNetworkClientComponent, TradeNetworkClientComponent, and any future components)
+            _mockLoggerFactory
+                .Setup(x => x.CreateLogger(It.IsAny<string>()))
+                .Returns(new Mock<ILogger>().Object);
+
+            // Setup the factory to return our specific loggers (overrides catch-all above)
             _mockLoggerFactory
                 .Setup(x => x.CreateLogger(typeof(TargetingNetworkClientComponent).FullName!))
                 .Returns(_mockTargetingLogger.Object);

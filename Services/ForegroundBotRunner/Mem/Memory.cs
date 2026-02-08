@@ -66,8 +66,12 @@ namespace ForegroundBotRunner.Mem
         [DllImport("kernel32.dll")]
         private static extern bool VirtualProtect(nint lpAddress, nuint dwSize, uint flNewProtect, out uint lpflOldProtect);
 
-        private static readonly nint wowProcessHandle = Process.GetCurrentProcess().Handle;
-        public static readonly nint imageBase = Process.GetCurrentProcess().MainModule.BaseAddress;
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        private static extern nint GetModuleHandle(string? lpModuleName);
+
+        // Use GetModuleHandle(null) which returns the base address of the main module
+        // This works when injected without requiring process handle access
+        public static readonly nint imageBase = GetModuleHandle(null);
         private static readonly FasmNet fasm = new();
 
         [HandleProcessCorruptedStateExceptions]

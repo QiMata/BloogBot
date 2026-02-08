@@ -147,36 +147,44 @@ namespace ForegroundBotRunner.Mem
 
         static public void LuaCall(string code)
         {
-            lock (locker)
+            ThreadSynchronizer.RunOnMainThread<int>(() =>
             {
-                LuaCallFunction(code, MemoryAddresses.LuaCallFunPtr);
-            }
+                lock (locker)
+                {
+                    LuaCallFunction(code, MemoryAddresses.LuaCallFunPtr);
+                }
+                return 0;
+            });
         }
         static public string[] LuaCallWithResult(string code)
         {
-            lock (locker)
+            return ThreadSynchronizer.RunOnMainThread<string[]>(() =>
             {
-                var luaVarNames = new List<string>();
-                for (var i = 0; i < 11; i++)
+                lock (locker)
                 {
-                    var currentPlaceHolder = "{" + i + "}";
-                    if (!code.Contains(currentPlaceHolder)) break;
-                    var randomName = GetRandomLuaVarName();
-                    code = code.Replace(currentPlaceHolder, randomName);
-                    luaVarNames.Add(randomName);
+                    var luaVarNames = new List<string>();
+                    for (var i = 0; i < 11; i++)
+                    {
+                        var currentPlaceHolder = "{" + i + "}";
+                        if (!code.Contains(currentPlaceHolder)) break;
+                        var randomName = GetRandomLuaVarName();
+                        code = code.Replace(currentPlaceHolder, randomName);
+                        luaVarNames.Add(randomName);
+                    }
+
+                    // Call LuaCallFunction directly since we're already on main thread
+                    LuaCallFunction(code, MemoryAddresses.LuaCallFunPtr);
+
+                    var results = new List<string>();
+                    foreach (var varName in luaVarNames)
+                    {
+                        var address = GetText(varName);
+                        results.Add(MemoryManager.ReadString(address));
+                    }
+
+                    return [.. results];
                 }
-
-                LuaCall(code);
-
-                var results = new List<string>();
-                foreach (var varName in luaVarNames)
-                {
-                    var address = GetText(varName);
-                    results.Add(MemoryManager.ReadString(address));
-                }
-
-                return [.. results];
-            }
+            });
         }
 
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]

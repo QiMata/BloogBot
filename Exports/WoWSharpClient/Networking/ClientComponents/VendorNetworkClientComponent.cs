@@ -139,10 +139,13 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 _logger.LogDebug("Buying item {ItemId} (quantity: {Quantity}) from vendor: {VendorGuid:X}", itemId, quantity, vendorGuid);
 
-                var payload = new byte[16];
+                // CMSG_BUY_ITEM format (MaNGOS 1.12.1):
+                // ObjectGuid vendorGuid (8), uint32 itemEntry (4), uint8 count (1), uint8 unk (1)
+                var payload = new byte[14];
                 BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
                 BitConverter.GetBytes(itemId).CopyTo(payload, 8);
-                BitConverter.GetBytes(quantity).CopyTo(payload, 12);
+                payload[12] = (byte)Math.Min(quantity, 255);
+                payload[13] = 0; // unk
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_ITEM, payload, cancellationToken);
 
@@ -166,14 +169,17 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Buying item from vendor slot {VendorSlot} (quantity: {Quantity}) from vendor: {VendorGuid:X}", vendorSlot, quantity, vendorGuid);
 
-                var payload = new byte[13];
-                BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
-                payload[8] = vendorSlot;
-                BitConverter.GetBytes(quantity).CopyTo(payload, 9);
+                // MaNGOS CMSG_BUY_ITEM reads item entry (uint32), not vendor slot.
+                // Look up the item entry from cached vendor inventory.
+                var vendorItem = _currentVendor?.AvailableItems.FirstOrDefault(i => i.VendorSlot == vendorSlot);
+                if (vendorItem == null)
+                {
+                    throw new InvalidOperationException($"No item found in vendor slot {vendorSlot}. Open vendor inventory first.");
+                }
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_ITEM, payload, cancellationToken);
+                await BuyItemAsync(vendorGuid, vendorItem.ItemId, quantity, cancellationToken);
 
-                _logger.LogInformation("Purchase request sent for vendor slot {VendorSlot} (quantity: {Quantity}) from vendor: {VendorGuid:X}", vendorSlot, quantity, vendorGuid);
+                _logger.LogInformation("Purchase request sent for vendor slot {VendorSlot} (item {ItemId}, quantity: {Quantity}) from vendor: {VendorGuid:X}", vendorSlot, vendorItem.ItemId, quantity, vendorGuid);
             }
             catch (Exception ex)
             {
@@ -261,23 +267,24 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        public async Task BuyItemInSlotAsync(ulong vendorGuid, uint itemId, uint quantity, byte bagId, byte slotId, CancellationToken cancellationToken = default)
+        public async Task BuyItemInSlotAsync(ulong vendorGuid, uint itemId, ulong bagGuid, byte slot, byte count = 1, CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Buying item {ItemId} (quantity: {Quantity}) into bag {BagId} slot {SlotId} from vendor: {VendorGuid:X}", itemId, quantity, bagId, slotId, vendorGuid);
+                _logger.LogDebug("Buying item {ItemId} (count: {Count}) into bag {BagGuid:X} slot {Slot} from vendor: {VendorGuid:X}", itemId, count, bagGuid, slot, vendorGuid);
 
-                var payload = new byte[18];
+                // CMSG_BUY_ITEM_IN_SLOT (1.12.1): ObjectGuid vendorGuid (8) + uint32 item (4) + ObjectGuid bagGuid (8) + uint8 slot (1) + uint8 count (1) = 22 bytes
+                var payload = new byte[22];
                 BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
                 BitConverter.GetBytes(itemId).CopyTo(payload, 8);
-                BitConverter.GetBytes(quantity).CopyTo(payload, 12);
-                payload[16] = bagId;
-                payload[17] = slotId;
+                BitConverter.GetBytes(bagGuid).CopyTo(payload, 12);
+                payload[20] = slot;
+                payload[21] = count;
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_ITEM_IN_SLOT, payload, cancellationToken);
 
-                _logger.LogInformation("Purchase request sent for item {ItemId} (quantity: {Quantity}) into bag {BagId} slot {SlotId} from vendor: {VendorGuid:X}", itemId, quantity, bagId, slotId, vendorGuid);
+                _logger.LogInformation("Purchase request sent for item {ItemId} (count: {Count}) into bag {BagGuid:X} slot {Slot} from vendor: {VendorGuid:X}", itemId, count, bagGuid, slot, vendorGuid);
             }
             catch (Exception ex)
             {
@@ -292,29 +299,32 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public async Task SellItemAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken cancellationToken = default)
         {
+            // Legacy bag/slot overload - callers should prefer SellItemByGuidAsync when item GUID is known
+            _logger.LogWarning("SellItemAsync(bag/slot) called without item GUID - sending zero GUID, server may reject");
+            await SellItemByGuidAsync(vendorGuid, 0UL, (byte)Math.Min(quantity, 255), cancellationToken);
+        }
+
+        public async Task SellItemByGuidAsync(ulong vendorGuid, ulong itemGuid, byte count = 0, CancellationToken cancellationToken = default)
+        {
             try
             {
                 SetOperationInProgress(true);
-                if (!CanSellItem(bagId, slotId, quantity))
-                {
-                    throw new InvalidOperationException($"Cannot sell item from bag {bagId} slot {slotId} (quantity: {quantity})");
-                }
+                _logger.LogDebug("Selling item {ItemGuid:X} (count: {Count}) to vendor: {VendorGuid:X}", itemGuid, count, vendorGuid);
 
-                _logger.LogDebug("Selling item from bag {BagId} slot {SlotId} (quantity: {Quantity}) to vendor: {VendorGuid:X}", bagId, slotId, quantity, vendorGuid);
-
-                var payload = new byte[14];
+                // CMSG_SELL_ITEM format (MaNGOS 1.12.1):
+                // ObjectGuid vendorGuid (8), ObjectGuid itemGuid (8), uint8 count (1)
+                var payload = new byte[17];
                 BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
-                payload[8] = bagId;
-                payload[9] = slotId;
-                BitConverter.GetBytes(quantity).CopyTo(payload, 10);
+                BitConverter.GetBytes(itemGuid).CopyTo(payload, 8);
+                payload[16] = count; // 0 = sell all
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_SELL_ITEM, payload, cancellationToken);
 
-                _logger.LogInformation("Sell request sent for item from bag {BagId} slot {SlotId} (quantity: {Quantity}) to vendor: {VendorGuid:X}", bagId, slotId, quantity, vendorGuid);
+                _logger.LogInformation("Sell request sent for item {ItemGuid:X} (count: {Count}) to vendor: {VendorGuid:X}", itemGuid, count, vendorGuid);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to sell item from bag {BagId} slot {SlotId} to vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
+                _logger.LogError(ex, "Failed to sell item {ItemGuid:X} to vendor: {VendorGuid:X}", itemGuid, vendorGuid);
                 throw;
             }
             finally
@@ -415,25 +425,26 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        public async Task RepairItemAsync(ulong vendorGuid, byte bagId, byte slotId, CancellationToken cancellationToken = default)
+        public async Task RepairItemAsync(ulong vendorGuid, ulong itemGuid, CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Repairing item from bag {BagId} slot {SlotId} with vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
+                _logger.LogDebug("Repairing item {ItemGuid:X} with vendor: {VendorGuid:X}", itemGuid, vendorGuid);
 
-                var payload = new byte[10];
+                // CMSG_REPAIR_ITEM (1.12.1): ObjectGuid npcGuid (8) + ObjectGuid itemGuid (8) = 16 bytes
+                // If itemGuid is 0, server repairs ALL items.
+                var payload = new byte[16];
                 BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
-                payload[8] = bagId;
-                payload[9] = slotId;
+                BitConverter.GetBytes(itemGuid).CopyTo(payload, 8);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_REPAIR_ITEM, payload, cancellationToken);
 
-                _logger.LogInformation("Repair request sent for item from bag {BagId} slot {SlotId} with vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
+                _logger.LogInformation("Repair request sent for item {ItemGuid:X} with vendor: {VendorGuid:X}", itemGuid, vendorGuid);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to repair item from bag {BagId} slot {SlotId} with vendor: {VendorGuid:X}", bagId, slotId, vendorGuid);
+                _logger.LogError(ex, "Failed to repair item {ItemGuid:X} with vendor: {VendorGuid:X}", itemGuid, vendorGuid);
                 throw;
             }
             finally
@@ -454,10 +465,11 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 _logger.LogDebug("Repairing all items with vendor: {VendorGuid:X}", vendorGuid);
 
-                var payload = new byte[10];
+                // CMSG_REPAIR_ITEM (1.12.1): ObjectGuid npcGuid (8) + ObjectGuid itemGuid (8) = 16 bytes
+                // itemGuid = 0 means repair ALL items
+                var payload = new byte[16];
                 BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
-                payload[8] = 0xFF;
-                payload[9] = 0xFF;
+                // itemGuid bytes 8-15 remain 0 (repair all)
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_REPAIR_ITEM, payload, cancellationToken);
 
@@ -857,11 +869,19 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private VendorInfo ParseVendorList(ReadOnlyMemory<byte> payload)
         {
+            // SMSG_LIST_INVENTORY format (MaNGOS 1.12.1):
+            // ObjectGuid vendorGuid (8)
+            // uint8 itemCount (1) - NOTE: uint8, not uint32!
+            // [per item, 28 bytes each]:
+            //   uint32 index (4) - 1-based
+            //   uint32 itemEntry (4)
+            //   uint32 displayId (4)
+            //   uint32 quantity (4) - 0xFFFFFFFF = unlimited
+            //   uint32 price (4)
+            //   uint32 maxDurability (4)
+            //   uint32 buyCount (4) - stack size
             var span = payload.Span;
             ulong vendorGuid = ReadUInt64(span, 0);
-            int offset = 8;
-            uint count = span.Length >= offset + 4 ? ReadUInt32(span, offset) : 0u;
-            offset += span.Length >= 12 ? 4 : 0;
 
             var info = new VendorInfo
             {
@@ -872,21 +892,34 @@ namespace WoWSharpClient.Networking.ClientComponents
                 AvailableItems = []
             };
 
-            int recordMinSize = 16;
-            for (int i = 0; i < count && span.Length >= offset + recordMinSize; i++)
+            if (span.Length < 9) return info;
+
+            byte count = span[8];
+            int offset = 9;
+            int recordSize = 28;
+
+            for (int i = 0; i < count && offset + recordSize <= span.Length; i++)
             {
+                uint index = ReadUInt32(span, offset);
+                uint itemEntry = ReadUInt32(span, offset + 4);
+                // uint32 displayId at offset + 8 (not stored in VendorItem)
+                uint quantity = ReadUInt32(span, offset + 12);
+                uint price = ReadUInt32(span, offset + 16);
+                // uint32 maxDurability at offset + 20 (not stored)
+                uint buyCount = ReadUInt32(span, offset + 24);
+
                 var item = new VendorItem
                 {
-                    VendorSlot = (byte)(ReadUInt32(span, offset + 0) & 0xFF),
-                    ItemId = ReadUInt32(span, offset + 4),
-                    Price = ReadUInt32(span, offset + 8),
-                    StackSize = ReadUInt32(span, offset + 12),
-                    AvailableQuantity = -1,
-                    MaxQuantity = -1,
+                    VendorSlot = (byte)(index & 0xFF),
+                    ItemId = itemEntry,
+                    Price = price,
+                    StackSize = buyCount > 0 ? buyCount : 1,
+                    AvailableQuantity = quantity == 0xFFFFFFFF ? -1 : (int)quantity,
+                    MaxQuantity = quantity == 0xFFFFFFFF ? -1 : (int)quantity,
                     CanUse = true
                 };
                 info.AvailableItems.Add(item);
-                offset += recordMinSize;
+                offset += recordSize;
             }
 
             return info;

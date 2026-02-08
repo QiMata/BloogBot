@@ -58,12 +58,12 @@ namespace DecisionEngineService
             }
         }
 
-        public static List<ActionMap> GetNextActions(ActivitySnapshot snapshot)
+        public static List<ActionMap> GetNextActions(WoWActivitySnapshot snapshot)
         {
             return MLModel.Predict(snapshot);
         }
 
-        private static async Task<List<ActivitySnapshot>> ReadBinFileAsync(string filePath, CancellationToken cancellationToken)
+        private static async Task<List<WoWActivitySnapshot>> ReadBinFileAsync(string filePath, CancellationToken cancellationToken)
         {
             const int maxAttempts = 5;
             const int delayBetweenAttemptsMs = 50;
@@ -74,11 +74,11 @@ namespace DecisionEngineService
                 try
                 {
                     using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                    List<ActivitySnapshot> snapshots = [];
+                    List<WoWActivitySnapshot> snapshots = [];
 
                     while (stream.Position < stream.Length)
                     {
-                        ActivitySnapshot snapshot = ActivitySnapshot.Parser.ParseDelimitedFrom(stream);
+                        WoWActivitySnapshot snapshot = WoWActivitySnapshot.Parser.ParseDelimitedFrom(stream);
                         if (snapshot is null)
                         {
                             break;

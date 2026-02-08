@@ -85,6 +85,7 @@ namespace WoWSharpClient.Models
         public uint LastWeekKills { get; set; }
         public uint ThisWeekKills { get; set; }
         public uint ThisWeekContribution { get; set; }
+        public uint LastWeekContribution { get; set; }
         public uint LifetimeHonorableKills { get; set; }
         public uint LifetimeDishonorableKills { get; set; }
         public uint WatchedFactionIndex { get; set; }
@@ -142,6 +143,7 @@ namespace WoWSharpClient.Models
             LastWeekKills = source.LastWeekKills;
             ThisWeekKills = source.ThisWeekKills;
             ThisWeekContribution = source.ThisWeekContribution;
+            LastWeekContribution = source.LastWeekContribution;
             LifetimeHonorableKills = source.LifetimeHonorableKills;
             LifetimeDishonorableKills = source.LifetimeDishonorableKills;
             WatchedFactionIndex = source.WatchedFactionIndex;

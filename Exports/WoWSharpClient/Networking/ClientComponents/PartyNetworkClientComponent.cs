@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using System.Reactive;
 using System.Reactive.Linq;
@@ -316,16 +317,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                     throw new InvalidOperationException("Only the group leader can promote other players");
                 }
 
-                _logger.LogDebug("Promoting player to leader: {PlayerName}", playerName);
+                // 1.12.1 CMSG_GROUP_SET_LEADER uses ObjectGuid(8), not name
+                var member = GetGroupMember(playerName);
+                if (member == null)
+                {
+                    throw new ArgumentException($"Player '{playerName}' is not in the group");
+                }
 
-                var nameBytes = Encoding.UTF8.GetBytes(playerName);
-                var payload = new byte[nameBytes.Length + 1];
-                Array.Copy(nameBytes, payload, nameBytes.Length);
-                payload[nameBytes.Length] = 0; // Null terminator
-
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_GROUP_SET_LEADER, payload, cancellationToken);
-
-                _logger.LogInformation("Leadership promotion sent for player: {PlayerName}", playerName);
+                await PromoteToLeaderAsync(member.Guid, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -336,14 +335,27 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public async Task PromoteToLeaderAsync(ulong playerGuid, CancellationToken cancellationToken = default)
         {
-            var member = GetGroupMember(playerGuid);
-            if (member != null)
+            try
             {
-                await PromoteToLeaderAsync(member.Name, cancellationToken);
+                if (!IsGroupLeader)
+                {
+                    throw new InvalidOperationException("Only the group leader can promote other players");
+                }
+
+                _logger.LogDebug("Promoting player to leader by GUID: {PlayerGuid:X}", playerGuid);
+
+                // 1.12.1 CMSG_GROUP_SET_LEADER: ObjectGuid(8)
+                var payload = new byte[8];
+                BinaryPrimitives.WriteUInt64LittleEndian(payload, playerGuid);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_GROUP_SET_LEADER, payload, cancellationToken);
+
+                _logger.LogInformation("Leadership promotion sent for player GUID: {PlayerGuid:X}", playerGuid);
             }
-            else
+            catch (Exception ex)
             {
-                throw new ArgumentException($"Player with GUID {playerGuid:X} is not in the group");
+                _logger.LogError(ex, "Failed to promote player to leader by GUID: {PlayerGuid:X}", playerGuid);
+                throw;
             }
         }
 
@@ -363,12 +375,18 @@ namespace WoWSharpClient.Networking.ClientComponents
                     throw new InvalidOperationException("Only the group leader can promote assistants");
                 }
 
+                // 1.12.1 CMSG_GROUP_ASSISTANT_LEADER: ObjectGuid(8) + flag(1)
+                var member = GetGroupMember(playerName);
+                if (member == null)
+                {
+                    throw new ArgumentException($"Player '{playerName}' is not in the group");
+                }
+
                 _logger.LogDebug("Promoting player to assistant: {PlayerName}", playerName);
 
-                var nameBytes = Encoding.UTF8.GetBytes(playerName);
-                var payload = new byte[nameBytes.Length + 1];
-                Array.Copy(nameBytes, payload, nameBytes.Length);
-                payload[nameBytes.Length] = 0; // Null terminator
+                var payload = new byte[9]; // guid(8) + flag(1)
+                BinaryPrimitives.WriteUInt64LittleEndian(payload, member.Guid);
+                payload[8] = 1; // 1 = promote to assistant
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_GROUP_ASSISTANT_LEADER, payload, cancellationToken);
 
@@ -394,15 +412,11 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 _logger.LogDebug("Setting loot method: {LootMethod}, Threshold: {LootThreshold}", lootMethod, lootThreshold);
 
-                var payload = new byte[17]; // 1 + 8 + 8 bytes
-                payload[0] = (byte)lootMethod;
-
-                if (lootMasterGuid.HasValue)
-                {
-                    BitConverter.GetBytes(lootMasterGuid.Value).CopyTo(payload, 1);
-                }
-
-                BitConverter.GetBytes((ulong)lootThreshold).CopyTo(payload, 9);
+                // 1.12.1 CMSG_LOOT_METHOD: uint32(4) + ObjectGuid(8) + uint32(4) = 16 bytes
+                var payload = new byte[16];
+                BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(0, 4), (uint)lootMethod);
+                BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(4, 8), lootMasterGuid ?? 0UL);
+                BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(12, 4), (uint)lootThreshold);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_METHOD, payload, cancellationToken);
 
@@ -520,19 +534,23 @@ namespace WoWSharpClient.Networking.ClientComponents
         #endregion
 
         #region Information Requests
-        public async Task RequestPartyMemberStatsAsync(CancellationToken cancellationToken = default)
+        public async Task RequestPartyMemberStatsAsync(ulong memberGuid, CancellationToken cancellationToken = default)
         {
             try
             {
-                _logger.LogDebug("Requesting party member stats");
+                _logger.LogDebug("Requesting party member stats for {MemberGuid:X}", memberGuid);
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_REQUEST_PARTY_MEMBER_STATS, [], cancellationToken);
+                // 1.12.1 CMSG_REQUEST_PARTY_MEMBER_STATS: ObjectGuid(8)
+                var payload = new byte[8];
+                BinaryPrimitives.WriteUInt64LittleEndian(payload, memberGuid);
 
-                _logger.LogInformation("Party member stats request sent");
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_REQUEST_PARTY_MEMBER_STATS, payload, cancellationToken);
+
+                _logger.LogInformation("Party member stats request sent for {MemberGuid:X}", memberGuid);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to request party member stats");
+                _logger.LogError(ex, "Failed to request party member stats for {MemberGuid:X}", memberGuid);
                 throw;
             }
         }
@@ -626,20 +644,99 @@ namespace WoWSharpClient.Networking.ClientComponents
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
             => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
+        /// <summary>
+        /// SMSG_GROUP_INVITE: CString inviterName
+        /// </summary>
         private string ParseGroupInvite(ReadOnlyMemory<byte> payload)
         {
-            // Placeholder: actual parsing TBD
-            return "Unknown";
+            var span = payload.Span;
+            if (span.Length == 0) return "Unknown";
+            int nullIdx = span.IndexOf((byte)0);
+            return nullIdx > 0
+                ? Encoding.UTF8.GetString(span[..nullIdx])
+                : Encoding.UTF8.GetString(span);
         }
 
+        /// <summary>
+        /// SMSG_GROUP_LIST (1.12.1 cmangos-classic format):
+        /// groupType(1) + ownSubGroup(1) + ownFlags(1) + memberCount(4)
+        /// + [CString name + guid(8) + online(1) + flags(1)] * memberCount
+        /// + leaderGuid(8)
+        /// + [if memberCount > 0: lootMethod(1) + looterGuid(8) + lootThreshold(1)]
+        /// </summary>
         private (bool IsRaid, uint MemberCount) ParseGroupList(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                if (span.Length < 5) return (IsInRaid, GroupSize);
-                var groupType = span[0];
-                var count = BitConverter.ToUInt32(span.Slice(1, 4));
+                // Header: groupType(1) + subGroup(1) + flags(1) + count(4) = 7 bytes
+                if (span.Length < 7) return (IsInRaid, GroupSize);
+
+                byte groupType = span[0];
+                // span[1] = ownSubGroup, span[2] = ownFlags (unused here)
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(3, 4));
+
+                var members = new List<GroupMember>((int)count);
+                int offset = 7;
+
+                for (uint i = 0; i < count && offset < span.Length; i++)
+                {
+                    // CString name (null-terminated)
+                    int nameEnd = span[offset..].IndexOf((byte)0);
+                    if (nameEnd < 0) break;
+                    string name = Encoding.UTF8.GetString(span.Slice(offset, nameEnd));
+                    offset += nameEnd + 1;
+
+                    // guid(8) + online(1) + memberFlags(1) = 10 bytes
+                    if (offset + 10 > span.Length) break;
+                    ulong guid = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset, 8));
+                    offset += 8;
+                    byte online = span[offset++];
+                    byte memberFlags = span[offset++];
+
+                    members.Add(new GroupMember
+                    {
+                        Guid = guid,
+                        Name = name,
+                        IsOnline = online != 0,
+                        SubGroup = memberFlags,
+                    });
+                }
+
+                // leaderGuid(8)
+                ulong leaderGuid = 0;
+                if (offset + 8 <= span.Length)
+                {
+                    leaderGuid = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset, 8));
+                    offset += 8;
+                }
+
+                // Mark leader; if no member matches leaderGuid, self is the leader
+                bool selfIsLeader = true;
+                foreach (var m in members)
+                {
+                    m.IsLeader = m.Guid == leaderGuid;
+                    if (m.IsLeader) selfIsLeader = false;
+                }
+
+                // Loot settings (only present when count > 0)
+                LootMethod parsedLootMethod = LootMethod.FreeForAll;
+                if (count > 0 && offset + 10 <= span.Length)
+                {
+                    parsedLootMethod = (LootMethod)span[offset++];
+                    offset += 8; // looterGuid
+                    offset += 1; // lootThreshold
+                }
+
+                lock (_groupLock)
+                {
+                    _groupMembers.Clear();
+                    _groupMembers.AddRange(members);
+                }
+
+                IsGroupLeader = selfIsLeader && count > 0;
+                CurrentLootMethod = parsedLootMethod;
+
                 return (groupType == 1, count);
             }
             catch
@@ -648,22 +745,53 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// SMSG_GROUP_SET_LEADER: CString newLeaderName (no GUID in packet).
+        /// GUID is looked up from local group member cache.
+        /// </summary>
         private (string NewLeaderName, ulong NewLeaderGuid) ParseGroupSetLeader(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
-            ulong guid = span.Length >= 8 ? BitConverter.ToUInt64(span[..8]) : 0UL;
-            var name = "Unknown";
+            if (span.Length == 0) return ("Unknown", 0UL);
+
+            int nullIdx = span.IndexOf((byte)0);
+            string name = nullIdx > 0
+                ? Encoding.UTF8.GetString(span[..nullIdx])
+                : Encoding.UTF8.GetString(span);
+
+            // Look up GUID from group members
+            ulong guid = 0;
+            lock (_groupLock)
+            {
+                var member = _groupMembers.FirstOrDefault(
+                    m => m.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                if (member != null) guid = member.Guid;
+            }
             return (name, guid);
         }
 
+        /// <summary>
+        /// SMSG_PARTY_COMMAND_RESULT: operation(uint32) + memberName(CString) + result(uint32).
+        /// The CString sits between the two uint32 fields.
+        /// </summary>
         private (string Operation, bool Success, uint ResultCode) ParsePartyCommandResult(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                if (span.Length < 8) return ("Unknown", false, 0xFFFFFFFF);
-                var operation = BitConverter.ToUInt32(span[..4]);
-                var result = BitConverter.ToUInt32(span.Slice(4, 4));
+                // Minimum: uint32(4) + null(1) + uint32(4) = 9 bytes
+                if (span.Length < 9) return ("Unknown", false, 0xFFFFFFFF);
+
+                uint operation = BinaryPrimitives.ReadUInt32LittleEndian(span[..4]);
+
+                // Skip CString member name after offset 4
+                int nullIdx = span[4..].IndexOf((byte)0);
+                if (nullIdx < 0) return ("Unknown", false, 0xFFFFFFFF);
+                int resultOffset = 4 + nullIdx + 1;
+
+                if (resultOffset + 4 > span.Length) return ("Unknown", false, 0xFFFFFFFF);
+
+                uint result = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(resultOffset, 4));
                 var operationName = operation switch
                 {
                     0x00 => "Invite",

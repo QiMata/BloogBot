@@ -27,6 +27,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly Dictionary<uint, uint> _spellCooldowns;
         private bool _disposed;
 
+        /// <summary>
+        /// Optional reference to the CharacterInit component for action bar slot resolution.
+        /// Set this after construction to enable CastSpellFromActionBarAsync.
+        /// </summary>
+        public ICharacterInitNetworkClientComponent? CharacterInitComponent { get; set; }
+
         // Reactive observable pipelines (wired to opcode handlers)
         private readonly IObservable<SpellCastStartData> _spellCastStarts;
         private readonly IObservable<SpellCastCompleteData> _spellCastCompletions;
@@ -168,15 +174,20 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Casting spell {SpellId}", spellId);
+                _logger.LogDebug("Casting spell {SpellId} (self-cast)", spellId);
 
-                var payload = BitConverter.GetBytes(spellId);
-                
+                // CMSG_CAST_SPELL: uint32 spellId + SpellCastTargets (uint16 targetMask)
+                // TARGET_FLAG_SELF = 0x0000
+                using var ms = new MemoryStream();
+                using var w = new BinaryWriter(ms);
+                w.Write(spellId);
+                w.Write((ushort)0x0000); // TARGET_FLAG_SELF
+
                 _isCasting = true;
                 _currentSpellId = spellId;
                 _currentSpellTarget = null;
-                
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, payload, cancellationToken);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, ms.ToArray(), cancellationToken);
                 _logger.LogInformation("Spell cast command sent successfully");
             }
             catch (Exception ex)
@@ -200,15 +211,19 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Casting spell {SpellId} on target {TargetGuid:X}", spellId, targetGuid);
 
-                var payload = new byte[12];
-                BitConverter.GetBytes(spellId).CopyTo(payload, 0);
-                BitConverter.GetBytes(targetGuid).CopyTo(payload, 4);
+                // CMSG_CAST_SPELL: uint32 spellId + SpellCastTargets
+                // TARGET_FLAG_UNIT = 0x0002 + packed GUID
+                using var ms = new MemoryStream();
+                using var w = new BinaryWriter(ms);
+                w.Write(spellId);
+                w.Write((ushort)0x0002); // TARGET_FLAG_UNIT
+                WoWSharpClient.Utils.ReaderUtils.WritePackedGuid(w, targetGuid);
 
                 _isCasting = true;
                 _currentSpellId = spellId;
                 _currentSpellTarget = targetGuid;
-                
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, payload, cancellationToken);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, ms.ToArray(), cancellationToken);
                 _logger.LogInformation("Targeted spell cast command sent successfully");
             }
             catch (Exception ex)
@@ -229,17 +244,21 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Casting spell {SpellId} at location ({X}, {Y}, {Z})", spellId, x, y, z);
 
-                var payload = new byte[16];
-                BitConverter.GetBytes(spellId).CopyTo(payload, 0);
-                BitConverter.GetBytes(x).CopyTo(payload, 4);
-                BitConverter.GetBytes(y).CopyTo(payload, 8);
-                BitConverter.GetBytes(z).CopyTo(payload, 12);
+                // CMSG_CAST_SPELL: uint32 spellId + SpellCastTargets
+                // TARGET_FLAG_DEST_LOCATION = 0x0040 + 3x float
+                using var ms = new MemoryStream();
+                using var w = new BinaryWriter(ms);
+                w.Write(spellId);
+                w.Write((ushort)0x0040); // TARGET_FLAG_DEST_LOCATION
+                w.Write(x);
+                w.Write(y);
+                w.Write(z);
 
                 _isCasting = true;
                 _currentSpellId = spellId;
                 _currentSpellTarget = null;
-                
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, payload, cancellationToken);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, ms.ToArray(), cancellationToken);
                 _logger.LogInformation("Location-targeted spell cast command sent successfully");
             }
             catch (Exception ex)
@@ -257,9 +276,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                _logger.LogDebug("Interrupting current spell cast");
+                _logger.LogDebug("Interrupting current spell cast (spellId={SpellId})", _currentSpellId);
 
-                var payload = new byte[4]; // Empty payload for cancel
+                // CMSG_CANCEL_CAST: uint32 spellId — server uses it in InterruptNonMeleeSpells
+                var payload = new byte[4];
+                BitConverter.GetBytes(_currentSpellId ?? 0u).CopyTo(payload, 0);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_CAST, payload, cancellationToken);
                 
                 _isCasting = false;
@@ -281,9 +302,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                _logger.LogDebug("Stopping current channeled spell");
+                _logger.LogDebug("Stopping current channeled spell (spellId={SpellId})", _currentSpellId);
 
-                var payload = new byte[4]; // Empty payload for cancel channeling
+                // CMSG_CANCEL_CHANNELLING: uint32 spellId (server reads but skips)
+                var payload = new byte[4];
+                BitConverter.GetBytes(_currentSpellId ?? 0u).CopyTo(payload, 0);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_CHANNELLING, payload, cancellationToken);
                 
                 _isChanneling = false;
@@ -306,17 +329,19 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Starting auto-repeat for spell {SpellId} on target {TargetGuid:X}", spellId, targetGuid);
 
-                // First set the target
+                // First set the target (full 8-byte GUID)
                 var targetPayload = BitConverter.GetBytes(targetGuid);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_SET_SELECTION, targetPayload, cancellationToken);
 
-                // Then start auto-repeat
-                var spellPayload = new byte[12];
-                BitConverter.GetBytes(spellId).CopyTo(spellPayload, 0);
-                BitConverter.GetBytes(targetGuid).CopyTo(spellPayload, 4);
-                
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, spellPayload, cancellationToken);
-                
+                // Then cast the spell with proper SpellCastTargets
+                using var ms = new MemoryStream();
+                using var w = new BinaryWriter(ms);
+                w.Write(spellId);
+                w.Write((ushort)0x0002); // TARGET_FLAG_UNIT
+                WoWSharpClient.Utils.ReaderUtils.WritePackedGuid(w, targetGuid);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CAST_SPELL, ms.ToArray(), cancellationToken);
+
                 _logger.LogInformation("Auto-repeat spell started successfully");
             }
             catch (Exception ex)
@@ -334,8 +359,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Stopping auto-repeat spell");
 
-                var payload = new byte[4]; // Empty payload for stopping auto-repeat
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_AUTO_REPEAT_SPELL, payload, cancellationToken);
+                // CMSG_CANCEL_AUTO_REPEAT_SPELL: empty packet (handler reads nothing)
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_AUTO_REPEAT_SPELL, [], cancellationToken);
                 
                 _logger.LogInformation("Auto-repeat spell stopped successfully");
             }
@@ -353,12 +378,50 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Casting spell from action bar slot {ActionBarSlot}", actionBarSlot);
 
-                var payload = new byte[1] { actionBarSlot };
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
-                
-                _logger.LogInformation("Action bar spell cast command sent successfully");
+                if (actionBarSlot >= 120)
+                    throw new ArgumentOutOfRangeException(nameof(actionBarSlot), "Action bar slot must be 0-119");
+
+                var charInit = CharacterInitComponent;
+                if (charInit == null || !charInit.IsInitialized)
+                    throw new InvalidOperationException(
+                        "Action bar data not available. Ensure CharacterInitComponent is set and SMSG_ACTION_BUTTONS has been received.");
+
+                var buttons = charInit.ActionButtons;
+                if (actionBarSlot >= buttons.Count)
+                    throw new InvalidOperationException($"Action bar slot {actionBarSlot} out of range (have {buttons.Count} buttons)");
+
+                var button = buttons[actionBarSlot];
+                if (button.IsEmpty)
+                    throw new InvalidOperationException($"Action bar slot {actionBarSlot} is empty");
+
+                switch (button.Type)
+                {
+                    case Models.ActionButtonType.Spell:
+                        _logger.LogDebug("Action bar slot {Slot} resolved to spell {SpellId}", actionBarSlot, button.ActionId);
+                        await CastSpellAsync(button.ActionId, cancellationToken);
+                        break;
+
+                    case Models.ActionButtonType.Item:
+                        _logger.LogWarning("Action bar slot {Slot} contains item {ItemId} — use ItemUseNetworkClientComponent instead",
+                            actionBarSlot, button.ActionId);
+                        throw new InvalidOperationException(
+                            $"Action bar slot {actionBarSlot} contains an item (ID {button.ActionId}), not a spell. Use ItemUseNetworkClientComponent.");
+
+                    case Models.ActionButtonType.Macro:
+                    case Models.ActionButtonType.ClickMacro:
+                        _logger.LogWarning("Action bar slot {Slot} contains macro {MacroId} — macros not supported in headless client",
+                            actionBarSlot, button.ActionId);
+                        throw new InvalidOperationException(
+                            $"Action bar slot {actionBarSlot} contains a macro (ID {button.ActionId}). Macros are not supported in headless client.");
+
+                    default:
+                        throw new InvalidOperationException(
+                            $"Action bar slot {actionBarSlot} has unsupported type {button.Type} (action ID {button.ActionId})");
+                }
+
+                _logger.LogInformation("Action bar spell cast from slot {Slot} completed", actionBarSlot);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not ArgumentOutOfRangeException and not InvalidOperationException)
             {
                 _logger.LogError(ex, "Failed to cast spell from action bar slot {ActionBarSlot}", actionBarSlot);
                 throw;

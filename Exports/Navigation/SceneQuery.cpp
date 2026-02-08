@@ -318,14 +318,31 @@ void SceneQuery::Initialize()
 
     try
     {
+        // Build data root from WWOW_DATA_DIR environment variable
+        std::string dataRoot;
+        char* envDataRoot = nullptr;
+        size_t envSize = 0;
+        if (_dupenv_s(&envDataRoot, &envSize, "WWOW_DATA_DIR") == 0 && envDataRoot != nullptr)
+        {
+            dataRoot = envDataRoot;
+            free(envDataRoot);
+            if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+                dataRoot += '/';
+        }
+
         // Acquire or create the VMapManager instance and configure it
         m_vmapManager = static_cast<VMAP::VMapManager2*>(VMAP::VMapFactory::createOrGetVMapManager());
         if (m_vmapManager)
         {
             VMAP::VMapFactory::initialize();
 
-            // Try common base paths
-            std::vector<std::string> vps = { "vmaps/", "Data/vmaps/", "../Data/vmaps/" };
+            // Try WWOW_DATA_DIR first, then common relative paths
+            std::vector<std::string> vps;
+            if (!dataRoot.empty())
+                vps.push_back(dataRoot + "vmaps/");
+            vps.push_back("vmaps/");
+            vps.push_back("Data/vmaps/");
+            vps.push_back("../Data/vmaps/");
             for (auto& vp : vps)
             {
                 if (std::filesystem::exists(vp))
@@ -340,8 +357,13 @@ void SceneQuery::Initialize()
         if (!m_mapLoader)
         {
             m_mapLoader = new MapLoader();
-            // Try common map data paths
-            std::vector<std::string> mps = { "maps/", "Data/maps/", "../Data/maps/" };
+            // Try WWOW_DATA_DIR first, then common relative paths
+            std::vector<std::string> mps;
+            if (!dataRoot.empty())
+                mps.push_back(dataRoot + "maps/");
+            mps.push_back("maps/");
+            mps.push_back("Data/maps/");
+            mps.push_back("../Data/maps/");
             for (auto& mp : mps)
             {
                 if (std::filesystem::exists(mp))

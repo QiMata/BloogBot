@@ -15,7 +15,13 @@ namespace ForegroundBotRunner.Statics
         private readonly Task thrLootUpdate;
         private readonly Task thrMerchUpdate;
 
-        private WoWEventHandler() => SignalEventManager.OnNewSignalEvent += EvaluateEvent;
+        private WoWEventHandler()
+        {
+            // Subscribe to BOTH event types - events with args AND events without args
+            // UPDATE_SELECTED_CHARACTER is a no-args event, so we must subscribe to OnNewSignalEventNoArgs!
+            SignalEventManager.OnNewSignalEvent += EvaluateEvent;
+            SignalEventManager.OnNewSignalEventNoArgs += EvaluateEvent;
+        }
 
         /// <summary>
         ///     Access to the WoWEventHandler
@@ -65,6 +71,11 @@ namespace ForegroundBotRunner.Statics
         ///     Occurs when we disconnect
         /// </summary>
         public event EventHandler OnDisconnect;
+
+        /// <summary>
+        ///     Occurs when the player logs out
+        /// </summary>
+        public event EventHandler OnLogout;
 
         /// <summary>
         ///     Occurs when a new error message pops up (Out of range, must be standing etc.)
@@ -330,20 +341,53 @@ namespace ForegroundBotRunner.Statics
         public event EventHandler<CharDeleteResponse> OnCharacterDeleteResponse;
         public event EventHandler<GameObjectCreatedArgs> OnGameObjectCreated;
 
+        // Event logging for debugging disconnects
+        private static readonly string EventLogPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Documents", "BloogBot", "event_log.txt");
+        private static readonly object _logLock = new();
+        private static DateTime _startTime = DateTime.Now;
+        private static bool _loggingInitialized = false;
+
+        private void LogEvent(string parEvent, object[] parArgs)
+        {
+            try
+            {
+                lock (_logLock)
+                {
+                    if (!_loggingInitialized)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(EventLogPath)!);
+                        File.WriteAllText(EventLogPath, $"=== Event Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+                        _startTime = DateTime.Now;
+                        _loggingInitialized = true;
+                    }
+
+                    var elapsed = (DateTime.Now - _startTime).TotalMilliseconds;
+                    var argsStr = parArgs?.Length > 0
+                        ? string.Join(", ", parArgs.Select(a => a?.ToString() ?? "null"))
+                        : "(no args)";
+
+                    var line = $"[+{elapsed,8:F0}ms] {parEvent}: {argsStr}\n";
+                    File.AppendAllText(EventLogPath, line);
+                }
+            }
+            catch { /* ignore logging errors */ }
+        }
+
         private void EvaluateEvent(string parEvent, params object[] parArgs)
         {
-            Task.Run(() =>
+            // Log ALL events for debugging
+            LogEvent(parEvent, parArgs);
+
+            try
             {
-                try
-                {
-                    _evaluteEvent(parEvent, parArgs);
-                    //Log.Error($"EVENT HANDLER: {parEvent} {JsonConvert.SerializeObject(parArgs)}");
-                }
-                catch (Exception ex)
-                {
-                    Log.Error($"EVENT HANDLER: {parEvent} {JsonConvert.SerializeObject(parArgs)} {ex.Message}");
-                }
-            });
+                _evaluteEvent(parEvent, parArgs);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"EVENT HANDLER: {parEvent} {ex.Message}");
+            }
         }
 
         private void _evaluteEvent(string parEvent, object[] parArgs)
@@ -429,6 +473,10 @@ namespace ForegroundBotRunner.Statics
             else if (parEvent == "DISCONNECTED_FROM_SERVER")
             {
                 OnDisconnect?.Invoke(this, new EventArgs());
+            }
+            else if (parEvent == "PLAYER_LOGOUT")
+            {
+                OnLogout?.Invoke(this, new EventArgs());
             }
             else if (parEvent == "UI_ERROR_MESSAGE")
             {

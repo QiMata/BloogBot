@@ -14,6 +14,24 @@
 #include <mutex>
 #include <filesystem>
 #include <vector>
+#include <crtdbg.h>
+#include <cstdio>
+#include <csignal>
+#include <cstdlib>
+
+// CRT invalid parameter handler — logs and continues instead of aborting
+static void NavigationInvalidParameterHandler(
+    const wchar_t* expression,
+    const wchar_t* function,
+    const wchar_t* file,
+    unsigned int line,
+    uintptr_t pReserved)
+{
+    fprintf(stderr, "[Navigation.dll] CRT invalid parameter in %ls at %ls:%u\n",
+            function ? function : L"(unknown)",
+            file ? file : L"(unknown)",
+            line);
+}
 
 // Global instances
 static bool g_initialized = false;
@@ -34,7 +52,7 @@ void InitializeAllSystems()
         std::string dataRoot;
         char* envDataRoot = nullptr;
         size_t envSize = 0;
-        if (_dupenv_s(&envDataRoot, &envSize, "BLOOGBOT_DATA_DIR") == 0 && envDataRoot != nullptr)
+        if (_dupenv_s(&envDataRoot, &envSize, "WWOW_DATA_DIR") == 0 && envDataRoot != nullptr)
         {
             dataRoot = envDataRoot;
             free(envDataRoot);
@@ -100,25 +118,37 @@ void InitializeAllSystems()
 // ESSENTIAL EXPORTS ONLY
 // ===============================
 
-extern "C" __declspec(dllexport) void PreloadMap(uint32_t mapId)
+static void PreloadMapInner(uint32_t mapId)
 {
     if (!g_initialized)
         InitializeAllSystems();
 
-    // Preload navigation mesh
     try
     {
         auto* navigation = Navigation::GetInstance();
         if (navigation)
         {
-            MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
-            
+            MMAP::MMapFactory::createOrGetMMapManager();
             navigation->GetQueryForMap(mapId);
         }
 
         SceneQuery::EnsureMapLoaded(mapId);
     }
     catch (...) {}
+}
+
+extern "C" __declspec(dllexport) void PreloadMap(uint32_t mapId)
+{
+    __try
+    {
+        PreloadMapInner(mapId);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        OutputDebugStringA("[Navigation.dll] SEH exception in PreloadMap\n");
+        fprintf(stderr, "[Navigation.dll] SEH exception in PreloadMap (code=0x%08lx)\n",
+                GetExceptionCode());
+    }
 }
 
 extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ end, bool smoothPath, int* length)
@@ -141,14 +171,8 @@ extern "C" __declspec(dllexport) void PathArrFree(XYZ* pathArr)
 
 // Removed legacy PhysicsStep export. Use PhysicsStepV2 only.
 
-extern "C" __declspec(dllexport) PhysicsOutput PhysicsStepV2(const PhysicsInput& input)
+static PhysicsOutput MakePassthroughOutput(const PhysicsInput& input)
 {
-    if (!g_initialized)
-        InitializeAllSystems();
-
-    if (auto* physics = PhysicsEngine::Instance())
-        return physics->StepV2(input, input.deltaTime);
-
     PhysicsOutput output = {};
     output.x = input.x;
     output.y = input.y;
@@ -163,6 +187,32 @@ extern "C" __declspec(dllexport) PhysicsOutput PhysicsStepV2(const PhysicsInput&
     output.liquidZ = -100000.0f;
     output.liquidType = VMAP::MAP_LIQUID_TYPE_NO_WATER;
     return output;
+}
+
+static PhysicsOutput PhysicsStepV2Inner(const PhysicsInput& input)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    if (auto* physics = PhysicsEngine::Instance())
+        return physics->StepV2(input, input.deltaTime);
+
+    return MakePassthroughOutput(input);
+}
+
+extern "C" __declspec(dllexport) PhysicsOutput PhysicsStepV2(const PhysicsInput& input)
+{
+    __try
+    {
+        return PhysicsStepV2Inner(input);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        OutputDebugStringA("[Navigation.dll] SEH exception in PhysicsStepV2\n");
+        fprintf(stderr, "[Navigation.dll] SEH exception in PhysicsStepV2 (code=0x%08lx)\n",
+                GetExceptionCode());
+        return MakePassthroughOutput(input);
+    }
 }
 
 extern "C" __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ to)
@@ -180,6 +230,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     if (ul_reason_for_call == DLL_PROCESS_ATTACH)
     {
         SetConsoleOutputCP(CP_UTF8);
+
+        // Install CRT invalid parameter handler to prevent abort() on null stream etc.
+        _set_invalid_parameter_handler(NavigationInvalidParameterHandler);
+
+        // Suppress CRT assertion dialogs — redirect to stderr instead of modal dialog
+        _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+        _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+        _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+        _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+
+        // Suppress abort() from showing Windows Error Reporting dialog
+        _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+
+        // Suppress Windows Error Reporting dialog for this process
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     }
     else if (ul_reason_for_call == DLL_PROCESS_DETACH)
     {

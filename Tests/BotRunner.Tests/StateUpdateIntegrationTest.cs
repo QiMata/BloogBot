@@ -4,8 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MySql.Data.MySqlClient;
-using StateManager.Clients;
-using StateManager;
+using WoWStateManager.Clients;
+using WoWStateManager;
 using System.ComponentModel;
 using System.Data;
 using Xunit.Abstractions;
@@ -18,6 +18,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
 using Xunit;
+using WinImports;
 
 namespace BotRunner.Tests
 {
@@ -533,6 +534,7 @@ namespace BotRunner.Tests
         private async Task<bool> ValidateInjectionPrerequisites()
         {
             var loaderPath = _fixture.Configuration["LoaderDllPath"];
+
             if (string.IsNullOrEmpty(loaderPath))
             {
                 _output.WriteLine("   - ERROR: LoaderDllPath not configured in appsettings.test.json");
@@ -587,11 +589,21 @@ namespace BotRunner.Tests
             }
             _output.WriteLine($"   - ? ForegroundBotRunner.runtimeconfig.json found at: {runtimeConfigPath}");
             
-            var gameClientPath = _fixture.Configuration["GameClient:ExecutablePath"];
+            // Check environment variable first, then fall back to config
+            var gameClientPath = Environment.GetEnvironmentVariable("WWOW_GAME_CLIENT_PATH");
+            if (string.IsNullOrEmpty(gameClientPath))
+            {
+                gameClientPath = _fixture.Configuration["GameClient:ExecutablePath"];
+            }
+            else
+            {
+                _output.WriteLine($"   - Using WWOW_GAME_CLIENT_PATH environment variable: {gameClientPath}");
+            }
+
             if (string.IsNullOrEmpty(gameClientPath) || !File.Exists(gameClientPath))
             {
                 _output.WriteLine($"   - ERROR: WoW.exe not found at: {gameClientPath}");
-                _output.WriteLine("   - Update GameClient:ExecutablePath in appsettings.test.json");
+                _output.WriteLine("   - Set WWOW_GAME_CLIENT_PATH environment variable or update GameClient:ExecutablePath in appsettings.test.json");
                 return false;
             }
             _output.WriteLine($"   - ? WoW.exe found at: {gameClientPath}");
@@ -934,11 +946,11 @@ namespace BotRunner.Tests
         {
             try
             {
-                var relativeProject = Path.Combine("Services", "StateManager", "StateManager.csproj");
+                var relativeProject = Path.Combine("Services", "WoWStateManager", "WoWStateManager.csproj");
                 var repoRoot = LocateRepoRootFor(relativeProject);
                 if (repoRoot == null)
                 {
-                    Console.WriteLine("[Tests] Could not locate repo root containing Services/StateManager/StateManager.csproj.");
+                    Console.WriteLine("[Tests] Could not locate repo root containing Services/WoWStateManager/WoWStateManager.csproj.");
                     return false;
                 }
 
@@ -1045,15 +1057,24 @@ namespace BotRunner.Tests
         {
             _logger.LogInformation("TestableStateManager starting WoW.exe with DLL injection...");
 
-            var gameClientPath = _configuration["GameClient:ExecutablePath"];
-            _logger.LogInformation($"Configured WoW.exe path: {gameClientPath}");
-            
+            // Check environment variable first, then fall back to config
+            var gameClientPath = Environment.GetEnvironmentVariable("WWOW_GAME_CLIENT_PATH");
             if (string.IsNullOrEmpty(gameClientPath))
             {
-                _logger.LogError("GameClient:ExecutablePath not configured in settings");
-                throw new InvalidOperationException($"GameClient:ExecutablePath not configured");
+                gameClientPath = _configuration["GameClient:ExecutablePath"];
             }
-            
+            else
+            {
+                _logger.LogInformation($"Using WWOW_GAME_CLIENT_PATH environment variable: {gameClientPath}");
+            }
+            _logger.LogInformation($"Configured WoW.exe path: {gameClientPath}");
+
+            if (string.IsNullOrEmpty(gameClientPath))
+            {
+                _logger.LogError("GameClient:ExecutablePath not configured. Set WWOW_GAME_CLIENT_PATH environment variable or GameClient:ExecutablePath in settings.");
+                throw new InvalidOperationException("GameClient:ExecutablePath not configured. Set WWOW_GAME_CLIENT_PATH environment variable or GameClient:ExecutablePath in settings.");
+            }
+
             if (!File.Exists(gameClientPath))
             {
                 _logger.LogError($"WoW.exe not found at configured path: {gameClientPath}");
@@ -1062,11 +1083,11 @@ namespace BotRunner.Tests
 
             var loaderDllPath = _configuration["LoaderDllPath"];
             _logger.LogInformation($"Configured LoaderDllPath: {loaderDllPath}");
-            
+
             if (string.IsNullOrEmpty(loaderDllPath))
             {
-                _logger.LogError("LoaderDllPath not configured in settings");
-                throw new InvalidOperationException("LoaderDllPath not configured");
+                _logger.LogError("LoaderDllPath not configured in settings.");
+                throw new InvalidOperationException("LoaderDllPath not configured in settings.");
             }
 
             // Resolve relative path
@@ -1108,10 +1129,10 @@ namespace BotRunner.Tests
             try
             {
                 _wowProcess = new Process { StartInfo = startInfo };
-                
+
                 _logger.LogInformation("Attempting to start WoW.exe process...");
                 bool started = _wowProcess.Start();
-                
+
                 if (!started)
                 {
                     _logger.LogError("Process.Start() returned false - failed to start WoW.exe");
@@ -1120,32 +1141,31 @@ namespace BotRunner.Tests
 
                 _logger.LogInformation($"? WoW.exe started successfully with Process ID: {_wowProcess.Id}");
                 _logger.LogInformation($"  Process Name: {_wowProcess.ProcessName}");
-                _logger.LogInformation($"  Main Window Title: {_wowProcess.MainWindowTitle}");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Exception while starting WoW.exe: {ex.Message}");
                 throw new InvalidOperationException($"Failed to start WoW.exe: {ex.Message}", ex);
             }
-            
-            // Check if process is still running after start
-            await Task.Delay(1000, cancellationToken);
-            if (_wowProcess.HasExited)
-            {
-                _logger.LogError($"WoW.exe exited immediately with exit code: {_wowProcess.ExitCode}");
-                throw new InvalidOperationException($"WoW.exe exited immediately with exit code: {_wowProcess.ExitCode}");
-            }
-            
-            _logger.LogInformation("? WoW.exe is running, waiting for initialization...");
 
-            // Give WoW time to initialize
-            await Task.Delay(5000, cancellationToken);
-            
-            // Check again if process is still running
-            if (_wowProcess.HasExited)
+            // Wait for WoW process to be fully initialized using intelligent detection
+            _logger.LogInformation("Waiting for WoW.exe to be ready for injection...");
+
+            var processReady = await WoWProcessDetector.WaitForProcessReadyAsync(
+                _wowProcess,
+                timeout: TimeSpan.FromSeconds(60),
+                waitForLoginScreen: true,
+                logger: msg => _logger.LogInformation($"[WoWDetector] {msg}"));
+
+            if (!processReady)
             {
-                _logger.LogError($"WoW.exe exited during initialization with exit code: {_wowProcess.ExitCode}");
-                throw new InvalidOperationException($"WoW.exe exited during initialization with exit code: {_wowProcess.ExitCode}");
+                if (_wowProcess.HasExited)
+                {
+                    _logger.LogError($"WoW.exe exited during initialization with exit code: {_wowProcess.ExitCode}");
+                    throw new InvalidOperationException($"WoW.exe exited during initialization with exit code: {_wowProcess.ExitCode}");
+                }
+
+                _logger.LogWarning("WoW.exe did not reach login screen within timeout - attempting injection anyway");
             }
 
             _logger.LogInformation("? WoW.exe initialization complete - starting DLL injection...");

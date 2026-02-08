@@ -7,7 +7,7 @@ namespace PromptHandlingService.Predefined.IntentParser
         public class UserRequest
         {
             public string Request { get; set; } = string.Empty;
-            public ActivitySnapshot ActivitySnapshot { get; set; } = new ActivitySnapshot();
+            public WoWActivitySnapshot ActivitySnapshot { get; set; } = new WoWActivitySnapshot();
 
             public override string ToString()
             {

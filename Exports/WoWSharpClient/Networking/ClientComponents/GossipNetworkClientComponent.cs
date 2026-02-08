@@ -1,4 +1,6 @@
+using System.Buffers.Binary;
 using System.Reactive.Linq;
+using System.Text;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -256,7 +258,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public async Task SelectOptimalQuestRewardAsync(QuestRewardSelectionStrategy strategy, CancellationToken cancellationToken = default)
         {
-            // Placeholder � select first reward (index 0)
+            // Placeholder � select first reward (index 0)
             await SelectGossipOptionAsync(0, cancellationToken);
         }
 
@@ -356,13 +358,72 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private GossipMenuData ParseGossipMenu(ReadOnlyMemory<byte> payload)
         {
-            // Placeholder parsing logic (expects first 8 bytes GUID if present)
+            // SMSG_GOSSIP_MESSAGE format (MaNGOS 1.12.1):
+            // ObjectGuid npcGuid (8)
+            // uint32 textId (4)
+            // uint32 menuId (4)
+            // uint32 gossipOptionsCount (4)
+            // [per gossip option]: uint32 index (4), uint8 icon (1), uint8 coded (1),
+            //                      uint32 boxMoney (4), string text (null-term), string boxText (null-term)
+            // uint32 questOptionsCount (4)
+            // [per quest option]: uint32 questId (4), uint32 icon (4), uint32 questLevel (4), string title (null-term)
             var span = payload.Span;
-            ulong npcGuid = span.Length >= 8 ? BitConverter.ToUInt64(span[..8]) : 0UL;
-            return new GossipMenuData(npcGuid, 0, 0)
+            if (span.Length < 20)
             {
-                Options = Array.Empty<GossipOptionData>(),
-                QuestOptions = Array.Empty<GossipQuestOption>(),
+                ulong g = span.Length >= 8 ? BinaryPrimitives.ReadUInt64LittleEndian(span) : 0UL;
+                return new GossipMenuData(g, 0, 0);
+            }
+
+            int offset = 0;
+            ulong npcGuid = BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset, 8)); offset += 8;
+            uint textId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+            uint menuId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+            uint gossipCount = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+
+            var gossipOptions = new List<GossipOptionData>();
+            for (uint i = 0; i < gossipCount && offset + 10 <= span.Length; i++)
+            {
+                uint optIndex = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                byte icon = span[offset++];
+                byte coded = span[offset++];
+                uint boxMoney = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                string message = ReadCString(span, ref offset);
+                string boxText = ReadCString(span, ref offset);
+
+                var gossipType = icon <= 10 ? (GossipTypes)icon : GossipTypes.Gossip;
+                gossipOptions.Add(new GossipOptionData(optIndex, message, gossipType)
+                {
+                    RequiresPayment = coded != 0,
+                    Cost = boxMoney
+                });
+            }
+
+            var questOptions = new List<GossipQuestOption>();
+            if (offset + 4 <= span.Length)
+            {
+                uint questCount = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                for (uint i = 0; i < questCount && offset + 12 <= span.Length; i++)
+                {
+                    uint questId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                    uint questIcon = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                    uint questLevel = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                    string questTitle = ReadCString(span, ref offset);
+
+                    var state = questIcon switch
+                    {
+                        0 or 2 => QuestGossipState.Available,
+                        1 or 3 => QuestGossipState.InProgress,
+                        4 => QuestGossipState.Completable,
+                        _ => QuestGossipState.Available
+                    };
+                    questOptions.Add(new GossipQuestOption(questId, questTitle, questLevel, state, i));
+                }
+            }
+
+            return new GossipMenuData(npcGuid, menuId, textId)
+            {
+                Options = gossipOptions,
+                QuestOptions = questOptions,
                 GossipText = string.Empty,
                 HasMultiplePages = false
             };
@@ -370,11 +431,33 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private (ulong NpcGuid, uint TextId, string Text) ParseNpcTextUpdate(ReadOnlyMemory<byte> payload)
         {
+            // SMSG_NPC_TEXT_UPDATE format (MaNGOS 1.12.1):
+            // textId(4) + 8 × [probability(float4) + text0\0 + text1\0 + lang(4) + 3×[emoteDelay(4)+emote(4)]]
+            // No GUID in this packet — NPC context comes from the active gossip session.
             var span = payload.Span;
-            ulong npcGuid = span.Length >= 8 ? BitConverter.ToUInt64(span[..8]) : 0UL;
-            uint textId = span.Length >= 12 ? BitConverter.ToUInt32(span.Slice(8, 4)) : 0U;
+            uint textId = span.Length >= 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span[..4]) : 0U;
+            ulong npcGuid = _currentNpcGuid ?? 0UL;
+
+            // Parse first text variant: skip probability(4), read text0
+            int offset = 4;
             string text = $"NPC Text {textId}";
+            if (offset + 4 <= span.Length)
+            {
+                offset += 4; // skip probability float
+                if (offset < span.Length)
+                    text = ReadCString(span, ref offset);
+            }
             return (npcGuid, textId, text);
+        }
+
+        private static string ReadCString(ReadOnlySpan<byte> span, ref int offset)
+        {
+            int start = offset;
+            while (offset < span.Length && span[offset] != 0)
+                offset++;
+            var result = offset > start ? Encoding.UTF8.GetString(span.Slice(start, offset - start)) : string.Empty;
+            if (offset < span.Length) offset++; // skip null terminator
+            return result;
         }
 
         private void ThrowIfDisposed()

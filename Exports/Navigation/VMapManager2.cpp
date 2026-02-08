@@ -35,6 +35,13 @@ namespace VMAP
 
         modelNameToPath.clear();
 
+        // Early-out if directory doesn't exist (prevents recursive_directory_iterator crash)
+        if (basePath.empty() || !std::filesystem::exists(basePath))
+        {
+            modelMappingLoaded = true;
+            return;
+        }
+
         // Helper function to add a model to our mapping
         auto addModel = [](const std::filesystem::path& path) {
             std::string fullPath = path.string();

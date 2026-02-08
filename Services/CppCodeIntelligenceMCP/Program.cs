@@ -113,7 +113,7 @@ try
         return new { 
             status = "healthy", 
             timestamp = DateTime.UtcNow,
-            service = "BloogBot.CppCodeIntelligenceMCP",
+            service = "CppCodeIntelligenceMCP",
             version = "1.0.0",
             uptime = DateTime.UtcNow.Subtract(Process.GetCurrentProcess().StartTime)
         };

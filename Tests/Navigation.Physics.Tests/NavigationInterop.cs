@@ -98,7 +98,7 @@ public static partial class NavigationInterop
         }
 
         /// <summary>
-        /// Computes the triangle's surface normal (right-hand rule: AB × AC)
+        /// Computes the triangle's surface normal (right-hand rule: AB ï¿½ AC)
         /// </summary>
         public readonly Vector3 Normal()
         {
@@ -127,22 +127,68 @@ public static partial class NavigationInterop
     }
 
     // ==========================================================================
-    // PHYSICS INPUT (matches PhysicsBridge.h PhysicsInput)
+    // PHYSICS INPUT (matches PhysicsBridge.h PhysicsInput exactly)
     // ==========================================================================
 
     [StructLayout(LayoutKind.Sequential)]
     public struct PhysicsInput
     {
-        public uint MapId;
+        public uint MoveFlags;
         public float X, Y, Z;
-        public float Vx, Vy, Vz;
         public float Orientation;
         public float Pitch;
-        public uint MoveFlags;
+        public float Vx, Vy, Vz;
+        public float WalkSpeed;
         public float RunSpeed;
+        public float RunBackSpeed;
         public float SwimSpeed;
-        public float FlySpeed;
+        public float SwimBackSpeed;
+        public float FlightSpeed;
+        public float TurnSpeed;
         public ulong TransportGuid;
+        public float TransportX, TransportY, TransportZ, TransportO;
+        public uint FallTime;
+        public float Height;
+        public float Radius;
+        [MarshalAs(UnmanagedType.I1)]
+        public bool HasSplinePath;
+        public float SplineSpeed;
+        public IntPtr SplinePoints;
+        public int SplinePointCount;
+        public int CurrentSplineIndex;
+        public float PrevGroundZ;
+        public float PrevGroundNx, PrevGroundNy, PrevGroundNz;
+        public float PendingDepenX, PendingDepenY, PendingDepenZ;
+        public uint StandingOnInstanceId;
+        public float StandingOnLocalX, StandingOnLocalY, StandingOnLocalZ;
+        public uint MapId;
+        public float DeltaTime;
+        public uint FrameCounter;
+    }
+
+    // ==========================================================================
+    // PHYSICS OUTPUT (matches PhysicsBridge.h PhysicsOutput exactly)
+    // ==========================================================================
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PhysicsOutput
+    {
+        public float X, Y, Z;
+        public float Orientation;
+        public float Pitch;
+        public float Vx, Vy, Vz;
+        public uint MoveFlags;
+        public float GroundZ;
+        public float LiquidZ;
+        public uint LiquidType;
+        public float GroundNx, GroundNy, GroundNz;
+        public float PendingDepenX, PendingDepenY, PendingDepenZ;
+        public uint StandingOnInstanceId;
+        public float StandingOnLocalX, StandingOnLocalY, StandingOnLocalZ;
+        public float FallDistance;
+        public float FallTime;
+        public int CurrentSplineIndex;
+        public float SplineProgress;
     }
 
     // ==========================================================================
@@ -268,4 +314,20 @@ public static partial class NavigationInterop
         out float stepHeight,
         out float stepDownHeight,
         out float walkableMinNormalZ);
+
+    // ==========================================================================
+    // PHYSICS STEP FUNCTION
+    // ==========================================================================
+
+    /// <summary>
+    /// Steps the physics simulation by one frame. deltaTime is embedded in PhysicsInput.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "PhysicsStepV2", CallingConvention = CallingConvention.Cdecl)]
+    public static extern PhysicsOutput StepPhysicsV2(ref PhysicsInput input);
+
+    /// <summary>
+    /// Preloads map data for a given map ID.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "PreloadMap", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void PreloadMap(uint mapId);
 }
