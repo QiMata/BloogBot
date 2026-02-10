@@ -31,7 +31,10 @@ MovementIntent BuildMovementIntent(uint32_t moveFlags, float orientation)
 
 float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming)
 {
-    if (isSwimming) return input.swimSpeed;
+    if (isSwimming) {
+        if (input.moveFlags & MOVEFLAG_BACKWARD) return input.swimBackSpeed;
+        return input.swimSpeed;
+    }
     if (input.moveFlags & MOVEFLAG_WALK_MODE) return input.walkSpeed;
     if (input.moveFlags & MOVEFLAG_BACKWARD) return input.runBackSpeed;
     return input.runSpeed;
@@ -63,15 +66,17 @@ void ProcessAirMovement(
     st.y = endPos.y;
     st.z = endPos.z;
 
-    // Continuous collision: prevent tunneling through ground when falling
+    // Continuous collision: prevent tunneling through ground when falling.
+    // Use a small margin beyond the actual fall distance rather than the full
+    // STEP_DOWN_HEIGHT (4.0y) to avoid prematurely snapping to ground mid-fall.
     const float r = input.radius;
     const float h = input.height;
-    const float stepDownLimit = PhysicsConstants::STEP_DOWN_HEIGHT;
-    
+    constexpr float AIR_SNAP_MARGIN = 0.5f;
+
     CapsuleCollision::Capsule cap = PhysShapes::BuildFullHeightCapsule(startPos.x, startPos.y, startPos.z, r, h);
     G3D::Vector3 downDir(0, 0, -1);
     float fallDist = std::max(0.0f, startPos.z - endPos.z);
-    float sweepDist = fallDist + stepDownLimit;
+    float sweepDist = fallDist + AIR_SNAP_MARGIN;
     
     std::vector<SceneHit> downHits;
     G3D::Vector3 playerFwd(std::cos(st.orientation), std::sin(st.orientation), 0.0f);

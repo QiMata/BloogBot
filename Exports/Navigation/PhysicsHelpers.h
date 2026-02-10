@@ -35,6 +35,7 @@ namespace PhysicsHelpers
         float walkSpeed,
         float runBackSpeed,
         float swimSpeed,
+        float swimBackSpeed,
         bool hasInput,
         float dt,
         bool isSwimming);
@@ -45,8 +46,9 @@ namespace PhysicsHelpers
     G3D::Vector3 ComputePendingDepenetrationFromOverlaps(const std::vector<SceneHit>& overlaps);
 
     /// Calculate move speed based on input flags and swimming state.
-    float CalculateMoveSpeed(uint32_t moveFlags, float runSpeed, float walkSpeed, 
-                             float runBackSpeed, float swimSpeed, bool isSwimming);
+    float CalculateMoveSpeed(uint32_t moveFlags, float runSpeed, float walkSpeed,
+                             float runBackSpeed, float swimSpeed, float swimBackSpeed,
+                             bool isSwimming);
 
     /// Computes slide impact ratio based on angle between direction and surface normal.
     /// Returns a value between 0 and 1 indicating how much movement is preserved.

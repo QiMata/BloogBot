@@ -35,6 +35,7 @@ namespace PhysicsHelpers
         float walkSpeed,
         float runBackSpeed,
         float swimSpeed,
+        float swimBackSpeed,
         bool hasInput,
         float dt,
         bool isSwimming)
@@ -69,7 +70,8 @@ namespace PhysicsHelpers
 
         // Choose speed based on environment and flags
         if (isSwimming) {
-            plan.speed = swimSpeed;
+            const bool backNoForward = moveBack && !moveFwd;
+            plan.speed = backNoForward ? swimBackSpeed : swimSpeed;
         } else if (walk) {
             plan.speed = walkSpeed;
         } else {
@@ -118,10 +120,14 @@ namespace PhysicsHelpers
         return acc.directionOrZero() * clampMag;
     }
 
-    float CalculateMoveSpeed(uint32_t moveFlags, float runSpeed, float walkSpeed, 
-                             float runBackSpeed, float swimSpeed, bool isSwimming)
+    float CalculateMoveSpeed(uint32_t moveFlags, float runSpeed, float walkSpeed,
+                             float runBackSpeed, float swimSpeed, float swimBackSpeed,
+                             bool isSwimming)
     {
-        if (isSwimming) return swimSpeed;
+        if (isSwimming) {
+            if (moveFlags & MOVEFLAG_BACKWARD) return swimBackSpeed;
+            return swimSpeed;
+        }
         if (moveFlags & MOVEFLAG_WALK_MODE) return walkSpeed;
         if (moveFlags & MOVEFLAG_BACKWARD) return runBackSpeed;
         return runSpeed;
