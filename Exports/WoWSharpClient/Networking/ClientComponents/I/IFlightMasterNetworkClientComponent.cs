@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Reactive;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
@@ -18,6 +22,11 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// Gets the currently available taxi nodes, if any.
         /// </summary>
         IReadOnlyList<uint> AvailableTaxiNodes { get; }
+
+        /// <summary>
+        /// Gets the current (nearest) taxi node ID from the last SMSG_SHOWTAXINODES, or null.
+        /// </summary>
+        uint? CurrentNodeId { get; }
 
         #region Reactive Observables
 

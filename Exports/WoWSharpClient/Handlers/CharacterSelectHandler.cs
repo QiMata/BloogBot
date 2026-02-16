@@ -1,6 +1,9 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using System;
+using System.IO;
+using System.Linq;
 using WoWSharpClient.Models;
 using WoWSharpClient.Utils;
 
@@ -124,10 +127,9 @@ namespace WoWSharpClient.Handlers
                                  $"Realm: '{realm}', Race: {race}, Gender: {gender}, Class: {classId}");
 
                 // Try to find in active game objects
-                var gameObject = WoWSharpObjectManager.Instance.Objects
-                    .FirstOrDefault(x => x.Guid == guid) as WoWPlayer;
 
-                if (gameObject != null)
+                if (WoWSharpObjectManager.Instance.Objects
+                    .FirstOrDefault(x => x.Guid == guid) is WoWPlayer gameObject)
                 {
                     var oldName = gameObject.Name;
                     var oldRace = gameObject.Race;

@@ -1,5 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
 
@@ -64,11 +67,11 @@ namespace WoWSharpClient.Tests.Agent
             // Act
             await _deadActorAgent.ResurrectAtCorpseAsync();
 
-            // Assert
+            // Assert - CMSG_RECLAIM_CORPSE (1.12.1): ObjectGuid playerGuid (8) = 8 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_RECLAIM_CORPSE,
-                    It.IsAny<byte[]>(),
+                    It.Is<byte[]>(b => b.Length == 8),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -77,16 +80,20 @@ namespace WoWSharpClient.Tests.Agent
         public async Task AcceptResurrectionAsync_ValidCall_SendsCorrectPacket()
         {
             // Arrange
-            _deadActorAgent.HandleResurrectionRequest(0x123, "TestPlayer");
+            const ulong resurrectorGuid = 0x123;
+            _deadActorAgent.HandleResurrectionRequest(resurrectorGuid, "TestPlayer");
 
             // Act
             await _deadActorAgent.AcceptResurrectionAsync();
 
-            // Assert
+            // Assert - CMSG_RESURRECT_RESPONSE (1.12.1): ObjectGuid resurrectorGuid(8) + uint8 status(1) = 9 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_RESURRECT_RESPONSE,
-                    It.IsAny<byte[]>(),
+                    It.Is<byte[]>(b =>
+                        b.Length == 9 &&
+                        BitConverter.ToUInt64(b, 0) == resurrectorGuid &&
+                        b[8] == 1), // 1 = Accept
                     It.IsAny<CancellationToken>()),
                 Times.Once);
 
@@ -97,16 +104,20 @@ namespace WoWSharpClient.Tests.Agent
         public async Task DeclineResurrectionAsync_ValidCall_SendsCorrectPacket()
         {
             // Arrange
-            _deadActorAgent.HandleResurrectionRequest(0x123, "TestPlayer");
+            const ulong resurrectorGuid = 0x123;
+            _deadActorAgent.HandleResurrectionRequest(resurrectorGuid, "TestPlayer");
 
             // Act
             await _deadActorAgent.DeclineResurrectionAsync();
 
-            // Assert
+            // Assert - CMSG_RESURRECT_RESPONSE (1.12.1): ObjectGuid resurrectorGuid(8) + uint8 status(1) = 9 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_RESURRECT_RESPONSE,
-                    It.IsAny<byte[]>(),
+                    It.Is<byte[]>(b =>
+                        b.Length == 9 &&
+                        BitConverter.ToUInt64(b, 0) == resurrectorGuid &&
+                        b[8] == 0), // 0 = Decline
                     It.IsAny<CancellationToken>()),
                 Times.Once);
 
@@ -157,6 +168,26 @@ namespace WoWSharpClient.Tests.Agent
                 x => x.SendOpcodeAsync(
                     GameData.Core.Enums.Opcode.CMSG_SELF_RES,
                     It.IsAny<byte[]>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task QueryAreaSpiritHealersAsync_ValidGuid_SendsCorrectPacket()
+        {
+            // Arrange
+            const ulong spiritHealerGuid = 0x123456789ABCDEF0;
+
+            // Act
+            await _deadActorAgent.QueryAreaSpiritHealersAsync(spiritHealerGuid);
+
+            // Assert - CMSG_AREA_SPIRIT_HEALER_QUERY (1.12.1): ObjectGuid spiritHealerGuid (8)
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    GameData.Core.Enums.Opcode.CMSG_AREA_SPIRIT_HEALER_QUERY,
+                    It.Is<byte[]>(b =>
+                        b.Length == 8 &&
+                        BitConverter.ToUInt64(b, 0) == spiritHealerGuid),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }

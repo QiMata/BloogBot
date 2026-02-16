@@ -1,4 +1,5 @@
 ﻿using GameData.Core.Models;
+using System;
 using System.Runtime.InteropServices;
 
 namespace PathfindingService.Repository
@@ -20,10 +21,6 @@ namespace PathfindingService.Repository
         // ===============================
         // PUBLIC METHODS
         // ===============================
-        static Navigation()
-        {
-
-        }
 
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
         {

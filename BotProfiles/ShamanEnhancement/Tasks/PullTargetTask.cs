@@ -1,5 +1,6 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace ShamanEnhancement.Tasks
@@ -36,7 +37,7 @@ namespace ShamanEnhancement.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
+            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.Player.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
             ObjectManager.MoveToward(nextWaypoint[1]);
         }
     }

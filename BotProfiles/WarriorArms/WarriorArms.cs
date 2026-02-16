@@ -1,17 +1,14 @@
-﻿using BotRunner.Interfaces;
-using System.ComponentModel.Composition;
+using BotRunner.Interfaces;
 using WarriorArms.Tasks;
-
 using BotProfiles.Common;
+
 namespace WarriorArms
 {
-    [Export(typeof(IBot))]
-    internal class WarriorArms : BotBase
+    public class WarriorArms : BotBase
     {
         public override string Name => "Arms Warrior";
 
         public override string FileName => "WarriorArms.dll";
-
 
         public override IBotTask CreateRestTask(IBotContext botContext) =>
             new RestTask(botContext);

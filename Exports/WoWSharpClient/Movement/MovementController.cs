@@ -2,6 +2,8 @@
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using Pathfinding;
+using Serilog;
+using System;
 using System.Numerics;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
@@ -28,6 +30,11 @@ namespace WoWSharpClient.Movement
         private uint _standingOnInstanceId = 0;
         private Vector3 _standingOnLocal = Vector3.Zero;
 
+        // Path-following state
+        private Position[]? _currentPath;
+        private int _currentWaypointIndex;
+        private const float WAYPOINT_ARRIVE_DIST = 2.0f;
+
         // Network timing
         private uint _lastPacketTime;
         private MovementFlags _lastSentFlags = player.MovementFlags;
@@ -35,8 +42,10 @@ namespace WoWSharpClient.Movement
 
         // Debug tracking
         private Vector3 _lastPhysicsPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
-        private float _accumulatedDelta = 0;
+        // _accumulatedDelta removed — was causing π speed multiplier bug in dead-reckoning
         private int _frameCounter = 0;
+        private int _movementDiagCounter = 0;
+        private Vector3 _lastPacketPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
 
         // ======== MAIN UPDATE - Called every frame ========
         public void Update(float deltaSec, uint gameTimeMs)
@@ -48,32 +57,13 @@ namespace WoWSharpClient.Movement
                 return;
             }
 
-            // Log pre-physics state
-            Console.WriteLine($"\n[Frame {_frameCounter}] === PRE-PHYSICS ===");
-            Console.WriteLine($"  Delta: {deltaSec:F4}s");
-            Console.WriteLine($"  Input Pos: ({_player.Position.X:F3}, {_player.Position.Y:F3}, {_player.Position.Z:F3})");
-            Console.WriteLine($"  Input Vel: ({_velocity.X:F3}, {_velocity.Y:F3}, {_velocity.Z:F3})");
-            Console.WriteLine($"  Flags: {_player.MovementFlags}");
+            Log.Verbose("[MovementController] Frame {Frame} dt={Delta:F4}s Pos=({X:F1},{Y:F1},{Z:F1}) Flags={Flags}",
+                _frameCounter, deltaSec, _player.Position.X, _player.Position.Y, _player.Position.Z, _player.MovementFlags);
 
             // 1. Run physics based on current player state
             var physicsResult = RunPhysics(deltaSec);
 
-            // Log physics output
-            Console.WriteLine($"[Frame {_frameCounter}] === PHYSICS OUTPUT ===");
-            Console.WriteLine($"  Output Pos: ({physicsResult.NewPosX:F3}, {physicsResult.NewPosY:F3}, {physicsResult.NewPosZ:F3})");
-            Console.WriteLine($"  Output Vel: ({physicsResult.NewVelX:F3}, {physicsResult.NewVelY:F3}, {physicsResult.NewVelZ:F3})");
-            Console.WriteLine($"  Output Flags: {(MovementFlags)physicsResult.MovementFlags}");
-
-            // Calculate actual movement
-            var deltaPos = new Vector3(
-                physicsResult.NewPosX - _player.Position.X,
-                physicsResult.NewPosY - _player.Position.Y,
-                physicsResult.NewPosZ - _player.Position.Z
-            );
-            var moveDist = MathF.Sqrt(deltaPos.X * deltaPos.X + deltaPos.Y * deltaPos.Y);
-            Console.WriteLine($"  Movement: {moveDist:F3} units (XY), {deltaPos.Z:F3} units (Z)");
-
-            // Check for position mismatch
+            // Check for position mismatch (external teleport, server correction, etc.)
             var physicsPosDiff = new Vector3(
                 _player.Position.X - _lastPhysicsPosition.X,
                 _player.Position.Y - _lastPhysicsPosition.Y,
@@ -81,24 +71,24 @@ namespace WoWSharpClient.Movement
             );
             if (physicsPosDiff.Length() > 0.01f)
             {
-                Console.WriteLine($"  WARNING: Position changed outside physics by {physicsPosDiff.Length():F3} units!");
-                Console.WriteLine($"    Last physics pos: ({_lastPhysicsPosition.X:F3}, {_lastPhysicsPosition.Y:F3}, {_lastPhysicsPosition.Z:F3})");
-                Console.WriteLine($"    Current pos: ({_player.Position.X:F3}, {_player.Position.Y:F3}, {_player.Position.Z:F3})");
+                Log.Warning("[MovementController] Position changed outside physics by {Dist:F3} units", physicsPosDiff.Length());
             }
 
-            ApplyPhysicsResult(physicsResult);
-            _lastPhysicsPosition = new Vector3(physicsResult.NewPosX, physicsResult.NewPosY, physicsResult.NewPosZ);
-
-            // Track accumulated time
-            _accumulatedDelta += deltaSec;
+            ApplyPhysicsResult(physicsResult, deltaSec);
+            var newPhysicsPos = new Vector3(physicsResult.NewPosX, physicsResult.NewPosY, physicsResult.NewPosZ);
+            var frameDelta = (newPhysicsPos - _lastPhysicsPosition).Length();
+            // Log every 100th frame to avoid spam
+            if (_frameCounter % 100 == 1 && _player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
+            {
+                Log.Information("[MovementController] Frame#{Frame} dt={DeltaSec:F4}s frameDelta={FrameDelta:F3}y expected={Expected:F3}y flags=0x{Flags:X}",
+                    _frameCounter, deltaSec, frameDelta, deltaSec * _player.RunSpeed, (uint)_player.MovementFlags);
+            }
+            _lastPhysicsPosition = newPhysicsPos;
 
             // 2. Send network packet if needed
             if (ShouldSendPacket(gameTimeMs))
             {
-                Console.WriteLine($"[Frame {_frameCounter}] === SENDING PACKET ===");
-                Console.WriteLine($"  Accumulated time: {_accumulatedDelta * 1000f:F1}ms");
                 SendMovementPacket(gameTimeMs);
-                _accumulatedDelta = 0;
             }
         }
 
@@ -152,14 +142,66 @@ namespace WoWSharpClient.Movement
                 StandingOnLocalZ = _standingOnLocal.Z,
             };
 
-            Console.WriteLine($"  Physics DeltaTime: {deltaSec:F4}s");
-
             return _physics.PhysicsStep(input);
         }
 
-        private void ApplyPhysicsResult(PhysicsOutput output)
+        private int _deadReckonCount = 0;
+        private int _physicsMovedCount = 0;
+
+        private void ApplyPhysicsResult(PhysicsOutput output, float deltaSec)
         {
             var oldPos = _player.Position;
+
+            // Dead-reckoning fallback: if physics engine returned same position but
+            // movement flags indicate we should be moving, apply simple trigonometric movement.
+            float dx = output.NewPosX - oldPos.X;
+            float dy = output.NewPosY - oldPos.Y;
+            bool physicsMovedUs = MathF.Abs(dx) >= 0.001f || MathF.Abs(dy) >= 0.001f;
+
+            if (!physicsMovedUs)
+            {
+                var flags = _player.MovementFlags;
+                float facing = _player.Facing;
+                // Use per-frame deltaSec, NOT accumulated delta — accumulated delta grows
+                // across ticks and causes ~3x movement (the π speed multiplier bug).
+                float dt = MathF.Max(deltaSec, 0.001f);
+                dt = MathF.Min(dt, 0.2f); // cap to prevent jumps
+
+                if (flags.HasFlag(MovementFlags.MOVEFLAG_FORWARD))
+                {
+                    output.NewPosX += MathF.Cos(facing) * _player.RunSpeed * dt;
+                    output.NewPosY += MathF.Sin(facing) * _player.RunSpeed * dt;
+                    _deadReckonCount++;
+                }
+                if (flags.HasFlag(MovementFlags.MOVEFLAG_BACKWARD))
+                {
+                    output.NewPosX -= MathF.Cos(facing) * _player.RunBackSpeed * dt;
+                    output.NewPosY -= MathF.Sin(facing) * _player.RunBackSpeed * dt;
+                    _deadReckonCount++;
+                }
+
+                // Log dead-reckoning usage periodically to diagnose physics engine issues
+                if (_deadReckonCount > 0 && _deadReckonCount % 50 == 1)
+                {
+                    Log.Warning("[MovementController] Dead-reckoning active (physics returned same pos). " +
+                        "Count={DeadReckon} vs physics={PhysicsMoved} dx={DX:F4} dy={DY:F4} flags=0x{Flags:X}",
+                        _deadReckonCount, _physicsMovedCount, dx, dy, (uint)_player.MovementFlags);
+                }
+            }
+            else
+            {
+                _physicsMovedCount++;
+            }
+
+            // Z interpolation from path waypoints when physics doesn't provide valid ground
+            bool physicsHasGround = output.GroundZ > -50000f && MathF.Abs(output.GroundZ) > 0.01f;
+            if (!physicsHasGround && _currentPath != null && _currentWaypointIndex < _currentPath.Length)
+            {
+                output.NewPosZ = InterpolatePathZ(output.NewPosX, output.NewPosY, oldPos.Z);
+            }
+
+            // Advance waypoint if we've arrived
+            AdvanceWaypointIfNeeded(output.NewPosX, output.NewPosY);
 
             // Update position from physics
             _player.Position = new Position(output.NewPosX, output.NewPosY, output.NewPosZ);
@@ -193,8 +235,8 @@ namespace WoWSharpClient.Movement
             var newPhysicsFlags = (MovementFlags)(output.MovementFlags) & PhysicsFlags;
             _player.MovementFlags = inputFlags | newPhysicsFlags;
 
-            Console.WriteLine($"[Frame {_frameCounter}] === POST-APPLY ===");
-            Console.WriteLine($"  Position changed: ({oldPos.X:F3}, {oldPos.Y:F3}, {oldPos.Z:F3}) -> ({_player.Position.X:F3}, {_player.Position.Y:F3}, {_player.Position.Z:F3})");
+            Log.Verbose("[MovementController] Applied: ({OldX:F1},{OldY:F1},{OldZ:F1}) -> ({NewX:F1},{NewY:F1},{NewZ:F1}) Flags={Flags}",
+                oldPos.X, oldPos.Y, oldPos.Z, _player.Position.X, _player.Position.Y, _player.Position.Z, _player.MovementFlags);
         }
 
         // ======== NETWORKING ========
@@ -218,24 +260,45 @@ namespace WoWSharpClient.Movement
 
             // Build and send packet
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _client.SendMovementOpcode(opcode, buffer);
+            _ = _client.SendMovementOpcodeAsync(opcode, buffer);
+
+            // Diagnostic: log position delta between packets
+            _movementDiagCounter++;
+            var curPos = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
+            var packetDelta = (curPos - _lastPacketPosition).Length();
+            var timeSinceLastMs = gameTimeMs - _lastPacketTime;
+            if (_movementDiagCounter % 5 == 1)  // Every 5th packet
+            {
+                Log.Information("[MovementController] {Opcode} Pos=({X:F1},{Y:F1},{Z:F1}) delta={Delta:F2}y dt={DeltaMs}ms speed={Speed:F1} flags=0x{Flags:X}",
+                    opcode, _player.Position.X, _player.Position.Y, _player.Position.Z,
+                    packetDelta, timeSinceLastMs, _player.RunSpeed, (uint)_player.MovementFlags);
+            }
+            _lastPacketPosition = curPos;
 
             // Update tracking
             _lastPacketTime = gameTimeMs;
             _lastSentFlags = _player.MovementFlags;
-
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {opcode} - Pos({_player.Position.X:F1}, {_player.Position.Y:F1}, {_player.Position.Z:F1}) Flags: {_player.MovementFlags}");
         }
 
         private Opcode DetermineOpcode(MovementFlags current, MovementFlags previous)
         {
-            // Stopped moving
+            // Stopped moving entirely
             if (current == MovementFlags.MOVEFLAG_NONE && previous != MovementFlags.MOVEFLAG_NONE)
                 return Opcode.MSG_MOVE_STOP;
 
             // Started jumping
             if (current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && !previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
                 return Opcode.MSG_MOVE_JUMP;
+
+            // Landed
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
+                return Opcode.MSG_MOVE_FALL_LAND;
+
+            // Started/stopped swimming
+            if (current.HasFlag(MovementFlags.MOVEFLAG_SWIMMING) && !previous.HasFlag(MovementFlags.MOVEFLAG_SWIMMING))
+                return Opcode.MSG_MOVE_START_SWIM;
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_SWIMMING) && previous.HasFlag(MovementFlags.MOVEFLAG_SWIMMING))
+                return Opcode.MSG_MOVE_STOP_SWIM;
 
             // Started moving forward
             if (current.HasFlag(MovementFlags.MOVEFLAG_FORWARD) && !previous.HasFlag(MovementFlags.MOVEFLAG_FORWARD))
@@ -248,13 +311,13 @@ namespace WoWSharpClient.Movement
             // Started strafing
             if (current.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT) && !previous.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT))
                 return Opcode.MSG_MOVE_START_STRAFE_LEFT;
-
             if (current.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT) && !previous.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT))
                 return Opcode.MSG_MOVE_START_STRAFE_RIGHT;
 
-            // Landed
-            if (!current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
-                return Opcode.MSG_MOVE_FALL_LAND;
+            // Stopped strafing (while still moving)
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT) && !current.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT)
+                && (previous.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT) || previous.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT)))
+                return Opcode.MSG_MOVE_STOP_STRAFE;
 
             // Default to heartbeat
             return Opcode.MSG_MOVE_HEARTBEAT;
@@ -265,8 +328,8 @@ namespace WoWSharpClient.Movement
         {
             // Called by bot when it changes facing directly
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _client.SendMovementOpcode(Opcode.MSG_MOVE_SET_FACING, buffer);
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] MSG_MOVE_SET_FACING - Facing: {_player.Facing:F2}");
+            _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_SET_FACING, buffer);
+            Log.Debug("[MovementController] MSG_MOVE_SET_FACING Facing={Facing:F2}", _player.Facing);
         }
 
         public void SendStopPacket(uint gameTimeMs)
@@ -274,9 +337,124 @@ namespace WoWSharpClient.Movement
             // Force send a stop packet (useful after teleports or when bot stops)
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _client.SendMovementOpcode(Opcode.MSG_MOVE_STOP, buffer);
+            _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_STOP, buffer);
             _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] MSG_MOVE_STOP (forced)");
+            Log.Debug("[MovementController] MSG_MOVE_STOP (forced)");
+        }
+
+        // ======== PATH FOLLOWING ========
+
+        /// <summary>
+        /// Sets a navigation path for the controller to follow.
+        /// The controller will interpolate Z from waypoint heights and auto-advance waypoints.
+        /// </summary>
+        public void SetPath(Position[] path)
+        {
+            if (path == null || path.Length == 0)
+            {
+                _currentPath = null;
+                _currentWaypointIndex = 0;
+                return;
+            }
+            _currentPath = path;
+            // Start at first waypoint that's ahead of us (skip waypoint 0 if it's our current position)
+            _currentWaypointIndex = path.Length > 1 ? 1 : 0;
+            Log.Debug("[MovementController] Path set: {Count} waypoints, starting at index {Idx}", path.Length, _currentWaypointIndex);
+        }
+
+        /// <summary>
+        /// Sets a single target waypoint (convenience for MoveToward calls).
+        /// </summary>
+        public void SetTargetWaypoint(Position target)
+        {
+            if (target == null)
+            {
+                _currentPath = null;
+                return;
+            }
+            _currentPath = [new Position(_player.Position.X, _player.Position.Y, _player.Position.Z), target];
+            _currentWaypointIndex = 1;
+        }
+
+        /// <summary>
+        /// Clears the current path.
+        /// </summary>
+        public void ClearPath()
+        {
+            _currentPath = null;
+            _currentWaypointIndex = 0;
+        }
+
+        /// <summary>
+        /// Returns the current target waypoint, or null if no path is set.
+        /// </summary>
+        public Position? CurrentWaypoint =>
+            _currentPath != null && _currentWaypointIndex < _currentPath.Length
+                ? _currentPath[_currentWaypointIndex]
+                : null;
+
+        /// <summary>
+        /// Interpolates Z height based on progress between the previous waypoint and current target.
+        /// Uses the path waypoint Z values which come from the navmesh (correct ground height).
+        /// </summary>
+        private float InterpolatePathZ(float newX, float newY, float currentZ)
+        {
+            if (_currentPath == null || _currentWaypointIndex >= _currentPath.Length)
+                return currentZ;
+
+            var target = _currentPath[_currentWaypointIndex];
+
+            // Get the previous waypoint (or use current path start)
+            var prev = _currentWaypointIndex > 0
+                ? _currentPath[_currentWaypointIndex - 1]
+                : new Position(_player.Position.X, _player.Position.Y, _player.Position.Z);
+
+            float totalDistXY = HorizontalDistance(prev.X, prev.Y, target.X, target.Y);
+            if (totalDistXY < 0.5f)
+                return target.Z; // Very close waypoints, just snap Z
+
+            float currentDistXY = HorizontalDistance(newX, newY, target.X, target.Y);
+            float t = 1.0f - MathF.Min(currentDistXY / totalDistXY, 1.0f);
+            t = MathF.Max(0, t);
+
+            return prev.Z + t * (target.Z - prev.Z);
+        }
+
+        /// <summary>
+        /// Checks if we've arrived at the current waypoint and advances to the next one.
+        /// Also updates facing toward the next waypoint.
+        /// </summary>
+        private void AdvanceWaypointIfNeeded(float posX, float posY)
+        {
+            if (_currentPath == null || _currentWaypointIndex >= _currentPath.Length)
+                return;
+
+            var wp = _currentPath[_currentWaypointIndex];
+            float dist = HorizontalDistance(posX, posY, wp.X, wp.Y);
+
+            if (dist <= WAYPOINT_ARRIVE_DIST)
+            {
+                _currentWaypointIndex++;
+                if (_currentWaypointIndex < _currentPath.Length)
+                {
+                    // Update facing toward next waypoint
+                    var next = _currentPath[_currentWaypointIndex];
+                    _player.Facing = MathF.Atan2(next.Y - posY, next.X - posX);
+                    Log.Debug("[MovementController] Advanced to waypoint {Idx}/{Total} ({X:F0},{Y:F0},{Z:F0})",
+                        _currentWaypointIndex, _currentPath.Length, next.X, next.Y, next.Z);
+                }
+                else
+                {
+                    Log.Debug("[MovementController] Reached end of path");
+                }
+            }
+        }
+
+        private static float HorizontalDistance(float x1, float y1, float x2, float y2)
+        {
+            float dx = x2 - x1;
+            float dy = y2 - y1;
+            return MathF.Sqrt(dx * dx + dy * dy);
         }
 
         // ======== STATE MANAGEMENT ========
@@ -293,6 +471,9 @@ namespace WoWSharpClient.Movement
             _pendingDepen = Vector3.Zero;
             _standingOnInstanceId = 0;
             _standingOnLocal = Vector3.Zero;
+
+            _currentPath = null;
+            _currentWaypointIndex = 0;
         }
     }
 }

@@ -50,23 +50,29 @@ StepV2(PhysicsInput, dt) ? PhysicsOutput
   ?           ?
   ?           ?? UP PASS: Step-up lift + ceiling check
   ?           ?? SIDE PASS: CollideAndSlide() horizontal
-  ?           ?? DOWN PASS: Undo step offset + ground snap
+  ?           ?? DOWN PASS: Undo step offset + ground snap + GetGroundZ refinement
+  ?           ?
+  ?           ?? Walk Experiment (if landed on non-walkable):
+  ?                 ?? Retry with stepOffset=0
+  ?                 ?? Recovery sweep downward
+  ?                 ?? Ground snap to walkable
   ?
+  ?? Post-frame GetGroundZ safety net
   ?? Output: new position, velocity, moveFlags, groundZ, liquidZ
 ```
 
 ## Key Constants
 
-From `Exports/Navigation/PhysicsTolerances.h`:
+From `Exports/Navigation/PhysicsEngine.h` (`PhysicsConstants` namespace):
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `STEP_HEIGHT` | 0.6f | Max height for auto-stepping (stairs) |
-| `STEP_DOWN_HEIGHT` | 0.5f | Max drop for ground snap |
-| `GRAVITY` | 19.29f | WoW gravity (yards/s�) |
-| `JUMP_VELOCITY` | 7.96f | Initial jump velocity |
-| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.5f | ~60� max walkable slope |
-| `WATER_LEVEL_DELTA` | 1.0f | Swim threshold below water surface |
+| `STEP_HEIGHT` | 2.125f | Max height for auto-stepping (vanilla allows ~2.1y step-ups) |
+| `STEP_DOWN_HEIGHT` | 4.0f | Max downward snap while grounded |
+| `GRAVITY` | 19.2911f | WoW gravity (yards/s�) |
+| `JUMP_VELOCITY` | 7.95577f | Initial jump velocity (yards/s) |
+| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.5f | ~60� max walkable slope |
+| `WATER_LEVEL_DELTA` | 2.0f | Swim threshold below water surface |
 
 ## Source Code Locations
 
@@ -74,16 +80,57 @@ The physics system is implemented in:
 
 ```
 Exports/Navigation/
-??? PhysicsEngine.cpp/.h         # Main entry point (StepV2)
-??? PhysicsTolerances.h          # Constants
-??? PhysicsBridge.h              # C++ ? C# interop structures
-??? PhysicsThreePass.cpp/.h      # UP/SIDE/DOWN decomposition
-??? PhysicsCollideSlide.cpp/.h   # Collision response
-??? PhysicsGroundSnap.cpp/.h     # Ground detection
-??? PhysicsMovement.cpp/.h       # Air/swim movement
+??? PhysicsEngine.cpp/.h         # Main entry point (StepV2) + three-pass UP/SIDE/DOWN
+??? PhysicsTolerances.h          # Contact offset, skin width, epsilon values
+??? PhysicsBridge.h              # C++ ? C# interop structures (PhysicsInput/Output)
+??? PhysicsCollideSlide.cpp/.h   # Iterative collide-and-slide (wall collision)
+??? PhysicsGroundSnap.cpp/.h     # Ground detection (step-up, step-down, vertical sweep)
+??? PhysicsMovement.cpp/.h       # Air/swim movement processing
 ??? PhysicsHelpers.cpp/.h        # Utility functions
-??? SceneQuery.cpp/.h            # Capsule sweeps against geometry
+??? SceneQuery.cpp/.h            # Capsule sweeps against VMAP/ADT geometry
 ```
+
+## Implementation Notes
+
+### GetGroundZ Refinement (Precision Enhancement)
+
+The capsule sweep contact point lies at a **lateral offset** from the character's actual XY (capsule radius away from center). On slopes, projecting this contact via the plane equation introduces systematic Z error that grows with slope steepness:
+
+```cpp
+planeZ = pz - ((nx * (x - px) + ny * (y - py)) / nz);  // biased by lateral offset
+```
+
+To correct this, every ground snap function (`TryStepUpSnap`, `TryDownwardStepSnap`, `VerticalSweepSnapDown`, `ExecuteDownPass`) performs a **GetGroundZ refinement** — a direct VMAP/ADT height query at the exact character XY immediately after setting Z from the plane equation:
+
+```cpp
+float preciseZ = SceneQuery::GetGroundZ(mapId, x, y, z, searchDist);
+if (VMAP::IsValidHeight(preciseZ) &&
+    preciseZ <= z + 0.05f &&   // tight upward bound
+    preciseZ >= z - 0.5f) {    // reasonable downward bound
+    z = preciseZ;
+}
+```
+
+A post-frame safety net in `StepV2` also queries GetGroundZ as a final check with tighter bounds than the per-snap refinements.
+
+### Walk Experiment (PhysX Pattern)
+
+When the three-pass move lands on a **non-walkable slope** (ground normal Z < `DEFAULT_WALKABLE_MIN_NORMAL_Z`), the engine performs a PhysX-style "walk experiment":
+
+1. **Retry with stepOffset=0** — re-run the entire three-pass move without step-up injection
+2. **Recovery sweep** — if the retry still lands on non-walkable and climbed upward, perform a downward `CollideAndSlide` sweep to undo the climb
+3. **Ground snap** — after recovery, attempt `TryDownwardStepSnap` to find walkable ground below
+
+This prevents characters from climbing steep slopes by undoing any upward progress that doesn't end on walkable terrain.
+
+### DecomposeMovement (Inlined from PhysX CCT)
+
+The `DecomposeMovement` function splits a movement vector into UP/SIDE/DOWN components with step offset injection:
+
+- **Step offset cancelled** when jumping or when there's no horizontal movement
+- **UP vector** = vertical upward component + step offset (if active)
+- **SIDE vector** = horizontal component
+- **DOWN vector** = vertical downward component (step offset undone in DOWN pass)
 
 ## Related Documentation
 

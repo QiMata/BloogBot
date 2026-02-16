@@ -2,6 +2,11 @@
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Utils;
 using Serilog;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
+using System.Linq;
+using System.IO;
 
 namespace WoWSharpClient
 {
@@ -90,11 +95,16 @@ namespace WoWSharpClient
             _handlers[Opcode.SMSG_INITIAL_SPELLS] = SpellHandler.HandleInitialSpells;
             _handlers[Opcode.SMSG_SPELLLOGMISS] = SpellHandler.HandleSpellLogMiss;
             _handlers[Opcode.SMSG_SPELL_GO] = SpellHandler.HandleSpellGo;
+            _handlers[Opcode.SMSG_SPELL_START] = SpellHandler.HandleSpellStart;
+            _handlers[Opcode.SMSG_ATTACKERSTATEUPDATE] = SpellHandler.HandleAttackerStateUpdate;
+            _handlers[Opcode.SMSG_DESTROY_OBJECT] = SpellHandler.HandleDestroyObject;
+            _handlers[Opcode.SMSG_CAST_FAILED] = SpellHandler.HandleCastFailed;
+            _handlers[Opcode.SMSG_SPELLHEALLOG] = SpellHandler.HandleSpellHealLog;
 
             _handlers[Opcode.SMSG_STANDSTATE_UPDATE] = StandStateHandler.HandleStandStateUpdate;
 
             _handlers[Opcode.SMSG_INIT_WORLD_STATES] = WorldStateHandler.HandleInitWorldStates;
-            _handlers[Opcode.SMSG_SET_REST_START] = WorldStateHandler.HandleInitWorldStates;
+            _handlers[Opcode.SMSG_SET_REST_START] = CharacterSelectHandler.HandleSetRestStart;
         }
 
         public void Dispatch(Opcode opcode, byte[] data)

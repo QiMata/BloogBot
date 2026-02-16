@@ -21,6 +21,7 @@ The build system includes:
    - CMake tools
 2. **.NET 8 SDK**
 3. **Git** for version control
+4. **Protocol Buffers Compiler (protoc)** - for regenerating IPC message classes (optional, only needed when modifying `.proto` files)
 
 ### Local Development Build
 
@@ -156,7 +157,7 @@ BloogBot/
 
 | Variable | Description |
 |----------|-------------|
-| `BLOOGBOT_WAIT_DEBUG` | Set to `1` to enable debugger attachment |
+| `WWOW_WAIT_DEBUG` | Set to `1` to enable debugger attachment |
 | `DOTNET_CLI_TELEMETRY_OPTOUT` | Disable .NET telemetry |
 
 ## Troubleshooting
@@ -172,7 +173,7 @@ BloogBot/
 
 For injection debugging:
 1. Build in Debug configuration
-2. Set `BLOOGBOT_WAIT_DEBUG=1`
+2. Set `WWOW_WAIT_DEBUG=1`
 3. Attach debugger to WoW.exe process
 4. PDB files are automatically copied to solution root
 
@@ -182,6 +183,46 @@ Check these locations for detailed logs:
 - `build/CMakeOutput.log` - CMake configuration log
 - `Build/*/Debug/` - Build output directory
 - GitHub Actions logs for CI builds
+
+## Protocol Buffers
+
+The project uses Protocol Buffers for inter-process communication. The `.proto` files are located in `Exports/BotCommLayer/Models/ProtoDef/`.
+
+### Installing protoc
+
+If you need to modify `.proto` files, install the Protocol Buffers compiler:
+
+```powershell
+# Option 1: Run the installation script (downloads to C:\protoc)
+.\install-protoc.ps1
+
+# Option 2: Manual download
+# Download from: https://github.com/protocolbuffers/protobuf/releases
+# Extract to C:\protoc (or any location)
+# The bin\protoc.exe should be accessible
+```
+
+### Regenerating C# Classes
+
+After modifying any `.proto` file:
+
+```powershell
+# Using the batch script (recommended)
+.\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat .\ .\.. "C:\protoc\bin\protoc.exe"
+
+# Or manually from the ProtoDef directory
+cd Exports\BotCommLayer\Models\ProtoDef
+C:\protoc\bin\protoc.exe --csharp_out=".." --proto_path="." communication.proto database.proto game.proto pathfinding.proto
+```
+
+### Proto Files
+
+| File | Purpose |
+|------|---------|
+| `communication.proto` | ActivitySnapshot, state changes, action messages |
+| `game.proto` | WoW game objects (WoWPlayer, WoWUnit, WoWItem, etc.) |
+| `pathfinding.proto` | Navigation requests and responses |
+| `database.proto` | Database schema definitions |
 
 ## Contributing
 

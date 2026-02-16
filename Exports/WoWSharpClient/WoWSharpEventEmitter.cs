@@ -1,6 +1,8 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using System;
+using System.Collections.Generic;
 using System.Reflection;
 
 namespace WoWSharpClient
@@ -27,6 +29,8 @@ namespace WoWSharpClient
         public event EventHandler OnCharacterListLoaded;
         public event EventHandler OnSpellLogMiss;
         public event EventHandler OnSpellGo;
+        public event EventHandler OnSpellStart;
+        public event EventHandler OnAttackerStateUpdate;
         public event EventHandler OnSetRestStart;
         public event EventHandler OnClientControlUpdate;
         public event EventHandler<WorldInfo> OnLoginVerifyWorld;
@@ -203,7 +207,9 @@ namespace WoWSharpClient
         public void FireOnCharacterCreateResponse(CharCreateResponse response) => FireEvent(OnCharacterCreateResponse, response);
         public void FireOnCharacterDeleteResponse(CharDeleteResponse response) => FireEvent(OnCharacterDeleteResponse, response);
         public void FireOnSpellGo(uint spellId, ulong casterGUID, ulong targetGUID) => FireEvent(OnSpellGo);
+        public void FireOnSpellStart(uint spellId, ulong casterGUID, ulong targetGUID, uint castTime) => FireEvent(OnSpellStart);
         public void FireOnSpellLogMiss(uint spellId, ulong casterGUID, ulong targetGUID, uint missReason) => FireEvent(OnSpellLogMiss);
+        public void FireOnAttackerStateUpdate(uint hitInfo, ulong attackerGuid, ulong targetGuid, uint totalDamage, uint spellId, uint blockedAmount) => FireEvent(OnAttackerStateUpdate);
         public void FireOnWorldStatesInit(List<WorldState> worldStates) => OnWorldStatesInit?.Invoke(this, worldStates);
         public void FireOnSetRestStart() => FireEvent(OnSetRestStart);
         public void FireOnCharacterJumpStart(ulong guid) => OnCharacterJumpStart?.Invoke(this, new CharacterActionArgs(guid));

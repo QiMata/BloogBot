@@ -1,4 +1,7 @@
 using GameData.Core.Enums;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace WoWSharpClient.Networking.ClientComponents.Models
 {
@@ -277,22 +280,28 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
     /// <summary>
     /// Represents gossip menu data received from the server.
     /// </summary>
-    public class GossipMenuData
+    /// <remarks>
+    /// Initializes a new instance of the GossipMenuData class.
+    /// </remarks>
+    /// <param name="npcGuid">The NPC GUID.</param>
+    /// <param name="menuId">The menu ID.</param>
+    /// <param name="textId">The text ID.</param>
+    public class GossipMenuData(ulong npcGuid, uint menuId, uint textId)
     {
         /// <summary>
         /// Gets the NPC GUID associated with this gossip menu.
         /// </summary>
-        public ulong NpcGuid { get; init; }
+        public ulong NpcGuid { get; init; } = npcGuid;
 
         /// <summary>
         /// Gets the menu ID.
         /// </summary>
-        public uint MenuId { get; init; }
+        public uint MenuId { get; init; } = menuId;
 
         /// <summary>
         /// Gets the text ID for the gossip text.
         /// </summary>
-        public uint TextId { get; init; }
+        public uint TextId { get; init; } = textId;
 
         /// <summary>
         /// Gets the available gossip options.
@@ -328,45 +337,38 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         /// Gets the timestamp when this menu was received.
         /// </summary>
         public DateTime Timestamp { get; init; } = DateTime.UtcNow;
-
-        /// <summary>
-        /// Initializes a new instance of the GossipMenuData class.
-        /// </summary>
-        /// <param name="npcGuid">The NPC GUID.</param>
-        /// <param name="menuId">The menu ID.</param>
-        /// <param name="textId">The text ID.</param>
-        public GossipMenuData(ulong npcGuid, uint menuId, uint textId)
-        {
-            NpcGuid = npcGuid;
-            MenuId = menuId;
-            TextId = textId;
-        }
     }
 
     /// <summary>
     /// Represents a gossip option available in a menu.
     /// </summary>
-    public class GossipOptionData
+    /// <remarks>
+    /// Initializes a new instance of the GossipOptionData class.
+    /// </remarks>
+    /// <param name="index">The option index.</param>
+    /// <param name="text">The option text.</param>
+    /// <param name="gossipType">The gossip type.</param>
+    public class GossipOptionData(uint index, string text, GossipTypes gossipType)
     {
         /// <summary>
         /// Gets the option index.
         /// </summary>
-        public uint Index { get; init; }
+        public uint Index { get; init; } = index;
 
         /// <summary>
         /// Gets the option text.
         /// </summary>
-        public string Text { get; init; } = string.Empty;
+        public string Text { get; init; } = text;
 
         /// <summary>
         /// Gets the gossip type for this option.
         /// </summary>
-        public GossipTypes GossipType { get; init; }
+        public GossipTypes GossipType { get; init; } = gossipType;
 
         /// <summary>
         /// Gets the service type for this option.
         /// </summary>
-        public GossipServiceType ServiceType { get; init; }
+        public GossipServiceType ServiceType { get; init; } = ConvertGossipTypeToServiceType(gossipType);
 
         /// <summary>
         /// Gets a value indicating whether this option requires a payment.
@@ -382,20 +384,6 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         /// Gets a value indicating whether this option leads to another menu.
         /// </summary>
         public bool LeadsToSubmenu { get; init; }
-
-        /// <summary>
-        /// Initializes a new instance of the GossipOptionData class.
-        /// </summary>
-        /// <param name="index">The option index.</param>
-        /// <param name="text">The option text.</param>
-        /// <param name="gossipType">The gossip type.</param>
-        public GossipOptionData(uint index, string text, GossipTypes gossipType)
-        {
-            Index = index;
-            Text = text;
-            GossipType = gossipType;
-            ServiceType = ConvertGossipTypeToServiceType(gossipType);
-        }
 
         /// <summary>
         /// Converts a GossipTypes enum to GossipServiceType.
@@ -425,32 +413,40 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
     /// <summary>
     /// Represents a quest option available in a gossip menu.
     /// </summary>
-    public class GossipQuestOption
+    /// <remarks>
+    /// Initializes a new instance of the GossipQuestOption class.
+    /// </remarks>
+    /// <param name="questId">The quest ID.</param>
+    /// <param name="questTitle">The quest title.</param>
+    /// <param name="questLevel">The quest level.</param>
+    /// <param name="state">The quest state.</param>
+    /// <param name="index">The option index.</param>
+    public class GossipQuestOption(uint questId, string questTitle, uint questLevel, QuestGossipState state, uint index)
     {
         /// <summary>
         /// Gets the quest ID.
         /// </summary>
-        public uint QuestId { get; init; }
+        public uint QuestId { get; init; } = questId;
 
         /// <summary>
         /// Gets the quest title.
         /// </summary>
-        public string QuestTitle { get; init; } = string.Empty;
+        public string QuestTitle { get; init; } = questTitle;
 
         /// <summary>
         /// Gets the quest level.
         /// </summary>
-        public uint QuestLevel { get; init; }
+        public uint QuestLevel { get; init; } = questLevel;
 
         /// <summary>
         /// Gets the quest state (available, completable, etc.).
         /// </summary>
-        public QuestGossipState State { get; init; }
+        public QuestGossipState State { get; init; } = state;
 
         /// <summary>
         /// Gets the option index for this quest.
         /// </summary>
-        public uint Index { get; init; }
+        public uint Index { get; init; } = index;
 
         /// <summary>
         /// Gets a value indicating whether this quest has multiple reward choices.
@@ -461,39 +457,27 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         /// Gets the number of available reward choices.
         /// </summary>
         public uint RewardChoiceCount { get; init; }
-
-        /// <summary>
-        /// Initializes a new instance of the GossipQuestOption class.
-        /// </summary>
-        /// <param name="questId">The quest ID.</param>
-        /// <param name="questTitle">The quest title.</param>
-        /// <param name="questLevel">The quest level.</param>
-        /// <param name="state">The quest state.</param>
-        /// <param name="index">The option index.</param>
-        public GossipQuestOption(uint questId, string questTitle, uint questLevel, QuestGossipState state, uint index)
-        {
-            QuestId = questId;
-            QuestTitle = questTitle;
-            QuestLevel = questLevel;
-            State = state;
-            Index = index;
-        }
     }
 
     /// <summary>
     /// Represents the result of a gossip option selection.
     /// </summary>
-    public class GossipOptionResult
+    /// <remarks>
+    /// Initializes a new instance of the GossipOptionResult class.
+    /// </remarks>
+    /// <param name="selectedOption">The selected option.</param>
+    /// <param name="success">Whether the selection was successful.</param>
+    public class GossipOptionResult(GossipOptionData selectedOption, bool success)
     {
         /// <summary>
         /// Gets the option that was selected.
         /// </summary>
-        public GossipOptionData SelectedOption { get; init; }
+        public GossipOptionData SelectedOption { get; init; } = selectedOption;
 
         /// <summary>
         /// Gets a value indicating whether the selection was successful.
         /// </summary>
-        public bool Success { get; init; }
+        public bool Success { get; init; } = success;
 
         /// <summary>
         /// Gets the error message if the selection failed.
@@ -519,43 +503,39 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         /// Gets the timestamp of the selection.
         /// </summary>
         public DateTime Timestamp { get; init; } = DateTime.UtcNow;
-
-        /// <summary>
-        /// Initializes a new instance of the GossipOptionResult class.
-        /// </summary>
-        /// <param name="selectedOption">The selected option.</param>
-        /// <param name="success">Whether the selection was successful.</param>
-        public GossipOptionResult(GossipOptionData selectedOption, bool success)
-        {
-            SelectedOption = selectedOption;
-            Success = success;
-        }
     }
 
     /// <summary>
     /// Represents quest reward choice data.
     /// </summary>
-    public class QuestRewardChoice
+    /// <remarks>
+    /// Initializes a new instance of the QuestRewardChoice class.
+    /// </remarks>
+    /// <param name="index">The reward index.</param>
+    /// <param name="itemId">The item ID.</param>
+    /// <param name="itemName">The item name.</param>
+    /// <param name="quantity">The quantity.</param>
+    public class QuestRewardChoice(uint index, uint itemId, string itemName, uint quantity)
     {
         /// <summary>
         /// Gets the reward index.
         /// </summary>
-        public uint Index { get; init; }
+        public uint Index { get; init; } = index;
 
         /// <summary>
         /// Gets the item ID for this reward.
         /// </summary>
-        public uint ItemId { get; init; }
+        public uint ItemId { get; init; } = itemId;
 
         /// <summary>
         /// Gets the item name.
         /// </summary>
-        public string ItemName { get; init; } = string.Empty;
+        public string ItemName { get; init; } = itemName;
 
         /// <summary>
         /// Gets the item quantity.
         /// </summary>
-        public uint Quantity { get; init; }
+        public uint Quantity { get; init; } = quantity;
 
         /// <summary>
         /// Gets the item quality.
@@ -576,42 +556,33 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         /// Gets the stat improvement score for this item.
         /// </summary>
         public float StatScore { get; init; }
-
-        /// <summary>
-        /// Initializes a new instance of the QuestRewardChoice class.
-        /// </summary>
-        /// <param name="index">The reward index.</param>
-        /// <param name="itemId">The item ID.</param>
-        /// <param name="itemName">The item name.</param>
-        /// <param name="quantity">The quantity.</param>
-        public QuestRewardChoice(uint index, uint itemId, string itemName, uint quantity)
-        {
-            Index = index;
-            ItemId = itemId;
-            ItemName = itemName;
-            Quantity = quantity;
-        }
     }
 
     /// <summary>
     /// Represents gossip service discovery data.
     /// </summary>
-    public class GossipServiceData
+    /// <remarks>
+    /// Initializes a new instance of the GossipServiceData class.
+    /// </remarks>
+    /// <param name="npcGuid">The NPC GUID.</param>
+    /// <param name="serviceType">The service type.</param>
+    /// <param name="serviceOption">The service option.</param>
+    public class GossipServiceData(ulong npcGuid, GossipServiceType serviceType, GossipOptionData serviceOption)
     {
         /// <summary>
         /// Gets the NPC GUID providing the service.
         /// </summary>
-        public ulong NpcGuid { get; init; }
+        public ulong NpcGuid { get; init; } = npcGuid;
 
         /// <summary>
         /// Gets the type of service discovered.
         /// </summary>
-        public GossipServiceType ServiceType { get; init; }
+        public GossipServiceType ServiceType { get; init; } = serviceType;
 
         /// <summary>
         /// Gets the gossip option associated with this service.
         /// </summary>
-        public GossipOptionData ServiceOption { get; init; }
+        public GossipOptionData ServiceOption { get; init; } = serviceOption;
 
         /// <summary>
         /// Gets additional service information.
@@ -622,19 +593,6 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         /// Gets the timestamp when this service was discovered.
         /// </summary>
         public DateTime Timestamp { get; init; } = DateTime.UtcNow;
-
-        /// <summary>
-        /// Initializes a new instance of the GossipServiceData class.
-        /// </summary>
-        /// <param name="npcGuid">The NPC GUID.</param>
-        /// <param name="serviceType">The service type.</param>
-        /// <param name="serviceOption">The service option.</param>
-        public GossipServiceData(ulong npcGuid, GossipServiceType serviceType, GossipOptionData serviceOption)
-        {
-            NpcGuid = npcGuid;
-            ServiceType = serviceType;
-            ServiceOption = serviceOption;
-        }
     }
 
     /// <summary>

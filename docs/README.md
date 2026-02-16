@@ -1,91 +1,64 @@
 # WWoW Documentation
 
-This directory contains technical documentation for the WWoW (Westworld of Warcraft) simulation platform.
+Technical documentation for the WWoW (Westworld of Warcraft) simulation platform.
 
 ## Directory Structure
 
 ```
 docs/
-??? README.md              # This file
-??? physics/               # PhysX CCT-style physics system documentation
-    ??? README.md          # Physics system overview and index
-    ??? 01_CALL_GRAPH.md   # Character Controller call graph
-    ??? 02_PARAMS_AND_STATE.md
-    ??? 03_PERFRAME_MOVE_PIPELINE.md
-    ??? 04_SWEEP_TEST_MOVE_CHARACTER.md
-    ??? 05_DO_SWEEP_TEST.md
-    ??? 06_COLLISION_RESPONSE.md
-    ??? 07_OVERLAP_RECOVERY_COMPUTE_MTD.md
-    ??? 08_SLOPE_STEP_CEILING_RULES.md
-    ??? 09_RIDE_ON_TOUCHED_OBJECT.md
-    ??? 10_PARITY_TEST_HARNESS.md
-    ??? PHYSX_CAPSULE_SWEEP_RULES.md
-    ??? PHYSX_CCT_RULES.md
-    ??? SWEEP_TEST_MOVE_CHARACTER_REFERENCE.md
-    ??? VANILLA_WOW_PHYSICS_INTENTION_RESEARCH.md
-    ??? WOW_PHYSICS_SERVICE_GUIDE.md
-```
-
-## Documentation Standards
-
-All markdown documentation in this repository follows these conventions:
-
-### File Naming
-
-| Location | Convention | Example |
-|----------|------------|---------|
-| Root directory | `SCREAMING_SNAKE_CASE.md` | `ARCHITECTURE.md`, `README.md` |
-| `.github/` | `SCREAMING_SNAKE_CASE.md` | `CONTRIBUTING.md`, `COPILOT_CONTEXT.md` |
-| `docs/` | `SCREAMING_SNAKE_CASE.md` | `PHYSICS_OVERVIEW.md` |
-| Numbered sequences | `NN_SCREAMING_SNAKE_CASE.md` | `01_CALL_GRAPH.md` |
-| Project READMEs | `README.md` | Always `README.md` |
-
-### Content Structure
-
-Every major documentation file should include:
-
-1. **Title** - H1 heading with the document name
-2. **Overview** - Brief description of the content
-3. **Main Content** - Organized with H2/H3 headings
-4. **Related Documentation** - Links to related docs
-5. **Signature Line** (for component docs):
-   ```markdown
-   ---
-
-   *This component is part of the WWoW (Westworld of Warcraft) simulation platform.*
-   ```
-
-### Diagrams
-
-Use ASCII/box-drawing characters for architecture diagrams to ensure compatibility:
-
-```
-???????????????     ???????????????
-? Component A ??????? Component B ?
-???????????????     ???????????????
+  README.md                    # This file
+  TASKS.md                     # Active/open task list (phases 1-7)
+  ARCHIVE.md                   # Completed task history
+  CLAUDE.md                    # Claude Code project instructions & session protocol
+  ARCHITECTURE.md              # High-level system architecture
+  PROJECT_STRUCTURE.md         # Detailed file/folder layouts
+  DEVELOPMENT_GUIDE.md         # Developer onboarding guide
+  CODING_STANDARDS.md          # C# coding conventions
+  IPC_COMMUNICATION.md         # Inter-process communication
+  BUILD.md                     # CMake build system & CI/CD
+  DEVELOPING.md                # Per-project build configs & debug setup
+  TECHNICAL_NOTES.md           # Constants, env paths, recording mappings, known issues
+  PHYSICS_ENGINE_PROMPT.md     # Movement recording format reference
+  physics/                     # PhysX CCT-style physics system documentation
+    README.md                  # Physics system overview and index
+    01_CALL_GRAPH.md           # Character Controller call graph
+    ...                        # 10 numbered docs + reference docs
+  server-protocol/             # WoW 1.12.1 protocol reference
+    auth-protocol.md
+    world-login.md
+    movement-protocol.md
+    object-updates.md
+    opcodes-1.12.1.md
+    transport-protocol.md
+    update-fields-1.12.1.md
+  testing/
+    end-to-end-integration-test.md  # E2E integration test guide
 ```
 
 ## Quick Links
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE.md](../ARCHITECTURE.md) | High-level system architecture |
-| [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) | Detailed file/folder layouts |
-| [DEVELOPMENT_GUIDE.md](../DEVELOPMENT_GUIDE.md) | Developer onboarding guide |
-| [CODING_STANDARDS.md](../CODING_STANDARDS.md) | C# coding conventions |
-| [IPC_COMMUNICATION.md](../IPC_COMMUNICATION.md) | Inter-process communication |
-| [Physics Documentation](./physics/README.md) | Character controller physics |
+| [TASKS.md](TASKS.md) | Active task list with phases and priorities |
+| [ARCHIVE.md](ARCHIVE.md) | Completed tasks and session history |
+| [CLAUDE.md](CLAUDE.md) | Claude Code instructions and session handoff protocol |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | High-level system architecture |
+| [TECHNICAL_NOTES.md](TECHNICAL_NOTES.md) | Constants, env paths, recording mappings |
+| [physics/README.md](physics/README.md) | Physics engine documentation index |
 
-## Contributing to Documentation
+## Documentation Standards
 
-When adding or updating documentation:
+### File Naming
 
-1. Follow the file naming conventions above
-2. Use consistent heading hierarchy (H1 for title, H2 for sections)
-3. Include cross-references to related documentation
-4. Add tables for structured information
-5. Use code blocks with language hints for examples
+| Location | Convention | Example |
+|----------|------------|---------|
+| `docs/` | `SCREAMING_SNAKE_CASE.md` | `ARCHITECTURE.md` |
+| Numbered sequences | `NN_SCREAMING_SNAKE_CASE.md` | `01_CALL_GRAPH.md` |
+| Project READMEs | `README.md` | Always `README.md` |
 
----
+### Content Structure
 
-*This component is part of the WWoW (Westworld of Warcraft) simulation platform.*
+1. **Title** - H1 heading
+2. **Overview** - Brief description
+3. **Main Content** - H2/H3 headings
+4. **Related Documentation** - Links to related docs

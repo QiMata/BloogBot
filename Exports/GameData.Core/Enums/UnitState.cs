@@ -1,4 +1,6 @@
-﻿namespace GameData.Core.Enums;
+﻿using System;
+
+namespace GameData.Core.Enums;
 
 /**
      * internal state flags for some auras and movement generators, other. (Taken from comment)

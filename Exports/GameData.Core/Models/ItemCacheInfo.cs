@@ -1,4 +1,6 @@
 ﻿using GameData.Core.Enums;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace GameData.Core.Models
 {

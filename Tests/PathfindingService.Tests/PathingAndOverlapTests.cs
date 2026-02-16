@@ -1,6 +1,8 @@
 ﻿using GameData.Core.Models;
 using Microsoft.Extensions.Configuration;
 using PathfindingService.Repository;
+using System;
+using System.IO;
 
 namespace PathfindingService.Tests
 {
@@ -42,7 +44,7 @@ namespace PathfindingService.Tests
 
         private static void VerifyNavDataExists()
         {
-            var dataRoot = Environment.GetEnvironmentVariable("BLOOGBOT_DATA_DIR");
+            var dataRoot = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
             string mmapsPath;
 
             if (!string.IsNullOrEmpty(dataRoot))
@@ -51,9 +53,9 @@ namespace PathfindingService.Tests
                 if (!Directory.Exists(mmapsPath))
                 {
                     throw new DirectoryNotFoundException(
-                        $"BLOOGBOT_DATA_DIR is set to '{dataRoot}' but mmaps/ subdirectory not found.\n" +
+                        $"WWOW_DATA_DIR is set to '{dataRoot}' but mmaps/ subdirectory not found.\n" +
                         "Please ensure nav data exists at: {mmapsPath}\n" +
-                        "Run setup.ps1 to provision data, or unset BLOOGBOT_DATA_DIR to use DLL-relative path.");
+                        "Run setup.ps1 to provision data, or unset WWOW_DATA_DIR to use DLL-relative path.");
                 }
             }
             else
@@ -72,7 +74,7 @@ namespace PathfindingService.Tests
                     throw new DirectoryNotFoundException(
                         $"Navigation data not found. Expected mmaps/ at: {mmapsPath}\n" +
                         "Please either:\n" +
-                        "  1. Set BLOOGBOT_DATA_DIR environment variable to point to your nav data root, or\n" +
+                        "  1. Set WWOW_DATA_DIR environment variable to point to your nav data root, or\n" +
                         "  2. Run setup.ps1 to copy nav data to the test output directory, or\n" +
                         "  3. Manually copy maps/, mmaps/, and vmaps/ to: {testOutputDir}");
                 }

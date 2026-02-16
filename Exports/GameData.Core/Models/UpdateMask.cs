@@ -1,4 +1,7 @@
-﻿namespace GameData.Core.Models
+﻿using System;
+using System.IO;
+
+namespace GameData.Core.Models
 {
     public class UpdateMask
     {

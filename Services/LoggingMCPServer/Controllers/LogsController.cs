@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using BloogBot.LoggingMCPServer.Services;
+using LoggingMCPServer.Services;
 using System.ComponentModel.DataAnnotations;
 
-namespace BloogBot.LoggingMCPServer.Controllers;
+namespace LoggingMCPServer.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]

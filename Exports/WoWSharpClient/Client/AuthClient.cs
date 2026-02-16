@@ -8,6 +8,12 @@ using System.Text;
 using System.Security.Cryptography;
 using WowSrp.Client;
 using Org.BouncyCastle.Utilities;
+using System.Threading.Tasks;
+using System.Threading;
+using System.IO;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace WoWSharpClient.Client
 {
@@ -27,9 +33,16 @@ namespace WoWSharpClient.Client
         private SrpClientChallenge? _srpClientChallenge;
         private byte[] _serverProof = [];
         private bool _disposed;
-        
+
         // For handling async realm list requests
         private TaskCompletionSource<List<Realm>>? _realmListCompletionSource;
+
+        // For waiting on the full SRP6 handshake to complete
+        private TaskCompletionSource<bool>? _loginCompletionSource;
+
+        // TCP receive buffer for auth protocol (handles fragmentation)
+        private readonly List<byte> _authBuffer = new();
+        private readonly object _bufferLock = new();
 
         /// <summary>
         /// Initializes a new instance of the AuthClient class.
@@ -131,10 +144,14 @@ namespace WoWSharpClient.Client
             _username = username;
             _password = password;
 
+            // Set up a TCS to wait for the full SRP6 handshake (challenge + proof)
+            var loginTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _loginCompletionSource = loginTcs;
+
             // Create CMD_AUTH_LOGON_CHALLENGE packet
             using var memoryStream = new MemoryStream();
             using var writer = new BinaryWriter(memoryStream, Encoding.UTF8, true);
-            
+
             int packetSize = 30 + _username.Length;
 
             writer.Write((byte)0x00); // Opcode: CMD_AUTH_LOGON_CHALLENGE
@@ -160,11 +177,32 @@ namespace WoWSharpClient.Client
             writer.Flush();
             byte[] packetData = memoryStream.ToArray();
 
-            Console.WriteLine($"[AuthClient] -> CMD_AUTH_LOGON_CHALLENGE [{packetData.Length}]");
+            Console.WriteLine($"[AuthClient] -> CMD_AUTH_LOGON_CHALLENGE [{packetData.Length}] hex={BitConverter.ToString(packetData)}");
             WoWSharpEventEmitter.Instance.FireOnHandshakeBegin();
 
             // For auth server, we send raw data directly since it doesn't use standard opcode format
             await _connection.SendAsync(packetData, cancellationToken);
+
+            // Wait for the full SRP6 handshake to complete (proof verified)
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+            try
+            {
+                var proofResult = await loginTcs.Task.WaitAsync(timeoutCts.Token);
+                if (!proofResult)
+                {
+                    throw new InvalidOperationException("[AuthClient] SRP6 proof failed - server rejected credentials");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("[AuthClient] Login handshake timed out");
+                throw;
+            }
+            finally
+            {
+                _loginCompletionSource = null;
+            }
         }
 
         /// <summary>
@@ -184,14 +222,13 @@ namespace WoWSharpClient.Client
             using var memoryStream = new MemoryStream();
             using var writer = new BinaryWriter(memoryStream, Encoding.UTF8, true);
             
-            writer.Write((ushort)0x10); // Size
-            writer.Write((ushort)0x10); // Opcode
-            writer.Write((ushort)0x00); // Padding
+            writer.Write((byte)0x10);   // CMD_REALM_LIST opcode
+            writer.Write((uint)0x00);   // Padding (unused, always 0)
 
             writer.Flush();
             byte[] packetData = memoryStream.ToArray();
 
-            Console.WriteLine($"[AuthClient] -> CMD_REALM_LIST ({packetData.Length} bytes)");
+            Console.WriteLine($"[AuthClient] -> CMD_REALM_LIST ({packetData.Length} bytes) hex={BitConverter.ToString(packetData)}");
 
             // For auth server, we send raw data directly
             await _connection.SendAsync(packetData, cancellationToken);
@@ -233,27 +270,17 @@ namespace WoWSharpClient.Client
         {
             try
             {
-                // Auth server packets don't follow the standard WoW protocol format
-                // They have their own structure, so we handle them directly here
-                if (data.Length >= 119) // CMD_AUTH_LOGON_CHALLENGE response
+                // Auth protocol doesn't use standard WoW framing.
+                // TCP doesn't guarantee packet boundaries, so we buffer data
+                // and extract complete packets by opcode + known/declared size.
+                var bytes = data.ToArray();
+                Console.WriteLine($"[AuthClient] RAW_RECV [{bytes.Length}] first8={BitConverter.ToString(bytes.Take(Math.Min(8, bytes.Length)).ToArray())}");
+                lock (_bufferLock)
                 {
-                    await HandleAuthLogonChallengeResponse(data);
+                    _authBuffer.AddRange(bytes);
                 }
-                else if (data.Length >= 2) // CMD_AUTH_LOGON_PROOF response or CMD_REALM_LIST response
-                {
-                    var packet = data.ToArray();
-                    byte opcode = packet[0];
-                    
-                    if (opcode == 0x01) // CMD_AUTH_LOGON_PROOF response
-                    {
-                        await HandleAuthLogonProofResponse(data);
-                    }
-                    else if (opcode == 0x10) // CMD_REALM_LIST response
-                    {
-                        await HandleRealmListResponse(data);
-                    }
-                }
-                // Add other auth packet handling as needed
+
+                await DrainAuthBuffer();
             }
             catch (Exception ex)
             {
@@ -261,10 +288,96 @@ namespace WoWSharpClient.Client
             }
         }
 
+        private async Task DrainAuthBuffer()
+        {
+            while (true)
+            {
+                byte[] snapshot;
+                lock (_bufferLock)
+                {
+                    if (_authBuffer.Count == 0) return;
+                    snapshot = _authBuffer.ToArray();
+                }
+
+                byte opcode = snapshot[0];
+                int consumed = 0;
+
+                switch (opcode)
+                {
+                    case 0x00: // CMD_AUTH_LOGON_CHALLENGE response
+                    {
+                        // opcode(1) + unk(1) + result(1) = 3 bytes minimum
+                        if (snapshot.Length < 3) return;
+                        byte result = snapshot[2];
+                        if (result != 0x00) // Not SUCCESS — short error packet (3 bytes)
+                        {
+                            consumed = 3;
+                            await HandleAuthLogonChallengeResponse(snapshot.AsMemory(0, consumed));
+                        }
+                        else
+                        {
+                            // Success: fixed 119 bytes
+                            if (snapshot.Length < 119) return; // Wait for more data
+                            consumed = 119;
+                            await HandleAuthLogonChallengeResponse(snapshot.AsMemory(0, consumed));
+                        }
+                        break;
+                    }
+                    case 0x01: // CMD_AUTH_LOGON_PROOF response
+                    {
+                        if (snapshot.Length < 2) return;
+                        byte result = snapshot[1];
+                        if (result != 0x00) // Error — opcode(1) + error(1) + unk(2) = 4 bytes
+                        {
+                            int errorLen = Math.Min(4, snapshot.Length);
+                            consumed = errorLen;
+                            await HandleAuthLogonProofResponse(snapshot.AsMemory(0, consumed));
+                        }
+                        else
+                        {
+                            // Success: opcode(1) + error(1) + M2(20) + accountFlags(4) = 26 bytes
+                            if (snapshot.Length < 26) return;
+                            consumed = 26;
+                            await HandleAuthLogonProofResponse(snapshot.AsMemory(0, consumed));
+                        }
+                        break;
+                    }
+                    case 0x10: // CMD_REALM_LIST response
+                    {
+                        // opcode(1) + size(2 LE) then size bytes of body
+                        if (snapshot.Length < 3) return;
+                        ushort bodySize = BitConverter.ToUInt16(snapshot, 1);
+                        int totalSize = 3 + bodySize;
+                        if (snapshot.Length < totalSize) return; // Wait for more data
+                        consumed = totalSize;
+                        await HandleRealmListResponse(snapshot.AsMemory(0, consumed));
+                        break;
+                    }
+                    default:
+                        Console.WriteLine($"[AuthClient] Unknown auth opcode: 0x{opcode:X2}, buffer size: {snapshot.Length}");
+                        // Discard one byte and retry
+                        consumed = 1;
+                        break;
+                }
+
+                if (consumed > 0)
+                {
+                    lock (_bufferLock)
+                    {
+                        _authBuffer.RemoveRange(0, consumed);
+                    }
+                }
+                else
+                {
+                    return; // Need more data
+                }
+            }
+        }
+
         private async Task HandleAuthLogonChallengeResponse(ReadOnlyMemory<byte> data)
         {
             var packet = data.ToArray();
-            Console.WriteLine($"[AuthClient] <- CMD_AUTH_LOGON_CHALLENGE [{packet.Length}]");
+            Console.WriteLine($"[AuthClient] <- CMD_AUTH_LOGON_CHALLENGE [{packet.Length}] first16={BitConverter.ToString(packet.Take(Math.Min(16, packet.Length)).ToArray())}");
 
             byte opcode = packet[0];
             ResponseCode result = (ResponseCode)packet[2];
@@ -282,7 +395,9 @@ namespace WoWSharpClient.Client
             }
             else
             {
-                Console.WriteLine($"[AuthClient] Unexpected AUTH_CHALLENGE response: opcode {opcode:X2}, result {result}");
+                Console.WriteLine($"[AuthClient] AUTH_CHALLENGE FAILED: opcode {opcode:X2}, result {result} (0x{(byte)result:X2})");
+                WoWSharpEventEmitter.Instance.FireOnLoginFailure();
+                _loginCompletionSource?.TrySetResult(false);
             }
         }
 
@@ -290,12 +405,11 @@ namespace WoWSharpClient.Client
         {
             try
             {
-                _srpClientChallenge = new SrpClientChallenge(_username, _password, generator, largeSafePrime, serverPublicKey, salt);
-                
-                // TODO: Fix property names once we understand the actual SrpClientChallenge API
-                // For now, use placeholder values to allow compilation
-                byte[] clientPublicKey = new byte[32]; // Placeholder
-                byte[] clientProof = new byte[20]; // Placeholder
+                var challenge = new SrpClientChallenge(_username, _password, generator, largeSafePrime, serverPublicKey, salt);
+                _srpClientChallenge = challenge;
+
+                byte[] clientPublicKey = challenge.ClientPublicKey;
+                byte[] clientProof = challenge.ClientProof;
                 
                 byte[] crcHash = SHA1.HashData(Arrays.Concatenate(crcSalt, clientProof));
 
@@ -312,7 +426,7 @@ namespace WoWSharpClient.Client
                 writer.Flush();
                 byte[] packetData = memoryStream.ToArray();
 
-                Console.WriteLine($"[AuthClient] -> CMD_AUTH_LOGON_PROOF [{packetData.Length}]");
+                Console.WriteLine($"[AuthClient] -> CMD_AUTH_LOGON_PROOF [{packetData.Length}] hex={BitConverter.ToString(packetData)}");
 
                 await _connection.SendAsync(packetData);
             }
@@ -325,7 +439,7 @@ namespace WoWSharpClient.Client
         private async Task HandleAuthLogonProofResponse(ReadOnlyMemory<byte> data)
         {
             var packet = data.ToArray();
-            Console.WriteLine($"[AuthClient] <- CMD_AUTH_LOGON_PROOF [{packet.Length}]");
+            Console.WriteLine($"[AuthClient] <- CMD_AUTH_LOGON_PROOF [{packet.Length}] hex={BitConverter.ToString(packet)}");
 
             if (packet.Length < 2)
                 return;
@@ -344,11 +458,13 @@ namespace WoWSharpClient.Client
                     if (!verificationResult.HasValue)
                     {
                         WoWSharpEventEmitter.Instance.FireOnLoginFailure();
+                        _loginCompletionSource?.TrySetResult(false);
                     }
                     else
                     {
                         _srpClient = verificationResult.Value;
                         WoWSharpEventEmitter.Instance.FireOnLoginSuccess();
+                        _loginCompletionSource?.TrySetResult(true);
                     }
                 }
             }
@@ -356,6 +472,7 @@ namespace WoWSharpClient.Client
             {
                 Console.WriteLine($"[AuthClient] Failed AUTH_PROOF response: opcode {opcode:X2}, result {result}");
                 WoWSharpEventEmitter.Instance.FireOnLoginFailure();
+                _loginCompletionSource?.TrySetResult(false);
             }
 
             await Task.CompletedTask;
@@ -388,7 +505,8 @@ namespace WoWSharpClient.Client
                 {
                     byte opcode = packet[0];
                     uint size = BitConverter.ToUInt16(packet, 1);
-                    uint numOfRealms = BitConverter.ToUInt16(packet, 6);
+                    // Vanilla 1.12.1: cmd(1) + size(2) + padding(4) + numRealms(1) = 8 bytes header
+                    uint numOfRealms = packet[7]; // uint8 at offset 7
 
                     if (opcode == 0x10 && packet.Length >= 8) // REALM_LIST
                     {

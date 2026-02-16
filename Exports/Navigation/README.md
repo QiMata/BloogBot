@@ -77,7 +77,6 @@ Exports/Navigation/
 |   +-- PhysicsEngine.cpp/.h    # Main physics coordinator
 |   +-- PhysicsBridge.h         # C++/C# interop structures
 |   +-- PhysicsTolerances.h     # Skin width, contact offsets
-|   +-- PhysicsThreePass.cpp/.h # UP/SIDE/DOWN decomposition
 |   +-- PhysicsCollideSlide.cpp/.h  # Wall sliding
 |   +-- PhysicsGroundSnap.cpp/.h    # Ground detection
 |   +-- PhysicsMovement.cpp/.h      # Air/swim movement

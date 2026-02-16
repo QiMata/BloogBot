@@ -1,6 +1,7 @@
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Models;
+using System.Collections.Generic;
 
 namespace WoWSharpClient.Screens
 {

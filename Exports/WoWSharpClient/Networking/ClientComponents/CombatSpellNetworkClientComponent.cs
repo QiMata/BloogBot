@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -409,7 +413,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Commanding pet {PetGuid:X} to use ability {AbilityId} on target {TargetGuid:X}", 
                     _currentPetGuid.Value, abilityId, targetGuid);
 
-                var payload = CreatePetAbilityPayload(_currentPetGuid.Value, abilityId, targetGuid);
+                var payload = CreatePetAbilityPayload(_currentPetGuid.Value, abilityId, targetGuid ?? 0);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_PET_ACTION, payload, cancellationToken);
 
                 _logger.LogInformation("Pet ability command sent successfully");
@@ -568,32 +572,34 @@ namespace WoWSharpClient.Networking.ClientComponents
             await Task.CompletedTask;
         }
 
-        private byte[] CreatePetCommandPayload(ulong petGuid, PetCommand command, ulong? targetGuid = null)
+        /// <summary>
+        /// Creates CMSG_PET_ACTION payload for pet commands (follow, attack, stay, dismiss).
+        /// MaNGOS format: petGuid(8) + packedData(4) + targetGuid(8) = 20 bytes always.
+        /// packedData = MAKE_UNIT_ACTION_BUTTON(commandId, ACT_COMMAND).
+        /// </summary>
+        public static byte[] CreatePetCommandPayload(ulong petGuid, PetCommand command, ulong targetGuid = 0)
         {
-            var payload = new List<byte>();
-            payload.AddRange(BitConverter.GetBytes(petGuid));
-            payload.AddRange(BitConverter.GetBytes((uint)command));
-            
-            if (targetGuid.HasValue)
-            {
-                payload.AddRange(BitConverter.GetBytes(targetGuid.Value));
-            }
-            
-            return payload.ToArray();
+            var payload = new byte[20];
+            BitConverter.GetBytes(petGuid).CopyTo(payload, 0);
+            uint packedData = PetActionType.Pack((uint)command, PetActionType.ACT_COMMAND);
+            BitConverter.GetBytes(packedData).CopyTo(payload, 8);
+            BitConverter.GetBytes(targetGuid).CopyTo(payload, 12);
+            return payload;
         }
 
-        private byte[] CreatePetAbilityPayload(ulong petGuid, uint abilityId, ulong? targetGuid = null)
+        /// <summary>
+        /// Creates CMSG_PET_ACTION payload for pet ability casts.
+        /// MaNGOS format: petGuid(8) + packedData(4) + targetGuid(8) = 20 bytes always.
+        /// packedData = MAKE_UNIT_ACTION_BUTTON(spellId, ACT_ENABLED).
+        /// </summary>
+        public static byte[] CreatePetAbilityPayload(ulong petGuid, uint abilityId, ulong targetGuid = 0)
         {
-            var payload = new List<byte>();
-            payload.AddRange(BitConverter.GetBytes(petGuid));
-            payload.AddRange(BitConverter.GetBytes(abilityId));
-            
-            if (targetGuid.HasValue)
-            {
-                payload.AddRange(BitConverter.GetBytes(targetGuid.Value));
-            }
-            
-            return payload.ToArray();
+            var payload = new byte[20];
+            BitConverter.GetBytes(petGuid).CopyTo(payload, 0);
+            uint packedData = PetActionType.Pack(abilityId, PetActionType.ACT_ENABLED);
+            BitConverter.GetBytes(packedData).CopyTo(payload, 8);
+            BitConverter.GetBytes(targetGuid).CopyTo(payload, 12);
+            return payload;
         }
 
         private (byte BagId, byte SlotId)? FindHealthPotionInInventory()

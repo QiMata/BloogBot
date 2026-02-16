@@ -7,6 +7,10 @@ using System.Text;
 using System.Reactive;
 using System.Reactive.Subjects;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
+using System;
+using System.Threading;
+using System.IO;
 
 namespace WoWSharpClient.Client
 {
@@ -175,17 +179,13 @@ namespace WoWSharpClient.Client
 
         private void RegisterWorldHandlers()
         {
+            // WorldClient-specific handlers (custom logic, not bridgeable)
             _pipeline.RegisterHandler(Opcode.SMSG_AUTH_CHALLENGE, HandleAuthChallenge);
             _pipeline.RegisterHandler(Opcode.SMSG_AUTH_RESPONSE, HandleAuthResponse);
-            _pipeline.RegisterHandler(Opcode.SMSG_CHAR_ENUM, HandleCharEnum);
             _pipeline.RegisterHandler(Opcode.SMSG_PONG, HandlePong);
-            _pipeline.RegisterHandler(Opcode.SMSG_QUERY_TIME_RESPONSE, HandleQueryTimeResponse);
-            _pipeline.RegisterHandler(Opcode.SMSG_LOGIN_VERIFY_WORLD, HandleLoginVerifyWorld);
-            _pipeline.RegisterHandler(Opcode.SMSG_NEW_WORLD, HandleNewWorld);
-            _pipeline.RegisterHandler(Opcode.SMSG_TRANSFER_PENDING, HandleTransferPending);
             _pipeline.RegisterHandler(Opcode.SMSG_CHARACTER_LOGIN_FAILED, HandleCharacterLoginFailed);
-            _pipeline.RegisterHandler(Opcode.SMSG_MESSAGECHAT, HandleMessageChat);
-            _pipeline.RegisterHandler(Opcode.SMSG_NAME_QUERY_RESPONSE, HandleNameQueryResponse);
+
+            // Attack handlers (emit to reactive subjects)
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSTART, HandleAttackStart);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSTOP, HandleAttackStop);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_NOTINRANGE, HandleAttackSwingNotInRange);
@@ -193,6 +193,113 @@ namespace WoWSharpClient.Client
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_NOTSTANDING, HandleAttackSwingNotStanding);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_DEADTARGET, HandleAttackSwingDeadTarget);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_CANT_ATTACK, HandleAttackSwingCantAttack);
+
+            // Bridge all legacy OpCodeDispatcher handlers so WoWSharpObjectManager
+            // receives events for object updates, movement, position, spells, etc.
+            BridgeToLegacy(Opcode.SMSG_CHAR_ENUM, Handlers.CharacterSelectHandler.HandleCharEnum);
+            BridgeToLegacy(Opcode.SMSG_ADDON_INFO, Handlers.CharacterSelectHandler.HandleAddonInfo);
+            BridgeToLegacy(Opcode.SMSG_CHAR_CREATE, Handlers.CharacterSelectHandler.HandleCharCreate);
+            BridgeToLegacy(Opcode.SMSG_NAME_QUERY_RESPONSE, Handlers.CharacterSelectHandler.HandleNameQueryResponse);
+            BridgeToLegacy(Opcode.SMSG_SET_REST_START, Handlers.CharacterSelectHandler.HandleSetRestStart);
+
+            // Login/World
+            BridgeToLegacy(Opcode.SMSG_LOGIN_VERIFY_WORLD, Handlers.LoginHandler.HandleLoginVerifyWorld);
+            BridgeToLegacy(Opcode.SMSG_LOGIN_SETTIMESPEED, Handlers.LoginHandler.HandleSetTimeSpeed);
+            BridgeToLegacy(Opcode.SMSG_QUERY_TIME_RESPONSE, Handlers.LoginHandler.HandleTimeQueryResponse);
+
+            // Object updates (critical for position/health/player creation)
+            BridgeToLegacy(Opcode.SMSG_UPDATE_OBJECT, Handlers.ObjectUpdateHandler.HandleUpdateObject);
+            BridgeToLegacy(Opcode.SMSG_COMPRESSED_UPDATE_OBJECT, Handlers.ObjectUpdateHandler.HandleUpdateObject);
+
+            // Client control
+            BridgeToLegacy(Opcode.SMSG_CLIENT_CONTROL_UPDATE, OpCodeDispatcher.HandleSMSGClientControlUpdate);
+
+            // Chat
+            BridgeToLegacy(Opcode.SMSG_MESSAGECHAT, Handlers.ChatHandler.HandleServerChatMessage);
+
+            // Account data
+            BridgeToLegacy(Opcode.SMSG_ACCOUNT_DATA_TIMES, Handlers.AccountDataHandler.HandleAccountData);
+            BridgeToLegacy(Opcode.SMSG_UPDATE_ACCOUNT_DATA, Handlers.AccountDataHandler.HandleAccountData);
+
+            // Spells
+            BridgeToLegacy(Opcode.SMSG_INITIAL_SPELLS, Handlers.SpellHandler.HandleInitialSpells);
+            BridgeToLegacy(Opcode.SMSG_SPELLLOGMISS, Handlers.SpellHandler.HandleSpellLogMiss);
+            BridgeToLegacy(Opcode.SMSG_SPELL_GO, Handlers.SpellHandler.HandleSpellGo);
+            BridgeToLegacy(Opcode.SMSG_SPELL_START, Handlers.SpellHandler.HandleSpellStart);
+            BridgeToLegacy(Opcode.SMSG_ATTACKERSTATEUPDATE, Handlers.SpellHandler.HandleAttackerStateUpdate);
+            BridgeToLegacy(Opcode.SMSG_DESTROY_OBJECT, Handlers.SpellHandler.HandleDestroyObject);
+            BridgeToLegacy(Opcode.SMSG_CAST_FAILED, Handlers.SpellHandler.HandleCastFailed);
+            BridgeToLegacy(Opcode.SMSG_SPELLHEALLOG, Handlers.SpellHandler.HandleSpellHealLog);
+
+            // Stand state / world state
+            BridgeToLegacy(Opcode.SMSG_STANDSTATE_UPDATE, Handlers.StandStateHandler.HandleStandStateUpdate);
+            BridgeToLegacy(Opcode.SMSG_INIT_WORLD_STATES, Handlers.WorldStateHandler.HandleInitWorldStates);
+
+            // Movement packets
+            BridgeToLegacy(Opcode.SMSG_MONSTER_MOVE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_COMPRESSED_MOVES, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_FEATHER_FALL, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_KNOCK_BACK, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_LAND_WALK, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_NORMAL_FALL, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_SET_FLIGHT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_SET_HOVER, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_UNSET_FLIGHT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_UNSET_HOVER, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_MOVE_WATER_WALK, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_FORCE_MOVE_ROOT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_FORCE_MOVE_UNROOT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_FORCE_RUN_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_FEATHER_FALL, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_LAND_WALK, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_NORMAL_FALL, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_ROOT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_SET_HOVER, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_SET_WALK_MODE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_START_SWIM, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_STOP_SWIM, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_UNROOT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_UNSET_HOVER, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.SMSG_SPLINE_MOVE_WATER_WALK, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_TELEPORT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_TELEPORT_ACK, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_TIME_SKIPPED, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_JUMP, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_FALL_LAND, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_START_FORWARD, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_START_BACKWARD, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_STOP, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_START_STRAFE_LEFT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_START_STRAFE_RIGHT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_STOP_STRAFE, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_START_TURN_LEFT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_START_TURN_RIGHT, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_STOP_TURN, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_SET_FACING, Handlers.MovementHandler.HandleUpdateMovement);
+            BridgeToLegacy(Opcode.MSG_MOVE_HEARTBEAT, Handlers.MovementHandler.HandleUpdateMovement);
+        }
+
+        /// <summary>
+        /// Bridges an opcode to a legacy handler (Action&lt;Opcode, byte[]&gt;) from OpCodeDispatcher.
+        /// </summary>
+        private void BridgeToLegacy(Opcode opcode, Action<Opcode, byte[]> legacyHandler)
+        {
+            _pipeline.RegisterHandler(opcode, payload =>
+            {
+                try
+                {
+                    legacyHandler(opcode, payload.ToArray());
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Bridge] ERROR handling {opcode}: {ex.Message}");
+                }
+                return Task.CompletedTask;
+            });
         }
 
         // Reactive IWorldClient streams (forward or expose)
@@ -218,6 +325,14 @@ namespace WoWSharpClient.Client
             try
             {
                 await SendAuthSessionAsync(serverSeed);
+
+                // Enable encryption immediately after sending CMSG_AUTH_SESSION.
+                // The server enables encryption right after receiving our auth session,
+                // so SMSG_AUTH_RESPONSE (the next packet) will already be encrypted.
+                if (_sessionKey.Length == 40)
+                {
+                    UpdateEncryptor(new VanillaHeaderEncryptor(_sessionKey));
+                }
             }
             catch (Exception ex)
             {
@@ -274,8 +389,13 @@ namespace WoWSharpClient.Client
                 if (result == 0x0C) // AUTH_OK
                 {
                     _isAuthenticated = true;
+                    // Encryption was already enabled in HandleAuthChallenge right after
+                    // sending CMSG_AUTH_SESSION (before this response was received).
                     Console.WriteLine("[NewWorldClient] World authentication successful!");
                     _authenticationSucceeded.OnNext(Unit.Default);
+
+                    // Automatically request character list after successful auth
+                    _ = SendCharEnumAsync();
                 }
                 else
                 {
@@ -294,21 +414,8 @@ namespace WoWSharpClient.Client
             return Task.CompletedTask;
         }
 
-        // --- Minimal handler stubs for the rest ---
-        private Task HandleCharEnum(ReadOnlyMemory<byte> payload)
-        {
-            // TODO: Parse character list entries and push to _characterFound
-            return Task.CompletedTask;
-        }
-
         private Task HandlePong(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleQueryTimeResponse(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleLoginVerifyWorld(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleNewWorld(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleTransferPending(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
         private Task HandleCharacterLoginFailed(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleMessageChat(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
-        private Task HandleNameQueryResponse(ReadOnlyMemory<byte> payload) => Task.CompletedTask;
 
         private Task HandleAttackStart(ReadOnlyMemory<byte> payload)
         {

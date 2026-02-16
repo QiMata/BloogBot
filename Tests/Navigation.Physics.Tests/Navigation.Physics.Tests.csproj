@@ -2,14 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <BaseOutputPath>..\..\Bot</BaseOutputPath>
     <PlatformTarget>x64</PlatformTarget>
     <ProduceReferenceAssembly>True</ProduceReferenceAssembly>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Auto-select x64 test host -->
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\test.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,13 +23,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
-    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- Copy Navigation.dll to output for P/Invoke tests -->
   <ItemGroup>
-    <None Include="..\..\Bot\$(Configuration)\net8.0\Navigation.dll" Link="Navigation.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\Bot\$(Configuration)\net8.0\Navigation.dll')" />
+    <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
+    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+    <ProjectReference Include="..\Tests.Infrastructure\Tests.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,7 +1,12 @@
 ﻿using OllamaSharp;
 using OllamaSharp.Models.Chat;
 using OllamaSharp.Models.Exceptions;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace PromptHandlingService.Providers
 {

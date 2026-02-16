@@ -1,0 +1,2 @@
+[BCM] called basePath='e:\repos\BloogBot\Bot\Debug\vmaps\' loaded=0 size=0
+[BCM] called basePath='E:\repos\BloogBot\Bot\Debug\net8.0/vmaps/' loaded=0 size=0

@@ -2,7 +2,7 @@ using ModelContextProtocol.Server;
 using System.ComponentModel;
 using System.Collections.Concurrent;
 
-namespace BloogBot.LoggingMCPServer.Tools;
+namespace LoggingMCPServer.Tools;
 
 [McpServerToolType]
 public class LoggingTools

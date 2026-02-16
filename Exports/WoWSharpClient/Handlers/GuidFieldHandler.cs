@@ -1,4 +1,6 @@
 using GameData.Core.Enums;
+using System;
+using System.IO;
 
 namespace WoWSharpClient.Handlers;
 

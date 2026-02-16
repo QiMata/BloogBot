@@ -55,6 +55,28 @@
             public static nint LoginState = 0xB41478;
         }
 
+        /// <summary>
+        /// Map/world loading state offsets
+        /// </summary>
+        public static class Map
+        {
+            /// <summary>
+            /// ContinentID - returns 0xFF during world loading
+            /// </summary>
+            public static nint ContinentId = 0x0086F694;
+        }
+
+        /// <summary>
+        /// Network connection state offsets
+        /// </summary>
+        public static class Connection
+        {
+            /// <summary>
+            /// ClientConnection pointer - null when disconnected
+            /// </summary>
+            public static nint ClientConnection = 0x00B41DA0;
+        }
+
         public static class Misc
         {
             public static nint LuaState = 0x00CEEF74;

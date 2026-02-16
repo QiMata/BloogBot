@@ -1,8 +1,9 @@
-using GameData.Core.Constants;
 using GameData.Core.Enums;
 using PathfindingService.Repository;
 using MovementFlags = GameData.Core.Enums.MovementFlags;
 using GameData.Core.Models;
+using System;
+using System.IO;
 
 namespace PathfindingService.Tests
 {
@@ -37,15 +38,10 @@ namespace PathfindingService.Tests
         public void Dispose() { }
     }
 
-    public class PhysicsEngineTests : IClassFixture<PhysicsFixture>
+    public class PhysicsEngineTests(PhysicsFixture fixture) : IClassFixture<PhysicsFixture>
     {
-        private readonly Physics _phy;
+        private readonly Physics _phy = fixture.Physics;
         private const float Dt = 0.05f;
-
-        public PhysicsEngineTests(PhysicsFixture fixture)
-        {
-            _phy = fixture.Physics;
-        }
 
         [Theory]
         [InlineData(1u, -562.225f, -4189.092f, 70.789f, Race.Orc, 0f, MovementFlags.MOVEFLAG_NONE)]

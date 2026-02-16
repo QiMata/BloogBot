@@ -1,3 +1,5 @@
+using System;
+
 namespace WoWSharpClient.Networking.ClientComponents.Models
 {
     /// <summary>
@@ -158,44 +160,45 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
     }
 
     /// <summary>
-    /// Pet commands available for pet control.
+    /// MaNGOS 1.12.1 CommandStates — pet command actions sent via CMSG_PET_ACTION.
+    /// Packed with ACT_COMMAND (0x07) via MAKE_UNIT_ACTION_BUTTON.
     /// </summary>
     public enum PetCommand
     {
-        /// <summary>
-        /// Command the pet to attack a target.
-        /// </summary>
-        Attack = 0,
-
-        /// <summary>
-        /// Command the pet to follow the player.
-        /// </summary>
+        Stay = 0,
         Follow = 1,
+        Attack = 2,
+        Dismiss = 3
+    }
+
+    /// <summary>
+    /// MaNGOS 1.12.1 ReactStates — pet reaction modes sent via CMSG_PET_ACTION.
+    /// Packed with ACT_REACTION (0x06) via MAKE_UNIT_ACTION_BUTTON.
+    /// </summary>
+    public enum PetReactState
+    {
+        Passive = 0,
+        Defensive = 1,
+        Aggressive = 2
+    }
+
+    /// <summary>
+    /// MaNGOS 1.12.1 ActiveStates — action type byte for UNIT_ACTION_BUTTON packing.
+    /// </summary>
+    public static class PetActionType
+    {
+        public const byte ACT_PASSIVE = 0x01;
+        public const byte ACT_DISABLED = 0x81;
+        public const byte ACT_ENABLED = 0xC1;
+        public const byte ACT_COMMAND = 0x07;
+        public const byte ACT_REACTION = 0x06;
 
         /// <summary>
-        /// Command the pet to stay in place.
+        /// Packs action/spell ID and type into uint32 for CMSG_PET_ACTION data field.
+        /// Lower 24 bits = action ID, upper 8 bits = action type.
         /// </summary>
-        Stay = 2,
-
-        /// <summary>
-        /// Command the pet to use a specific ability.
-        /// </summary>
-        UseAbility = 3,
-
-        /// <summary>
-        /// Command the pet to be passive.
-        /// </summary>
-        Passive = 4,
-
-        /// <summary>
-        /// Command the pet to be defensive.
-        /// </summary>
-        Defensive = 5,
-
-        /// <summary>
-        /// Command the pet to be aggressive.
-        /// </summary>
-        Aggressive = 6
+        public static uint Pack(uint actionId, byte actionType) =>
+            (actionId & 0x00FFFFFF) | ((uint)actionType << 24);
     }
 
     /// <summary>

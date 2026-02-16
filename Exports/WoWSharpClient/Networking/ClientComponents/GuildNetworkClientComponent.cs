@@ -5,6 +5,10 @@ using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -188,48 +192,215 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #region Parsing Helpers
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode) => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
-        private (string Inviter, string GuildName) ParseGuildInvite(ReadOnlyMemory<byte> payload) => ("Inviter", "Guild");
-        private (string Inviter, string GuildName) ParseGuildInvite(byte[] payload) => ("Inviter", "Guild");
-        private GuildInfo ParseGuildInfo(ReadOnlyMemory<byte> payload) => new GuildInfo
+
+        /// <summary>
+        /// Parses SMSG_GUILD_INVITE: inviterName\0 + guildName\0
+        /// </summary>
+        private (string Inviter, string GuildName) ParseGuildInvite(ReadOnlyMemory<byte> payload)
         {
-            GuildId = CurrentGuildId ?? 0,
-            Name = CurrentGuildName ?? "Guild",
-            MOTD = string.Empty,
-            Info = string.Empty,
-            MemberCount = (uint)_guildMembers.Count,
-            CreationDate = DateTime.UtcNow,
-            LeaderName = _guildMembers.FirstOrDefault()?.Name ?? string.Empty,
-            Ranks = Array.Empty<GuildRankInfo>(),
-            Emblem = null
-        };
-        private List<GuildMember> ParseGuildRoster(ReadOnlyMemory<byte> payload) { lock (_stateLock) { return _guildMembers.ToList(); } }
+            var span = payload.Span;
+            int offset = 0;
+            var inviter = ReadCString(span, ref offset);
+            var guild = ReadCString(span, ref offset);
+            return (inviter, guild);
+        }
+
+        /// <summary>
+        /// Overload for byte[] used by HandleServerResponse test hook.
+        /// </summary>
+        private (string Inviter, string GuildName) ParseGuildInvite(byte[] payload)
+            => ParseGuildInvite((ReadOnlyMemory<byte>)payload);
+
+        /// <summary>
+        /// Parses SMSG_GUILD_INFO: guildName\0 + day(4) + month(4) + year(4) + memberCount(4) + accountCount(4)
+        /// </summary>
+        private GuildInfo ParseGuildInfo(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            int offset = 0;
+            var name = ReadCString(span, ref offset);
+
+            uint day = 0, month = 0, year = 0, memberCount = 0;
+            if (offset + 4 <= span.Length) { day = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4; }
+            if (offset + 4 <= span.Length) { month = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4; }
+            if (offset + 4 <= span.Length) { year = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4; }
+            if (offset + 4 <= span.Length) { memberCount = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4; }
+            // accountCount follows but we don't store it
+
+            DateTime creationDate;
+            try { creationDate = new DateTime((int)year, (int)month + 1, (int)day + 1, 0, 0, 0, DateTimeKind.Utc); }
+            catch { creationDate = DateTime.UnixEpoch; }
+
+            return new GuildInfo
+            {
+                GuildId = CurrentGuildId ?? 0,
+                Name = name,
+                MOTD = string.Empty,
+                Info = string.Empty,
+                MemberCount = memberCount,
+                CreationDate = creationDate,
+                LeaderName = string.Empty,
+                Ranks = Array.Empty<GuildRankInfo>(),
+                Emblem = null
+            };
+        }
+
+        /// <summary>
+        /// Parses SMSG_GUILD_ROSTER:
+        ///   memberCount(4) + motd\0 + guildinfo\0 + rankCount(4)
+        ///   + [rankRights(4)] × rankCount
+        ///   + [member entries] × memberCount
+        /// Each member entry:
+        ///   guid(8) + status(1) + name\0 + rankId(4) + level(1) + class(1) + zoneId(4)
+        ///   + [if offline: logoutTime(float)] + publicNote\0 + officerNote\0
+        /// </summary>
+        private List<GuildMember> ParseGuildRoster(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            int offset = 0;
+            var members = new List<GuildMember>();
+
+            if (span.Length < 4) return members;
+            uint memberCount = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4;
+
+            var motd = ReadCString(span, ref offset);
+            var guildInfoText = ReadCString(span, ref offset);
+
+            if (offset + 4 > span.Length) return members;
+            uint rankCount = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4;
+
+            // Read rank rights (we store them for the GuildInfo cache)
+            var rankRights = new uint[rankCount];
+            for (int i = 0; i < rankCount && offset + 4 <= span.Length; i++)
+            {
+                rankRights[i] = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4;
+            }
+
+            // Read member entries
+            for (int i = 0; i < memberCount && offset < span.Length; i++)
+            {
+                if (offset + 8 > span.Length) break;
+                ulong guid = BitConverter.ToUInt64(span.Slice(offset, 8)); offset += 8;
+
+                if (offset + 1 > span.Length) break;
+                byte status = span[offset]; offset += 1;
+                bool isOnline = (status & 1) != 0;
+
+                string name = ReadCString(span, ref offset);
+
+                if (offset + 4 > span.Length) break;
+                uint rankId = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4;
+
+                if (offset + 2 > span.Length) break;
+                byte level = span[offset]; offset += 1;
+                byte classId = span[offset]; offset += 1;
+
+                if (offset + 4 > span.Length) break;
+                uint zoneId = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4;
+
+                DateTime? lastLogon = null;
+                if (!isOnline)
+                {
+                    if (offset + 4 > span.Length) break;
+                    float logoutTime = BitConverter.ToSingle(span.Slice(offset, 4)); offset += 4;
+                    lastLogon = DateTime.UtcNow.AddSeconds(-logoutTime);
+                }
+
+                string publicNote = ReadCString(span, ref offset);
+                string officerNote = ReadCString(span, ref offset);
+
+                members.Add(new GuildMember
+                {
+                    Guid = guid,
+                    Name = name,
+                    Rank = rankId,
+                    Class = classId,
+                    Level = level,
+                    Zone = zoneId.ToString(),
+                    IsOnline = isOnline,
+                    Status = isOnline ? GuildMemberStatus.Online : GuildMemberStatus.Offline,
+                    PublicNote = publicNote,
+                    OfficerNote = officerNote,
+                    LastLogon = lastLogon
+                });
+            }
+
+            // Update cached guild info with MOTD and info text from roster
+            lock (_stateLock)
+            {
+                if (_guildInfo != null)
+                {
+                    _guildInfo.MOTD = motd;
+                    _guildInfo.Info = guildInfoText;
+                }
+            }
+
+            return members;
+        }
+
+        /// <summary>
+        /// Parses SMSG_GUILD_COMMAND_RESULT: commandType(4) + name\0 + errorCode(4)
+        /// MaNGOS command types: CREATE_S=0, INVITE_S=1, QUIT_S=3, FOUNDER_S=0x0E
+        /// </summary>
         private GuildCommandResult ParseGuildCommandResult(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
-            if (span.Length < 8) return new GuildCommandResult("Unknown", false, 0xFFFFFFFF);
-            var operation = BitConverter.ToUInt32(span[..4]);
-            var result = BitConverter.ToUInt32(span.Slice(4, 4));
-            var operationName = operation switch
+            int offset = 0;
+
+            if (span.Length < 4) return new GuildCommandResult("Unknown", false, 0xFFFFFFFF);
+            uint commandType = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4;
+
+            // Skip the name CString (not used in result but must be read to reach error code)
+            ReadCString(span, ref offset);
+
+            uint errorCode = 0;
+            if (offset + 4 <= span.Length) { errorCode = BitConverter.ToUInt32(span.Slice(offset, 4)); offset += 4; }
+
+            var operationName = commandType switch
             {
-                0x081 => "Create",
-                0x082 => "Invite",
-                0x084 => "Accept",
-                0x085 => "Decline",
-                0x087 => "Info",
-                0x089 => "Roster",
-                0x08B => "Promote",
-                0x08C => "Demote",
-                0x08D => "Leave",
-                0x08E => "Remove",
-                0x08F => "Disband",
-                0x090 => "Leader",
-                0x091 => "MOTD",
-                _ => $"Unknown({operation:X})"
+                0x00 => "Create",
+                0x01 => "Invite",
+                0x03 => "Quit",
+                0x0E => "Founder",
+                _ => $"Unknown({commandType:X})"
             };
-            var success = result == 0;
-            return new GuildCommandResult(operationName, success, result);
+
+            return new GuildCommandResult(operationName, errorCode == 0, errorCode);
         }
-        private IEnumerable<GuildMemberStatusChange> ParseGuildEvents(ReadOnlyMemory<byte> payload) { yield break; }
+
+        /// <summary>
+        /// Parses SMSG_GUILD_EVENT: eventType(1) + strCount(1) + [strings\0] + [optional guid(8)]
+        /// GE_SIGNED_ON = 0x0C, GE_SIGNED_OFF = 0x0D
+        /// </summary>
+        private IEnumerable<GuildMemberStatusChange> ParseGuildEvents(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+            if (span.Length < 2) yield break;
+
+            int offset = 0;
+            byte eventType = span[offset]; offset += 1;
+            byte strCount = span[offset]; offset += 1;
+
+            var strings = new List<string>();
+            for (int i = 0; i < strCount && offset < span.Length; i++)
+                strings.Add(ReadCString(span, ref offset));
+
+            // GE_SIGNED_ON = 0x0C, GE_SIGNED_OFF = 0x0D
+            if (eventType == 0x0C && strings.Count > 0)
+                yield return new GuildMemberStatusChange(strings[0], true);
+            else if (eventType == 0x0D && strings.Count > 0)
+                yield return new GuildMemberStatusChange(strings[0], false);
+        }
+
+        private static string ReadCString(ReadOnlySpan<byte> span, ref int offset)
+        {
+            int start = offset;
+            while (offset < span.Length && span[offset] != 0)
+                offset++;
+            var result = offset > start ? Encoding.UTF8.GetString(span.Slice(start, offset - start)) : string.Empty;
+            if (offset < span.Length) offset++; // skip null terminator
+            return result;
+        }
         #endregion
 
         #region Internal Send Helpers

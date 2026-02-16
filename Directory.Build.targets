@@ -1,0 +1,21 @@
+<Project>
+  <!--
+    x64 output override: Bot/$(Configuration)/x64/
+
+    Non-x64 projects get their output path from Directory.Build.props, which
+    sets OutputPath early enough for the SDK to correctly derive OutDir,
+    TargetDir, and TargetPath.
+
+    x64 projects need a late override here because PlatformTarget is only
+    available after the csproj body is evaluated. We must override ALL
+    downstream properties since they were already computed from the .props
+    value before this runs.
+  -->
+  <PropertyGroup Condition="'$(PlatformTarget)' == 'x64'">
+    <_SolutionRoot Condition="'$(_SolutionRoot)' == ''">$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildProjectDirectory), 'WestworldOfWarcraft.sln'))</_SolutionRoot>
+    <OutputPath>$(_SolutionRoot)\Bot\$(Configuration)\x64\</OutputPath>
+    <OutDir>$(OutputPath)</OutDir>
+    <TargetDir>$(OutputPath)</TargetDir>
+    <TargetPath>$(TargetDir)$(TargetFileName)</TargetPath>
+  </PropertyGroup>
+</Project>

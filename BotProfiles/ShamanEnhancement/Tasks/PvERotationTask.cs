@@ -4,10 +4,9 @@ using static BotRunner.Constants.Spellbook;
 
 namespace ShamanEnhancement.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
-
-        internal PvERotationTask(IBotContext botContext) : base(botContext) { }
+        public PvERotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
         {

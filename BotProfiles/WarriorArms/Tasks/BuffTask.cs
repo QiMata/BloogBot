@@ -3,7 +3,7 @@ using BotRunner.Tasks;
 
 namespace WarriorArms.Tasks
 {
-    internal class BuffTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class BuffTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         public void Update()
         {

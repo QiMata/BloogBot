@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace BloogBot.LoggingMCPServer.Services;
+namespace LoggingMCPServer.Services;
 
 public class LogEvent
 {

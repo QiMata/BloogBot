@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Clients
 {
-    public class CharacterStateUpdateClient : ProtobufSocketClient<ActivitySnapshot, ActivitySnapshot>
+    public class CharacterStateUpdateClient : ProtobufSocketClient<WoWActivitySnapshot, WoWActivitySnapshot>
     {
         private readonly ILogger _logger;
 
@@ -22,6 +22,6 @@ namespace BotRunner.Clients
             _logger = logger;
         }
 
-        public virtual ActivitySnapshot SendMemberStateUpdate(ActivitySnapshot update) => SendMessage(update);
+        public virtual WoWActivitySnapshot SendMemberStateUpdate(WoWActivitySnapshot update) => SendMessage(update);
     }
 }

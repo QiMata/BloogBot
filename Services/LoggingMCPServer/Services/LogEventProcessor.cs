@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 
-namespace BloogBot.LoggingMCPServer.Services;
+namespace LoggingMCPServer.Services;
 
 public class LogEventProcessor
 {

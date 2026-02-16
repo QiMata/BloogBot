@@ -1,4 +1,5 @@
 ﻿using GameData.Core.Interfaces;
+using System.Collections.Generic;
 
 namespace GameData.Core.Frames
 {

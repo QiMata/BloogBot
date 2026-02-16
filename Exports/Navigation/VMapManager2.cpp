@@ -35,6 +35,13 @@ namespace VMAP
 
         modelNameToPath.clear();
 
+        // Early-out if directory doesn't exist (prevents recursive_directory_iterator crash)
+        // Do NOT set modelMappingLoaded here — a later call with a valid path should succeed
+        if (basePath.empty() || !std::filesystem::exists(basePath))
+        {
+            return;
+        }
+
         // Helper function to add a model to our mapping
         auto addModel = [](const std::filesystem::path& path) {
             std::string fullPath = path.string();
@@ -320,7 +327,9 @@ namespace VMAP
 
         StaticMapTree* newTree = new StaticMapTree(mapId, iBasePath);
 
-        if (newTree->InitMap(mapFileName, this))
+        bool initResult = newTree->InitMap(mapFileName, this);
+
+        if (initResult)
         {
             iInstanceMapTrees[mapId] = newTree;
             iLoadedMaps.insert(mapId);
@@ -601,6 +610,7 @@ namespace VMAP
             if (!modelMappingLoaded)
                 BuildCompleteModelMapping(basepath);
             std::string fullPath = ResolveModelPath(basepath, filename);
+
             if (fullPath.empty() || !std::filesystem::exists(fullPath))
             {
                 return nullptr;

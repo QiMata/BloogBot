@@ -1,7 +1,10 @@
+using System;
 using System.Buffers;
 using System.Net.Sockets;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient.Networking.Abstractions;
 
 namespace WoWSharpClient.Networking.Implementation
@@ -198,18 +201,11 @@ namespace WoWSharpClient.Networking.Implementation
             _whenConnected.Dispose();
         }
 
-        private sealed class InlineObserver<T> : IObserver<T>
+        private sealed class InlineObserver<T>(Action<T> onNext, Action<Exception>? onError = null, Action? onCompleted = null) : IObserver<T>
         {
-            private readonly Action<T> _onNext;
-            private readonly Action<Exception>? _onError;
-            private readonly Action? _onCompleted;
-
-            public InlineObserver(Action<T> onNext, Action<Exception>? onError = null, Action? onCompleted = null)
-            {
-                _onNext = onNext;
-                _onError = onError;
-                _onCompleted = onCompleted;
-            }
+            private readonly Action<T> _onNext = onNext;
+            private readonly Action<Exception>? _onError = onError;
+            private readonly Action? _onCompleted = onCompleted;
 
             public void OnCompleted() => _onCompleted?.Invoke();
             public void OnError(Exception error) => _onError?.Invoke(error);

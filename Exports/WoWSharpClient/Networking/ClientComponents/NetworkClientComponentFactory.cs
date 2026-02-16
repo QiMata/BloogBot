@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 
@@ -41,6 +42,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private IFriendNetworkClientComponent? _friendAgent;
         private IIgnoreNetworkClientComponent? _ignoreAgent;
         private ITradeNetworkClientComponent? _tradeAgent;
+        private ICharacterInitNetworkClientComponent? _characterInitAgent;
 
         // Injected agents constructor (used in unit tests)
         public NetworkClientComponentFactory(
@@ -71,6 +73,21 @@ namespace WoWSharpClient.Networking.ClientComponents
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
             _logger = _loggerFactory.CreateLogger<NetworkClientComponentFactory>();
+        }
+
+        /// <summary>
+        /// Eagerly creates essential agents whose opcode handlers must be registered
+        /// before login packets arrive (e.g., CharacterInit for ACTION_BUTTONS/INITIALIZE_FACTIONS,
+        /// Party for GROUP_INVITE/GROUP_LIST).
+        /// Call this immediately after constructing the factory with a connected WorldClient.
+        /// </summary>
+        public void InitializeEssentialAgents()
+        {
+            EnsureLazyAvailable();
+            // Touch each property to force lazy creation and opcode handler registration
+            _ = CharacterInitAgent;
+            _ = PartyAgent;
+            _logger?.LogInformation("Essential agents initialized (CharacterInit, Party).");
         }
 
         private void EnsureLazyAvailable()
@@ -423,6 +440,19 @@ namespace WoWSharpClient.Networking.ClientComponents
                     _tradeAgent = AgentFactory.CreateTradeNetworkClientComponent(_worldClient!, _loggerFactory!);
                 }
                 return _tradeAgent;
+            }
+        }
+
+        public ICharacterInitNetworkClientComponent CharacterInitAgent
+        {
+            get
+            {
+                if (_characterInitAgent == null)
+                {
+                    EnsureLazyAvailable();
+                    _characterInitAgent = AgentFactory.CreateCharacterInitNetworkClientComponent(_worldClient!, _loggerFactory!);
+                }
+                return _characterInitAgent;
             }
         }
     }

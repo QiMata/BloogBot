@@ -1,17 +1,14 @@
 using Communication;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace DecisionEngineService;
 
-public class MLModel
+public class MLModel(List<float> initialWeights)
 {
-    private readonly List<float> _weights;
+    private readonly List<float> _weights = initialWeights ?? [];
 
-    public MLModel(List<float> initialWeights)
-    {
-        _weights = initialWeights ?? [];
-    }
-
-    public void LearnFromSnapshot(ActivitySnapshot snapshot)
+    public void LearnFromSnapshot(WoWActivitySnapshot snapshot)
     {
         if (snapshot == null)
         {
@@ -21,7 +18,7 @@ public class MLModel
         AdjustWeights(snapshot);
     }
 
-    public static List<ActionMap> Predict(ActivitySnapshot snapshot)
+    public static List<ActionMap> Predict(WoWActivitySnapshot snapshot)
     {
         return GenerateActionMap(snapshot);
     }
@@ -31,7 +28,7 @@ public class MLModel
         return _weights;
     }
 
-    private void AdjustWeights(ActivitySnapshot snapshot)
+    private void AdjustWeights(WoWActivitySnapshot snapshot)
     {
         if (snapshot.CurrentAction == null)
         {
@@ -64,7 +61,7 @@ public class MLModel
         }
     }
 
-    private static List<ActionMap> GenerateActionMap(ActivitySnapshot snapshot)
+    private static List<ActionMap> GenerateActionMap(WoWActivitySnapshot snapshot)
     {
         List<ActionMap> actionMaps = [];
 
@@ -86,7 +83,10 @@ public class MLModel
             });
         }
 
-        var hostileCount = snapshot.NearbyUnits?.Count(unit => unit.UnitFlags == 16 /* Hostile flag */) ?? 0;
+        // Fix: RepeatedField<T> does not support Count(predicate), so use LINQ ToList().Count
+        var hostileCount = snapshot.NearbyUnits == null
+            ? 0
+            : snapshot.NearbyUnits.Where(unit => unit.UnitFlags == 16 /* Hostile flag */).ToList().Count;
         if (hostileCount > 2)
         {
             actionMaps.Add(new ActionMap

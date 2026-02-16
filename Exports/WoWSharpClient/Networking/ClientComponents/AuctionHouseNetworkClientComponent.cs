@@ -1,6 +1,10 @@
+using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -9,39 +13,34 @@ using WoWSharpClient.Networking.ClientComponents.I;
 namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
-    /// Implementation of auction house network agent that handles auction house operations in World of Warcraft.
-    /// Manages browsing auctions, placing bids, posting auctions, and collecting sold items using the Mangos protocol.
-    /// Uses opcode-driven observables instead of subjects.
+    /// Handles auction house operations using the MaNGOS 1.12.1 protocol.
+    /// SMSG parsers: AUCTION_LIST_RESULT (68 bytes/entry), AUCTION_COMMAND_RESULT (conditional),
+    /// AUCTION_REMOVED_NOTIFICATION (12 bytes), BIDDER_NOTIFICATION (32 bytes), OWNER_NOTIFICATION (28 bytes).
+    /// CMSG formats: All include auctioneerGuid prefix as required by the server.
     /// </summary>
-    public class AuctionHouseNetworkClientComponent : NetworkClientComponent, IAuctionHouseNetworkClientComponent, IDisposable
+    public class AuctionHouseNetworkClientComponent(IWorldClient worldClient, ILogger<AuctionHouseNetworkClientComponent> logger) : NetworkClientComponent, IAuctionHouseNetworkClientComponent, IDisposable
     {
-        private readonly IWorldClient _worldClient;
-        private readonly ILogger<AuctionHouseNetworkClientComponent> _logger;
+        private const int AUCTION_ENTRY_SIZE = 64;
+
+        private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
+        private readonly ILogger<AuctionHouseNetworkClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         private bool _isAuctionHouseOpen;
         private ulong? _currentAuctioneerGuid;
         private readonly List<AuctionData> _currentAuctions = [];
         private readonly List<AuctionData> _ownedAuctions = [];
         private readonly List<AuctionData> _bidderAuctions = [];
+        private uint _totalSearchResultCount;
         private bool _disposed;
-
-        /// <summary>
-        /// Initializes a new instance of the AuctionHouseNetworkClientComponent class.
-        /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance.</param>
-        public AuctionHouseNetworkClientComponent(IWorldClient worldClient, ILogger<AuctionHouseNetworkClientComponent> logger)
-        {
-            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
 
         /// <inheritdoc />
         public bool IsAuctionHouseOpen => _isAuctionHouseOpen;
 
+        /// <inheritdoc />
+        public uint TotalSearchResultCount => _totalSearchResultCount;
+
         /// <summary>
         /// Gets the most recent auction search results captured by the component.
-        /// Exposed for tests and read-only consumers.
         /// </summary>
         public IReadOnlyList<AuctionData> CurrentAuctions => _currentAuctions;
 
@@ -78,51 +77,53 @@ namespace WoWSharpClient.Networking.ClientComponents
         public IObservable<AuctionOperationResult> AuctionOperationCompletedStream => Observable.Defer(() =>
             SafeStream(Opcode.SMSG_AUCTION_COMMAND_RESULT)
                 .Select(ParseCommandResult)
-                .Where(c => c.Success)
-                .Select(c => new AuctionOperationResult(c.Operation, c.AuctionId))
+                .Where(c => c.Error == AuctionError.Ok)
+                .Select(c => new AuctionOperationResult(c.Action, c.AuctionId))
         );
 
         public IObservable<AuctionOperationError> AuctionOperationFailedStream => Observable.Defer(() =>
             SafeStream(Opcode.SMSG_AUCTION_COMMAND_RESULT)
                 .Select(ParseCommandResult)
-                .Where(c => !c.Success)
-                .Select(c => new AuctionOperationError(c.Operation, c.Error ?? "Unknown error"))
+                .Where(c => c.Error != AuctionError.Ok)
+                .Select(c => new AuctionOperationError(c.Action, c.Error, c.Error.ToString()))
         );
 
         public IObservable<BidPlacedData> BidPlacedStream => Observable.Defer(() =>
             SafeStream(Opcode.SMSG_AUCTION_COMMAND_RESULT)
                 .Select(ParseCommandResult)
-                .Where(c => c.Success && c.Operation == AuctionOperationType.PlaceBid)
-                .Select(c => new BidPlacedData(c.AuctionId, c.BidAmount ?? 0))
+                .Where(c => c.Error == AuctionError.Ok && c.Action == AuctionAction.BidPlaced)
+                .Select(c => new BidPlacedData(c.AuctionId, c.OutbidAmount))
         );
 
         public IObservable<AuctionPostedData> AuctionPostedStream => Observable.Defer(() =>
             SafeStream(Opcode.SMSG_AUCTION_COMMAND_RESULT)
                 .Select(ParseCommandResult)
-                .Where(c => c.Success && c.Operation == AuctionOperationType.PostAuction)
-                .Select(c => new AuctionPostedData(c.ItemId ?? 0, c.StartBid ?? 0, c.Buyout ?? 0, c.Duration ?? 0))
+                .Where(c => c.Error == AuctionError.Ok && c.Action == AuctionAction.Started)
+                .Select(c => new AuctionPostedData(c.AuctionId))
         );
 
-        public IObservable<uint> AuctionCancelledStream => Observable.Defer(() =>
+        public IObservable<AuctionNotificationData> AuctionRemovedStream => Observable.Defer(() =>
             SafeStream(Opcode.SMSG_AUCTION_REMOVED_NOTIFICATION)
                 .Select(ParseRemovedNotification)
-                .Where(id => id != 0)
+                .Where(n => n.AuctionId != 0)
         );
 
         public IObservable<AuctionNotificationData> AuctionNotificationStream => Observable.Defer(() =>
             Observable.Merge(
-                SafeStream(Opcode.SMSG_AUCTION_BIDDER_NOTIFICATION).Select(payload => ParseNotification(payload, isOwner: false)),
-                SafeStream(Opcode.SMSG_AUCTION_OWNER_NOTIFICATION).Select(payload => ParseNotification(payload, isOwner: true))
+                SafeStream(Opcode.SMSG_AUCTION_BIDDER_NOTIFICATION).Select(ParseBidderNotification),
+                SafeStream(Opcode.SMSG_AUCTION_OWNER_NOTIFICATION).Select(ParseOwnerNotification)
             )
         );
         #endregion
+
+        #region CMSG Methods
 
         /// <inheritdoc />
         public async Task OpenAuctionHouseAsync(ulong auctioneerGuid, CancellationToken cancellationToken = default)
         {
             try
             {
-                _logger.LogDebug("Opening auction house interaction with: {AuctioneerGuid:X}", auctioneerGuid);
+                _logger.LogDebug("Opening auction house with auctioneer: {AuctioneerGuid:X}", auctioneerGuid);
 
                 var payload = new byte[8];
                 BitConverter.GetBytes(auctioneerGuid).CopyTo(payload, 0);
@@ -132,11 +133,11 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await _worldClient.SendOpcodeAsync(Opcode.MSG_AUCTION_HELLO, payload, cancellationToken);
 
-                _logger.LogInformation("Auction house interaction initiated with: {AuctioneerGuid:X}", auctioneerGuid);
+                _logger.LogInformation("Auction house opened with auctioneer: {AuctioneerGuid:X}", auctioneerGuid);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to open auction house interaction with: {AuctioneerGuid:X}", auctioneerGuid);
+                _logger.LogError(ex, "Failed to open auction house with: {AuctioneerGuid:X}", auctioneerGuid);
                 throw;
             }
         }
@@ -144,68 +145,76 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public async Task CloseAuctionHouseAsync(CancellationToken cancellationToken = default)
         {
-            try
-            {
-                _logger.LogDebug("Closing auction house window");
-
-                _isAuctionHouseOpen = false;
-                _currentAuctioneerGuid = null;
-
-                _logger.LogInformation("Auction house window closed");
-                await Task.CompletedTask;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to close auction house window");
-                throw;
-            }
+            _logger.LogDebug("Closing auction house window");
+            _isAuctionHouseOpen = false;
+            _currentAuctioneerGuid = null;
+            _logger.LogInformation("Auction house window closed");
+            await Task.CompletedTask;
         }
 
         /// <inheritdoc />
         public async Task SearchAuctionsAsync(
             string name = "",
-            uint levelMin = 0,
-            uint levelMax = 0,
-            uint category = 0,
-            uint subCategory = 0,
+            byte levelMin = 0,
+            byte levelMax = 0,
+            uint inventoryType = 0,
+            uint itemClass = 0,
+            uint itemSubClass = 0,
             AuctionQuality quality = AuctionQuality.Any,
             bool usable = false,
+            uint listOffset = 0,
             CancellationToken cancellationToken = default)
         {
             try
             {
-                _logger.LogDebug("Searching auctions with criteria: Name='{Name}', LevelMin={LevelMin}, LevelMax={LevelMax}, Category={Category}, SubCategory={SubCategory}, Quality={Quality}, Usable={Usable}",
-                    name, levelMin, levelMax, category, subCategory, quality, usable);
+                var auctioneerGuid = _currentAuctioneerGuid
+                    ?? throw new InvalidOperationException("Auction house is not open");
 
-                // Build the payload for CMSG_AUCTION_LIST_ITEMS
+                _logger.LogDebug("Searching auctions: Name='{Name}', Level={LevelMin}-{LevelMax}, Class={ItemClass}, SubClass={ItemSubClass}, Quality={Quality}",
+                    name, levelMin, levelMax, itemClass, itemSubClass, quality);
+
+                // CMSG_AUCTION_LIST_ITEMS format (MaNGOS):
+                // auctioneerGuid(8) + listfrom(4) + name(null-term) + levelmin(1) + levelmax(1)
+                // + auctionSlotID(4) + auctionMainCategory(4) + auctionSubCategory(4) + quality(4) + usable(1)
                 var nameBytes = System.Text.Encoding.UTF8.GetBytes(name);
-                var payload = new byte[24 + nameBytes.Length + 1]; // 24 bytes for parameters + string + null terminator
-
+                var payload = new byte[8 + 4 + nameBytes.Length + 1 + 1 + 1 + 4 + 4 + 4 + 4 + 1];
                 var offset = 0;
-                
-                // String (null-terminated)
+
+                // Auctioneer GUID
+                BitConverter.GetBytes(auctioneerGuid).CopyTo(payload, offset);
+                offset += 8;
+
+                // List offset (pagination)
+                BitConverter.GetBytes(listOffset).CopyTo(payload, offset);
+                offset += 4;
+
+                // Search name (null-terminated)
                 nameBytes.CopyTo(payload, offset);
                 offset += nameBytes.Length;
-                payload[offset++] = 0; // null terminator
+                payload[offset++] = 0;
 
-                // Level range
-                BitConverter.GetBytes(levelMin).CopyTo(payload, offset);
-                offset += 4;
-                BitConverter.GetBytes(levelMax).CopyTo(payload, offset);
-                offset += 4;
+                // Level range (uint8 each)
+                payload[offset++] = levelMin;
+                payload[offset++] = levelMax;
 
-                // Category filters
-                BitConverter.GetBytes(category).CopyTo(payload, offset);
-                offset += 4;
-                BitConverter.GetBytes(subCategory).CopyTo(payload, offset);
+                // Inventory type (auctionSlotID)
+                BitConverter.GetBytes(inventoryType).CopyTo(payload, offset);
                 offset += 4;
 
-                // Quality filter
-                BitConverter.GetBytes((uint)quality).CopyTo(payload, offset);
+                // Item class (auctionMainCategory)
+                BitConverter.GetBytes(itemClass).CopyTo(payload, offset);
                 offset += 4;
 
-                // Usable filter
-                BitConverter.GetBytes(usable ? 1u : 0u).CopyTo(payload, offset);
+                // Item subclass (auctionSubCategory)
+                BitConverter.GetBytes(itemSubClass).CopyTo(payload, offset);
+                offset += 4;
+
+                // Quality (int32, -1 = any)
+                BitConverter.GetBytes((int)quality).CopyTo(payload, offset);
+                offset += 4;
+
+                // Usable (uint8)
+                payload[offset] = usable ? (byte)1 : (byte)0;
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUCTION_LIST_ITEMS, payload, cancellationToken);
 
@@ -223,10 +232,17 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                var auctioneerGuid = _currentAuctioneerGuid
+                    ?? throw new InvalidOperationException("Auction house is not open");
+
                 _logger.LogDebug("Requesting owned auctions");
 
-                // CMSG_AUCTION_LIST_OWNER_ITEMS has no payload
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUCTION_LIST_OWNER_ITEMS, [], cancellationToken);
+                // CMSG_AUCTION_LIST_OWNER_ITEMS: auctioneerGuid(8) + listfrom(4)
+                var payload = new byte[12];
+                BitConverter.GetBytes(auctioneerGuid).CopyTo(payload, 0);
+                // listfrom = 0 (first page)
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUCTION_LIST_OWNER_ITEMS, payload, cancellationToken);
 
                 _logger.LogInformation("Owned auctions request sent");
             }
@@ -242,10 +258,17 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                var auctioneerGuid = _currentAuctioneerGuid
+                    ?? throw new InvalidOperationException("Auction house is not open");
+
                 _logger.LogDebug("Requesting bidder auctions");
 
-                // CMSG_AUCTION_LIST_BIDDER_ITEMS has no payload
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUCTION_LIST_BIDDER_ITEMS, [], cancellationToken);
+                // CMSG_AUCTION_LIST_BIDDER_ITEMS: auctioneerGuid(8) + listfrom(4) + outbiddedCount(4) + [outbiddedAuctionIds]
+                var payload = new byte[16];
+                BitConverter.GetBytes(auctioneerGuid).CopyTo(payload, 0);
+                // listfrom = 0, outbiddedCount = 0
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUCTION_LIST_BIDDER_ITEMS, payload, cancellationToken);
 
                 _logger.LogInformation("Bidder auctions request sent");
             }
@@ -261,15 +284,20 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                var auctioneerGuid = _currentAuctioneerGuid
+                    ?? throw new InvalidOperationException("Auction house is not open");
+
                 _logger.LogDebug("Placing bid of {BidAmount} copper on auction {AuctionId}", bidAmount, auctionId);
 
-                var payload = new byte[8];
-                BitConverter.GetBytes(auctionId).CopyTo(payload, 0);
-                BitConverter.GetBytes(bidAmount).CopyTo(payload, 4);
+                // CMSG_AUCTION_PLACE_BID: auctioneerGuid(8) + auctionId(4) + price(4)
+                var payload = new byte[16];
+                BitConverter.GetBytes(auctioneerGuid).CopyTo(payload, 0);
+                BitConverter.GetBytes(auctionId).CopyTo(payload, 8);
+                BitConverter.GetBytes(bidAmount).CopyTo(payload, 12);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUCTION_PLACE_BID, payload, cancellationToken);
 
-                _logger.LogInformation("Bid placement request sent for auction {AuctionId} with amount {BidAmount}", auctionId, bidAmount);
+                _logger.LogInformation("Bid placed: {BidAmount} copper on auction {AuctionId}", bidAmount, auctionId);
             }
             catch (Exception ex)
             {
@@ -280,8 +308,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         /// <inheritdoc />
         public async Task PostAuctionAsync(
-            byte bagId,
-            byte slotId,
+            ulong itemGuid,
             uint startBid,
             uint buyoutPrice,
             AuctionDuration duration,
@@ -289,32 +316,28 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                _logger.LogDebug("Posting auction for item in bag {BagId} slot {SlotId} with start bid {StartBid}, buyout {BuyoutPrice}, duration {Duration}h",
-                    bagId, slotId, startBid, buyoutPrice, (uint)duration);
+                var auctioneerGuid = _currentAuctioneerGuid
+                    ?? throw new InvalidOperationException("Auction house is not open");
 
-                var payload = new byte[14];
-                var offset = 0;
+                _logger.LogDebug("Posting auction for item {ItemGuid:X} bid={StartBid} buyout={BuyoutPrice} duration={Duration}h",
+                    itemGuid, startBid, buyoutPrice, (uint)duration);
 
-                // Bag and slot
-                payload[offset++] = bagId;
-                payload[offset++] = slotId;
-
-                // Pricing
-                BitConverter.GetBytes(startBid).CopyTo(payload, offset);
-                offset += 4;
-                BitConverter.GetBytes(buyoutPrice).CopyTo(payload, offset);
-                offset += 4;
-
-                // Duration in hours
-                BitConverter.GetBytes((uint)duration).CopyTo(payload, offset);
+                // CMSG_AUCTION_SELL_ITEM: auctioneerGuid(8) + itemGuid(8) + bid(4) + buyout(4) + etime(4)
+                // etime is in minutes: 720 (12h), 1440 (24h), 2880 (48h)
+                var payload = new byte[28];
+                BitConverter.GetBytes(auctioneerGuid).CopyTo(payload, 0);
+                BitConverter.GetBytes(itemGuid).CopyTo(payload, 8);
+                BitConverter.GetBytes(startBid).CopyTo(payload, 16);
+                BitConverter.GetBytes(buyoutPrice).CopyTo(payload, 20);
+                BitConverter.GetBytes((uint)duration * 60).CopyTo(payload, 24); // hours → minutes
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUCTION_SELL_ITEM, payload, cancellationToken);
 
-                _logger.LogInformation("Auction posting request sent for item in bag {BagId} slot {SlotId}", bagId, slotId);
+                _logger.LogInformation("Auction posted for item {ItemGuid:X}", itemGuid);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to post auction for item in bag {BagId} slot {SlotId}", bagId, slotId);
+                _logger.LogError(ex, "Failed to post auction for item {ItemGuid:X}", itemGuid);
                 throw;
             }
         }
@@ -324,14 +347,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
+                var auctioneerGuid = _currentAuctioneerGuid
+                    ?? throw new InvalidOperationException("Auction house is not open");
+
                 _logger.LogDebug("Cancelling auction {AuctionId}", auctionId);
 
-                var payload = new byte[4];
-                BitConverter.GetBytes(auctionId).CopyTo(payload, 0);
+                // CMSG_AUCTION_REMOVE_ITEM: auctioneerGuid(8) + auctionId(4)
+                var payload = new byte[12];
+                BitConverter.GetBytes(auctioneerGuid).CopyTo(payload, 0);
+                BitConverter.GetBytes(auctionId).CopyTo(payload, 8);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUCTION_REMOVE_ITEM, payload, cancellationToken);
 
-                _logger.LogInformation("Auction cancellation request sent for auction {AuctionId}", auctionId);
+                _logger.LogInformation("Auction {AuctionId} cancellation request sent", auctionId);
             }
             catch (Exception ex)
             {
@@ -346,10 +374,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 _logger.LogDebug("Buying out auction {AuctionId} for {BuyoutPrice} copper", auctionId, buyoutPrice);
-
-                // Buyout is essentially placing a bid equal to the buyout price
                 await PlaceBidAsync(auctionId, buyoutPrice, cancellationToken);
-
                 _logger.LogInformation("Buyout request sent for auction {AuctionId}", auctionId);
             }
             catch (Exception ex)
@@ -370,25 +395,17 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                _logger.LogDebug("Performing quick search for '{ItemName}' with auctioneer: {AuctioneerGuid:X}", itemName, auctioneerGuid);
-
+                _logger.LogDebug("Quick search for '{ItemName}' with auctioneer: {AuctioneerGuid:X}", itemName, auctioneerGuid);
                 await OpenAuctionHouseAsync(auctioneerGuid, cancellationToken);
-                
-                // Small delay to allow auction house window to open
                 await Task.Delay(100, cancellationToken);
-                
                 await SearchAuctionsAsync(itemName, cancellationToken: cancellationToken);
-                
-                // Small delay to allow search to complete
                 await Task.Delay(100, cancellationToken);
-                
                 await CloseAuctionHouseAsync(cancellationToken);
-
-                _logger.LogInformation("Quick search completed for '{ItemName}' with auctioneer: {AuctioneerGuid:X}", itemName, auctioneerGuid);
+                _logger.LogInformation("Quick search completed for '{ItemName}'", itemName);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Quick search failed for '{ItemName}' with auctioneer: {AuctioneerGuid:X}", itemName, auctioneerGuid);
+                _logger.LogError(ex, "Quick search failed for '{ItemName}'", itemName);
                 throw;
             }
         }
@@ -396,8 +413,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// <inheritdoc />
         public async Task QuickPostAsync(
             ulong auctioneerGuid,
-            byte bagId,
-            byte slotId,
+            ulong itemGuid,
             uint startBid,
             uint buyoutPrice,
             AuctionDuration duration,
@@ -405,28 +421,18 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                _logger.LogDebug("Performing quick post for item in bag {BagId} slot {SlotId} with auctioneer: {AuctioneerGuid:X}",
-                    bagId, slotId, auctioneerGuid);
-
+                _logger.LogDebug("Quick post for item {ItemGuid:X} with auctioneer: {AuctioneerGuid:X}",
+                    itemGuid, auctioneerGuid);
                 await OpenAuctionHouseAsync(auctioneerGuid, cancellationToken);
-                
-                // Small delay to allow auction house window to open
                 await Task.Delay(100, cancellationToken);
-                
-                await PostAuctionAsync(bagId, slotId, startBid, buyoutPrice, duration, cancellationToken);
-                
-                // Small delay to allow posting to complete
+                await PostAuctionAsync(itemGuid, startBid, buyoutPrice, duration, cancellationToken);
                 await Task.Delay(100, cancellationToken);
-                
                 await CloseAuctionHouseAsync(cancellationToken);
-
-                _logger.LogInformation("Quick post completed for item in bag {BagId} slot {SlotId} with auctioneer: {AuctioneerGuid:X}",
-                    bagId, slotId, auctioneerGuid);
+                _logger.LogInformation("Quick post completed for item {ItemGuid:X}", itemGuid);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Quick post failed for item in bag {BagId} slot {SlotId} with auctioneer: {AuctioneerGuid:X}",
-                    bagId, slotId, auctioneerGuid);
+                _logger.LogError(ex, "Quick post failed for item {ItemGuid:X}", itemGuid);
                 throw;
             }
         }
@@ -436,33 +442,25 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                _logger.LogDebug("Performing quick buyout for auction {AuctionId} with auctioneer: {AuctioneerGuid:X}",
+                _logger.LogDebug("Quick buyout for auction {AuctionId} with auctioneer: {AuctioneerGuid:X}",
                     auctionId, auctioneerGuid);
-
                 await OpenAuctionHouseAsync(auctioneerGuid, cancellationToken);
-                
-                // Small delay to allow auction house window to open
                 await Task.Delay(100, cancellationToken);
-                
                 await BuyoutAuctionAsync(auctionId, buyoutPrice, cancellationToken);
-                
-                // Small delay to allow buyout to complete
                 await Task.Delay(100, cancellationToken);
-                
                 await CloseAuctionHouseAsync(cancellationToken);
-
-                _logger.LogInformation("Quick buyout completed for auction {AuctionId} with auctioneer: {AuctioneerGuid:X}",
-                    auctionId, auctioneerGuid);
+                _logger.LogInformation("Quick buyout completed for auction {AuctionId}", auctionId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Quick buyout failed for auction {AuctionId} with auctioneer: {AuctioneerGuid:X}",
-                    auctionId, auctioneerGuid);
+                _logger.LogError(ex, "Quick buyout failed for auction {AuctionId}", auctionId);
                 throw;
             }
         }
 
-        #region Server Response Handlers (optional, state updates only)
+        #endregion
+
+        #region Server Response Handlers (state updates only)
         public void HandleAuctionHouseOpened(ulong auctioneerGuid)
         {
             _isAuctionHouseOpen = true;
@@ -491,36 +489,14 @@ namespace WoWSharpClient.Networking.ClientComponents
             _logger.LogDebug("Received {Count} bidder auction results", auctions.Count);
         }
 
-        public void HandleAuctionOperationCompleted(AuctionOperationType operation, uint auctionId)
+        public void HandleAuctionOperationCompleted(AuctionAction action, uint auctionId)
         {
-            _logger.LogDebug("Auction operation {Operation} completed for auction {AuctionId}", operation, auctionId);
+            _logger.LogDebug("Auction operation {Action} completed for auction {AuctionId}", action, auctionId);
         }
 
-        public void HandleAuctionOperationFailed(AuctionOperationType operation, string errorReason)
+        public void HandleAuctionOperationFailed(AuctionAction action, AuctionError error)
         {
-            _logger.LogWarning("Auction operation {Operation} failed: {Error}", operation, errorReason);
-        }
-
-        public void HandleBidPlaced(uint auctionId, uint bidAmount)
-        {
-            _logger.LogDebug("Bid of {BidAmount} copper placed on auction {AuctionId}", bidAmount, auctionId);
-        }
-
-        public void HandleAuctionPosted(uint itemId, uint startBid, uint buyoutPrice, uint duration)
-        {
-            _logger.LogDebug("Auction posted for item {ItemId} with start bid {StartBid}, buyout {BuyoutPrice}, duration {Duration}h",
-                itemId, startBid, buyoutPrice, duration);
-        }
-
-        public void HandleAuctionCancelled(uint auctionId)
-        {
-            _logger.LogDebug("Auction {AuctionId} cancelled", auctionId);
-        }
-
-        public void HandleAuctionNotification(AuctionNotificationType notificationType, uint auctionId, uint itemId)
-        {
-            _logger.LogDebug("Auction notification: {NotificationType} for auction {AuctionId} (item {ItemId})",
-                notificationType, auctionId, itemId);
+            _logger.LogWarning("Auction operation {Action} failed: {Error}", action, error);
         }
         #endregion
 
@@ -535,7 +511,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         #endregion
 
-        #region Parsing helpers and SafeStream
+        #region SMSG Parsers
+
         private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
             => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
@@ -549,41 +526,196 @@ namespace WoWSharpClient.Networking.ClientComponents
             return span.Length >= offset + 8 ? BinaryPrimitives.ReadUInt64LittleEndian(span.Slice(offset, 8)) : 0UL;
         }
 
+        /// <summary>
+        /// Parses SMSG_AUCTION_LIST_RESULT, SMSG_AUCTION_OWNER_LIST_RESULT, or SMSG_AUCTION_BIDDER_LIST_RESULT.
+        /// Format: itemCount(4) + [itemCount × 68-byte BuildAuctionInfo entries] + totalCount(4).
+        /// </summary>
         private IReadOnlyList<AuctionData> ParseAuctionList(ReadOnlyMemory<byte> payload)
         {
-            // Best-effort parsing: protocol specifics are not guaranteed here; return empty list if unknown.
-            // Integrators can replace with real parsing logic later.
-            return Array.Empty<AuctionData>();
+            var span = payload.Span;
+
+            if (span.Length < 4)
+            {
+                _logger.LogWarning("Auction list payload too small: {Length} bytes", span.Length);
+                return Array.Empty<AuctionData>();
+            }
+
+            uint itemCount = ReadUInt32(span, 0);
+            int dataStart = 4;
+            int expectedDataSize = dataStart + (int)(itemCount * AUCTION_ENTRY_SIZE) + 4; // +4 for totalCount at end
+
+            if (span.Length < dataStart + (int)(itemCount * AUCTION_ENTRY_SIZE))
+            {
+                _logger.LogWarning("Auction list payload too small for {ItemCount} entries: {Length} bytes (expected >= {Expected})",
+                    itemCount, span.Length, dataStart + itemCount * AUCTION_ENTRY_SIZE);
+                return Array.Empty<AuctionData>();
+            }
+
+            var auctions = new AuctionData[itemCount];
+            int offset = dataStart;
+
+            for (int i = 0; i < itemCount; i++)
+            {
+                // BuildAuctionInfo per-entry format (68 bytes):
+                uint auctionId = ReadUInt32(span, offset);           // 0
+                uint itemEntry = ReadUInt32(span, offset + 4);       // 4
+                uint enchantmentId = ReadUInt32(span, offset + 8);   // 8  (PERM_ENCHANTMENT_SLOT)
+                uint randomPropertyId = ReadUInt32(span, offset + 12); // 12
+                uint suffixFactor = ReadUInt32(span, offset + 16);   // 16
+                uint count = ReadUInt32(span, offset + 20);          // 20 (stack size)
+                uint spellCharges = ReadUInt32(span, offset + 24);   // 24
+                ulong ownerGuid = ReadUInt64(span, offset + 28);     // 28
+                uint startBid = ReadUInt32(span, offset + 36);       // 36
+                uint minOutbid = ReadUInt32(span, offset + 40);      // 40
+                uint buyoutPrice = ReadUInt32(span, offset + 44);    // 44
+                uint timeLeftMs = ReadUInt32(span, offset + 48);     // 48 (milliseconds remaining)
+                ulong bidderGuid = ReadUInt64(span, offset + 52);    // 52
+                uint currentBid = ReadUInt32(span, offset + 60);     // 60
+
+                auctions[i] = new AuctionData(
+                    auctionId, itemEntry, enchantmentId, randomPropertyId, suffixFactor,
+                    count, spellCharges, ownerGuid, startBid, minOutbid,
+                    buyoutPrice, timeLeftMs, bidderGuid, currentBid);
+
+                offset += AUCTION_ENTRY_SIZE;
+            }
+
+            // Read totalCount at end of payload
+            if (span.Length >= offset + 4)
+            {
+                _totalSearchResultCount = ReadUInt32(span, offset);
+            }
+
+            _logger.LogInformation("Parsed {ItemCount}/{TotalCount} auctions from list result",
+                itemCount, _totalSearchResultCount);
+
+            return auctions;
         }
 
-        private (bool Success, AuctionOperationType Operation, uint AuctionId, string? Error, uint? BidAmount, uint? ItemId, uint? StartBid, uint? Buyout, uint? Duration) ParseCommandResult(ReadOnlyMemory<byte> payload)
+        /// <summary>
+        /// Parses SMSG_AUCTION_COMMAND_RESULT.
+        /// Format: auctionId(4) + action(4) + error(4) + [conditional fields based on action and error].
+        /// </summary>
+        private (AuctionAction Action, uint AuctionId, AuctionError Error, uint OutbidAmount)
+            ParseCommandResult(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
-            // Heuristic layout: [result(1)] [operation(4)] [auctionId(4)] [optional details...]
-            bool success = span.Length > 0 && span[0] == 0;
-            var op = (AuctionOperationType)ReadUInt32(span, 1);
-            uint auctionId = ReadUInt32(span, 5);
-            // Optional values (best-effort)
-            uint? bid = span.Length >= 13 ? ReadUInt32(span, 9) : null;
-            // No error string parsing available -> null
-            return (success, op, auctionId, null, bid, null, null, null, null);
-        }
 
-        private uint ParseRemovedNotification(ReadOnlyMemory<byte> payload)
-        {
-            // Heuristic: first 4 bytes may be auctionId
-            return ReadUInt32(payload.Span, 0);
-        }
+            if (span.Length < 12)
+            {
+                _logger.LogWarning("Auction command result payload too small: {Length} bytes", span.Length);
+                return (AuctionAction.Started, 0, AuctionError.InternalError, 0);
+            }
 
-        private AuctionNotificationData ParseNotification(ReadOnlyMemory<byte> payload, bool isOwner)
-        {
-            // Heuristic mapping: read minimal fields
-            var span = payload.Span;
             uint auctionId = ReadUInt32(span, 0);
-            uint itemId = ReadUInt32(span, 4);
-            var type = isOwner ? AuctionNotificationType.Sold : AuctionNotificationType.Outbid;
-            return new AuctionNotificationData(type, auctionId, itemId);
+            var action = (AuctionAction)ReadUInt32(span, 4);
+            var error = (AuctionError)ReadUInt32(span, 8);
+
+            uint outbidAmount = 0;
+
+            if (error == AuctionError.Ok && action == AuctionAction.BidPlaced)
+            {
+                // On successful bid: uint32 outbid increment follows
+                if (span.Length >= 16)
+                    outbidAmount = ReadUInt32(span, 12);
+            }
+            else if (error == AuctionError.HigherBid)
+            {
+                // On higher bid error: bidderGuid(8) + bidAmount(4) + outbidAmount(4)
+                if (span.Length >= 28)
+                    outbidAmount = ReadUInt32(span, 24); // skip bidderGuid(8) + bidAmount(4)
+            }
+
+            _logger.LogDebug("Auction command: action={Action}, auctionId={AuctionId}, error={Error}",
+                action, auctionId, error);
+
+            return (action, auctionId, error, outbidAmount);
         }
+
+        /// <summary>
+        /// Parses SMSG_AUCTION_REMOVED_NOTIFICATION.
+        /// Format: auctionId(4) + itemEntry(4) + randomPropertyId(4) = 12 bytes.
+        /// </summary>
+        private AuctionNotificationData ParseRemovedNotification(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+
+            if (span.Length < 12)
+            {
+                _logger.LogWarning("Auction removed notification too small: {Length} bytes", span.Length);
+                return new AuctionNotificationData(AuctionNotificationType.Expired, 0, 0, 0);
+            }
+
+            uint auctionId = ReadUInt32(span, 0);
+            uint itemEntry = ReadUInt32(span, 4);
+            uint randomPropertyId = ReadUInt32(span, 8);
+
+            _logger.LogDebug("Auction removed: id={AuctionId}, item={ItemEntry}", auctionId, itemEntry);
+
+            return new AuctionNotificationData(AuctionNotificationType.Expired, auctionId, itemEntry, randomPropertyId);
+        }
+
+        /// <summary>
+        /// Parses SMSG_AUCTION_BIDDER_NOTIFICATION (32 bytes).
+        /// Format: houseId(4) + auctionId(4) + bidderGuid(8) + outbidAmount(4) + minOutbid(4) + itemEntry(4) + randomPropertyId(4).
+        /// </summary>
+        private AuctionNotificationData ParseBidderNotification(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+
+            if (span.Length < 32)
+            {
+                _logger.LogWarning("Bidder notification too small: {Length} bytes", span.Length);
+                return new AuctionNotificationData(AuctionNotificationType.Outbid, 0, 0, 0);
+            }
+
+            uint houseId = ReadUInt32(span, 0);
+            uint auctionId = ReadUInt32(span, 4);
+            ulong bidderGuid = ReadUInt64(span, 8);
+            uint outbidAmount = ReadUInt32(span, 16);
+            uint minOutbid = ReadUInt32(span, 20);
+            uint itemEntry = ReadUInt32(span, 24);
+            uint randomPropertyId = ReadUInt32(span, 28);
+
+            // outbidAmount == 0 means we won the auction
+            var type = outbidAmount == 0 ? AuctionNotificationType.Won : AuctionNotificationType.Outbid;
+
+            _logger.LogDebug("Bidder notification: {Type} auction={AuctionId} item={ItemEntry}", type, auctionId, itemEntry);
+
+            return new AuctionBidderNotificationData(
+                houseId, auctionId, bidderGuid, outbidAmount, minOutbid, itemEntry, randomPropertyId);
+        }
+
+        /// <summary>
+        /// Parses SMSG_AUCTION_OWNER_NOTIFICATION (28 bytes).
+        /// Format: auctionId(4) + bidAmount(4) + minOutbid(4) + buyerGuid(8) + itemEntry(4) + randomPropertyId(4).
+        /// bidAmount == 0 means auction expired; bidAmount > 0 means sold.
+        /// </summary>
+        private AuctionNotificationData ParseOwnerNotification(ReadOnlyMemory<byte> payload)
+        {
+            var span = payload.Span;
+
+            if (span.Length < 28)
+            {
+                _logger.LogWarning("Owner notification too small: {Length} bytes", span.Length);
+                return new AuctionNotificationData(AuctionNotificationType.Expired, 0, 0, 0);
+            }
+
+            uint auctionId = ReadUInt32(span, 0);
+            uint bidAmount = ReadUInt32(span, 4);
+            uint minOutbid = ReadUInt32(span, 8);
+            ulong buyerGuid = ReadUInt64(span, 12);
+            uint itemEntry = ReadUInt32(span, 20);
+            uint randomPropertyId = ReadUInt32(span, 24);
+
+            var type = bidAmount > 0 ? AuctionNotificationType.Sold : AuctionNotificationType.Expired;
+
+            _logger.LogDebug("Owner notification: {Type} auction={AuctionId} item={ItemEntry}", type, auctionId, itemEntry);
+
+            return new AuctionOwnerNotificationData(
+                auctionId, bidAmount, minOutbid, buyerGuid, itemEntry, randomPropertyId);
+        }
+
         #endregion
     }
 }

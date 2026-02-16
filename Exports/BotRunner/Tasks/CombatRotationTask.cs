@@ -1,13 +1,13 @@
 using BotRunner.Interfaces;
+using System.Linq;
 
 namespace BotRunner.Tasks;
 
 /// <summary>
 /// Base class for combat rotation tasks with common combat utilities.
 /// </summary>
-public abstract class CombatRotationTask : BotTask
+public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botContext)
 {
-    protected CombatRotationTask(IBotContext botContext) : base(botContext) { }
 
     /// <summary>
     /// Perform the combat rotation logic.

@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -9,7 +14,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Item use network client component that handles item usage operations.
-    /// Follows the reactive pattern used by other client components (no events/subjects).
+    /// CMSG_USE_ITEM format: bagIndex(1) + slot(1) + spellSlot(1) + SpellCastTargets(variable)
+    /// SpellCastTargets: targetMask(uint16) [+ packed GUID if unit target] [+ xyz if location target]
     /// </summary>
     public class ItemUseNetworkClientComponent : NetworkClientComponent, IItemUseNetworkClientComponent
     {
@@ -22,25 +28,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly Dictionary<uint, uint> _itemCooldowns;
         private bool _disposed;
 
-        // Opcode-backed streams (no Subject/event usage)
+        // Opcode-backed streams
         private readonly IObservable<ItemUseStartedData> _itemUseStarted;
         private readonly IObservable<ItemUseCompletedData> _itemUseCompleted;
         private readonly IObservable<ItemUseErrorData> _itemUseFailed;
         private readonly IObservable<ConsumableEffectData> _consumableEffectApplied;
 
-        /// <summary>
-        /// Initializes a new instance of the ItemUseNetworkClientComponent class.
-        /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance.</param>
         public ItemUseNetworkClientComponent(IWorldClient worldClient, ILogger<ItemUseNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _itemCooldowns = new Dictionary<uint, uint>();
 
-            // Wire opcode streams similar to SpellCastingNetworkClientComponent.
-            // Best-effort parsing based on SMSG_SPELL_* messages that also carry item-use spells.
+            // Item use results come through SMSG_SPELL_START / SMSG_SPELL_GO (item spells)
             _itemUseStarted = SafeStream(Opcode.SMSG_SPELL_START)
                 .Select(ParseItemUseStart)
                 .Where(x => x.HasValue)
@@ -89,12 +89,9 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Publish()
                 .RefCount();
 
-            // If server sends effect/cooldown updates over specific item/consumable opcodes, wire them here.
-            // Until then, expose a never stream for consumers to compose with.
             _consumableEffectApplied = Observable.Never<ConsumableEffectData>();
         }
 
-        // Safe retrieval of opcode stream (never null)
         private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
             => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
@@ -109,6 +106,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         #endregion
 
         #region Outbound operations
+
+        /// <summary>
+        /// Uses an item (self-cast, no target).
+        /// CMSG_USE_ITEM: bagIndex(1) + slot(1) + spellSlot(1) + targetMask(uint16=0x0000)
+        /// </summary>
         public async Task UseItemAsync(byte bagId, byte slotId, CancellationToken cancellationToken = default)
         {
             try
@@ -116,12 +118,15 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Using item from bag {BagId} slot {SlotId}", bagId, slotId);
 
-                var payload = new byte[2];
-                payload[0] = bagId;
-                payload[1] = slotId;
+                using var ms = new MemoryStream();
+                using var w = new BinaryWriter(ms);
+                w.Write(bagId);
+                w.Write(slotId);
+                w.Write((byte)0); // spellSlot (first spell on item)
+                w.Write((ushort)0x0000); // TARGET_FLAG_SELF — no target
 
                 lock (_stateLock) _isUsingItem = true;
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, ms.ToArray(), cancellationToken);
 
                 _logger.LogInformation("Item use command sent successfully");
             }
@@ -137,6 +142,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// Uses an item on a specific target.
+        /// CMSG_USE_ITEM: bagIndex(1) + slot(1) + spellSlot(1) + targetMask(uint16=0x0002) + packedGUID
+        /// </summary>
         public async Task UseItemOnTargetAsync(byte bagId, byte slotId, ulong targetGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -145,13 +154,16 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Using item from bag {BagId} slot {SlotId} on target {Target:X}",
                     bagId, slotId, targetGuid);
 
-                var payload = new byte[10];
-                payload[0] = bagId;
-                payload[1] = slotId;
-                BitConverter.GetBytes(targetGuid).CopyTo(payload, 2);
+                using var ms = new MemoryStream();
+                using var w = new BinaryWriter(ms);
+                w.Write(bagId);
+                w.Write(slotId);
+                w.Write((byte)0); // spellSlot
+                w.Write((ushort)0x0002); // TARGET_FLAG_UNIT
+                WoWSharpClient.Utils.ReaderUtils.WritePackedGuid(w, targetGuid);
 
                 lock (_stateLock) _isUsingItem = true;
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, ms.ToArray(), cancellationToken);
 
                 _logger.LogInformation("Item use on target command sent successfully");
             }
@@ -168,6 +180,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// Uses an item at a specific location.
+        /// CMSG_USE_ITEM: bagIndex(1) + slot(1) + spellSlot(1) + targetMask(uint16=0x0040) + x(float) + y(float) + z(float)
+        /// </summary>
         public async Task UseItemAtLocationAsync(byte bagId, byte slotId, float x, float y, float z, CancellationToken cancellationToken = default)
         {
             try
@@ -176,15 +192,18 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Using item from bag {BagId} slot {SlotId} at location ({X}, {Y}, {Z})",
                     bagId, slotId, x, y, z);
 
-                var payload = new byte[14];
-                payload[0] = bagId;
-                payload[1] = slotId;
-                BitConverter.GetBytes(x).CopyTo(payload, 2);
-                BitConverter.GetBytes(y).CopyTo(payload, 6);
-                BitConverter.GetBytes(z).CopyTo(payload, 10);
+                using var ms = new MemoryStream();
+                using var w = new BinaryWriter(ms);
+                w.Write(bagId);
+                w.Write(slotId);
+                w.Write((byte)0); // spellSlot
+                w.Write((ushort)0x0040); // TARGET_FLAG_DEST_LOCATION
+                w.Write(x);
+                w.Write(y);
+                w.Write(z);
 
                 lock (_stateLock) _isUsingItem = true;
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, ms.ToArray(), cancellationToken);
 
                 _logger.LogInformation("Item use at location command sent successfully");
             }
@@ -201,6 +220,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// Activates an item by GUID. Looks up the item's bag/slot position and uses it.
+        /// Falls back to bag=0 slot=0 spellSlot=0 if position unknown.
+        /// </summary>
         public async Task ActivateItemAsync(ulong itemGuid, CancellationToken cancellationToken = default)
         {
             try
@@ -208,14 +231,21 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Activating item {ItemGuid:X}", itemGuid);
 
-                var payload = BitConverter.GetBytes(itemGuid);
+                // CMSG_USE_ITEM requires bag/slot position, not GUID directly.
+                // Use bag=0, slot=0 as fallback — callers should prefer UseItemAsync with known position.
+                using var ms = new MemoryStream();
+                using var w = new BinaryWriter(ms);
+                w.Write((byte)0); // bagIndex (backpack)
+                w.Write((byte)0); // slot
+                w.Write((byte)0); // spellSlot
+                w.Write((ushort)0x0000); // TARGET_FLAG_SELF
 
                 lock (_stateLock)
                 {
                     _isUsingItem = true;
                     _currentItemInUse = itemGuid;
                 }
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_USE_ITEM, ms.ToArray(), cancellationToken);
 
                 _logger.LogInformation("Item activation command sent successfully");
             }
@@ -241,9 +271,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
                 _logger.LogDebug("Using consumable from bag {BagId} slot {SlotId}", bagId, slotId);
-
                 await UseItemAsync(bagId, slotId, cancellationToken);
-
                 _logger.LogInformation("Consumable use command sent successfully");
             }
             catch (Exception ex)
@@ -263,9 +291,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
                 _logger.LogDebug("Opening container from bag {BagId} slot {SlotId}", bagId, slotId);
-
                 await UseItemAsync(bagId, slotId, cancellationToken);
-
                 _logger.LogInformation("Container open command sent successfully");
             }
             catch (Exception ex)
@@ -316,7 +342,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Canceling current item use");
 
-                var payload = new byte[4]; // Empty payload for cancel
+                // CMSG_CANCEL_CAST: spellId(uint32) = 4 bytes — zeros cancel current cast
+                var payload = new byte[4];
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_CAST, payload, cancellationToken);
 
                 lock (_stateLock)
@@ -403,38 +430,9 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private (byte BagId, byte SlotId)? FindItemInInventory(uint itemId)
         {
-            _logger.LogDebug("Enhanced item search for itemId {ItemId} - checking all inventory locations", itemId);
-
-            for (byte bagId = 0; bagId < 5; bagId++)
-            {
-                byte maxSlots = bagId == 0 ? (byte)16 : (byte)16; // Simplified - would be dynamic
-                for (byte slotId = 0; slotId < maxSlots; slotId++)
-                {
-                    // Placeholder for actual inventory state checking from object manager
-                }
-            }
-
+            _logger.LogDebug("Searching for itemId {ItemId} in inventory", itemId);
+            // Placeholder — requires ObjectManager inventory access to find item position
             return null;
-        }
-
-        private bool ValidateItemUsage(uint itemId)
-        {
-            lock (_stateLock)
-            {
-                if (_isUsingItem)
-                {
-                    _logger.LogDebug("Cannot use item {ItemId} - already using an item", itemId);
-                    return false;
-                }
-            }
-
-            if (!CanUseItem(itemId))
-            {
-                _logger.LogDebug("Cannot use item {ItemId} - on cooldown", itemId);
-                return false;
-            }
-
-            return true;
         }
         #endregion
 
@@ -467,13 +465,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         }
         #endregion
 
-        #region Parsing helpers (best-effort)
+        #region Parsing helpers
         private ItemUseStartedData? ParseItemUseStart(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                // Heuristic: [0..3]=spellId, [4..7]=castTime, [8..15]=guid if present
                 uint spellId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0u;
                 uint castTime = span.Length >= 8 ? BitConverter.ToUInt32(span.Slice(4, 4)) : 0u;
                 ulong itemGuid = span.Length >= 16 ? BitConverter.ToUInt64(span.Slice(8, 8)) : 0UL;
@@ -504,7 +501,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             try
             {
-                // Without concrete layout, emit a generic error
                 return new ItemUseErrorData(null, "Item use failed", DateTime.UtcNow);
             }
             catch

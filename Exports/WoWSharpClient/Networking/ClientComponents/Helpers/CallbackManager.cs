@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace WoWSharpClient.Networking.ClientComponents.Helpers
 {
     /// <summary>
@@ -79,17 +82,11 @@ namespace WoWSharpClient.Networking.ClientComponents.Helpers
             }
         }
 
-        private class CallbackUnsubscriber : IDisposable
+        private class CallbackUnsubscriber(CallbackManager<T> manager, Action<T> callback) : IDisposable
         {
-            private readonly CallbackManager<T> _manager;
-            private readonly Action<T> _callback;
+            private readonly CallbackManager<T> _manager = manager;
+            private readonly Action<T> _callback = callback;
             private bool _disposed = false;
-
-            public CallbackUnsubscriber(CallbackManager<T> manager, Action<T> callback)
-            {
-                _manager = manager;
-                _callback = callback;
-            }
 
             public void Dispose()
             {
@@ -176,17 +173,11 @@ namespace WoWSharpClient.Networking.ClientComponents.Helpers
             }
         }
 
-        private class CallbackUnsubscriber : IDisposable
+        private class CallbackUnsubscriber(CallbackManager manager, Action callback) : IDisposable
         {
-            private readonly CallbackManager _manager;
-            private readonly Action _callback;
+            private readonly CallbackManager _manager = manager;
+            private readonly Action _callback = callback;
             private bool _disposed = false;
-
-            public CallbackUnsubscriber(CallbackManager manager, Action callback)
-            {
-                _manager = manager;
-                _callback = callback;
-            }
 
             public void Dispose()
             {

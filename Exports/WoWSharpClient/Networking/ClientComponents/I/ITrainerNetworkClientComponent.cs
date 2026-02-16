@@ -1,4 +1,7 @@
-using System.Reactive; // for Unit
+using System;
+using System.Reactive;
+using System.Threading;
+using System.Threading.Tasks; // for Unit
 
 namespace WoWSharpClient.Networking.ClientComponents.I
 {

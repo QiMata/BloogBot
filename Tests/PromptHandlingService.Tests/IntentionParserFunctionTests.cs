@@ -1,6 +1,9 @@
 using Communication;
 using PromptHandlingService.Predefined.IntentParser;
 using PromptHandlingService.Providers;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace PromptHandlingService.Tests
 {
@@ -16,7 +19,7 @@ namespace PromptHandlingService.Tests
             var testRequest = new IntentionParserFunction.UserRequest
             {
                 Request = "I want to run Molten Core.",
-                ActivitySnapshot = new ActivitySnapshot()
+                ActivitySnapshot = new WoWActivitySnapshot()
                 {
                     Player = new Game.WoWPlayer()
                     {

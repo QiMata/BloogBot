@@ -4,9 +4,76 @@ using Pathfinding;
 using PathfindingService.Repository;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
+using System.Text.Json;
+using System.Collections.Generic;
+using System;
+using System.IO;
+using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace PathfindingService
 {
+    /// <summary>
+    /// Status information written to a file for service-to-service communication.
+    /// </summary>
+    public class PathfindingServiceStatus
+    {
+        public bool IsReady { get; set; }
+        public string StatusMessage { get; set; } = "";
+        public List<uint> LoadedMaps { get; set; } = [];
+        public DateTime Timestamp { get; set; }
+        public int ProcessId { get; set; }
+
+        /// <summary>
+        /// Gets the default path for the status file.
+        /// </summary>
+        public static string GetStatusFilePath()
+        {
+            return Path.Combine(AppContext.BaseDirectory, "pathfinding_status.json");
+        }
+
+        /// <summary>
+        /// Writes the status to the default status file.
+        /// </summary>
+        public void WriteToFile()
+        {
+            var path = GetStatusFilePath();
+            var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(path, json);
+        }
+
+        /// <summary>
+        /// Reads status from the default status file. Returns null if file doesn't exist or is invalid.
+        /// </summary>
+        public static PathfindingServiceStatus? ReadFromFile()
+        {
+            var path = GetStatusFilePath();
+            if (!File.Exists(path)) return null;
+
+            try
+            {
+                var json = File.ReadAllText(path);
+                return JsonSerializer.Deserialize<PathfindingServiceStatus>(json);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Deletes the status file if it exists.
+        /// </summary>
+        public static void DeleteStatusFile()
+        {
+            var path = GetStatusFilePath();
+            if (File.Exists(path))
+            {
+                try { File.Delete(path); } catch { }
+            }
+        }
+    }
+
     public class PathfindingSocketServer(string ipAddress, int port, ILogger logger) : ProtobufSocketServer<PathfindingRequest, PathfindingResponse>(ipAddress, port, logger)
     {
         private Navigation _navigation;
@@ -20,7 +87,7 @@ namespace PathfindingService
         public bool IsInitialized => _isInitialized;
 
         /// <summary>
-        /// Initializes the navigation and physics systems. 
+        /// Initializes the navigation and physics systems.
         /// Call this after the socket server is running to allow early connections.
         /// </summary>
         public void InitializeNavigation()
@@ -29,6 +96,12 @@ namespace PathfindingService
             {
                 if (_isInitialized) return;
 
+                // Write initial "loading" status
+                WriteStatus(false, "Loading navigation data...", []);
+
+                // Ensure native library is loaded first (with helpful error messages)
+                Physics.EnsureNativeLibraryLoaded();
+
                 logger.LogInformation("Loading Navigation data...");
                 _navigation = new Navigation();
 
@@ -36,7 +109,37 @@ namespace PathfindingService
                 _physics = new Physics();
 
                 _isInitialized = true;
+
+                // Write "ready" status with loaded maps
+                // Maps 0, 1, 389 are preloaded by Physics.EnsureNativeLibraryLoaded()
+                var loadedMaps = new List<uint> { 0, 1, 389 };
+                WriteStatus(true, "Ready - navigation and physics systems initialized", loadedMaps);
+
                 logger.LogInformation("Navigation and Physics systems initialized.");
+            }
+        }
+
+        /// <summary>
+        /// Writes the current service status to the status file.
+        /// </summary>
+        private void WriteStatus(bool isReady, string message, List<uint> loadedMaps)
+        {
+            try
+            {
+                var status = new PathfindingServiceStatus
+                {
+                    IsReady = isReady,
+                    StatusMessage = message,
+                    LoadedMaps = loadedMaps,
+                    Timestamp = DateTime.UtcNow,
+                    ProcessId = Environment.ProcessId
+                };
+                status.WriteToFile();
+                logger.LogInformation($"Status file updated: IsReady={isReady}, Message='{message}'");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning($"Failed to write status file: {ex.Message}");
             }
         }
 
@@ -83,10 +186,25 @@ namespace PathfindingService
             return new PathfindingResponse { Path = resp };
         }
 
+        private int _physicsLogCounter = 0;
         private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
         {
             var physicsInput = step.ToPhysicsInput();
             var physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
+
+            // Log every 100th physics step to diagnose ground snapping
+            if (++_physicsLogCounter % 100 == 1)
+            {
+                float dz = physicsOutput.z - physicsInput.z;
+                logger.LogInformation(
+                    "[PHYS_DIAG] frame={Frame} in=({X:F1},{Y:F1},{Z:F1}) out=({OX:F1},{OY:F1},{OZ:F1}) dZ={DZ:F2} groundZ={GZ:F1} flags=0x{F:X} prevGZ={PGZ:F1} dt={DT:F4}",
+                    physicsInput.frameCounter,
+                    physicsInput.x, physicsInput.y, physicsInput.z,
+                    physicsOutput.x, physicsOutput.y, physicsOutput.z,
+                    dz, physicsOutput.groundZ, physicsOutput.moveFlags,
+                    physicsInput.prevGroundZ, physicsInput.deltaTime);
+            }
+
             return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
         }
 
@@ -110,9 +228,9 @@ namespace PathfindingService
 
         private static bool CheckPosition(uint mapId, Game.Position a, Game.Position b, out PathfindingResponse error)
         {
-            if (mapId == 0 || a == null || b == null)
+            if (a == null || b == null)
             {
-                error = ErrorResponse("Missing or invalid MapId/start/end.");
+                error = ErrorResponse("Missing start/end position.");
                 return false;
             }
             error = null!;
@@ -146,13 +264,22 @@ namespace PathfindingService
                 // Movement speeds
                 walkSpeed = proto.WalkSpeed,
                 runSpeed = proto.RunSpeed,
-                swimSpeed = proto.SwimSpeed,
-                flightSpeed = 7.0f, // Default flight speed
                 runBackSpeed = proto.RunBackSpeed,
+                swimSpeed = proto.SwimSpeed,
+                swimBackSpeed = proto.SwimBackSpeed,
+                flightSpeed = 7.0f, // Default flight speed (vanilla has no flying)
 
                 // State
                 moveFlags = proto.MovementFlags,
+                fallTime = (uint)proto.FallTime,
                 mapId = proto.MapId,
+
+                // Transport
+                transportGuid = proto.TransportGuid,
+                transportX = proto.TransportOffsetX,
+                transportY = proto.TransportOffsetY,
+                transportZ = proto.TransportOffsetZ,
+                transportO = proto.TransportOrientation,
 
                 // Velocity
                 vx = proto.VelX,

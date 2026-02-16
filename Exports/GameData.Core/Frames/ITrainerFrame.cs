@@ -1,4 +1,6 @@
-﻿namespace GameData.Core.Frames
+﻿using System.Collections.Generic;
+
+namespace GameData.Core.Frames
 {
     public interface ITrainerFrame
     {

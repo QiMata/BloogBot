@@ -1,5 +1,7 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Models;
+using System;
+using System.Collections.Generic;
 
 namespace GameData.Core.Interfaces
 {
@@ -176,10 +178,12 @@ namespace GameData.Core.Interfaces
     {
         public readonly ulong Guid = guid;
     }
-    public class RequiresAcknowledgementArgs(ulong guid, uint counter)
+    public class RequiresAcknowledgementArgs(ulong guid, uint counter, float speed = 0f)
     {
         public ulong Guid { get; } = guid;
         public uint Counter { get; } = counter;
+        /// <summary>Speed value from SMSG_FORCE_*_SPEED_CHANGE packets (echoed back in ACK).</summary>
+        public float Speed { get; } = speed;
     }
 
 }

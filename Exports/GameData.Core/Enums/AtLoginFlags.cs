@@ -1,4 +1,6 @@
-﻿namespace GameData.Core.Enums;
+﻿using System;
+
+namespace GameData.Core.Enums;
 
 [Flags]
 public enum AtLoginFlags

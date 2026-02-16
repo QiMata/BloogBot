@@ -3,6 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace ForegroundBotRunner;
 
@@ -21,8 +24,8 @@ public static class Program
             var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             if (currentProcess.ProcessName.Contains("wow", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine("ERROR: Program.Main() is running in WoW process! Wrong entry point used.");
-                File.AppendAllText(logPath, "ERROR: Program.Main() running in WoW process - CLR calling wrong entry point!\n");
+                Console.WriteLine("ERROR: Program.Main() is running in WoW process! Use StartInjected() instead.");
+                File.AppendAllText(logPath, "ERROR: Program.Main() running in WoW process - use StartInjected() entry point!\n");
                 return;
             }
 
@@ -39,6 +42,41 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Entry point for injected execution inside WoW.exe.
+    /// Called by Loader.Load() instead of Main() when running injected.
+    /// </summary>
+    public static void StartInjected()
+    {
+        string logPath = "";
+        try
+        {
+            // Get log path early - use WoW directory via AppDomain
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory ?? Environment.CurrentDirectory;
+            var logDir = Path.Combine(baseDir, "WWoWLogs");
+            Directory.CreateDirectory(logDir);
+            logPath = Path.Combine(logDir, "startinjected.log");
+
+            File.AppendAllText(logPath, $"\n=== StartInjected() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+            File.AppendAllText(logPath, $"BaseDir: {baseDir}\n");
+
+            Console.WriteLine("=== ForegroundBotRunner StartInjected() - Running inside WoW ===");
+
+            // Skip DisplayProcessInfo - it can crash with Access Denied
+            File.AppendAllText(logPath, "STEP 1: Skipping DisplayProcessInfo\n");
+
+            // Build and run the host - this will block until shutdown
+            File.AppendAllText(logPath, "STEP 2: About to call CreateHostBuilder().Build().Run()\n");
+            CreateHostBuilder([]).Build().Run();
+            File.AppendAllText(logPath, "STEP 3: Host exited normally\n");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Fatal error in StartInjected(): {ex}");
+            try { if (!string.IsNullOrEmpty(logPath)) File.AppendAllText(logPath, $"EXCEPTION: {ex}\n"); } catch { }
+        }
+    }
+
     public static IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((context, builder) =>
@@ -46,7 +84,7 @@ public static class Program
                 var configDict = new Dictionary<string, string?>
                 {
                     ["PathfindingService:IpAddress"] = "127.0.0.1",
-                    ["PathfindingService:Port"] = "5000",
+                    ["PathfindingService:Port"] = "5001",
                     ["CharacterStateListener:IpAddress"] = "127.0.0.1",
                     ["CharacterStateListener:Port"] = "5002",
                     ["LoginServer:IpAddress"] = "127.0.0.1"
@@ -56,6 +94,14 @@ public static class Program
             })
             .ConfigureServices((hostContext, services) =>
             {
+                services.AddSingleton<BotRunner.Clients.PathfindingClient>(sp =>
+                {
+                    var config = hostContext.Configuration;
+                    var ip = config["PathfindingService:IpAddress"] ?? "127.0.0.1";
+                    var port = int.Parse(config["PathfindingService:Port"] ?? "5001");
+                    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<BotRunner.Clients.PathfindingClient>();
+                    return new BotRunner.Clients.PathfindingClient(ip, port, logger);
+                });
                 services.AddHostedService<ForegroundBotWorker>();
             })
             .ConfigureLogging((context, builder) =>

@@ -42,30 +42,43 @@ The project includes CMake presets for IDE integration:
 
 ## Build Configurations for Each Project
 
+### Services
 | Project | Configuration | Platform | Build Method |
 |---------|---------------|----------|--------------|
+| ForegroundBotRunner | Debug | x86 | dotnet build |
+| WoWStateManager | Debug | x86 | dotnet build |
+| PathfindingService | Debug | x86 | dotnet build |
 | BackgroundBotRunner | Debug | Any CPU | dotnet build |
-| BloogBot.AI | Debug | Any CPU | dotnet build |
+| DecisionEngineService | Debug | Any CPU | dotnet build |
+| PromptHandlingService | Debug | Any CPU | dotnet build |
+| LoggingMCPServer | Debug | Any CPU | dotnet build |
+| CppCodeIntelligenceMCP | Debug | Any CPU | dotnet build |
+
+### Libraries (Exports)
+| Project | Configuration | Platform | Build Method |
+|---------|---------------|----------|--------------|
 | BotCommLayer | Debug | Any CPU | dotnet build |
 | BotRunner | Debug | Any CPU | dotnet build |
-| BotRunner.Tests | Debug | Any CPU | dotnet test |
-| DecisionEngineService | Debug | Any CPU | dotnet build |
-| **FastCall** | **Debug** | **Win32** | **CMake/MSBuild** |
-| ForegroundBotRunner | Debug | x86 | dotnet build |
 | GameData.Core | Debug | Any CPU | dotnet build |
-| **Loader** | **Release** | **Win32** | **CMake/MSBuild** |
-| **Navigation** | **Release** | **Win32** | **CMake/MSBuild** |
-| PathfindingService | Debug | x86 | dotnet build |
-| PathfindingService.Tests | Debug | Any CPU | dotnet test |
-| PromptHandlingService | Debug | Any CPU | dotnet build |
-| PromptHandlingService.Tests | Debug | Any CPU | dotnet test |
-| StateManager | Debug | x86 | dotnet build |
-| StateManagerUI | Debug | Any CPU | dotnet build |
 | WinProcessImports | Debug | Any CPU | dotnet build |
 | WoWSharpClient | Debug | Any CPU | dotnet build |
-| WoWSharpClient.Tests | Debug | Any CPU | dotnet test |
-| WWoW.Systems.AppHost | Debug | Any CPU | dotnet build |
-| WWoW.Systems.ServiceDefaults | Debug | Any CPU | dotnet build |
+| **FastCall** | **Debug** | **Win32** | **CMake/MSBuild** |
+| **Loader** | **Release** | **Win32** | **CMake/MSBuild** |
+| **Navigation** | **Release** | **Win32** | **CMake/MSBuild** |
+
+### Tests
+| Project | Configuration | Platform | Build Method | Notes |
+|---------|---------------|----------|--------------|-------|
+| Navigation.Physics.Tests | Debug | x86 | dotnet test | **Use --settings test.runsettings** |
+| BotRunner.Tests | Debug | x86 | dotnet test | **Use --settings test.runsettings** |
+| PathfindingService.Tests | Debug | Any CPU | dotnet test | |
+| WoWSharpClient.Tests | Debug | Any CPU | dotnet test | |
+| PromptHandlingService.Tests | Debug | Any CPU | dotnet test | |
+
+### UI
+| Project | Configuration | Platform | Build Method |
+|---------|---------------|----------|--------------|
+| WoWStateManagerUI | Debug | Any CPU | dotnet build |
 
 **Note**: Bold entries are native C++ projects built through CMake. All others are .NET projects.
 
@@ -73,13 +86,14 @@ The project includes CMake presets for IDE integration:
 
 ### For Injection Debugging (ForegroundBotRunner)
 1. Build in Debug mode with x86 platform
-2. Set environment variable: `BLOOGBOT_WAIT_DEBUG=1`
+2. Set environment variable: `WWOW_WAIT_DEBUG=1`
 3. Copy PDB files are automatically copied to solution root for debugging
 4. Attach Visual Studio debugger to WoW.exe process after injection
 5. Use Managed (.NET Framework) debugging for net48 shim code
 
 ### Key Notes
 - Native projects (FastCall, Loader, Navigation) use Win32 platform
-- Injection-related projects (ForegroundBotRunner, PathfindingService, StateManager) use x86 platform
+- Injection-related projects (ForegroundBotRunner, PathfindingService, WoWStateManager) use x86 platform
+- Physics tests require `--settings Tests/BotRunner.Tests/test.runsettings` for x86 platform target
 - Loader and Navigation are built in Release configuration
 - All other projects use Debug configuration with Any CPU platform

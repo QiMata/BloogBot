@@ -1,5 +1,6 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Models;
+using System.Collections.Generic;
 using static GameData.Core.Constants.Spellbook;
 
 namespace GameData.Core.Interfaces

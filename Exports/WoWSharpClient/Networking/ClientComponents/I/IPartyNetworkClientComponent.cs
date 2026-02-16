@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Reactive;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
@@ -66,7 +70,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         #endregion
 
         #region Information Requests
-        Task RequestPartyMemberStatsAsync(CancellationToken cancellationToken = default);
+        Task RequestPartyMemberStatsAsync(ulong memberGuid, CancellationToken cancellationToken = default);
         Task InitiateReadyCheckAsync(CancellationToken cancellationToken = default);
         Task RespondToReadyCheckAsync(bool isReady, CancellationToken cancellationToken = default);
         #endregion

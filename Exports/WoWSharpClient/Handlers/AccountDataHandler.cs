@@ -1,6 +1,7 @@
 ﻿using GameData.Core.Enums;
 using System.Text;
 using Serilog;
+using System;
 
 namespace WoWSharpClient.Handlers
 {

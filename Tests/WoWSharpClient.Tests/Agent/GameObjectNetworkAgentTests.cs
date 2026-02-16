@@ -4,7 +4,10 @@ using WoWSharpClient.Client;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
-using System.Reactive.Linq; // for Subscribe overloads
+using System.Reactive.Linq;
+using System.Threading.Tasks;
+using System;
+using System.Threading; // for Subscribe overloads
 
 namespace WoWSharpClient.Tests.Agent
 {

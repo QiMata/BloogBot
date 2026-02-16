@@ -1,5 +1,10 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -47,10 +52,6 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private bool _disposed;
 
-        // Placeholder server opcode used to drive streams until concrete loot opcodes are wired.
-        // Replace with real SMSG_* loot opcodes when available.
-        private static readonly Opcode PlaceholderLootServerOpcode = Opcode.SMSG_UPDATE_OBJECT;
-
         /// <summary>
         /// Initializes a new instance of the LootingNetworkClientComponent class.
         /// </summary>
@@ -61,14 +62,9 @@ namespace WoWSharpClient.Networking.ClientComponents
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-            // Network-driven streams (placeholders) merged with manual streams from Handle* methods
-            var lootWindowFromNetwork = SafeOpcodeStream(PlaceholderLootServerOpcode)
-                .Select(TryParseLootWindowChange)
-                .Where(x => x != null)
-                .Select(x => x!);
-
-            _lootWindowChanges = lootWindowFromNetwork
-                .Merge(CreateManualStream(_lootWindowObservers))
+            // Observable streams fed by Handle* methods via manual observer lists.
+            // Real SMSG opcodes are subscribed below and call Handle* methods which publish to these streams.
+            _lootWindowChanges = CreateManualStream(_lootWindowObservers)
                 .Do(data =>
                 {
                     _isLootWindowOpen = data.IsOpen;
@@ -85,30 +81,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             _lootWindowOpened = _lootWindowChanges.Where(d => d.IsOpen);
             _lootWindowClosed = _lootWindowChanges.Where(d => !d.IsOpen);
 
-            var itemLootFromNetwork = SafeOpcodeStream(PlaceholderLootServerOpcode)
-                .Select(TryParseItemLoot)
-                .Where(x => x != null)
-                .Select(x => x!);
-
-            _itemLoot = itemLootFromNetwork
-                .Merge(CreateManualStream(_itemLootObservers))
+            _itemLoot = CreateManualStream(_itemLootObservers)
                 .Do(ld => _availableLoot.TryRemove(ld.LootSlot, out _));
 
-            var moneyFromNetwork = SafeOpcodeStream(PlaceholderLootServerOpcode)
-                .Select(TryParseMoneyLoot)
-                .Where(x => x != null)
-                .Select(x => x!);
+            _moneyLoot = CreateManualStream(_moneyLootObservers);
 
-            _moneyLoot = moneyFromNetwork
-                .Merge(CreateManualStream(_moneyLootObservers));
-
-            var lootRollFromNetwork = SafeOpcodeStream(PlaceholderLootServerOpcode)
-                .Select(TryParseLootRoll)
-                .Where(x => x != null)
-                .Select(x => x!);
-
-            _lootRolls = lootRollFromNetwork
-                .Merge(CreateManualStream(_lootRollObservers))
+            _lootRolls = CreateManualStream(_lootRollObservers)
                 .Do(roll =>
                 {
                     if (_pendingRolls.TryGetValue(roll.LootGuid, out var slots))
@@ -118,31 +96,23 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
                 });
 
-            var lootErrorsFromNetwork = SafeOpcodeStream(PlaceholderLootServerOpcode)
-                .Select(TryParseLootError)
-                .Where(x => x is not null)!;
+            _lootErrors = CreateManualStream(_lootErrorObservers);
+            _bindOnPickupConfirmations = CreateManualStream(_bopObservers);
 
-            _lootErrors = lootErrorsFromNetwork
-                .Merge(CreateManualStream(_lootErrorObservers));
-
-            var bopFromNetwork = SafeOpcodeStream(PlaceholderLootServerOpcode)
-                .Select(TryParseBindOnPickup)
-                .Where(x => x != null)
-                .Select(x => x!);
-
-            _bindOnPickupConfirmations = bopFromNetwork
-                .Merge(CreateManualStream(_bopObservers));
-
-            var masterFromNetwork = SafeOpcodeStream(PlaceholderLootServerOpcode)
-                .Select(TryParseMasterLoot)
-                .Where(x => x != null)
-                .Select(x => x!);
-
-            _masterLootAssignments = masterFromNetwork
-                .Merge(CreateManualStream(_masterLootObservers))
+            _masterLootAssignments = CreateManualStream(_masterLootObservers)
                 .Do(m => _availableLoot.TryRemove(m.LootSlot, out _));
 
             _groupLootNotifications = Observable.Never<GroupLootNotificationData>();
+
+            // Subscribe to real SMSG loot opcodes and route to Handle* methods
+            SafeOpcodeStream(Opcode.SMSG_LOOT_RESPONSE).Subscribe(OnLootResponseReceived);
+            SafeOpcodeStream(Opcode.SMSG_LOOT_RELEASE_RESPONSE).Subscribe(OnLootReleaseReceived);
+            SafeOpcodeStream(Opcode.SMSG_LOOT_REMOVED).Subscribe(OnLootRemovedReceived);
+            SafeOpcodeStream(Opcode.SMSG_LOOT_MONEY_NOTIFY).Subscribe(OnMoneyNotifyReceived);
+            SafeOpcodeStream(Opcode.SMSG_LOOT_CLEAR_MONEY).Subscribe(OnClearMoneyReceived);
+            SafeOpcodeStream(Opcode.SMSG_ITEM_PUSH_RESULT).Subscribe(OnItemPushResultReceived);
+            SafeOpcodeStream(Opcode.SMSG_LOOT_START_ROLL).Subscribe(OnLootStartRollReceived);
+            SafeOpcodeStream(Opcode.SMSG_LOOT_ROLL).Subscribe(OnLootRollReceived);
         }
 
         #region Properties
@@ -199,7 +169,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to open loot for target: {LootTargetGuid:X}", lootTargetGuid);
-                // Surface via errors stream (parsed from server) – nothing to push directly.
+                // Surface via errors stream (parsed from server) ï¿½ nothing to push directly.
                 throw;
             }
             finally
@@ -287,7 +257,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 _logger.LogDebug("Closing loot window");
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_RELEASE, [], cancellationToken);
+
+                // CMSG_LOOT_RELEASE: ObjectGuid lootGuid (8)
+                var payload = new byte[8];
+                BitConverter.GetBytes(_currentLootTarget ?? 0UL).CopyTo(payload, 0);
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_RELEASE, payload, cancellationToken);
                 _logger.LogInformation("Loot release command sent");
             }
             catch (Exception ex)
@@ -310,10 +285,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Rolling {RollType} for loot in slot {ItemSlot} from: {LootGuid:X}",
                     rollType, itemSlot, lootGuid);
 
-                var payload = new byte[10];
+                // CMSG_LOOT_ROLL: ObjectGuid lootGuid (8) + uint32 itemSlot (4) + uint8 rollType (1) = 13 bytes
+                var payload = new byte[13];
                 BitConverter.GetBytes(lootGuid).CopyTo(payload, 0);
-                payload[8] = itemSlot;
-                payload[9] = (byte)rollType;
+                BitConverter.GetBytes((uint)itemSlot).CopyTo(payload, 8);
+                payload[12] = (byte)rollType;
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_ROLL, payload, cancellationToken);
                 _logger.LogInformation("Loot roll {RollType} sent for slot {ItemSlot} from: {LootGuid:X}",
@@ -462,24 +438,25 @@ namespace WoWSharpClient.Networking.ClientComponents
         public async Task ConfirmBindOnPickupAsync(byte lootSlot, bool confirm = true, CancellationToken cancellationToken = default)
         {
             ThrowIfDisposed();
-            SetOperationInProgress(true);
             try
             {
                 _logger.LogDebug("Confirming BoP for slot {LootSlot}: {Confirm}", lootSlot, confirm);
 
-                var payload = new byte[2] { lootSlot, (byte)(confirm ? 1 : 0) };
-
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_RELEASE, payload, cancellationToken);
-                _logger.LogInformation("BoP confirmation sent for slot {LootSlot}: {Confirm}", lootSlot, confirm);
+                if (confirm)
+                {
+                    // In vanilla 1.12.1, BoP is handled server-side when you loot the item.
+                    // The client just sends CMSG_AUTOSTORE_LOOT_ITEM as normal.
+                    await LootItemAsync(lootSlot, cancellationToken);
+                }
+                else
+                {
+                    _logger.LogInformation("BoP declined for slot {LootSlot}, not looting", lootSlot);
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to confirm BoP for slot {LootSlot}", lootSlot);
                 throw;
-            }
-            finally
-            {
-                SetOperationInProgress(false);
             }
         }
 
@@ -493,11 +470,13 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Assigning master loot slot {LootSlot} to player: {PlayerGuid:X}", lootSlot, targetPlayerGuid);
 
-                var payload = new byte[9];
-                payload[0] = lootSlot;
-                BitConverter.GetBytes(targetPlayerGuid).CopyTo(payload, 1);
+                // CMSG_LOOT_MASTER_GIVE: ObjectGuid lootGuid (8) + uint8 slotId (1) + ObjectGuid targetGuid (8) = 17 bytes
+                var payload = new byte[17];
+                BitConverter.GetBytes(_currentLootTarget ?? 0UL).CopyTo(payload, 0);
+                payload[8] = lootSlot;
+                BitConverter.GetBytes(targetPlayerGuid).CopyTo(payload, 9);
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_RELEASE, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_MASTER_GIVE, payload, cancellationToken);
 
                 _logger.LogInformation("Master loot assignment sent for slot {LootSlot} to player: {PlayerGuid:X}", lootSlot, targetPlayerGuid);
             }
@@ -520,9 +499,13 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Setting group loot method to: {LootMethod}", method);
 
-                var payload = BitConverter.GetBytes((uint)method);
+                // CMSG_LOOT_METHOD: uint32 lootMethod (4) + ObjectGuid masterLooterGuid (8) + uint32 lootThreshold (4) = 16 bytes
+                var payload = new byte[16];
+                BitConverter.GetBytes((uint)method).CopyTo(payload, 0);
+                // masterLooterGuid = 0 (no master looter change)
+                BitConverter.GetBytes((uint)_lootThreshold).CopyTo(payload, 12);
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_RELEASE, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_METHOD, payload, cancellationToken);
 
                 _logger.LogInformation("Group loot method change sent: {LootMethod}", method);
             }
@@ -545,9 +528,13 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Setting loot threshold to: {Threshold}", threshold);
 
-                var payload = BitConverter.GetBytes((uint)threshold);
+                // CMSG_LOOT_METHOD: uint32 lootMethod (4) + ObjectGuid masterLooterGuid (8) + uint32 lootThreshold (4) = 16 bytes
+                var payload = new byte[16];
+                BitConverter.GetBytes((uint)_currentLootMethod).CopyTo(payload, 0);
+                // masterLooterGuid = 0 (no change)
+                BitConverter.GetBytes((uint)threshold).CopyTo(payload, 12);
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_RELEASE, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_METHOD, payload, cancellationToken);
 
                 _logger.LogInformation("Loot threshold change sent: {Threshold}", threshold);
             }
@@ -570,9 +557,14 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Setting master looter to: {MasterLooterGuid:X}", masterLooterGuid);
 
-                var payload = BitConverter.GetBytes(masterLooterGuid);
+                // CMSG_LOOT_METHOD: uint32 lootMethod (4) + ObjectGuid masterLooterGuid (8) + uint32 lootThreshold (4) = 16 bytes
+                // Setting master looter implies Master Loot method (2)
+                var payload = new byte[16];
+                BitConverter.GetBytes((uint)GroupLootMethod.MasterLoot).CopyTo(payload, 0);
+                BitConverter.GetBytes(masterLooterGuid).CopyTo(payload, 4);
+                BitConverter.GetBytes((uint)_lootThreshold).CopyTo(payload, 12);
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_RELEASE, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LOOT_METHOD, payload, cancellationToken);
 
                 _logger.LogInformation("Master looter change sent: {MasterLooterGuid:X}", masterLooterGuid);
             }
@@ -898,11 +890,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             });
         }
 
-        private sealed class ManualUnsubscriber<T> : IDisposable
+        private sealed class ManualUnsubscriber<T>(List<IObserver<T>> list, IObserver<T> observer) : IDisposable
         {
-            private readonly List<IObserver<T>> _list;
-            private readonly IObserver<T> _observer;
-            public ManualUnsubscriber(List<IObserver<T>> list, IObserver<T> observer) { _list = list; _observer = observer; }
+            private readonly List<IObserver<T>> _list = list;
+            private readonly IObserver<T> _observer = observer;
+
             public void Dispose()
             {
                 lock (_list)
@@ -922,113 +914,245 @@ namespace WoWSharpClient.Networking.ClientComponents
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
             => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
 
-        private LootWindowData? TryParseLootWindowChange(ReadOnlyMemory<byte> payload)
+        #region SMSG Packet Handlers
+
+        /// <summary>
+        /// Handles SMSG_LOOT_RESPONSE (0x160).
+        /// Format: guid(8) + lootType(1) + gold(4) + itemCount(1) + [per item: lootIndex(1) + itemId(4) + count(4) + displayInfoId(4) + reserved(4) + randomPropertyId(4) + slotType(1)]
+        /// </summary>
+        private void OnLootResponseReceived(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                // Heuristic: if >= 9 bytes, [0..7]=guid, [8]=isOpen (1/0), [9..12] items, [13..16] money (optional)
-                if (span.Length >= 9)
+                if (span.Length < 14) return; // minimum: guid(8) + lootType(1) + gold(4) + itemCount(1)
+
+                ulong guid = BitConverter.ToUInt64(span[..8]);
+                byte lootType = span[8];
+                uint gold = BitConverter.ToUInt32(span.Slice(9, 4));
+                byte itemCount = span[13];
+
+                _logger.LogDebug("SMSG_LOOT_RESPONSE: guid={Guid:X}, type={Type}, gold={Gold}, items={Count}",
+                    guid, lootType, gold, itemCount);
+
+                // Parse loot items (each item = 22 bytes: index(1) + itemId(4) + count(4) + displayId(4) + reserved(4) + randomPropId(4) + slotType(1))
+                var lootSlots = new List<LootSlotInfo>();
+                int offset = 14;
+                for (int i = 0; i < itemCount && offset + 22 <= span.Length; i++)
                 {
-                    ulong guid = BitConverter.ToUInt64(span[..8]);
-                    bool isOpen = span[8] != 0;
-                    uint items = span.Length >= 13 ? BitConverter.ToUInt32(span.Slice(9, 4)) : 0u;
-                    uint money = span.Length >= 17 ? BitConverter.ToUInt32(span.Slice(13, 4)) : 0u;
-                    return new LootWindowData(isOpen, isOpen ? guid : null, items, money, DateTime.UtcNow);
+                    byte lootIndex = span[offset];
+                    uint itemId = BitConverter.ToUInt32(span.Slice(offset + 1, 4));
+                    uint count = BitConverter.ToUInt32(span.Slice(offset + 5, 4));
+                    // displayInfoId at offset + 9 (4 bytes) - not needed
+                    // reserved at offset + 13 (4 bytes) - always 0
+                    // randomPropertyId at offset + 17 (4 bytes) - not needed for tracking
+                    byte serverSlotType = span[offset + 21];
+                    offset += 22;
+
+                    // serverSlotType: 0=AllowLoot, 1=RollOngoing, 2=Master, 3=Locked, 4=Owner
+                    bool requiresRoll = serverSlotType == 1;
+                    var slotInfo = new LootSlotInfo(
+                        lootIndex, itemId, $"Item#{itemId}", count,
+                        ItemQuality.Common, false, requiresRoll,
+                        LootSlotType.Item, requiresRoll ? guid : null);
+
+                    lootSlots.Add(slotInfo);
                 }
+
+                HandleLootList(guid, lootSlots.AsReadOnly());
+                HandleLootWindowChanged(true, guid, (uint)lootSlots.Count, gold);
             }
-            catch { }
-            return null;
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse SMSG_LOOT_RESPONSE");
+            }
         }
 
-        private LootData? TryParseItemLoot(ReadOnlyMemory<byte> payload)
+        /// <summary>
+        /// Handles SMSG_LOOT_RELEASE_RESPONSE (0x161).
+        /// Format: guid(8) + unk(1)
+        /// </summary>
+        private void OnLootReleaseReceived(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                if (payload.Length < 9) return;
+                ulong guid = BitConverter.ToUInt64(payload.Span[..8]);
+                _logger.LogDebug("SMSG_LOOT_RELEASE_RESPONSE: guid={Guid:X}", guid);
+                HandleLootWindowChanged(false, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse SMSG_LOOT_RELEASE_RESPONSE");
+            }
+        }
+
+        /// <summary>
+        /// Handles SMSG_LOOT_REMOVED (0x162).
+        /// Format: lootSlot(1)
+        /// </summary>
+        private void OnLootRemovedReceived(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                if (payload.Length < 1) return;
+                byte lootSlot = payload.Span[0];
+                _logger.LogDebug("SMSG_LOOT_REMOVED: slot={Slot}", lootSlot);
+                _availableLoot.TryRemove(lootSlot, out _);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse SMSG_LOOT_REMOVED");
+            }
+        }
+
+        /// <summary>
+        /// Handles SMSG_LOOT_MONEY_NOTIFY (0x163).
+        /// Format: amount(4)
+        /// </summary>
+        private void OnMoneyNotifyReceived(ReadOnlyMemory<byte> payload)
+        {
+            try
+            {
+                if (payload.Length < 4) return;
+                uint amount = BitConverter.ToUInt32(payload.Span[..4]);
+                _logger.LogDebug("SMSG_LOOT_MONEY_NOTIFY: amount={Amount}", amount);
+                HandleMoneyLooted(_currentLootTarget ?? 0, amount);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse SMSG_LOOT_MONEY_NOTIFY");
+            }
+        }
+
+        /// <summary>
+        /// Handles SMSG_LOOT_CLEAR_MONEY (0x165).
+        /// Format: empty payload
+        /// </summary>
+        private void OnClearMoneyReceived(ReadOnlyMemory<byte> payload)
+        {
+            _logger.LogDebug("SMSG_LOOT_CLEAR_MONEY received");
+        }
+
+        /// <summary>
+        /// Handles SMSG_ITEM_PUSH_RESULT (0x166).
+        /// Format: playerGuid(8) + received(4) + created(4) + showInChat(4) + bagSlot(1) + itemSlot(4) + itemEntry(4) + suffixFactor(4) + randomPropertyId(4) + count(4)
+        /// </summary>
+        private void OnItemPushResultReceived(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                if (span.Length >= 17)
+                if (span.Length < 41) return;
+
+                ulong playerGuid = BitConverter.ToUInt64(span[..8]);
+                uint received = BitConverter.ToUInt32(span.Slice(8, 4));   // 0=looted, 1=from NPC
+                // created at offset 12 (4 bytes)
+                // showInChat at offset 16 (4 bytes)
+                byte bagSlot = span[20];
+                uint itemSlot = BitConverter.ToUInt32(span.Slice(21, 4));
+                uint itemEntry = BitConverter.ToUInt32(span.Slice(25, 4));
+                // suffixFactor at offset 29 (4 bytes)
+                // randomPropertyId at offset 33 (4 bytes)
+                uint count = BitConverter.ToUInt32(span.Slice(37, 4));
+
+                _logger.LogDebug("SMSG_ITEM_PUSH_RESULT: player={Guid:X}, item={ItemId}, count={Count}, bag={Bag}, slot={Slot}",
+                    playerGuid, itemEntry, count, bagSlot, itemSlot);
+
+                // Only report as loot if received == 0 (looted, not from NPC)
+                if (received == 0)
                 {
-                    ulong guid = BitConverter.ToUInt64(span[..8]);
-                    uint itemId = BitConverter.ToUInt32(span.Slice(8, 4));
-                    byte slot = span[12];
-                    uint qty = BitConverter.ToUInt32(span.Slice(13, 4));
-                    return new LootData(guid, itemId, $"Item {itemId}", qty, ItemQuality.Common, slot, DateTime.UtcNow);
+                    HandleItemLooted(_currentLootTarget ?? 0, itemEntry, $"Item#{itemEntry}", count, ItemQuality.Common, bagSlot);
                 }
             }
-            catch { }
-            return null;
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse SMSG_ITEM_PUSH_RESULT");
+            }
         }
 
-        private MoneyLootData? TryParseMoneyLoot(ReadOnlyMemory<byte> payload)
+        /// <summary>
+        /// Handles SMSG_LOOT_START_ROLL (0x2A1).
+        /// Format: lootSourceGuid(8) + mapId(4) + lootSlot(4) + itemEntry(4) + itemRandomSuffix(4) + itemRandomPropertyId(4) + countdown(4)
+        /// </summary>
+        private void OnLootStartRollReceived(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                if (span.Length >= 12)
+                if (span.Length < 32) return;
+
+                ulong lootGuid = BitConverter.ToUInt64(span[..8]);
+                // mapId at offset 8 (4 bytes) - not needed
+                uint lootSlot = BitConverter.ToUInt32(span.Slice(12, 4));
+                uint itemEntry = BitConverter.ToUInt32(span.Slice(16, 4));
+                // randomSuffix at offset 20, randomProperty at offset 24
+                uint countdown = BitConverter.ToUInt32(span.Slice(28, 4));
+
+                _logger.LogInformation("SMSG_LOOT_START_ROLL: guid={Guid:X}, slot={Slot}, item={ItemId}, countdown={Countdown}ms",
+                    lootGuid, lootSlot, itemEntry, countdown);
+
+                byte slotByte = (byte)lootSlot;
+
+                // Mark as pending roll
+                _pendingRolls.AddOrUpdate(
+                    lootGuid,
+                    [slotByte],
+                    (key, existing) => { existing.Add(slotByte); return existing; });
+
+                // Update slot info to require roll
+                if (_availableLoot.TryGetValue(slotByte, out var existingSlot))
                 {
-                    ulong guid = BitConverter.ToUInt64(span[..8]);
-                    uint amount = BitConverter.ToUInt32(span.Slice(8, 4));
-                    return new MoneyLootData(guid, amount, DateTime.UtcNow);
+                    _availableLoot[slotByte] = existingSlot with { RequiresRoll = true, RollGuid = lootGuid };
                 }
+
+                HandleLootRoll(lootGuid, slotByte, itemEntry, LootRollType.Need, 0);
             }
-            catch { }
-            return null;
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse SMSG_LOOT_START_ROLL");
+            }
         }
 
-        private LootRollData? TryParseLootRoll(ReadOnlyMemory<byte> payload)
+        /// <summary>
+        /// Handles SMSG_LOOT_ROLL (0x2A2).
+        /// Format: lootSourceGuid(8) + lootSlot(4) + playerGuid(8) + itemEntry(4) + itemRandomSuffix(4) + itemRandomPropertyId(4) + rollNumber(4) + rollType(1)
+        /// </summary>
+        private void OnLootRollReceived(ReadOnlyMemory<byte> payload)
         {
             try
             {
                 var span = payload.Span;
-                if (span.Length >= 17)
+                if (span.Length < 37) return;
+
+                ulong lootGuid = BitConverter.ToUInt64(span[..8]);
+                uint lootSlot = BitConverter.ToUInt32(span.Slice(8, 4));
+                ulong playerGuid = BitConverter.ToUInt64(span.Slice(12, 8));
+                uint itemEntry = BitConverter.ToUInt32(span.Slice(20, 4));
+                // randomSuffix at offset 24, randomProperty at offset 28
+                uint rollNumber = BitConverter.ToUInt32(span.Slice(32, 4));
+                byte rollType = span[36];
+
+                _logger.LogDebug("SMSG_LOOT_ROLL: guid={Guid:X}, slot={Slot}, player={Player:X}, item={Item}, roll={Roll}, type={Type}",
+                    lootGuid, lootSlot, playerGuid, itemEntry, rollNumber, rollType);
+
+                var rollTypeEnum = rollType switch
                 {
-                    ulong lootGuid = BitConverter.ToUInt64(span[..8]);
-                    byte itemSlot = span[8];
-                    uint itemId = BitConverter.ToUInt32(span.Slice(9, 4));
-                    var rollType = (LootRollType)(span[13] % 3);
-                    uint rollResult = BitConverter.ToUInt32(span.Slice(13, 4));
-                    return new LootRollData(lootGuid, itemSlot, itemId, rollType, rollResult, DateTime.UtcNow);
-                }
+                    0 => LootRollType.Pass,
+                    1 => LootRollType.Need,
+                    2 => LootRollType.Greed,
+                    _ => LootRollType.Pass
+                };
+
+                HandleLootRoll(lootGuid, (byte)lootSlot, itemEntry, rollTypeEnum, rollNumber);
             }
-            catch { }
-            return null;
-        }
-
-        private LootErrorData? TryParseLootError(ReadOnlyMemory<byte> payload) => null;
-
-        private BindOnPickupData? TryParseBindOnPickup(ReadOnlyMemory<byte> payload)
-        {
-            try
+            catch (Exception ex)
             {
-                var span = payload.Span;
-                if (span.Length >= 9)
-                {
-                    byte slot = span[0];
-                    uint itemId = BitConverter.ToUInt32(span.Slice(1, 4));
-                    return new BindOnPickupData(slot, itemId, $"Item {itemId}", ItemQuality.Uncommon, true, DateTime.UtcNow);
-                }
+                _logger.LogWarning(ex, "Failed to parse SMSG_LOOT_ROLL");
             }
-            catch { }
-            return null;
         }
 
-        private MasterLootData? TryParseMasterLoot(ReadOnlyMemory<byte> payload)
-        {
-            try
-            {
-                var span = payload.Span;
-                if (span.Length >= 25)
-                {
-                    byte slot = span[0];
-                    uint itemId = BitConverter.ToUInt32(span.Slice(1, 4));
-                    ulong fromGuid = BitConverter.ToUInt64(span.Slice(5, 8));
-                    ulong toGuid = BitConverter.ToUInt64(span.Slice(13, 8));
-                    return new MasterLootData(slot, itemId, $"Item {itemId}", fromGuid, "Unknown", toGuid, "Unknown", DateTime.UtcNow);
-                }
-            }
-            catch { }
-            return null;
-        }
+        #endregion
 
         private void ThrowIfDisposed()
         {

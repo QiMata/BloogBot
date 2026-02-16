@@ -1,11 +1,18 @@
 ﻿using BotRunner.Clients;
 using BotRunner.Combat;
-using BotRunner.Movement;
+using BotRunner.Interfaces;
+using BotRunner.Tasks;
 using Communication;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using WoWSharpClient.Networking.ClientComponents.I;
 using Xas.FluentBehaviourTree;
 
 namespace BotRunner
@@ -15,11 +22,11 @@ namespace BotRunner
         private readonly IObjectManager _objectManager;
 
         private readonly CharacterStateUpdateClient _characterStateUpdateClient;
-        private readonly ITargetEngagementService _targetEngagementService;
         private readonly ILootingService _lootingService;
-        private readonly ITargetPositioningService _targetPositioningService;
+        private readonly IDependencyContainer _container;
+        private readonly Func<IAgentFactory?>? _agentFactoryAccessor;
 
-        private ActivitySnapshot _activitySnapshot;
+        private WoWActivitySnapshot _activitySnapshot;
 
         private Task? _asyncBotTaskRunnerTask;
         private CancellationTokenSource? _cts;
@@ -27,19 +34,23 @@ namespace BotRunner
         private IBehaviourTreeNode? _behaviorTree;
         private BehaviourTreeStatus _behaviorTreeStatus = BehaviourTreeStatus.Success;
 
+        private readonly Stack<IBotTask> _botTasks = new();
+        private bool _tasksInitialized;
+
         public BotRunnerService(IObjectManager objectManager,
                                  CharacterStateUpdateClient characterStateUpdateClient,
-                                 ITargetEngagementService targetEngagementService,
                                  ILootingService lootingService,
-                                 ITargetPositioningService targetPositioningService)
+                                 IDependencyContainer container,
+                                 Func<IAgentFactory?>? agentFactoryAccessor = null,
+                                 string? accountName = null)
         {
             _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-            _activitySnapshot = new() { AccountName = "?" };
+            _activitySnapshot = new() { AccountName = accountName ?? "?" };
+            _agentFactoryAccessor = agentFactoryAccessor;
 
             _characterStateUpdateClient = characterStateUpdateClient ?? throw new ArgumentNullException(nameof(characterStateUpdateClient));
-            _targetEngagementService = targetEngagementService ?? throw new ArgumentNullException(nameof(targetEngagementService));
             _lootingService = lootingService ?? throw new ArgumentNullException(nameof(lootingService));
-            _targetPositioningService = targetPositioningService ?? throw new ArgumentNullException(nameof(targetPositioningService));
+            _container = container ?? throw new ArgumentNullException(nameof(container));
         }
 
         public void Start()
@@ -74,6 +85,8 @@ namespace BotRunner
             {
                 try
                 {
+                    PopulateSnapshotFromObjectManager();
+
                     var incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
 
                     UpdateBehaviorTree(incomingActivityMemberState);
@@ -83,7 +96,12 @@ namespace BotRunner
                         _behaviorTreeStatus = _behaviorTree.Tick(new TimeData(0.1f));
                     }
 
-                    await ProcessCombatAsync(CancellationToken.None);
+                    // Process BotTask stack when in-world and behavior tree isn't running
+                    if (_objectManager.HasEnteredWorld && _botTasks.Count > 0
+                        && (_behaviorTree == null || _behaviorTreeStatus != BehaviourTreeStatus.Running))
+                    {
+                        _botTasks.Peek().Update();
+                    }
 
                     _activitySnapshot = incomingActivityMemberState;
                 }
@@ -96,8 +114,26 @@ namespace BotRunner
             }
         }
 
-        private void UpdateBehaviorTree(ActivitySnapshot incomingActivityMemberState)
+        private void UpdateBehaviorTree(WoWActivitySnapshot incomingActivityMemberState)
         {
+            // Check for new incoming actions FIRST — they can interrupt a running tree
+            if (_objectManager.HasEnteredWorld
+                && incomingActivityMemberState.CurrentAction != null
+                && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait)
+            {
+                var action = incomingActivityMemberState.CurrentAction;
+                Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ActionType} ({(int)action.ActionType})");
+                var actionList = ConvertActionMessageToCharacterActions(action);
+                if (actionList.Count > 0)
+                {
+                    Log.Information($"[BOT RUNNER] Building behavior tree for: {actionList[0].Item1}");
+                    _behaviorTree = BuildBehaviorTreeFromActions(actionList);
+                    _behaviorTreeStatus = BehaviourTreeStatus.Running;
+                    _activitySnapshot.PreviousAction = action;
+                    return;
+                }
+            }
+
             if (_behaviorTree != null && _behaviorTreeStatus == BehaviourTreeStatus.Running)
             {
                 return;
@@ -154,40 +190,16 @@ namespace BotRunner
                 return;
             }
 
-            if (!_objectManager.Players.Any(x => x.Name == "Dallawha"))
+            // Initialize BotTask stack once after entering world
+            if (!_tasksInitialized)
             {
-                _behaviorTree = BuildWaitSequence(0);
-                return;
+                _tasksInitialized = true;
+                InitializeTaskSequence();
             }
 
-            _behaviorTree ??= BuildWaitSequence(0);
-        }
-
-        private async Task ProcessCombatAsync(CancellationToken cancellationToken)
-        {
-            if (!_objectManager.HasEnteredWorld)
-            {
-                return;
-            }
-
-            var target = _objectManager.Units.FirstOrDefault(x => x.Name == "Dallawha");
-
-            if (target == null)
-            {
-                return;
-            }
-
-            if (target.Health <= 0)
-            {
-                _objectManager.StopAllMovement();
-                await _lootingService.TryLootAsync(target.Guid, cancellationToken);
-                return;
-            }
-
-            if (_targetPositioningService.EnsureInCombatRange(target))
-            {
-                await _targetEngagementService.EngageAsync(target, cancellationToken);
-            }
+            // No active behavior tree needed — clear any completed tree so it isn't re-ticked.
+            // Task stack (line 104) runs when _behaviorTree is null or status != Running.
+            _behaviorTree = null;
         }
 
         internal static Position? ResolveNextWaypoint(Position[]? positions, Action<string>? logAction = null)
@@ -207,9 +219,163 @@ namespace BotRunner
             return positions[1];
         }
 
+        private void InitializeTaskSequence()
+        {
+            var accountName = _activitySnapshot.AccountName;
+            if (string.IsNullOrEmpty(accountName) || accountName == "?" || accountName.Length < 4)
+            {
+                Log.Information("[BOT RUNNER] No valid account name for task initialization, using wait.");
+                return;
+            }
+
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container);
+
+            try
+            {
+                var classCode = accountName.Substring(2, 2);
+                var @class = WoWNameGenerator.ParseClassCode(classCode);
+
+                // All classes use unified GrindTask — class-specific behavior comes from
+                // the ClassContainer's task factories (rest, buff, pull, combat rotation).
+                // Push tasks in reverse order (stack is LIFO)
+                _botTasks.Push(new Tasks.GrindTask(context, _lootingService));
+                _botTasks.Push(new Tasks.WaitTask(context, 3000));
+                _botTasks.Push(new Tasks.TeleportTask(context, "valleyoftrials"));
+                Log.Information("[BOT RUNNER] Initialized {Class} task sequence for {Account} using {Profile}",
+                    @class, accountName, _container.ClassContainer.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"[BOT RUNNER] Failed to initialize task sequence: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Maps Communication.ActionType (proto) to CharacterAction (C# enum).
+        /// These enums are NOT identical — proto is missing AbandonQuest and has
+        /// StartMeleeAttack/StartRangedAttack/StartWandAttack that C# doesn't.
+        /// A direct (CharacterAction)(int) cast gives wrong values for most actions.
+        /// </summary>
+        private static CharacterAction? MapProtoActionType(Communication.ActionType actionType) => actionType switch
+        {
+            Communication.ActionType.Wait => CharacterAction.Wait,
+            Communication.ActionType.Goto => CharacterAction.GoTo,
+            Communication.ActionType.InteractWith => CharacterAction.InteractWith,
+            Communication.ActionType.SelectGossip => CharacterAction.SelectGossip,
+            Communication.ActionType.SelectTaxiNode => CharacterAction.SelectTaxiNode,
+            Communication.ActionType.AcceptQuest => CharacterAction.AcceptQuest,
+            Communication.ActionType.DeclineQuest => CharacterAction.DeclineQuest,
+            Communication.ActionType.SelectReward => CharacterAction.SelectReward,
+            Communication.ActionType.CompleteQuest => CharacterAction.CompleteQuest,
+            Communication.ActionType.TrainSkill => CharacterAction.TrainSkill,
+            Communication.ActionType.TrainTalent => CharacterAction.TrainTalent,
+            Communication.ActionType.OfferTrade => CharacterAction.OfferTrade,
+            Communication.ActionType.OfferGold => CharacterAction.OfferGold,
+            Communication.ActionType.OfferItem => CharacterAction.OfferItem,
+            Communication.ActionType.AcceptTrade => CharacterAction.AcceptTrade,
+            Communication.ActionType.DeclineTrade => CharacterAction.DeclineTrade,
+            Communication.ActionType.EnchantTrade => CharacterAction.EnchantTrade,
+            Communication.ActionType.LockpickTrade => CharacterAction.LockpickTrade,
+            Communication.ActionType.PromoteLeader => CharacterAction.PromoteLeader,
+            Communication.ActionType.PromoteAssistant => CharacterAction.PromoteAssistant,
+            Communication.ActionType.PromoteLootManager => CharacterAction.PromoteLootManager,
+            Communication.ActionType.SetGroupLoot => CharacterAction.SetGroupLoot,
+            Communication.ActionType.AssignLoot => CharacterAction.AssignLoot,
+            Communication.ActionType.LootRollNeed => CharacterAction.LootRollNeed,
+            Communication.ActionType.LootRollGreed => CharacterAction.LootRollGreed,
+            Communication.ActionType.LootPass => CharacterAction.LootPass,
+            Communication.ActionType.SendGroupInvite => CharacterAction.SendGroupInvite,
+            Communication.ActionType.AcceptGroupInvite => CharacterAction.AcceptGroupInvite,
+            Communication.ActionType.DeclineGroupInvite => CharacterAction.DeclineGroupInvite,
+            Communication.ActionType.KickPlayer => CharacterAction.KickPlayer,
+            Communication.ActionType.LeaveGroup => CharacterAction.LeaveGroup,
+            Communication.ActionType.DisbandGroup => CharacterAction.DisbandGroup,
+            Communication.ActionType.StartMeleeAttack => CharacterAction.StartMeleeAttack,
+            Communication.ActionType.StopAttack => CharacterAction.StopAttack,
+            Communication.ActionType.CastSpell => CharacterAction.CastSpell,
+            Communication.ActionType.StopCast => CharacterAction.StopCast,
+            Communication.ActionType.UseItem => CharacterAction.UseItem,
+            Communication.ActionType.EquipItem => CharacterAction.EquipItem,
+            Communication.ActionType.UnequipItem => CharacterAction.UnequipItem,
+            Communication.ActionType.DestroyItem => CharacterAction.DestroyItem,
+            Communication.ActionType.MoveItem => CharacterAction.MoveItem,
+            Communication.ActionType.SplitStack => CharacterAction.SplitStack,
+            Communication.ActionType.BuyItem => CharacterAction.BuyItem,
+            Communication.ActionType.BuybackItem => CharacterAction.BuybackItem,
+            Communication.ActionType.SellItem => CharacterAction.SellItem,
+            Communication.ActionType.RepairItem => CharacterAction.RepairItem,
+            Communication.ActionType.RepairAllItems => CharacterAction.RepairAllItems,
+            Communication.ActionType.DismissBuff => CharacterAction.DismissBuff,
+            Communication.ActionType.Resurrect => CharacterAction.Resurrect,
+            Communication.ActionType.Craft => CharacterAction.Craft,
+            Communication.ActionType.Login => CharacterAction.Login,
+            Communication.ActionType.Logout => CharacterAction.Logout,
+            Communication.ActionType.CreateCharacter => CharacterAction.CreateCharacter,
+            Communication.ActionType.DeleteCharacter => CharacterAction.DeleteCharacter,
+            Communication.ActionType.EnterWorld => CharacterAction.EnterWorld,
+            _ => null,
+        };
+
+        private static List<(CharacterAction, List<object>)> ConvertActionMessageToCharacterActions(Communication.ActionMessage action)
+        {
+            var result = new List<(CharacterAction, List<object>)>();
+
+            var charAction = MapProtoActionType(action.ActionType);
+            if (charAction == null)
+            {
+                Log.Warning($"[BOT RUNNER] Unknown ActionType {action.ActionType} ({(int)action.ActionType}), cannot map to CharacterAction");
+                return result;
+            }
+
+            var parameters = new List<object>();
+
+            foreach (var param in action.Parameters)
+            {
+                switch (param.ParameterCase)
+                {
+                    case Communication.RequestParameter.ParameterOneofCase.FloatParam:
+                        parameters.Add(param.FloatParam);
+                        break;
+                    case Communication.RequestParameter.ParameterOneofCase.IntParam:
+                        parameters.Add(param.IntParam);
+                        break;
+                    case Communication.RequestParameter.ParameterOneofCase.LongParam:
+                        parameters.Add(param.LongParam);
+                        break;
+                    case Communication.RequestParameter.ParameterOneofCase.StringParam:
+                        parameters.Add(param.StringParam);
+                        break;
+                }
+            }
+
+            result.Add((charAction.Value, parameters));
+            return result;
+        }
+
+        private sealed class BotRunnerContext(IObjectManager objectManager, Stack<IBotTask> tasks, IDependencyContainer container) : IBotContext
+        {
+            public IObjectManager ObjectManager => objectManager;
+            public Stack<IBotTask> BotTasks => tasks;
+            public IDependencyContainer Container => container;
+        }
+
+        /// <summary>
+        /// Safely unboxes a numeric value to ulong. Handles boxed long, ulong, int, uint.
+        /// Needed because protobuf int64 fields are boxed as long, and C# cannot unbox long to ulong directly.
+        /// </summary>
+        private static ulong UnboxGuid(object value) => value switch
+        {
+            long l => unchecked((ulong)l),
+            ulong u => u,
+            int i => unchecked((ulong)i),
+            uint u => u,
+            _ => throw new InvalidCastException($"Cannot convert {value?.GetType()} to GUID (ulong)")
+        };
+
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
         {
-            var builder = new BehaviourTreeBuilder();
+            var builder = new BehaviourTreeBuilder()
+                .Sequence("StateManager Action Sequence");
 
             // Iterate over the action map and build sequences for each action with its parameters
             foreach (var actionEntry in actionMap)
@@ -223,7 +389,7 @@ namespace BotRunner
                         builder.Splice(BuildGoToSequence((float)actionEntry.Item2[0], (float)actionEntry.Item2[1], (float)actionEntry.Item2[2], (float)actionEntry.Item2[3]));
                         break;
                     case CharacterAction.InteractWith:
-                        builder.Splice(BuildInteractWithSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(BuildInteractWithSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
 
                     case CharacterAction.SelectGossip:
@@ -255,7 +421,7 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.OfferTrade:
-                        builder.Splice(BuildOfferTradeSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(BuildOfferTradeSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.OfferGold:
                         builder.Splice(BuildOfferMoneySequence((int)actionEntry.Item2[0]));
@@ -277,19 +443,19 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.PromoteLeader:
-                        builder.Splice(BuildPromoteLeaderSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(BuildPromoteLeaderSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.PromoteAssistant:
-                        builder.Splice(BuildPromoteAssistantSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(BuildPromoteAssistantSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.PromoteLootManager:
-                        builder.Splice(BuildPromoteLootManagerSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(BuildPromoteLootManagerSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.SetGroupLoot:
                         builder.Splice(BuildSetGroupLootSequence((GroupLootSetting)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.AssignLoot:
-                        builder.Splice(BuildAssignLootSequence((int)actionEntry.Item2[0], (ulong)actionEntry.Item2[1]));
+                        builder.Splice(BuildAssignLootSequence((int)actionEntry.Item2[0], UnboxGuid(actionEntry.Item2[1])));
                         break;
 
                     case CharacterAction.LootRollNeed:
@@ -303,7 +469,10 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.SendGroupInvite:
-                        builder.Splice(BuildSendGroupInviteSequence((ulong)actionEntry.Item2[0]));
+                        if (actionEntry.Item2[0] is string playerName)
+                            builder.Splice(BuildSendGroupInviteByNameSequence(playerName));
+                        else
+                            builder.Splice(BuildSendGroupInviteSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.AcceptGroupInvite:
                         builder.Splice(AcceptGroupInviteSequence);
@@ -312,7 +481,7 @@ namespace BotRunner
                         builder.Splice(DeclineGroupInviteSequence);
                         break;
                     case CharacterAction.KickPlayer:
-                        builder.Splice(BuildKickPlayerSequence((ulong)actionEntry.Item2[0]));
+                        builder.Splice(BuildKickPlayerSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
                     case CharacterAction.LeaveGroup:
                         builder.Splice(LeaveGroupSequence);
@@ -320,11 +489,14 @@ namespace BotRunner
                     case CharacterAction.DisbandGroup:
                         builder.Splice(DisbandGroupSequence);
                         break;
+                    case CharacterAction.StartMeleeAttack:
+                        builder.Splice(BuildStartMeleeAttackSequence(UnboxGuid(actionEntry.Item2[0])));
+                        break;
                     case CharacterAction.StopAttack:
                         builder.Splice(StopAttackSequence);
                         break;
                     case CharacterAction.CastSpell:
-                        builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], (ulong)actionEntry.Item2[1]));
+                        builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], UnboxGuid(actionEntry.Item2[1])));
                         break;
                     case CharacterAction.StopCast:
                         builder.Splice(StopCastSequence);
@@ -402,7 +574,7 @@ namespace BotRunner
                 }
             }
 
-            return builder.Build();
+            return builder.End().Build();
         }
         private static IBehaviourTreeNode BuildWaitSequence(float duration) => new BehaviourTreeBuilder()
                 .Sequence("Wait Sequence")
@@ -415,23 +587,28 @@ namespace BotRunner
         /// <param name="x">The x-coordinate of the destination.</param>
         /// <param name="y">The y-coordinate of the destination.</param>
         /// <param name="z">The z-coordinate of the destination.</param>
-        /// <param name="f">The allowed range/facing tolerance for reaching the destination.</param>
+        /// <param name="tolerance">How close to get before stopping (0 = default 3 yards).</param>
         /// <returns>IBehaviourTreeNode that manages moving the bot to the specified location.</returns>
-        private IBehaviourTreeNode BuildGoToSequence(float x, float y, float z, float f) => new BehaviourTreeBuilder()
+        private IBehaviourTreeNode BuildGoToSequence(float x, float y, float z, float tolerance) => new BehaviourTreeBuilder()
             .Sequence("GoTo Sequence")
-                // Move the bot to the location
                 .Do("Move to Location", time =>
                 {
-                    if (_objectManager.Player.Facing >= f - 0.1f && _objectManager.Player.Facing <= f + 0.1f)
-                    {
-                        if (_objectManager.Player.Position.DistanceTo(new Position(x, y, z)) < 1)
-                            return BehaviourTreeStatus.Success;
-                        else
-                            _objectManager.MoveToward(new Position(x, y, z), f);
-                    }
-                    else
-                        _objectManager.SetFacing(f);
+                    var target = new Position(x, y, z);
+                    var dist = _objectManager.Player.Position.DistanceTo(target);
+                    var arrivalDist = tolerance > 0 ? tolerance : 3f;
 
+                    if (dist < arrivalDist)
+                    {
+                        _objectManager.StopAllMovement();
+                        return BehaviourTreeStatus.Success;
+                    }
+
+                    // Calculate facing toward target
+                    var dx = x - _objectManager.Player.Position.X;
+                    var dy = y - _objectManager.Player.Position.Y;
+                    var facing = MathF.Atan2(dy, dx);
+
+                    _objectManager.MoveToward(target, facing);
                     return BehaviourTreeStatus.Running;
                 })
             .End()
@@ -462,13 +639,10 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that checks for and sets a target if needed.</returns>
         private IBehaviourTreeNode CheckForTarget(ulong guid) => new BehaviourTreeBuilder()
             .Sequence("Check for Target")
-                // Check if the player already has a target
-                .Condition("Has Target", time => _objectManager.Player != null
-                                                 && _objectManager.Player.TargetGuid != 0)
-                // If no target, set the target to the provided GUID
+                .Condition("Player Exists", time => _objectManager.Player != null)
                 .Do("Set Target", time =>
                 {
-                    if (_objectManager.Player.TargetGuid == 0)
+                    if (_objectManager.Player.TargetGuid != guid)
                     {
                         _objectManager.SetTarget(guid);
                     }
@@ -655,6 +829,19 @@ namespace BotRunner
         /// Sequence to stop any active auto-attacks, including melee, ranged, and wand.
         /// </summary>
         /// <returns>IBehaviourTreeNode that manages stopping auto-attacks.</returns>
+        private IBehaviourTreeNode BuildStartMeleeAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
+            .Sequence("Start Melee Attack Sequence")
+                .Splice(CheckForTarget(targetGuid))
+                .Do("Start Melee Attack", time =>
+                {
+                    _objectManager.SetTarget(targetGuid);
+                    _objectManager.StartMeleeAttack();
+                    Log.Information($"[BOT RUNNER] Started melee attack on target {targetGuid:X}");
+                    return BehaviourTreeStatus.Success;
+                })
+            .End()
+            .Build();
+
         private IBehaviourTreeNode StopAttackSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Attack Sequence")
                 // Check if any auto-attack (melee, ranged, or wand) is active
@@ -674,22 +861,44 @@ namespace BotRunner
         /// </summary>
         /// <param name="spellId">The ID of the spell to cast.</param>
         /// <returns>IBehaviourTreeNode that manages casting a spell.</returns>
-        private IBehaviourTreeNode BuildCastSpellSequence(int spellId, ulong targetGuid) => new BehaviourTreeBuilder()
-            .Sequence("Cast Spell Sequence")
-                // Ensure the bot has a valid target
-                .Splice(CheckForTarget(targetGuid))
+        private IBehaviourTreeNode BuildCastSpellSequence(int spellId, ulong targetGuid)
+        {
+            Log.Information($"[BOT RUNNER] BuildCastSpellSequence: spell={spellId}, target=0x{targetGuid:X}");
+            return new BehaviourTreeBuilder()
+                .Sequence("Cast Spell Sequence")
+                    .Splice(CheckForTarget(targetGuid))
 
-                // Ensure the bot has enough resources to cast the spell
-                .Condition("Can Cast Spell", time => _objectManager.CanCastSpell(spellId, targetGuid))
+                    .Condition("Can Cast Spell", time =>
+                    {
+                        var canCast = _objectManager.CanCastSpell(spellId, targetGuid);
+                        if (!canCast)
+                            Log.Debug($"[BOT RUNNER] CanCastSpell({spellId}, 0x{targetGuid:X}) = false");
+                        return canCast;
+                    })
 
-                // Cast the spell
-                .Do("Cast Spell", time =>
-                {
-                    _objectManager.CastSpell(spellId);
-                    return BehaviourTreeStatus.Success;
-                })
-            .End()
-            .Build();
+                    .Do("Stop and Face Target", time =>
+                    {
+                        // Stop movement before casting to prevent INTERRUPTED failures
+                        _objectManager.StopAllMovement();
+
+                        // Face the target to prevent UNIT_NOT_INFRONT failures
+                        var target = _objectManager.Units.FirstOrDefault(u => u.Guid == targetGuid);
+                        if (target?.Position != null)
+                        {
+                            _objectManager.Face(target.Position);
+                        }
+                        return BehaviourTreeStatus.Success;
+                    })
+
+                    .Do("Cast Spell", time =>
+                    {
+                        Log.Information($"[BOT RUNNER] Casting spell {spellId} on target 0x{targetGuid:X}");
+                        _objectManager.CastSpell(spellId);
+                        return BehaviourTreeStatus.Success;
+                    })
+                .End()
+                .Build();
+        }
         /// <summary>
         /// Sequence to stop the current spell cast. This will stop any spell the bot is currently casting.
         /// </summary>
@@ -1023,22 +1232,72 @@ namespace BotRunner
             .End()
             .Build();
         /// <summary>
-        /// Sequence to accept a group invite from another player.
+        /// Sequence to send a group invite by player name (used by headless clients via PartyNetworkClientComponent).
         /// </summary>
-        /// <returns>IBehaviourTreeNode that manages accepting the group invite.</returns>
-        private IBehaviourTreeNode AcceptGroupInviteSequence => new BehaviourTreeBuilder()
-            .Sequence("Accept Group Invite Sequence")
-                // Ensure the bot has a pending invite to accept
-                .Condition("Has Pending Invite", time => _objectManager.HasPendingGroupInvite())
-
-                // Accept the group invite
-                .Do("Accept Group Invite", time =>
+        private IBehaviourTreeNode BuildSendGroupInviteByNameSequence(string playerName) => new BehaviourTreeBuilder()
+            .Sequence("Send Group Invite By Name Sequence")
+                .Do("Send Group Invite By Name", time =>
                 {
-                    _objectManager.AcceptGroupInvite();
+                    var factory = _agentFactoryAccessor?.Invoke();
+                    if (factory != null)
+                    {
+                        Log.Information($"[BOT RUNNER] Inviting player '{playerName}' to group via network agent");
+                        _ = factory.PartyAgent.InvitePlayerAsync(playerName);
+                        return BehaviourTreeStatus.Success;
+                    }
+
+                    // Fallback to IObjectManager for foreground bots (uses Lua InviteByName)
+                    Log.Information($"[BOT RUNNER] Inviting player '{playerName}' to group via ObjectManager");
+                    _objectManager.InviteByName(playerName);
                     return BehaviourTreeStatus.Success;
                 })
             .End()
             .Build();
+        /// <summary>
+        /// Sequence to accept a group invite from another player.
+        /// </summary>
+        /// <returns>IBehaviourTreeNode that manages accepting the group invite.</returns>
+        private IBehaviourTreeNode AcceptGroupInviteSequence
+        {
+            get
+            {
+                int pollCount = 0;
+                return new BehaviourTreeBuilder()
+                    .Sequence("Accept Group Invite Sequence")
+                        .Do("Accept Group Invite", time =>
+                        {
+                            pollCount++;
+                            var factory = _agentFactoryAccessor?.Invoke();
+                            if (factory != null && factory.PartyAgent.HasPendingInvite)
+                            {
+                                Log.Information("[BOT RUNNER] Accepting group invite via network agent");
+                                _ = factory.PartyAgent.AcceptInviteAsync();
+                                return BehaviourTreeStatus.Success;
+                            }
+
+                            // Fallback to IObjectManager for foreground bots
+                            if (_objectManager.HasPendingGroupInvite())
+                            {
+                                _objectManager.AcceptGroupInvite();
+                                return BehaviourTreeStatus.Success;
+                            }
+
+                            if (pollCount % 10 == 1)
+                                Log.Information($"[BOT RUNNER] Waiting for group invite... (poll {pollCount}, HasPendingInvite={factory?.PartyAgent?.HasPendingInvite})");
+
+                            // Timeout after ~10 seconds (100 ticks at 100ms)
+                            if (pollCount >= 100)
+                            {
+                                Log.Warning("[BOT RUNNER] Timed out waiting for group invite after 10s");
+                                return BehaviourTreeStatus.Failure;
+                            }
+
+                            return BehaviourTreeStatus.Running;
+                        })
+                    .End()
+                    .Build();
+            }
+        }
         /// <summary>
         /// Sequence to decline a group invite from another player.
         /// </summary>
@@ -1080,13 +1339,26 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages leaving the group.</returns>
         private IBehaviourTreeNode LeaveGroupSequence => new BehaviourTreeBuilder()
             .Sequence("Leave Group Sequence")
-                // Ensure the bot is in a group
-                .Condition("Is In Group", time => _objectManager.PartyLeaderGuid != 0)
-
                 // Leave the group
                 .Do("Leave Group", time =>
                 {
-                    _objectManager.LeaveGroup();
+                    var factory = _agentFactoryAccessor?.Invoke();
+                    if (factory != null)
+                    {
+                        Log.Information("[BOT RUNNER] Leaving group via network agent");
+                        _ = factory.PartyAgent.LeaveGroupAsync();
+                        return BehaviourTreeStatus.Success;
+                    }
+
+                    // Fallback to IObjectManager for foreground bots
+                    if (_objectManager.PartyLeaderGuid != 0)
+                    {
+                        Log.Information("[BOT RUNNER] Leaving group via ObjectManager");
+                        _objectManager.LeaveGroup();
+                        return BehaviourTreeStatus.Success;
+                    }
+
+                    Log.Information("[BOT RUNNER] Not in a group, nothing to leave");
                     return BehaviourTreeStatus.Success;
                 })
             .End()
@@ -1334,16 +1606,16 @@ namespace BotRunner
                 // Ensure the bot is on the login screen
                 .Condition("Is On Login Screen", time => _objectManager.LoginScreen.IsOpen)
 
-                // Input credentials
+                // Input credentials and wait for async login to complete
                 .Do("Input Credentials", time =>
                 {
                     if (_objectManager.LoginScreen.IsLoggedIn) return BehaviourTreeStatus.Success;
 
                     _objectManager.LoginScreen.Login(username, password);
-                    return BehaviourTreeStatus.Success;
+                    return BehaviourTreeStatus.Running; // Stay running while async login completes
                 })
 
-                // Select the first available realm
+                // Verify login completed
                 .Condition("Waiting in queue", time => _objectManager.LoginScreen.IsLoggedIn)
                 .Do("Select Realm", time =>
                 {
@@ -1468,5 +1740,262 @@ namespace BotRunner
                 })
             .End()
             .Build();
+
+        #region Snapshot Building
+
+        private void PopulateSnapshotFromObjectManager()
+        {
+            _activitySnapshot.Timestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            // Clear any action from the previous response to prevent echo-back.
+            // Without this, the old CurrentAction stays in the snapshot, gets sent
+            // back to StateManager, and is returned again — causing infinite re-execution.
+            _activitySnapshot.CurrentAction = null;
+
+            // Detect screen state
+            if (_objectManager.HasEnteredWorld && _objectManager.Player != null)
+            {
+                _activitySnapshot.ScreenState = "InWorld";
+                _activitySnapshot.CharacterName = _objectManager.Player.Name ?? string.Empty;
+            }
+            else if (_objectManager.CharacterSelectScreen?.IsOpen == true)
+            {
+                _activitySnapshot.ScreenState = "CharacterSelect";
+            }
+            else if (_objectManager.LoginScreen?.IsLoggedIn == true)
+            {
+                _activitySnapshot.ScreenState = "RealmSelect";
+            }
+            else
+            {
+                _activitySnapshot.ScreenState = "LoginScreen";
+            }
+
+            // Only populate game data when in world
+            if (_activitySnapshot.ScreenState != "InWorld" || _objectManager.Player == null)
+                return;
+
+            var player = _objectManager.Player;
+
+            // Movement data
+            try
+            {
+                var pos = player.Position;
+                _activitySnapshot.MovementData = new Game.MovementData
+                {
+                    MovementFlags = (uint)player.MovementFlags,
+                    FallTime = player.FallTime,
+                    JumpVerticalSpeed = player.JumpVerticalSpeed,
+                    JumpSinAngle = player.JumpSinAngle,
+                    JumpCosAngle = player.JumpCosAngle,
+                    JumpHorizontalSpeed = player.JumpHorizontalSpeed,
+                    SwimPitch = player.SwimPitch,
+                    WalkSpeed = player.WalkSpeed,
+                    RunSpeed = player.RunSpeed,
+                    RunBackSpeed = player.RunBackSpeed,
+                    SwimSpeed = player.SwimSpeed,
+                    SwimBackSpeed = player.SwimBackSpeed,
+                    TurnRate = player.TurnRate,
+                    Facing = player.Facing,
+                    TransportGuid = player.TransportGuid,
+                    TransportOrientation = player.TransportOrientation,
+                };
+                if (pos != null)
+                {
+                    _activitySnapshot.MovementData.Position = new Game.Position
+                    {
+                        X = pos.X,
+                        Y = pos.Y,
+                        Z = pos.Z,
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating movement data: {ex.Message}");
+            }
+
+            // Party leader GUID (0 if not in a group)
+            // Use agent factory (headless) if available, otherwise fall back to IObjectManager (foreground)
+            try
+            {
+                var factory = _agentFactoryAccessor?.Invoke();
+                if (factory != null)
+                {
+                    var members = factory.PartyAgent.GetGroupMembers();
+                    var leader = members.FirstOrDefault(m => m.IsLeader);
+                    _activitySnapshot.PartyLeaderGuid = leader?.Guid ?? (factory.PartyAgent.IsGroupLeader && factory.PartyAgent.GroupSize > 0 ? player.Guid : 0);
+                }
+                else
+                {
+                    _activitySnapshot.PartyLeaderGuid = _objectManager.PartyLeaderGuid;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating party leader GUID: {ex.Message}");
+            }
+
+            // Player protobuf
+            try
+            {
+                _activitySnapshot.Player = BuildPlayerProtobuf(player);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating player: {ex.Message}");
+            }
+
+            // Spell list (known spell IDs for combat coordination)
+            try
+            {
+                if (_activitySnapshot.Player != null)
+                {
+                    _activitySnapshot.Player.SpellList.Clear();
+                    foreach (var spellId in _objectManager.KnownSpellIds)
+                        _activitySnapshot.Player.SpellList.Add(spellId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating spell list: {ex.Message}");
+            }
+
+            // Nearby units (within 40y)
+            try
+            {
+                _activitySnapshot.NearbyUnits.Clear();
+                var playerPos = player.Position;
+                if (playerPos != null)
+                {
+                    foreach (var unit in _objectManager.Units
+                        .Where(u => u.Guid != player.Guid && u.Position != null && u.Position.DistanceTo(playerPos) < 40f))
+                    {
+                        _activitySnapshot.NearbyUnits.Add(BuildUnitProtobuf(unit));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating nearby units: {ex.Message}");
+            }
+
+            // Nearby game objects (within 40y)
+            try
+            {
+                _activitySnapshot.NearbyObjects.Clear();
+                var playerPos = player.Position;
+                if (playerPos != null)
+                {
+                    foreach (var go in _objectManager.GameObjects
+                        .Where(g => g.Position != null && g.Position.DistanceTo(playerPos) < 40f))
+                    {
+                        _activitySnapshot.NearbyObjects.Add(BuildGameObjectProtobuf(go));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating nearby objects: {ex.Message}");
+            }
+        }
+
+        private static Game.WoWPlayer BuildPlayerProtobuf(IWoWUnit unit)
+        {
+            var player = new Game.WoWPlayer
+            {
+                Unit = BuildUnitProtobuf(unit),
+            };
+
+            if (unit is IWoWLocalPlayer lp)
+            {
+                try { player.Coinage = lp.Copper; } catch { }
+            }
+
+            return player;
+        }
+
+        private static Game.WoWUnit BuildUnitProtobuf(IWoWUnit unit)
+        {
+            var pos = unit.Position;
+            var protoUnit = new Game.WoWUnit
+            {
+                GameObject = new Game.WoWGameObject
+                {
+                    Base = new Game.WoWObject
+                    {
+                        Guid = unit.Guid,
+                        ObjectType = (uint)unit.ObjectType,
+                        Facing = unit.Facing,
+                        ScaleX = unit.ScaleX,
+                    },
+                    FactionTemplate = unit.FactionTemplate,
+                    Level = unit.Level,
+                },
+                Health = unit.Health,
+                MaxHealth = unit.MaxHealth,
+                TargetGuid = unit.TargetGuid,
+                UnitFlags = (uint)unit.UnitFlags,
+                DynamicFlags = (uint)unit.DynamicFlags,
+                MovementFlags = (uint)unit.MovementFlags,
+                MountDisplayId = unit.MountDisplayId,
+                ChannelSpellId = unit.ChannelingId,
+                SummonedBy = unit.SummonedByGuid,
+                NpcFlags = (uint)unit.NpcFlags,
+            };
+
+            if (pos != null)
+            {
+                protoUnit.GameObject.Base.Position = new Game.Position { X = pos.X, Y = pos.Y, Z = pos.Z };
+            }
+
+            // Power map: Mana, Rage, Energy
+            try
+            {
+                if (unit.Powers.TryGetValue(Powers.MANA, out uint mana)) protoUnit.Power[0] = mana;
+                if (unit.MaxPowers.TryGetValue(Powers.MANA, out uint maxMana)) protoUnit.MaxPower[0] = maxMana;
+                if (unit.Powers.TryGetValue(Powers.RAGE, out uint rage)) protoUnit.Power[1] = rage;
+                if (unit.MaxPowers.TryGetValue(Powers.RAGE, out uint maxRage)) protoUnit.MaxPower[1] = maxRage;
+                if (unit.Powers.TryGetValue(Powers.ENERGY, out uint energy)) protoUnit.Power[3] = energy;
+                if (unit.MaxPowers.TryGetValue(Powers.ENERGY, out uint maxEnergy)) protoUnit.MaxPower[3] = maxEnergy;
+            }
+            catch { }
+
+            // Auras (from AuraFields - raw spell IDs)
+            try
+            {
+                if (unit.AuraFields != null)
+                {
+                    foreach (var auraSpellId in unit.AuraFields.Where(a => a != 0))
+                        protoUnit.Auras.Add(auraSpellId);
+                }
+            }
+            catch { }
+
+            return protoUnit;
+        }
+
+        private static Game.WoWGameObject BuildGameObjectProtobuf(IWoWGameObject go)
+        {
+            var pos = go.Position;
+            var protoGo = new Game.WoWGameObject
+            {
+                Base = new Game.WoWObject
+                {
+                    Guid = go.Guid,
+                    ObjectType = (uint)go.ObjectType,
+                    Facing = go.Facing,
+                },
+            };
+
+            if (pos != null)
+            {
+                protoGo.Base.Position = new Game.Position { X = pos.X, Y = pos.Y, Z = pos.Z };
+            }
+
+            return protoGo;
+        }
+
+        #endregion
     }
 }

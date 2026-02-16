@@ -32,6 +32,14 @@ message WoWGameObject {
     uint32 goState = 2;
     uint32 level = 3;
     uint32 factionTemplate = 4;
+    uint32 displayId = 5;
+    uint32 flags = 6;
+    uint32 dynamicFlags = 7;
+    string name = 8;
+    uint32 entry = 9;
+    uint32 gameObjectType = 10;   // Door=0, Button=1, QuestGiver=2, etc.
+    uint32 artKit = 11;
+    uint32 animProgress = 12;
 }
 
 // Definition for WoWUnit, extending WoWGameObject
@@ -148,6 +156,119 @@ message Position {
     float x = 1;
     float y = 2;
     float z = 3;
+}
+
+// Snapshot of a nearby game object captured during a movement recording frame.
+// Useful for transport physics (elevators, boats, zeppelins) and collision objects.
+message GameObjectSnapshot {
+    uint64 guid = 1;
+    uint32 entry = 2;              // DB template entry ID
+    uint32 displayId = 3;
+    uint32 gameObjectType = 4;     // 0=Door, 1=Button, 11=Transport, 15=MoTransport, etc.
+    uint32 flags = 5;
+    uint32 goState = 6;            // 0=Active, 1=Ready, 2=Deactivated
+    Position position = 7;         // World position
+    float facing = 8;
+    string name = 9;
+    float distanceToPlayer = 10;   // Yards from player to this object
+    float scale = 11;              // Object scale (from OBJECT_FIELD_SCALE_X descriptor)
+}
+
+// Snapshot of a nearby unit (NPC or other player) for pathing/collision validation.
+message UnitSnapshot {
+    uint64 guid = 1;
+    uint32 entry = 2;              // Creature template entry ID (0 for players)
+    string name = 3;
+    Position position = 4;         // World position
+    float facing = 5;
+    uint32 movementFlags = 6;      // Unit's movement flags
+    uint32 health = 7;
+    uint32 maxHealth = 8;
+    uint32 level = 9;
+    uint32 unitFlags = 10;         // UnitFlags (in combat, stunned, etc.)
+    float distanceToPlayer = 11;   // Yards from player
+    float boundingRadius = 12;     // Collision radius
+    float combatReach = 13;
+    uint32 npcFlags = 14;          // Vendor, quest giver, etc.
+    uint64 targetGuid = 15;        // Who this unit is targeting
+    bool isPlayer = 16;            // True if WoWPlayer, false if NPC
+    bool hasSpline = 17;            // True if MoveSpline pointer is non-zero or MOVEFLAG_SPLINE_ENABLED
+    uint32 splineFlags = 18;        // MoveSpline flags (when hasSpline=true)
+    int32 splineTimePassed = 19;    // How far along the spline (ms)
+    int32 splineDuration = 20;      // Total spline duration (ms)
+    Position splineFinalDestination = 21; // Where the spline ends
+    uint32 splineNodeCount = 22;    // Number of spline waypoints
+}
+
+// A network packet event captured alongside movement frames.
+// Enables correlating server events with physics frame state.
+message PacketEvent {
+    uint64 timestampMs = 1;        // Milliseconds since recording started (same clock as frames)
+    uint32 opcode = 2;             // Movement opcode (MSG_MOVE_*, SMSG_MONSTER_MOVE, etc.)
+    bool isOutbound = 3;           // true=client→server, false=server→client
+    bytes payload = 4;             // Raw packet payload (movement info bytes)
+    uint64 affectedGuid = 5;       // GUID of the unit this packet affects
+}
+
+// Movement data snapshot for physics recording
+message MovementData {
+    uint32 movementFlags = 1;
+    uint32 fallTime = 2;
+    float jumpVerticalSpeed = 3;
+    float jumpSinAngle = 4;
+    float jumpCosAngle = 5;
+    float jumpHorizontalSpeed = 6;
+    float swimPitch = 7;
+    float walkSpeed = 8;
+    float runSpeed = 9;
+    float runBackSpeed = 10;
+    float swimSpeed = 11;
+    float swimBackSpeed = 12;
+    float turnRate = 13;
+    Position position = 14;
+    float facing = 15;
+    uint64 frameTimestamp = 16;  // Milliseconds since recording started
+    // Transport data (populated when MOVEFLAG_ONTRANSPORT = 0x200 is set)
+    uint64 transportGuid = 17;
+    float transportOffsetX = 18;   // Local X position on transport
+    float transportOffsetY = 19;   // Local Y position on transport
+    float transportOffsetZ = 20;   // Local Z position on transport
+    float transportOrientation = 21; // Local facing on transport
+    float fallStartHeight = 22;    // Z at start of fall
+    // Velocity data for physics calibration
+    float currentSpeed = 23;       // Active speed from CMovementInfo+0x84
+    float fallingSpeed = 24;       // Vertical fall velocity from static 0x0087D894
+    // Nearby world objects
+    repeated GameObjectSnapshot nearbyGameObjects = 25;
+    repeated UnitSnapshot nearbyUnits = 26;
+    // Spline data (populated when MOVEFLAG_SPLINE_ENABLED = 0x400000 is set)
+    uint32 splineFlags = 27;
+    Position splineFinalPoint = 28;
+    uint64 splineTargetGuid = 29;
+    float splineFinalOrientation = 30;
+    int32 splineTimePassed = 31;
+    int32 splineDuration = 32;
+    uint32 splineId = 33;
+    repeated Position splineNodes = 34;
+    Position splineFinalDestination = 35;
+    // System tick (GetTickCount / Environment.TickCount) for sub-frame timing.
+    // Same clock as FallStartTime — enables exact fall duration calculation.
+    uint32 systemTick = 36;
+}
+
+// A complete movement recording session for physics engine testing
+message MovementRecording {
+    string characterName = 1;
+    uint32 mapId = 2;
+    string zoneName = 3;
+    uint64 startTimestampUtc = 4;  // Unix timestamp in milliseconds
+    uint32 frameIntervalMs = 5;    // Target interval between frames (e.g., 50ms)
+    repeated MovementData frames = 6;
+    string description = 7;        // User-provided description of the recording
+    uint32 race = 8;               // Race enum value (1=Human, 2=Orc, ..., 8=Troll)
+    uint32 gender = 9;             // Gender (0=Male, 1=Female)
+    // Network packet log (movement opcodes captured during recording)
+    repeated PacketEvent packets = 10;
 }
 
 // Reusable message for Item

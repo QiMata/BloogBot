@@ -2,6 +2,9 @@
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Functions = ForegroundBotRunner.Mem.Functions;
 
 namespace ForegroundBotRunner.Objects
@@ -167,7 +170,7 @@ namespace ForegroundBotRunner.Objects
             {
                 var buffs = new List<ISpell>();
                 var currentBuffOffset = MemoryAddresses.WoWUnit_BuffsBaseOffset;
-                for (var i = 0; i < 10; i++)
+                for (var i = 0; i < 32; i++)
                 {
                     var buffId = MemoryManager.ReadInt(GetDescriptorPtr() + currentBuffOffset);
                     if (buffId != 0)
@@ -269,7 +272,7 @@ namespace ForegroundBotRunner.Objects
 
         public uint TypeId => throw new NotImplementedException();
 
-        public NPCFlags NPCFlags => throw new NotImplementedException();
+        public NPCFlags NPCFlags => (NPCFlags)MemoryManager.ReadInt(GetDescriptorPtr() + MemoryAddresses.WoWUnit_NPCFlagsOffset);
 
         public uint[] Bytes0 => throw new NotImplementedException();
 
@@ -315,7 +318,7 @@ namespace ForegroundBotRunner.Objects
 
         public uint CreatedBySpell => throw new NotImplementedException();
 
-        public NPCFlags NpcFlags => throw new NotImplementedException();
+        public NPCFlags NpcFlags => (NPCFlags)MemoryManager.ReadInt(GetDescriptorPtr() + MemoryAddresses.WoWUnit_NPCFlagsOffset);
 
         public uint NpcEmoteState => throw new NotImplementedException();
 
@@ -359,19 +362,68 @@ namespace ForegroundBotRunner.Objects
 
         public uint[] PowerCostMultipliers => throw new NotImplementedException();
 
-        public uint FallTime => throw new NotImplementedException();
+        /// <summary>
+        /// Tick count when the fall began. Use with current tick to calculate fall duration.
+        /// </summary>
+        public uint FallStartTime => MemoryManager.ReadUint(nint.Add(Pointer, MemoryAddresses.WoWUnit_FallStartTimeOffset));
 
-        public float WalkSpeed => throw new NotImplementedException();
+        /// <summary>
+        /// Duration of current fall in milliseconds. Returns 0 if not falling.
+        /// Uses Environment.TickCount (GetTickCount clock) which matches the clock
+        /// the WoW client uses for FallStartTime at base+0x78.
+        /// Previous bug: used LastHardwareAction (last mouse/keyboard input time) which
+        /// only updates on HW events, producing garbage durations.
+        /// </summary>
+        public uint FallTime
+        {
+            get
+            {
+                if (!IsFalling) return 0;
+                uint currentTick = (uint)Environment.TickCount;
+                uint fallStart = FallStartTime;
+                return fallStart > 0 && currentTick > fallStart ? currentTick - fallStart : 0;
+            }
+        }
 
-        public float RunSpeed => throw new NotImplementedException();
+        /// <summary>
+        /// Z position at start of fall. Used to calculate fall damage.
+        /// </summary>
+        public float FallStartHeight => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_FallStartHeightOffset));
 
-        public float RunBackSpeed => throw new NotImplementedException();
+        /// <summary>
+        /// Active movement speed in yards/second.
+        /// </summary>
+        public float CurrentSpeed => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_CurrentSpeedOffset));
 
-        public float SwimSpeed => throw new NotImplementedException();
+        /// <summary>
+        /// Walk speed in yards/second (default 2.5).
+        /// </summary>
+        public float WalkSpeed => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_WalkSpeedOffset));
 
-        public float SwimBackSpeed => throw new NotImplementedException();
+        /// <summary>
+        /// Forward run speed in yards/second (default 7.0).
+        /// </summary>
+        public float RunSpeed => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_RunSpeedOffset));
 
-        public float TurnRate => throw new NotImplementedException();
+        /// <summary>
+        /// Backward run speed in yards/second (default 4.5).
+        /// </summary>
+        public float RunBackSpeed => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_RunBackSpeedOffset));
+
+        /// <summary>
+        /// Forward swim speed in yards/second (default 4.722).
+        /// </summary>
+        public float SwimSpeed => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_SwimSpeedOffset));
+
+        /// <summary>
+        /// Backward swim speed in yards/second (default 2.5).
+        /// </summary>
+        public float SwimBackSpeed => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_SwimBackSpeedOffset));
+
+        /// <summary>
+        /// Turn rate in radians/second (default π).
+        /// </summary>
+        public float TurnRate => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_TurnRateOffset));
 
         public HighGuid Charm => throw new NotImplementedException();
 
@@ -391,24 +443,238 @@ namespace ForegroundBotRunner.Objects
 
         public float[] Rotation => throw new NotImplementedException();
 
-        public ulong TransportGuid => throw new NotImplementedException();
+        /// <summary>
+        /// Transport GUID — CONFIRMED with zeppelin recording. Non-zero when on transport.
+        /// When set, the main Position fields (0x9B8-0x9C0) auto-switch to transport-local coordinates.
+        /// </summary>
+        public ulong TransportGuid => MemoryManager.ReadUlong(nint.Add(Pointer, MemoryAddresses.WoWUnit_TransportGuidOffset));
 
-        public Position TransportOffset => throw new NotImplementedException();
+        /// <summary>
+        /// WARNING: These offsets (base+0x28..0x30) do NOT contain transport-local position in vanilla 1.12.1.
+        /// They read sin/cos garbage. When TransportGuid != 0, use the main Position property instead.
+        /// </summary>
+        public Position TransportOffset => new(
+            MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_Unknown0x9D0)),
+            MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_Unknown0x9D4)),
+            MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_Unknown0x9D8))
+        );
 
-        public float SwimPitch => throw new NotImplementedException();
+        /// <summary>
+        /// WARNING: Offset base+0x34 does NOT contain transport orientation in vanilla 1.12.1.
+        /// </summary>
+        public float TransportOrientation => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_Unknown0x9DC));
 
-        public float JumpVerticalSpeed => throw new NotImplementedException();
+        public float SwimPitch => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_SwimPitchOffset));
 
-        public float JumpSinAngle => throw new NotImplementedException();
+        public float JumpVerticalSpeed => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_JumpVelocityOffset));
 
-        public float JumpCosAngle => throw new NotImplementedException();
+        public float JumpSinAngle => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_JumpSinAngleOffset));
 
-        public float JumpHorizontalSpeed => throw new NotImplementedException();
+        public float JumpCosAngle => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_JumpCosAngleOffset));
 
-        public float SplineElevation => throw new NotImplementedException();
+        public float JumpHorizontalSpeed => 0f; // TODO: Verify offset - not stored directly in vanilla?
+
+        /// <summary>
+        /// Current vertical fall velocity from static address 0x0087D894.
+        /// Available even when per-unit JumpVelocity offset reads stale data.
+        /// </summary>
+        public float CurrentFallingSpeed => MemoryManager.ReadFloat(MemoryAddresses.FallingSpeedPtr);
+
+        public float SplineElevation => 0f; // Server-side spline data, not in CMovementInfo
 
         public uint MovementFlags2 => throw new NotImplementedException();
 
         public IWoWGameObject Transport { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
+        // ── MoveSpline data (read from unit memory via pointer at 0xD8) ──
+        // UNVERIFIED offset: the MoveSpline pointer location needs empirical testing.
+        // All reads are wrapped in try/catch to handle wrong offsets gracefully.
+
+        /// <summary>
+        /// Reads the MoveSpline pointer from the unit. Returns nint.Zero if not available.
+        /// Does NOT gate on MOVEFLAG_SPLINE_ENABLED since that flag may not be set
+        /// in client memory even when NPCs are on active server splines.
+        /// </summary>
+        private nint GetMoveSplinePtr()
+        {
+            try
+            {
+                var ptr = MemoryManager.ReadIntPtr(nint.Add(Pointer, MemoryAddresses.WoWUnit_MoveSplinePtrOffset));
+                // Basic validity: pointer should be non-zero and look like a heap address
+                if (ptr == nint.Zero || (long)ptr < 0x10000)
+                    return nint.Zero;
+                return ptr;
+            }
+            catch { return nint.Zero; }
+        }
+
+        /// <summary>
+        /// Whether this unit has a non-zero MoveSpline pointer OR MOVEFLAG_SPLINE_ENABLED set.
+        /// </summary>
+        public bool HasMoveSpline
+        {
+            get
+            {
+                try
+                {
+                    if (MovementFlags.HasFlag(GameData.Core.Enums.MovementFlags.MOVEFLAG_SPLINE_ENABLED))
+                        return true;
+                    return GetMoveSplinePtr() != nint.Zero;
+                }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
+        /// Raw MoveSpline pointer value for diagnostic purposes.
+        /// </summary>
+        public nint RawMoveSplinePtr
+        {
+            get
+            {
+                try { return MemoryManager.ReadIntPtr(nint.Add(Pointer, MemoryAddresses.WoWUnit_MoveSplinePtrOffset)); }
+                catch { return nint.Zero; }
+            }
+        }
+
+        public new GameData.Core.Enums.SplineFlags SplineFlags
+        {
+            get
+            {
+                try
+                {
+                    var ptr = GetMoveSplinePtr();
+                    if (ptr == nint.Zero) return GameData.Core.Enums.SplineFlags.None;
+                    return (GameData.Core.Enums.SplineFlags)MemoryManager.ReadUint(nint.Add(ptr, MemoryAddresses.MoveSpline_FlagsOffset));
+                }
+                catch { return GameData.Core.Enums.SplineFlags.None; }
+            }
+            set { }
+        }
+
+        public new Position SplineFinalPoint
+        {
+            get
+            {
+                try
+                {
+                    var ptr = GetMoveSplinePtr();
+                    if (ptr == nint.Zero) return new Position(0, 0, 0);
+                    // Destination Vector3 at +0x58 (confirmed: endpoint of flight path)
+                    var baseAddr = nint.Add(ptr, MemoryAddresses.MoveSpline_DestinationOffset);
+                    return new Position(
+                        MemoryManager.ReadFloat(baseAddr),
+                        MemoryManager.ReadFloat(nint.Add(baseAddr, 4)),
+                        MemoryManager.ReadFloat(nint.Add(baseAddr, 8)));
+                }
+                catch { return new Position(0, 0, 0); }
+            }
+            set { }
+        }
+
+        public new int SplineTimePassed
+        {
+            get
+            {
+                try
+                {
+                    var ptr = GetMoveSplinePtr();
+                    if (ptr == nint.Zero) return 0;
+                    // +0x20: ms elapsed since spline start (confirmed: 16→4938 over ~5s of flight)
+                    return MemoryManager.ReadInt(nint.Add(ptr, MemoryAddresses.MoveSpline_TimePassedOffset));
+                }
+                catch { return 0; }
+            }
+            set { }
+        }
+
+        /// <summary>
+        /// Total spline duration in milliseconds.
+        /// Confirmed at MoveSpline+0x24: flight ends when time_passed ≈ this value.
+        /// (134139ms for XR→OG, 699388ms for OG→XR)
+        /// </summary>
+        public new int SplineDuration
+        {
+            get
+            {
+                try
+                {
+                    var ptr = GetMoveSplinePtr();
+                    if (ptr == nint.Zero) return 0;
+                    return MemoryManager.ReadInt(nint.Add(ptr, MemoryAddresses.MoveSpline_DurationOffset));
+                }
+                catch { return 0; }
+            }
+            set { }
+        }
+
+        public new uint SplineId
+        {
+            get
+            {
+                try
+                {
+                    var ptr = GetMoveSplinePtr();
+                    if (ptr == nint.Zero) return 0;
+                    // +0x28 is constant during a flight — serves as a unique spline identifier
+                    return MemoryManager.ReadUint(nint.Add(ptr, MemoryAddresses.MoveSpline_Unknown28Offset));
+                }
+                catch { return 0; }
+            }
+            set { }
+        }
+
+        /// <summary>
+        /// Reads spline path nodes from the node array pointer at MoveSpline+0x3C.
+        /// Node count is at MoveSpline+0x00. Confirmed with Orgrimmar↔Crossroads flight (68 nodes).
+        /// </summary>
+        public new List<Position> SplineNodes
+        {
+            get
+            {
+                try
+                {
+                    var ptr = GetMoveSplinePtr();
+                    if (ptr == nint.Zero) return [];
+                    var count = MemoryManager.ReadInt(nint.Add(ptr, MemoryAddresses.MoveSpline_NodeCountOffset));
+                    if (count <= 0 || count > 200) return [];
+                    var dataPtr = MemoryManager.ReadIntPtr(nint.Add(ptr, MemoryAddresses.MoveSpline_PointsDataPtrOffset));
+                    if (dataPtr == nint.Zero || (long)dataPtr < 0x10000) return [];
+                    var nodes = new List<Position>(count);
+                    for (int i = 0; i < count; i++)
+                    {
+                        var nodeAddr = nint.Add(dataPtr, i * 12);
+                        nodes.Add(new Position(
+                            MemoryManager.ReadFloat(nodeAddr),
+                            MemoryManager.ReadFloat(nint.Add(nodeAddr, 4)),
+                            MemoryManager.ReadFloat(nint.Add(nodeAddr, 8))));
+                    }
+                    return nodes;
+                }
+                catch { return []; }
+            }
+            set { }
+        }
+
+        public new Position SplineFinalDestination
+        {
+            get
+            {
+                try
+                {
+                    var nodes = SplineNodes;
+                    if (nodes.Count == 0) return new Position(0, 0, 0);
+                    // In MaNGOS, FinalDestination = spline.getPoint(spline.last())
+                    // spline.last() = index_hi, but the points include padding entries
+                    // The last usable point is at index = pointCount - 1
+                    return nodes[^1];
+                }
+                catch { return new Position(0, 0, 0); }
+            }
+            set { }
+        }
+
+        public new ulong SplineTargetGuid { get => 0; set { } } // Not stored in MoveSpline struct
+        public new float SplineFinalOrientation { get => 0f; set { } } // Not stored in MoveSpline struct
     }
 }

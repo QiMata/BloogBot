@@ -1,4 +1,6 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.IO;
+using System.Runtime.InteropServices;
 
 namespace ForegroundBotRunner.Mem.Hooks
 {
@@ -8,10 +10,85 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private delegate void SignalEventNoArgsDelegate(string eventName);
 
+        // Diagnostic logging path (same as ForegroundBotWorker)
+        private static readonly string DiagnosticLogPath;
+        private static readonly object DiagnosticLogLock = new();
+        private static int _eventCount = 0;
+
+        private static volatile bool _hooksInitialized;
+
         static SignalEventManager()
         {
-            InitializeSignalEventHook();
-            InitializeSignalEventHookNoArgs();
+            // Initialize diagnostic log path
+            string wowDir;
+            try
+            {
+                wowDir = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName) ?? AppContext.BaseDirectory;
+            }
+            catch
+            {
+                wowDir = AppContext.BaseDirectory;
+            }
+            var logsDir = Path.Combine(wowDir, "WWoWLogs");
+            try { Directory.CreateDirectory(logsDir); } catch { }
+            DiagnosticLogPath = Path.Combine(logsDir, "signal_event_manager.log");
+            try { File.WriteAllText(DiagnosticLogPath, $"=== SignalEventManager Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
+
+            // DEFERRED: Hooks are NOT initialized here. They inject assembly into WoW's
+            // event functions, which interferes with the world server handshake if done
+            // before the player enters the world. Call InitializeHooks() after world entry.
+            DiagLog("SignalEventManager static constructor COMPLETED (hooks DEFERRED)");
+        }
+
+        /// <summary>
+        /// Initialize the assembly hooks into WoW's signal event system.
+        /// Must be called AFTER the player has successfully entered the world
+        /// to avoid interfering with the world server handshake.
+        /// </summary>
+        public static void InitializeHooks()
+        {
+            if (_hooksInitialized)
+            {
+                DiagLog("InitializeHooks called but hooks already initialized");
+                return;
+            }
+
+            DiagLog("InitializeHooks STARTING");
+
+            try
+            {
+                InitializeSignalEventHook();
+                DiagLog("InitializeSignalEventHook completed");
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"InitializeSignalEventHook FAILED: {ex.Message}");
+            }
+            try
+            {
+                InitializeSignalEventHookNoArgs();
+                DiagLog("InitializeSignalEventHookNoArgs completed");
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"InitializeSignalEventHookNoArgs FAILED: {ex.Message}");
+            }
+
+            _hooksInitialized = true;
+            DiagLog("InitializeHooks COMPLETED (hooks ENABLED)");
+        }
+
+        private static void DiagLog(string message)
+        {
+            try
+            {
+                lock (DiagnosticLogLock)
+                {
+                    var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n";
+                    File.AppendAllText(DiagnosticLogPath, line);
+                }
+            }
+            catch { }
         }
 
         #region InitializeSignalEventHook
@@ -47,6 +124,13 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void SignalEventHook(string eventName, string typesArg, uint firstArgPtr)
         {
+            // Log first few events for debugging
+            _eventCount++;
+            if (_eventCount <= 20)
+            {
+                DiagLog($"EVENT[{_eventCount}]: {eventName} format={typesArg}");
+            }
+
             var types = typesArg.TrimStart('%').Split('%');
             var list = new object[types.Length];
             for (var i = 0; i < types.Length; i++)
@@ -118,6 +202,13 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void SignalEventNoArgsHook(string eventName)
         {
+            // Log first few events for debugging
+            _eventCount++;
+            if (_eventCount <= 20)
+            {
+                DiagLog($"EVENT_NOARGS[{_eventCount}]: {eventName}");
+            }
+
             OnNewSignalEventNoArgs?.Invoke(eventName);
         }
 

@@ -1,4 +1,9 @@
-﻿namespace PromptHandlingService.Predefined.MaNGOSConfigHandlers
+﻿using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace PromptHandlingService.Predefined.MaNGOSConfigHandlers
 {
     public class ConfigEditorFunction(IPromptRunner promptRunner) : PromptFunctionBase(promptRunner)
     {

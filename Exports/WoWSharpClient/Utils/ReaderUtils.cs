@@ -1,4 +1,7 @@
-﻿using System.Text;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
 
 namespace WoWSharpClient.Utils
 {
@@ -53,13 +56,12 @@ namespace WoWSharpClient.Utils
 
         public static string ReadString(BinaryReader reader, uint length)
         {
-            var stringBuilder = new StringBuilder();
-            while (length - 1 != 0)
-            {
-                stringBuilder.Append(reader.ReadChar());
-                length--;
-            }
-            return stringBuilder.ToString();
+            if (length == 0) return string.Empty;
+            var bytes = reader.ReadBytes((int)length);
+            int nullIdx = Array.IndexOf(bytes, (byte)0);
+            return nullIdx >= 0
+                ? Encoding.UTF8.GetString(bytes, 0, nullIdx)
+                : Encoding.UTF8.GetString(bytes);
         }
     }
 }

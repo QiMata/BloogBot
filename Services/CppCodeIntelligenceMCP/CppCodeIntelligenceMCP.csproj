@@ -5,17 +5,17 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-CppCodeIntelligenceMCP-A1B2C3D4</UserSecretsId>
-    <AssemblyName>BloogBot.CppCodeIntelligenceMCP</AssemblyName>
-    <RootNamespace>BloogBot.CppCodeIntelligenceMCP</RootNamespace>
+    <AssemblyName>CppCodeIntelligenceMCP</AssemblyName>
+    <RootNamespace>CppCodeIntelligenceMCP</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="0.3.0-preview.4" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.5" />
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
     <PackageReference Include="Serilog" Version="3.1.1" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />

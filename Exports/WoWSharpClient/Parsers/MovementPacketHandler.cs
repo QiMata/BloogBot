@@ -1,7 +1,8 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Models;
+using System.Collections.Generic;
+using System.IO;
 using WoWSharpClient.Models;
-using WoWSharpClient.Utils;
 
 namespace WoWSharpClient.Parsers
 {
@@ -90,7 +91,9 @@ namespace WoWSharpClient.Parsers
                                        clientTimeMs,
                                        (uint)p.FallTime);   // ← cast fixes CS1503
 
-        /* Ack helper used by *_SPEED/ROOT_CHANGE_ACK opcodes */
+        /// <summary>
+        /// ACK for ROOT/UNROOT/KNOCKBACK: full 8-byte GUID + counter + MovementInfo
+        /// </summary>
         internal static byte[] BuildForceMoveAck(WoWLocalPlayer player,
                                                  uint movementCounter,
                                                  uint clientTimeMs)
@@ -98,11 +101,31 @@ namespace WoWSharpClient.Parsers
             using var ms = new MemoryStream();
             using var w = new BinaryWriter(ms);
 
-            ReaderUtils.WritePackedGuid(w, player.Guid);
+            w.Write(player.Guid);               // full 8-byte GUID (server uses recv_data >> ObjectGuid)
             w.Write(movementCounter);
             w.Write(BuildMovementInfoBuffer(player,
                                             clientTimeMs,
-                                            (uint)player.FallTime)); // ← cast fixes CS1503
+                                            (uint)player.FallTime));
+            return ms.ToArray();
+        }
+
+        /// <summary>
+        /// ACK for speed changes: full 8-byte GUID + counter + MovementInfo + float speed
+        /// </summary>
+        internal static byte[] BuildForceSpeedChangeAck(WoWLocalPlayer player,
+                                                        uint movementCounter,
+                                                        uint clientTimeMs,
+                                                        float speed)
+        {
+            using var ms = new MemoryStream();
+            using var w = new BinaryWriter(ms);
+
+            w.Write(player.Guid);               // full 8-byte GUID
+            w.Write(movementCounter);
+            w.Write(BuildMovementInfoBuffer(player,
+                                            clientTimeMs,
+                                            (uint)player.FallTime));
+            w.Write(speed);                     // speed value the server sent
             return ms.ToArray();
         }
 
@@ -125,6 +148,7 @@ namespace WoWSharpClient.Parsers
             };
 
             /* ----- Transport --------------------------------------------- */
+            /* ----- Transport --------------------------------------------- */
             if (info.HasTransport)
             {
                 info.TransportGuid = r.ReadUInt64();          // uint64
@@ -133,7 +157,9 @@ namespace WoWSharpClient.Parsers
                 float tz = r.ReadSingle();
                 info.TransportOffset = new Position(tx, ty, tz);
                 info.TransportOrientation = r.ReadSingle();
-                info.TransportLastUpdated = r.ReadUInt32();
+                // No transport time field in MovementInfo — MaNGOS MovementInfo::Write()
+                // writes only GUID + position + orientation for MOVEFLAG_ONTRANSPORT.
+                // Transport timestamps are handled separately via UPDATEFLAG_TRANSPORT.
             }
 
             /* ----- Swim pitch ------------------------------------------- */
@@ -233,7 +259,7 @@ namespace WoWSharpClient.Parsers
                 float tz = r.ReadSingle();
                 info.TransportOffset = new Position(tx, ty, tz);
                 info.TransportOrientation = r.ReadSingle();
-                info.TransportLastUpdated = r.ReadUInt32();
+                // No transport time field — see ParseMovementBlock comment.
             }
 
             if (info.IsSwimming)

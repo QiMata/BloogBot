@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -9,13 +13,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 {
     /// <summary>
     /// Inventory network client component.
-    /// This implementation exposes only cold observables derived directly from <see cref="IWorldClient"/> opcode streams.
-    /// No events or Subject/Relay based fan-out is used – consumers compose over the exposed streams.
+    /// Handles CMSG inventory operations (swap, split, destroy) and SMSG_INVENTORY_CHANGE_FAILURE parsing.
+    /// Item state changes (moves, creation, destruction) come through SMSG_UPDATE_OBJECT, not dedicated opcodes.
     /// </summary>
-    public class InventoryNetworkClientComponent : NetworkClientComponent, IInventoryNetworkClientComponent, IDisposable
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="InventoryNetworkClientComponent"/> class.
+    /// </remarks>
+    public class InventoryNetworkClientComponent(IWorldClient worldClient, ILogger<InventoryNetworkClientComponent> logger) : NetworkClientComponent, IInventoryNetworkClientComponent, IDisposable
     {
-        private readonly IWorldClient _worldClient;
-        private readonly ILogger<InventoryNetworkClientComponent> _logger;
+        private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
+        private readonly ILogger<InventoryNetworkClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         private uint _currentMoney;
         private bool _isInventoryOpen;
@@ -25,60 +32,45 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly Dictionary<(byte BagId, byte SlotId), uint> _inventoryState = new();
         private readonly object _inventoryLock = new();
 
-        // Lazy-built observables (no Subjects / events)
+        // Lazy-built observables
         private IObservable<ItemMovedData>? _itemMovedStream;
         private IObservable<ItemSplitData>? _itemSplitStream;
         private IObservable<ItemDestroyedData>? _itemDestroyedStream;
         private IObservable<string>? _inventoryErrorsStream;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="InventoryNetworkClientComponent"/> class.
-        /// </summary>
-        public InventoryNetworkClientComponent(IWorldClient worldClient, ILogger<InventoryNetworkClientComponent> logger)
-        {
-            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
-
         public bool IsInventoryOpen => _isInventoryOpen;
 
         #region Reactive Streams
-        // NOTE: Specific SMSG_* inventory opcodes are not present in the current Opcode enum excerpt.
-        // Placeholder implementation wires to generic update / world state opcode(s) and attempts heuristic parsing.
-        // When concrete inventory-related server opcodes are introduced, replace the placeholders below accordingly.
 
-        // Chosen placeholder opcode (repurpose to real ones when available)
-        private static readonly Opcode PlaceholderInventoryServerOpcode = Opcode.SMSG_UPDATE_WORLD_STATE;
-
+        // Item movement/split/destruction state changes come through SMSG_UPDATE_OBJECT (object field changes),
+        // not through dedicated SMSG opcodes. These streams are populated externally when the ObjectUpdateHandler
+        // detects inventory changes. For now, expose empty streams that consumers can compose with.
         public IObservable<ItemMovedData> ItemMovedStream =>
-            _itemMovedStream ??= _worldClient
-                .RegisterOpcodeHandler(PlaceholderInventoryServerOpcode)
-                .Select(TryParseItemMoved)
-                .Where(m => m.HasValue)
-                .Select(m => m!.Value);
+            _itemMovedStream ??= Observable.Never<ItemMovedData>();
 
         public IObservable<ItemSplitData> ItemSplitStream =>
-            _itemSplitStream ??= _worldClient
-                .RegisterOpcodeHandler(PlaceholderInventoryServerOpcode)
-                .Select(TryParseItemSplit)
-                .Where(s => s.HasValue)
-                .Select(s => s!.Value);
+            _itemSplitStream ??= Observable.Never<ItemSplitData>();
 
         public IObservable<ItemDestroyedData> ItemDestroyedStream =>
-            _itemDestroyedStream ??= _worldClient
-                .RegisterOpcodeHandler(PlaceholderInventoryServerOpcode)
-                .Select(TryParseItemDestroyed)
-                .Where(d => d.HasValue)
-                .Select(d => d!.Value);
+            _itemDestroyedStream ??= Observable.Never<ItemDestroyedData>();
 
+        // SMSG_INVENTORY_CHANGE_FAILURE: real opcode for inventory error feedback
         public IObservable<string> InventoryErrors =>
-            _inventoryErrorsStream ??= _worldClient
-                .RegisterOpcodeHandler(PlaceholderInventoryServerOpcode)
-                .Select(TryParseInventoryError)
+            _inventoryErrorsStream ??= SafeOpcodeStream(Opcode.SMSG_INVENTORY_CHANGE_FAILURE)
+                .Select(ParseInventoryChangeFailure)
                 .Where(e => e is not null)!;
+
+        private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
+            => _worldClient.RegisterOpcodeHandler(opcode) ?? Observable.Empty<ReadOnlyMemory<byte>>();
+
         #endregion
 
         #region Outbound Operations
+
+        /// <summary>
+        /// Moves an item between two bag positions.
+        /// CMSG_SWAP_ITEM (0x10C): dstBag(1) + dstSlot(1) + srcBag(1) + srcSlot(1) = 4 bytes
+        /// </summary>
         public async Task MoveItemAsync(byte sourceBag, byte sourceSlot, byte destinationBag, byte destinationSlot, CancellationToken cancellationToken = default)
         {
             try
@@ -86,18 +78,18 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Moving item {SourceBag}:{SourceSlot} -> {DestBag}:{DestSlot}", sourceBag, sourceSlot, destinationBag, destinationSlot);
 
+                // CMSG_SWAP_ITEM: dstBag, dstSlot, srcBag, srcSlot
                 var payload = new byte[4];
-                payload[0] = sourceBag;
-                payload[1] = sourceSlot;
-                payload[2] = destinationBag;
-                payload[3] = destinationSlot;
+                payload[0] = destinationBag;
+                payload[1] = destinationSlot;
+                payload[2] = sourceBag;
+                payload[3] = sourceSlot;
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_INV_ITEM, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_ITEM, payload, cancellationToken);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to move item {SBag}:{SSlot}->{DBag}:{DSlot}", sourceBag, sourceSlot, destinationBag, destinationSlot);
-                // Error surfaced via InventoryErrors stream (placeholder – currently no direct push)
                 throw;
             }
             finally
@@ -106,6 +98,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// Swaps two items between bag positions.
+        /// CMSG_SWAP_ITEM (0x10C): dstBag(1) + dstSlot(1) + srcBag(1) + srcSlot(1) = 4 bytes
+        /// </summary>
         public async Task SwapItemsAsync(byte firstBag, byte firstSlot, byte secondBag, byte secondSlot, CancellationToken cancellationToken = default)
         {
             try
@@ -113,13 +109,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Swapping items {Bag1}:{Slot1} <-> {Bag2}:{Slot2}", firstBag, firstSlot, secondBag, secondSlot);
 
+                // CMSG_SWAP_ITEM: dstBag, dstSlot, srcBag, srcSlot
                 var payload = new byte[4];
-                payload[0] = firstBag;
-                payload[1] = firstSlot;
-                payload[2] = secondBag;
-                payload[3] = secondSlot;
+                payload[0] = secondBag;
+                payload[1] = secondSlot;
+                payload[2] = firstBag;
+                payload[3] = firstSlot;
 
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_INV_ITEM, payload, cancellationToken);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_SWAP_ITEM, payload, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -132,6 +129,10 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// Splits a stack of items.
+        /// CMSG_SPLIT_ITEM (0x10E): srcBag(1) + srcSlot(1) + dstBag(1) + dstSlot(1) + count(uint8) = 5 bytes
+        /// </summary>
         public async Task SplitItemStackAsync(byte sourceBag, byte sourceSlot, byte destinationBag, byte destinationSlot, uint quantity, CancellationToken cancellationToken = default)
         {
             try
@@ -139,12 +140,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Splitting stack {Qty} from {SBag}:{SSlot} -> {DBag}:{DSlot}", quantity, sourceBag, sourceSlot, destinationBag, destinationSlot);
 
-                var payload = new byte[8];
+                // CMSG_SPLIT_ITEM: srcBag, srcSlot, dstBag, dstSlot, uint8 count
+                var payload = new byte[5];
                 payload[0] = sourceBag;
                 payload[1] = sourceSlot;
                 payload[2] = destinationBag;
                 payload[3] = destinationSlot;
-                BitConverter.GetBytes(quantity).CopyTo(payload, 4);
+                payload[4] = (byte)Math.Min(quantity, 255);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_SPLIT_ITEM, payload, cancellationToken);
             }
@@ -162,6 +164,10 @@ namespace WoWSharpClient.Networking.ClientComponents
         public async Task SplitItemAsync(byte sourceBag, byte sourceSlot, byte destinationBag, byte destinationSlot, uint quantity, CancellationToken cancellationToken = default)
             => await SplitItemStackAsync(sourceBag, sourceSlot, destinationBag, destinationSlot, quantity, cancellationToken);
 
+        /// <summary>
+        /// Destroys an item in the inventory.
+        /// CMSG_DESTROYITEM (0x111): bag(1) + slot(1) + count(uint8) + reserved(3) = 6 bytes
+        /// </summary>
         public async Task DestroyItemAsync(byte bagId, byte slotId, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             try
@@ -169,10 +175,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                 SetOperationInProgress(true);
                 _logger.LogDebug("Destroying {Qty} of item at {Bag}:{Slot}", quantity, bagId, slotId);
 
+                // CMSG_DESTROYITEM: bag, slot, uint8 count, 3x reserved uint8
                 var payload = new byte[6];
                 payload[0] = bagId;
                 payload[1] = slotId;
-                BitConverter.GetBytes(quantity).CopyTo(payload, 2);
+                payload[2] = (byte)Math.Min(quantity, 255);
+                payload[3] = 0; // reserved
+                payload[4] = 0; // reserved
+                payload[5] = 0; // reserved
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_DESTROYITEM, payload, cancellationToken);
             }
@@ -187,18 +197,30 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        /// <summary>
+        /// Auto-stores an item from one bag to another.
+        /// CMSG_AUTOSTORE_BAG_ITEM (0x10B): srcBag(1) + srcSlot(1) + dstBag(1) = 3 bytes
+        /// </summary>
         public async Task SortBagAsync(byte bagId, CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                var payload = new byte[1] { bagId };
-                _logger.LogDebug("Sorting bag {Bag}", bagId);
+                _logger.LogDebug("Auto-storing items in bag {Bag}", bagId);
+
+                // CMSG_AUTOSTORE_BAG_ITEM: srcBag, srcSlot, dstBag
+                // This opcode auto-stores a single item, not a batch sort.
+                // Send with srcBag=bagId, srcSlot=0, dstBag=255 (auto-find destination)
+                var payload = new byte[3];
+                payload[0] = bagId;
+                payload[1] = 0;
+                payload[2] = 255; // INVENTORY_SLOT_BAG_0 â€” auto-find space
+
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_AUTOSTORE_BAG_ITEM, payload, cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to sort bag {Bag}", bagId);
+                _logger.LogError(ex, "Failed to auto-store bag item {Bag}", bagId);
                 throw;
             }
             finally
@@ -279,7 +301,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 uint count = 0;
                 foreach (var kv in _inventoryState)
                 {
-                    if (kv.Value == itemId) count++; // quantity not tracked in placeholder model
+                    if (kv.Value == itemId) count++;
                 }
                 return count;
             }
@@ -298,73 +320,75 @@ namespace WoWSharpClient.Networking.ClientComponents
         }
         #endregion
 
-        #region Placeholder Parsing
-        private ItemMovedData? TryParseItemMoved(ReadOnlyMemory<byte> payload)
+        #region SMSG_INVENTORY_CHANGE_FAILURE Parser
+
+        /// <summary>
+        /// SMSG_INVENTORY_CHANGE_FAILURE (0x112)
+        /// Format: msg(uint8) [+ requiredLevel(uint32) if msg==CantEquipLevelI] + itemGuid1(uint64) + itemGuid2(uint64) + bagType(uint8)
+        /// If msg == Ok (0), only the 1-byte msg is sent.
+        /// </summary>
+        private string? ParseInventoryChangeFailure(ReadOnlyMemory<byte> payload)
         {
             try
             {
-                // Heuristic placeholder: expect 5 bytes (sBag,sSlot,dBag,dSlot) + 8 guid
-                if (payload.Length == 12)
+                var span = payload.Span;
+                if (span.Length < 1) return null;
+
+                byte errorCode = span[0];
+                if (errorCode == (byte)InventoryResult.Ok) return null; // Success â€” no error
+
+                var result = (InventoryResult)errorCode;
+                int offset = 1;
+
+                // CantEquipLevelI includes a required level field
+                uint requiredLevel = 0;
+                if (result == InventoryResult.CantEquipLevelI && offset + 4 <= span.Length)
                 {
-                    var span = payload.Span;
-                    ulong guid = BitConverter.ToUInt64(span[..8]);
-                    byte sBag = span[8];
-                    byte sSlot = span[9];
-                    byte dBag = span[10];
-                    byte dSlot = span[11];
-                    return new ItemMovedData(guid, sBag, sSlot, dBag, dSlot);
+                    requiredLevel = BitConverter.ToUInt32(span.Slice(offset, 4));
+                    offset += 4;
                 }
+
+                // Read item GUIDs if present
+                ulong itemGuid1 = 0, itemGuid2 = 0;
+                if (offset + 8 <= span.Length)
+                {
+                    itemGuid1 = BitConverter.ToUInt64(span.Slice(offset, 8));
+                    offset += 8;
+                }
+                if (offset + 8 <= span.Length)
+                {
+                    itemGuid2 = BitConverter.ToUInt64(span.Slice(offset, 8));
+                    offset += 8;
+                }
+
+                string errorMessage = result switch
+                {
+                    InventoryResult.CantEquipLevelI => $"Requires level {requiredLevel}",
+                    InventoryResult.BagFull => "Inventory is full",
+                    InventoryResult.ItemDoesntGoToSlot => "Item doesn't go in that slot",
+                    InventoryResult.CantDropSoulbound => "Cannot drop soulbound item",
+                    InventoryResult.ItemNotFound => "Item not found",
+                    InventoryResult.ItemsCantBeSwapped => "Items can't be swapped",
+                    InventoryResult.SlotIsEmpty => "Slot is empty",
+                    InventoryResult.TooFarAwayFromBank => "Too far from bank",
+                    InventoryResult.NotEnoughMoney => "Not enough money",
+                    InventoryResult.YouAreDead => "Cannot do that while dead",
+                    InventoryResult.YouAreStunned => "Cannot do that while stunned",
+                    _ => $"Inventory error: {result} ({errorCode})"
+                };
+
+                _logger.LogWarning("Inventory change failure: {Error} (item1={Item1:X}, item2={Item2:X})",
+                    errorMessage, itemGuid1, itemGuid2);
+
+                return errorMessage;
             }
             catch (Exception ex)
             {
-                _logger.LogTrace(ex, "Failed to parse item moved payload length {Len}", payload.Length);
+                _logger.LogTrace(ex, "Failed to parse SMSG_INVENTORY_CHANGE_FAILURE payload length {Len}", payload.Length);
+                return null;
             }
-            return null;
         }
 
-        private ItemSplitData? TryParseItemSplit(ReadOnlyMemory<byte> payload)
-        {
-            try
-            {
-                if (payload.Length == 12)
-                {
-                    var span = payload.Span;
-                    ulong guid = BitConverter.ToUInt64(span[..8]);
-                    uint qty = BitConverter.ToUInt32(span[8..12]);
-                    return new ItemSplitData(guid, qty);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogTrace(ex, "Failed to parse item split payload length {Len}", payload.Length);
-            }
-            return null;
-        }
-
-        private ItemDestroyedData? TryParseItemDestroyed(ReadOnlyMemory<byte> payload)
-        {
-            try
-            {
-                if (payload.Length == 12)
-                {
-                    var span = payload.Span;
-                    ulong guid = BitConverter.ToUInt64(span[..8]);
-                    uint qty = BitConverter.ToUInt32(span[8..12]);
-                    return new ItemDestroyedData(guid, qty);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogTrace(ex, "Failed to parse item destroyed payload length {Len}", payload.Length);
-            }
-            return null;
-        }
-
-        private string? TryParseInventoryError(ReadOnlyMemory<byte> payload)
-        {
-            // Without concrete opcode layout we cannot decode specific errors – return null.
-            return null;
-        }
         #endregion
 
         #region IDisposable

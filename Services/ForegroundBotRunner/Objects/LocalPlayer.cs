@@ -2,6 +2,9 @@
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using static GameData.Core.Constants.Spellbook;
 using Functions = ForegroundBotRunner.Mem.Functions;
 

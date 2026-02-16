@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
-namespace BloogBot.LoggingMCPServer.Services;
+namespace LoggingMCPServer.Services;
 
 public class TelemetryCollector
 {

@@ -1,40 +1,36 @@
 using GameData.Core.Enums;
+using System;
 using WoWSharpClient.Networking.Abstractions;
 
 namespace WoWSharpClient.Networking.Implementation
 {
     /// <summary>
     /// WoW protocol packet codec that handles encoding and decoding of WoW packets.
-    /// WoW packet format: 2-byte size (big-endian) + 2-byte opcode (little-endian) + payload
+    /// Client→Server: 2-byte size (big-endian) + 4-byte opcode (little-endian) + payload
+    /// Server→Client: 2-byte size (big-endian) + 2-byte opcode (little-endian) + payload
     /// </summary>
     public sealed class WoWPacketCodec : IPacketCodec<Opcode>
     {
         public ReadOnlyMemory<byte> Encode(Opcode opcode, ReadOnlyMemory<byte> payload)
         {
-            // Calculate total size: opcode (2 bytes) + payload
-            var packetSize = sizeof(ushort) + payload.Length;
-            var encoded = new byte[sizeof(ushort) + packetSize]; // size field + packet
+            // Client→Server header: 2 bytes size (big-endian) + 4 bytes opcode (little-endian)
+            // size = opcode(4) + payload.Length (size field does not include itself)
+            var packetSize = (ushort)(sizeof(uint) + payload.Length);
+            var encoded = new byte[sizeof(ushort) + packetSize]; // size(2) + opcode(4) + payload
 
-            // Write size as big-endian (WoW protocol)
-            var sizeBytes = BitConverter.GetBytes((ushort)packetSize);
-            if (BitConverter.IsLittleEndian)
-            {
-                encoded[0] = sizeBytes[1];
-                encoded[1] = sizeBytes[0];
-            }
-            else
-            {
-                encoded[0] = sizeBytes[0];
-                encoded[1] = sizeBytes[1];
-            }
+            // Write size as big-endian
+            encoded[0] = (byte)((packetSize >> 8) & 0xFF);
+            encoded[1] = (byte)(packetSize & 0xFF);
 
-            // Write opcode as little-endian
-            var opcodeBytes = BitConverter.GetBytes((ushort)opcode);
-            encoded[2] = opcodeBytes[0];
-            encoded[3] = opcodeBytes[1];
+            // Write opcode as 4-byte little-endian
+            var opcodeValue = (uint)(object)opcode;
+            encoded[2] = (byte)(opcodeValue & 0xFF);
+            encoded[3] = (byte)((opcodeValue >> 8) & 0xFF);
+            encoded[4] = (byte)((opcodeValue >> 16) & 0xFF);
+            encoded[5] = (byte)((opcodeValue >> 24) & 0xFF);
 
             // Write payload
-            payload.Span.CopyTo(encoded.AsSpan(4));
+            payload.Span.CopyTo(encoded.AsSpan(6));
 
             return encoded;
         }

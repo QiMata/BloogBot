@@ -1,5 +1,7 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace GameData.Core.Models
 {

@@ -1,6 +1,9 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace GameData.Core.Interfaces
 {
@@ -127,6 +130,7 @@ namespace GameData.Core.Interfaces
         void PickupMacro(uint v);
         void PlaceAction(uint v);
         void InviteToGroup(ulong guid);
+        void InviteByName(string characterName);
         void KickPlayer(ulong guid);
         void AcceptGroupInvite();
         void DeclineGroupInvite();
@@ -147,6 +151,7 @@ namespace GameData.Core.Interfaces
         void DoEmote(TextEmote emote);
         uint GetManaCost(string healingTouch);
         void MoveToward(Position position, float facing);
+        void SetNavigationPath(Position[] path) { } // default no-op for foreground
         void RefreshSkills();
         void RefreshSpells();
         void RetrieveCorpse();
@@ -162,6 +167,7 @@ namespace GameData.Core.Interfaces
         void CastSpell(string spellName, int rank = -1, bool castOnSelf = false);
         void CastSpell(int spellId, int rank = -1, bool castOnSelf = false);
         bool CanCastSpell(int spellId, ulong targetGuid);
+        IReadOnlyCollection<uint> KnownSpellIds { get; }
         void UseItem(int bagId, int slotId, ulong targetGuid = 0);
         ulong GetBackpackItemGuid(int parSlot);
         ulong GetEquippedItemGuid(EquipSlot slot);

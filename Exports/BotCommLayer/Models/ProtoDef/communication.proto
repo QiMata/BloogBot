@@ -7,7 +7,7 @@ import "game.proto";
 message AsyncRequest {
     uint64 id = 1;
     oneof parameter {
-        ActivitySnapshot activity_snapshot = 2;
+        WoWActivitySnapshot activity_snapshot = 2;
         StateChangeRequest state_change = 3;
     }
 }
@@ -91,6 +91,11 @@ message StateChangeResponse {
     ResponseResult response = 1;
 }
 
+enum BotRunnerType {
+    FOREGROUND = 0;  // Inject into existing WoW process (DLL injection)
+    BACKGROUND = 1;  // Headless bot runner (no WoW client)
+}
+
 message CharacterDefinition {
     string account_name = 1;
     float openness = 2;
@@ -99,6 +104,7 @@ message CharacterDefinition {
     float agreeableness = 5;
     float neuroticism = 6;
     bool should_run = 7;
+    BotRunnerType runner_type = 8;  // Which bot runner to use
 }
 
 enum StateChangeType {
@@ -125,7 +131,7 @@ message RequestParameter {
     }
 }
 
-message ActivitySnapshot {
+message WoWActivitySnapshot {
     uint32 timestamp = 1;
     string accountName = 2;
     game.WoWPlayer player = 3;
@@ -133,4 +139,8 @@ message ActivitySnapshot {
     ActionMessage currentAction = 5;
     repeated game.WoWGameObject nearbyObjects = 6;
     repeated game.WoWUnit nearbyUnits = 7;
+    string characterName = 8;  // Name of the logged-in character (set after world entry)
+    string screenState = 9;    // Current WoW screen state (e.g. "LoginScreen", "CharacterSelect", "InWorld")
+    game.MovementData movementData = 10;  // Current movement physics snapshot (speeds, flags, position)
+    uint64 partyLeaderGuid = 11;  // GUID of the party leader (0 if not in a group)
 }

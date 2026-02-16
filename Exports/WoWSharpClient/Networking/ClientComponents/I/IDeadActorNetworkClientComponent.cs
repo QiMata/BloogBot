@@ -1,3 +1,7 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>
@@ -94,12 +98,13 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         Task QueryCorpseLocationAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Queries available spirit healers in the area.
-        /// Sends CMSG_AREA_SPIRIT_HEALER_QUERY to find nearby spirit healers.
+        /// Queries available spirit healers in the area (battleground only).
+        /// Sends CMSG_AREA_SPIRIT_HEALER_QUERY with the spirit healer's GUID.
         /// </summary>
+        /// <param name="spiritHealerGuid">The GUID of the spirit healer NPC.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        Task QueryAreaSpiritHealersAsync(CancellationToken cancellationToken = default);
+        Task QueryAreaSpiritHealersAsync(ulong spiritHealerGuid, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Queues for resurrection at an area spirit healer.

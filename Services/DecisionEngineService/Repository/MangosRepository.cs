@@ -4,6 +4,8 @@ using MySql.Data.MySqlClient;
 using MySql.Data.Types;
 using System.Data;
 using Serilog;
+using System.Collections.Generic;
+using System;
 
 namespace DecisionEngineService.Repository
 {

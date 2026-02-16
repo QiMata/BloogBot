@@ -1,6 +1,10 @@
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.Models;
@@ -106,11 +110,15 @@ namespace WoWSharpClient.Tests.Agent
             // Act
             await _vendorAgent.BuyItemAsync(vendorGuid, itemId, quantity);
 
-            // Assert
+            // Assert - CMSG_BUY_ITEM (1.12.1): vendorGuid(8) + itemEntry(4) + count(1) + unk(1) = 14 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_BUY_ITEM,
-                    It.Is<byte[]>(b => b.Length == 16),
+                    It.Is<byte[]>(b =>
+                        b.Length == 14 &&
+                        BitConverter.ToUInt64(b, 0) == vendorGuid &&
+                        BitConverter.ToUInt32(b, 8) == itemId &&
+                        b[12] == (byte)quantity),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -120,19 +128,38 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             const ulong vendorGuid = 0x123456789ABCDEF0;
-            const byte vendorSlot = 1;
+            const byte vendorSlot = 0;
             const uint quantity = 3;
+            const uint expectedItemId = 929;
+
+            // Set up vendor inventory so BuyItemBySlotAsync can look up the item entry
+            SetupVendorWithItem(vendorGuid, expectedItemId, quantity);
 
             // Act
             await _vendorAgent.BuyItemBySlotAsync(vendorGuid, vendorSlot, quantity);
 
-            // Assert
+            // Assert - delegates to BuyItemAsync which sends CMSG_BUY_ITEM (14 bytes)
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_BUY_ITEM,
-                    It.Is<byte[]>(b => b.Length == 13),
+                    It.Is<byte[]>(b =>
+                        b.Length == 14 &&
+                        BitConverter.ToUInt64(b, 0) == vendorGuid &&
+                        BitConverter.ToUInt32(b, 8) == expectedItemId),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
+        }
+
+        [Fact]
+        public async Task BuyItemBySlotAsync_NoVendorInventory_ThrowsInvalidOperationException()
+        {
+            // Arrange
+            const ulong vendorGuid = 0x123456789ABCDEF0;
+            const byte vendorSlot = 5;
+
+            // Act & Assert - no vendor inventory set up, should throw
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => _vendorAgent.BuyItemBySlotAsync(vendorGuid, vendorSlot));
         }
 
         [Fact]
@@ -147,11 +174,43 @@ namespace WoWSharpClient.Tests.Agent
             // Act
             await _vendorAgent.SellItemAsync(vendorGuid, bagId, slotId, quantity);
 
-            // Assert
+            // Assert - CMSG_SELL_ITEM (1.12.1): vendorGuid(8) + itemGuid(8) + count(1) = 17 bytes
+            // Legacy SellItemAsync sends zero itemGuid since it doesn't have the GUID
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_SELL_ITEM,
-                    It.Is<byte[]>(b => b.Length == 14),
+                    It.Is<byte[]>(b =>
+                        b.Length == 17 &&
+                        BitConverter.ToUInt64(b, 0) == vendorGuid &&
+                        BitConverter.ToUInt64(b, 8) == 0UL), // zero GUID (legacy)
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task BuyItemInSlotAsync_ValidParameters_SendsCorrectPacket()
+        {
+            // Arrange
+            const ulong vendorGuid = 0x123456789ABCDEF0;
+            const uint itemId = 929;
+            const ulong bagGuid = 0x00000000CAFEBABE;
+            const byte slot = 5;
+            const byte count = 3;
+
+            // Act
+            await _vendorAgent.BuyItemInSlotAsync(vendorGuid, itemId, bagGuid, slot, count);
+
+            // Assert - CMSG_BUY_ITEM_IN_SLOT (1.12.1): vendorGuid(8) + itemId(4) + bagGuid(8) + slot(1) + count(1) = 22 bytes
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    Opcode.CMSG_BUY_ITEM_IN_SLOT,
+                    It.Is<byte[]>(b =>
+                        b.Length == 22 &&
+                        BitConverter.ToUInt64(b, 0) == vendorGuid &&
+                        BitConverter.ToUInt32(b, 8) == itemId &&
+                        BitConverter.ToUInt64(b, 12) == bagGuid &&
+                        b[20] == slot &&
+                        b[21] == count),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -161,17 +220,18 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             const ulong vendorGuid = 0x123456789ABCDEF0;
-            const byte bagId = 0;
-            const byte slotId = 1;
+            const ulong itemGuid = 0x00000000DEADBEEF;
 
             // Act
-            await _vendorAgent.RepairItemAsync(vendorGuid, bagId, slotId);
+            await _vendorAgent.RepairItemAsync(vendorGuid, itemGuid);
 
-            // Assert
+            // Assert - CMSG_REPAIR_ITEM (1.12.1): npcGuid(8) + itemGuid(8) = 16 bytes
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_REPAIR_ITEM,
-                    It.Is<byte[]>(b => b.Length == 10),
+                    It.Is<byte[]>(b => b.Length == 16
+                        && BitConverter.ToUInt64(b, 0) == vendorGuid
+                        && BitConverter.ToUInt64(b, 8) == itemGuid),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -187,10 +247,37 @@ namespace WoWSharpClient.Tests.Agent
             await _vendorAgent.RepairAllItemsAsync(vendorGuid);
 
             // Assert
+            // CMSG_REPAIR_ITEM (1.12.1): npcGuid(8) + itemGuid(8) = 16 bytes, itemGuid=0 for repair all
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_REPAIR_ITEM,
-                    It.Is<byte[]>(b => b.Length == 10 && b[8] == 0xFF && b[9] == 0xFF),
+                    It.Is<byte[]>(b => b.Length == 16
+                        && BitConverter.ToUInt64(b, 0) == vendorGuid
+                        && BitConverter.ToUInt64(b, 8) == 0UL),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task SellItemByGuidAsync_ValidParameters_SendsCorrectPacket()
+        {
+            // Arrange
+            const ulong vendorGuid = 0x123456789ABCDEF0;
+            const ulong itemGuid = 0x00000000DEADBEEF;
+            const byte count = 5;
+
+            // Act
+            await _vendorAgent.SellItemByGuidAsync(vendorGuid, itemGuid, count);
+
+            // Assert - CMSG_SELL_ITEM (1.12.1): vendorGuid(8) + itemGuid(8) + count(1) = 17 bytes
+            _mockWorldClient.Verify(
+                x => x.SendOpcodeAsync(
+                    Opcode.CMSG_SELL_ITEM,
+                    It.Is<byte[]>(b =>
+                        b.Length == 17 &&
+                        BitConverter.ToUInt64(b, 0) == vendorGuid &&
+                        BitConverter.ToUInt64(b, 8) == itemGuid &&
+                        b[16] == count),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
         }
@@ -815,10 +902,10 @@ namespace WoWSharpClient.Tests.Agent
             _vendorAgent.HandleVendorWindowOpened(vendorInfo);
         }
 
-        private sealed class ActionObserver<T> : IObserver<T>
+        private sealed class ActionObserver<T>(Action<T> onNext) : IObserver<T>
         {
-            private readonly Action<T> _onNext;
-            public ActionObserver(Action<T> onNext) => _onNext = onNext;
+            private readonly Action<T> _onNext = onNext;
+
             public void OnCompleted() { }
             public void OnError(Exception error) { }
             public void OnNext(T value) => _onNext(value);

@@ -1,4 +1,6 @@
 using GameData.Core.Enums;
+using System;
+using System.Collections.Generic;
 
 namespace WoWSharpClient.Networking.ClientComponents.Models
 {

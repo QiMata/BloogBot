@@ -3,20 +3,17 @@
 
 namespace Navigation.Physics.Tests;
 
+using System;
 using static NavigationInterop;
 
 /// <summary>
 /// Tests that validate the C# physics constants match the C++ implementation.
 /// This ensures test assertions are based on the actual engine values.
 /// </summary>
-public class PhysicsConstantsValidationTests : IClassFixture<PhysicsEngineFixture>
+[Collection("PhysicsEngine")]
+public class PhysicsConstantsValidationTests(PhysicsEngineFixture fixture)
 {
-    private readonly PhysicsEngineFixture _fixture;
-
-    public PhysicsConstantsValidationTests(PhysicsEngineFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PhysicsEngineFixture _fixture = fixture;
 
     [Fact]
     public void PhysicsConstants_GravityMatchesCpp()
@@ -108,11 +105,11 @@ public class PhysicsConstantsValidationTests : IClassFixture<PhysicsEngineFixtur
     [Fact]
     public void PhysicsConstants_WalkableThresholdMatchesSlopeAngle()
     {
-        // cos(60°) should equal WalkableMinNormalZ
+        // cos(60ï¿½) should equal WalkableMinNormalZ
         float cos60 = MathF.Cos(60.0f * MathF.PI / 180.0f);
 
         Assert.True(MathF.Abs(cos60 - PhysicsTestConstants.WalkableMinNormalZ) < 0.01f,
-            $"WalkableMinNormalZ ({PhysicsTestConstants.WalkableMinNormalZ}) should equal cos(60°) ({cos60})");
+            $"WalkableMinNormalZ ({PhysicsTestConstants.WalkableMinNormalZ}) should equal cos(60ï¿½) ({cos60})");
     }
 
     [Fact]
@@ -154,7 +151,7 @@ public class PhysicsConstantsValidationTests : IClassFixture<PhysicsEngineFixtur
     [Fact]
     public void PhysicsConstants_JumpHeightIsReasonable()
     {
-        // Maximum jump height = v?² / (2g)
+        // Maximum jump height = v?ï¿½ / (2g)
         float maxJumpHeight = (PhysicsTestConstants.JumpVelocity * PhysicsTestConstants.JumpVelocity) /
                              (2.0f * PhysicsTestConstants.Gravity);
 

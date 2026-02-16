@@ -5,7 +5,10 @@ using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
 using System.Reactive.Subjects; // Added for Subject
-using System.Reactive.Disposables; // Added for CompositeDisposable
+using System.Reactive.Disposables;
+using System;
+using System.Threading.Tasks;
+using System.Threading; // Added for CompositeDisposable
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -21,6 +24,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly ILogger<AttackNetworkClientComponent> _logger;
         private bool _isAttacking;
         private ulong? _currentVictim;
+        private ulong _pendingAttackTarget;
         private bool _disposed;
 
         // Reactive observable pipelines (wired to world client streams/opcodes)
@@ -116,10 +120,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             SetOperationInProgress(true);
             try
             {
-                _logger.LogDebug("Starting auto-attack");
+                _logger.LogDebug("Starting auto-attack on target {TargetGuid:X}", _pendingAttackTarget);
 
-                // CMSG_ATTACKSWING has no payload for auto-attack
-                await _worldClient.SendOpcodeAsync(Opcode.CMSG_ATTACKSWING, [], cancellationToken);
+                // CMSG_ATTACKSWING requires the target's full 8-byte GUID
+                var payload = BitConverter.GetBytes(_pendingAttackTarget);
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_ATTACKSWING, payload, cancellationToken);
 
                 _logger.LogInformation("Auto-attack command sent to server");
             }
@@ -171,6 +176,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 _logger.LogDebug("Setting target and starting attack on: {TargetGuid:X}", targetGuid);
+                _pendingAttackTarget = targetGuid;
 
                 var targetCompletionSource = new TaskCompletionSource<bool>();
                 var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

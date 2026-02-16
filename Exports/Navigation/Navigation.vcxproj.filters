@@ -91,9 +91,6 @@
     <ClCompile Include="PhysicsMovement.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PhysicsThreePass.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="PhysicsTestExports.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -194,9 +191,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PhysicsMovement.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="PhysicsThreePass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

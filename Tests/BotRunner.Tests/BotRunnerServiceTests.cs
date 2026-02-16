@@ -5,6 +5,10 @@ using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
 using WoWSharpClient.Networking.ClientComponents.I;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.Collections.Generic;
 
 namespace BotRunner.Tests
 {
@@ -283,14 +287,9 @@ namespace BotRunner.Tests
         }
     }
 
-    internal sealed class MovementTestPathfindingClient : PathfindingClient
+    internal sealed class MovementTestPathfindingClient(Position[] path) : PathfindingClient
     {
-        private readonly Position[] _path;
-
-        public MovementTestPathfindingClient(Position[] path)
-        {
-            _path = path;
-        }
+        private readonly Position[] _path = path;
 
         public float PathingDistance { get; set; }
 

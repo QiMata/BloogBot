@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -23,6 +28,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly List<TalentTreeInfo> _talentTrees;
         private readonly Dictionary<uint, TalentInfo> _talentCache;
         private bool _awaitingRespecConfirmation;
+        private ulong _respecNpcGuid;
         private bool _disposed;
 
         // Reactive opcode-backed streams (publish/refcount like other components)
@@ -92,8 +98,13 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 var span = payload.Span;
-                // Best-effort: read first 4 bytes as cost (uint)
-                return span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0u;
+                // MaNGOS format: ObjectGuid(8) + uint32 cost = 12 bytes
+                if (span.Length >= 12)
+                {
+                    _respecNpcGuid = BitConverter.ToUInt64(span[..8]);
+                    return BitConverter.ToUInt32(span.Slice(8, 4));
+                }
+                return 0u;
             }
             catch
             {
@@ -178,8 +189,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                     return;
                 }
 
-                var payload = new byte[4];
+                // CMSG_LEARN_TALENT: uint32 talentId + uint32 requestedRank = 8 bytes
+                var requestedRank = GetTalentRank(talentId); // 0-based: current rank is the next rank to learn
+                var payload = new byte[8];
                 BitConverter.GetBytes(talentId).CopyTo(payload, 0);
+                BitConverter.GetBytes(requestedRank).CopyTo(payload, 4);
 
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_LEARN_TALENT, payload, cancellationToken);
 
@@ -272,9 +286,16 @@ namespace WoWSharpClient.Networking.ClientComponents
                     return;
                 }
 
-                // Send MSG_TALENT_WIPE_CONFIRM with confirmation
-                var payload = new byte[1];
-                payload[0] = confirm ? (byte)1 : (byte)0;
+                if (!confirm)
+                {
+                    _awaitingRespecConfirmation = false;
+                    _logger.LogInformation("Talent respec declined");
+                    return;
+                }
+
+                // MSG_TALENT_WIPE_CONFIRM (client→server): ObjectGuid(8) of the trainer NPC
+                var payload = new byte[8];
+                BitConverter.GetBytes(_respecNpcGuid).CopyTo(payload, 0);
 
                 await _worldClient.SendOpcodeAsync(Opcode.MSG_TALENT_WIPE_CONFIRM, payload, cancellationToken);
 

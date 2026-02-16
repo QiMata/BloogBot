@@ -1,6 +1,12 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Reactive.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -315,14 +321,20 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetChatOperationInProgress(true);
-                
+
                 _logger.LogDebug("Joining channel: {ChannelName}", channelName);
-                
-                await ExecuteCommandAsync("join", [channelName], cancellationToken);
-                
+
+                // CMSG_JOIN_CHANNEL: channelName\0 + password\0
+                var nameBytes = Encoding.UTF8.GetBytes(channelName);
+                var payload = new byte[nameBytes.Length + 1 + 1]; // name + null + empty password null
+                nameBytes.CopyTo(payload, 0);
+                // payload[nameBytes.Length] = 0x00; // null terminator for name (already zero)
+                // payload[nameBytes.Length + 1] = 0x00; // null terminator for empty password (already zero)
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_JOIN_CHANNEL, payload, cancellationToken);
+
                 // Optimistically add to active channels (server response will confirm)
                 _activeChannels[channelName] = 0;
-                
+
                 _logger.LogInformation("Joined channel: {ChannelName}", channelName);
             }
             catch (Exception ex)
@@ -345,11 +357,17 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetChatOperationInProgress(true);
-                
+
                 _logger.LogDebug("Leaving channel: {ChannelName}", channelName);
-                
-                await ExecuteCommandAsync("leave", [channelName], cancellationToken);
-                
+
+                // CMSG_LEAVE_CHANNEL: unk(4) + channelName\0
+                var nameBytes = Encoding.UTF8.GetBytes(channelName);
+                var payload = new byte[4 + nameBytes.Length + 1]; // unk(4) + name + null
+                // payload[0..3] = 0x00 (unk, already zero)
+                nameBytes.CopyTo(payload, 4);
+                // payload[4 + nameBytes.Length] = 0x00; // null terminator (already zero)
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_LEAVE_CHANNEL, payload, cancellationToken);
+
                 _logger.LogInformation("Left channel: {ChannelName}", channelName);
             }
             catch (Exception ex)
@@ -699,13 +717,16 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             switch (chatType)
             {
+                case ChatMsg.CHAT_MSG_MONSTER_SAY:
+                case ChatMsg.CHAT_MSG_MONSTER_YELL:
                 case ChatMsg.CHAT_MSG_MONSTER_WHISPER:
+                case ChatMsg.CHAT_MSG_MONSTER_EMOTE:
                 case ChatMsg.CHAT_MSG_RAID_BOSS_WHISPER:
                 case ChatMsg.CHAT_MSG_RAID_BOSS_EMOTE:
-                case ChatMsg.CHAT_MSG_MONSTER_EMOTE:
+                    senderGuid = reader.ReadUInt64();
                     reader.ReadUInt32(); // senderNameLength, discard
                     senderName = ReaderUtils.ReadCString(reader);
-                    targetGuid = ReaderUtils.ReadPackedGuid(reader);
+                    targetGuid = reader.ReadUInt64();
                     break;
 
                 case ChatMsg.CHAT_MSG_SAY:
@@ -713,14 +734,6 @@ namespace WoWSharpClient.Networking.ClientComponents
                 case ChatMsg.CHAT_MSG_YELL:
                     senderGuid = reader.ReadUInt64();
                     reader.ReadUInt64(); // duplicate sender GUID, discard
-                    break;
-
-                case ChatMsg.CHAT_MSG_MONSTER_SAY:
-                case ChatMsg.CHAT_MSG_MONSTER_YELL:
-                    senderGuid = reader.ReadUInt64();
-                    reader.ReadUInt32(); // senderNameLength, discard
-                    senderName = ReaderUtils.ReadCString(reader);
-                    targetGuid = reader.ReadUInt64();
                     break;
 
                 case ChatMsg.CHAT_MSG_CHANNEL:

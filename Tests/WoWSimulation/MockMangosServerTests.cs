@@ -1,8 +1,10 @@
-using BloogBot.Tests.WoWSimulation.Core;
+using WoWSimulation.Tests.Core;
 using FluentAssertions;
 using Xunit;
+using System.Threading.Tasks;
+using System.Collections.Generic;
 
-namespace BloogBot.Tests.WoWSimulation;
+namespace WoWSimulation.Tests;
 
 public class MockMangosServerTests
 {
@@ -124,7 +126,7 @@ public class MockMangosServerTests
 
         // Act
         _ = server.SendCommand<bool>("CastSpell", "Heal").Result;
-        _ = server.SendCommand<bool>("InteractWithObject", 1).Result;
+        _ = server.SendCommand<bool>("InteractWithObject", 2).Result; // Herb Node (interactable)
 
         var history = server.GetEventHistory();
 

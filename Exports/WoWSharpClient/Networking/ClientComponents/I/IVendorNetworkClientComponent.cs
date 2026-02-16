@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Reactive; // for Unit
+using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents.I
@@ -27,11 +31,11 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         Task BuyItemAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken cancellationToken = default);
         Task BuyItemBySlotAsync(ulong vendorGuid, byte vendorSlot, uint quantity = 1, CancellationToken cancellationToken = default);
         Task BuyItemBulkAsync(ulong vendorGuid, uint itemId, uint totalQuantity, BulkVendorOptions? options = null, CancellationToken cancellationToken = default);
-        Task BuyItemInSlotAsync(ulong vendorGuid, uint itemId, uint quantity, byte bagId, byte slotId, CancellationToken cancellationToken = default);
+        Task BuyItemInSlotAsync(ulong vendorGuid, uint itemId, ulong bagGuid, byte slot, byte count = 1, CancellationToken cancellationToken = default);
         Task SellItemAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken cancellationToken = default);
         Task<uint> SellAllJunkAsync(ulong vendorGuid, BulkVendorOptions? options = null, CancellationToken cancellationToken = default);
         Task<uint> SellItemsAsync(ulong vendorGuid, IEnumerable<JunkItem> junkItems, BulkVendorOptions? options = null, CancellationToken cancellationToken = default);
-        Task RepairItemAsync(ulong vendorGuid, byte bagId, byte slotId, CancellationToken cancellationToken = default);
+        Task RepairItemAsync(ulong vendorGuid, ulong itemGuid, CancellationToken cancellationToken = default);
         Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken cancellationToken = default);
         Task<uint> GetRepairCostAsync(ulong vendorGuid, CancellationToken cancellationToken = default);
         Task CloseVendorAsync(CancellationToken cancellationToken = default);

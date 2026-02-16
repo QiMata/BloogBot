@@ -1,9 +1,12 @@
 ﻿using Communication;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Reactive.Subjects;
+using System.Threading;
 
 namespace BotCommLayer
 {

@@ -2,47 +2,57 @@
 
 ## Overview
 
-BloogBot is a comprehensive World of Warcraft automation system designed with a modular, service-oriented architecture. The system is built to run bots either as background services or injected directly into the WoW game process, with sophisticated pathfinding, decision-making, and state management capabilities.
+BloogBot is a comprehensive World of Warcraft 1.12.1 automation system with two complementary client approaches:
+
+1. **Injected Client (ForegroundBotRunner)** — Runs inside the real WoW.exe process. Reads memory, calls native functions, automates gameplay. This is the reference implementation and the source of ground-truth data.
+2. **Headless Client (WoWSharpClient)** — Standalone process (no graphics/audio). Implements the WoW protocol from scratch. Connects to the server independently, moves via the centralized PhysicsEngine, and plays autonomously.
+
+**The pipeline**: Record data from the injected client → calibrate the PhysicsEngine → validate the headless client against real data → bring the headless client to feature parity.
 
 ## High-Level Architecture
 
-The BloogBot system follows a distributed service architecture with the following key characteristics:
-
-- **Multi-Process Design**: Core services run as separate processes for isolation and fault tolerance
-- **Injection Framework**: Critical bot logic runs inside the WoW process via DLL injection for low-latency game interaction
-- **State Machine Coordination**: A finite state machine orchestrates bot behavior across different game scenarios
-- **AI-Driven Decision Making**: ML-powered decision engine for adaptive bot behavior
-- **Communication Layer**: Protobuf-based inter-service communication for reliable message passing
+```
+┌──────────────────────┐                         ┌─────────────────────┐
+│  ForegroundBotRunner  │──── GetPath ──────────→│                     │
+│  (injected client)    │     LineOfSight         │  PathfindingService │
+├──────────────────────┤                    ┌───→│  (single process)   │
+│  WoWSharpClient 1     │──── PhysicsStep ──┘    │                     │
+│  (headless client)    │     GetPath             │  Navigation.dll     │
+├──────────────────────┤     LineOfSight          │  (maps loaded once) │
+│  WoWSharpClient N     │────────────────────────→│                     │
+└──────────────────────┘     TCP/protobuf:5001    └─────────────────────┘
+```
 
 ### Core Components
 
-1. **StateManager**: Central orchestrator managing bot state transitions and coordination
-2. **PathfindingService**: Navigation and movement planning using A* pathfinding
-3. **DecisionEngineService**: AI-powered rule engine for dynamic decision making
-4. **WoWSharpClient**: Low-level game client integration and memory manipulation
-5. **ForegroundBotRunner**: Injection framework for running bot logic inside WoW process
-6. **BackgroundBotRunner**: Standalone bot service for external coordination
+1. **WoWStateManager**: Orchestrator managing bot lifecycle, WoW process spawning, and DLL injection
+2. **PathfindingService**: Navigation, pathfinding, and physics simulation using Navigation.dll
+3. **ForegroundBotRunner**: Injection framework running inside WoW.exe — memory reading, native function calls, GrindBot state machine
+4. **WoWSharpClient**: Headless WoW protocol client — auth, world server, movement, combat
+5. **DecisionEngineService**: ML-powered rule engine for adaptive bot behavior
+6. **BotCommLayer**: Protobuf-based inter-service communication
 
 ## Service Architecture
 
-### StateManager Service
-- **Purpose**: Finite state machine implementation for bot behavior coordination
+### WoWStateManager Service
+- **Purpose**: Bot lifecycle management — spawns WoW processes, injects DLLs, manages state
 - **Technology**: .NET 8 Worker Service
 - **Key Features**:
-  - Stack-based state transitions
-  - Safety kill-switches and monitoring
-  - Discord integration for alerts
-  - Support for nested goals (e.g., death recovery during grinding)
-- **Location**: `Services/StateManager/`
+  - WoW process spawning and monitoring
+  - Loader.dll injection for CLR hosting
+  - Character state tracking via protobuf snapshots
+  - Login automation and disconnect recovery
+- **Location**: `Services/WoWStateManager/`
 
 ### PathfindingService
-- **Purpose**: Navigation and pathfinding using game world data
+- **Purpose**: Navigation, pathfinding, and physics simulation using game world data
 - **Technology**: .NET 8 Background Service with unsafe code for performance
 - **Key Features**:
-  - A* pathfinding algorithm on navigation meshes
-  - Multi-threaded path computation
-  - Support for dynamic obstacle avoidance
+  - A* pathfinding on navigation meshes (via Navigation.dll)
+  - Physics engine for movement simulation (StepPhysicsV2)
+  - Line-of-sight and scene queries
   - Uses precomputed move maps from `Bot/mmaps` directory
+  - TCP/protobuf server on port 5001
 - **Location**: `Services/PathfindingService/`
 
 ### DecisionEngineService
@@ -56,35 +66,29 @@ The BloogBot system follows a distributed service architecture with the followin
 - **Location**: `Services/DecisionEngineService/`
 
 ### ForegroundBotRunner
-- **Purpose**: DLL injection framework for running bot logic inside WoW process
-- **Technology**: Dual-target (.NET 8 + .NET Framework 4.8)
+- **Purpose**: Injected bot logic running inside WoW.exe process
+- **Technology**: .NET 8 (injected via Loader.dll CLR hosting)
 - **Key Features**:
-  - Native CLR hosting via ICLRRuntimeHost
-  - Debug support with environment variable controls
-  - Automatic PDB copying for debugging
-  - Shim architecture for compatibility
+  - Direct memory reading/writing for game state access
+  - Object Manager enumeration (units, players, items, game objects)
+  - GrindBot state machine (Idle → FindTarget → Combat → Loot → Rest → Dead)
+  - Combat rotations for all 9 classes
+  - Movement recording system (JSON/protobuf output)
+  - Thread synchronization for safe main-thread execution
 - **Location**: `Services/ForegroundBotRunner/`
-
-### BackgroundBotRunner
-- **Purpose**: Standalone bot service for external coordination
-- **Technology**: .NET 8 Worker Service
-- **Key Features**:
-  - Independent process execution
-  - Service management and monitoring
-  - Integration with other bot services
-- **Location**: `Services/BackgroundBotRunner/`
 
 ## Core Libraries
 
 ### WoWSharpClient
-- **Purpose**: Low-level WoW client integration and game state management
+- **Purpose**: Headless WoW 1.12.1 protocol client (no graphics/audio)
 - **Technology**: .NET 8 with unsafe code
 - **Key Features**:
-  - Memory reading/writing for game state access
-  - Object manager for game entities
-  - Movement packet handling
-  - Anti-cheat (Warden) bypass mechanisms
-  - Network protocol implementation
+  - SRP6 authentication and realm list
+  - World server connection with header encryption
+  - Full CMSG/SMSG packet codec (937+ protocol tests passing)
+  - Object manager from SMSG_UPDATE_OBJECT parsing
+  - Movement controller and packet sending
+  - Network client components for combat, vendor, quest, guild, etc.
 - **Location**: `Exports/WoWSharpClient/`
 
 ### GameData.Core
@@ -128,12 +132,14 @@ The BloogBot system follows a distributed service architecture with the followin
 - **Location**: `Exports/Loader/`
 
 ### Navigation (C++)
-- **Purpose**: High-performance pathfinding algorithms
-- **Technology**: C++ with native optimization
+- **Purpose**: High-performance pathfinding and physics engine
+- **Technology**: C++ (Win32, built via CMake)
 - **Key Features**:
-  - Navigation mesh processing
-  - Physics simulation
-  - Performance-critical pathfinding operations
+  - A* pathfinding on MaNGOS navigation meshes (mmaps)
+  - Physics engine (StepPhysicsV2) — gravity, jump, ground snap, collision
+  - VMap/MMap loading for terrain and WMO collision
+  - Scene queries (line-of-sight, height queries)
+  - Physics constants: Gravity=19.2911, JumpV=7.9555, TerminalV=60.148
 - **Location**: `Exports/Navigation/`
 
 ### FastCall (C++)
@@ -147,42 +153,34 @@ The BloogBot system follows a distributed service architecture with the followin
 
 ## UI and Management
 
-### StateManagerUI
-- **Purpose**: WPF-based management interface
+### WoWStateManagerUI
+- **Purpose**: WPF-based management interface for WoWStateManager
 - **Technology**: .NET 8 WPF
 - **Key Features**:
   - Bot status monitoring
+  - Character state display
   - Configuration management
-  - Real-time logging display
-- **Location**: `UI/StateManagerUI/`
-
-### WWoW.Systems
-- **Purpose**: Aspire-based application hosting
-- **Technology**: .NET 8 with .NET Aspire
-- **Key Features**:
-  - Service orchestration
-  - Distributed application management
-  - Development environment support
-- **Location**: `UI/WWoW.Systems/`
+- **Location**: `UI/WoWStateManagerUI/`
 
 ## Data Flow and Communication
 
-### Message Flow
-1. **StateManager** coordinates overall bot behavior
-2. **PathfindingService** provides navigation paths via protobuf messages
-3. **DecisionEngineService** processes rules and returns decisions
-4. **WoWSharpClient** executes low-level game actions
-5. **BotCommLayer** handles all inter-service communication
-
-### Injection Process
-1. **StateManager** launches WoW process
+### Injected Client Flow
+1. **WoWStateManager** launches WoW.exe process
 2. **Loader.dll** injected into WoW process
-3. **Loader** initializes .NET CLR inside WoW
-4. **ForegroundBotRunner** (.NET Framework 4.8 shim) loads
-5. Bot logic executes with direct memory access
+3. **Loader** initializes .NET CLR inside WoW, loads ForegroundBotRunner
+4. **ForegroundBotRunner** hooks EndScene, starts ObjectManager polling
+5. **GrindBot** state machine drives gameplay (find target → combat → loot → rest)
+6. **PathfindingService** provides navigation paths via TCP/protobuf on port 5001
+
+### Headless Client Flow
+1. **WoWSharpClient** connects directly to auth/world servers (no WoW.exe needed)
+2. SRP6 authentication → realm list → world server handshake
+3. SMSG_UPDATE_OBJECT populates ObjectManager
+4. **MovementController** sends movement packets using PhysicsEngine simulation
+5. **PathfindingService** provides both navigation paths and physics steps
 
 ### Debug Flow
-1. Set `BLOOGBOT_WAIT_DEBUG=1` environment variable
+1. Set `WWOW_WAIT_DEBUG=1` environment variable
 2. **Loader** allocates debug console
 3. **ForegroundBotRunner** waits for debugger attachment
 4. Visual Studio attaches to WoW.exe process
@@ -279,7 +277,7 @@ The project includes a comprehensive GitHub Actions workflow that provides:
 
 ### Debugging Injection
 1. Build in Debug configuration with x86 platform
-2. Set `BLOOGBOT_WAIT_DEBUG=1` environment variable
+2. Set `WWOW_WAIT_DEBUG=1` environment variable
 3. Ensure PDB files are copied to injection directory
 4. Attach Visual Studio debugger to WoW.exe process
 5. Use Managed (.NET Framework) debugging mode
@@ -287,14 +285,18 @@ The project includes a comprehensive GitHub Actions workflow that provides:
 ## Deployment Architecture
 
 ### Service Distribution
-- **StateManager**: Central coordinator, typically runs on main machine
-- **PathfindingService**: Can run distributed for load balancing
-- **DecisionEngineService**: Stateless, horizontally scalable
-- **UI Components**: Local development and management interfaces
+- **WoWStateManager**: Central orchestrator — spawns WoW processes, manages injection
+- **PathfindingService**: Navigation and physics — single process loads map data once
+- **ForegroundBotRunner**: Injected into each WoW.exe instance
+- **WoWSharpClient**: Headless instances, one per bot account
 
 ### Configuration Management
-- **Environment Variables**: Runtime configuration
-- **JSON Config Files**: Complex settings and rules
-- **Database Storage**: Rule definitions and execution history
+- **Environment Variables**: Runtime configuration (WWOW_WAIT_DEBUG, test accounts)
+- **JSON Config Files**: Hotspot patrol paths, character definitions
+- **Protobuf Messages**: Inter-service communication (BotCommLayer)
 
-This architecture provides a robust, scalable foundation for World of Warcraft automation with clear separation of concerns, strong debugging capabilities, and sophisticated anti-detection mechanisms.
+### Test Infrastructure
+- **Navigation.Physics.Tests**: Physics engine calibration against recorded movement data (42/43 passing)
+- **WoWSharpClient.Tests**: Protocol packet format validation (937+ tests)
+- **BotRunner.Tests**: Integration tests (login, movement recording, screen detection)
+- **PathfindingService.Tests**: Pathfinding and physics interop tests

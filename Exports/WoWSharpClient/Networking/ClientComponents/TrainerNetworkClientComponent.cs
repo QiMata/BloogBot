@@ -5,6 +5,11 @@ using WoWSharpClient.Networking.ClientComponents.I;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Buffers.Binary;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -118,32 +123,56 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private (ulong TrainerGuid, TrainerServiceData[] Services) ParseTrainerList(ReadOnlyMemory<byte> payload)
         {
+            // SMSG_TRAINER_LIST format (MaNGOS 1.12.1):
+            // ObjectGuid trainerGuid (8)
+            // uint32 trainerType (4) - class type
+            // uint32 spellCount (4)
+            // [per spell, 38 bytes each]:
+            //   uint32 spellId (4)
+            //   uint8 state (1) - 0=green/can learn, 1=yellow/prereq, 2=grey/known, 3=red
+            //   uint32 cost (4)
+            //   uint32 primaryProfReq (4)
+            //   uint32 primaryProfConfirm (4)
+            //   uint8 requiredLevel (1)
+            //   uint32 requiredSkill (4)
+            //   uint32 requiredSkillValue (4)
+            //   uint32 prereqSpellId1 (4)
+            //   uint32 prereqSpellId2 (4)
+            //   uint32 unk (4)
+            // string title (null-terminated) - trainer greeting
             var span = payload.Span;
             ulong trainerGuid = ReadUInt64(span, 0);
             var services = new List<TrainerServiceData>();
 
-            // Best-effort parsing: if a count exists at offset 8 (common), read minimal entries
-            int offset = 8;
-            uint count = span.Length >= offset + 4 ? ReadUInt32(span, offset) : 0u;
-            offset += span.Length >= 12 ? 4 : 0; // advance if count read
+            if (span.Length < 16) return (trainerGuid, []);
 
-            int recordMinSize = 12; // index(4) + spellId(4) + cost(4)
-            for (int i = 0; i < count && span.Length >= offset + recordMinSize; i++)
+            int offset = 8;
+            uint trainerType = ReadUInt32(span, offset); offset += 4;
+            uint count = ReadUInt32(span, offset); offset += 4;
+
+            int recordSize = 38;
+            for (uint i = 0; i < count && offset + recordSize <= span.Length; i++)
             {
+                uint spellId = ReadUInt32(span, offset);
+                byte state = span[offset + 4];
+                uint cost = ReadUInt32(span, offset + 5);
+                byte reqLevel = span[offset + 17];
+                uint reqSkill = ReadUInt32(span, offset + 18);
+                uint reqSkillValue = ReadUInt32(span, offset + 22);
+
                 var service = new TrainerServiceData
                 {
-                    ServiceIndex = ReadUInt32(span, offset + 0),
-                    SpellId = ReadUInt32(span, offset + 4),
-                    Cost = ReadUInt32(span, offset + 8),
-                    RequiredLevel = span.Length >= offset + 16 ? ReadUInt32(span, offset + 12) : 0,
-                    RequiredSkill = span.Length >= offset + 20 ? ReadUInt32(span, offset + 16) : 0,
-                    RequiredSkillLevel = span.Length >= offset + 24 ? ReadUInt32(span, offset + 20) : 0,
-                    CanLearn = true,
+                    ServiceIndex = i,
+                    SpellId = spellId,
+                    Cost = cost,
+                    RequiredLevel = reqLevel,
+                    RequiredSkill = reqSkill,
+                    RequiredSkillLevel = reqSkillValue,
+                    CanLearn = state == 0, // GREEN = can learn
                     Name = string.Empty
                 };
-
                 services.Add(service);
-                offset += recordMinSize; // conservative advance
+                offset += recordSize;
             }
 
             return (trainerGuid, services.ToArray());
@@ -151,18 +180,19 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private (uint SpellId, uint Cost) ParseTrainerBuySucceeded(ReadOnlyMemory<byte> payload)
         {
+            // SMSG_TRAINER_BUY_SUCCEEDED: ObjectGuid trainerGuid (8), uint32 spellId (4)
             var span = payload.Span;
-            uint spellId = ReadUInt32(span, 0);
-            uint cost = span.Length >= 8 ? ReadUInt32(span, 4) : 0u;
-            return (spellId, cost);
+            uint spellId = span.Length >= 12 ? ReadUInt32(span, 8) : ReadUInt32(span, 0);
+            return (spellId, 0u);
         }
 
         private string ParseTrainerBuyFailed(ReadOnlyMemory<byte> payload)
         {
-            // Best-effort: if an error code exists, map to message; else generic
+            // SMSG_TRAINER_BUY_FAILED: ObjectGuid trainerGuid (8), uint32 spellId (4), uint32 errorCode (4)
             var span = payload.Span;
-            uint error = ReadUInt32(span, 0);
-            return $"Trainer buy failed (code {error})";
+            uint spellId = span.Length >= 12 ? ReadUInt32(span, 8) : 0;
+            uint error = span.Length >= 16 ? ReadUInt32(span, 12) : ReadUInt32(span, 0);
+            return $"Trainer buy failed for spell {spellId} (code {error})";
         }
 
         #region ITrainerNetworkClientComponent Implementation

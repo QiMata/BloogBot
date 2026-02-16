@@ -1,12 +1,110 @@
 ﻿using GameData.Core.Models;
 using System.Runtime.InteropServices;
-using GameData.Core.Enums; // Access MovementFlags for sanitization
+using GameData.Core.Enums;
+using System;
+using System.IO;
+using System.Linq; // Access MovementFlags for sanitization
 
 namespace PathfindingService.Repository
 {
     public class Physics
     {
         private const string DLL_NAME = "Navigation.dll";
+        private static bool _dllLoaded = false;
+        private static bool _mapsPreloaded = false;
+        private static readonly object _loadLock = new object();
+
+        // ===============================
+        // NATIVE LIBRARY HELPER
+        // ===============================
+        
+        /// <summary>
+        /// Ensures the Navigation.dll is loaded before any P/Invoke calls.
+        /// Call this at the start of the application to get better error messages.
+        /// </summary>
+        public static void EnsureNativeLibraryLoaded()
+        {
+            lock (_loadLock)
+            {
+                if (_dllLoaded) return;
+                
+                var baseDir = AppContext.BaseDirectory;
+                var cwdDir = Directory.GetCurrentDirectory();
+                
+                var searchPaths = new[]
+                {
+                    Path.Combine(baseDir, DLL_NAME),
+                    Path.Combine(cwdDir, DLL_NAME),
+                    DLL_NAME  // System path
+                };
+
+                Console.WriteLine($"[Physics] Looking for {DLL_NAME}...");
+                Console.WriteLine($"[Physics]   AppContext.BaseDirectory: {baseDir}");
+                Console.WriteLine($"[Physics]   Current Directory: {cwdDir}");
+
+                foreach (var path in searchPaths)
+                {
+                    var fullPath = Path.IsPathRooted(path) ? path : Path.GetFullPath(path);
+                    Console.WriteLine($"[Physics]   Checking: {fullPath}");
+                    
+                    if (File.Exists(fullPath))
+                    {
+                        Console.WriteLine($"[Physics]   Found file at: {fullPath}");
+                        try
+                        {
+                            if (NativeLibrary.TryLoad(fullPath, out IntPtr handle))
+                            {
+                                Console.WriteLine($"[Physics]   Successfully loaded {DLL_NAME}!");
+                                _dllLoaded = true;
+                                
+                                // Now preload maps
+                                PreloadMapsInternal();
+                                return;
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[Physics]   Failed to load (TryLoad returned false)");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Physics]   Failed to load: {ex.Message}");
+                        }
+                    }
+                }
+
+                // If we couldn't load explicitly, try to let P/Invoke find it via PATH
+                Console.WriteLine($"[Physics]   Attempting P/Invoke load via system PATH...");
+                try
+                {
+                    // This will trigger the DLL load
+                    PreloadMapsInternal();
+                    _dllLoaded = true;
+                    Console.WriteLine($"[Physics]   Loaded via PATH successfully!");
+                    return;
+                }
+                catch (DllNotFoundException)
+                {
+                    // Expected if not in PATH
+                }
+
+                throw new DllNotFoundException(
+                    $"Unable to find or load '{DLL_NAME}'. " +
+                    $"Searched in: {string.Join(", ", searchPaths.Select(p => Path.IsPathRooted(p) ? p : Path.GetFullPath(p)))}. " +
+                    $"Make sure the Navigation C++ project is built and the DLL is in the application directory or in PATH.");
+            }
+        }
+
+        private static void PreloadMapsInternal()
+        {
+            if (_mapsPreloaded) return;
+            Console.WriteLine($"[Physics]   Preloading navigation maps...");
+            PreloadMap(0);
+            PreloadMap(1);
+            PreloadMap(389);
+            _mapsPreloaded = true;
+            Console.WriteLine($"[Physics]   Maps preloaded successfully!");
+        }
 
         // ===============================
         // ESSENTIAL IMPORTS ONLY
@@ -28,12 +126,6 @@ namespace PathfindingService.Repository
         // ===============================
         // PUBLIC METHODS
         // ===============================
-        static Physics()
-        {
-            PreloadMap(0);
-            PreloadMap(1);
-            PreloadMap(389);
-        }
 
         public PhysicsOutput StepPhysicsV2(PhysicsInput input, float deltaTime)
         {
@@ -120,9 +212,13 @@ namespace PathfindingService.Repository
 		public float standingOnLocalY;
 		public float standingOnLocalZ;
 
+		public IntPtr nearbyObjects;
+		public int nearbyObjectCount;
+
         public uint mapId;
         public float deltaTime;
         public uint frameCounter;
+        public uint physicsFlags;
     }
 
     [StructLayout(LayoutKind.Sequential)]

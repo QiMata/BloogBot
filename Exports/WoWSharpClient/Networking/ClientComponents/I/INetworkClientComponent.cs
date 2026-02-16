@@ -1,3 +1,5 @@
+using System;
+
 namespace WoWSharpClient.Networking.ClientComponents.I
 {
     /// <summary>

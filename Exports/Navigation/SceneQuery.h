@@ -175,6 +175,10 @@ class SceneQuery
         // One-time initialization for SceneQuery VMAP dependencies
         static void Initialize();
 
+        // Inject an externally-managed MapLoader (for test contexts where
+        // SceneQuery::Initialize() can't auto-discover the maps directory).
+        static void SetMapLoader(MapLoader* loader) { m_mapLoader = loader; }
+
         // Unified liquid info result used by liquid evaluation helpers
         struct LiquidInfo
         {
@@ -224,8 +228,17 @@ class SceneQuery
         // Returns true if there is clear LOS between `from` and `to` on the given map
         static bool LineOfSight(uint32_t mapId, const G3D::Vector3& from, const G3D::Vector3& to);
 
+        // Direct ground height query combining VMAP ray and ADT terrain interpolation.
+        // Returns the highest valid ground Z at (x, y) within maxSearchDist below z.
+        // More precise than capsule sweep for exact XY positions (no lateral contact offset).
+        static float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist = 10.0f);
+
     private:
         inline static VMAP::VMapManager2* m_vmapManager = nullptr;
         inline static MapLoader* m_mapLoader = nullptr;
         inline static bool m_initialized = false;
+
+        // BIH-based ground Z query: uses AABB overlap against the BIH tree to find
+        // walkable triangles when getHeight's downward ray misses (e.g. WMO interiors).
+        static float GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float y, float z, float maxSearchDist);
 };

@@ -20,5 +20,5 @@ public interface IBot
     /// <summary>
     /// Creates a class container with task factories for the given activity member state.
     /// </summary>
-    IClassContainer GetClassContainer(ActivitySnapshot probe);
+    IClassContainer GetClassContainer(WoWActivitySnapshot probe);
 }

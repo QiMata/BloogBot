@@ -1,10 +1,12 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarriorArms.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         private static readonly string[] SunderTargets = [ "Snapjaw", "Snapper", "Tortoise", "Spikeshell", "Burrower", "Borer", // turtles
             "Bear", "Grizzly", "Ashclaw", "Mauler", "Shardtooth", "Plaguebear", "Bristlefur", "Thistlefur", // bears
@@ -15,7 +17,7 @@ namespace WarriorArms.Tasks
 
         private const string SunderArmorIcon = "Interface\\Icons\\Ability_Warrior_Sunder";
 
-        internal PvERotationTask(IBotContext botContext) : base(botContext) { }
+        public PvERotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
         {

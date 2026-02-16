@@ -1,4 +1,5 @@
-﻿namespace GameData.Core.Enums;
+﻿using System;
+namespace GameData.Core.Enums;
 
 /**
      * [-ZERO] Need recheck values

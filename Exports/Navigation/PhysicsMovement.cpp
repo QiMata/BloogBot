@@ -31,7 +31,10 @@ MovementIntent BuildMovementIntent(uint32_t moveFlags, float orientation)
 
 float CalculateMoveSpeed(const PhysicsInput& input, bool isSwimming)
 {
-    if (isSwimming) return input.swimSpeed;
+    if (isSwimming) {
+        if (input.moveFlags & MOVEFLAG_BACKWARD) return input.swimBackSpeed;
+        return input.swimSpeed;
+    }
     if (input.moveFlags & MOVEFLAG_WALK_MODE) return input.walkSpeed;
     if (input.moveFlags & MOVEFLAG_BACKWARD) return input.runBackSpeed;
     return input.runSpeed;
@@ -63,30 +66,42 @@ void ProcessAirMovement(
     st.y = endPos.y;
     st.z = endPos.z;
 
-    // Continuous collision: prevent tunneling through ground when falling
+    // When the caller provides exact velocity (TRUST_INPUT_VELOCITY), the trajectory
+    // is already known — skip ground collision detection to avoid premature landing
+    // on nearby slopes that the character is jumping over.
+    const bool trustVel = (input.physicsFlags & PHYSICS_FLAG_TRUST_INPUT_VELOCITY) != 0;
+    if (trustVel)
+        return;
+
+    // Continuous ground collision detection.
+    // Sweep downward with a generous margin to detect nearby walkable ground.
+    // However, only snap to ground when the character's predicted position (endPos)
+    // is at or below the ground surface — prevents premature landing when the
+    // character is still above ground (e.g., near the apex of a jump on a slope).
     const float r = input.radius;
     const float h = input.height;
-    const float stepDownLimit = PhysicsConstants::STEP_DOWN_HEIGHT;
-    
+    constexpr float AIR_SWEEP_MARGIN = 0.5f;   // Generous sweep to detect nearby ground
+    constexpr float LANDING_TOLERANCE = 0.1f;   // Snap when endPos is within 0.1y of ground
+
     CapsuleCollision::Capsule cap = PhysShapes::BuildFullHeightCapsule(startPos.x, startPos.y, startPos.z, r, h);
     G3D::Vector3 downDir(0, 0, -1);
     float fallDist = std::max(0.0f, startPos.z - endPos.z);
-    float sweepDist = fallDist + stepDownLimit;
-    
+    float sweepDist = fallDist + AIR_SWEEP_MARGIN;
+
     std::vector<SceneHit> downHits;
     G3D::Vector3 playerFwd(std::cos(st.orientation), std::sin(st.orientation), 0.0f);
     SceneQuery::SweepCapsule(input.mapId, cap, downDir, sweepDist, downHits, playerFwd);
-    
+
     const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-    const SceneHit* bestNP = nullptr; 
-    float bestTOI = FLT_MAX; 
+    const SceneHit* bestNP = nullptr;
+    float bestTOI = FLT_MAX;
     float bestZ = -FLT_MAX;
-    
+
     for (size_t i = 0; i < downHits.size(); ++i) {
         const auto& hhit = downHits[i];
         if (hhit.startPenetrating) continue;
         if (hhit.normal.z < walkableCosMin) continue;
-        
+
         bool better = false;
         if (!bestNP) better = true;
         else {
@@ -96,13 +111,13 @@ void ProcessAirMovement(
                 else if (std::fabs(hhit.distance - bestTOI) <= 1e-6f && hhit.point.z < bestZ) better = true;
             }
         }
-        if (better) { 
-            bestNP = &hhit; 
-            bestTOI = hhit.distance; 
-            bestZ = hhit.point.z; 
+        if (better) {
+            bestNP = &hhit;
+            bestTOI = hhit.distance;
+            bestZ = hhit.point.z;
         }
     }
-    
+
     if (bestNP) {
         float toiDist = bestNP->distance;
         if (toiDist <= sweepDist + 1e-4f) {
@@ -112,29 +127,34 @@ void ProcessAirMovement(
             if (std::fabs(nz) > 1e-6f) {
                 snapZ = pz - ((nx * (st.x - px) + ny * (st.y - py)) / nz);
             }
-            st.z = snapZ;
-            st.vz = 0.0f;
-            st.isGrounded = true;
-            st.groundNormal = bestNP->normal.directionOrZero();
+            // Only snap when the character's predicted end position is at or below
+            // the ground surface. This prevents premature landing when the character
+            // is still clearly above the ground (rising or near jump apex).
+            if (endPos.z <= snapZ + LANDING_TOLERANCE) {
+                st.z = snapZ;
+                st.vz = 0.0f;
+                st.isGrounded = true;
+                st.groundNormal = bestNP->normal.directionOrZero();
+            }
         }
     } else if (!downHits.empty()) {
-        // Fallback for penetrating walkable contacts
-        const SceneHit* bestPen = nullptr; 
+        // Fallback for penetrating walkable contacts (character starts inside geometry)
+        const SceneHit* bestPen = nullptr;
         float bestPenZ = -FLT_MAX;
         for (const auto& hhit : downHits) {
             if (!hhit.startPenetrating) continue;
             if (hhit.normal.z < walkableCosMin) continue;
             if (hhit.distance > sweepDist + 1e-4f) continue;
-            
+
             bool better = false;
             if (!bestPen) better = true;
             else {
                 if ((hhit.instanceId == 0) && (bestPen->instanceId != 0)) better = true;
                 else if (hhit.point.z > bestPenZ) better = true;
             }
-            if (better) { 
-                bestPen = &hhit; 
-                bestPenZ = hhit.point.z; 
+            if (better) {
+                bestPen = &hhit;
+                bestPenZ = hhit.point.z;
             }
         }
         if (bestPen) {
@@ -159,20 +179,30 @@ void ProcessSwimMovement(
     float dt,
     float speed)
 {
-    // Handles swim movement: horizontal and vertical (pitch) control
+    // Handles swim movement: horizontal and vertical (pitch) control.
+    // Total velocity magnitude = swimSpeed regardless of pitch angle.
+    // Horizontal speed = swimSpeed * cos(pitch), vertical = swimSpeed * sin(pitch).
     if (intent.hasInput) {
-        st.vx = intent.dir.x * speed;
-        st.vy = intent.dir.y * speed;
+        float horizScale = std::cos(st.pitch);
+        st.vx = intent.dir.x * speed * horizScale;
+        st.vy = intent.dir.y * speed * horizScale;
     }
     else {
         st.vx = st.vy = 0;
     }
-    
+
     float desiredVz = 0.0f;
-    // Only apply vertical movement if moving forward
-    if (intent.hasInput && (input.moveFlags & MOVEFLAG_FORWARD))
-        desiredVz = std::sin(st.pitch) * speed;
-    
+    // Apply pitch-based vertical movement for forward and backward swimming.
+    // Forward: pitch down -> descend, pitch up -> ascend
+    // Backward: direction reversed (pitch down -> ascend, pitch up -> descend)
+    // Strafe-only: no vertical movement (WoW keeps depth constant)
+    if (intent.hasInput) {
+        if (input.moveFlags & MOVEFLAG_FORWARD)
+            desiredVz = std::sin(st.pitch) * speed;
+        else if (input.moveFlags & MOVEFLAG_BACKWARD)
+            desiredVz = -std::sin(st.pitch) * speed;
+    }
+
     st.vz = desiredVz;
     st.x += st.vx * dt;
     st.y += st.vy * dt;

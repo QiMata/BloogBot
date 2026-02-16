@@ -1,4 +1,10 @@
+using System;
+using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Reactive.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -407,44 +413,93 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         private static QuestData? ParseQuestDetailsToQuestData(ReadOnlyMemory<byte> payload)
         {
-            // Minimal parser: attempt to read questId from first 4 bytes, otherwise 0
+            // SMSG_QUESTGIVER_QUEST_DETAILS format (MaNGOS 1.12.1):
+            // ObjectGuid questGiverGuid (8)
+            // uint32 questId (4)
+            // string title (null-terminated)
+            // string details (null-terminated)
+            // string objectives (null-terminated)
+            // ... more data ...
             var span = payload.Span;
-            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
-            return new QuestData(questId, "Quest Details", 0UL, QuestOperationType.Offered, DateTime.UtcNow);
+            if (span.Length < 12) return null;
+
+            ulong questGiverGuid = BinaryPrimitives.ReadUInt64LittleEndian(span[..8]);
+            uint questId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(8, 4));
+            int offset = 12;
+            string title = ReadCString(span, ref offset);
+
+            return new QuestData(questId, title.Length > 0 ? title : $"Quest {questId}", questGiverGuid, QuestOperationType.Offered, DateTime.UtcNow);
         }
 
         private static IEnumerable<QuestData> ParseQuestListToQuestData(ReadOnlyMemory<byte> payload)
         {
-            // Without spec, emit a single placeholder offered entry if payload present
-            yield return new QuestData(0U, "Quest List", 0UL, QuestOperationType.Offered, DateTime.UtcNow);
+            // SMSG_QUESTGIVER_QUEST_LIST arrives as part of SMSG_GOSSIP_MESSAGE quest section,
+            // but can also arrive standalone. Format:
+            // ObjectGuid npcGuid (8)
+            // string greeting (null-terminated)
+            // uint8 delay (1)
+            // uint8 questCount (1)
+            // [per quest]: uint32 questId (4), uint32 icon (4), uint32 questLevel (4), string title (null-term)
+            var results = new List<QuestData>();
+            var span = payload.Span;
+            if (span.Length < 12) return results;
+
+            ulong npcGuid = BinaryPrimitives.ReadUInt64LittleEndian(span[..8]);
+            int offset = 8;
+            string greeting = ReadCString(span, ref offset);
+            if (offset + 2 > span.Length) return results;
+
+            byte delay = span[offset++];
+            byte questCount = span[offset++];
+
+            for (int i = 0; i < questCount && offset + 12 <= span.Length; i++)
+            {
+                uint questId = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                uint icon = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                uint questLevel = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(offset, 4)); offset += 4;
+                string title = ReadCString(span, ref offset);
+
+                results.Add(new QuestData(questId, title.Length > 0 ? title : $"Quest {questId}", npcGuid, QuestOperationType.Offered, DateTime.UtcNow));
+            }
+            return results;
         }
 
         private static QuestData? ParseQuestConfirmAcceptToQuestData(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
-            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
-            return new QuestData(questId, "Quest Accepted", 0UL, QuestOperationType.Accepted, DateTime.UtcNow);
+            uint questId = span.Length >= 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span[..4]) : 0U;
+            return new QuestData(questId, $"Quest {questId}", 0UL, QuestOperationType.Accepted, DateTime.UtcNow);
         }
 
         private static QuestData? ParseQuestCompleteToQuestData(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
-            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
-            return new QuestData(questId, "Quest Completed", 0UL, QuestOperationType.Completed, DateTime.UtcNow);
+            uint questId = span.Length >= 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span[..4]) : 0U;
+            return new QuestData(questId, $"Quest {questId}", 0UL, QuestOperationType.Completed, DateTime.UtcNow);
         }
 
         private static QuestErrorData ParseQuestFailedToError(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
-            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
+            uint questId = span.Length >= 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span[..4]) : 0U;
             return new QuestErrorData("Quest failed", questId, null, DateTime.UtcNow);
         }
 
         private static QuestErrorData ParseQuestInvalidToError(ReadOnlyMemory<byte> payload)
         {
             var span = payload.Span;
-            uint questId = span.Length >= 4 ? BitConverter.ToUInt32(span[..4]) : 0U;
+            uint questId = span.Length >= 4 ? BinaryPrimitives.ReadUInt32LittleEndian(span[..4]) : 0U;
             return new QuestErrorData("Quest invalid", questId, null, DateTime.UtcNow);
+        }
+
+        private static string ReadCString(ReadOnlySpan<byte> span, ref int offset)
+        {
+            int start = offset;
+            while (offset < span.Length && span[offset] != 0)
+                offset++;
+            var result = offset > start ? Encoding.UTF8.GetString(span.Slice(start, offset - start)) : string.Empty;
+            if (offset < span.Length) offset++; // skip null terminator
+            return result;
         }
 
         #endregion

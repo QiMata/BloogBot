@@ -1,0 +1,13 @@
+{
+  "hooks": [
+    {
+      "matcher": "Stop",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "powershell -Command \"if (-not (Test-Path 'next-session-prompt.md')) { Write-Warning 'next-session-prompt.md was not generated!' }\""
+        }
+      ]
+    }
+  ]
+}

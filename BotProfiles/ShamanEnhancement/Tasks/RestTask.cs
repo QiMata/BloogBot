@@ -1,10 +1,12 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace ShamanEnhancement.Tasks
 {
-    internal class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         public void Update()
         {

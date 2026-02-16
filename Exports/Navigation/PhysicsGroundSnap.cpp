@@ -69,8 +69,13 @@ bool TryStepUpSnap(
     
     if (dz >= 0.0f && dz <= maxUp + snapEps + 1e-4f) {
         st.z = snapZ;
-        st.isGrounded = true; 
-        st.vz = 0.0f; 
+        // Refine Z with direct height query at exact XY (no capsule lateral offset bias)
+        float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z, maxUp + 0.5f);
+        if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
+            preciseZ <= st.z + 0.05f && preciseZ >= st.z - 0.5f)
+            st.z = preciseZ;
+        st.isGrounded = true;
+        st.vz = 0.0f;
         st.groundNormal = use->normal.directionOrZero();
         return true;
     }
@@ -156,6 +161,12 @@ bool TryDownwardStepSnap(
 
     if (best && best->hit) {
         st.z = best->snapZ;
+        // Refine Z with direct height query at exact XY
+        float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z,
+            PhysicsConstants::STEP_DOWN_HEIGHT);
+        if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
+            preciseZ <= st.z + 0.05f && preciseZ >= st.z - 0.5f)
+            st.z = preciseZ;
         st.isGrounded = true;
         st.vz = 0.0f;
         st.groundNormal = best->hit->normal.directionOrZero();
@@ -196,6 +207,12 @@ bool TryDownwardStepSnap(
                 }
                 if (maxPen <= maxAllowedPenDepth) {
                     st.z = snapZ;
+                    // Refine Z with direct height query at exact XY
+                    float preciseZ2 = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z,
+                        PhysicsConstants::STEP_DOWN_HEIGHT);
+                    if (preciseZ2 > PhysicsConstants::INVALID_HEIGHT &&
+                        preciseZ2 <= st.z + 0.05f && preciseZ2 >= st.z - 0.5f)
+                        st.z = preciseZ2;
                     st.isGrounded = true;
                     st.vz = 0.0f;
                     st.groundNormal = bestPenWalk->normal.directionOrZero();
@@ -235,8 +252,13 @@ bool VerticalSweepSnapDown(
         float dz = snapZ - st.z;
         if (dz <= snapEps) {
             st.z = snapZ;
-            st.isGrounded = true; 
-            st.vz = 0.0f; 
+            // Refine Z with direct height query at exact XY
+            float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z, maxDown + 0.5f);
+            if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
+                preciseZ <= st.z + 0.05f && preciseZ >= st.z - 0.5f)
+                st.z = preciseZ;
+            st.isGrounded = true;
+            st.vz = 0.0f;
             st.groundNormal = bestNP->normal.directionOrZero();
             return true;
         }
@@ -307,6 +329,12 @@ float ApplyVerticalDepenetration(
         float dz = snapZ - st.z;
         if (dz > 1e-6f) {
             st.z = snapZ;
+            // Refine Z with direct height query at exact XY
+            float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z,
+                PhysicsConstants::STEP_DOWN_HEIGHT);
+            if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
+                preciseZ <= st.z + 0.05f && preciseZ >= st.z - 0.5f)
+                st.z = preciseZ;
             st.isGrounded = true;
             st.vz = 0.0f;
             st.groundNormal = bestUp->normal.directionOrZero();

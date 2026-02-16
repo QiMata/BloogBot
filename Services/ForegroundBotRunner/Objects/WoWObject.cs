@@ -4,6 +4,8 @@ using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Runtime.InteropServices;
 using Serilog;
+using System;
+using System.Collections.Generic;
 
 namespace ForegroundBotRunner.Objects
 {
@@ -124,16 +126,24 @@ namespace ForegroundBotRunner.Objects
                     if (ObjectType == WoWObjectType.Player)
                     {
                         var namePtr = MemoryManager.ReadIntPtr(0xC0E230);
-                        while (true)
+                        // Walk the name cache linked list with safety limits
+                        // The list can be empty or the entry might not exist yet (timing issue)
+                        const int maxIterations = 1000;
+                        for (int i = 0; i < maxIterations && namePtr != nint.Zero; i++)
                         {
                             var nextGuid = MemoryManager.ReadUlong(nint.Add(namePtr, 0xC));
 
-                            if (nextGuid != Guid)
-                                namePtr = MemoryManager.ReadIntPtr(namePtr);
-                            else
-                                break;
+                            if (nextGuid == Guid)
+                            {
+                                // Found the entry - read the name string at offset 0x14
+                                return MemoryManager.ReadString(nint.Add(namePtr, 0x14));
+                            }
+
+                            // Move to next entry in the linked list
+                            namePtr = MemoryManager.ReadIntPtr(namePtr);
                         }
-                        return MemoryManager.ReadString(nint.Add(namePtr, 0x14));
+                        // Name not found in cache yet (timing issue) or cache exhausted
+                        return string.Empty;
                     }
                     else if (ObjectType == WoWObjectType.Unit)
                     {
@@ -165,15 +175,16 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
-        public ulong Guid => throw new NotImplementedException();
+        // Use constructor parameters via primary constructor syntax
+        public ulong Guid => guid.FullGuid;
 
-        public HighGuid HighGuid => throw new NotImplementedException();
+        public HighGuid HighGuid => guid;
 
-        public WoWObjectType ObjectType => throw new NotImplementedException();
+        public WoWObjectType ObjectType => objectType;
 
         public uint LastUpated => throw new NotImplementedException();
 
-        public uint Entry => throw new NotImplementedException();
+        public uint Entry => (uint)MemoryManager.ReadInt(nint.Add(GetDescriptorPtr(), 0xC));
 
         public bool InWorld => throw new NotImplementedException();
 
