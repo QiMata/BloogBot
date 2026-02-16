@@ -1,5 +1,6 @@
 using FluentAssertions;
 using RecordedTests.Shared.Storage;
+using System;
 
 namespace RecordedTests.Shared.Tests.Storage;
 
@@ -42,7 +43,6 @@ public class S3RecordedTestStorageTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("not-a-url")]
-    [InlineData("s3://bucket/key")]  // S3 URI not valid for ServiceUrl
     public void ParseS3Uri_InvalidUri_ThrowsFormatException(string? invalidUri)
     {
         // Act
@@ -50,6 +50,20 @@ public class S3RecordedTestStorageTests
 
         // Assert
         act.Should().Throw<FormatException>();
+    }
+
+    [Theory]
+    [InlineData("https://my-bucket.s3.amazonaws.com/recorded-tests/test.mkv")]
+    [InlineData("http://my-bucket.s3.us-west-2.amazonaws.com/test.mkv")]
+    public void ParseS3Uri_HttpsS3Url_ThrowsFormatException(string httpsUrl)
+    {
+        // S3 storage expects s3:// URIs, not HTTPS URLs
+        // Act
+        var act = () => S3RecordedTestStorage.ParseS3Uri(httpsUrl);
+
+        // Assert
+        act.Should().Throw<FormatException>()
+            .WithMessage("*s3://*");
     }
 
     [Fact]
@@ -92,20 +106,6 @@ public class S3RecordedTestStorageTests
         // Assert
         bucket.Should().Be("my-bucket");
         key.Should().BeEmpty();
-    }
-
-    [Theory]
-    [InlineData("https://my-bucket.s3.amazonaws.com/recorded-tests/test.mkv")]
-    [InlineData("http://my-bucket.s3.us-west-2.amazonaws.com/test.mkv")]
-    public void ParseS3Uri_HttpsS3Url_ThrowsFormatException(string httpsUrl)
-    {
-        // S3 storage expects s3:// URIs, not HTTPS URLs
-        // Act
-        var act = () => S3RecordedTestStorage.ParseS3Uri(httpsUrl);
-
-        // Assert
-        act.Should().Throw<FormatException>()
-            .WithMessage("*s3://*");
     }
 
     [Fact]

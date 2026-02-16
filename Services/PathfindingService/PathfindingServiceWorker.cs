@@ -1,23 +1,20 @@
-using PathfindingService.Repository;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace PathfindingService
 {
-    public class PathfindingServiceWorker : BackgroundService
+    public class PathfindingServiceWorker(
+        ILogger<PathfindingServiceWorker> logger,
+        ILoggerFactory loggerFactory,
+        IConfiguration configuration) : BackgroundService
     {
-        private readonly ILogger<PathfindingServiceWorker> _logger;
-        private readonly ILoggerFactory _loggerFactory;
-        private readonly IConfiguration _configuration;
+        private readonly ILogger<PathfindingServiceWorker> _logger = logger;
+        private readonly ILoggerFactory _loggerFactory = loggerFactory;
+        private readonly IConfiguration _configuration = configuration;
         private PathfindingSocketServer? _pathfindingSocketServer;
-
-        public PathfindingServiceWorker(
-            ILogger<PathfindingServiceWorker> logger,
-            ILoggerFactory loggerFactory,
-            IConfiguration configuration)
-        {
-            _logger = logger;
-            _loggerFactory = loggerFactory;
-            _configuration = configuration;
-        }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {

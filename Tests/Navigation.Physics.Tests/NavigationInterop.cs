@@ -1,6 +1,7 @@
 // NavigationInterop.cs - P/Invoke declarations for Navigation.dll physics functions
 // This provides direct access to the C++ physics engine for testing.
 
+using System;
 using System.Runtime.InteropServices;
 
 namespace Navigation.Physics.Tests;
@@ -18,18 +19,11 @@ public static partial class NavigationInterop
     // ==========================================================================
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct Vector3
+    public struct Vector3(float x, float y, float z)
     {
-        public float X;
-        public float Y;
-        public float Z;
-
-        public Vector3(float x, float y, float z)
-        {
-            X = x;
-            Y = y;
-            Z = z;
-        }
+        public float X = x;
+        public float Y = y;
+        public float Z = z;
 
         public readonly float Length() => MathF.Sqrt(X * X + Y * Y + Z * Z);
         public readonly float LengthSquared() => X * X + Y * Y + Z * Z;
@@ -84,18 +78,11 @@ public static partial class NavigationInterop
     // ==========================================================================
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct Triangle
+    public struct Triangle(NavigationInterop.Vector3 a, NavigationInterop.Vector3 b, NavigationInterop.Vector3 c)
     {
-        public Vector3 A;
-        public Vector3 B;
-        public Vector3 C;
-
-        public Triangle(Vector3 a, Vector3 b, Vector3 c)
-        {
-            A = a;
-            B = b;
-            C = c;
-        }
+        public Vector3 A = a;
+        public Vector3 B = b;
+        public Vector3 C = c;
 
         /// <summary>
         /// Computes the triangle's surface normal (right-hand rule: AB � AC)
@@ -124,6 +111,21 @@ public static partial class NavigationInterop
             new Vector3(Bx, By, Bz),
             new Vector3(Cx, Cy, Cz)
         );
+    }
+
+    // ==========================================================================
+    // DYNAMIC OBJECT INFO (matches PhysicsBridge.h DynamicObjectInfo exactly)
+    // ==========================================================================
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DynamicObjectInfo
+    {
+        public ulong Guid;
+        public uint DisplayId;
+        public float X, Y, Z;
+        public float Orientation;
+        public float Scale;
+        public uint GoState;
     }
 
     // ==========================================================================
@@ -161,10 +163,15 @@ public static partial class NavigationInterop
         public float PendingDepenX, PendingDepenY, PendingDepenZ;
         public uint StandingOnInstanceId;
         public float StandingOnLocalX, StandingOnLocalY, StandingOnLocalZ;
+        public IntPtr NearbyObjects;      // DynamicObjectInfo* — pinned array
+        public int NearbyObjectCount;
         public uint MapId;
         public float DeltaTime;
         public uint FrameCounter;
+        public uint PhysicsFlags;
     }
+
+    public const uint PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
 
     // ==========================================================================
     // PHYSICS OUTPUT (matches PhysicsBridge.h PhysicsOutput exactly)
@@ -252,10 +259,18 @@ public static partial class NavigationInterop
     public static extern bool LoadMapTile(uint mapId, uint tileX, uint tileY);
 
     /// <summary>
-    /// Gets terrain height at a world position
+    /// Gets terrain height at a world position (ADT grid only, no VMAP)
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "GetTerrainHeight", CallingConvention = CallingConvention.Cdecl)]
     public static extern float GetTerrainHeight(uint mapId, float x, float y);
+
+    /// <summary>
+    /// Gets ground Z combining VMAP (WMO/M2 models) + ADT terrain.
+    /// Returns highest walkable surface at or below z + 0.5.
+    /// Query from different z heights to detect multi-level geometry.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetGroundZ", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist);
 
     // ==========================================================================
     // GEOMETRY QUERY FUNCTIONS (for testing)
@@ -330,4 +345,64 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "PreloadMap", CallingConvention = CallingConvention.Cdecl)]
     public static extern void PreloadMap(uint mapId);
+
+    // ==========================================================================
+    // DYNAMIC OBJECT REGISTRY (elevators, doors, chests)
+    // ==========================================================================
+
+    /// <summary>
+    /// Loads the displayId→model mapping from the vmaps directory.
+    /// Must be called once before RegisterDynamicObject.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "LoadDynamicObjectMapping", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool LoadDynamicObjectMapping(string vmapsBasePath);
+
+    /// <summary>
+    /// Registers a dynamic object by displayId. Loads the real .vmo model mesh.
+    /// Returns true if the model was found and registered successfully.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "RegisterDynamicObject", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool RegisterDynamicObject(
+        ulong guid, uint entry, uint displayId,
+        uint mapId, float scale);
+
+    /// <summary>
+    /// Updates the world position and orientation of a dynamic object.
+    /// Rebuilds world-space collision triangles from the cached model mesh.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "UpdateDynamicObjectPosition", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void UpdateDynamicObjectPosition(
+        ulong guid, float x, float y, float z, float orientation);
+
+    /// <summary>
+    /// Removes a single dynamic object by GUID.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "UnregisterDynamicObject", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void UnregisterDynamicObject(ulong guid);
+
+    /// <summary>
+    /// Removes all dynamic objects on a given map.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "ClearDynamicObjects", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void ClearDynamicObjects(uint mapId);
+
+    /// <summary>
+    /// Removes all dynamic objects (keeps model cache).
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "ClearAllDynamicObjects", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void ClearAllDynamicObjects();
+
+    /// <summary>
+    /// Returns number of active dynamic objects.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetDynamicObjectCount", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int GetDynamicObjectCount();
+
+    /// <summary>
+    /// Returns number of cached model meshes.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetCachedModelCount", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int GetCachedModelCount();
 }

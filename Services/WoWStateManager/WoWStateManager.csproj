@@ -6,11 +6,6 @@
 <Platforms>AnyCPU;x86</Platforms>
 <PlatformTarget>x86</PlatformTarget>
 <OutputType>Exe</OutputType>
-<!-- Output to same folder as ForegroundBotRunner for integration tests -->
-<BaseOutputPath>..\..\Bot</BaseOutputPath>
-<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-<OutputPath>..\..\Bot\$(Configuration)\net8.0\</OutputPath>
 </PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -44,10 +39,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\BackgroundBotRunner\BackgroundBotRunner.csproj" />
 		<ProjectReference Include="..\DecisionEngineService\DecisionEngineService.csproj" />
 		<ProjectReference Include="..\ForegroundBotRunner\ForegroundBotRunner.csproj" />
-		<ProjectReference Include="..\PathfindingService\PathfindingService.csproj" />
+
 		<ProjectReference Include="..\PromptHandlingService\PromptHandlingService.csproj" />
 	</ItemGroup>
 </Project>

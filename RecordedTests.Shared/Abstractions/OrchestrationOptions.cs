@@ -1,3 +1,5 @@
+using System;
+
 namespace RecordedTests.Shared.Abstractions;
 
 public sealed class OrchestrationOptions

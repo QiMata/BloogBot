@@ -5,6 +5,10 @@ using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {

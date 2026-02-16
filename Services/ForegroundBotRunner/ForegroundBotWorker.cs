@@ -1,15 +1,17 @@
+using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using BotRunner.Clients;
 using Communication;
+using ForegroundBotRunner.Logging;
 using ForegroundBotRunner.Mem.Hooks;
-using ForegroundBotRunner.Objects;
 using ForegroundBotRunner.Statics;
-using Game;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -49,13 +51,23 @@ namespace ForegroundBotRunner
         private DateTime _lastLoginAttemptTime = DateTime.MinValue;
         private DateTime _lastEnterWorldAttemptTime = DateTime.MinValue;
         private DateTime _loadingStartedTime = DateTime.MinValue;  // Track when we started loading to prevent premature timeout
+        private DateTime _loginScreenFirstSeenTime = DateTime.MinValue; // When LoginScreen state was first detected (Lua init grace period)
+        private DateTime _characterSelectFirstSeenTime = DateTime.MinValue; // When CharacterSelect state was first detected
         private static readonly TimeSpan LoginRetryInterval = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan WorldLoadingTimeout = TimeSpan.FromSeconds(60);  // Max time to wait for world to load
+        private static readonly TimeSpan LuaInitGracePeriod = TimeSpan.FromSeconds(3);   // Wait for WoW Lua engine to initialize after login screen appears
+        private static readonly TimeSpan CharSelectGracePeriod = TimeSpan.FromSeconds(3); // Wait for character list to populate in memory
 
         // Diagnostic logging to file (for debugging when running inside WoW.exe)
         private static readonly string DiagnosticLogPath;
         private static readonly object DiagnosticLogLock = new();
         private static int _diagnosticLogCount = 0;
+
+        // 63d: Named pipe logger provider — when connected, DiagLog becomes fallback-only
+        private static NamedPipeLoggerProvider? _pipeLoggerProvider;
+
+        // Pending action from StateManager response (set by background send thread, read by main loop)
+        private Communication.ActionMessage? _pendingAction;
 
         static ForegroundBotWorker()
         {
@@ -82,7 +94,7 @@ namespace ForegroundBotRunner
 
         /// <summary>
         /// Writes a diagnostic message to the file log for debugging.
-        /// This allows tracing what's happening inside WoW.exe from the test.
+        /// Always writes to file — pipe logger may silently drop messages.
         /// </summary>
         private static void DiagLog(string message)
         {
@@ -106,6 +118,22 @@ namespace ForegroundBotRunner
             _logger = loggerFactory.CreateLogger<ForegroundBotWorker>();
             _activitySnapshot = new WoWActivitySnapshot();
             _automatedRecording = Environment.GetEnvironmentVariable("BLOOGBOT_AUTOMATED_RECORDING") == "1";
+
+            // 63d: Try to register the named-pipe logger so ILogger output reaches StateManager
+            var envAccount = Environment.GetEnvironmentVariable("WWOW_ACCOUNT_NAME");
+            if (!string.IsNullOrEmpty(envAccount))
+            {
+                try
+                {
+                    _pipeLoggerProvider = new NamedPipeLoggerProvider(envAccount);
+                    loggerFactory.AddProvider(_pipeLoggerProvider);
+                    DiagLog($"NamedPipeLoggerProvider registered for account '{envAccount}', connected={_pipeLoggerProvider.IsConnected}");
+                }
+                catch (Exception ex)
+                {
+                    DiagLog($"NamedPipeLoggerProvider failed to register: {ex.Message}");
+                }
+            }
 
             DiagLog($"ForegroundBotWorker constructor called. DiagnosticLogPath={DiagnosticLogPath}, AutomatedRecording={_automatedRecording}");
             _logger.LogInformation("ForegroundBotWorker initialized (direct memory mode) - will request account from StateManager");
@@ -159,7 +187,7 @@ namespace ForegroundBotRunner
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to connect to StateManager for account assignment");
+                _logger.LogError(ex, "Failed to connect to StateManager");
                 return false;
             }
         }
@@ -221,8 +249,18 @@ namespace ForegroundBotRunner
                         // This gives StateManager visibility into login, charselect, loading, etc.
                         SendActivitySnapshot(currentScreenState);
 
-                        // If in world, run bot logic and poll recorder
-                        if (currentScreenState == WoWScreenState.InWorld && _objectManager?.HasEnteredWorld == true)
+                        // Process any pending actions from StateManager response (e.g., group invite)
+                        if (currentScreenState == WoWScreenState.InWorld
+                            && _objectManager?.HasEnteredWorld == true)
+                        {
+                            ProcessPendingAction();
+                        }
+
+                        // If in world, run bot logic and poll recorder.
+                        // Skip during continent transitions — object pointers are invalid.
+                        if (currentScreenState == WoWScreenState.InWorld
+                            && _objectManager?.HasEnteredWorld == true
+                            && _objectManager?.IsContinentTransition != true)
                         {
                             // Poll MovementRecorder - checks REC Lua variable to toggle recording
                             _movementRecorder?.Poll();
@@ -246,19 +284,27 @@ namespace ForegroundBotRunner
                                 });
                             }
 
-                            if (!_automatedRecording && _movementRecorder == null)
+                            if (!_automatedRecording && _movementRecorder?.IsRecording != true)
                             {
                                 // Initialize GrindBot on first world entry (skip entirely when recorder is present)
                                 if (_grindBot == null && _objectManager != null)
                                 {
                                     var questRepo = Repository.SqliteQuestRepository.TryCreate();
                                     var groupMgr = new Grouping.GroupManager(_objectManager);
-                                    _grindBot = new GrindBot(_objectManager, _pathfindingClient, questRepo, groupMgr);
+                                    _grindBot = new GrindBot(_objectManager, _pathfindingClient, questRepo, groupMgr, DiagLog);
                                     DiagLog($"GrindBot initialized (pathfinding={_pathfindingClient != null})");
+                                    _logger.LogInformation("GrindBot initialized (pathfinding={HasPathfinding})", _pathfindingClient != null);
                                 }
 
                                 // Run bot state machine
                                 _grindBot?.Update();
+
+                                // Diagnostic: log GrindBot phase periodically
+                                if (loopCount % 10 == 0 && _grindBot != null)
+                                {
+                                    var p = _objectManager?.Player;
+                                    DiagLog($"GRINDBOT: phase={_grindBot.CurrentPhase}, pos=({p?.Position?.X:F0},{p?.Position?.Y:F0},{p?.Position?.Z:F0}), hp={p?.HealthPercent ?? 0}%");
+                                }
                             }
                         }
 
@@ -372,6 +418,8 @@ namespace ForegroundBotRunner
                 _isLoadingWorld = false;  // Reset loading state on disconnect
                 _loadingStartedTime = DateTime.MinValue;  // Reset loading timer on disconnect
                 _characterListReady = false;  // Reset character list ready on disconnect
+                _loginScreenFirstSeenTime = DateTime.MinValue;  // Reset Lua init grace period on disconnect
+                _characterSelectFirstSeenTime = DateTime.MinValue;  // Reset char select grace period on disconnect
 
                 ObjectManager.PauseNativeCallsDuringWorldEntry = false;  // Re-enable native calls on disconnect
                 if (_objectManager != null)
@@ -389,6 +437,8 @@ namespace ForegroundBotRunner
                 _isLoadingWorld = false;
                 _loadingStartedTime = DateTime.MinValue;  // Reset loading timer on logout
                 _characterListReady = false;  // Reset character list ready on logout
+                _loginScreenFirstSeenTime = DateTime.MinValue;  // Reset Lua init grace period on logout
+                _characterSelectFirstSeenTime = DateTime.MinValue;  // Reset char select grace period on logout
 
                 if (_objectManager != null)
                 {
@@ -571,7 +621,22 @@ namespace ForegroundBotRunner
             if (screenState != WoWScreenState.LoginScreen)
             {
                 DiagLog($"HandleLoginScreenState: Not at login screen (screenState={screenState})");
+                _loginScreenFirstSeenTime = DateTime.MinValue; // Reset grace period when leaving login screen
                 return;
+            }
+
+            // Grace period: WoW's Lua engine needs time to initialize after the login screen appears.
+            // Calling LuaCall too early causes the delegate to crash on the main thread, and
+            // ThreadSynchronizer returns null which cascades into NullReferenceException.
+            if (_loginScreenFirstSeenTime == DateTime.MinValue)
+            {
+                _loginScreenFirstSeenTime = DateTime.UtcNow;
+                DiagLog($"HandleLoginScreenState: Login screen first detected, waiting {LuaInitGracePeriod.TotalSeconds}s for Lua engine init");
+                return;
+            }
+            if (DateTime.UtcNow - _loginScreenFirstSeenTime < LuaInitGracePeriod)
+            {
+                return; // Still within Lua init grace period
             }
 
             // Throttle login attempts - always respect cooldown regardless of disconnect resets
@@ -639,15 +704,39 @@ namespace ForegroundBotRunner
                 ObjectManager.ClearCachedGuid(); // Clear cached GUID on logout
                 _enterWorldAttempted = false;
                 _characterListReady = false;
+                _characterSelectFirstSeenTime = DateTime.MinValue; // Reset grace period
                 return; // Don't try to enter world this tick, let the state settle
             }
 
-            // Wait for character list to be loaded before attempting to enter world
-            // The UPDATE_SELECTED_CHARACTER event sets _characterListReady = true
-            // TIMEOUT: On some private servers (e.g., Elysium), this event may not fire
+            // Wait for character list to be loaded before attempting to enter world.
+            // The UPDATE_SELECTED_CHARACTER event sets _characterListReady = true, but
+            // SignalEventManager hooks are deferred until after world entry (to avoid
+            // disconnect during handshake). Fall back to memory polling when hooks aren't active.
             if (!_characterListReady)
             {
-                return;
+                // Grace period: let the character list data settle in memory
+                if (_characterSelectFirstSeenTime == DateTime.MinValue)
+                {
+                    _characterSelectFirstSeenTime = DateTime.UtcNow;
+                    DiagLog($"HandleCharacterSelectState: Character select first detected, waiting {CharSelectGracePeriod.TotalSeconds}s for character list");
+                    return;
+                }
+                if (DateTime.UtcNow - _characterSelectFirstSeenTime < CharSelectGracePeriod)
+                {
+                    return; // Still within grace period
+                }
+
+                // After grace period, check character count from memory directly
+                int memCharCount = ObjectManager.MaxCharacterCount;
+                if (memCharCount > 0)
+                {
+                    DiagLog($"HandleCharacterSelectState: Hooks not active, but MaxCharacterCount={memCharCount} from memory — proceeding");
+                    _characterListReady = true;
+                }
+                else
+                {
+                    return; // Character list not yet loaded
+                }
             }
 
             // Check if there are characters on the account
@@ -741,8 +830,11 @@ namespace ForegroundBotRunner
                 _lastReportedScreenState = screenState;
             }
 
-            // Populate snapshot fields when player is in world
-            if (screenState == WoWScreenState.InWorld && _objectManager?.Player is ForegroundBotRunner.Objects.WoWUnit unit)
+            // Populate snapshot fields when player is in world.
+            // Skip during continent transitions — object pointers are invalid and would crash.
+            if (screenState == WoWScreenState.InWorld
+                && _objectManager?.IsContinentTransition != true
+                && _objectManager?.Player is ForegroundBotRunner.Objects.WoWUnit unit)
             {
                 try
                 {
@@ -787,6 +879,16 @@ namespace ForegroundBotRunner
                 catch (Exception ex)
                 {
                     DiagLog($"SendActivitySnapshot: Error populating movement data: {ex.Message}");
+                }
+
+                // Party leader GUID (0 if not in a group)
+                try
+                {
+                    snapshot.PartyLeaderGuid = _objectManager.PartyLeaderGuid;
+                }
+                catch (Exception ex)
+                {
+                    DiagLog($"SendActivitySnapshot: Error populating party leader GUID: {ex.Message}");
                 }
 
                 // Populate Player protobuf
@@ -858,13 +960,18 @@ namespace ForegroundBotRunner
                 DiagLog($"SendActivitySnapshot: FIRST snapshot - Account={snapshot.AccountName}, ScreenState={snapshot.ScreenState}, Character={snapshot.CharacterName}");
             }
 
-            // Fire-and-forget: send on thread pool to avoid blocking main thread
+            // Send on thread pool to avoid blocking main thread; store response for action processing
             _snapshotSendInProgress = true;
             Task.Run(() =>
             {
                 try
                 {
-                    _stateUpdateClient.SendMemberStateUpdate(snapshot);
+                    var response = _stateUpdateClient.SendMemberStateUpdate(snapshot);
+                    if (response?.CurrentAction != null
+                        && response.CurrentAction.ActionType != Communication.ActionType.Wait)
+                    {
+                        _pendingAction = response.CurrentAction;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -876,6 +983,53 @@ namespace ForegroundBotRunner
                     _snapshotSendInProgress = false;
                 }
             });
+        }
+
+        /// <summary>
+        /// Processes pending actions received from StateManager (e.g., group invite/accept/leave).
+        /// Called from the main loop thread so ObjectManager Lua calls use ThreadSynchronizer safely.
+        /// </summary>
+        private void ProcessPendingAction()
+        {
+            var action = System.Threading.Interlocked.Exchange(ref _pendingAction, null);
+            if (action == null) return;
+
+            try
+            {
+                switch (action.ActionType)
+                {
+                    case Communication.ActionType.SendGroupInvite:
+                        var playerName = action.Parameters.FirstOrDefault()?.StringParam;
+                        if (!string.IsNullOrEmpty(playerName))
+                        {
+                            DiagLog($"ACTION: Inviting '{playerName}' to group");
+                            _logger.LogInformation($"Processing StateManager action: invite '{playerName}' to group");
+                            _objectManager?.InviteByName(playerName);
+                        }
+                        break;
+
+                    case Communication.ActionType.AcceptGroupInvite:
+                        DiagLog("ACTION: Accepting group invite");
+                        _logger.LogInformation("Processing StateManager action: accept group invite");
+                        _objectManager?.AcceptGroupInvite();
+                        break;
+
+                    case Communication.ActionType.LeaveGroup:
+                        DiagLog("ACTION: Leaving group");
+                        _logger.LogInformation("Processing StateManager action: leave group");
+                        _objectManager?.LeaveGroup();
+                        break;
+
+                    default:
+                        DiagLog($"ACTION: Unhandled action type {action.ActionType}");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"ProcessPendingAction ERROR: {ex.Message}");
+                _logger.LogWarning(ex, "Error processing pending action from StateManager");
+            }
         }
 
         private Game.WoWPlayer BuildPlayerProtobuf(ForegroundBotRunner.Objects.WoWUnit unit)
@@ -991,6 +1145,9 @@ namespace ForegroundBotRunner
                 _movementRecorder.StopRecording();
             }
             _movementRecorder?.Dispose();
+
+            // 63d: Dispose the named-pipe logger provider
+            _pipeLoggerProvider?.Dispose();
 
             await base.StopAsync(cancellationToken);
             _logger.LogInformation("ForegroundBotWorker stopped.");

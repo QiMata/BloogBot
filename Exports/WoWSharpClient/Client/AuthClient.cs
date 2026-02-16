@@ -8,6 +8,12 @@ using System.Text;
 using System.Security.Cryptography;
 using WowSrp.Client;
 using Org.BouncyCastle.Utilities;
+using System.Threading.Tasks;
+using System.Threading;
+using System.IO;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace WoWSharpClient.Client
 {

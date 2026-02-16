@@ -1,4 +1,6 @@
 using ForegroundBotRunner.Mem;
+using System;
+using System.IO;
 using System.Text;
 
 namespace ForegroundBotRunner.Statics

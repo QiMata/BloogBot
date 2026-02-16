@@ -2,6 +2,9 @@
 using GameData.Core.Models;
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Tests.Util;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
 namespace WoWSharpClient.Tests.Handlers
 {

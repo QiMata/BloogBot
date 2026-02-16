@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 

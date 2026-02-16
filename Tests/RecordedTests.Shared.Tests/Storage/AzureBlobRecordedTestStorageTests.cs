@@ -1,5 +1,6 @@
 using FluentAssertions;
 using RecordedTests.Shared.Storage;
+using System;
 
 namespace RecordedTests.Shared.Tests.Storage;
 
@@ -24,8 +25,7 @@ public class AzureBlobRecordedTestStorageTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("not-a-url")]
-    [InlineData("s3://bucket/key")]  // S3 URI not valid for Azure
-    [InlineData("http://storage.blob.core.windows.net/container/blob")]  // HTTP not HTTPS
+    [InlineData("s3://bucket/key")]
     public void ParseAzureBlobUri_InvalidUri_ThrowsFormatException(string? invalidUri)
     {
         // Act

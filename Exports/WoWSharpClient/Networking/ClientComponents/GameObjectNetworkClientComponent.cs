@@ -4,6 +4,9 @@ using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using System.Reactive.Subjects;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -11,10 +14,13 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Reactive implementation of game object network agent that handles game object interactions.
     /// Produces observable streams instead of C# events.
     /// </summary>
-    public class GameObjectNetworkClientComponent : NetworkClientComponent, IGameObjectNetworkClientComponent
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="GameObjectNetworkClientComponent"/> class.
+    /// </remarks>
+    public class GameObjectNetworkClientComponent(IWorldClient worldClient, ILogger<GameObjectNetworkClientComponent> logger) : NetworkClientComponent, IGameObjectNetworkClientComponent
     {
-        private readonly IWorldClient _worldClient;
-        private readonly ILogger<GameObjectNetworkClientComponent> _logger;
+        private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
+        private readonly ILogger<GameObjectNetworkClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         private bool _disposed;
 
         // Subjects (hot observables) for consumers to subscribe to
@@ -23,15 +29,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly Subject<ulong> _chestOpened = new();
         private readonly Subject<(ulong GameObjectGuid, uint ItemId)> _nodeHarvested = new();
         private readonly Subject<(ulong GameObjectGuid, string Reason)> _gatheringFailed = new();
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GameObjectNetworkClientComponent"/> class.
-        /// </summary>
-        public GameObjectNetworkClientComponent(IWorldClient worldClient, ILogger<GameObjectNetworkClientComponent> logger)
-        {
-            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
 
         #region Observable Streams
         /// <summary>

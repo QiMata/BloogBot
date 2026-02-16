@@ -1,5 +1,4 @@
 using ForegroundBotRunner.Mem;
-using ForegroundBotRunner.Objects;
 using ForegroundBotRunner.Statics;
 using Game;
 using Google.Protobuf;
@@ -12,6 +11,11 @@ using LocalWoWUnit = ForegroundBotRunner.Objects.WoWUnit;
 using LocalWoWGameObject = ForegroundBotRunner.Objects.WoWGameObject;
 using Race = GameData.Core.Enums.Race;
 using Gender = GameData.Core.Enums.Gender;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.Linq;
+using System.IO;
 
 namespace ForegroundBotRunner
 {
@@ -35,9 +39,13 @@ namespace ForegroundBotRunner
 
         private int _lastToggleValue;
         private bool _chatHookInstalled;
+        private bool _wasInTransition;
         private int _diagnosticFrameCount;
 
         private int _splineSampleCount;
+
+        /// <summary>Tracks last-known GoState per GUID to log transitions (doors opening/closing).</summary>
+        private readonly System.Collections.Generic.Dictionary<ulong, uint> _lastGoState = new();
 
         private const int DefaultFrameIntervalMs = 16;  // ~60 FPS
         private const int DiagnosticIntervalFrames = 300; // Log position every ~5 seconds
@@ -105,6 +113,21 @@ namespace ForegroundBotRunner
             var objectManager = _getObjectManager();
             if (objectManager?.Player == null)
                 return;
+
+            // After a map transition, Lua state may have been reset — reinstall chat hook.
+            if (_wasInTransition)
+            {
+                _chatHookInstalled = false;
+                _wasInTransition = false;
+                _logger.LogInformation("Map transition ended — reinstalling chat hook");
+            }
+
+            // Track transition state so we can detect when it clears
+            if (objectManager.IsContinentTransition)
+            {
+                _wasInTransition = true;
+                return;
+            }
 
             EnsureChatHook();
 
@@ -239,6 +262,7 @@ namespace ForegroundBotRunner
                 _recordingCts = new CancellationTokenSource();
                 _isRecording = true;
                 _splineSampleCount = 0;
+                _lastGoState.Clear();
 
                 _recordingTask = Task.Run(() => RecordingLoop(frameIntervalMs, _recordingCts.Token));
 
@@ -260,6 +284,9 @@ namespace ForegroundBotRunner
                 return null;
             }
 
+            MovementRecording? recordingToSave = null;
+            int frameCount = 0;
+
             lock (_recordingLock)
             {
                 _isRecording = false;
@@ -274,20 +301,39 @@ namespace ForegroundBotRunner
                 if (_currentRecording == null || _currentRecording.Frames.Count == 0)
                 {
                     _logger.LogWarning("RECORDING_STOPPED: No frames captured");
+                    _currentRecording = null;
+                    _recordingCts?.Dispose();
+                    _recordingCts = null;
                     return null;
                 }
 
-                string filePath = SaveRecording(_currentRecording);
-
-                _logger.LogInformation("RECORDING_STOPPED: {FrameCount} frames saved to {FilePath}",
-                    _currentRecording.Frames.Count, filePath);
-
+                // Take ownership of the recording data and release the lock immediately.
+                // SaveRecording does heavy JSON serialization + file I/O that must NOT
+                // block the main WoW thread (which processes WM_USER messages).
+                recordingToSave = _currentRecording;
+                frameCount = _currentRecording.Frames.Count;
                 _currentRecording = null;
                 _recordingCts?.Dispose();
                 _recordingCts = null;
-
-                return filePath;
             }
+
+            // Save on a background thread so the main WoW message pump isn't blocked.
+            // A long-running save on the main thread freezes WoW and can trigger a crash.
+            _logger.LogInformation("RECORDING_STOPPED: {FrameCount} frames captured, saving in background...", frameCount);
+            Task.Run(() =>
+            {
+                try
+                {
+                    string filePath = SaveRecording(recordingToSave);
+                    _logger.LogInformation("RECORDING_SAVED: {FilePath}", filePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to save recording ({FrameCount} frames). Data lost.", frameCount);
+                }
+            });
+
+            return null; // Path not known synchronously; logged when save completes
         }
 
         private async Task RecordingLoop(int intervalMs, CancellationToken cancellationToken)
@@ -327,6 +373,13 @@ namespace ForegroundBotRunner
             if (objectManager == null || !objectManager.IsInWorld)
                 return null;
 
+            // Secondary guard: check for continent transition directly.
+            // The IsInWorld check above reads ContinentId, but the map can change
+            // between that check and the memory reads below. IsContinentTransition
+            // is a volatile bool set by the polling loop and is cheaper/safer to read.
+            if (objectManager.IsContinentTransition)
+                return null;
+
             var player = objectManager.Player;
             if (player == null)
                 return null;
@@ -364,6 +417,7 @@ namespace ForegroundBotRunner
                     FallStartHeight = Safe(unit.FallStartHeight),
                     CurrentSpeed = Safe(unit.CurrentSpeed),
                     FallingSpeed = Safe(unit.CurrentFallingSpeed)
+                    // SystemTick = (uint)Environment.TickCount  // Requires proto regeneration
                 };
 
                 // Transport data — CONFIRMED via zeppelin recording:
@@ -402,9 +456,29 @@ namespace ForegroundBotRunner
                 }
 
                 // Snapshot nearby world objects
+                // When on transport, unit.Position is transport-local — compute world pos for distance checks
                 var playerPos = unit.Position;
-                SnapshotNearbyGameObjects(objectManager!, frame, playerPos);
-                SnapshotNearbyUnits(objectManager!, frame, playerPos, unit.Guid);
+                var playerWorldPos = playerPos;
+                if (frame.TransportGuid != 0)
+                {
+                    // Find transport GO to get its world position for coordinate transform
+                    foreach (var go in objectManager!.GameObjects)
+                    {
+                        if (go is LocalWoWGameObject tGo && tGo.Guid == frame.TransportGuid)
+                        {
+                            var tp = tGo.Position;
+                            float cosO = MathF.Cos(tGo.Facing);
+                            float sinO = MathF.Sin(tGo.Facing);
+                            playerWorldPos = new GameData.Core.Models.Position(
+                                playerPos.X * cosO - playerPos.Y * sinO + tp.X,
+                                playerPos.X * sinO + playerPos.Y * cosO + tp.Y,
+                                playerPos.Z + tp.Z);
+                            break;
+                        }
+                    }
+                }
+                SnapshotNearbyGameObjects(objectManager!, frame, playerWorldPos, frame.TransportGuid);
+                SnapshotNearbyUnits(objectManager!, frame, playerWorldPos, unit.Guid);
 
                 // Periodic player position logging
                 _diagnosticFrameCount++;
@@ -428,7 +502,8 @@ namespace ForegroundBotRunner
         /// Captures nearby game objects within range and adds them to the frame.
         /// Only tracks transports and interactive objects (doors, buttons, elevators).
         /// </summary>
-        private void SnapshotNearbyGameObjects(ObjectManager objectManager, MovementData frame, GameData.Core.Models.Position playerPos)
+        private void SnapshotNearbyGameObjects(ObjectManager objectManager, MovementData frame,
+            GameData.Core.Models.Position playerWorldPos, ulong transportGuid)
         {
             const float MaxSnapshotRange = 100f; // yards
 
@@ -454,12 +529,14 @@ namespace ForegroundBotRunner
                         continue;
 
                     var goPos = gameObj.Position;
-                    float dx = goPos.X - playerPos.X;
-                    float dy = goPos.Y - playerPos.Y;
-                    float dz = goPos.Z - playerPos.Z;
+                    float dx = goPos.X - playerWorldPos.X;
+                    float dy = goPos.Y - playerWorldPos.Y;
+                    float dz = goPos.Z - playerWorldPos.Z;
                     float dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
 
-                    if (dist > MaxSnapshotRange)
+                    // Always include the transport the player is riding, regardless of distance
+                    bool isPlayerTransport = transportGuid != 0 && gameObj.Guid == transportGuid;
+                    if (!isPlayerTransport && dist > MaxSnapshotRange)
                         continue;
 
                     var snapshot = new GameObjectSnapshot
@@ -478,8 +555,32 @@ namespace ForegroundBotRunner
                         },
                         Facing = Safe(gameObj.Facing),
                         Name = gameObj.Name ?? "",
-                        DistanceToPlayer = Safe(dist)
+                        DistanceToPlayer = Safe(dist),
+                        Scale = Safe(gameObj.ScaleX)
                     };
+
+                    // Detect GoState transitions (door open/close, elevator state changes)
+                    uint currentState = snapshot.GoState;
+                    if (_lastGoState.TryGetValue(gameObj.Guid, out uint prevState))
+                    {
+                        if (currentState != prevState)
+                        {
+                            _logger.LogInformation(
+                                "GO_STATE_CHANGE: guid=0x{Guid:X} name='{Name}' displayId={DisplayId} type={Type} " +
+                                "state {PrevState}->{NewState} pos=({X:F1},{Y:F1},{Z:F1})",
+                                gameObj.Guid, snapshot.Name, snapshot.DisplayId, goType,
+                                prevState, currentState, goPos.X, goPos.Y, goPos.Z);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation(
+                            "GO_FIRST_SEEN: guid=0x{Guid:X} name='{Name}' displayId={DisplayId} type={Type} " +
+                            "state={State} flags=0x{Flags:X} scale={Scale:F2} pos=({X:F1},{Y:F1},{Z:F1})",
+                            gameObj.Guid, snapshot.Name, snapshot.DisplayId, goType,
+                            currentState, snapshot.Flags, snapshot.Scale, goPos.X, goPos.Y, goPos.Z);
+                    }
+                    _lastGoState[gameObj.Guid] = currentState;
 
                     frame.NearbyGameObjects.Add(snapshot);
                 }
@@ -644,8 +745,14 @@ namespace ForegroundBotRunner
             Directory.CreateDirectory(recordingsDir);
 
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            string safeName = new string(recording.CharacterName.Where(c => char.IsLetterOrDigit(c)).ToArray());
-            string baseFileName = $"{safeName}_{recording.ZoneName.Replace(' ', '_')}_{timestamp}";
+            string safeName = new string((recording.CharacterName ?? "Unknown").Where(c => char.IsLetterOrDigit(c)).ToArray());
+            if (string.IsNullOrEmpty(safeName)) safeName = "Unknown";
+            // Sanitize zone name: remove any characters invalid in Windows file paths
+            string safeZone = recording.ZoneName ?? "Unknown";
+            foreach (char c in Path.GetInvalidFileNameChars())
+                safeZone = safeZone.Replace(c, '_');
+            safeZone = safeZone.Replace(' ', '_');
+            string baseFileName = $"{safeName}_{safeZone}_{timestamp}";
 
             // Save as JSON (human-readable)
             string jsonPath = Path.Combine(recordingsDir, $"{baseFileName}.json");

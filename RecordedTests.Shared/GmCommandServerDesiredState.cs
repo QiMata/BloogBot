@@ -94,9 +94,9 @@ public sealed class GmCommandServerDesiredState : IServerDesiredState
         return Task.CompletedTask;
     }
 
-    public sealed class GmCommandStep
+    public sealed class GmCommandStep(Func<IRecordedTestContext, string> commandFactory, string? description = null)
     {
-        private readonly Func<IRecordedTestContext, string> _commandFactory;
+        private readonly Func<IRecordedTestContext, string> _commandFactory = commandFactory ?? throw new ArgumentNullException(nameof(commandFactory));
 
         public GmCommandStep(string command, string? description = null)
             : this(_ => command ?? throw new ArgumentNullException(nameof(command)), description)
@@ -107,13 +107,7 @@ public sealed class GmCommandServerDesiredState : IServerDesiredState
             }
         }
 
-        public GmCommandStep(Func<IRecordedTestContext, string> commandFactory, string? description = null)
-        {
-            _commandFactory = commandFactory ?? throw new ArgumentNullException(nameof(commandFactory));
-            Description = description;
-        }
-
-        public string? Description { get; }
+        public string? Description { get; } = description;
 
         public string Resolve(IRecordedTestContext context)
                 {

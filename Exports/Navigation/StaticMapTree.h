@@ -73,6 +73,8 @@ namespace VMAP
         inline const BIH* GetBIHTree() const { return &iTree; }
         inline const ModelInstance* GetInstancesPtr() const { return iTreeValues; }
         inline uint32_t GetInstanceCount() const { return iNTreeValues; }
+        inline uint32_t GetLoadedSpawnCount() const { return (uint32_t)iLoadedSpawns.size(); }
+        inline bool IsTiled() const { return iIsTiled; }
         // Expose map id for integration with terrain queries
         inline uint32_t GetMapId() const { return iMapID; }
 

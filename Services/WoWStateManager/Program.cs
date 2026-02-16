@@ -1,8 +1,15 @@
 using DecisionEngineService;
 using ForegroundBotRunner;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using PromptHandlingService;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text.Json;
+using System.Threading;
 
 namespace WoWStateManager
 {
@@ -45,7 +52,8 @@ namespace WoWStateManager
         /// </summary>
         public static string GetStatusFilePath()
         {
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "pathfinding_status.json");
+            var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
+            return Path.Combine(x64Dir, "pathfinding_status.json");
         }
 
         /// <summary>
@@ -129,19 +137,28 @@ namespace WoWStateManager
         {
             try
             {
+                // PathfindingService is x64 — lives in Bot/{Config}/x64/, not Bot/{Config}/net8.0/
+                var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
+                var dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
+
+                if (!File.Exists(dllPath))
+                {
+                    Console.WriteLine($"PathfindingService.dll not found at: {dllPath}");
+                    Console.WriteLine("Build the solution first: dotnet build WestworldOfWarcraft.sln");
+                    return null;
+                }
+
                 var processInfo = new ProcessStartInfo
                 {
                     FileName = "dotnet",
-                    Arguments = "PathfindingService.dll",
+                    Arguments = $"\"{dllPath}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    RedirectStandardOutput = false,
-                    RedirectStandardError = false,
-                    WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
+                    WorkingDirectory = x64Dir
                 };
 
                 var process = Process.Start(processInfo);
-                Console.WriteLine($"PathfindingService launched (PID: {process?.Id}).");
+                Console.WriteLine($"PathfindingService launched from {x64Dir} (PID: {process?.Id}).");
                 return process;
             }
             catch (Exception ex)
@@ -303,50 +320,42 @@ namespace WoWStateManager
         {
             try
             {
-                // Use unified build output structure
-                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                var exePath = Path.Combine(baseDir, "PathfindingService.exe");
-                var runtimeConfigPath = Path.Combine(baseDir, "PathfindingService.runtimeconfig.json");
+                // PathfindingService is x64 — lives in Bot/{Config}/x64/
+                var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
+                var exePath = Path.Combine(x64Dir, "PathfindingService.exe");
+                var dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
 
-                if (!File.Exists(exePath))
+                ProcessStartInfo psi;
+                if (File.Exists(exePath))
                 {
-                    Console.WriteLine($"PathfindingService executable not found at: {exePath}");
-                    Console.WriteLine("Ensure the PathfindingService project has been built.");
+                    psi = new ProcessStartInfo
+                    {
+                        FileName = exePath,
+                        WorkingDirectory = x64Dir,
+                        UseShellExecute = true,
+                        CreateNoWindow = false
+                    };
+                }
+                else if (File.Exists(dllPath))
+                {
+                    psi = new ProcessStartInfo
+                    {
+                        FileName = "dotnet",
+                        Arguments = $"\"{dllPath}\"",
+                        WorkingDirectory = x64Dir,
+                        UseShellExecute = true,
+                        CreateNoWindow = false
+                    };
+                }
+                else
+                {
+                    Console.WriteLine($"PathfindingService not found at: {exePath} or {dllPath}");
+                    Console.WriteLine("Build the solution first: dotnet build WestworldOfWarcraft.sln");
                     return;
                 }
 
-                if (!File.Exists(runtimeConfigPath))
-                {
-                    Console.WriteLine($"PathfindingService runtime config not found at: {runtimeConfigPath}");
-                    Console.WriteLine("Creating a default runtime config file...");
-                    
-                    // Create a minimal runtime config file
-                    var runtimeConfig = @"{
-  ""runtimeOptions"": {
-    ""tfm"": ""net8.0"",
-    ""framework"": {
-      ""name"": ""Microsoft.NETCore.App"",
-      ""version"": ""8.0.0""
-    },
-    ""configProperties"": {
-      ""System.Reflection.Metadata.MetadataUpdater.IsSupported"": false
-    }
-  }
-}";
-                    File.WriteAllText(runtimeConfigPath, runtimeConfig);
-                }
-
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "cmd.exe",
-                    Arguments = $"/k \"\"{exePath}\" & echo. & echo PathfindingService exited with code %ERRORLEVEL% & pause\"",
-                    WorkingDirectory = baseDir,
-                    UseShellExecute = true,
-                    CreateNoWindow = false
-                };
-
                 Process.Start(psi);
-                Console.WriteLine("PathfindingService process started.");
+                Console.WriteLine($"PathfindingService process started from {x64Dir}.");
             }
             catch (Exception ex)
             {
@@ -443,11 +452,6 @@ namespace WoWStateManager
                     services.Configure<MangosServerOptions>(hostContext.Configuration.GetSection("MangosServer"));
                     services.AddHostedService<MangosServerBootstrapper>();
 
-                    services.Configure<PathfindingServiceOptions>(hostContext.Configuration.GetSection("PathfindingService"));
-                    // Only register PathfindingServiceBootstrapper if we need to manage the service lifecycle.
-                    // When the service is already running or ready, the assembly may not be in our output directory.
-                    if (_serviceState != PathfindingServiceState.AlreadyRunning && _serviceState != PathfindingServiceState.Ready)
-                        services.AddHostedService<PathfindingServiceBootstrapper>();
                     services.AddHostedService<StateManagerWorker>();
                     services.AddHostedService<DecisionEngineWorker>();
 

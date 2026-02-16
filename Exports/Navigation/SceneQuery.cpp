@@ -8,6 +8,7 @@
 #include "MapLoader.h"
 #include "VMapManager2.h"
 #include "VMapFactory.h"
+#include "DynamicObjectRegistry.h"
 #include <filesystem>
 #include "PhysicsEngine.h"
 #include <algorithm>
@@ -18,6 +19,8 @@
 #include <sstream>
 #include <unordered_map>
 #include <set>
+#define NOMINMAX
+#include <windows.h>
 #include "PhysicsDiagnosticsHelpers.h"
 #include "VMapDefinitions.h"
 #include "PhysicsLiquidHelpers.h"
@@ -319,15 +322,19 @@ void SceneQuery::Initialize()
     try
     {
         // Build data root from WWOW_DATA_DIR environment variable
+        // Use Win32 GetEnvironmentVariableA instead of _dupenv_s because .NET's
+        // Environment.SetEnvironmentVariable updates the process environment block
+        // but NOT the CRT cache that _dupenv_s reads from.
         std::string dataRoot;
-        char* envDataRoot = nullptr;
-        size_t envSize = 0;
-        if (_dupenv_s(&envDataRoot, &envSize, "WWOW_DATA_DIR") == 0 && envDataRoot != nullptr)
         {
-            dataRoot = envDataRoot;
-            free(envDataRoot);
-            if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
-                dataRoot += '/';
+            char buf[512] = {0};
+            DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", buf, sizeof(buf));
+            if (len > 0 && len < sizeof(buf))
+            {
+                dataRoot = buf;
+                if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+                    dataRoot += '/';
+            }
         }
 
         // Acquire or create the VMapManager instance and configure it
@@ -343,11 +350,14 @@ void SceneQuery::Initialize()
             vps.push_back("vmaps/");
             vps.push_back("Data/vmaps/");
             vps.push_back("../Data/vmaps/");
+
             for (auto& vp : vps)
             {
                 if (std::filesystem::exists(vp))
                 {
                     m_vmapManager->setBasePath(vp);
+                    // Also load displayId→model mapping for dynamic objects
+                    DynamicObjectRegistry::Instance()->LoadDisplayIdMapping(vp);
                     break;
                 }
             }
@@ -415,6 +425,196 @@ float SceneQuery::GetLiquidHeight(uint32_t mapId, float x, float y, float z, uin
     }
 
     return VMAP::VMAP_INVALID_LIQUID_HEIGHT;
+}
+
+float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist)
+{
+    EnsureMapLoaded(mapId);
+
+    // Collect candidate ground heights from all sources, then pick the one
+    // closest to z. "Closest to z" correctly handles:
+    //   - Outdoor: ADT ground is closest, VMAP roof is above (filtered by z+0.5)
+    //   - Underground interiors: BIH WMO floor is closest, ADT terrain above is farther
+    //   - Multi-level buildings: correct floor is closest to current Z
+    float vmapZ = PhysicsConstants::INVALID_HEIGHT;
+    float adtZ  = PhysicsConstants::INVALID_HEIGHT;
+    float bihZ  = PhysicsConstants::INVALID_HEIGHT;
+
+    // 1. VMAP ray (WMO/M2 models — buildings, bridges, ramps)
+    if (m_vmapManager)
+    {
+        vmapZ = m_vmapManager->getHeight(mapId, x, y, z, maxSearchDist);
+        if (!VMAP::IsValidHeight(vmapZ)) vmapZ = PhysicsConstants::INVALID_HEIGHT;
+    }
+
+    // 2. ADT terrain interpolation
+    if (m_mapLoader && m_mapLoader->IsInitialized())
+    {
+        float h = m_mapLoader->GetHeight(mapId, x, y);
+        if (h > MapFormat::INVALID_HEIGHT + 1.0f)
+            adtZ = h;
+    }
+
+    // 3. BIH overlap: When VMAP ray misses (WMO interiors like Undercity),
+    //    find walkable triangles via AABB overlap against the BIH tree.
+    if (vmapZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f && m_vmapManager)
+    {
+        const VMAP::StaticMapTree* map = m_vmapManager->GetStaticMapTree(mapId);
+        if (map && map->GetInstancesPtr() && map->GetInstanceCount() > 0)
+            bihZ = GetGroundZByBIH(map, x, y, z, maxSearchDist);
+    }
+
+    // Pick result closest to z among valid candidates (within acceptance window)
+    float bestZ = PhysicsConstants::INVALID_HEIGHT;
+    float bestErr = std::numeric_limits<float>::max();
+    auto consider = [&](float candidate) {
+        if (candidate <= PhysicsConstants::INVALID_HEIGHT + 1.0f) return;
+        if (candidate > z + 0.5f) return;
+        if (candidate < z - maxSearchDist) return;
+        float err = std::fabs(candidate - z);
+        if (err < bestErr) {
+            bestErr = err;
+            bestZ = candidate;
+        }
+    };
+    consider(vmapZ);
+    consider(adtZ);
+    consider(bihZ);
+
+    return bestZ;
+}
+
+float SceneQuery::GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float y, float z, float maxSearchDist)
+{
+    // Convert query point to internal coordinates (X/Y mirrored, Z preserved)
+    G3D::Vector3 iPos = NavCoord::WorldToInternal(x, y, z);
+
+    // Build a thin vertical AABB in internal space.
+    // XY padding must be small (just enough to catch triangles at the exact point).
+    const float xyPad = 0.5f;
+    G3D::Vector3 iLo(iPos.x - xyPad, iPos.y - xyPad, z - maxSearchDist);
+    G3D::Vector3 iHi(iPos.x + xyPad, iPos.y + xyPad, z + 0.5f);
+    G3D::AABox queryBox(iLo, iHi);
+
+    // Query BIH tree for overlapping model instances
+    const uint32_t maxInst = 64;
+    uint32_t instIdx[maxInst];
+    uint32_t instCount = 0;
+    bool bihOk = map->GetBIHTree()->QueryAABB(queryBox, instIdx, instCount, maxInst);
+
+    // Brute-force fallback: check all instances whose AABB overlaps the query
+    if (!bihOk || instCount == 0)
+    {
+        for (uint32_t i = 0; i < map->GetInstanceCount() && instCount < maxInst; ++i)
+        {
+            const VMAP::ModelInstance& inst = map->GetInstancesPtr()[i];
+            if (!inst.iModel) continue;
+            if (!inst.iBound.intersects(queryBox)) continue;
+            instIdx[instCount++] = i;
+        }
+    }
+    else
+    {
+        // Also add any instances missed by BIH but whose AABB overlaps
+        std::vector<char> present(map->GetInstanceCount(), 0);
+        for (uint32_t k = 0; k < instCount; ++k)
+            if (instIdx[k] < map->GetInstanceCount()) present[instIdx[k]] = 1;
+        for (uint32_t i = 0; i < map->GetInstanceCount() && instCount < maxInst; ++i)
+        {
+            if (present[i]) continue;
+            const VMAP::ModelInstance& inst = map->GetInstancesPtr()[i];
+            if (!inst.iModel) continue;
+            if (!inst.iBound.intersects(queryBox)) continue;
+            instIdx[instCount++] = i;
+        }
+    }
+
+    if (instCount == 0) return PhysicsConstants::INVALID_HEIGHT;
+
+    float bestZ = PhysicsConstants::INVALID_HEIGHT;
+
+    for (uint32_t k = 0; k < instCount; ++k)
+    {
+        uint32_t idx = instIdx[k];
+        if (idx >= map->GetInstanceCount()) continue;
+        const VMAP::ModelInstance& inst = map->GetInstancesPtr()[idx];
+        if (!inst.iModel) continue;
+        if (!inst.iBound.intersects(queryBox)) continue;
+
+        // Build model-local bounds from internal-space query box
+        G3D::Vector3 corners[8] = {
+            {queryBox.low().x, queryBox.low().y, queryBox.low().z},
+            {queryBox.high().x, queryBox.low().y, queryBox.low().z},
+            {queryBox.low().x, queryBox.high().y, queryBox.low().z},
+            {queryBox.high().x, queryBox.high().y, queryBox.low().z},
+            {queryBox.low().x, queryBox.low().y, queryBox.high().z},
+            {queryBox.high().x, queryBox.low().y, queryBox.high().z},
+            {queryBox.low().x, queryBox.high().y, queryBox.high().z},
+            {queryBox.high().x, queryBox.high().y, queryBox.high().z}
+        };
+        G3D::Vector3 c0 = inst.iInvRot * ((corners[0] - inst.iPos) * inst.iInvScale);
+        G3D::AABox modelBox(c0, c0);
+        for (int ci = 1; ci < 8; ++ci)
+        {
+            G3D::Vector3 pm = inst.iInvRot * ((corners[ci] - inst.iPos) * inst.iInvScale);
+            modelBox.merge(pm);
+        }
+
+        std::vector<G3D::Vector3> vertices;
+        std::vector<uint32_t> indices;
+        if (!inst.iModel->GetMeshDataInBounds(modelBox, vertices, indices))
+        {
+            if (!inst.iModel->GetAllMeshData(vertices, indices))
+                continue;
+        }
+
+        size_t triCount = indices.size() / 3;
+        for (size_t t = 0; t < triCount; ++t)
+        {
+            uint32_t i0 = indices[t * 3 + 0];
+            uint32_t i1 = indices[t * 3 + 1];
+            uint32_t i2 = indices[t * 3 + 2];
+            if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size()) continue;
+
+            // Transform model-local vertices to internal space, then to world space
+            G3D::Vector3 iA = inst.iRot * (vertices[i0] * inst.iScale) + inst.iPos;
+            G3D::Vector3 iB = inst.iRot * (vertices[i1] * inst.iScale) + inst.iPos;
+            G3D::Vector3 iC = inst.iRot * (vertices[i2] * inst.iScale) + inst.iPos;
+            G3D::Vector3 wA = NavCoord::InternalToWorld(iA);
+            G3D::Vector3 wB = NavCoord::InternalToWorld(iB);
+            G3D::Vector3 wC = NavCoord::InternalToWorld(iC);
+
+            // Check if triangle is walkable (upward-facing normal)
+            G3D::Vector3 wN = (wB - wA).cross(wC - wA);
+            float len = wN.magnitude();
+            if (len < 1e-6f) continue;
+            wN /= len;
+            if (wN.z < 0.0f) wN = -wN;
+            if (wN.z < PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) continue;
+
+            // 2D point-in-triangle test (XY only)
+            float d0 = (wB.x - wA.x) * (y - wA.y) - (wB.y - wA.y) * (x - wA.x);
+            float d1 = (wC.x - wB.x) * (y - wB.y) - (wC.y - wB.y) * (x - wB.x);
+            float d2 = (wA.x - wC.x) * (y - wC.y) - (wA.y - wC.y) * (x - wC.x);
+            bool hasNeg = (d0 < 0) || (d1 < 0) || (d2 < 0);
+            bool hasPos = (d0 > 0) || (d1 > 0) || (d2 > 0);
+            if (hasNeg && hasPos) continue;
+
+            // Compute Z at (x, y) via barycentric interpolation
+            float denom = (wB.y - wC.y) * (wA.x - wC.x) + (wC.x - wB.x) * (wA.y - wC.y);
+            if (std::fabs(denom) < 1e-10f) continue;
+            float u = ((wB.y - wC.y) * (x - wC.x) + (wC.x - wB.x) * (y - wC.y)) / denom;
+            float v = ((wC.y - wA.y) * (x - wC.x) + (wA.x - wC.x) * (y - wC.y)) / denom;
+            float w = 1.0f - u - v;
+            float triZ = u * wA.z + v * wB.z + w * wC.z;
+
+            // Accept if within search range and highest valid result
+            if (triZ <= z + 0.5f && triZ >= z - maxSearchDist && triZ > bestZ)
+                bestZ = triZ;
+        }
+    }
+
+    return bestZ;
 }
 
 SceneQuery::LiquidInfo SceneQuery::EvaluateLiquidAt(uint32_t mapId, float x, float y, float z)
@@ -963,6 +1163,9 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
     auto flushSweepLog = [&]() {
         PHYS_INFO(PHYS_CYL, sweepLog.str());
     };
+    // Ensure map VMAP data is initialized before querying
+    EnsureMapLoaded(mapId);
+
     // Acquire map tree from injected manager
     const VMAP::StaticMapTree* map = nullptr;
     if (m_vmapManager)
@@ -1008,6 +1211,42 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                         }
                     }
                 }
+        }
+
+        // 3) Dynamic object overlaps (elevators, doors)
+        {
+            auto* dynReg = DynamicObjectRegistry::Instance();
+            if (dynReg)
+            {
+                G3D::Vector3 dP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
+                G3D::Vector3 dP1(capsuleStart.p1.x, capsuleStart.p1.y, capsuleStart.p1.z);
+                G3D::Vector3 center = (dP0 + dP1) * 0.5f;
+                float r = inflCaps.r;
+                G3D::AABox dynAABB(
+                    G3D::Vector3(center.x - r, center.y - r, dP0.z - r),
+                    G3D::Vector3(center.x + r, center.y + r, dP1.z + r));
+                std::vector<CapsuleCollision::Triangle> dynTris;
+                dynReg->QueryTriangles(mapId, dynAABB, dynTris);
+                if (!dynTris.empty())
+                {
+                    CapsuleCollision::Capsule Cw; Cw.p0 = { dP0.x, dP0.y, dP0.z }; Cw.p1 = { dP1.x, dP1.y, dP1.z }; Cw.r = inflCaps.r;
+                    for (size_t dIdx = 0; dIdx < dynTris.size(); ++dIdx)
+                    {
+                        CapsuleCollision::Hit chD;
+                        if (CapsuleCollision::intersectCapsuleTriangle(Cw, dynTris[dIdx], chD))
+                        {
+                            G3D::Vector3 wPoint(chD.point.x, chD.point.y, chD.point.z);
+                            G3D::Vector3 wA(dynTris[dIdx].a.x, dynTris[dIdx].a.y, dynTris[dIdx].a.z);
+                            G3D::Vector3 wB(dynTris[dIdx].b.x, dynTris[dIdx].b.y, dynTris[dIdx].b.z);
+                            G3D::Vector3 wC(dynTris[dIdx].c.x, dynTris[dIdx].c.y, dynTris[dIdx].c.z);
+                            G3D::Vector3 wN = (wB - wA).cross(wC - wA).directionOrZero();
+                            bool flipped = false; G3D::Vector3 chosenN = wN; if (chosenN.z < 0.0f) { chosenN = -chosenN; flipped = true; }
+                            SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = chosenN; h.point = wPoint; h.triIndex = (int)dIdx; h.instanceId = 0x80000000u | (uint32_t)dIdx; h.startPenetrating = true; h.penetrationDepth = chD.depth; h.normalFlipped = flipped;
+                            overlaps.push_back(h);
+                        }
+                    }
+                }
+            }
         }
 
         if (!overlaps.empty())
@@ -1066,6 +1305,7 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                  << " distance=" << distance
                  << " aabbInflate=" << PhysicsTol::AABBInflation(capsuleStart.r)
                  << " zBias=" << PhysicsTol::GroundZBias(capsuleStart.r) << "\n";
+
     }
 
     // Build per-instance distribution summary
@@ -1274,19 +1514,45 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
         }
     }
 
-    if (!outHits.empty())
+    // 3) Dynamic object penetration (elevators, doors) — world space
     {
-        // Sort start penetration hits so the highest surface (largest point.z) comes first; tie-break by penetration depth
-        std::sort(outHits.begin(), outHits.end(), [](const SceneHit& a, const SceneHit& b) {
-            if (std::fabs(a.point.z - b.point.z) > 1e-4f) return a.point.z > b.point.z; // higher first
-            if (std::fabs(a.penetrationDepth - b.penetrationDepth) > 1e-5f) return a.penetrationDepth > b.penetrationDepth; // deeper first
-            return a.triIndex < b.triIndex; // stable fallback
-        });
-        // Log rejection diagnostics when a lot of candidates were pruned
-        sweepLog << "  Rejections: vmapProx=" << vmapRejectedByProximity
-                 << " terrainZWin=" << terrainRejectedByZWindow << "\n";
-        return (int)outHits.size();
+        auto* dynReg = DynamicObjectRegistry::Instance();
+        if (dynReg)
+        {
+            G3D::AABox sweepWorldAABB(
+                G3D::Vector3(wP0.x, wP0.y, wP0.z).min(wP0 + dir * distance) - G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r),
+                G3D::Vector3(wP1.x, wP1.y, wP1.z).max(wP1 + dir * distance) + G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r));
+            std::vector<CapsuleCollision::Triangle> dynTris;
+            dynReg->QueryTriangles(mapId, sweepWorldAABB, dynTris);
+            if (!dynTris.empty())
+            {
+                CapsuleCollision::Capsule Cw; Cw.p0 = { wP0.x, wP0.y, wP0.z }; Cw.p1 = { wP1.x, wP1.y, wP1.z }; Cw.r = capsuleStart.r;
+                for (size_t dIdx = 0; dIdx < dynTris.size(); ++dIdx)
+                {
+                    CapsuleCollision::Hit chD;
+                    if (CapsuleCollision::intersectCapsuleTriangle(Cw, dynTris[dIdx], chD))
+                    {
+                        G3D::Vector3 wPoint(chD.point.x, chD.point.y, chD.point.z);
+                        if (wPoint.z < capMinZWorld || wPoint.z > capMaxZWorld) continue;
+                        G3D::Vector3 wA(dynTris[dIdx].a.x, dynTris[dIdx].a.y, dynTris[dIdx].a.z);
+                        G3D::Vector3 wB(dynTris[dIdx].b.x, dynTris[dIdx].b.y, dynTris[dIdx].b.z);
+                        G3D::Vector3 wC(dynTris[dIdx].c.x, dynTris[dIdx].c.y, dynTris[dIdx].c.z);
+                        G3D::Vector3 wN = (wB - wA).cross(wC - wA).directionOrZero();
+                        G3D::Vector3 capsuleMidW = (wP0 + wP1) * 0.5f;
+                        G3D::Vector3 chosenN = OrientNormalForOverlap(wN, capsuleMidW, wPoint);
+                        bool flipped = (chosenN.dot(wN) < 0.0f);
+                        SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f; h.normal = chosenN; h.point = wPoint; h.triIndex = (int)dIdx; h.instanceId = 0x80000000u | (uint32_t)dIdx; h.startPenetrating = true; h.penetrationDepth = chD.depth; h.normalFlipped = flipped;
+                        outHits.push_back(h);
+                    }
+                }
+            }
+        }
     }
+
+    // NOTE: Do NOT early-return on overlap hits. The CCD sweep below must always run
+    // so callers (e.g. ExecuteDownPass) can find swept surfaces even when the capsule
+    // overlaps nearby geometry at the start position (common near WMO walls).
+    // Overlap hits are kept in outHits and will be merged with CCD sweep results.
 
     // Analytic sweep in model-local space
     struct HitTmp { float t; int triCacheIdx; int triLocalIdx; uint32_t instId; G3D::Vector3 nWorld; G3D::Vector3 pWorld; float penetrationDepth; G3D::Vector3 centerAtHit; SceneHit::CapsuleRegion region; };
@@ -1310,11 +1576,16 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
         CapsuleCollision::Capsule CLocal; CLocal.p0 = { p0L.x, p0L.y, p0L.z }; CLocal.p1 = { p1L.x, p1L.y, p1L.z }; CLocal.r = capsuleStart.r * invScale;
         CapsuleCollision::Vec3 velLocal(vL.x, vL.y, vL.z);
 
-        // Proximity gate before sweep: skip triangles too far from the capsule segment in local space
+        // Proximity gate before sweep: skip triangles too far from the SWEPT capsule volume
         G3D::Vector3 triLo(std::min({Tlocal.a.x, Tlocal.b.x, Tlocal.c.x}), std::min({Tlocal.a.y, Tlocal.b.y, Tlocal.c.y}), std::min({Tlocal.a.z, Tlocal.b.z, Tlocal.c.z}));
         G3D::Vector3 triHi(std::max({Tlocal.a.x, Tlocal.b.x, Tlocal.c.x}), std::max({Tlocal.a.y, Tlocal.b.y, Tlocal.c.y}), std::max({Tlocal.a.z, Tlocal.b.z, Tlocal.c.z}));
         G3D::AABox triBox(triLo, triHi);
-        float segDistSq = SegmentAABBDistSqLocal(p0L, p1L, triBox);
+        // Check proximity at BOTH start and end-of-sweep positions
+        G3D::Vector3 p0LEnd = p0L + vL;
+        G3D::Vector3 p1LEnd = p1L + vL;
+        float segDistSqStart = SegmentAABBDistSqLocal(p0L, p1L, triBox);
+        float segDistSqEnd   = SegmentAABBDistSqLocal(p0LEnd, p1LEnd, triBox);
+        float segDistSq = std::min(segDistSqStart, segDistSqEnd);
         float allowSq = (CLocal.r) * (CLocal.r);
         if (segDistSq > allowSq) {
             ++vmapRejectedByProximity2;
@@ -1468,22 +1739,58 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
         }
     }
 
+    // 3) Dynamic object sweep (elevators, doors) — world space
+    {
+        auto* dynReg = DynamicObjectRegistry::Instance();
+        if (dynReg)
+        {
+            G3D::AABox sweepWorldAABB(
+                wP0.min(wP0 + dir * distance) - G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r),
+                wP1.max(wP1 + dir * distance) + G3D::Vector3(capsuleStart.r, capsuleStart.r, capsuleStart.r));
+            std::vector<CapsuleCollision::Triangle> dynTris;
+            dynReg->QueryTriangles(mapId, sweepWorldAABB, dynTris);
+            if (!dynTris.empty())
+            {
+                CapsuleCollision::Capsule Cw; Cw.p0 = { wP0.x, wP0.y, wP0.z }; Cw.p1 = { wP1.x, wP1.y, wP1.z }; Cw.r = capsuleStart.r;
+                CapsuleCollision::Vec3 velW(worldVel.x, worldVel.y, worldVel.z);
+                for (size_t dIdx = 0; dIdx < dynTris.size(); ++dIdx)
+                {
+                    float toi; CapsuleCollision::Vec3 nW, pW;
+                    if (CapsuleCollision::capsuleTriangleSweep(Cw, velW, dynTris[dIdx], toi, nW, pW) && toi >= 0.0f && toi <= 1.0f)
+                    {
+                        float tClamped = CapsuleCollision::cc_clamp(toi, 0.0f, 1.0f);
+                        G3D::Vector3 wImpact(pW.x, pW.y, pW.z);
+                        G3D::Vector3 wA(dynTris[dIdx].a.x, dynTris[dIdx].a.y, dynTris[dIdx].a.z);
+                        G3D::Vector3 wB(dynTris[dIdx].b.x, dynTris[dIdx].b.y, dynTris[dIdx].b.z);
+                        G3D::Vector3 wC(dynTris[dIdx].c.x, dynTris[dIdx].c.y, dynTris[dIdx].c.z);
+                        G3D::Vector3 wN = EnsureSafeNormal((wB - wA).cross(wC - wA));
+                        G3D::Vector3 chosenN = OrientNormalForSweep(wN, dir);
+                        G3D::Vector3 wCenter0 = (wP0 + wP1) * 0.5f;
+                        G3D::Vector3 centerAtHit = wCenter0 + dir * (tClamped * distance);
+                        CapsuleCollision::Hit chD; CapsuleCollision::intersectCapsuleTriangle({ Cw.p0 + velW * toi, Cw.p1 + velW * toi, Cw.r }, dynTris[dIdx], chD);
+                        HitTmp tmp; tmp.t = toi; tmp.triCacheIdx = (int)dIdx; tmp.triLocalIdx = (int)dIdx; tmp.instId = 0x80000000u | (uint32_t)dIdx; tmp.nWorld = chosenN; tmp.pWorld = wImpact; tmp.penetrationDepth = chD.depth; tmp.centerAtHit = centerAtHit; tmp.region = SceneHit::CapsuleRegion::Unknown; candidates.push_back(tmp);
+                    }
+                }
+            }
+        }
+    }
+
     if (!candidates.empty())
     {
         std::sort(candidates.begin(), candidates.end(), [](const HitTmp& a, const HitTmp& b) { if (a.t == b.t) return a.triLocalIdx < b.triLocalIdx; return a.t < b.t; });
         for (auto& c : candidates)
         {
-            SceneHit h; 
-            h.hit = true; 
+            SceneHit h;
+            h.hit = true;
             h.time = CapsuleCollision::cc_clamp(c.t, 0.0f, 1.0f);
-            h.distance = h.time * distance; 
+            h.distance = h.time * distance;
             h.penetrationDepth = c.penetrationDepth;
             G3D::Vector3 wSurfN = c.nWorld.directionOrZero();
-            h.normal = wSurfN; 
-            h.point = c.pWorld; 
-            h.triIndex = c.triLocalIdx; 
-            h.instanceId = c.instId; 
-            h.startPenetrating = false; 
+            h.normal = wSurfN;
+            h.point = c.pWorld;
+            h.triIndex = c.triLocalIdx;
+            h.instanceId = c.instId;
+            h.startPenetrating = false;
             h.normalFlipped = false;
             h.region = c.region;
             outHits.push_back(h);
@@ -1492,7 +1799,11 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
                      << " t=" << h.time << " dist=" << h.distance
                      << " pt=(" << h.point.x << "," << h.point.y << "," << h.point.z << ") nZ=" << h.normal.z << "\n";
         }
-        // Inference summary across all hits
+    }
+
+    if (!outHits.empty())
+    {
+        // Summary across all hits (overlap + CCD sweep)
         size_t penCount = 0, nonPen = 0, walkNP = 0; float earliestNP = FLT_MAX; float minZ = FLT_MAX, maxZ = -FLT_MAX;
         for (const auto& h : outHits) {
             if (h.startPenetrating) ++penCount; else { ++nonPen; earliestNP = std::min(earliestNP, h.time); if (h.normal.z >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) ++walkNP; }
@@ -1512,5 +1823,6 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
     sweepLog << "  Summary: hits=0\n";
     sweepLog << "  ZWindow capMinZ=" << capMinZWorld << " capMaxZ=" << capMaxZWorld << " terrainTriCount=" << terrainTris.size() << "\n";
     flushSweepLog();
+
     return 0;
 }

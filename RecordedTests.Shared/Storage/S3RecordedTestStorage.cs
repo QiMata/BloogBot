@@ -1,5 +1,11 @@
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RecordedTests.Shared.Storage;
 
@@ -11,31 +17,14 @@ namespace RecordedTests.Shared.Storage;
 /// This implementation requires the AWSSDK.S3 NuGet package to be installed.
 /// To use this storage backend, add: dotnet add package AWSSDK.S3
 /// </remarks>
-public sealed class S3RecordedTestStorage : IRecordedTestStorage
+public sealed class S3RecordedTestStorage(
+    S3StorageConfiguration configuration,
+    ITestLogger? logger = null) : IRecordedTestStorage
 {
-    private readonly S3StorageConfiguration _configuration;
-    private readonly ITestLogger? _logger;
-    // private readonly AmazonS3Client _s3Client; // Requires AWSSDK.S3 package
+    private readonly S3StorageConfiguration _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+    private readonly ITestLogger? _logger = logger;
 
-    public S3RecordedTestStorage(
-        S3StorageConfiguration configuration,
-        ITestLogger? logger = null)
-    {
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-        _logger = logger;
-
-        // TODO: Initialize S3 client when AWSSDK.S3 is added
-        // _s3Client = new AmazonS3Client(
-        //     configuration.AccessKeyId,
-        //     configuration.SecretAccessKey,
-        //     new AmazonS3Config
-        //     {
-        //         ServiceURL = configuration.ServiceUrl,
-        //         ForcePathStyle = configuration.UsePathStyle
-        //     });
-        }
-
-        public Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
+    public Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
         {
             // S3 storage implementation should use UploadArtifactAsync for individual artifacts
             _logger?.Warn("StoreAsync is not directly implemented for S3 Storage. Use UploadArtifactAsync for individual artifacts.");
@@ -185,20 +174,51 @@ public sealed class S3RecordedTestStorage : IRecordedTestStorage
         return name;
     }
 
-    private static (string bucket, string key) ParseS3Uri(string s3Uri)
+    /// <summary>
+    /// Parses an S3 URI (s3://bucket/key) into its bucket and key components.
+    /// </summary>
+    public static (string bucket, string key) ParseS3Uri(string s3Uri)
     {
-        if (!s3Uri.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(s3Uri) || !s3Uri.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException($"Invalid S3 URI format: {s3Uri}");
+            throw new FormatException($"Invalid S3 URI format. Expected s3://bucket/key but got: {s3Uri}");
         }
 
-        var parts = s3Uri.Substring(5).Split('/', 2);
-        if (parts.Length < 2)
+        var path = s3Uri.Substring(5);
+        var slashIndex = path.IndexOf('/');
+        if (slashIndex < 0)
         {
-            throw new ArgumentException($"Invalid S3 URI format (missing key): {s3Uri}");
+            return (path, string.Empty);
         }
 
-        return (parts[0], parts[1]);
+        return (path.Substring(0, slashIndex), path.Substring(slashIndex + 1));
+    }
+
+    /// <summary>
+    /// Generates an S3 key from the given components.
+    /// </summary>
+    public static string GenerateS3Key(string keyPrefix, string testName, string timestamp, string artifactName)
+    {
+        var sanitized = SanitizeKeyPublic(testName);
+        return $"{keyPrefix}{sanitized}/{timestamp}/{artifactName}";
+    }
+
+    /// <summary>
+    /// Generates an S3 URI from a bucket name and key.
+    /// </summary>
+    public static string GenerateS3Uri(string bucketName, string key)
+    {
+        return $"s3://{bucketName}/{key}";
+    }
+
+    private static string SanitizeKeyPublic(string name)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        foreach (var c in invalidChars)
+        {
+            name = name.Replace(c, '_');
+        }
+        return name;
     }
 }
 

@@ -1,7 +1,10 @@
-using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Statics;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ForegroundBotRunner
 {
@@ -12,11 +15,11 @@ namespace ForegroundBotRunner
     ///
     /// Requires GM level 3 for .go xyz teleport commands.
     /// </summary>
-    public class MovementScenarioRunner
+    public class MovementScenarioRunner(ObjectManager objectManager, MovementRecorder recorder, ILoggerFactory loggerFactory)
     {
-        private readonly ObjectManager _objectManager;
-        private readonly MovementRecorder _recorder;
-        private readonly ILogger _logger;
+        private readonly ObjectManager _objectManager = objectManager;
+        private readonly MovementRecorder _recorder = recorder;
+        private readonly ILogger _logger = loggerFactory.CreateLogger<MovementScenarioRunner>();
 
         // Diagnostic log (writes to WoW's WWoWLogs directory so tests can read it)
         private static readonly string DiagnosticLogPath;
@@ -52,13 +55,6 @@ namespace ForegroundBotRunner
         // Slope: Durotar road approaching Razor Hill from the south (gentle slope)
         // Use Z slightly above terrain to avoid underground
         private const float SlopeX = 290f, SlopeY = -4660f, SlopeZ = 18f;
-
-        public MovementScenarioRunner(ObjectManager objectManager, MovementRecorder recorder, ILoggerFactory loggerFactory)
-        {
-            _objectManager = objectManager;
-            _recorder = recorder;
-            _logger = loggerFactory.CreateLogger<MovementScenarioRunner>();
-        }
 
         public async Task RunAllScenariosAsync(CancellationToken ct)
         {

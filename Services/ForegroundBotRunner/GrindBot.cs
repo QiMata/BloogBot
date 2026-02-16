@@ -10,6 +10,9 @@ using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ForegroundBotRunner
 {
@@ -36,6 +39,7 @@ namespace ForegroundBotRunner
         private readonly GroupManager? _groupManager;
         private readonly DungeonNavigator? _dungeonNavigator;
         private readonly Random _random = new();
+        private readonly Action<string>? _diagLog;
         private ICombatRotation? _rotation;
         private GrindBotPhase _phase = GrindBotPhase.Idle;
         private WoWUnit? _currentTarget;
@@ -58,13 +62,18 @@ namespace ForegroundBotRunner
         private readonly Dictionary<ulong, int> _blacklist = new();
         private const int BLACKLIST_DURATION_MS = 120_000; // 2 minutes
 
-        // Hotspot patrol
-        private readonly Position[] _hotspots;
-        private int _currentHotspotIndex;
-        private const float HOTSPOT_REACH_DISTANCE = 10f;
+        // Exploration (when no targets nearby)
+        private Position? _exploreTarget;
+        private Position? _exploreOrigin; // Where we started exploring from
+        private int _exploreCount; // Number of explore legs completed
+        private readonly List<Position> _recentExplorePositions = new();
+        private const float EXPLORE_REACH_DISTANCE = 8f;
+        private const float EXPLORE_MIN_RADIUS = 40f;
+        private const float EXPLORE_MAX_RADIUS = 80f;
+        private const int MAX_RECENT_EXPLORE = 10;
 
         // Tuning constants
-        private const float AGGRO_RANGE = 30f;
+        private const float AGGRO_RANGE = 80f;
         private const float MELEE_RANGE = 5f;
         private const float LOOT_RANGE = 5f;
         private const int LOOT_TIMEOUT_MS = 8000;
@@ -72,18 +81,18 @@ namespace ForegroundBotRunner
         private const int REST_THRESHOLD_PCT = 50;
         private const int REST_RESUME_PCT = 80;
         private const int LOG_INTERVAL_MS = 5000;
-        private const float STUCK_THRESHOLD = 0.05f;
-        private const int STUCK_DETECTION_MS = 1000;
-        private const int UNSTUCK_DURATION_MS = 300;
+        private const float STUCK_THRESHOLD = 1.0f;    // Must move >1y per check interval to not be stuck
+        private const int STUCK_DETECTION_MS = 3000;   // 3 seconds of no movement before triggering
+        private const int UNSTUCK_DURATION_MS = 1000;  // 1 second per unstuck attempt
 
         public GrindBotPhase CurrentPhase => _phase;
 
-        public GrindBot(ObjectManager objectManager, PathfindingClient? pathfindingClient = null, IQuestRepository? questRepo = null, GroupManager? groupManager = null)
+        public GrindBot(ObjectManager objectManager, PathfindingClient? pathfindingClient = null, IQuestRepository? questRepo = null, GroupManager? groupManager = null, Action<string>? diagLog = null)
         {
             _objectManager = objectManager;
             _navigation = new NavigationPath(pathfindingClient);
-            _hotspots = HotspotConfig.Load();
             _groupManager = groupManager;
+            _diagLog = diagLog;
             if (groupManager != null)
                 _dungeonNavigator = new DungeonNavigator(objectManager, groupManager);
             if (questRepo != null)
@@ -157,6 +166,7 @@ namespace ForegroundBotRunner
             {
                 // Stale pointer - target likely despawned
                 Log.Warning("[GrindBot] Access violation in {Phase}, resetting to FindTarget", _phase);
+                _diagLog?.Invoke($"[GrindBot] ACCESS VIOLATION in {_phase}, resetting to FindTarget");
                 _currentTarget = null;
                 _objectManager.StopAllMovement();
                 SetPhase(GrindBotPhase.FindTarget);
@@ -164,6 +174,7 @@ namespace ForegroundBotRunner
             catch (Exception ex)
             {
                 Log.Error(ex, "[GrindBot] Update error in {Phase}", _phase);
+                _diagLog?.Invoke($"[GrindBot] EXCEPTION in {_phase}: {ex.Message}");
             }
         }
 
@@ -172,10 +183,18 @@ namespace ForegroundBotRunner
             if (_phase != newPhase)
             {
                 Log.Information("[GrindBot] {OldPhase} -> {NewPhase}", _phase, newPhase);
+                _diagLog?.Invoke($"[GrindBot] {_phase} -> {newPhase}");
                 _phase = newPhase;
                 _phaseStartTime = Environment.TickCount;
                 _navigation.Clear();
                 ResetStuckState();
+
+                // Reset expanding explore when transitioning to combat or loot
+                if (newPhase == GrindBotPhase.MoveToTarget || newPhase == GrindBotPhase.Combat)
+                {
+                    _exploreOrigin = null;
+                    _exploreTarget = null;
+                }
             }
         }
 
@@ -209,6 +228,13 @@ namespace ForegroundBotRunner
 
             // Check for aggressors first (mobs attacking us or party members)
             var aggressor = FindAggressor(player);
+            if (aggressor == null && player.IsInCombat)
+            {
+                // Fallback: player is in combat but FindAggressor didn't find a mob targeting us.
+                // Look for nearby in-combat mobs (handles neutral mobs like boars whose TargetGuid
+                // may not read correctly from memory).
+                aggressor = FindNearbyCombatMob(player);
+            }
             if (aggressor != null)
             {
                 _currentTarget = aggressor;
@@ -300,6 +326,7 @@ namespace ForegroundBotRunner
             var target = FindNearestHostile(player);
             if (target != null)
             {
+                _diagLog?.Invoke($"[GrindBot] Found hostile: {target.Name} ({target.Guid:X}) at {target.Position.DistanceTo(player.Position):F0}y, hp={target.Health}");
                 _currentTarget = target;
                 TargetUnit(target);
                 _autoAttackStarted = false;
@@ -307,35 +334,30 @@ namespace ForegroundBotRunner
                 return;
             }
 
-            // No targets - patrol to next hotspot if configured
-            if (_hotspots.Length > 0)
+            // No targets - explore with pathfinding, biased forward to avoid circling
             {
-                var hotspot = _hotspots[_currentHotspotIndex % _hotspots.Length];
-                var distToHotspot = player.Position.DistanceTo(hotspot);
-
-                if (distToHotspot < HOTSPOT_REACH_DISTANCE)
+                if (_exploreTarget == null || player.Position.DistanceTo(_exploreTarget) < EXPLORE_REACH_DISTANCE)
                 {
-                    // Reached this hotspot - advance to next
-                    _currentHotspotIndex = (_currentHotspotIndex + 1) % _hotspots.Length;
-                    hotspot = _hotspots[_currentHotspotIndex];
+                    _exploreTarget = PickExplorePosition(player);
                     _navigation.Clear();
-                    Log.Debug("[GrindBot] Reached hotspot, advancing to #{Index}", _currentHotspotIndex);
+                    _diagLog?.Invoke($"[GrindBot] New explore target: ({_exploreTarget.X:F0},{_exploreTarget.Y:F0},{_exploreTarget.Z:F0}), origin=({_exploreOrigin?.X:F0},{_exploreOrigin?.Y:F0}), count={_exploreCount}");
+                    Log.Debug("[GrindBot] New explore target: ({X:F0},{Y:F0},{Z:F0})",
+                        _exploreTarget.X, _exploreTarget.Y, _exploreTarget.Z);
                 }
 
-                // Navigate toward hotspot
-                var mapId = _objectManager.ContinentId;
-                var nextWaypoint = _navigation.GetNextWaypoint(player.Position, hotspot, mapId);
-                if (nextWaypoint != null)
+                var exploreMapId = _objectManager.ContinentId;
+                var exploreWp = _navigation.GetNextWaypoint(player.Position, _exploreTarget, exploreMapId);
+                if (exploreWp != null)
                 {
-                    _objectManager.Face(nextWaypoint);
+                    _objectManager.Face(exploreWp);
                     _objectManager.StartMovement(ControlBits.Front);
                 }
+                else
+                {
+                    _diagLog?.Invoke($"[GrindBot] GetNextWaypoint returned NULL for explore target ({_exploreTarget.X:F0},{_exploreTarget.Y:F0})");
+                }
 
-                LogPeriodic($"Patrolling to hotspot #{_currentHotspotIndex} ({distToHotspot:F0}y away)");
-            }
-            else
-            {
-                LogPeriodic($"No targets found within {AGGRO_RANGE}y (no hotspots configured)");
+                LogPeriodic($"Exploring toward ({_exploreTarget.X:F0},{_exploreTarget.Y:F0}) - no targets within {AGGRO_RANGE}y");
             }
         }
 
@@ -371,16 +393,28 @@ namespace ForegroundBotRunner
                 if (_stuckCount > 20)
                 {
                     Log.Warning("[GrindBot] Stuck too many times moving to target, blacklisting");
+                    _diagLog?.Invoke($"[GrindBot] Blacklisting target {_currentTarget.Guid:X} after {_stuckCount} stuck events");
                     BlacklistTarget(_currentTarget.Guid);
                     _objectManager.StopAllMovement();
                     _currentTarget = null;
                     SetPhase(GrindBotPhase.FindTarget);
+                }
+                else if (Environment.TickCount - _lastLogTick > LOG_INTERVAL_MS)
+                {
+                    _diagLog?.Invoke($"[GrindBot] STUCK #{_stuckCount}, unstucking={_isUnstucking}, moveFlags=0x{player.MovementFlags:X}");
                 }
                 return; // Let unstuck movement play out
             }
 
             var combatRange = _rotation?.DesiredRange ?? MELEE_RANGE;
             var distance = player.Position.DistanceTo(_currentTarget.Position);
+
+            // Periodic diagnostic for MoveToTarget
+            if (Environment.TickCount - _lastLogTick > LOG_INTERVAL_MS)
+            {
+                _diagLog?.Invoke($"[GrindBot] MoveToTarget: dist={distance:F1}y, combatRange={combatRange:F1}, target=({_currentTarget.Position.X:F0},{_currentTarget.Position.Y:F0},{_currentTarget.Position.Z:F0}), facing={player.Facing:F2}, moveFlags=0x{player.MovementFlags:X}");
+            }
+
             if (distance <= combatRange)
             {
                 _objectManager.StopAllMovement();
@@ -409,11 +443,27 @@ namespace ForegroundBotRunner
 
             // Use pathfinding to navigate to target
             var mapId = _objectManager.ContinentId;
-            var nextWaypoint = _navigation.GetNextWaypoint(player.Position, _currentTarget.Position, mapId);
-            if (nextWaypoint != null)
+
+            // Close range: face target directly with instant SetFacing to avoid spiral orbiting.
+            // The multi-step Face() overshoots when the target is nearby and moving.
+            if (distance < 20f)
             {
-                _objectManager.Face(nextWaypoint);
+                var targetPos = _currentTarget.Position;
+                var dx = targetPos.X - player.Position.X;
+                var dy = targetPos.Y - player.Position.Y;
+                var angle = (float)Math.Atan2(dy, dx);
+                if (angle < 0) angle += (float)(Math.PI * 2);
+                _objectManager.SetFacing(angle);
                 _objectManager.StartMovement(ControlBits.Front);
+            }
+            else
+            {
+                var nextWaypoint = _navigation.GetNextWaypoint(player.Position, _currentTarget.Position, mapId);
+                if (nextWaypoint != null)
+                {
+                    _objectManager.Face(nextWaypoint);
+                    _objectManager.StartMovement(ControlBits.Front);
+                }
             }
         }
 
@@ -495,8 +545,7 @@ namespace ForegroundBotRunner
             }
             else
             {
-                var playerUnit = player as WoWUnit;
-                if (playerUnit != null && playerUnit.IsMoving)
+                if (player is WoWUnit playerUnit && playerUnit.IsMoving)
                 {
                     _objectManager.StopAllMovement();
                 }
@@ -716,6 +765,75 @@ namespace ForegroundBotRunner
             }
         }
 
+        // ── Explore Position Picking ──
+
+        /// <summary>
+        /// Pick an explore position that expands outward from the origin.
+        /// Uses an expanding spiral: each successive leg pushes further from
+        /// where exploration started, preventing circular loops.
+        /// </summary>
+        private Position PickExplorePosition(IWoWLocalPlayer player)
+        {
+            // Record where we started exploring (reset when we find a target)
+            if (_exploreOrigin == null)
+            {
+                _exploreOrigin = player.Position;
+                _exploreCount = 0;
+            }
+
+            // Expanding radius: start at 40-80y, grow by 20y per completed leg
+            float minDist = EXPLORE_MIN_RADIUS + _exploreCount * 20f;
+            float maxDist = EXPLORE_MAX_RADIUS + _exploreCount * 20f;
+
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                // Pick positions relative to the ORIGIN (not current position)
+                // to ensure we spiral outward from where we started
+                float angle = (float)(_random.NextDouble() * Math.PI * 2); // Full 360°
+                float dist = minDist + (float)(_random.NextDouble() * (maxDist - minDist));
+
+                var candidate = new Position(
+                    _exploreOrigin.X + (float)(Math.Cos(angle) * dist),
+                    _exploreOrigin.Y + (float)(Math.Sin(angle) * dist),
+                    player.Position.Z);
+
+                // Skip if too close to a recently visited explore point
+                bool tooClose = false;
+                foreach (var recent in _recentExplorePositions)
+                {
+                    if (recent.DistanceTo(candidate) < 30f)
+                    {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                if (tooClose) continue;
+
+                _exploreCount++;
+                TrackExplorePosition(candidate);
+                return candidate;
+            }
+
+            // Fallback: clear history and push outward from origin
+            _recentExplorePositions.Clear();
+            _exploreCount++;
+            float fallbackAngle = (float)(_random.NextDouble() * Math.PI * 2);
+            float fallbackDist = maxDist;
+            var fallback = new Position(
+                _exploreOrigin.X + (float)(Math.Cos(fallbackAngle) * fallbackDist),
+                _exploreOrigin.Y + (float)(Math.Sin(fallbackAngle) * fallbackDist),
+                player.Position.Z);
+            TrackExplorePosition(fallback);
+            return fallback;
+        }
+
+        private void TrackExplorePosition(Position pos)
+        {
+            _recentExplorePositions.Add(pos);
+            if (_recentExplorePositions.Count > MAX_RECENT_EXPLORE)
+                _recentExplorePositions.RemoveAt(0);
+        }
+
         // ── Stuck Detection ──
 
         /// <summary>
@@ -730,13 +848,14 @@ namespace ForegroundBotRunner
                 if (Environment.TickCount - _unstuckStartTick > UNSTUCK_DURATION_MS)
                 {
                     // Check if we moved enough
-                    if (_unstuckStartPosition != null && player.Position.DistanceTo(_unstuckStartPosition) > 3)
+                    if (_unstuckStartPosition != null && player.Position.DistanceTo(_unstuckStartPosition) > 2)
                     {
                         _objectManager.StopAllMovement();
                         _isUnstucking = false;
                         return false;
                     }
-                    // Try another random direction
+                    // Try another random direction (stuckCount increments here too)
+                    _stuckCount++;
                     DoUnstuckMovement();
                 }
                 return true; // Still unstucking
@@ -774,6 +893,9 @@ namespace ForegroundBotRunner
             _unstuckStartTick = Environment.TickCount;
             _unstuckStartPosition = _objectManager.Player?.Position;
 
+            // CRITICAL: Stop all movement first to clear conflicting control bits
+            _objectManager.StopAllMovement();
+
             var direction = _random.Next(0, 4);
             switch (direction)
             {
@@ -794,7 +916,7 @@ namespace ForegroundBotRunner
                     _objectManager.StartMovement(ControlBits.StrafeRight);
                     break;
             }
-            _objectManager.StartMovement(ControlBits.Jump);
+            ThreadSynchronizer.SimulateSpacebarPress(); // Jump to clear obstacles
         }
 
         private void ResetStuckState()
@@ -879,6 +1001,31 @@ namespace ForegroundBotRunner
             }
         }
 
+        /// <summary>
+        /// Fallback for when the player is in combat but FindAggressor didn't match any mob.
+        /// Finds the nearest non-player mob that is in combat and within aggro range.
+        /// </summary>
+        private WoWUnit? FindNearbyCombatMob(IWoWLocalPlayer player)
+        {
+            try
+            {
+                return _objectManager.Units
+                    .OfType<WoWUnit>()
+                    .Where(u => u is not WoWPlayer &&
+                               u.Health > 0 &&
+                               u.IsInCombat &&
+                               !u.NotAttackable &&
+                               u.Position.DistanceTo(player.Position) <= AGGRO_RANGE)
+                    .OrderBy(u => u.Position.DistanceTo(player.Position))
+                    .FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[GrindBot] FindNearbyCombatMob error");
+                return null;
+            }
+        }
+
         private int CountAggressors(IWoWLocalPlayer player)
         {
             try
@@ -940,6 +1087,10 @@ namespace ForegroundBotRunner
                 return null;
             }
 
+            // Periodic diagnostic: log candidate count
+            if (Environment.TickCount - _lastLogTick > LOG_INTERVAL_MS)
+                _diagLog?.Invoke($"[GrindBot] FindNearestHostile: {candidates.Count} candidates");
+
             // Check unit reaction for each candidate (native call via ThreadSynchronizer)
             foreach (var candidate in candidates)
             {
@@ -948,7 +1099,7 @@ namespace ForegroundBotRunner
                     var reaction = ThreadSynchronizer.RunOnMainThread(() =>
                         Functions.GetUnitReaction(playerPtr, candidate.Pointer));
 
-                    if (reaction <= UnitReaction.Hostile)
+                    if (reaction <= UnitReaction.Neutral)
                     {
                         return candidate;
                     }

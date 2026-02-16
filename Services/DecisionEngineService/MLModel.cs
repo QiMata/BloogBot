@@ -1,15 +1,12 @@
 using Communication;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace DecisionEngineService;
 
-public class MLModel
+public class MLModel(List<float> initialWeights)
 {
-    private readonly List<float> _weights;
-
-    public MLModel(List<float> initialWeights)
-    {
-        _weights = initialWeights ?? [];
-    }
+    private readonly List<float> _weights = initialWeights ?? [];
 
     public void LearnFromSnapshot(WoWActivitySnapshot snapshot)
     {
@@ -86,7 +83,10 @@ public class MLModel
             });
         }
 
-        var hostileCount = snapshot.NearbyUnits?.Count(unit => unit.UnitFlags == 16 /* Hostile flag */) ?? 0;
+        // Fix: RepeatedField<T> does not support Count(predicate), so use LINQ ToList().Count
+        var hostileCount = snapshot.NearbyUnits == null
+            ? 0
+            : snapshot.NearbyUnits.Where(unit => unit.UnitFlags == 16 /* Hostile flag */).ToList().Count;
         if (hostileCount > 2)
         {
             actionMaps.Add(new ActionMap

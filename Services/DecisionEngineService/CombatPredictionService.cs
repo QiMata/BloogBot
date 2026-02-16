@@ -2,6 +2,8 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.ML;
 using Microsoft.Extensions.Logging;
+using System.IO;
+using System;
 
 namespace DecisionEngineService
 {
@@ -54,9 +56,8 @@ namespace DecisionEngineService
                 connection.Open();
                 using var command = connection.CreateCommand();
                 command.CommandText = "SELECT ModelData FROM TrainedModel ORDER BY Id DESC LIMIT 1";
-                var modelData = command.ExecuteScalar() as byte[];
 
-                if (modelData != null)
+                if (command.ExecuteScalar() is byte[] modelData)
                 {
                     using var memoryStream = new MemoryStream(modelData);
                     DataViewSchema modelSchema;

@@ -1,5 +1,10 @@
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RecordedTests.Shared.Storage;
 
@@ -10,27 +15,14 @@ namespace RecordedTests.Shared.Storage;
 /// This implementation requires the Azure.Storage.Blobs NuGet package to be installed.
 /// To use this storage backend, add: dotnet add package Azure.Storage.Blobs
 /// </remarks>
-public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
+public sealed class AzureBlobRecordedTestStorage(
+    AzureBlobStorageConfiguration configuration,
+    ITestLogger? logger = null) : IRecordedTestStorage
 {
-    private readonly AzureBlobStorageConfiguration _configuration;
-    private readonly ITestLogger? _logger;
-    // private readonly BlobServiceClient _blobServiceClient; // Requires Azure.Storage.Blobs package
-    // private readonly BlobContainerClient _containerClient;
+    private readonly AzureBlobStorageConfiguration _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+    private readonly ITestLogger? _logger = logger;
 
-    public AzureBlobRecordedTestStorage(
-        AzureBlobStorageConfiguration configuration,
-        ITestLogger? logger = null)
-    {
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-        _logger = logger;
-
-        // TODO: Initialize Azure Blob client when Azure.Storage.Blobs is added
-        // _blobServiceClient = new BlobServiceClient(_configuration.ConnectionString);
-        // _containerClient = _blobServiceClient.GetBlobContainerClient(_configuration.ContainerName);
-        // await _containerClient.CreateIfNotExistsAsync();
-        }
-
-        public Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
+    public Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
         {
             // Azure Blob storage implementation should use UploadArtifactAsync for individual artifacts
             _logger?.Warn("StoreAsync is not directly implemented for Azure Blob Storage. Use UploadArtifactAsync for individual artifacts.");
@@ -75,7 +67,7 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
         ArgumentException.ThrowIfNullOrWhiteSpace(storageLocation);
         ArgumentException.ThrowIfNullOrWhiteSpace(localDestinationPath);
 
-        var blobName = ParseAzureBlobUri(storageLocation);
+        var blobName = ParseAzureBlobUriInstance(storageLocation);
 
         _logger?.Info($"Downloading artifact from Azure Blob '{blobName}' to {localDestinationPath}");
 
@@ -130,7 +122,7 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageLocation);
 
-        var blobName = ParseAzureBlobUri(storageLocation);
+        var blobName = ParseAzureBlobUriInstance(storageLocation);
 
         _logger?.Info($"Deleting artifact from Azure Blob '{blobName}'");
 
@@ -154,19 +146,59 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
         return name.Replace('\\', '/');
     }
 
-    private string ParseAzureBlobUri(string blobUri)
+    /// <summary>
+    /// Parses an Azure Blob URI into its account, container, and blob name components.
+    /// </summary>
+    public static (string account, string container, string blobName) ParseAzureBlobUri(string blobUri)
     {
-        // Expected format: https://{account}.blob.core.windows.net/{container}/{blobName}
-        var uri = new Uri(blobUri);
-        var pathParts = uri.AbsolutePath.TrimStart('/').Split('/', 2);
+        if (string.IsNullOrEmpty(blobUri))
+            throw new FormatException("Blob URI cannot be null or empty.");
 
-        if (pathParts.Length < 2)
+        if (!blobUri.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            throw new FormatException($"Invalid Azure Blob URI format. Expected https:// URI but got: {blobUri}");
+
+        Uri uri;
+        try
         {
-            throw new ArgumentException($"Invalid Azure Blob URI format: {blobUri}");
+            uri = new Uri(blobUri);
+        }
+        catch (UriFormatException ex)
+        {
+            throw new FormatException($"Invalid Azure Blob URI format: {blobUri}", ex);
         }
 
-        var containerName = pathParts[0];
-        var blobName = pathParts[1];
+        if (!uri.Host.EndsWith(".blob.core.windows.net", StringComparison.OrdinalIgnoreCase))
+            throw new FormatException($"Invalid Azure Blob URI host. Expected *.blob.core.windows.net but got: {uri.Host}");
+
+        var account = uri.Host.Split('.')[0];
+        var pathParts = uri.AbsolutePath.TrimStart('/').Split('/', 2);
+
+        if (pathParts.Length < 2 || string.IsNullOrEmpty(pathParts[0]) || string.IsNullOrEmpty(pathParts[1]))
+            throw new FormatException($"Invalid Azure Blob URI format (missing container or blob name): {blobUri}");
+
+        return (account, pathParts[0], pathParts[1]);
+    }
+
+    /// <summary>
+    /// Generates a blob name from the given components.
+    /// </summary>
+    public static string GenerateBlobName(string blobPrefix, string testName, string timestamp, string artifactName)
+    {
+        var sanitized = SanitizeBlobName(testName);
+        return $"{blobPrefix}{sanitized}/{timestamp}/{artifactName}";
+    }
+
+    /// <summary>
+    /// Generates an Azure Blob URI from account, container, and blob name.
+    /// </summary>
+    public static string GenerateAzureBlobUri(string accountName, string containerName, string blobName)
+    {
+        return $"https://{accountName}.blob.core.windows.net/{containerName}/{blobName}";
+    }
+
+    private string ParseAzureBlobUriInstance(string blobUri)
+    {
+        var (_, containerName, blobName) = ParseAzureBlobUri(blobUri);
 
         if (containerName != _configuration.ContainerName)
         {

@@ -9,34 +9,28 @@ namespace RecordedTests.PathingTests.Descriptions;
 /// Test description for pathing tests, extending the default recorded test orchestration
 /// with pathing-specific configuration and GM command execution.
 /// </summary>
-public class PathingRecordedTestDescription : DefaultRecordedWoWTestDescription
+/// <remarks>
+/// Initializes a new instance of the PathingRecordedTestDescription.
+/// </remarks>
+/// <param name="context">The pathing test context</param>
+/// <param name="foregroundRunner">The foreground bot runner (GM-capable)</param>
+/// <param name="backgroundRunner">The background bot runner (test execution)</param>
+/// <param name="recorder">Optional screen recorder</param>
+/// <param name="logger">Test logger</param>
+public class PathingRecordedTestDescription(
+    PathingRecordedTestContext context,
+    IBotRunner foregroundRunner,
+    IBotRunner backgroundRunner,
+    IScreenRecorder? recorder,
+    ITestLogger logger) : DefaultRecordedWoWTestDescription(
+        context,
+        foregroundRunner,
+        backgroundRunner,
+        CreateDesiredState(context.TestDefinition, foregroundRunner, logger),
+        recorder,
+        logger)
 {
-    private readonly PathingTestDefinition _testDefinition;
-
-    /// <summary>
-    /// Initializes a new instance of the PathingRecordedTestDescription.
-    /// </summary>
-    /// <param name="context">The pathing test context</param>
-    /// <param name="foregroundRunner">The foreground bot runner (GM-capable)</param>
-    /// <param name="backgroundRunner">The background bot runner (test execution)</param>
-    /// <param name="recorder">Optional screen recorder</param>
-    /// <param name="logger">Test logger</param>
-    public PathingRecordedTestDescription(
-        PathingRecordedTestContext context,
-        IBotRunner foregroundRunner,
-        IBotRunner backgroundRunner,
-        IScreenRecorder? recorder,
-        ITestLogger logger)
-        : base(
-            context,
-            foregroundRunner,
-            backgroundRunner,
-            CreateDesiredState(context.TestDefinition, foregroundRunner, logger),
-            recorder,
-            logger)
-    {
-        _testDefinition = context.TestDefinition;
-    }
+    private readonly PathingTestDefinition _testDefinition = context.TestDefinition;
 
     /// <summary>
     /// Creates the server desired state with GM command execution wired up.

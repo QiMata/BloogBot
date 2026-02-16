@@ -1,6 +1,10 @@
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.Models;
@@ -898,10 +902,10 @@ namespace WoWSharpClient.Tests.Agent
             _vendorAgent.HandleVendorWindowOpened(vendorInfo);
         }
 
-        private sealed class ActionObserver<T> : IObserver<T>
+        private sealed class ActionObserver<T>(Action<T> onNext) : IObserver<T>
         {
-            private readonly Action<T> _onNext;
-            public ActionObserver(Action<T> onNext) => _onNext = onNext;
+            private readonly Action<T> _onNext = onNext;
+
             public void OnCompleted() { }
             public void OnError(Exception error) { }
             public void OnNext(T value) => _onNext(value);

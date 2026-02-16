@@ -1,6 +1,9 @@
 using Newtonsoft.Json;
 using System.Reflection;
 using Serilog;
+using System.Collections.Generic;
+using System;
+using System.IO;
 
 namespace WoWStateManager.Settings
 {
@@ -45,6 +48,15 @@ namespace WoWStateManager.Settings
         }
 
         private StateManagerSettings() { }
+
+        /// <summary>
+        /// Resets the singleton instance so the next access to <see cref="Instance"/>
+        /// re-reads the settings file from disk. Intended for test isolation only.
+        /// </summary>
+        public static void ResetInstance()
+        {
+            _instance = null;
+        }
 
         /// <summary>
         /// List of character settings defining which bots to run and how.

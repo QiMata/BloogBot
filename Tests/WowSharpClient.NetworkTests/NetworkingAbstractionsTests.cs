@@ -1,5 +1,7 @@
 using WoWSharpClient.Networking.Implementation;
 using GameData.Core.Enums;
+using System;
+using System.Threading.Tasks;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -22,21 +24,60 @@ namespace WowSharpClient.NetworkTests
         }
 
         [Fact]
-        public void WoWPacketCodec_CanEncodeAndDecodePackets()
+        public void WoWPacketCodec_Encode_ProducesCorrectCmsgFormat()
         {
-            // Arrange
+            // Arrange — Encode produces Client→Server: size(2 BE) + opcode(4 LE) + payload
             var codec = new WoWPacketCodec();
-            var originalOpcode = Opcode.CMSG_PING;
-            var originalPayload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            var opcode = Opcode.CMSG_PING; // 0x01DC
+            var payload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
 
             // Act
-            var encodedPacket = codec.Encode(originalOpcode, originalPayload);
-            var success = codec.TryDecode(encodedPacket, out var decodedOpcode, out var decodedPayload);
+            var encoded = codec.Encode(opcode, payload).ToArray();
+
+            // Assert — total = 2 (size) + 4 (opcode) + 4 (payload) = 10
+            Assert.Equal(10, encoded.Length);
+            // Size field (big-endian) = opcode(4) + payload(4) = 8
+            Assert.Equal(0x00, encoded[0]);
+            Assert.Equal(0x08, encoded[1]);
+            // Opcode (little-endian 4 bytes) = 0x000001DC
+            Assert.Equal(0xDC, encoded[2]);
+            Assert.Equal(0x01, encoded[3]);
+            Assert.Equal(0x00, encoded[4]);
+            Assert.Equal(0x00, encoded[5]);
+            // Payload
+            Assert.Equal(payload, encoded[6..]);
+        }
+
+        [Fact]
+        public void WoWPacketCodec_TryDecode_ParsesSmsgFormat()
+        {
+            // Arrange — TryDecode expects Server→Client: size(2 BE) + opcode(2 LE) + payload
+            var codec = new WoWPacketCodec();
+            var payload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            var smsgPacket = CreateSmsgPacket(Opcode.SMSG_PONG, payload);
+
+            // Act
+            var success = codec.TryDecode(smsgPacket, out var decodedOpcode, out var decodedPayload);
 
             // Assert
             Assert.True(success);
-            Assert.Equal(originalOpcode, decodedOpcode);
-            Assert.Equal(originalPayload, decodedPayload.ToArray());
+            Assert.Equal(Opcode.SMSG_PONG, decodedOpcode);
+            Assert.Equal(payload, decodedPayload.ToArray());
+        }
+
+        /// <summary>
+        /// Creates an SMSG-format packet: size(2 BE) + opcode(2 LE) + payload.
+        /// </summary>
+        internal static byte[] CreateSmsgPacket(Opcode opcode, byte[] payload)
+        {
+            var size = (ushort)(2 + payload.Length); // opcode(2) + payload
+            var packet = new byte[2 + 2 + payload.Length];
+            packet[0] = (byte)((size >> 8) & 0xFF);
+            packet[1] = (byte)(size & 0xFF);
+            packet[2] = (byte)((ushort)opcode & 0xFF);
+            packet[3] = (byte)(((ushort)opcode >> 8) & 0xFF);
+            Array.Copy(payload, 0, packet, 4, payload.Length);
+            return packet;
         }
 
         [Fact]

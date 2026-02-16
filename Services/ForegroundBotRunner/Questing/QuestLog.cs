@@ -1,5 +1,7 @@
 using ForegroundBotRunner.Mem;
 using Serilog;
+using System;
+using System.Collections.Generic;
 
 namespace ForegroundBotRunner.Questing
 {

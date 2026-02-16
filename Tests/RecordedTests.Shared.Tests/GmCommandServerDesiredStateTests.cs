@@ -2,10 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using RecordedTests.Shared;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
-using Xunit;
 
 namespace RecordedTests.Shared.Tests;
 
@@ -192,32 +190,21 @@ public sealed class GmCommandServerDesiredStateTests
         }
     }
 
-    private sealed class StubRecordedTestContext : IRecordedTestContext
+    private sealed class StubRecordedTestContext(string testName) : IRecordedTestContext
     {
-        public StubRecordedTestContext(string testName)
-        {
-            TestName = testName;
-            SanitizedTestName = ArtifactPathHelper.SanitizeName(testName);
-            ArtifactsRootDirectory = "/tmp";
-            TestRootDirectory = "/tmp/root";
-            TestRunDirectory = "/tmp/root/run";
-            Server = new ServerInfo("localhost", 3724, "Test");
-            StartedAt = DateTimeOffset.UtcNow;
-        }
+        public string TestName { get; } = testName;
 
-        public string TestName { get; }
+        public string SanitizedTestName { get; } = ArtifactPathHelper.SanitizeName(testName);
 
-        public string SanitizedTestName { get; }
+        public ServerInfo Server { get; } = new ServerInfo("localhost", 3724, "Test");
 
-        public ServerInfo Server { get; }
+        public DateTimeOffset StartedAt { get; } = DateTimeOffset.UtcNow;
 
-        public DateTimeOffset StartedAt { get; }
+        public string ArtifactsRootDirectory { get; } = "/tmp";
 
-        public string ArtifactsRootDirectory { get; }
+        public string TestRootDirectory { get; } = "/tmp/root";
 
-        public string TestRootDirectory { get; }
-
-        public string TestRunDirectory { get; }
+        public string TestRunDirectory { get; } = "/tmp/root/run";
     }
 
     private sealed class CapturingLogger : ITestLogger

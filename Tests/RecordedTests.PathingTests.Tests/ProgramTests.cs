@@ -1,6 +1,6 @@
 using FluentAssertions;
 using RecordedTests.PathingTests.Configuration;
-using RecordedTests.Shared.Abstractions;
+using System;
 
 namespace RecordedTests.PathingTests.Tests;
 

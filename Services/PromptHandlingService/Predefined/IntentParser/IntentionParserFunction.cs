@@ -1,4 +1,7 @@
 ﻿using Communication;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace PromptHandlingService.Predefined.IntentParser
 {

@@ -3,6 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace ForegroundBotRunner;
 
@@ -91,6 +94,14 @@ public static class Program
             })
             .ConfigureServices((hostContext, services) =>
             {
+                services.AddSingleton<BotRunner.Clients.PathfindingClient>(sp =>
+                {
+                    var config = hostContext.Configuration;
+                    var ip = config["PathfindingService:IpAddress"] ?? "127.0.0.1";
+                    var port = int.Parse(config["PathfindingService:Port"] ?? "5001");
+                    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<BotRunner.Clients.PathfindingClient>();
+                    return new BotRunner.Clients.PathfindingClient(ip, port, logger);
+                });
                 services.AddHostedService<ForegroundBotWorker>();
             })
             .ConfigureLogging((context, builder) =>

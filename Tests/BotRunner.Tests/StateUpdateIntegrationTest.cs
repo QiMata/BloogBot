@@ -1,24 +1,22 @@
 using BotRunner.Clients;
+using BotRunner.Tests.Helpers;
 using GameData.Core.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MySql.Data.MySqlClient;
 using WoWStateManager.Clients;
-using WoWStateManager;
 using System.ComponentModel;
 using System.Data;
 using Xunit.Abstractions;
 using Xunit.Sdk;
-using BotRunner;
-using WoWSharpClient;
-using Communication;
-using Google.Protobuf;
-using System.Net;
 using System.Net.Sockets;
 using System.Diagnostics;
-using Xunit;
-using WinImports;
+using System.Threading.Tasks;
+using System;
+using System.IO;
+using System.Threading;
+using System.Collections.Generic;
 
 namespace BotRunner.Tests
 {
@@ -69,15 +67,21 @@ namespace BotRunner.Tests
     /// To skip these tests in CI: dotnet test --filter "Category!=RequiresInfrastructure"
     /// </summary>
     [RequiresInfrastructure]
+    [Collection(InfrastructureTestCollection.Name)]
     public class MangosServerStateTrackingIntegrationTest : IClassFixture<IntegrationTestFixture>
     {
         private readonly IntegrationTestFixture _fixture;
         private readonly ITestOutputHelper _output;
+        private readonly InfrastructureTestGuard _guard;
 
-        public MangosServerStateTrackingIntegrationTest(IntegrationTestFixture fixture, ITestOutputHelper output)
+        public MangosServerStateTrackingIntegrationTest(IntegrationTestFixture fixture, InfrastructureTestGuard guard, ITestOutputHelper output)
         {
             _fixture = fixture;
+            _guard = guard;
             _output = output;
+
+            // Ensure no lingering StateManager/WoW from a previous test
+            _guard.EnsureCleanState(msg => _output.WriteLine(msg));
         }
 
         [Fact]
@@ -833,15 +837,19 @@ namespace BotRunner.Tests
     }
 
     /// <summary>
-    /// Test fixture that provides REAL components for end-to-end integration testing
-    /// NO SIMULATION - All services must be real and functional
+    /// Test fixture that provides REAL components for end-to-end integration testing.
+    /// NO SIMULATION - All services must be real and functional.
+    /// 
+    /// IMPORTANT: This fixture does NOT launch its own StateManager process.
+    /// StateManager lifecycle is managed by <see cref="InfrastructureTestGuard"/> and
+    /// <see cref="StateManagerProcessHelper"/> to prevent multiple competing instances.
+    /// If a test needs a StateManager, it should launch one via the helper and register
+    /// it with the guard.
     /// </summary>
     public class IntegrationTestFixture : IDisposable
     {
         public IServiceProvider ServiceProvider { get; private set; }
         public IConfiguration Configuration { get; private set; }
-
-        private Process? _stateManagerProcess;
 
         public IntegrationTestFixture()
         {
@@ -888,14 +896,16 @@ namespace BotRunner.Tests
                 return new PathfindingClient(resolvedIp, pathfindingPortNumber, logger);
             });
 
-            // Instead of registering StateManagerWorker directly, let's use the test's own StateManager 
-            // that doesn't require the complex dependencies that StateManagerWorker needs
-            // We'll create a simpler test version that can trigger the injection
+            // TestableStateManager provides injection capabilities without the full StateManagerWorker dependencies
             services.AddSingleton<TestableStateManager>();
 
             ServiceProvider = services.BuildServiceProvider();
         }
 
+        /// <summary>
+        /// Checks if the CharacterStateListener port is open. Does NOT auto-launch a StateManager.
+        /// Use <see cref="StateManagerProcessHelper"/> to launch one if needed.
+        /// </summary>
         public async Task EnsureCharacterStateListenerAvailableAsync(string ip, int port)
         {
             var resolvedIp = ip.Equals("localhost", StringComparison.OrdinalIgnoreCase) ? "127.0.0.1" : ip;
@@ -906,27 +916,9 @@ namespace BotRunner.Tests
                 return;
             }
 
-            Console.WriteLine($"[Tests] CharacterStateListener not detected at {resolvedIp}:{port}. Attempting to start StateManager...");
-            bool startedStateManager = await TryStartStateManagerAsync(resolvedIp, port);
-
-            if (!startedStateManager)
-            {
-                throw new InvalidOperationException("Failed to start StateManager automatically. Please start Services/StateManager manually before running the test.");
-            }
-
-            var sw = Stopwatch.StartNew();
-            var timeout = TimeSpan.FromSeconds(90);
-            while (sw.Elapsed < timeout)
-            {
-                if (await IsPortOpenAsync(resolvedIp, port))
-                {
-                    Console.WriteLine($"[Tests] StateManager started and listening at {resolvedIp}:{port}.");
-                    return;
-                }
-                await Task.Delay(500);
-            }
-
-            throw new TimeoutException($"StateManager did not open {resolvedIp}:{port} within {timeout.TotalSeconds} seconds.");
+            throw new InvalidOperationException(
+                $"CharacterStateListener not available at {resolvedIp}:{port}. " +
+                "Launch StateManager via StateManagerProcessHelper before calling this method.");
         }
 
         private static async Task<bool> IsPortOpenAsync(string ip, int port)
@@ -942,93 +934,10 @@ namespace BotRunner.Tests
             catch { return false; }
         }
 
-        private async Task<bool> TryStartStateManagerAsync(string ip, int port)
-        {
-            try
-            {
-                var relativeProject = Path.Combine("Services", "WoWStateManager", "WoWStateManager.csproj");
-                var repoRoot = LocateRepoRootFor(relativeProject);
-                if (repoRoot == null)
-                {
-                    Console.WriteLine("[Tests] Could not locate repo root containing Services/WoWStateManager/WoWStateManager.csproj.");
-                    return false;
-                }
-
-                var projectPath = relativeProject;
-                var fullProjectPath = Path.Combine(repoRoot, projectPath);
-                if (!File.Exists(fullProjectPath))
-                {
-                    Console.WriteLine($"[Tests] StateManager project not found at {fullProjectPath}");
-                    return false;
-                }
-
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "dotnet",
-                    Arguments = $"run --project \"{projectPath}\" -c Debug --no-launch-profile",
-                    WorkingDirectory = repoRoot,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-
-                psi.Environment["CharacterStateListener:IpAddress"] = ip;
-                psi.Environment["CharacterStateListener:Port"] = port.ToString();
-
-                foreach (var kvp in Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>())
-                {
-                    var key = kvp.Key?.ToString();
-                    if (key != null && (key.StartsWith("MangosSOAP:") || key.StartsWith("ConnectionStrings:") || key.StartsWith("ASPNETCORE_") || key.StartsWith("DOTNET_")))
-                    {
-                        psi.Environment[key] = kvp.Value?.ToString();
-                    }
-                }
-
-                _stateManagerProcess = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                _stateManagerProcess.OutputDataReceived += (_, e) => { if (!string.IsNullOrEmpty(e.Data)) Console.WriteLine($"[StateManager] {e.Data}"); };
-                _stateManagerProcess.ErrorDataReceived += (_, e) => { if (!string.IsNullOrEmpty(e.Data)) Console.WriteLine($"[StateManager-ERR] {e.Data}"); };
-
-                if (!_stateManagerProcess.Start())
-                    return false;
-
-                _stateManagerProcess.BeginOutputReadLine();
-                _stateManagerProcess.BeginErrorReadLine();
-
-                await Task.Delay(500);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Tests] Failed to start StateManager: {ex.Message}");
-                return false;
-            }
-        }
-
-        private static string? LocateRepoRootFor(string relativeProject)
-        {
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir != null)
-            {
-                var candidate = Path.Combine(dir.FullName, relativeProject);
-                if (File.Exists(candidate)) return dir.FullName;
-                dir = dir.Parent;
-            }
-            return null;
-        }
-
         public void Dispose()
         {
-            try
-            {
-                if (_stateManagerProcess != null && !_stateManagerProcess.HasExited)
-                {
-                    Console.WriteLine("[Tests] Stopping StateManager process started by tests...");
-                    _stateManagerProcess.Kill(true);
-                    _stateManagerProcess.Dispose();
-                }
-            }
-            catch { }
+            // Fixture no longer manages any StateManager process.
+            // Process lifecycle is handled by InfrastructureTestGuard / StateManagerProcessHelper.
 
             if (ServiceProvider is IDisposable disposable)
             {
@@ -1041,17 +950,11 @@ namespace BotRunner.Tests
     /// Simplified StateManager for testing that focuses on the core injection functionality
     /// without requiring all the complex dependencies of the full StateManagerWorker
     /// </summary>
-    public class TestableStateManager
+    public class TestableStateManager(ILogger<TestableStateManager> logger, IConfiguration configuration)
     {
-        private readonly ILogger<TestableStateManager> _logger;
-        private readonly IConfiguration _configuration;
+        private readonly ILogger<TestableStateManager> _logger = logger;
+        private readonly IConfiguration _configuration = configuration;
         private Process? _wowProcess;
-
-        public TestableStateManager(ILogger<TestableStateManager> logger, IConfiguration configuration)
-        {
-            _logger = logger;
-            _configuration = configuration;
-        }
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {

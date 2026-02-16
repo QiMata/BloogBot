@@ -1,6 +1,11 @@
 using FluentAssertions;
-using RecordedTests.Shared;
+using NSubstitute;
 using RecordedTests.Shared.Abstractions;
+using RecordedTests.Shared.Abstractions.I;
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RecordedTests.Shared.Tests.Recording;
 
@@ -11,9 +16,10 @@ public class ObsRecorderStubTests
     {
         // Arrange
         var recorder = new ObsRecorderStub();
+        var context = CreateTestContext();
 
         // Act
-        var act = async () => await recorder.StartAsync(CancellationToken.None);
+        var act = async () => await recorder.StartAsync(context, CancellationToken.None);
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
@@ -25,7 +31,7 @@ public class ObsRecorderStubTests
     {
         // Arrange
         var recorder = new ObsRecorderStub();
-        var target = new RecordingTarget(RecordingTargetType.WindowTitle, "WoW");
+        var target = new RecordingTarget(RecordingTargetType.WindowByTitle, WindowTitle: "WoW");
 
         // Act
         var act = async () => await recorder.ConfigureTargetAsync(target, CancellationToken.None);
@@ -45,9 +51,10 @@ public class ObsRecorderStubTests
         await recorder.LaunchAsync(CancellationToken.None);
 
         // Assert - subsequent calls should not throw
-        var target = new RecordingTarget(RecordingTargetType.WindowTitle, "WoW");
+        var target = new RecordingTarget(RecordingTargetType.WindowByTitle, WindowTitle: "WoW");
         await recorder.ConfigureTargetAsync(target, CancellationToken.None);
-        var act = async () => await recorder.StartAsync(CancellationToken.None);
+        var context = CreateTestContext();
+        var act = async () => await recorder.StartAsync(context, CancellationToken.None);
         await act.Should().NotThrowAsync();
     }
 
@@ -56,8 +63,9 @@ public class ObsRecorderStubTests
     {
         // Arrange
         var recorder = new ObsRecorderStub();
+        var context = CreateTestContext();
         await recorder.LaunchAsync(CancellationToken.None);
-        await recorder.StartAsync(CancellationToken.None);
+        await recorder.StartAsync(context, CancellationToken.None);
 
         // Act - stop multiple times
         await recorder.StopAsync(CancellationToken.None);
@@ -88,13 +96,14 @@ public class ObsRecorderStubTests
     {
         // Arrange
         var recorder = new ObsRecorderStub();
+        var context = CreateTestContext();
         var tempDir = Path.Combine(Path.GetTempPath(), $"obs-test-{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);
 
         try
         {
             await recorder.LaunchAsync(CancellationToken.None);
-            await recorder.StartAsync(CancellationToken.None);
+            await recorder.StartAsync(context, CancellationToken.None);
             await recorder.StopAsync(CancellationToken.None);
 
             // Create a collision - manually create the target file
@@ -102,20 +111,20 @@ public class ObsRecorderStubTests
             File.WriteAllText(targetPath1, "existing");
 
             // Act - move should create recording_1.mkv
-            var artifact1 = await recorder.MoveLastRecordingAsync(tempDir, CancellationToken.None);
+            var artifact1 = await recorder.MoveLastRecordingAsync(tempDir, "recording", CancellationToken.None);
 
             // Start another recording
-            await recorder.StartAsync(CancellationToken.None);
+            await recorder.StartAsync(context, CancellationToken.None);
             await recorder.StopAsync(CancellationToken.None);
 
             // Move again - should create recording_2.mkv
-            var artifact2 = await recorder.MoveLastRecordingAsync(tempDir, CancellationToken.None);
+            var artifact2 = await recorder.MoveLastRecordingAsync(tempDir, "recording", CancellationToken.None);
 
             // Assert
-            artifact1.FilePath.Should().EndWith("recording_1.mkv");
-            artifact2.FilePath.Should().EndWith("recording_2.mkv");
-            File.Exists(artifact1.FilePath).Should().BeTrue();
-            File.Exists(artifact2.FilePath).Should().BeTrue();
+            artifact1.FullPath.Should().EndWith("recording_1.mkv");
+            artifact2.FullPath.Should().EndWith("recording_2.mkv");
+            File.Exists(artifact1.FullPath).Should().BeTrue();
+            File.Exists(artifact2.FullPath).Should().BeTrue();
         }
         finally
         {
@@ -131,24 +140,24 @@ public class ObsRecorderStubTests
     {
         // Arrange
         var recorder = new ObsRecorderStub();
+        var context = CreateTestContext();
         var tempDir = Path.Combine(Path.GetTempPath(), $"obs-test-{Guid.NewGuid()}");
         Directory.CreateDirectory(tempDir);
 
         try
         {
             await recorder.LaunchAsync(CancellationToken.None);
-            await recorder.StartAsync(CancellationToken.None);
+            await recorder.StartAsync(context, CancellationToken.None);
             await recorder.StopAsync(CancellationToken.None);
 
             // Act
-            var artifact = await recorder.MoveLastRecordingAsync(tempDir, CancellationToken.None);
+            var artifact = await recorder.MoveLastRecordingAsync(tempDir, "recording", CancellationToken.None);
 
             // Assert
             artifact.Should().NotBeNull();
-            artifact.FilePath.Should().EndWith(".mkv");
-            artifact.ContentType.Should().Be("video/x-matroska");
-            artifact.SizeBytes.Should().BeGreaterThan(0);
-            File.Exists(artifact.FilePath).Should().BeTrue();
+            artifact.FullPath.Should().EndWith(".mkv");
+            artifact.Name.Should().NotBeNullOrWhiteSpace();
+            File.Exists(artifact.FullPath).Should().BeTrue();
         }
         finally
         {
@@ -164,10 +173,11 @@ public class ObsRecorderStubTests
     {
         // Arrange
         var recorder = new ObsRecorderStub();
+        var context = CreateTestContext();
         await recorder.LaunchAsync(CancellationToken.None);
 
         // Act
-        await recorder.StartAsync(CancellationToken.None);
+        await recorder.StartAsync(context, CancellationToken.None);
         await recorder.StopAsync(CancellationToken.None);
 
         // The temp file path is internal, but we can verify move works
@@ -176,11 +186,11 @@ public class ObsRecorderStubTests
 
         try
         {
-            var artifact = await recorder.MoveLastRecordingAsync(tempDir, CancellationToken.None);
+            var artifact = await recorder.MoveLastRecordingAsync(tempDir, "recording", CancellationToken.None);
 
             // Assert
-            File.Exists(artifact.FilePath).Should().BeTrue();
-            File.ReadAllText(artifact.FilePath).Should().Contain("OBS recording stub");
+            File.Exists(artifact.FullPath).Should().BeTrue();
+            File.ReadAllText(artifact.FullPath).Should().Contain("Dummy recording bytes");
         }
         finally
         {
@@ -196,8 +206,9 @@ public class ObsRecorderStubTests
     {
         // Arrange
         var recorder = new ObsRecorderStub();
+        var context = CreateTestContext();
         await recorder.LaunchAsync(CancellationToken.None);
-        await recorder.StartAsync(CancellationToken.None);
+        await recorder.StartAsync(context, CancellationToken.None);
 
         // Act
         await recorder.DisposeAsync();
@@ -205,5 +216,18 @@ public class ObsRecorderStubTests
         // Assert - should not throw
         var act = async () => await recorder.DisposeAsync();
         await act.Should().NotThrowAsync();
+    }
+
+    private static IRecordedTestContext CreateTestContext()
+    {
+        var context = Substitute.For<IRecordedTestContext>();
+        context.TestName.Returns("ObsRecorderStubTest");
+        context.SanitizedTestName.Returns("ObsRecorderStubTest");
+        context.Server.Returns(new ServerInfo("localhost", 3724));
+        context.StartedAt.Returns(DateTimeOffset.UtcNow);
+        context.ArtifactsRootDirectory.Returns(Path.GetTempPath());
+        context.TestRootDirectory.Returns(Path.GetTempPath());
+        context.TestRunDirectory.Returns(Path.GetTempPath());
+        return context;
     }
 }

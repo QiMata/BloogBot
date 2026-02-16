@@ -1,4 +1,8 @@
+using System;
 using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using OBSWebsocketDotNet;
 using OBSWebsocketDotNet.Types;
 using RecordedTests.Shared.Abstractions;

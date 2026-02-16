@@ -4,9 +4,9 @@ using static BotRunner.Constants.Spellbook;
 
 namespace WarriorArms.Tasks
 {
-    internal class PvPRotationTask : CombatRotationTask, IBotTask
+    public class PvPRotationTask : CombatRotationTask, IBotTask
     {
-        internal PvPRotationTask(IBotContext botContext) : base(botContext) { }
+        public PvPRotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
         {

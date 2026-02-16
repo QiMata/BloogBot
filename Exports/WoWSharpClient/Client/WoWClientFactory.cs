@@ -6,6 +6,7 @@ using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Networking.I;
+using System;
 
 namespace WoWSharpClient.Client
 {

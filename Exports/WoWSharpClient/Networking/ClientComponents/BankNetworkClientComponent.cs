@@ -1,5 +1,8 @@
+using System;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -28,10 +31,10 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Note: Personal gold banking does not exist in vanilla 1.12.1.
     /// Guild banks (with gold deposit/withdraw) were added in TBC 2.0.
     /// </summary>
-    public class BankNetworkClientComponent : NetworkClientComponent, IBankNetworkClientComponent, IDisposable
+    public class BankNetworkClientComponent(IWorldClient worldClient, ILogger<BankNetworkClientComponent> logger) : NetworkClientComponent, IBankNetworkClientComponent, IDisposable
     {
-        private readonly IWorldClient _worldClient;
-        private readonly ILogger<BankNetworkClientComponent> _logger;
+        private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
+        private readonly ILogger<BankNetworkClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         private bool _isBankWindowOpen;
         private ulong? _currentBankerGuid;
@@ -46,12 +49,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private static readonly uint[] BankSlotCosts = [1000, 7500, 15000, 37500, 75000, 150000, 300000];
 
         #region Constructor
-
-        public BankNetworkClientComponent(IWorldClient worldClient, ILogger<BankNetworkClientComponent> logger)
-        {
-            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
 
         #endregion
 

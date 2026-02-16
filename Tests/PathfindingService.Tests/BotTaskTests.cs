@@ -8,14 +8,9 @@ namespace PathfindingService.Tests;
 /// These require Navigation.dll and mmaps data to be available.
 /// </summary>
 [Trait(TestCategories.Feature, TestCategories.Pathfinding)]
-public class PathfindingBotTaskTests : IClassFixture<NavigationFixture>
+public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
 {
-    private readonly NavigationFixture _fixture;
-
-    public PathfindingBotTaskTests(NavigationFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly NavigationFixture _fixture = fixture;
 
     [Fact]
     public void PathCalculation_ShouldReturnValidWaypointPath()

@@ -1,5 +1,6 @@
 ﻿using MySql.Data.MySqlClient;
 using Serilog;
+using System;
 
 namespace WoWStateManager.Repository
 {

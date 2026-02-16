@@ -42,6 +42,7 @@ public enum CharacterAction
     LeaveGroup,         // Leave the current group.
     DisbandGroup,       // Disband the current group.
 
+    StartMeleeAttack,   // Start melee auto-attack on a target.
     StopAttack,         // Cease any ongoing attack.
     CastSpell,          // Cast or channel a spell on a target or location.
     StopCast,           // Stop casting a spell.

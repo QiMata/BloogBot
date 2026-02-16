@@ -5,11 +5,9 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using RecordedTests.Shared;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
 using RecordedTests.Shared.Tests.TestInfrastructure;
-using Xunit;
 
 namespace RecordedTests.Shared.Tests;
 
@@ -71,14 +69,9 @@ public sealed class RecordedTestRunnerTests
         Assert.Equal("1.2.3", buildValue.GetString());
     }
 
-    private sealed class ImmediateServerAvailability : IServerAvailabilityChecker
+    private sealed class ImmediateServerAvailability(ServerInfo serverInfo) : IServerAvailabilityChecker
     {
-        private readonly ServerInfo _serverInfo;
-
-        public ImmediateServerAvailability(ServerInfo serverInfo)
-        {
-            _serverInfo = serverInfo;
-        }
+        private readonly ServerInfo _serverInfo = serverInfo;
 
         public Task<ServerInfo?> WaitForAvailableAsync(TimeSpan timeout, CancellationToken cancellationToken)
         {
@@ -86,16 +79,10 @@ public sealed class RecordedTestRunnerTests
         }
     }
 
-    private sealed class StubBotRunner : IBotRunner
+    private sealed class StubBotRunner(string name, bool createArtifact = false) : IBotRunner
     {
-        private readonly string _name;
-        private readonly bool _createArtifact;
-
-        public StubBotRunner(string name, bool createArtifact = false)
-        {
-            _name = name;
-            _createArtifact = createArtifact;
-        }
+        private readonly string _name = name;
+        private readonly bool _createArtifact = createArtifact;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
@@ -131,16 +118,11 @@ public sealed class RecordedTestRunnerTests
         public Task ShutdownUiAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class SpyStorage : IRecordedTestStorage
+    private sealed class SpyStorage(IRecordedTestStorage inner) : IRecordedTestStorage
         {
-            private readonly IRecordedTestStorage _inner;
+            private readonly IRecordedTestStorage _inner = inner;
 
-            public SpyStorage(IRecordedTestStorage inner)
-            {
-                _inner = inner;
-            }
-
-            public RecordedTestStorageContext? CapturedContext { get; private set; }
+        public RecordedTestStorageContext? CapturedContext { get; private set; }
 
             public async Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
             {

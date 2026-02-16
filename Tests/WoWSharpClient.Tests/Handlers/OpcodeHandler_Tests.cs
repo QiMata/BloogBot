@@ -3,6 +3,10 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using System;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
 using WoWSharpClient.Client;
 using WoWSharpClient.Tests.Util;
 

@@ -1,4 +1,6 @@
 using RecordedTests.Shared.Abstractions;
+using System;
+using System.Collections.Generic;
 
 namespace RecordedTests.PathingTests.Configuration;
 

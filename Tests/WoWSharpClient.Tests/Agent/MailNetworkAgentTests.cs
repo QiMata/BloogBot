@@ -5,6 +5,10 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.IO;
 
 namespace WoWSharpClient.Tests.Agent
 {

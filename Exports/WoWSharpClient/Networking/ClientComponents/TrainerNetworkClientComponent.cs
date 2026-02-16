@@ -5,6 +5,11 @@ using WoWSharpClient.Networking.ClientComponents.I;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Buffers.Binary;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {

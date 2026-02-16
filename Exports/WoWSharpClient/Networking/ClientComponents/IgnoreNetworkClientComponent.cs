@@ -4,6 +4,11 @@ using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using System.Reactive.Linq;
+using System.Collections.Generic;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {

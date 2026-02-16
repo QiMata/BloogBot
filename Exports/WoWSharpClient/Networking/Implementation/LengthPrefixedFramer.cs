@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using WoWSharpClient.Networking.I;
 
 namespace WoWSharpClient.Networking.Implementation

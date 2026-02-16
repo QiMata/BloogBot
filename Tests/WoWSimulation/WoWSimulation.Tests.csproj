@@ -1,9 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -23,9 +21,7 @@
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
-    <ProjectReference Include="..\..\Services\WoWStateManager\WoWStateManager.csproj" />
-  </ItemGroup>
+  <!-- PathfindingService (x64) and WoWStateManager (x86) are separate processes;
+       this test project only uses its own MockMangosServer types. -->
 
 </Project>

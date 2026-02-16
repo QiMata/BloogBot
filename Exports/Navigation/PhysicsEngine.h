@@ -49,7 +49,9 @@ namespace PhysicsConstants
     constexpr float MAX_GROUND_SNAP_UP_SPEED = 9999.0f;
     constexpr float MAX_GROUND_SNAP_DOWN_SPEED = 9999.0f;
 
-    // Slope walkability threshold (cos 60� = 0.5) - kept only as documentation default; configurable at runtime
+    // Slope walkability threshold: cos(60째) = 0.5 per CMaNGOS walkableSlopeAngle default
+    // 50-60째 = NAV_AREA_GROUND_STEEP (walkable for mobs, not players in navmesh)
+    // Recordings confirm: sustained walking at ~53째, airborne transitions at ~64째
     constexpr float DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.5f;
 }
 

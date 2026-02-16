@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -23,7 +21,12 @@
     <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
-    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+    <!-- Build-order only: PathfindingService is x64 and runs as a separate process.
+         Integration tests communicate with it over TCP, not via assembly reference. -->
+    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      Private="false" />
     <ProjectReference Include="..\Tests.Infrastructure\Tests.Infrastructure.csproj" />
   </ItemGroup>
 

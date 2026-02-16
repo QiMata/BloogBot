@@ -1,11 +1,19 @@
+using System;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using BotRunner;
 using BotRunner.Clients;
 using BotRunner.Combat;
-using BotRunner.Movement;
+using BotRunner.Interfaces;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using WoWSharpClient;
 using WoWSharpClient.Client;
+using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BackgroundBotRunner
@@ -44,12 +52,16 @@ namespace BackgroundBotRunner
             _botCombatState = new BotCombatState();
             var agentFactoryAccessor = new Func<IAgentFactory?>(() => _agentFactory);
 
+            var accountName = Environment.GetEnvironmentVariable("WWOW_ACCOUNT_NAME");
+            var container = CreateClassContainer(accountName, _pathfindingClient);
+
             _botRunner = new BotRunnerService(
                 infrastructure.ObjectManager,
                 _characterStateUpdateClient,
-                new DynamicTargetEngagementService(agentFactoryAccessor, _botCombatState),
                 new DynamicLootingService(agentFactoryAccessor, _botCombatState),
-                new TargetPositioningService(infrastructure.ObjectManager, _pathfindingClient));
+                container,
+                agentFactoryAccessor,
+                accountName);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -150,6 +162,13 @@ namespace BackgroundBotRunner
             _agentFactory = WoWClientFactory.CreateNetworkClientComponentFactory(worldClient, _loggerFactory);
             _activeWorldClient = worldClient;
 
+            // Eagerly initialize essential agents so their opcode handlers are registered
+            // before login packets arrive (CharacterInit for ACTION_BUTTONS, Party for GROUP_INVITE)
+            if (_agentFactory is NetworkClientComponentFactory concreteFactory)
+            {
+                concreteFactory.InitializeEssentialAgents();
+            }
+
             try
             {
                 _worldDisconnectSubscription = worldClient.WhenDisconnected?.Subscribe(_ =>
@@ -194,32 +213,35 @@ namespace BackgroundBotRunner
             _logger.LogInformation("Cleared network client component factory state.");
         }
 
-        private sealed class DynamicTargetEngagementService(Func<IAgentFactory?> factoryAccessor, BotCombatState combatState)
-            : ITargetEngagementService
+        private static IDependencyContainer CreateClassContainer(string? accountName, PathfindingClient pathfindingClient)
         {
-            private readonly Func<IAgentFactory?> _factoryAccessor = factoryAccessor;
-            private readonly BotCombatState _combatState = combatState;
+            BotProfiles.Common.BotBase botProfile;
 
-            public ulong? CurrentTargetGuid => _combatState.CurrentTargetGuid;
-
-            public async Task EngageAsync(IWoWUnit target, CancellationToken cancellationToken)
+            if (!string.IsNullOrEmpty(accountName) && accountName.Length >= 4)
             {
-                ArgumentNullException.ThrowIfNull(target);
+                var classCode = accountName.Substring(2, 2);
+                var @class = WoWNameGenerator.ParseClassCode(classCode);
 
-                var factory = _factoryAccessor() ?? throw new InvalidOperationException("Agent factory is not available.");
-                var targetGuid = target.Guid;
-
-                if (!factory.TargetingAgent.IsTargeted(targetGuid))
+                botProfile = @class switch
                 {
-                    await factory.AttackAgent.AttackTargetAsync(targetGuid, factory.TargetingAgent, cancellationToken);
-                }
-                else if (!factory.AttackAgent.IsAttacking)
-                {
-                    await factory.AttackAgent.StartAttackAsync(cancellationToken);
-                }
-
-                _combatState.SetCurrentTarget(targetGuid);
+                    Class.Warrior => new WarriorArms.WarriorArms(),
+                    Class.Shaman => new ShamanEnhancement.ShamanEnhancement(),
+                    _ => new WarriorArms.WarriorArms() // Default fallback: melee warrior
+                };
             }
+            else
+            {
+                botProfile = new WarriorArms.WarriorArms();
+            }
+
+            return new ClassContainer(
+                botProfile.Name,
+                botProfile.CreateRestTask,
+                botProfile.CreateBuffTask,
+                botProfile.CreateMoveToTargetTask,
+                botProfile.CreatePvERotationTask,
+                botProfile.CreatePvPRotationTask,
+                pathfindingClient);
         }
 
         private sealed class DynamicLootingService(Func<IAgentFactory?> factoryAccessor, BotCombatState combatState)

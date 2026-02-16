@@ -1,26 +1,21 @@
 using BotRunner.Interfaces;
 using GameData.Core.Models;
+using System;
+using System.Collections.Generic;
 
 namespace BotRunner.Tasks.Questing;
 
 /// <summary>
 /// Task that moves the player to a specific position using pathfinding.
 /// </summary>
-public class MoveToPositionTask : BotTask, IBotTask
+public class MoveToPositionTask(IBotContext botContext, Position targetPosition, float tolerance = 3.0f) : BotTask(botContext), IBotTask
 {
-    private readonly Position _targetPosition;
-    private readonly float _tolerance;
+    private readonly Position _targetPosition = targetPosition;
+    private readonly float _tolerance = tolerance;
     private List<Position>? _path;
     private int _currentPathIndex;
     private DateTime _lastPathRequest;
     private const int PATH_REQUEST_COOLDOWN_MS = 1000;
-
-    public MoveToPositionTask(IBotContext botContext, Position targetPosition, float tolerance = 3.0f)
-        : base(botContext)
-    {
-        _targetPosition = targetPosition;
-        _tolerance = tolerance;
-    }
 
     public void Update()
     {

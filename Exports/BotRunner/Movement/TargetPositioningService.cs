@@ -1,5 +1,6 @@
 using BotRunner.Clients;
 using GameData.Core.Interfaces;
+using System;
 
 namespace BotRunner.Movement
 {
@@ -8,18 +9,11 @@ namespace BotRunner.Movement
         bool EnsureInCombatRange(IWoWUnit target);
     }
 
-    public class TargetPositioningService : ITargetPositioningService
+    public class TargetPositioningService(IObjectManager objectManager, PathfindingClient pathfindingClient, float engagementRange = 25f) : ITargetPositioningService
     {
-        private readonly IObjectManager _objectManager;
-        private readonly PathfindingClient _pathfindingClient;
-        private readonly float _engagementRange;
-
-        public TargetPositioningService(IObjectManager objectManager, PathfindingClient pathfindingClient, float engagementRange = 25f)
-        {
-            _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-            _pathfindingClient = pathfindingClient ?? throw new ArgumentNullException(nameof(pathfindingClient));
-            _engagementRange = engagementRange;
-        }
+        private readonly IObjectManager _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
+        private readonly PathfindingClient _pathfindingClient = pathfindingClient ?? throw new ArgumentNullException(nameof(pathfindingClient));
+        private readonly float _engagementRange = engagementRange;
 
         public bool EnsureInCombatRange(IWoWUnit target)
         {

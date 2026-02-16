@@ -1,5 +1,7 @@
 ﻿using BotCommLayer;
 using Communication;
+using Microsoft.Extensions.Logging;
+using System;
 
 namespace WoWStateManager.Listeners
 {

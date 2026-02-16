@@ -1,6 +1,8 @@
 ﻿using Database;
 using DecisionEngineService.Repository;
 using Google.Protobuf.WellKnownTypes;
+using System;
+using System.Collections.Generic;
 
 namespace PromptHandlingService.Tests
 {

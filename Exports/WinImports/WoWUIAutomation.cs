@@ -1,5 +1,7 @@
+using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 public static class WoWUIAutomation
 {

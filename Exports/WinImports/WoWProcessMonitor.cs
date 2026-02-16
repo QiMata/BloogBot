@@ -1,6 +1,8 @@
+using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace WinImports;
 
@@ -8,7 +10,10 @@ namespace WinImports;
 /// Monitors a WoW process from an external process to detect client state.
 /// Used by tests and StateManager to wait for the WoW client to be ready before injection.
 /// </summary>
-public class WoWProcessMonitor : IDisposable
+/// <remarks>
+/// Creates a new WoW process monitor for the specified process ID.
+/// </remarks>
+public class WoWProcessMonitor(int processId) : IDisposable
 {
     // WoW 1.12.1.5875 Memory Offsets (from Offsets.cs)
     private const int LoginStateOffset = 0xB41478;
@@ -21,18 +26,9 @@ public class WoWProcessMonitor : IDisposable
     public const string LoginStateCharSelect = "charselect";
     public const string LoginStateConnecting = "connecting";
 
-    private readonly int _processId;
-    private IntPtr _processHandle;
+    private readonly int _processId = processId;
+    private IntPtr _processHandle = IntPtr.Zero;
     private bool _disposed;
-
-    /// <summary>
-    /// Creates a new WoW process monitor for the specified process ID.
-    /// </summary>
-    public WoWProcessMonitor(int processId)
-    {
-        _processId = processId;
-        _processHandle = IntPtr.Zero;
-    }
 
     /// <summary>
     /// Creates a new WoW process monitor for the specified process.

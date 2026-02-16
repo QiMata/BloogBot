@@ -3,8 +3,11 @@ using Moq;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
-using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
+using System.Threading.Tasks;
+using System;
+using System.Threading;
+using System.Collections.Generic;
 
 namespace WoWSharpClient.Tests.Agent
 {

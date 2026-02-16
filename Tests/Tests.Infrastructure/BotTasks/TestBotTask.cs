@@ -1,3 +1,5 @@
+using System;
+
 namespace Tests.Infrastructure.BotTasks;
 
 /// <summary>
@@ -5,15 +7,13 @@ namespace Tests.Infrastructure.BotTasks;
 /// that can be executed in a test context. Each task is self-contained with
 /// its own completion and failure tracking.
 /// </summary>
-public abstract class TestBotTask
+public abstract class TestBotTask(string name)
 {
-    public string Name { get; }
+    public string Name { get; } = name;
     public bool IsComplete { get; protected set; }
     public bool HasFailed { get; protected set; }
     public string? FailureReason { get; protected set; }
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
-
-    protected TestBotTask(string name) => Name = name;
 
     /// <summary>
     /// Execute one tick of the task. Called repeatedly until IsComplete is true.

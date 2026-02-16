@@ -1,6 +1,11 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Models;
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace WoWSharpClient.Client
 {
@@ -14,6 +19,7 @@ namespace WoWSharpClient.Client
         private AuthClient? _authClient;
         private IWorldClient? _worldClient;
         private bool _isLoggedIn;
+        private volatile bool _loginInProgress;
         private uint _pingCounter = 0;
         private bool _disposed;
 
@@ -47,7 +53,12 @@ namespace WoWSharpClient.Client
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(username);
             ArgumentException.ThrowIfNullOrWhiteSpace(password);
-            
+
+            // Prevent concurrent login attempts — fire-and-forget callers can race
+            if (_loginInProgress)
+                return;
+
+            _loginInProgress = true;
             try
             {
                 if (_authClient == null || !_authClient.IsConnected)
@@ -61,6 +72,10 @@ namespace WoWSharpClient.Client
                 Console.WriteLine($"Exception occurred during login: {ex}");
                 _isLoggedIn = false;
                 throw;
+            }
+            finally
+            {
+                _loginInProgress = false;
             }
         }
 
@@ -139,7 +154,7 @@ namespace WoWSharpClient.Client
             await _worldClient.SendSetActiveMoverAsync(guid, cancellationToken);
         }
 
-        public async Task SendMovementOpcodeAsync(Opcode opcode, byte[] movementInfo, CancellationToken cancellationToken = default)
+        public virtual async Task SendMovementOpcodeAsync(Opcode opcode, byte[] movementInfo, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(movementInfo);
             
@@ -247,91 +262,6 @@ namespace WoWSharpClient.Client
                 IpAddress = _ipAddress,
                 Username = _authClient?.Username ?? string.Empty
             };
-        }
-
-        // Backward compatibility methods (synchronous wrappers)
-        [Obsolete("Use LoginAsync instead")]
-        public void Login(string username, string password)
-        {
-            LoginAsync(username, password).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use GetRealmListAsync instead")]
-        public List<Realm> GetRealmList()
-        {
-            return GetRealmListAsync().GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SelectRealmAsync instead")]
-        public void SelectRealm(Realm realm)
-        {
-            SelectRealmAsync(realm).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use RefreshCharacterSelectsAsync instead")]
-        public void RefreshCharacterSelects()
-        {
-            RefreshCharacterSelectsAsync().GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SendCharacterCreateAsync instead")]
-        public void SendCharacterCreate(string name, Race race, Class clazz, Gender gender, byte skin, byte face, byte hairStyle, byte hairColor, byte facialHair, byte outfitId)
-        {
-            SendCharacterCreateAsync(name, race, clazz, gender, skin, face, hairStyle, hairColor, facialHair, outfitId).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use EnterWorldAsync instead")]
-        public void EnterWorld(ulong guid)
-        {
-            EnterWorldAsync(guid).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SendChatMessageAsync instead")]
-        public void SendChatMessage(ChatMsg chatMsgType, Language language, string destination, string text)
-        {
-            SendChatMessageAsync(chatMsgType, language, destination, text).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SendNameQueryAsync instead")]
-        public void SendNameQuery(ulong guid)
-        {
-            SendNameQueryAsync(guid).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SendMoveWorldPortAcknowledgeAsync instead")]
-        public void SendMoveWorldPortAcknowledge()
-        {
-            SendMoveWorldPortAcknowledgeAsync().GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SendSetActiveMoverAsync instead")]
-        public void SendSetActiveMover(ulong guid)
-        {
-            SendSetActiveMoverAsync(guid).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SendMovementOpcodeAsync instead")]
-        public void SendMovementOpcode(Opcode opcode, byte[] movementInfo)
-        {
-            SendMovementOpcodeAsync(opcode, movementInfo).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SendMSGPackedAsync instead")]
-        public void SendMSGPacked(Opcode opcode, byte[] payload)
-        {
-            SendMSGPackedAsync(opcode, payload).GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use SendPingAsync instead")]
-        public void SendPing()
-        {
-            SendPingAsync().GetAwaiter().GetResult();
-        }
-
-        [Obsolete("Use QueryTimeAsync instead")]
-        public void QueryTime()
-        {
-            QueryTimeAsync().GetAwaiter().GetResult();
         }
 
         /// <summary>

@@ -1,8 +1,7 @@
-using BackgroundBotRunner;
 using Communication;
-using ForegroundBotRunner;
 using WoWStateManager.Clients;
 using WoWStateManager.Listeners;
+using WoWStateManager.Logging;
 using WoWStateManager.Repository;
 using WoWStateManager.Settings;
 using System.Diagnostics;
@@ -10,6 +9,16 @@ using System.Net.Sockets;
 using System.Text;
 using System.Runtime.InteropServices;
 using static WinProcessImports;
+using System.Threading.Tasks;
+using System;
+using System.Threading;
+using System.Collections.Generic;
+using System.IO;
+using Microsoft.Extensions.Hosting;
+using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
 namespace WoWStateManager
 {
@@ -26,12 +35,31 @@ namespace WoWStateManager
         private readonly MangosSOAPClient _mangosSOAPClient;
 
         private readonly Dictionary<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)> _managedServices = [];
+        private readonly object _managedServicesLock = new();
 
         // Prevent repeated launches each loop iteration
         private bool _initialLaunchCompleted = false;
         // Optional basic backoff tracking (account -> last launch time)
         private readonly Dictionary<string, DateTime> _lastLaunchTimes = new();
         private static readonly TimeSpan MinRelaunchInterval = TimeSpan.FromMinutes(1);
+
+        // 63c: Named-pipe log servers � one per foreground bot account
+        private readonly Dictionary<string, BotLogPipeServer> _botLogPipeServers = new();
+
+        /// <summary>
+        /// Shared mutable timestamp used to communicate the real injection time
+        /// from the injection code path to the monitoring task closure.
+        /// Uses Interlocked on ticks since DateTime is a struct and cannot be volatile.
+        /// </summary>
+        private sealed class InjectionTimestampHolder(DateTime initial)
+        {
+            private long _ticks = initial.Ticks;
+            public DateTime Value
+            {
+                get => new(Interlocked.Read(ref _ticks), DateTimeKind.Utc);
+                set => Interlocked.Exchange(ref _ticks, value.Ticks);
+            }
+        }
 
         public StateManagerWorker(
             ILogger<StateManagerWorker> logger,
@@ -71,27 +99,75 @@ namespace WoWStateManager
 
         public void StartBackgroundBotWorker(string accountName)
         {
-            var scope = _serviceProvider.CreateScope();
             var tokenSource = new CancellationTokenSource();
-            var service = ActivatorUtilities.CreateInstance<BackgroundBotWorker>(
-                scope.ServiceProvider,
-                _loggerFactory,
-                _configuration
-            );
 
-            _managedServices.Add(accountName, (service, tokenSource, Task.Run(async () => await service.StartAsync(tokenSource.Token)), null));
-            _logger.LogInformation($"Started ActivityManagerService for account {accountName}");
+            // Launch BackgroundBotRunner as a separate process so each bot owns its own
+            // WoWSharpObjectManager/EventEmitter singletons (no cross-contamination).
+            var botExePath = Path.Combine(AppContext.BaseDirectory, "BackgroundBotRunner.dll");
+            var psi = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = botExePath,
+                WorkingDirectory = AppContext.BaseDirectory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+            psi.Environment["WWOW_ACCOUNT_NAME"] = accountName;
+            psi.Environment["WWOW_ACCOUNT_PASSWORD"] = "PASSWORD";
+
+            var process = Process.Start(psi);
+            var pid = (uint?)process?.Id;
+
+            // Forward stdout/stderr to our logger in background tasks
+            if (process != null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        while (!process.StandardOutput.EndOfStream)
+                        {
+                            var line = await process.StandardOutput.ReadLineAsync();
+                            if (line != null) _logger.LogInformation($"[{accountName}] {line}");
+                        }
+                    }
+                    catch { }
+                });
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        while (!process.StandardError.EndOfStream)
+                        {
+                            var line = await process.StandardError.ReadLineAsync();
+                            if (line != null) _logger.LogWarning($"[{accountName}:ERR] {line}");
+                        }
+                    }
+                    catch { }
+                });
+            }
+
+            lock (_managedServicesLock)
+            {
+                _managedServices.Add(accountName, (null, tokenSource, Task.CompletedTask, pid));
+            }
+            _logger.LogInformation($"Started BackgroundBotRunner process for account {accountName} (PID: {pid})");
         }
 
         public void StartForegroundBotWorker(string accountName, int? targetProcessId = null)
         {
             // Backoff: prevent rapid re-launch loops if process dies immediately
-            if (_lastLaunchTimes.TryGetValue(accountName, out var last) && DateTime.UtcNow - last < MinRelaunchInterval)
+            lock (_managedServicesLock)
             {
-                _logger.LogWarning($"Skipping launch for {accountName} - last attempt {DateTime.UtcNow - last:g} ago (< {MinRelaunchInterval}).");
-                return;
+                if (_lastLaunchTimes.TryGetValue(accountName, out var last) && DateTime.UtcNow - last < MinRelaunchInterval)
+                {
+                    _logger.LogWarning($"Skipping launch for {accountName} - last attempt {DateTime.UtcNow - last:g} ago (< {MinRelaunchInterval}).");
+                    return;
+                }
+                _lastLaunchTimes[accountName] = DateTime.UtcNow;
             }
-            _lastLaunchTimes[accountName] = DateTime.UtcNow;
 
             // Start WoW process and inject the bot worker service
             StartForegroundBotRunner(accountName, targetProcessId);
@@ -104,7 +180,13 @@ namespace WoWStateManager
         {
             var status = new Dictionary<string, string>();
 
-            foreach (var kvp in _managedServices)
+            List<KeyValuePair<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)>> snapshot;
+            lock (_managedServicesLock)
+            {
+                snapshot = _managedServices.ToList();
+            }
+
+            foreach (var kvp in snapshot)
             {
                 var accountName = kvp.Key;
                 var (Service, TokenSource, Task, ProcessId) = kvp.Value;
@@ -182,9 +264,13 @@ namespace WoWStateManager
         /// </summary>
         public string GetBotDetails(string accountName)
         {
-            if (!_managedServices.TryGetValue(accountName, out var serviceTuple))
+            (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId) serviceTuple;
+            lock (_managedServicesLock)
             {
-                return $"Account '{accountName}' not found in managed services.";
+                if (!_managedServices.TryGetValue(accountName, out serviceTuple))
+                {
+                    return $"Account '{accountName}' not found in managed services.";
+                }
             }
 
             var (Service, TokenSource, Task, ProcessId) = serviceTuple;
@@ -319,9 +405,22 @@ namespace WoWStateManager
                 // Note: We proceed anyway since the service might come online later, but we log the warning
             }
 
-            for (int i = 0; i < StateManagerSettings.Instance.CharacterSettings.Count; i++)
+            // 62d: Deduplicate CharacterSettings by AccountName to prevent double-launch races
+            var seenAccounts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var deduplicatedSettings = new List<Settings.CharacterSettings>();
+            foreach (var cs in StateManagerSettings.Instance.CharacterSettings)
             {
-                var characterSettings = StateManagerSettings.Instance.CharacterSettings[i];
+                if (!seenAccounts.Add(cs.AccountName))
+                {
+                    _logger.LogWarning($"Duplicate CharacterSettings entry for account '{cs.AccountName}' � skipping.");
+                    continue;
+                }
+                deduplicatedSettings.Add(cs);
+            }
+
+            for (int i = 0; i < deduplicatedSettings.Count; i++)
+            {
+                var characterSettings = deduplicatedSettings[i];
                 var accountName = characterSettings.AccountName;
 
                 // Skip if not configured to run
@@ -332,7 +431,12 @@ namespace WoWStateManager
                 }
 
                 // Already tracked? skip
-                if (_managedServices.ContainsKey(accountName))
+                bool alreadyManaged;
+                lock (_managedServicesLock)
+                {
+                    alreadyManaged = _managedServices.ContainsKey(accountName);
+                }
+                if (alreadyManaged)
                 {
                     _logger.LogDebug($"Account {accountName} already managed, skipping");
                     continue;
@@ -402,6 +506,14 @@ namespace WoWStateManager
             else
             {
                 Environment.SetEnvironmentVariable("LOADER_ALLOC_CONSOLE", null); // ensure not set
+            }
+
+            // 63c: Start named-pipe log server BEFORE launching WoW so the bot can connect immediately
+            if (!_botLogPipeServers.ContainsKey(accountName))
+            {
+                var pipeServer = new BotLogPipeServer(accountName, _loggerFactory);
+                pipeServer.Start();
+                _botLogPipeServers[accountName] = pipeServer;
             }
 
             var PATH_TO_GAME = _configuration["GameClient:ExecutablePath"];
@@ -601,12 +713,20 @@ namespace WoWStateManager
 
                 processId = processInfo.dwProcessId;
                 processHandle = processInfo.hProcess;  // Use the handle directly from CreateProcess
+
+                // Close the primary thread handle immediately � we only need the process handle
+                if (processInfo.hThread != IntPtr.Zero)
+                    CloseHandle(processInfo.hThread);
+
                 _logger.LogInformation($"WoW.exe started for account {accountName} (Process ID: {processId}, Handle: 0x{processHandle:X})");
             }
 
             // IMPORTANT: Add to managed services IMMEDIATELY to prevent duplicate launches
             var tokenSource = new CancellationTokenSource();
             var capturedProcessId = processId;
+            // Use a holder object so the monitoring closure always reads the latest timestamp
+            // (the injection code path updates this after actual injection completes).
+            var injectionTimestampHolder = new InjectionTimestampHolder(DateTime.UtcNow);
             var monitoringTask = Task.Run(async () =>
             {
                 bool processExited = false;
@@ -615,14 +735,17 @@ namespace WoWStateManager
                     // Wait a bit before starting to monitor to avoid interfering with injection
                     await Task.Delay(10000, tokenSource.Token);
 
-                    // Monitor using WaitForSingleObject on the process handle
+                    // 62c: Orphan reaper � track whether the bot has phoned home
+                    bool snapshotReceived = false;
+
+                    // Monitor the WoW process
                     while (!tokenSource.Token.IsCancellationRequested)
                     {
-                        // Check if process is still running by trying to find it
+                        // Check if process is still running
                         try
                         {
                             var proc = Process.GetProcessById((int)capturedProcessId);
-                            if (proc == null)
+                            if (proc == null || proc.HasExited)
                             {
                                 processExited = true;
                                 break;
@@ -630,7 +753,6 @@ namespace WoWStateManager
                         }
                         catch (ArgumentException)
                         {
-                            // Process no longer exists
                             processExited = true;
                             break;
                         }
@@ -638,6 +760,35 @@ namespace WoWStateManager
                         {
                             // Ignore other errors (access denied etc), just keep monitoring
                         }
+
+                        // 62c: Check for snapshot phone-home; kill orphans after 60s from actual injection
+                        if (!snapshotReceived)
+                        {
+                            if (_activityMemberSocketListener.CurrentActivityMemberList.TryGetValue(accountName, out var snap)
+                                && snap != null
+                                && !string.IsNullOrEmpty(snap.AccountName)
+                                && snap.AccountName != "?")
+                            {
+                                snapshotReceived = true;
+                                _logger.LogInformation($"Orphan reaper: snapshot received for {accountName} (PID {capturedProcessId})");
+                            }
+                            else if (DateTime.UtcNow > injectionTimestampHolder.Value.AddSeconds(60))
+                            {
+                                _logger.LogWarning($"Orphan reaper: no snapshot from {accountName} (PID {capturedProcessId}) within 60s of injection � killing process.");
+                                try
+                                {
+                                    var orphan = Process.GetProcessById((int)capturedProcessId);
+                                    orphan.Kill();
+                                }
+                                catch (Exception killEx)
+                                {
+                                    _logger.LogWarning(killEx, $"Orphan reaper: failed to kill PID {capturedProcessId}");
+                                }
+                                processExited = true;
+                                break;
+                            }
+                        }
+
                         await Task.Delay(5000, tokenSource.Token);
                     }
                 }
@@ -654,18 +805,79 @@ namespace WoWStateManager
                     // Only remove from managed services if process actually exited
                     if (processExited)
                     {
-                        _managedServices.Remove(accountName);
+                        lock (_managedServicesLock)
+                        {
+                            _managedServices.Remove(accountName);
+                        }
+                        // Reset the activity member slot so '?' assignment works on relaunch
+                        if (_activityMemberSocketListener.CurrentActivityMemberList.ContainsKey(accountName))
+                        {
+                            _activityMemberSocketListener.CurrentActivityMemberList[accountName] = new();
+                            _logger.LogInformation($"Reset activity member slot for account {accountName}");
+                        }
                         _logger.LogInformation($"Foreground bot process for account {accountName} has exited and been removed from tracking");
                     }
                 }
             });
 
             // Add to managed services IMMEDIATELY to prevent race condition with ApplyDesiredWorkerState
-            _managedServices.Add(accountName, (null, tokenSource, monitoringTask, processId));
+            lock (_managedServicesLock)
+            {
+                _managedServices.Add(accountName, (null, tokenSource, monitoringTask, processId));
+            }
             _logger.LogInformation($"Added {accountName} to managed services with PID {processId} - preventing duplicate launches");
 
-            // Give WoW.exe time to initialize before injection
-            Thread.Sleep(2000);
+            // 62a: Poll for WoW window before injection (up to 15s)
+            // Uses WaitForSingleObject + EnumWindows instead of Process.GetProcessById
+            // to avoid "Access denied" when the test host isn't running elevated.
+            {
+                var windowPollTimeout = TimeSpan.FromSeconds(15);
+                var windowPollSw = Stopwatch.StartNew();
+                bool windowReady = false;
+
+                while (windowPollSw.Elapsed < windowPollTimeout)
+                {
+                    // Check if process is still alive using the CreateProcess handle
+                    var processWait = WaitForSingleObject(processHandle, 0);
+                    if (processWait == WAIT_OBJECT_0)
+                    {
+                        _logger.LogError($"WoW process (PID {processId}) exited before window appeared. Aborting injection for {accountName}.");
+                        RemoveManagedService(accountName, tokenSource);
+                        CloseHandleSafe(processHandle);
+                        return;
+                    }
+
+                    // Check for a visible window belonging to this process ID
+                    bool foundWindow = false;
+                    EnumWindows((hWnd, lParam) =>
+                    {
+                        GetWindowThreadProcessId(hWnd, out uint windowPid);
+                        if (windowPid == processId && IsWindowVisible(hWnd))
+                        {
+                            foundWindow = true;
+                            return false; // stop enumerating
+                        }
+                        return true; // continue
+                    }, IntPtr.Zero);
+
+                    if (foundWindow)
+                    {
+                        windowReady = true;
+                        _logger.LogInformation($"WoW window detected for PID {processId} after {windowPollSw.Elapsed.TotalSeconds:F1}s");
+                        break;
+                    }
+
+                    Thread.Sleep(250);
+                }
+
+                if (!windowReady)
+                {
+                    _logger.LogError($"WoW window did not appear within {windowPollTimeout.TotalSeconds}s for PID {processId}. Aborting injection for {accountName}.");
+                    RemoveManagedService(accountName, tokenSource);
+                    CloseHandleSafe(processHandle);
+                    return;
+                }
+            }
 
             _logger.LogInformation($"ATTEMPTING DLL INJECTION: {loaderPath}");
 
@@ -683,12 +895,8 @@ namespace WoWStateManager
                 _logger.LogError($"[FAIL] Failed to allocate memory in target process. Error Code: {lastError} (0x{lastError:X})");
                 _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
                 
-                // Check if target process is still running
-                try
-                {
-                    Process.GetProcessById((int)processId);
-                }
-                catch (ArgumentException)
+                // Check if target process is still alive using the CreateProcess handle
+                if (WaitForSingleObject(processHandle, 0) == WAIT_OBJECT_0)
                 {
                     _logger.LogError($"[FAIL] Target WoW process (PID {processId}) has already exited");
                 }
@@ -853,13 +1061,85 @@ namespace WoWStateManager
             // free the memory that was allocated by VirtualAllocEx
             VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
 
+            // Update the injection timestamp so the orphan reaper uses the real time
+            injectionTimestampHolder.Value = DateTime.UtcNow;
+
+            // 62b: Wait for bot phone-home after injection (poll CurrentActivityMemberList, 30s timeout)
+            {
+                var phoneHomeTimeout = TimeSpan.FromSeconds(30);
+                var phoneHomeSw = Stopwatch.StartNew();
+                bool phoneHomeReceived = false;
+
+                while (phoneHomeSw.Elapsed < phoneHomeTimeout)
+                {
+                    if (_activityMemberSocketListener.CurrentActivityMemberList.TryGetValue(accountName, out var snapshot)
+                        && snapshot != null
+                        && !string.IsNullOrEmpty(snapshot.AccountName)
+                        && snapshot.AccountName != "?")
+                    {
+                        phoneHomeReceived = true;
+                        _logger.LogInformation($"Bot phone-home received for {accountName} after {phoneHomeSw.Elapsed.TotalSeconds:F1}s");
+                        break;
+                    }
+
+                    Thread.Sleep(500);
+                }
+
+                if (!phoneHomeReceived)
+                {
+                    _logger.LogWarning($"No phone-home snapshot from {accountName} within {phoneHomeTimeout.TotalSeconds}s of injection. Bot may be unresponsive (PID {processId}).");
+                }
+            }
+
+            // Close the process handle � we're done with low-level manipulation.
+            // The monitoring task uses Process.GetProcessById which opens its own handle.
+            CloseHandleSafe(processHandle);
+
             _logger.LogInformation($"Foreground Bot Runner setup completed for account {accountName} (Process ID: {processId})");
             _logger.LogInformation("=== DLL INJECTION DIAGNOSTICS END ===");
         }
 
+        /// <summary>
+        /// Removes an account from managed services and cancels its monitoring task.
+        /// Used when injection aborts after the entry was already added.
+        /// </summary>
+        private void RemoveManagedService(string accountName, CancellationTokenSource tokenSource)
+        {
+            tokenSource.Cancel();
+            lock (_managedServicesLock)
+            {
+                _managedServices.Remove(accountName);
+            }
+            // Reset the activity member slot so '?' assignment works on relaunch
+            if (_activityMemberSocketListener.CurrentActivityMemberList.ContainsKey(accountName))
+            {
+                _activityMemberSocketListener.CurrentActivityMemberList[accountName] = new();
+            }
+            _logger.LogInformation($"Removed {accountName} from managed services after injection abort");
+        }
+
+        /// <summary>
+        /// Safely closes a Win32 handle, ignoring errors on IntPtr.Zero.
+        /// </summary>
+        private static void CloseHandleSafe(IntPtr handle)
+        {
+            if (handle != IntPtr.Zero)
+            {
+                try { CloseHandle(handle); } catch { }
+            }
+        }
+
         public void StopManagedService(string accountName)
         {
-            if (_managedServices.TryGetValue(accountName, out var serviceTuple))
+            (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId) serviceTuple;
+            bool found;
+            lock (_managedServicesLock)
+            {
+                found = _managedServices.TryGetValue(accountName, out serviceTuple);
+                if (found) _managedServices.Remove(accountName);
+            }
+
+            if (found)
             {
                 var (Service, TokenSource, Task, ProcessId) = serviceTuple;
 
@@ -871,11 +1151,9 @@ namespace WoWStateManager
                 // If it's a background service, stop it properly
                 if (Service != null)
                 {
-                    Task.Factory.StartNew(async () => await Service.StopAsync(CancellationToken.None));
+                    _ = System.Threading.Tasks.Task.Run(async () => await Service.StopAsync(CancellationToken.None));
                 }
 
-                // Remove from tracking immediately to prevent issues
-                _managedServices.Remove(accountName);
                 _logger.LogInformation($"Stopped managed service for account {accountName}");
             }
             else
@@ -891,7 +1169,11 @@ namespace WoWStateManager
         {
             _logger.LogInformation("Stopping all managed services...");
 
-            var servicesToStop = _managedServices.ToList(); // Create a copy to avoid modification during iteration
+            List<KeyValuePair<string, (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId)>> servicesToStop;
+            lock (_managedServicesLock)
+            {
+                servicesToStop = _managedServices.ToList();
+            }
 
             foreach (var kvp in servicesToStop)
             {
@@ -928,9 +1210,18 @@ namespace WoWStateManager
             }
 
             // Clear all services
-            _managedServices.Clear();
+            lock (_managedServicesLock)
+            {
+                _managedServices.Clear();
+            }
 
-            // Stop any active movement recording
+            // 63c: Dispose all named-pipe log servers
+            foreach (var kvp in _botLogPipeServers)
+            {
+                try { kvp.Value.Dispose(); } catch { }
+            }
+            _botLogPipeServers.Clear();
+
             _logger.LogInformation("All managed services stopped");
         }
 
@@ -953,8 +1244,35 @@ namespace WoWStateManager
                         _logger.LogInformation("Initial bot launch completed.");
                     }
 
+                    // Detect terminated processes and allow re-launch via ApplyDesiredWorkerState.
+                    // The monitoring task removes dead entries from _managedServices, so if a
+                    // configured account is no longer tracked it will be picked up again.
+                    bool hasTerminated = false;
+                    lock (_managedServicesLock)
+                    {
+                        foreach (var cs in StateManagerSettings.Instance.CharacterSettings)
+                        {
+                            if (cs.ShouldRun && !_managedServices.ContainsKey(cs.AccountName))
+                            {
+                                hasTerminated = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (hasTerminated)
+                    {
+                        _logger.LogInformation("Detected terminated bot process(es) � attempting re-launch");
+                        await ApplyDesiredWorkerState(stoppingToken);
+                    }
+
                     // Log status of managed services periodically
-                    if (_managedServices.Count > 0)
+                    int serviceCount;
+                    lock (_managedServicesLock)
+                    {
+                        serviceCount = _managedServices.Count;
+                    }
+
+                    if (serviceCount > 0)
                     {
                         var statusReport = GetManagedBotStatus();
                         _logger.LogInformation($"Managed Services Status: {string.Join(", ", statusReport.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}");

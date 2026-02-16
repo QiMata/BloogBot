@@ -8,12 +8,14 @@ This document describes how to record player movement data from World of Warcraf
 
 ### Prerequisites
 1. Bot must be injected and player must be in-world
-2. Use a shaman or any character with access to teleportation/movement abilities for testing
+2. Any character class works — no special abilities needed
 
 ### Commands
-Say these in game chat (SAY channel):
-- **`record start`** - Begin recording at 50ms intervals (20 FPS)
-- **`record stop`** - Stop recording and save to files
+Type in WoW chat (SAY channel):
+- **`/say rec`** - Toggle recording on/off (60 FPS, 16ms intervals)
+- **`/say rec elevator`** - Toggle with a description appended to the filename
+
+The recorder uses a Lua CHAT_MSG_SAY hook to detect "rec" messages from the player.
 
 ### Output Location
 Recordings are saved to:

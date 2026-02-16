@@ -1,5 +1,9 @@
 using WoWSharpClient.Networking.Implementation;
 using GameData.Core.Enums;
+using System.Threading.Tasks;
+using System;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -33,13 +37,10 @@ namespace WowSharpClient.NetworkTests
             // Connect the pipeline
             await pipeline.ConnectAsync("test", 1234);
 
-            // Act - Inject a properly formatted WoW packet
+            // Act - Inject a server-format (SMSG) packet: size(2 BE) + opcode(2 LE) + payload
             var testPayload = new byte[] { 0x01, 0x02, 0x03 };
-            var encodedPacket = codec.Encode(Opcode.SMSG_PONG, testPayload);
-            var framedMessage = framer.Frame(encodedPacket);
-            var encryptedMessage = encryptor.Encrypt(framedMessage);
-
-            connection.InjectIncomingData(encryptedMessage);
+            var smsgPacket = NetworkingAbstractionsTests.CreateSmsgPacket(Opcode.SMSG_PONG, testPayload);
+            connection.InjectIncomingData(smsgPacket);
 
             // Wait a moment for async processing
             await Task.Delay(100);
@@ -102,13 +103,9 @@ namespace WowSharpClient.NetworkTests
 
             await pipeline.ConnectAsync("test", 1234);
 
-            // Act - Create a complete message and split it into partial frames
+            // Act - Create a complete SMSG packet and split it into partial frames
             var testPayload = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-            var encodedPacket = codec.Encode(Opcode.SMSG_PONG, testPayload);
-            var framedMessage = framer.Frame(encodedPacket);
-            var encryptedMessage = encryptor.Encrypt(framedMessage);
-
-            var fullMessage = encryptedMessage.ToArray();
+            var fullMessage = NetworkingAbstractionsTests.CreateSmsgPacket(Opcode.SMSG_PONG, testPayload);
             
             // Split into multiple partial frames
             var part1 = fullMessage.Take(3).ToArray();
@@ -160,17 +157,15 @@ namespace WowSharpClient.NetworkTests
 
             await pipeline.ConnectAsync("test", 1234);
 
-            // Act - Send a message to the throwing handler
+            // Act - Send a server-format message to the throwing handler
             var testPayload1 = new byte[] { 0x01, 0x02 };
-            var packet1 = encryptor.Encrypt(framer.Frame(codec.Encode(Opcode.SMSG_PONG, testPayload1)));
-            connection.InjectIncomingData(packet1);
+            connection.InjectIncomingData(NetworkingAbstractionsTests.CreateSmsgPacket(Opcode.SMSG_PONG, testPayload1));
 
             await Task.Delay(100);
 
-            // Send a message to the non-throwing handler
+            // Send a server-format message to the non-throwing handler
             var testPayload2 = new byte[] { 0x03, 0x04 };
-            var packet2 = encryptor.Encrypt(framer.Frame(codec.Encode(Opcode.SMSG_AUTH_CHALLENGE, testPayload2)));
-            connection.InjectIncomingData(packet2);
+            connection.InjectIncomingData(NetworkingAbstractionsTests.CreateSmsgPacket(Opcode.SMSG_AUTH_CHALLENGE, testPayload2));
 
             await Task.Delay(100);
 
@@ -211,8 +206,7 @@ namespace WowSharpClient.NetworkTests
 
             foreach (var payload in payloads)
             {
-                var packet = encryptor.Encrypt(framer.Frame(codec.Encode(Opcode.SMSG_PONG, payload)));
-                connection.InjectIncomingData(packet);
+                connection.InjectIncomingData(NetworkingAbstractionsTests.CreateSmsgPacket(Opcode.SMSG_PONG, payload));
             }
 
             await Task.Delay(200);

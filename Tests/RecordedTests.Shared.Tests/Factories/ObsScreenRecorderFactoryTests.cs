@@ -2,6 +2,8 @@ using FluentAssertions;
 using RecordedTests.Shared.Abstractions.I;
 using RecordedTests.Shared.Factories;
 using RecordedTests.Shared.Recording;
+using System;
+using System.Collections.Generic;
 
 namespace RecordedTests.Shared.Tests.Factories;
 

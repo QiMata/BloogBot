@@ -18,6 +18,10 @@ file(GLOB_RECURSE NAVIGATION_HEADERS
 # Remove main from sources if it exists (since we're building a library)
 list(FILTER NAVIGATION_SOURCES EXCLUDE REGEX "main\\.cpp$")
 
+# Exclude CMake build directories (compiler ID files contain _main)
+list(FILTER NAVIGATION_SOURCES EXCLUDE REGEX "cmake_build")
+list(FILTER NAVIGATION_HEADERS EXCLUDE REGEX "cmake_build")
+
 # Create the DLL
 add_library(Navigation SHARED ${NAVIGATION_SOURCES} ${NAVIGATION_HEADERS})
 
@@ -25,7 +29,10 @@ add_library(Navigation SHARED ${NAVIGATION_SOURCES} ${NAVIGATION_HEADERS})
 target_include_directories(Navigation PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/Detour
+    ${CMAKE_CURRENT_SOURCE_DIR}/Detour/Include
+    ${CMAKE_CURRENT_SOURCE_DIR}/Detour/Source
     ${CMAKE_CURRENT_SOURCE_DIR}/g3dlite
+    ${CMAKE_CURRENT_SOURCE_DIR}/g3dlite/Include
     ${CMAKE_CURRENT_SOURCE_DIR}/Utilities
 )
 
@@ -63,7 +70,7 @@ set_property(TARGET Navigation PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<C
 
 # Output properties
 set_target_properties(Navigation PROPERTIES
-    CXX_STANDARD 17
+    CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON
     FOLDER "Native"
 )

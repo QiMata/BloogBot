@@ -1,10 +1,12 @@
+using BotRunner.Tests.Helpers;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
+using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
-using Xunit;
+using System.Threading.Tasks;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests
@@ -23,21 +25,23 @@ namespace BotRunner.Tests
     /// - Verify the ForegroundBotRunner initializes successfully
     /// </summary>
     [RequiresInfrastructure]
+    [Collection(InfrastructureTestCollection.Name)]
     public class ClientHijackIntegrationTest : IDisposable
     {
         private readonly ITestOutputHelper _output;
         private readonly IConfiguration _configuration;
-        private Process? _stateManagerProcess;
-        private readonly StringBuilder _stateManagerLogs = new();
-        private readonly object _logLock = new();
+        private readonly InfrastructureTestGuard _guard;
+        private readonly StateManagerProcessHelper _helper;
 
-        public ClientHijackIntegrationTest(ITestOutputHelper output)
+        public ClientHijackIntegrationTest(InfrastructureTestGuard guard, ITestOutputHelper output)
         {
+            _guard = guard;
             _output = output;
+            _helper = new StateManagerProcessHelper();
 
-            // Kill any lingering WoWStateManager processes from previous test runs
-            // that may be locking DLLs in Bot/Debug/net8.0/
-            KillLingeringProcesses();
+            // Use the shared guard to kill any lingering processes from previous test runs
+            _guard.EnsureCleanState(msg => _output.WriteLine(msg));
+            _guard.RegisterHelper(_helper);
 
             var configBuilder = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
@@ -45,41 +49,6 @@ namespace BotRunner.Tests
                 .AddEnvironmentVariables();
 
             _configuration = configBuilder.Build();
-        }
-
-        /// <summary>
-        /// Kills any WoWStateManager.exe processes left over from previous test runs.
-        /// These linger when the test runner exits abnormally or Dispose isn't called,
-        /// and they lock DLLs preventing rebuilds.
-        /// </summary>
-        private void KillLingeringProcesses()
-        {
-            foreach (var name in new[] { "WoWStateManager", "WoW" })
-            {
-                try
-                {
-                    var procs = Process.GetProcessesByName(name);
-                    foreach (var proc in procs)
-                    {
-                        try
-                        {
-                            _output.WriteLine($"Killing lingering {name} process (PID: {proc.Id})...");
-                            proc.Kill(entireProcessTree: true);
-                            proc.WaitForExit(5000);
-                            _output.WriteLine($"  Killed PID {proc.Id}");
-                        }
-                        catch (Exception ex)
-                        {
-                            _output.WriteLine($"  Warning: Could not kill PID {proc.Id}: {ex.Message}");
-                        }
-                        finally
-                        {
-                            proc.Dispose();
-                        }
-                    }
-                }
-                catch { }
-            }
         }
 
         [Fact]
@@ -159,7 +128,7 @@ namespace BotRunner.Tests
             // Resolve relative path
             if (!Path.IsPathRooted(loaderPath))
             {
-                var solutionRoot = FindSolutionRoot(Directory.GetCurrentDirectory());
+                var solutionRoot = StateManagerProcessHelper.FindSolutionRoot(Directory.GetCurrentDirectory());
                 if (solutionRoot != null)
                 {
                     loaderPath = Path.Combine(solutionRoot, loaderPath);
@@ -305,77 +274,40 @@ namespace BotRunner.Tests
 
             // Step 2: Update StateManagerSettings.json with the target process ID
             _output.WriteLine("Step 2: Configuring StateManager to hijack this process...");
-            var solutionRoot = FindSolutionRoot(Directory.GetCurrentDirectory());
+            var solutionRoot = StateManagerProcessHelper.FindSolutionRoot(Directory.GetCurrentDirectory());
             if (solutionRoot == null)
             {
                 Assert.Fail("Could not find solution root directory");
             }
 
             // Settings must be in the Bot output folder where StateManager reads from (not source directory)
-            var stateManagerBuildPath = Path.Combine(solutionRoot, "Bot", "Debug", "net8.0");
-            var settingsPath = Path.Combine(stateManagerBuildPath, "Settings", "StateManagerSettings.json");
-            var originalSettings = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : null;
+            var stateManagerBuildPath = StateManagerProcessHelper.GetStateManagerBuildPath(solutionRoot);
 
             // Clean up any stale breadcrumb files from previous runs
-            CleanupBreadcrumbFiles(stateManagerBuildPath);
+            StateManagerProcessHelper.CleanupBreadcrumbFiles(stateManagerBuildPath, msg => _output.WriteLine(msg));
 
             try
             {
                 // Write settings with the target process ID
-                var hijackSettings = $@"[
-  {{
-    ""AccountName"": ""ORWR1"",
-    ""Openness"": 1.0,
-    ""Conscientiousness"": 1.0,
-    ""Extraversion"": 1.0,
-    ""Agreeableness"": 1.0,
-    ""Neuroticism"": 1.0,
-    ""ShouldRun"": true,
-    ""RunnerType"": ""Foreground"",
-    ""TargetProcessId"": {targetPid}
-  }}
-]";
-                File.WriteAllText(settingsPath, hijackSettings);
+                var hijackConfig = new StateManagerLaunchConfig
+                {
+                    AccountName = "ORWR1",
+                    TaskMode = BotTaskMode.Hijack,
+                    RunnerType = "Foreground",
+                    TargetProcessId = targetPid
+                };
+
+                _helper.WriteSettings(stateManagerBuildPath, hijackConfig);
                 _output.WriteLine($"  ✓ Settings updated with TargetProcessId: {targetPid}");
                 _output.WriteLine("");
 
                 // Step 3: Start StateManager
                 _output.WriteLine("Step 3: Starting StateManager...");
-                var stateManagerExe = Path.Combine(stateManagerBuildPath, "WoWStateManager.exe");
-
-                if (!File.Exists(stateManagerExe))
-                {
-                    // Try the dll if exe doesn't exist
-                    var stateManagerDll = Path.Combine(stateManagerBuildPath, "WoWStateManager.dll");
-                    if (!File.Exists(stateManagerDll))
-                    {
-                        Assert.Fail($"StateManager not found at: {stateManagerExe} or {stateManagerDll}. Build StateManager first.");
-                    }
-                    // Use dotnet to run the dll
-                    stateManagerExe = stateManagerDll;
-                }
-
-                _output.WriteLine($"  Using StateManager at: {stateManagerExe}");
-
-                var psi = new ProcessStartInfo
-                {
-                    FileName = stateManagerExe.EndsWith(".dll") ? "dotnet" : stateManagerExe,
-                    Arguments = stateManagerExe.EndsWith(".dll") ? $"\"{stateManagerExe}\"" : "",
-                    WorkingDirectory = stateManagerBuildPath,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-
-                // Set environment variables
-                psi.Environment["Logging__LogLevel__Default"] = "Debug";
 
                 // Pass through WWOW_DATA_DIR if set, or use game client directory
                 var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
                 if (string.IsNullOrEmpty(dataDir))
                 {
-                    // Try to derive from game client path
                     var gameClientPath = _configuration["GameClient:ExecutablePath"];
                     if (!string.IsNullOrEmpty(gameClientPath) && File.Exists(gameClientPath))
                     {
@@ -384,43 +316,16 @@ namespace BotRunner.Tests
                 }
                 if (!string.IsNullOrEmpty(dataDir))
                 {
-                    psi.Environment["WWOW_DATA_DIR"] = dataDir;
+                    hijackConfig.ExtraEnvironmentVariables["WWOW_DATA_DIR"] = dataDir;
                     _output.WriteLine($"  WWOW_DATA_DIR: {dataDir}");
                 }
 
-                _stateManagerProcess = new Process { StartInfo = psi };
+                _helper.OnOutputLine += line => _output.WriteLine($"[StateManager] {line}");
+                _helper.OnErrorLine += line => _output.WriteLine($"[StateManager-ERR] {line}");
 
-                _stateManagerProcess.OutputDataReceived += (sender, args) =>
-                {
-                    if (!string.IsNullOrEmpty(args.Data))
-                    {
-                        lock (_logLock)
-                        {
-                            _stateManagerLogs.AppendLine($"[OUT] {args.Data}");
-                        }
-                        _output.WriteLine($"[StateManager] {args.Data}");
-                    }
-                };
+                Assert.True(_helper.Launch(stateManagerBuildPath, hijackConfig), "Failed to start StateManager process");
 
-                _stateManagerProcess.ErrorDataReceived += (sender, args) =>
-                {
-                    if (!string.IsNullOrEmpty(args.Data))
-                    {
-                        lock (_logLock)
-                        {
-                            _stateManagerLogs.AppendLine($"[ERR] {args.Data}");
-                        }
-                        _output.WriteLine($"[StateManager-ERR] {args.Data}");
-                    }
-                };
-
-                bool started = _stateManagerProcess.Start();
-                Assert.True(started, "Failed to start StateManager process");
-
-                _stateManagerProcess.BeginOutputReadLine();
-                _stateManagerProcess.BeginErrorReadLine();
-
-                _output.WriteLine($"  ✓ StateManager started with PID: {_stateManagerProcess.Id}");
+                _output.WriteLine($"  ✓ StateManager started with PID: {_helper.Process!.Id}");
                 _output.WriteLine("");
 
                 // Step 4: Wait for injection to complete
@@ -432,16 +337,15 @@ namespace BotRunner.Tests
 
                 while (sw.Elapsed < timeout)
                 {
-                    if (_stateManagerProcess.HasExited)
+                    if (!_helper.IsRunning)
                     {
-                        _output.WriteLine($"  StateManager exited with code: {_stateManagerProcess.ExitCode}");
+                        _output.WriteLine($"  StateManager exited with code: {_helper.Process?.ExitCode}");
                         break;
                     }
 
                     // Check logs for injection progress and success
-                    lock (_logLock)
                     {
-                        var logs = _stateManagerLogs.ToString();
+                        var logs = _helper.CapturedLogs;
 
                         // Check for injection success
                         if (logs.Contains("DLL injection completed successfully") ||
@@ -466,10 +370,11 @@ namespace BotRunner.Tests
                             sw.Elapsed.TotalSeconds > 30)
                         {
                             _output.WriteLine("  ⚠ No injection attempt detected after 30s - checking settings...");
-                            _output.WriteLine($"    Settings path: {settingsPath}");
-                            if (File.Exists(settingsPath))
+                            var debugSettingsPath = Path.Combine(stateManagerBuildPath, "StateManagerSettings.json");
+                            _output.WriteLine($"    Settings path: {debugSettingsPath}");
+                            if (File.Exists(debugSettingsPath))
                             {
-                                _output.WriteLine($"    Settings content: {File.ReadAllText(settingsPath)}");
+                                _output.WriteLine($"    Settings content: {File.ReadAllText(debugSettingsPath)}");
                             }
                         }
                     }
@@ -487,7 +392,7 @@ namespace BotRunner.Tests
                 _output.WriteLine("");
                 _output.WriteLine("=== TEST SUMMARY ===");
                 _output.WriteLine($"  Target WoW Process: PID {targetPid}");
-                _output.WriteLine($"  StateManager PID: {_stateManagerProcess?.Id}");
+                _output.WriteLine($"  StateManager PID: {_helper.Process?.Id}");
                 _output.WriteLine($"  Injection Detected: {(injectionDetected ? "Yes" : "No")}");
                 _output.WriteLine($"  Managed Code Entry: {(verificationResult.ManagedCodeEntry ? "Yes" : "No")}");
                 _output.WriteLine($"  Bot Service Started: {(verificationResult.BotServiceStarted ? "Yes" : "No")}");
@@ -505,7 +410,7 @@ namespace BotRunner.Tests
 
                 _output.WriteLine("");
                 _output.WriteLine("=== CAPTURED STATE MANAGER LOGS ===");
-                _output.WriteLine(_stateManagerLogs.ToString());
+                _output.WriteLine(_helper.CapturedLogs);
                 _output.WriteLine("=== END LOGS ===");
 
                 // Assert on success criteria
@@ -515,11 +420,8 @@ namespace BotRunner.Tests
             finally
             {
                 // Restore original settings
-                if (originalSettings != null)
-                {
-                    File.WriteAllText(settingsPath, originalSettings);
-                    _output.WriteLine("Restored original StateManagerSettings.json");
-                }
+                _helper.RestoreSettings();
+                _output.WriteLine("Restored original StateManagerSettings.json");
             }
         }
 
@@ -532,18 +434,16 @@ namespace BotRunner.Tests
             _output.WriteLine("This test spawns a fresh WoW client (no TargetProcessId)");
             _output.WriteLine("");
 
-            var solutionRoot = FindSolutionRoot(Directory.GetCurrentDirectory());
+            var solutionRoot = StateManagerProcessHelper.FindSolutionRoot(Directory.GetCurrentDirectory());
             if (solutionRoot == null)
             {
                 Assert.Fail("Could not find solution root directory");
             }
 
-            var stateManagerBuildPath = Path.Combine(solutionRoot, "Bot", "Debug", "net8.0");
-            var settingsPath = Path.Combine(stateManagerBuildPath, "Settings", "StateManagerSettings.json");
-            var originalSettings = File.Exists(settingsPath) ? File.ReadAllText(settingsPath) : null;
+            var stateManagerBuildPath = StateManagerProcessHelper.GetStateManagerBuildPath(solutionRoot);
 
             // Clean up any stale breadcrumb files from previous runs
-            CleanupBreadcrumbFiles(stateManagerBuildPath);
+            StateManagerProcessHelper.CleanupBreadcrumbFiles(stateManagerBuildPath, msg => _output.WriteLine(msg));
 
             // Track spawned WoW process for cleanup
             Process? spawnedWoW = null;
@@ -552,78 +452,25 @@ namespace BotRunner.Tests
             {
                 // Step 1: Configure StateManager WITHOUT TargetProcessId (spawns fresh WoW)
                 _output.WriteLine("Step 1: Configuring StateManager to spawn fresh WoW client...");
-                var spawnSettings = @"[
-  {
-    ""AccountName"": ""ORWR1"",
-    ""Openness"": 1.0,
-    ""Conscientiousness"": 1.0,
-    ""Extraversion"": 1.0,
-    ""Agreeableness"": 1.0,
-    ""Neuroticism"": 1.0,
-    ""ShouldRun"": true,
-    ""RunnerType"": ""Foreground""
-  }
-]";
-                File.WriteAllText(settingsPath, spawnSettings);
+                var spawnConfig = new StateManagerLaunchConfig
+                {
+                    AccountName = "ORWR1",
+                    TaskMode = BotTaskMode.Default,
+                    RunnerType = "Foreground"
+                };
+                _helper.WriteSettings(stateManagerBuildPath, spawnConfig);
                 _output.WriteLine("  ✓ Settings configured (no TargetProcessId - will spawn fresh WoW)");
                 _output.WriteLine("");
 
                 // Step 2: Start StateManager
                 _output.WriteLine("Step 2: Starting StateManager...");
-                var stateManagerExe = Path.Combine(stateManagerBuildPath, "WoWStateManager.exe");
 
-                if (!File.Exists(stateManagerExe))
-                {
-                    var stateManagerDll = Path.Combine(stateManagerBuildPath, "WoWStateManager.dll");
-                    if (!File.Exists(stateManagerDll))
-                    {
-                        Assert.Fail($"StateManager not found at: {stateManagerExe}");
-                    }
-                    stateManagerExe = stateManagerDll;
-                }
+                _helper.OnOutputLine += line => _output.WriteLine($"[StateManager] {line}");
+                _helper.OnErrorLine += line => _output.WriteLine($"[StateManager-ERR] {line}");
 
-                _output.WriteLine($"  Using StateManager at: {stateManagerExe}");
+                Assert.True(_helper.Launch(stateManagerBuildPath, spawnConfig), "Failed to start StateManager process");
 
-                var psi = new ProcessStartInfo
-                {
-                    FileName = stateManagerExe.EndsWith(".dll") ? "dotnet" : stateManagerExe,
-                    Arguments = stateManagerExe.EndsWith(".dll") ? $"\"{stateManagerExe}\"" : "",
-                    WorkingDirectory = stateManagerBuildPath,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
-
-                psi.Environment["Logging__LogLevel__Default"] = "Debug";
-
-                _stateManagerProcess = new Process { StartInfo = psi };
-
-                _stateManagerProcess.OutputDataReceived += (sender, args) =>
-                {
-                    if (!string.IsNullOrEmpty(args.Data))
-                    {
-                        lock (_logLock) { _stateManagerLogs.AppendLine($"[OUT] {args.Data}"); }
-                        _output.WriteLine($"[StateManager] {args.Data}");
-                    }
-                };
-
-                _stateManagerProcess.ErrorDataReceived += (sender, args) =>
-                {
-                    if (!string.IsNullOrEmpty(args.Data))
-                    {
-                        lock (_logLock) { _stateManagerLogs.AppendLine($"[ERR] {args.Data}"); }
-                        _output.WriteLine($"[StateManager-ERR] {args.Data}");
-                    }
-                };
-
-                bool started = _stateManagerProcess.Start();
-                Assert.True(started, "Failed to start StateManager process");
-
-                _stateManagerProcess.BeginOutputReadLine();
-                _stateManagerProcess.BeginErrorReadLine();
-
-                _output.WriteLine($"  ✓ StateManager started with PID: {_stateManagerProcess.Id}");
+                _output.WriteLine($"  ✓ StateManager started with PID: {_helper.Process!.Id}");
                 _output.WriteLine("");
 
                 // Step 3: Wait for WoW spawn, injection, and valid snapshot
@@ -646,7 +493,7 @@ namespace BotRunner.Tests
                 while (sw.Elapsed < timeout)
                 {
                     // Check for StateManager exit - could be crash OR user closing WoW
-                    if (_stateManagerProcess.HasExited)
+                    if (!_helper.IsRunning)
                     {
                         if (snapshotResult.SnapshotReceived)
                         {
@@ -655,7 +502,7 @@ namespace BotRunner.Tests
                         }
                         else
                         {
-                            failureReason = $"StateManager exited unexpectedly with code: {_stateManagerProcess.ExitCode}";
+                            failureReason = $"StateManager exited unexpectedly with code: {_helper.Process?.ExitCode}";
                             _output.WriteLine($"  ✗ {failureReason}");
                         }
                         break;
@@ -669,9 +516,8 @@ namespace BotRunner.Tests
                     }
 
                     string logs;
-                    lock (_logLock)
                     {
-                        logs = _stateManagerLogs.ToString();
+                        logs = _helper.CapturedLogs;
                     }
 
                     // Check for WoW process spawn
@@ -749,7 +595,7 @@ namespace BotRunner.Tests
                 _output.WriteLine("=== TEST SUMMARY ===");
                 _output.WriteLine($"  Total Time: {sw.Elapsed.TotalSeconds:F1}s");
                 _output.WriteLine($"  Spawned WoW Process: {(wowPid.HasValue ? $"PID {wowPid}" : "Not detected")}");
-                _output.WriteLine($"  StateManager PID: {_stateManagerProcess?.Id}");
+                _output.WriteLine($"  StateManager PID: {_helper.Process?.Id}");
                 _output.WriteLine($"  Injection Detected: {(injectionDetected ? "Yes" : "No")}");
                 _output.WriteLine($"  Managed Code Entry: {(verificationResult.ManagedCodeEntry ? "Yes" : "No")}");
                 _output.WriteLine($"  Bot Service Started: {(verificationResult.BotServiceStarted ? "Yes" : "No")}");
@@ -768,7 +614,7 @@ namespace BotRunner.Tests
                 {
                     _output.WriteLine("");
                     _output.WriteLine("=== CAPTURED STATE MANAGER LOGS (Last 100 lines) ===");
-                    var logLines = _stateManagerLogs.ToString().Split('\n');
+                    var logLines = _helper.CapturedLogs.Split('\n');
                     var lastLines = logLines.Skip(Math.Max(0, logLines.Length - 100));
                     foreach (var line in lastLines)
                     {
@@ -797,11 +643,8 @@ namespace BotRunner.Tests
                 CaptureWWoWLogs();
 
                 // Restore original settings
-                if (originalSettings != null)
-                {
-                    File.WriteAllText(settingsPath, originalSettings);
-                    _output.WriteLine("Restored original StateManagerSettings.json");
-                }
+                _helper.RestoreSettings();
+                _output.WriteLine("Restored original StateManagerSettings.json");
 
                 // Clean up spawned WoW process
                 if (spawnedWoW != null && !spawnedWoW.HasExited)
@@ -1109,15 +952,14 @@ namespace BotRunner.Tests
 
             while (sw.Elapsed < timeout)
             {
-                if (_stateManagerProcess?.HasExited == true)
+                if (_helper.Process?.HasExited == true)
                 {
                     _output.WriteLine($"  StateManager exited while waiting for snapshot");
                     break;
                 }
 
-                lock (_logLock)
                 {
-                    var logs = _stateManagerLogs.ToString();
+                    var logs = _helper.CapturedLogs;
                     var match = snapshotRegex.Match(logs);
 
                     if (match.Success)
@@ -1341,46 +1183,10 @@ namespace BotRunner.Tests
             }
         }
 
-        private string? FindSolutionRoot(string startDirectory)
-        {
-            var dir = new DirectoryInfo(startDirectory);
-            while (dir != null)
-            {
-                if (File.Exists(Path.Combine(dir.FullName, "WestworldOfWarcraft.sln")) ||
-                    (Directory.Exists(Path.Combine(dir.FullName, "Services")) &&
-                     Directory.Exists(Path.Combine(dir.FullName, "Exports"))))
-                {
-                    return dir.FullName;
-                }
-                dir = dir.Parent;
-            }
-            return null;
-        }
-
         public void Dispose()
         {
-            try
-            {
-                if (_stateManagerProcess != null && !_stateManagerProcess.HasExited)
-                {
-                    _output.WriteLine("Stopping StateManager process (tree kill)...");
-                    _stateManagerProcess.Kill(entireProcessTree: true);
-                    _stateManagerProcess.WaitForExit(10000);
-                    _output.WriteLine("  StateManager stopped.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _output.WriteLine($"Error stopping StateManager: {ex.Message}");
-            }
-            finally
-            {
-                _stateManagerProcess?.Dispose();
-            }
-
-            // Belt-and-suspenders: kill any WoWStateManager still running by name
-            // (covers cases where the process handle was lost)
-            KillLingeringProcesses();
+            _helper.Stop();
+            _guard.UnregisterHelper();
         }
     }
 }

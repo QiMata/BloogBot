@@ -6,7 +6,16 @@
 #include "CapsuleCollision.h"
 #include "MapLoader.h"
 #include "CoordinateTransforms.h"
+#include "DynamicObjectRegistry.h"
+#include "VMapManager2.h"
+#include "VMapFactory.h"
+#include "StaticMapTree.h"
 #include <cstring>
+#include <cstdlib>
+#include <string>
+#define NOMINMAX
+#include <windows.h>
+#include <filesystem>
 
 // Global instances for testing
 static MapLoader* g_testMapLoader = nullptr;
@@ -23,6 +32,33 @@ extern "C"
         {
             PhysicsEngine::Instance()->Initialize();
             SceneQuery::Initialize();
+
+            // Auto-load displayId→model mapping for dynamic objects
+            // Use Win32 GetEnvironmentVariableA (not _dupenv_s) — see SceneQuery.cpp comment
+            std::string dataRoot;
+            {
+                char buf[512] = {0};
+                DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", buf, sizeof(buf));
+                if (len > 0 && len < sizeof(buf))
+                {
+                    dataRoot = buf;
+                    if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+                        dataRoot += '/';
+                }
+            }
+            std::vector<std::string> vps;
+            if (!dataRoot.empty())
+                vps.push_back(dataRoot + "vmaps/");
+            vps.push_back("vmaps/");
+            for (auto& vp : vps)
+            {
+                if (std::filesystem::exists(vp))
+                {
+                    DynamicObjectRegistry::Instance()->LoadDisplayIdMapping(vp);
+                    break;
+                }
+            }
+
             return true;
         }
         catch (...)
@@ -68,7 +104,13 @@ extern "C"
             {
                 g_testMapLoader = new MapLoader();
             }
-            return g_testMapLoader->Initialize(dataPath ? dataPath : "maps/");
+            bool ok = g_testMapLoader->Initialize(dataPath ? dataPath : "maps/");
+            if (ok)
+            {
+                // Inject into SceneQuery so GetGroundZ / SweepCapsule have ADT data
+                SceneQuery::SetMapLoader(g_testMapLoader);
+            }
+            return ok;
         }
         catch (...)
         {
@@ -88,6 +130,42 @@ extern "C"
         if (!g_testMapLoader)
             return MapFormat::INVALID_HEIGHT;
         return g_testMapLoader->GetHeight(mapId, x, y);
+    }
+
+    /// Gets the combined ground Z (VMAP + ADT) at a position.
+    /// Queries both WMO/M2 model geometry and ADT terrain, returns highest walkable surface <= z + 0.5.
+    __declspec(dllexport) float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist)
+    {
+        return SceneQuery::GetGroundZ(mapId, x, y, z, maxSearchDist);
+    }
+
+    /// Diagnostic: returns info about VMAP state for a map.
+    /// Returns: instanceCount in the StaticMapTree, or negative error codes.
+    /// Also tries EnsureMapLoaded if not loaded, and logs basePath.
+    __declspec(dllexport) int GetVmapDiagnostics(uint32_t mapId)
+    {
+        auto* vmapMgr = static_cast<VMAP::VMapManager2*>(VMAP::VMapFactory::createOrGetVMapManager());
+        if (!vmapMgr) return -2;
+
+        fprintf(stderr, "[VmapDiag] map=%u isInit=%d\n",
+            mapId, vmapMgr->isMapInitialized(mapId) ? 1 : 0);
+        fflush(stderr);
+
+        // Try loading if not loaded
+        if (!vmapMgr->isMapInitialized(mapId))
+        {
+            SceneQuery::EnsureMapLoaded(mapId);
+            fprintf(stderr, "[VmapDiag] After EnsureMapLoaded: isInit=%d\n",
+                vmapMgr->isMapInitialized(mapId) ? 1 : 0);
+            fflush(stderr);
+        }
+
+        if (!vmapMgr->isMapInitialized(mapId))
+            return -1;
+        auto* mapTree = vmapMgr->GetStaticMapTree(mapId);
+        if (!mapTree)
+            return -3;
+        return (int)mapTree->GetInstanceCount();
     }
 
     // ==========================================================================
@@ -237,6 +315,64 @@ extern "C"
     {
         G3D::Vector3 moveDir(moveDirX, moveDirY, moveDirZ);
         return SceneQuery::ComputeCapsuleSweep(mapId, x, y, z, radius, height, moveDir, intendedDist);
+    }
+
+    // ==========================================================================
+    // DYNAMIC OBJECT REGISTRY (elevators, doors, chests)
+    // ==========================================================================
+
+    /// Load the displayId→model mapping from the vmaps directory.
+    /// Must be called once before RegisterDynamicObject.
+    __declspec(dllexport) bool LoadDynamicObjectMapping(const char* vmapsBasePath)
+    {
+        if (!vmapsBasePath) return false;
+        return DynamicObjectRegistry::Instance()->LoadDisplayIdMapping(vmapsBasePath);
+    }
+
+    /// Register a dynamic object by displayId. Loads the real .vmo model mesh.
+    __declspec(dllexport) bool RegisterDynamicObject(
+        uint64_t guid, uint32_t entry, uint32_t displayId,
+        uint32_t mapId, float scale)
+    {
+        return DynamicObjectRegistry::Instance()->RegisterObject(
+            guid, entry, displayId, mapId, scale);
+    }
+
+    /// Update the world position and orientation of a dynamic object.
+    __declspec(dllexport) void UpdateDynamicObjectPosition(
+        uint64_t guid, float x, float y, float z, float orientation)
+    {
+        DynamicObjectRegistry::Instance()->UpdatePosition(guid, x, y, z, orientation);
+    }
+
+    /// Remove a single dynamic object by GUID.
+    __declspec(dllexport) void UnregisterDynamicObject(uint64_t guid)
+    {
+        DynamicObjectRegistry::Instance()->Unregister(guid);
+    }
+
+    /// Remove all dynamic objects on a given map.
+    __declspec(dllexport) void ClearDynamicObjects(uint32_t mapId)
+    {
+        DynamicObjectRegistry::Instance()->ClearMap(mapId);
+    }
+
+    /// Remove all dynamic objects (keeps model cache).
+    __declspec(dllexport) void ClearAllDynamicObjects()
+    {
+        DynamicObjectRegistry::Instance()->ClearAll();
+    }
+
+    /// Returns number of active dynamic objects.
+    __declspec(dllexport) int GetDynamicObjectCount()
+    {
+        return DynamicObjectRegistry::Instance()->Count();
+    }
+
+    /// Returns number of cached model meshes.
+    __declspec(dllexport) int GetCachedModelCount()
+    {
+        return DynamicObjectRegistry::Instance()->CachedModelCount();
     }
 
 } // extern "C"

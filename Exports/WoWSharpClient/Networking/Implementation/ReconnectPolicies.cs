@@ -1,3 +1,4 @@
+using System;
 using WoWSharpClient.Networking.Abstractions;
 
 namespace WoWSharpClient.Networking.Implementation
@@ -51,21 +52,15 @@ namespace WoWSharpClient.Networking.Implementation
     /// <summary>
     /// A simple reconnection policy that always returns a fixed delay.
     /// </summary>
-    public sealed class FixedDelayPolicy : IReconnectPolicy
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="FixedDelayPolicy"/> class.
+    /// </remarks>
+    /// <param name="delay">Fixed delay between reconnection attempts.</param>
+    /// <param name="maxAttempts">Maximum number of reconnection attempts (0 = unlimited).</param>
+    public sealed class FixedDelayPolicy(TimeSpan delay, int maxAttempts = 0) : IReconnectPolicy
     {
-        private readonly int _maxAttempts;
-        private readonly TimeSpan _delay;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FixedDelayPolicy"/> class.
-        /// </summary>
-        /// <param name="delay">Fixed delay between reconnection attempts.</param>
-        /// <param name="maxAttempts">Maximum number of reconnection attempts (0 = unlimited).</param>
-        public FixedDelayPolicy(TimeSpan delay, int maxAttempts = 0)
-        {
-            _delay = delay;
-            _maxAttempts = maxAttempts;
-        }
+        private readonly int _maxAttempts = maxAttempts;
+        private readonly TimeSpan _delay = delay;
 
         public TimeSpan? GetDelay(int attempt, Exception? lastError)
         {

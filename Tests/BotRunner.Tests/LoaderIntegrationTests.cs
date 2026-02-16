@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging;
-using Xunit;
 using Xunit.Abstractions;
 
 using Tests.Infrastructure;
+using System.Threading.Tasks;
+using System;
+using System.IO;
 
 namespace BotRunner.Tests;
 
@@ -15,17 +17,11 @@ namespace BotRunner.Tests;
 /// </summary>
 [Trait("Category", TestCategories.Integration)]
 [Trait("Category", "Loader")]
-public class LoaderIntegrationTests : IDisposable
+public class LoaderIntegrationTests(ITestOutputHelper output) : IDisposable
 {
-    private readonly ITestOutputHelper _output;
-    private readonly ILogger<WoWProcessManager> _logger;
+    private readonly ITestOutputHelper _output = output;
+    private readonly ILogger<WoWProcessManager> _logger = new XunitLogger<WoWProcessManager>(output);
     private WoWProcessManager? _processManager;
-
-    public LoaderIntegrationTests(ITestOutputHelper output)
-    {
-        _output = output;
-        _logger = new XunitLogger<WoWProcessManager>(output);
-    }
 
     /// <summary>
     /// Tests that Loader.dll can be injected into WoW and initialize .NET 8 runtime.

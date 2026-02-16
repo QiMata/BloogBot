@@ -3,14 +3,9 @@ using RecordedTests.Shared.Tests.TestInfrastructure;
 
 namespace RecordedTests.Shared.Tests.Scenarios;
 
-public abstract class RecordedTestScenario
+public abstract class RecordedTestScenario(string name)
 {
-    protected RecordedTestScenario(string name)
-    {
-        Name = name;
-    }
-
-    public string Name { get; }
+    public string Name { get; } = name;
 
     public abstract BotScript CreateForegroundScript(ScenarioState state, ScenarioLog log);
 

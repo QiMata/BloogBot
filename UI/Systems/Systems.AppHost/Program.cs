@@ -1,4 +1,6 @@
 // Configuration constants
+using Aspire.Hosting;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Add MySQL container for WoW database

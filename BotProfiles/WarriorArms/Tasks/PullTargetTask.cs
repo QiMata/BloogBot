@@ -1,11 +1,12 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Models;
 
 namespace WarriorArms.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
-        internal PullTargetTask(IBotContext botContext) : base(botContext) { }
+        public PullTargetTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
         {
@@ -36,7 +37,7 @@ namespace WarriorArms.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
+            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.Player.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
             ObjectManager.MoveToward(nextWaypoint[0]);
         }
     }

@@ -7,9 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using BotRunner;
 using BotRunner.Clients;
-using WoWSharpClient;
 using GameData.Core.Interfaces;
-using Communication;
 
 namespace ForegroundBotRunner
 {

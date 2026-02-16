@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -12,10 +16,13 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Handles CMSG inventory operations (swap, split, destroy) and SMSG_INVENTORY_CHANGE_FAILURE parsing.
     /// Item state changes (moves, creation, destruction) come through SMSG_UPDATE_OBJECT, not dedicated opcodes.
     /// </summary>
-    public class InventoryNetworkClientComponent : NetworkClientComponent, IInventoryNetworkClientComponent, IDisposable
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="InventoryNetworkClientComponent"/> class.
+    /// </remarks>
+    public class InventoryNetworkClientComponent(IWorldClient worldClient, ILogger<InventoryNetworkClientComponent> logger) : NetworkClientComponent, IInventoryNetworkClientComponent, IDisposable
     {
-        private readonly IWorldClient _worldClient;
-        private readonly ILogger<InventoryNetworkClientComponent> _logger;
+        private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
+        private readonly ILogger<InventoryNetworkClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         private uint _currentMoney;
         private bool _isInventoryOpen;
@@ -30,15 +37,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private IObservable<ItemSplitData>? _itemSplitStream;
         private IObservable<ItemDestroyedData>? _itemDestroyedStream;
         private IObservable<string>? _inventoryErrorsStream;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="InventoryNetworkClientComponent"/> class.
-        /// </summary>
-        public InventoryNetworkClientComponent(IWorldClient worldClient, ILogger<InventoryNetworkClientComponent> logger)
-        {
-            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
 
         public bool IsInventoryOpen => _isInventoryOpen;
 

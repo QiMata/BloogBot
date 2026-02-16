@@ -1,4 +1,6 @@
 ﻿using Serilog;
+using System;
+using System.IO;
 
 namespace WoWSharpClient.Tests.Util
 {

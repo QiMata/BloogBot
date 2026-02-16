@@ -8,22 +8,22 @@ To ensure your character controller matches PhysX’s behavior, use this checkli
 
 ### Movement Pipeline
 
-- [ ] **Decomposition** – Splitting input displacement into **Up**, **Side**, **Down** vectors.
-- [ ] **Min Distance threshold** – Ignoring movements `<= minDist` to prevent jitter.
-- [ ] **Step Offset application** – Adding `stepOffset` to **UpVector** only when appropriate (lateral move present, not already moving up). Cancel `stepOffset` if jumping/upwards or no horizontal input.
-- [ ] **Upward Sweep** – Executing an upward sweep and clamping movement at first ceiling hit. Setting `eCOLLISION_UP` if upward motion was obstructed.
-- [ ] **Lateral Sweep** – Iteratively sweeping and sliding along surfaces, reflecting velocity and zeroing normal component (`bump=0`, `friction=1`). Setting `eCOLLISION_SIDES` if any wall/steep slope contact.
-- [ ] **Downward Sweep** – Sweeping down to ground, stopping at first contact. Setting `eCOLLISION_DOWN` on ground hit. Ensuring one or multiple iterations based on slope mode (force slide vs not).
-- [ ] **Overlap Recovery** – Detecting overlaps (initial penetration) and computing MTD to push the controller out. Applying penetration correction either immediately (preferred) or via `mOverlapRecover` across frames. Ensuring no persistent interpenetration.
+- [x] **Decomposition** – Splitting input displacement into **Up**, **Side**, **Down** vectors. *(Implemented: `DecomposeMovement()` inlined in PhysicsEngine.cpp)*
+- [x] **Min Distance threshold** – Ignoring movements `<= minDist` to prevent jitter. *(MIN_MOVE_DISTANCE = 0.001f)*
+- [x] **Step Offset application** – Adding `stepOffset` to **UpVector** only when appropriate (lateral move present, not already moving up). Cancel `stepOffset` if jumping/upwards or no horizontal input. *(DecomposeMovement handles all cancellation cases)*
+- [x] **Upward Sweep** – Executing an upward sweep and clamping movement at first ceiling hit. Setting `eCOLLISION_UP` if upward motion was obstructed. *(ExecuteUpPass)*
+- [x] **Lateral Sweep** – Iteratively sweeping and sliding along surfaces, reflecting velocity and zeroing normal component (`bump=0`, `friction=1`). Setting `eCOLLISION_SIDES` if any wall/steep slope contact. *(ExecuteSidePass + CollideAndSlide, MAX_SLIDE_ITERATIONS=10)*
+- [x] **Downward Sweep** – Sweeping down to ground, stopping at first contact. Setting `eCOLLISION_DOWN` on ground hit. Ensuring one or multiple iterations based on slope mode (force slide vs not). *(ExecuteDownPass + GetGroundZ refinement)*
+- [x] **Overlap Recovery** – Detecting overlaps (initial penetration) and computing MTD to push the controller out. Applying penetration correction either immediately (preferred) or via `mOverlapRecover` across frames. Ensuring no persistent interpenetration. *(ApplyHorizontalDepenetration + ApplyVerticalDepenetration)*
 - [ ] **Moving Platform Adjustments** – Before sweeps, adjusting for base motion (only if base is flagged rideable and not user-override):
   - [ ] Upward base movement applied directly to controller position.
   - [ ] Downward base movement added to downward displacement.
   - [ ] Horizontal base movement added to lateral displacement.
-  - [ ] Update cached base position and `standingOnMoving` flag for next frame.
-- [ ] **Collision Flags** – Populating `collisionFlags` bitfield properly:
-  - [ ] `Sides` when any lateral collision occurred (wall or steep slope impact).
-  - [ ] `Up` when head/ceiling collision occurred (after upward sweep).
-  - [ ] `Down` when grounded (after down sweep).
+  - [x] Update cached base position and `standingOnMoving` flag for next frame. *(DynamicObjectRegistry handles transport transforms)*
+- [x] **Collision Flags** – Populating `collisionFlags` bitfield properly:
+  - [x] `Sides` when any lateral collision occurred (wall or steep slope impact).
+  - [x] `Up` when head/ceiling collision occurred (after upward sweep).
+  - [x] `Down` when grounded (after down sweep).
 - [ ] **Cached State** – Maintaining between frames:
   - [ ] `mTouchedShape` / `mTouchedActor` for ground object.
   - [ ] `mTouchedObstacleHandle` for ground obstacle.
@@ -36,14 +36,14 @@ To ensure your character controller matches PhysX’s behavior, use this checkli
 
 ## Slope and Step Handling
 
-- [ ] **Slope limit logic** – Using `up ⋅ normal` vs `slopeLimit` to identify steep surfaces.
-- [ ] **Prevent climbing mode** – If steep and requires upward move, do not climb:
-  - [ ] Trigger second “walk experiment” pass, remove upward motion.
-  - [ ] Character can stand on slope (no forced slide).
+- [x] **Slope limit logic** – Using `up ⋅ normal` vs `slopeLimit` to identify steep surfaces. *(DEFAULT_WALKABLE_MIN_NORMAL_Z = 0.5f, confirmed via recordings)*
+- [x] **Prevent climbing mode** – If steep and requires upward move, do not climb:
+  - [x] Trigger second "walk experiment" pass, remove upward motion. *(Full PhysX walk experiment: retry with stepOffset=0, recovery sweep, ground snap)*
+  - [x] Character can stand on slope (no forced slide).
 - [ ] **Force sliding mode** – If steep, slide off:
   - [ ] Allow multiple down iterations (`maxIterDown = maxIter`).
   - [ ] Character cannot remain perched; gravity will carry them off.
-- [ ] **Step up conditions** – Only stepping when horizontal move exists and obstacle height `<= stepOffset`.
+- [x] **Step up conditions** – Only stepping when horizontal move exists and obstacle height `<= stepOffset`. *(STEP_HEIGHT = 2.125f, cancelled during jump/no-lateral)*
 - [ ] **Ceiling slide prevention** – If configured, stopping horizontal movement on head hit.
 
 ---

@@ -1,6 +1,10 @@
 using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.IO;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -11,16 +15,20 @@ namespace WowSharpClient.NetworkTests
         {
             // Arrange
             using var connection = new InMemoryConnection();
-            using var framer = new LengthPrefixedFramer(4, false); // Use simple framer for auth
+            using var framer = new LengthPrefixedFramer(4, false);
             var encryptor = new NoEncryption();
             var codec = new WoWPacketCodec();
             var router = new MessageRouter<Opcode>();
 
             using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
 
-            // Act
+            // Act — LoginAsync sends the challenge packet immediately before awaiting
+            // the SRP handshake TCS, so fire-and-forget and verify the sent packet.
             await authClient.ConnectAsync("127.0.0.1", 3724);
-            await authClient.LoginAsync("testuser", "testpass");
+            var loginTask = authClient.LoginAsync("testuser", "testpass");
+
+            // Wait for the challenge packet to be sent (it's sent before the TCS await)
+            await Task.Delay(100);
 
             // Assert
             Assert.True(authClient.IsConnected);
@@ -29,10 +37,13 @@ namespace WowSharpClient.NetworkTests
             var sentData = connection.GetSentData();
             Assert.Single(sentData);
 
-            // Verify the sent packet starts with CMD_AUTH_LOGON_CHALLENGE opcode (0x00)
             var sentPacket = sentData[0];
             Assert.True(sentPacket.Length > 0);
             Assert.Equal(0x00, sentPacket[0]); // CMD_AUTH_LOGON_CHALLENGE opcode
+
+            // Clean up: inject a failed challenge to unblock LoginAsync
+            connection.InjectIncomingData(CreateFailedChallengeResponse());
+            try { await loginTask; } catch { /* Expected: SRP proof failed or timeout */ }
         }
 
         [Fact]
@@ -48,23 +59,26 @@ namespace WowSharpClient.NetworkTests
             using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
 
             await authClient.ConnectAsync("127.0.0.1", 3724);
-            await authClient.LoginAsync("testuser", "testpass");
 
-            // Clear sent data from login
+            // Fire-and-forget LoginAsync (it blocks on SRP TCS)
+            var loginTask = authClient.LoginAsync("testuser", "testpass");
+            await Task.Delay(100); // Wait for challenge to be sent
+
             connection.ClearData();
 
-            // Act - Simulate server sending AUTH_LOGON_CHALLENGE response
-            // Frame the response properly through the length-prefixed framer
+            // Act - Inject a successful challenge response (raw auth protocol)
             var challengeResponse = CreateMockAuthLogonChallengeResponse();
-            var framedResponse = framer.Frame(challengeResponse);
-            connection.InjectIncomingData(framedResponse);
+            connection.InjectIncomingData(challengeResponse);
 
-            await Task.Delay(500); // Wait longer for async processing
+            await Task.Delay(500); // Wait for async SRP processing
 
-            // Assert - Since AuthClient handles auth packets with raw events, 
-            // and our mock doesn't trigger proof sending, we should check that
-            // the client is still connected and ready for the next step
+            // Assert - Client should still be connected. SRP proof send may have
+            // failed with mock data (BouncyCastle), but connection remains alive.
             Assert.True(authClient.IsConnected);
+
+            // Clean up
+            connection.InjectIncomingData(CreateFailedChallengeResponse());
+            try { await loginTask; } catch { /* Expected */ }
         }
 
         [Fact]
@@ -80,14 +94,19 @@ namespace WowSharpClient.NetworkTests
             using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
 
             await authClient.ConnectAsync("127.0.0.1", 3724);
-            await authClient.LoginAsync("testuser", "testpass");
 
-            // For this test, we'll just verify that the client is ready for authentication
-            // The actual SRP implementation details require complex crypto setup
-            // Assert
+            // Fire-and-forget — Username is set before the SRP TCS await
+            var loginTask = authClient.LoginAsync("testuser", "testpass");
+            await Task.Delay(100);
+
+            // Assert — these are set before LoginAsync blocks on SRP handshake
             Assert.True(authClient.IsConnected);
             Assert.Equal("testuser", authClient.Username);
             // Session key and server proof will be empty until actual SRP exchange occurs
+
+            // Clean up
+            connection.InjectIncomingData(CreateFailedChallengeResponse());
+            try { await loginTask; } catch { /* Expected */ }
         }
 
         [Fact]
@@ -147,22 +166,22 @@ namespace WowSharpClient.NetworkTests
             using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
 
             await authClient.ConnectAsync("127.0.0.1", 3724);
-            await authClient.LoginAsync("testuser", "wrongpass");
 
-            // Simulate AUTH_LOGON_CHALLENGE response
-            var challengeResponse = CreateMockAuthLogonChallengeResponse();
-            connection.InjectIncomingData(challengeResponse);
+            // Fire-and-forget LoginAsync, then inject a FAILED challenge response
+            // (result ≠ 0 → only 3 bytes, no SRP, sets TCS to false immediately)
+            var loginTask = authClient.LoginAsync("testuser", "wrongpass");
             await Task.Delay(100);
 
-            // Act - Simulate failed AUTH_LOGON_PROOF response
-            var failedProofResponse = CreateMockAuthLogonProofResponse(success: false);
-            connection.InjectIncomingData(failedProofResponse);
-
+            // Act - Inject failed challenge response (error code, no SRP needed)
+            connection.InjectIncomingData(CreateFailedChallengeResponse());
             await Task.Delay(200);
 
+            // LoginAsync should throw because TCS was set to false
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await loginTask);
+
             // Assert
-            Assert.Empty(authClient.SessionKey); // No session key on failure
-            Assert.Empty(authClient.ServerProof); // No server proof on failure
+            Assert.Empty(authClient.SessionKey);
+            Assert.Empty(authClient.ServerProof);
         }
 
         [Fact]
@@ -181,6 +200,15 @@ namespace WowSharpClient.NetworkTests
             Assert.False(authClient.IsConnected);
         }
 
+        /// <summary>
+        /// Creates a 3-byte failed AUTH_LOGON_CHALLENGE response: opcode(0x00) + unk(0x00) + error(0x04).
+        /// This immediately completes the LoginAsync TCS without SRP.
+        /// </summary>
+        private static byte[] CreateFailedChallengeResponse()
+        {
+            return [0x00, 0x00, 0x04]; // CMD_AUTH_LOGON_CHALLENGE, padding, RESPONSE_FAIL
+        }
+
         private static byte[] CreateMockAuthLogonChallengeResponse()
         {
             // Create a minimal AUTH_LOGON_CHALLENGE response packet
@@ -189,25 +217,30 @@ namespace WowSharpClient.NetworkTests
             packet[1] = 0x00; // Padding
             packet[2] = 0x00; // RESPONSE_SUCCESS
 
-            // Fill in minimal required fields (server public key, generator, etc.)
-            // Server public key (32 bytes at offset 3)
+            // Fill in minimal required fields per vanilla AUTH_LOGON_CHALLENGE response:
+            // [3..34]  B: server public key (32 bytes)
+            // [35]     g_len: generator length (1)
+            // [36]     g: generator value (7)
+            // [37]     N_len: safe prime length (32)
+            // [38..69] N: safe prime (32 bytes)
+            // [70..101] salt (32 bytes)
+            // [102..117] CRC salt (16 bytes)
+            // [118] security_flags (0)
             for (int i = 0; i < 32; i++)
-                packet[3 + i] = (byte)(i % 256);
+                packet[3 + i] = (byte)(i % 256); // Server public key
 
-            packet[35] = 0x01; // Generator
-            packet[36] = 0x20; // Large safe prime length (32 bytes)
+            packet[35] = 0x01; // g_len = 1
+            packet[36] = 0x07; // g = 7 (SRP generator)
+            packet[37] = 0x20; // N_len = 32
 
-            // Large safe prime (32 bytes at offset 37)
             for (int i = 0; i < 32; i++)
-                packet[37 + i] = (byte)(0xFF - (i % 256));
+                packet[38 + i] = (byte)(0xFF - (i % 256)); // Safe prime
 
-            // Salt (32 bytes at offset 69)
             for (int i = 0; i < 32; i++)
-                packet[69 + i] = (byte)((i * 7) % 256);
+                packet[70 + i] = (byte)((i * 7) % 256); // Salt
 
-            // CRC salt (16 bytes at offset 101)
             for (int i = 0; i < 16; i++)
-                packet[101 + i] = (byte)((i * 13) % 256);
+                packet[102 + i] = (byte)((i * 13) % 256); // CRC salt
 
             return packet;
         }

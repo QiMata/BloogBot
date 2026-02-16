@@ -4,8 +4,6 @@
     <PackageOutputPath />
     <PackAsTool>False</PackAsTool>
     <TargetFramework>net8.0</TargetFramework>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <Platforms>AnyCPU;x86</Platforms>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 

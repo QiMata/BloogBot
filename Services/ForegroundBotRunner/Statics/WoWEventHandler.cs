@@ -1,9 +1,13 @@
 ﻿using ForegroundBotRunner.Mem.Hooks;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
-using Newtonsoft.Json;
 using System.Text.RegularExpressions;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace ForegroundBotRunner.Statics
 {

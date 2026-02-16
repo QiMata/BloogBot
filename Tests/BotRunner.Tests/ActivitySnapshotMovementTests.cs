@@ -1,7 +1,7 @@
 using Communication;
 using Game;
 using Google.Protobuf;
-using Xunit;
+using System;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests
@@ -10,14 +10,9 @@ namespace BotRunner.Tests
     /// Tests that verify movement data is correctly serialized/deserialized in WoWActivitySnapshot.
     /// These tests do NOT require WoW or any infrastructure - they test the protobuf data layer.
     /// </summary>
-    public class WoWActivitySnapshotMovementTests
+    public class WoWActivitySnapshotMovementTests(ITestOutputHelper output)
     {
-        private readonly ITestOutputHelper _output;
-
-        public WoWActivitySnapshotMovementTests(ITestOutputHelper output)
-        {
-            _output = output;
-        }
+        private readonly ITestOutputHelper _output = output;
 
         [Fact]
         public void MovementData_ShouldRoundTripThroughProtobuf()

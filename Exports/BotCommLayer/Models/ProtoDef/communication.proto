@@ -142,4 +142,5 @@ message WoWActivitySnapshot {
     string characterName = 8;  // Name of the logged-in character (set after world entry)
     string screenState = 9;    // Current WoW screen state (e.g. "LoginScreen", "CharacterSelect", "InWorld")
     game.MovementData movementData = 10;  // Current movement physics snapshot (speeds, flags, position)
+    uint64 partyLeaderGuid = 11;  // GUID of the party leader (0 if not in a group)
 }

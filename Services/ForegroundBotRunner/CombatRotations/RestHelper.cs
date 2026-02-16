@@ -1,6 +1,7 @@
 using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using Serilog;
+using System;
 
 namespace ForegroundBotRunner.CombatRotations
 {

@@ -9,8 +9,8 @@
 #include "PhysicsBridge.h" // for MOVEFLAG_* constants
 #include "VMapDefinitions.h"
 
-// Default logging configuration
-int gPhysLogLevel = 3;           // 0=ERR,1=INFO,2=DBG,3=TRACE
+// Default logging configuration — ERR only; set VMAP_PHYS_LOG_LEVEL env var to increase
+int gPhysLogLevel = 0;           // 0=ERR,1=INFO,2=DBG,3=TRACE
 uint32_t gPhysLogMask = PHYS_ALL;
 
 static int ParseLevel(const char* s)
@@ -183,12 +183,7 @@ struct VMapLogInit
         const char* mask = std::getenv("VMAP_PHYS_LOG_MASK");
         if (mask) gPhysLogMask = ParseMask(mask);
 
-        // Force-enable TRACE level and cylinder category to ensure diagnostics are visible during tests.
-        // This overrides runtime env vars if they would disable the important TRACE output we added.
-        if (gPhysLogLevel < 3) gPhysLogLevel = 3;
-        gPhysLogMask |= PHYS_CYL; // ensure cylinder logs are always included
-
-        // Echo the runtime settings to stdout so tests can observe them (from main)
+        // Echo the runtime settings to stdout so tests can observe them
         std::ostringstream ss;
         ss << "[PHYS][INFO][INIT] gPhysLogLevel=" << gPhysLogLevel << " gPhysLogMask=0x" << std::hex << gPhysLogMask << std::dec;
         std::cout << ss.str() << std::endl;

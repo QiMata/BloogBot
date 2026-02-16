@@ -1,6 +1,9 @@
 using GameData.Core.Enums;
 using WoWSharpClient.Utils;
 using Serilog;
+using System.Collections.Generic;
+using System.IO;
+using System;
 
 namespace WoWSharpClient.Handlers
 {
@@ -14,11 +17,16 @@ namespace WoWSharpClient.Handlers
                 byte talentSpec = reader.ReadByte();
                 ushort spellCount = reader.ReadUInt16();
 
+                var spells = new List<GameData.Core.Models.Spell>(spellCount);
                 for (int i = 0; i < spellCount; i++)
                 {
                     ushort spellID = reader.ReadUInt16();
                     short unknown = reader.ReadInt16(); // Possible additional data
+                    spells.Add(new GameData.Core.Models.Spell(spellID, 0, "", "", ""));
                 }
+
+                WoWSharpObjectManager.Instance.Spells = spells;
+                Log.Information($"[SpellHandler] Loaded {spellCount} spells from SMSG_INITIAL_SPELLS");
 
                 ushort cooldownCount = reader.ReadUInt16();
 
@@ -214,6 +222,52 @@ namespace WoWSharpClient.Handlers
             {
                 Log.Warning("[SpellHandler] Truncated SMSG_DESTROY_OBJECT packet");
             }
+        }
+
+        /// <summary>
+        /// Parses SMSG_CAST_FAILED (0x130).
+        /// Format: uint32 spellId, byte result, [byte reason if result != 0]
+        /// Logs spell cast failures so we can diagnose rejected casts.
+        /// </summary>
+        public static void HandleCastFailed(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint spellId = reader.ReadUInt32();
+                byte result = reader.ReadByte();
+
+                if (result != 0)
+                {
+                    var remaining = data.Length - 5; // 4 bytes spellId + 1 byte result
+                    var hex = BitConverter.ToString(data);
+                    Log.Warning("[SpellHandler] CAST_FAILED: spell={SpellId} result={Result} dataLen={DataLen} remaining={Remaining} hex={Hex}",
+                        spellId, result, data.Length, remaining, hex);
+                }
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// Parses SMSG_SPELLHEALLOG (0x150).
+        /// Format: PackGUID target, PackGUID caster, uint32 spellId, uint32 healAmount, byte critical
+        /// Logs heal amounts for combat coordination feedback.
+        /// </summary>
+        public static void HandleSpellHealLog(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                ulong targetGuid = ReaderUtils.ReadPackedGuid(reader);
+                ulong casterGuid = ReaderUtils.ReadPackedGuid(reader);
+                uint spellId = reader.ReadUInt32();
+                uint healAmount = reader.ReadUInt32();
+                byte critical = reader.ReadByte();
+
+                Log.Information("[SpellHandler] HEAL_LOG: caster=0x{Caster:X} target=0x{Target:X} spell={SpellId} healed={Amount}{Crit}",
+                    casterGuid, targetGuid, spellId, healAmount, critical != 0 ? " CRIT" : "");
+            }
+            catch (EndOfStreamException) { }
         }
     }
 }

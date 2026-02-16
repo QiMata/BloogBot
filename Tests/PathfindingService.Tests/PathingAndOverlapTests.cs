@@ -1,6 +1,8 @@
 ﻿using GameData.Core.Models;
 using Microsoft.Extensions.Configuration;
 using PathfindingService.Repository;
+using System;
+using System.IO;
 
 namespace PathfindingService.Tests
 {

@@ -1,6 +1,7 @@
 using BotRunner.Clients;
 using GameData.Core.Models;
 using Serilog;
+using System;
 
 namespace ForegroundBotRunner
 {
@@ -8,9 +9,9 @@ namespace ForegroundBotRunner
     /// Manages a path of waypoints from the pathfinding service.
     /// Tracks progress through the path and handles recalculation.
     /// </summary>
-    public class NavigationPath
+    public class NavigationPath(PathfindingClient? pathfinding)
     {
-        private readonly PathfindingClient? _pathfinding;
+        private readonly PathfindingClient? _pathfinding = pathfinding;
         private Position[] _waypoints = [];
         private int _currentIndex;
         private Position _destination;
@@ -19,11 +20,6 @@ namespace ForegroundBotRunner
         private const float WAYPOINT_REACH_DISTANCE = 3f;
         private const float RECALCULATE_DISTANCE = 10f;
         private const int RECALCULATE_COOLDOWN_MS = 2000;
-
-        public NavigationPath(PathfindingClient? pathfinding)
-        {
-            _pathfinding = pathfinding;
-        }
 
         /// <summary>
         /// Gets the next waypoint to move toward, or the direct destination if no path is available.

@@ -16,10 +16,10 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
     /// <summary>
     /// A single action bar button entry parsed from SMSG_ACTION_BUTTONS.
     /// </summary>
-    public readonly struct ActionButton
+    public readonly struct ActionButton(uint packedData)
     {
         /// <summary>The raw packed uint32 value from the server.</summary>
-        public uint PackedData { get; }
+        public uint PackedData { get; } = packedData;
 
         /// <summary>The action ID (spell ID, item ID, or macro ID). Bottom 24 bits.</summary>
         public uint ActionId => PackedData & 0x00FFFFFF;
@@ -30,11 +30,6 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         /// <summary>Whether this button slot is empty (no action assigned).</summary>
         public bool IsEmpty => PackedData == 0;
 
-        public ActionButton(uint packedData)
-        {
-            PackedData = packedData;
-        }
-
         public override string ToString() =>
             IsEmpty ? "Empty" : $"{Type}:{ActionId}";
     }
@@ -42,55 +37,34 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
     /// <summary>
     /// Proficiency data from SMSG_SET_PROFICIENCY.
     /// </summary>
-    public readonly struct ProficiencyData
+    public readonly struct ProficiencyData(byte itemClass, uint subclassMask)
     {
         /// <summary>Item class (0=Consumable, 2=Weapon, 4=Armor, etc.)</summary>
-        public byte ItemClass { get; }
+        public byte ItemClass { get; } = itemClass;
 
         /// <summary>Bitmask of allowed subclasses for this item class.</summary>
-        public uint SubclassMask { get; }
-
-        public ProficiencyData(byte itemClass, uint subclassMask)
-        {
-            ItemClass = itemClass;
-            SubclassMask = subclassMask;
-        }
+        public uint SubclassMask { get; } = subclassMask;
     }
 
     /// <summary>
     /// Hearthstone bind point from SMSG_BINDPOINTUPDATE.
     /// </summary>
-    public readonly struct BindPointData
+    public readonly struct BindPointData(float x, float y, float z, uint mapId, uint areaId)
     {
-        public float X { get; }
-        public float Y { get; }
-        public float Z { get; }
-        public uint MapId { get; }
-        public uint AreaId { get; }
-
-        public BindPointData(float x, float y, float z, uint mapId, uint areaId)
-        {
-            X = x;
-            Y = y;
-            Z = z;
-            MapId = mapId;
-            AreaId = areaId;
-        }
+        public float X { get; } = x;
+        public float Y { get; } = y;
+        public float Z { get; } = z;
+        public uint MapId { get; } = mapId;
+        public uint AreaId { get; } = areaId;
     }
 
     /// <summary>
     /// A single faction entry from SMSG_INITIALIZE_FACTIONS.
     /// </summary>
-    public readonly struct FactionEntry
+    public readonly struct FactionEntry(byte flags, int standing)
     {
-        public byte Flags { get; }
-        public int Standing { get; }
-
-        public FactionEntry(byte flags, int standing)
-        {
-            Flags = flags;
-            Standing = standing;
-        }
+        public byte Flags { get; } = flags;
+        public int Standing { get; } = standing;
 
         /// <summary>Whether this faction is visible in the reputation panel.</summary>
         public bool IsVisible => (Flags & 0x01) != 0;

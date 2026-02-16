@@ -1,11 +1,12 @@
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
-using Xunit;
+using System.Threading.Tasks;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests
@@ -47,19 +48,25 @@ namespace BotRunner.Tests
     ///    - Usually indicates a DLL loading or configuration issue
     /// </summary>
     [RequiresInfrastructure]
+    [Collection(InfrastructureTestCollection.Name)]
     public class ServiceStartupIntegrationTest : IDisposable
     {
         private readonly ITestOutputHelper _output;
         private readonly IConfiguration _configuration;
+        private readonly InfrastructureTestGuard _guard;
         private Process? _pathfindingServiceProcess;
         private Process? _stateManagerProcess;
         private readonly StringBuilder _pathfindingLogs = new();
         private readonly StringBuilder _stateManagerLogs = new();
         private readonly object _logLock = new();
 
-        public ServiceStartupIntegrationTest(ITestOutputHelper output)
+        public ServiceStartupIntegrationTest(InfrastructureTestGuard guard, ITestOutputHelper output)
         {
+            _guard = guard;
             _output = output;
+
+            // Ensure no lingering StateManager/WoW from a previous test
+            _guard.EnsureCleanState(msg => _output.WriteLine(msg));
             
             var configBuilder = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())

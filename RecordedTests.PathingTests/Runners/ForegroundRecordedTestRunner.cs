@@ -1,8 +1,11 @@
 using GameData.Core.Enums;
 using RecordedTests.PathingTests.Configuration;
-using RecordedTests.Shared;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient;
 using WoWSharpClient.Client;
 
@@ -12,36 +15,27 @@ namespace RecordedTests.PathingTests.Runners;
 /// Foreground bot runner that connects with GM account privileges and executes GM commands.
 /// Implements both IBotRunner (for orchestration) and IGmCommandExecutor (for command execution).
 /// </summary>
-public class ForegroundRecordedTestRunner : IBotRunner, IGmCommandExecutor
+/// <remarks>
+/// Initializes a new instance of the ForegroundRecordedTestRunner.
+/// </remarks>
+/// <param name="account">GM account username</param>
+/// <param name="password">GM account password</param>
+/// <param name="character">GM character name</param>
+/// <param name="logger">Test logger</param>
+/// <param name="config">Optional test configuration for recording target</param>
+public class ForegroundRecordedTestRunner(
+    string account,
+    string password,
+    string character,
+    ITestLogger logger,
+    TestConfiguration? config = null) : IBotRunner, IGmCommandExecutor
 {
-    private readonly string _account;
-    private readonly string _password;
-    private readonly string _character;
-    private readonly ITestLogger _logger;
-    private readonly TestConfiguration? _config;
+    private readonly string _account = account ?? throw new ArgumentNullException(nameof(account));
+    private readonly string _password = password ?? throw new ArgumentNullException(nameof(password));
+    private readonly string _character = character ?? throw new ArgumentNullException(nameof(character));
+    private readonly ITestLogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly TestConfiguration? _config = config;
     private WoWClientOrchestrator? _orchestrator;
-
-    /// <summary>
-    /// Initializes a new instance of the ForegroundRecordedTestRunner.
-    /// </summary>
-    /// <param name="account">GM account username</param>
-    /// <param name="password">GM account password</param>
-    /// <param name="character">GM character name</param>
-    /// <param name="logger">Test logger</param>
-    /// <param name="config">Optional test configuration for recording target</param>
-    public ForegroundRecordedTestRunner(
-        string account,
-        string password,
-        string character,
-        ITestLogger logger,
-        TestConfiguration? config = null)
-    {
-        _account = account ?? throw new ArgumentNullException(nameof(account));
-        _password = password ?? throw new ArgumentNullException(nameof(password));
-        _character = character ?? throw new ArgumentNullException(nameof(character));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _config = config;
-    }
 
     /// <inheritdoc />
     public async Task ConnectAsync(ServerInfo server, CancellationToken cancellationToken)

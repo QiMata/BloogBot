@@ -171,6 +171,7 @@ message GameObjectSnapshot {
     float facing = 8;
     string name = 9;
     float distanceToPlayer = 10;   // Yards from player to this object
+    float scale = 11;              // Object scale (from OBJECT_FIELD_SCALE_X descriptor)
 }
 
 // Snapshot of a nearby unit (NPC or other player) for pathing/collision validation.
@@ -250,6 +251,9 @@ message MovementData {
     uint32 splineId = 33;
     repeated Position splineNodes = 34;
     Position splineFinalDestination = 35;
+    // System tick (GetTickCount / Environment.TickCount) for sub-frame timing.
+    // Same clock as FallStartTime — enables exact fall duration calculation.
+    uint32 systemTick = 36;
 }
 
 // A complete movement recording session for physics engine testing

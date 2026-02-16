@@ -1,6 +1,9 @@
 using BotRunner.Interfaces;
 using Microsoft.Data.Sqlite;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.IO;
 
 namespace ForegroundBotRunner.Repository
 {

@@ -1,5 +1,6 @@
 using RecordedTests.Shared.Abstractions.I;
 using RecordedTests.Shared.Recording;
+using System;
 
 namespace RecordedTests.Shared.Factories;
 

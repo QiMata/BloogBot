@@ -1,3 +1,4 @@
+using System;
 using Tests.Infrastructure.BotTasks;
 
 namespace BotRunner.Tests.BotTasks;

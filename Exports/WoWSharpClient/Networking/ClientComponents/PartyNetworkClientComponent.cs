@@ -6,6 +6,11 @@ using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
+using System.Collections.Generic;
+using System;
+using System.Threading.Tasks;
+using System.Threading;
+using System.Linq;
 
 namespace WoWSharpClient.Networking.ClientComponents
 {
@@ -32,6 +37,14 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<(string Operation, string Error)> _partyErrors;
         private readonly IObservable<Unit> _readyCheckRequests;
         private readonly IObservable<Unit> _readyCheckResponses;
+
+        // Self-subscriptions that keep state-tracking .Do() side effects active
+        // even when no external code subscribes to the public observables.
+        private readonly IDisposable _partyInviteSub;
+        private readonly IDisposable _groupUpdateSub;
+        private readonly IDisposable _groupLeaveSub;
+        private readonly IDisposable _leaderChangeSub;
+        private readonly IDisposable _commandResultSub;
 
         public PartyNetworkClientComponent(IWorldClient worldClient, ILogger<PartyNetworkClientComponent> logger)
         {
@@ -110,6 +123,14 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Select(_ => Unit.Default)
                 .Do(_ => _logger.LogDebug("Ready check response received"))
                 .Publish().RefCount();
+
+            // Self-subscribe so that the .Do() side effects (HasPendingInvite, IsInGroup, etc.)
+            // always fire when packets arrive, even if no external code subscribes.
+            _partyInviteSub = _partyInvites.Subscribe(_ => { });
+            _groupUpdateSub = _groupUpdates.Subscribe(_ => { });
+            _groupLeaveSub = _groupLeaves.Subscribe(_ => { });
+            _leaderChangeSub = _leadershipChanges.Subscribe(_ => { });
+            _commandResultSub = _partyCommandResults.Subscribe(_ => { });
         }
 
         #region INetworkClientComponent Implementation
@@ -815,6 +836,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) return;
             _disposed = true;
+
+            _partyInviteSub?.Dispose();
+            _groupUpdateSub?.Dispose();
+            _groupLeaveSub?.Dispose();
+            _leaderChangeSub?.Dispose();
+            _commandResultSub?.Dispose();
+
             _logger.LogDebug("Disposing PartyNetworkClientComponent");
         }
         #endregion

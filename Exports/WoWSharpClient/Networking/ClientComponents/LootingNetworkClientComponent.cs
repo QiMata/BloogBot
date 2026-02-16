@@ -1,5 +1,10 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -885,11 +890,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             });
         }
 
-        private sealed class ManualUnsubscriber<T> : IDisposable
+        private sealed class ManualUnsubscriber<T>(List<IObserver<T>> list, IObserver<T> observer) : IDisposable
         {
-            private readonly List<IObserver<T>> _list;
-            private readonly IObserver<T> _observer;
-            public ManualUnsubscriber(List<IObserver<T>> list, IObserver<T> observer) { _list = list; _observer = observer; }
+            private readonly List<IObserver<T>> _list = list;
+            private readonly IObserver<T> _observer = observer;
+
             public void Dispose()
             {
                 lock (_list)

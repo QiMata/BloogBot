@@ -1,3 +1,5 @@
+using System;
+
 namespace RecordedTests.Shared.Abstractions.I;
 
 public interface IRecordedTestContext

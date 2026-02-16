@@ -1,19 +1,16 @@
 using BotRunner.Interfaces;
 using GameData.Core.Interfaces;
+using System;
+using System.Collections.Generic;
 
 namespace BotRunner.Tasks;
 
 /// <summary>
 /// Base class for bot tasks providing common functionality.
 /// </summary>
-public abstract class BotTask
+public abstract class BotTask(IBotContext botContext)
 {
-    protected readonly IBotContext BotContext;
-
-    protected BotTask(IBotContext botContext)
-    {
-        BotContext = botContext;
-    }
+    protected readonly IBotContext BotContext = botContext;
 
     /// <summary>
     /// Access to the object manager for game state.

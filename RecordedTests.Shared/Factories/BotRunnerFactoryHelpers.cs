@@ -1,4 +1,5 @@
 using RecordedTests.Shared.Abstractions.I;
+using System;
 
 namespace RecordedTests.Shared.Factories;
 
@@ -28,14 +29,9 @@ public static class BotRunnerFactoryHelpers
         return new TypedBotRunnerFactory<TRunner>();
     }
 
-    private sealed class DelegateBotRunnerFactory : IBotRunnerFactory
+    private sealed class DelegateBotRunnerFactory(Func<IBotRunner> factoryDelegate) : IBotRunnerFactory
     {
-        private readonly Func<IBotRunner> _factoryDelegate;
-
-        public DelegateBotRunnerFactory(Func<IBotRunner> factoryDelegate)
-        {
-            _factoryDelegate = factoryDelegate;
-        }
+        private readonly Func<IBotRunner> _factoryDelegate = factoryDelegate;
 
         public IBotRunner Create() => _factoryDelegate();
     }

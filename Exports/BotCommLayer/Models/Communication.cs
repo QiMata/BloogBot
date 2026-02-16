@@ -94,7 +94,7 @@ namespace Communication {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid" }, null, null, null, null)
           }));
     }
     #endregion
@@ -2320,6 +2320,7 @@ namespace Communication {
       characterName_ = other.characterName_;
       screenState_ = other.screenState_;
       movementData_ = other.movementData_ != null ? other.movementData_.Clone() : null;
+      partyLeaderGuid_ = other.partyLeaderGuid_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -2456,6 +2457,21 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "partyLeaderGuid" field.</summary>
+    public const int PartyLeaderGuidFieldNumber = 11;
+    private ulong partyLeaderGuid_;
+    /// <summary>
+    /// GUID of the party leader (0 if not in a group)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public ulong PartyLeaderGuid {
+      get { return partyLeaderGuid_; }
+      set {
+        partyLeaderGuid_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -2481,6 +2497,7 @@ namespace Communication {
       if (CharacterName != other.CharacterName) return false;
       if (ScreenState != other.ScreenState) return false;
       if (!object.Equals(MovementData, other.MovementData)) return false;
+      if (PartyLeaderGuid != other.PartyLeaderGuid) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -2498,6 +2515,7 @@ namespace Communication {
       if (CharacterName.Length != 0) hash ^= CharacterName.GetHashCode();
       if (ScreenState.Length != 0) hash ^= ScreenState.GetHashCode();
       if (movementData_ != null) hash ^= MovementData.GetHashCode();
+      if (PartyLeaderGuid != 0UL) hash ^= PartyLeaderGuid.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -2550,6 +2568,10 @@ namespace Communication {
         output.WriteRawTag(82);
         output.WriteMessage(MovementData);
       }
+      if (PartyLeaderGuid != 0UL) {
+        output.WriteRawTag(88);
+        output.WriteUInt64(PartyLeaderGuid);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -2594,6 +2616,10 @@ namespace Communication {
         output.WriteRawTag(82);
         output.WriteMessage(MovementData);
       }
+      if (PartyLeaderGuid != 0UL) {
+        output.WriteRawTag(88);
+        output.WriteUInt64(PartyLeaderGuid);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -2629,6 +2655,9 @@ namespace Communication {
       }
       if (movementData_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(MovementData);
+      }
+      if (PartyLeaderGuid != 0UL) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt64Size(PartyLeaderGuid);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -2679,6 +2708,9 @@ namespace Communication {
           MovementData = new global::Game.MovementData();
         }
         MovementData.MergeFrom(other.MovementData);
+      }
+      if (other.PartyLeaderGuid != 0UL) {
+        PartyLeaderGuid = other.PartyLeaderGuid;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -2751,6 +2783,10 @@ namespace Communication {
             input.ReadMessage(MovementData);
             break;
           }
+          case 88: {
+            PartyLeaderGuid = input.ReadUInt64();
+            break;
+          }
         }
       }
     #endif
@@ -2820,6 +2856,10 @@ namespace Communication {
               MovementData = new global::Game.MovementData();
             }
             input.ReadMessage(MovementData);
+            break;
+          }
+          case 88: {
+            PartyLeaderGuid = input.ReadUInt64();
             break;
           }
         }

@@ -1,4 +1,7 @@
+using System;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -12,10 +15,15 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// Manages spirit release, corpse resurrection, and spirit healer interactions using the Mangos protocol.
     /// Uses opcode-backed observables (no events/subjects).
     /// </summary>
-    public class DeadActorClientComponent : NetworkClientComponent, IDeadActorNetworkClientComponent, IDisposable
+    /// <remarks>
+    /// Initializes a new instance of the DeadActorAgent class.
+    /// </remarks>
+    /// <param name="worldClient">The world client for sending packets.</param>
+    /// <param name="logger">Logger instance.</param>
+    public class DeadActorClientComponent(IWorldClient worldClient, ILogger<DeadActorClientComponent> logger) : NetworkClientComponent, IDeadActorNetworkClientComponent, IDisposable
     {
-        private readonly IWorldClient _worldClient;
-        private readonly ILogger<DeadActorClientComponent> _logger;
+        private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
+        private readonly ILogger<DeadActorClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         private bool _isDead;
         private bool _isGhost;
@@ -26,26 +34,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         private bool _disposed;
 
         // Reactive opcode-backed streams (keep conservative defaults until protocol wiring is implemented)
-        private readonly IObservable<DeathData> _deathEvents;
-        private readonly IObservable<ResurrectionData> _resurrectionNotifications;
-        private readonly IObservable<DeathErrorData> _deathErrors;
-
-        /// <summary>
-        /// Initializes a new instance of the DeadActorAgent class.
-        /// </summary>
-        /// <param name="worldClient">The world client for sending packets.</param>
-        /// <param name="logger">Logger instance.</param>
-        public DeadActorClientComponent(IWorldClient worldClient, ILogger<DeadActorClientComponent> logger)
-        {
-            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-            // Expose opcode-backed observables. If no server streams exist yet, expose never-ending streams.
-            // Integrators can wire specific SMSG_* opcodes here once available (e.g., SMSG_RESURRECT_REQUEST, etc.).
-            _deathEvents = Observable.Never<DeathData>();
-            _resurrectionNotifications = Observable.Never<ResurrectionData>();
-            _deathErrors = Observable.Never<DeathErrorData>();
-        }
+        private readonly IObservable<DeathData> _deathEvents = Observable.Never<DeathData>();
+        private readonly IObservable<ResurrectionData> _resurrectionNotifications = Observable.Never<ResurrectionData>();
+        private readonly IObservable<DeathErrorData> _deathErrors = Observable.Never<DeathErrorData>();
 
         /// <inheritdoc />
         public bool IsDead => _isDead;

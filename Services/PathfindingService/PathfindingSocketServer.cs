@@ -5,6 +5,11 @@ using PathfindingService.Repository;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
 using System.Text.Json;
+using System.Collections.Generic;
+using System;
+using System.IO;
+using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace PathfindingService
 {
@@ -181,10 +186,25 @@ namespace PathfindingService
             return new PathfindingResponse { Path = resp };
         }
 
+        private int _physicsLogCounter = 0;
         private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
         {
             var physicsInput = step.ToPhysicsInput();
             var physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
+
+            // Log every 100th physics step to diagnose ground snapping
+            if (++_physicsLogCounter % 100 == 1)
+            {
+                float dz = physicsOutput.z - physicsInput.z;
+                logger.LogInformation(
+                    "[PHYS_DIAG] frame={Frame} in=({X:F1},{Y:F1},{Z:F1}) out=({OX:F1},{OY:F1},{OZ:F1}) dZ={DZ:F2} groundZ={GZ:F1} flags=0x{F:X} prevGZ={PGZ:F1} dt={DT:F4}",
+                    physicsInput.frameCounter,
+                    physicsInput.x, physicsInput.y, physicsInput.z,
+                    physicsOutput.x, physicsOutput.y, physicsOutput.z,
+                    dz, physicsOutput.groundZ, physicsOutput.moveFlags,
+                    physicsInput.prevGroundZ, physicsInput.deltaTime);
+            }
+
             return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
         }
 
@@ -208,9 +228,9 @@ namespace PathfindingService
 
         private static bool CheckPosition(uint mapId, Game.Position a, Game.Position b, out PathfindingResponse error)
         {
-            if (mapId == 0 || a == null || b == null)
+            if (a == null || b == null)
             {
-                error = ErrorResponse("Missing or invalid MapId/start/end.");
+                error = ErrorResponse("Missing start/end position.");
                 return false;
             }
             error = null!;

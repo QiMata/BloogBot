@@ -2,8 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>false</IsTestProject>
     <RootNamespace>Tests.Infrastructure</RootNamespace>
@@ -15,6 +13,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,20 +21,11 @@
     <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
   </ItemGroup>
 
-  <!-- Build ordering dependency only - ForegroundBotRunner must build first so its outputs exist for copying -->
+  <!-- Build ordering dependency only - ForegroundBotRunner must build first so its outputs exist -->
   <ItemGroup>
-    <ProjectReference Include="..\..\Services\ForegroundBotRunner\ForegroundBotRunner.csproj" 
-                      ReferenceOutputAssembly="false" 
-                      SkipGetTargetFrameworkProperties="true"
-                      Private="false" />
+    <ProjectReference Include="..\..\Services\ForegroundBotRunner\ForegroundBotRunner.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Private="false" />
   </ItemGroup>
 
-  <!-- Copy Loader.dll and ForegroundBotRunner files to output for integration tests -->
-  <!-- Note: These files are optional - they're only needed for integration tests that require injection -->
-  <Target Name="CopyIntegrationTestDependencies" AfterTargets="Build" Condition="Exists('$(SolutionDir)Bot\$(Configuration)\net8.0\ForegroundBotRunner.dll')">
-    <Copy SourceFiles="$(SolutionDir)Bot\$(Configuration)\net8.0\Loader.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('$(SolutionDir)Bot\$(Configuration)\net8.0\Loader.dll')" />
-    <Copy SourceFiles="$(SolutionDir)Bot\$(Configuration)\net8.0\ForegroundBotRunner.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('$(SolutionDir)Bot\$(Configuration)\net8.0\ForegroundBotRunner.dll')" />
-    <Copy SourceFiles="$(SolutionDir)Bot\$(Configuration)\net8.0\ForegroundBotRunner.runtimeconfig.json" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('$(SolutionDir)Bot\$(Configuration)\net8.0\ForegroundBotRunner.runtimeconfig.json')" />
-  </Target>
+  <!-- Native DLL copying handled by Directory.Build.targets -->
 
 </Project>

@@ -1,5 +1,7 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Models;
+using System.Collections.Generic;
+using System.Linq;
 using WoWSharpClient.Models;
 
 namespace WoWSharpClient.Movement

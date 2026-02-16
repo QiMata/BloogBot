@@ -1,5 +1,8 @@
 using WoWSharpClient.Networking.Abstractions;
 using System.Reactive.Disposables;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
 
 namespace WoWSharpClient.Networking.Implementation
 {

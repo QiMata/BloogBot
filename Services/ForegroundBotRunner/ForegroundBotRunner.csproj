@@ -1,24 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <PlatformTarget>x86</PlatformTarget>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <BaseOutputPath>..\..\Bot</BaseOutputPath>
-    <!-- Output to same folder as Loader.dll (net8.0) -->
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-    <OutputPath>..\..\Bot\$(Configuration)\net8.0\</OutputPath>
-    <!-- Generate runtimeconfig.json for native hosting -->
-    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
-    <!-- Enable native hosting -->
-    <EnableDynamicLoading>true</EnableDynamicLoading>
-    <!-- Roll forward to latest major version for flexibility with .NET 9+ -->
-    <RollForward>LatestMajor</RollForward>
-  </PropertyGroup>
+<PropertyGroup>
+  <OutputType>Exe</OutputType>
+  <TargetFramework>net8.0-windows</TargetFramework>
+  <PlatformTarget>x86</PlatformTarget>
+  <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  <!-- Generate runtimeconfig.json for native hosting -->
+  <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+  <!-- Enable native hosting -->
+  <EnableDynamicLoading>true</EnableDynamicLoading>
+  <!-- Roll forward to latest major version for flexibility with .NET 9+ -->
+  <RollForward>LatestMajor</RollForward>
+</PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Fasm.NET" Version="1.70.3.2" />
@@ -40,9 +33,14 @@
     <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
   </ItemGroup>
 
+  <!-- Pre-built native x86 DLLs that must be in the output directory.
+       These are the fallback copies used when C++ projects cannot build
+       (e.g. dotnet CLI without VS C++ workload). The C++ vcxproj builds
+       output directly to Bot\$(Configuration)\net8.0\ when built with
+       Visual Studio / MSBuild. -->
   <ItemGroup>
-    <Resource Include="Resources\Fasm.NET.dll" />
-    <Resource Include="Resources\FastCall.dll" />
+    <None Include="Resources\Fasm.NET.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Resources\FastCall.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Frames excluded - UI code not needed for injected mode -->

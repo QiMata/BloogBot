@@ -4,6 +4,8 @@ using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
+using System;
+using System.Linq;
 
 namespace ForegroundBotRunner.Grouping
 {
@@ -22,10 +24,10 @@ namespace ForegroundBotRunner.Grouping
     /// Follows a dungeon route, managing waypoint progression, trash clearing,
     /// and boss encounter transitions. Works with GroupManager for role-based behavior.
     /// </summary>
-    public class DungeonNavigator
+    public class DungeonNavigator(ObjectManager objectManager, GroupManager groupManager)
     {
-        private readonly ObjectManager _objectManager;
-        private readonly GroupManager _groupManager;
+        private readonly ObjectManager _objectManager = objectManager;
+        private readonly GroupManager _groupManager = groupManager;
         private DungeonData? _dungeon;
         private int _currentWaypointIndex;
         private DungeonPhase _phase = DungeonPhase.Idle;
@@ -41,12 +43,6 @@ namespace ForegroundBotRunner.Grouping
         public DungeonData? CurrentDungeon => _dungeon;
         public int CurrentWaypointIndex => _currentWaypointIndex;
         public bool IsActive => _dungeon != null && _phase != DungeonPhase.Idle && _phase != DungeonPhase.Complete;
-
-        public DungeonNavigator(ObjectManager objectManager, GroupManager groupManager)
-        {
-            _objectManager = objectManager;
-            _groupManager = groupManager;
-        }
 
         /// <summary>
         /// Check if current map ID is a known dungeon and activate navigation.

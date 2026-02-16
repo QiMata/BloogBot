@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BotRunner.Combat
@@ -7,16 +10,10 @@ namespace BotRunner.Combat
         Task<bool> TryLootAsync(ulong targetGuid, CancellationToken cancellationToken);
     }
 
-    public class LootingService : ILootingService
+    public class LootingService(IAgentFactory agentFactory, BotCombatState combatState) : ILootingService
     {
-        private readonly IAgentFactory _agentFactory;
-        private readonly BotCombatState _combatState;
-
-        public LootingService(IAgentFactory agentFactory, BotCombatState combatState)
-        {
-            _agentFactory = agentFactory ?? throw new ArgumentNullException(nameof(agentFactory));
-            _combatState = combatState ?? throw new ArgumentNullException(nameof(combatState));
-        }
+        private readonly IAgentFactory _agentFactory = agentFactory ?? throw new ArgumentNullException(nameof(agentFactory));
+        private readonly BotCombatState _combatState = combatState ?? throw new ArgumentNullException(nameof(combatState));
 
         public async Task<bool> TryLootAsync(ulong targetGuid, CancellationToken cancellationToken)
         {

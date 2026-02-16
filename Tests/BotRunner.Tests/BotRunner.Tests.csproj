@@ -1,15 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-<PropertyGroup>
-  <TargetFramework>net8.0-windows</TargetFramework>
-  <ImplicitUsings>enable</ImplicitUsings>
-  <Nullable>enable</Nullable>
-
-  <IsPackable>false</IsPackable>
-  <IsTestProject>true</IsTestProject>
-  <Platforms>x86</Platforms>
-  <PlatformTarget>x86</PlatformTarget>
-</PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <Platforms>x86</Platforms>
+    <PlatformTarget>x86</PlatformTarget>
+    <!-- Auto-select x86 test host so dotnet test works without a settings flag -->
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\test.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
@@ -27,10 +26,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../Exports/BotRunner/BotRunner.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
@@ -42,7 +37,12 @@
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
     <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
     <ProjectReference Include="..\..\Services\DecisionEngineService\DecisionEngineService.csproj" />
-    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+    <!-- Build-order only: PathfindingService is x64 and runs as a separate process.
+         We need it built but don't load its assembly in the x86 test host. -->
+    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      Private="false" />
     <ProjectReference Include="..\Tests.Infrastructure\Tests.Infrastructure.csproj" />
   </ItemGroup>
 
@@ -50,6 +50,7 @@
     <None Update="appsettings.test.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 using GameData.Core.Models;
 using PathfindingService.Repository;
+using System;
 using Tests.Infrastructure.BotTasks;
 
 namespace PathfindingService.Tests.BotTasks;

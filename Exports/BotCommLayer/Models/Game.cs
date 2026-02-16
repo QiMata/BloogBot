@@ -114,59 +114,59 @@ namespace Game {
             "CzINLmdhbWUuV29XSXRlbRIRCglpdGVtU2xvdHMYAiADKA0iSAoNUXVlc3RM",
             "b2dFbnRyeRIRCglxdWVzdExvZzEYASABKA0SEQoJcXVlc3RMb2cyGAIgASgN",
             "EhEKCXF1ZXN0TG9nMxgDIAEoDSIrCghQb3NpdGlvbhIJCgF4GAEgASgCEgkK",
-            "AXkYAiABKAISCQoBehgDIAEoAiLWAQoSR2FtZU9iamVjdFNuYXBzaG90EgwK",
+            "AXkYAiABKAISCQoBehgDIAEoAiLlAQoSR2FtZU9iamVjdFNuYXBzaG90EgwK",
             "BGd1aWQYASABKAQSDQoFZW50cnkYAiABKA0SEQoJZGlzcGxheUlkGAMgASgN",
             "EhYKDmdhbWVPYmplY3RUeXBlGAQgASgNEg0KBWZsYWdzGAUgASgNEg8KB2dv",
             "U3RhdGUYBiABKA0SIAoIcG9zaXRpb24YByABKAsyDi5nYW1lLlBvc2l0aW9u",
             "Eg4KBmZhY2luZxgIIAEoAhIMCgRuYW1lGAkgASgJEhgKEGRpc3RhbmNlVG9Q",
-            "bGF5ZXIYCiABKAIi6QMKDFVuaXRTbmFwc2hvdBIMCgRndWlkGAEgASgEEg0K",
-            "BWVudHJ5GAIgASgNEgwKBG5hbWUYAyABKAkSIAoIcG9zaXRpb24YBCABKAsy",
-            "Di5nYW1lLlBvc2l0aW9uEg4KBmZhY2luZxgFIAEoAhIVCg1tb3ZlbWVudEZs",
-            "YWdzGAYgASgNEg4KBmhlYWx0aBgHIAEoDRIRCgltYXhIZWFsdGgYCCABKA0S",
-            "DQoFbGV2ZWwYCSABKA0SEQoJdW5pdEZsYWdzGAogASgNEhgKEGRpc3RhbmNl",
-            "VG9QbGF5ZXIYCyABKAISFgoOYm91bmRpbmdSYWRpdXMYDCABKAISEwoLY29t",
-            "YmF0UmVhY2gYDSABKAISEAoIbnBjRmxhZ3MYDiABKA0SEgoKdGFyZ2V0R3Vp",
-            "ZBgPIAEoBBIQCghpc1BsYXllchgQIAEoCBIRCgloYXNTcGxpbmUYESABKAgS",
-            "EwoLc3BsaW5lRmxhZ3MYEiABKA0SGAoQc3BsaW5lVGltZVBhc3NlZBgTIAEo",
-            "BRIWCg5zcGxpbmVEdXJhdGlvbhgUIAEoBRIuChZzcGxpbmVGaW5hbERlc3Rp",
-            "bmF0aW9uGBUgASgLMg4uZ2FtZS5Qb3NpdGlvbhIXCg9zcGxpbmVOb2RlQ291",
-            "bnQYFiABKA0ibQoLUGFja2V0RXZlbnQSEwoLdGltZXN0YW1wTXMYASABKAQS",
-            "DgoGb3Bjb2RlGAIgASgNEhIKCmlzT3V0Ym91bmQYAyABKAgSDwoHcGF5bG9h",
-            "ZBgEIAEoDBIUCgxhZmZlY3RlZEd1aWQYBSABKAQipwcKDE1vdmVtZW50RGF0",
-            "YRIVCg1tb3ZlbWVudEZsYWdzGAEgASgNEhAKCGZhbGxUaW1lGAIgASgNEhkK",
-            "EWp1bXBWZXJ0aWNhbFNwZWVkGAMgASgCEhQKDGp1bXBTaW5BbmdsZRgEIAEo",
-            "AhIUCgxqdW1wQ29zQW5nbGUYBSABKAISGwoTanVtcEhvcml6b250YWxTcGVl",
-            "ZBgGIAEoAhIRCglzd2ltUGl0Y2gYByABKAISEQoJd2Fsa1NwZWVkGAggASgC",
-            "EhAKCHJ1blNwZWVkGAkgASgCEhQKDHJ1bkJhY2tTcGVlZBgKIAEoAhIRCglz",
-            "d2ltU3BlZWQYCyABKAISFQoNc3dpbUJhY2tTcGVlZBgMIAEoAhIQCgh0dXJu",
-            "UmF0ZRgNIAEoAhIgCghwb3NpdGlvbhgOIAEoCzIOLmdhbWUuUG9zaXRpb24S",
-            "DgoGZmFjaW5nGA8gASgCEhYKDmZyYW1lVGltZXN0YW1wGBAgASgEEhUKDXRy",
-            "YW5zcG9ydEd1aWQYESABKAQSGAoQdHJhbnNwb3J0T2Zmc2V0WBgSIAEoAhIY",
-            "ChB0cmFuc3BvcnRPZmZzZXRZGBMgASgCEhgKEHRyYW5zcG9ydE9mZnNldFoY",
-            "FCABKAISHAoUdHJhbnNwb3J0T3JpZW50YXRpb24YFSABKAISFwoPZmFsbFN0",
-            "YXJ0SGVpZ2h0GBYgASgCEhQKDGN1cnJlbnRTcGVlZBgXIAEoAhIUCgxmYWxs",
-            "aW5nU3BlZWQYGCABKAISMwoRbmVhcmJ5R2FtZU9iamVjdHMYGSADKAsyGC5n",
-            "YW1lLkdhbWVPYmplY3RTbmFwc2hvdBInCgtuZWFyYnlVbml0cxgaIAMoCzIS",
-            "LmdhbWUuVW5pdFNuYXBzaG90EhMKC3NwbGluZUZsYWdzGBsgASgNEigKEHNw",
-            "bGluZUZpbmFsUG9pbnQYHCABKAsyDi5nYW1lLlBvc2l0aW9uEhgKEHNwbGlu",
-            "ZVRhcmdldEd1aWQYHSABKAQSHgoWc3BsaW5lRmluYWxPcmllbnRhdGlvbhge",
-            "IAEoAhIYChBzcGxpbmVUaW1lUGFzc2VkGB8gASgFEhYKDnNwbGluZUR1cmF0",
-            "aW9uGCAgASgFEhAKCHNwbGluZUlkGCEgASgNEiMKC3NwbGluZU5vZGVzGCIg",
-            "AygLMg4uZ2FtZS5Qb3NpdGlvbhIuChZzcGxpbmVGaW5hbERlc3RpbmF0aW9u",
-            "GCMgASgLMg4uZ2FtZS5Qb3NpdGlvbiL6AQoRTW92ZW1lbnRSZWNvcmRpbmcS",
-            "FQoNY2hhcmFjdGVyTmFtZRgBIAEoCRINCgVtYXBJZBgCIAEoDRIQCgh6b25l",
-            "TmFtZRgDIAEoCRIZChFzdGFydFRpbWVzdGFtcFV0YxgEIAEoBBIXCg9mcmFt",
-            "ZUludGVydmFsTXMYBSABKA0SIgoGZnJhbWVzGAYgAygLMhIuZ2FtZS5Nb3Zl",
-            "bWVudERhdGESEwoLZGVzY3JpcHRpb24YByABKAkSDAoEcmFjZRgIIAEoDRIO",
-            "CgZnZW5kZXIYCSABKA0SIgoHcGFja2V0cxgKIAMoCzIRLmdhbWUuUGFja2V0",
-            "RXZlbnQilAEKBEl0ZW0SCgoCaWQYASABKAQSDAoEbmFtZRgCIAEoCRIMCgRz",
-            "bG90GAMgASgJEhAKCHF1YW50aXR5GAQgASgNEiQKBXN0YXRzGAUgAygLMhUu",
-            "Z2FtZS5JdGVtLlN0YXRzRW50cnkaLAoKU3RhdHNFbnRyeRILCgNrZXkYASAB",
-            "KA0SDQoFdmFsdWUYAiABKA06AjgBKpkBCgRSYWNlEg0KCVJBQ0VfTk9ORRAA",
-            "Eg4KClJBQ0VfSFVNQU4QARIMCghSQUNFX09SQxACEg4KClJBQ0VfRFdBUkYQ",
-            "AxISCg5SQUNFX05JR0hUX0VMRhAEEg8KC1JBQ0VfVU5ERUFEEAUSDwoLUkFD",
-            "RV9UQVVSRU4QBhIOCgpSQUNFX0dOT01FEAcSDgoKUkFDRV9UUk9MTBAIYgZw",
-            "cm90bzM="));
+            "bGF5ZXIYCiABKAISDQoFc2NhbGUYCyABKAIi6QMKDFVuaXRTbmFwc2hvdBIM",
+            "CgRndWlkGAEgASgEEg0KBWVudHJ5GAIgASgNEgwKBG5hbWUYAyABKAkSIAoI",
+            "cG9zaXRpb24YBCABKAsyDi5nYW1lLlBvc2l0aW9uEg4KBmZhY2luZxgFIAEo",
+            "AhIVCg1tb3ZlbWVudEZsYWdzGAYgASgNEg4KBmhlYWx0aBgHIAEoDRIRCglt",
+            "YXhIZWFsdGgYCCABKA0SDQoFbGV2ZWwYCSABKA0SEQoJdW5pdEZsYWdzGAog",
+            "ASgNEhgKEGRpc3RhbmNlVG9QbGF5ZXIYCyABKAISFgoOYm91bmRpbmdSYWRp",
+            "dXMYDCABKAISEwoLY29tYmF0UmVhY2gYDSABKAISEAoIbnBjRmxhZ3MYDiAB",
+            "KA0SEgoKdGFyZ2V0R3VpZBgPIAEoBBIQCghpc1BsYXllchgQIAEoCBIRCglo",
+            "YXNTcGxpbmUYESABKAgSEwoLc3BsaW5lRmxhZ3MYEiABKA0SGAoQc3BsaW5l",
+            "VGltZVBhc3NlZBgTIAEoBRIWCg5zcGxpbmVEdXJhdGlvbhgUIAEoBRIuChZz",
+            "cGxpbmVGaW5hbERlc3RpbmF0aW9uGBUgASgLMg4uZ2FtZS5Qb3NpdGlvbhIX",
+            "Cg9zcGxpbmVOb2RlQ291bnQYFiABKA0ibQoLUGFja2V0RXZlbnQSEwoLdGlt",
+            "ZXN0YW1wTXMYASABKAQSDgoGb3Bjb2RlGAIgASgNEhIKCmlzT3V0Ym91bmQY",
+            "AyABKAgSDwoHcGF5bG9hZBgEIAEoDBIUCgxhZmZlY3RlZEd1aWQYBSABKAQi",
+            "uwcKDE1vdmVtZW50RGF0YRIVCg1tb3ZlbWVudEZsYWdzGAEgASgNEhAKCGZh",
+            "bGxUaW1lGAIgASgNEhkKEWp1bXBWZXJ0aWNhbFNwZWVkGAMgASgCEhQKDGp1",
+            "bXBTaW5BbmdsZRgEIAEoAhIUCgxqdW1wQ29zQW5nbGUYBSABKAISGwoTanVt",
+            "cEhvcml6b250YWxTcGVlZBgGIAEoAhIRCglzd2ltUGl0Y2gYByABKAISEQoJ",
+            "d2Fsa1NwZWVkGAggASgCEhAKCHJ1blNwZWVkGAkgASgCEhQKDHJ1bkJhY2tT",
+            "cGVlZBgKIAEoAhIRCglzd2ltU3BlZWQYCyABKAISFQoNc3dpbUJhY2tTcGVl",
+            "ZBgMIAEoAhIQCgh0dXJuUmF0ZRgNIAEoAhIgCghwb3NpdGlvbhgOIAEoCzIO",
+            "LmdhbWUuUG9zaXRpb24SDgoGZmFjaW5nGA8gASgCEhYKDmZyYW1lVGltZXN0",
+            "YW1wGBAgASgEEhUKDXRyYW5zcG9ydEd1aWQYESABKAQSGAoQdHJhbnNwb3J0",
+            "T2Zmc2V0WBgSIAEoAhIYChB0cmFuc3BvcnRPZmZzZXRZGBMgASgCEhgKEHRy",
+            "YW5zcG9ydE9mZnNldFoYFCABKAISHAoUdHJhbnNwb3J0T3JpZW50YXRpb24Y",
+            "FSABKAISFwoPZmFsbFN0YXJ0SGVpZ2h0GBYgASgCEhQKDGN1cnJlbnRTcGVl",
+            "ZBgXIAEoAhIUCgxmYWxsaW5nU3BlZWQYGCABKAISMwoRbmVhcmJ5R2FtZU9i",
+            "amVjdHMYGSADKAsyGC5nYW1lLkdhbWVPYmplY3RTbmFwc2hvdBInCgtuZWFy",
+            "YnlVbml0cxgaIAMoCzISLmdhbWUuVW5pdFNuYXBzaG90EhMKC3NwbGluZUZs",
+            "YWdzGBsgASgNEigKEHNwbGluZUZpbmFsUG9pbnQYHCABKAsyDi5nYW1lLlBv",
+            "c2l0aW9uEhgKEHNwbGluZVRhcmdldEd1aWQYHSABKAQSHgoWc3BsaW5lRmlu",
+            "YWxPcmllbnRhdGlvbhgeIAEoAhIYChBzcGxpbmVUaW1lUGFzc2VkGB8gASgF",
+            "EhYKDnNwbGluZUR1cmF0aW9uGCAgASgFEhAKCHNwbGluZUlkGCEgASgNEiMK",
+            "C3NwbGluZU5vZGVzGCIgAygLMg4uZ2FtZS5Qb3NpdGlvbhIuChZzcGxpbmVG",
+            "aW5hbERlc3RpbmF0aW9uGCMgASgLMg4uZ2FtZS5Qb3NpdGlvbhISCgpzeXN0",
+            "ZW1UaWNrGCQgASgNIvoBChFNb3ZlbWVudFJlY29yZGluZxIVCg1jaGFyYWN0",
+            "ZXJOYW1lGAEgASgJEg0KBW1hcElkGAIgASgNEhAKCHpvbmVOYW1lGAMgASgJ",
+            "EhkKEXN0YXJ0VGltZXN0YW1wVXRjGAQgASgEEhcKD2ZyYW1lSW50ZXJ2YWxN",
+            "cxgFIAEoDRIiCgZmcmFtZXMYBiADKAsyEi5nYW1lLk1vdmVtZW50RGF0YRIT",
+            "CgtkZXNjcmlwdGlvbhgHIAEoCRIMCgRyYWNlGAggASgNEg4KBmdlbmRlchgJ",
+            "IAEoDRIiCgdwYWNrZXRzGAogAygLMhEuZ2FtZS5QYWNrZXRFdmVudCKUAQoE",
+            "SXRlbRIKCgJpZBgBIAEoBBIMCgRuYW1lGAIgASgJEgwKBHNsb3QYAyABKAkS",
+            "EAoIcXVhbnRpdHkYBCABKA0SJAoFc3RhdHMYBSADKAsyFS5nYW1lLkl0ZW0u",
+            "U3RhdHNFbnRyeRosCgpTdGF0c0VudHJ5EgsKA2tleRgBIAEoDRINCgV2YWx1",
+            "ZRgCIAEoDToCOAEqmQEKBFJhY2USDQoJUkFDRV9OT05FEAASDgoKUkFDRV9I",
+            "VU1BThABEgwKCFJBQ0VfT1JDEAISDgoKUkFDRV9EV0FSRhADEhIKDlJBQ0Vf",
+            "TklHSFRfRUxGEAQSDwoLUkFDRV9VTkRFQUQQBRIPCgtSQUNFX1RBVVJFThAG",
+            "Eg4KClJBQ0VfR05PTUUQBxIOCgpSQUNFX1RST0xMEAhiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Game.Race), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -178,10 +178,10 @@ namespace Game {
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWContainer), global::Game.WoWContainer.Parser, new[]{ "Item", "ItemSlots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.QuestLogEntry), global::Game.QuestLogEntry.Parser, new[]{ "QuestLog1", "QuestLog2", "QuestLog3" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.Position), global::Game.Position.Parser, new[]{ "X", "Y", "Z" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Game.GameObjectSnapshot), global::Game.GameObjectSnapshot.Parser, new[]{ "Guid", "Entry", "DisplayId", "GameObjectType", "Flags", "GoState", "Position", "Facing", "Name", "DistanceToPlayer" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.GameObjectSnapshot), global::Game.GameObjectSnapshot.Parser, new[]{ "Guid", "Entry", "DisplayId", "GameObjectType", "Flags", "GoState", "Position", "Facing", "Name", "DistanceToPlayer", "Scale" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.UnitSnapshot), global::Game.UnitSnapshot.Parser, new[]{ "Guid", "Entry", "Name", "Position", "Facing", "MovementFlags", "Health", "MaxHealth", "Level", "UnitFlags", "DistanceToPlayer", "BoundingRadius", "CombatReach", "NpcFlags", "TargetGuid", "IsPlayer", "HasSpline", "SplineFlags", "SplineTimePassed", "SplineDuration", "SplineFinalDestination", "SplineNodeCount" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.PacketEvent), global::Game.PacketEvent.Parser, new[]{ "TimestampMs", "Opcode", "IsOutbound", "Payload", "AffectedGuid" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Game.MovementData), global::Game.MovementData.Parser, new[]{ "MovementFlags", "FallTime", "JumpVerticalSpeed", "JumpSinAngle", "JumpCosAngle", "JumpHorizontalSpeed", "SwimPitch", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "TurnRate", "Position", "Facing", "FrameTimestamp", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "FallStartHeight", "CurrentSpeed", "FallingSpeed", "NearbyGameObjects", "NearbyUnits", "SplineFlags", "SplineFinalPoint", "SplineTargetGuid", "SplineFinalOrientation", "SplineTimePassed", "SplineDuration", "SplineId", "SplineNodes", "SplineFinalDestination" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.MovementData), global::Game.MovementData.Parser, new[]{ "MovementFlags", "FallTime", "JumpVerticalSpeed", "JumpSinAngle", "JumpCosAngle", "JumpHorizontalSpeed", "SwimPitch", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "TurnRate", "Position", "Facing", "FrameTimestamp", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "FallStartHeight", "CurrentSpeed", "FallingSpeed", "NearbyGameObjects", "NearbyUnits", "SplineFlags", "SplineFinalPoint", "SplineTargetGuid", "SplineFinalOrientation", "SplineTimePassed", "SplineDuration", "SplineId", "SplineNodes", "SplineFinalDestination", "SystemTick" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.MovementRecording), global::Game.MovementRecording.Parser, new[]{ "CharacterName", "MapId", "ZoneName", "StartTimestampUtc", "FrameIntervalMs", "Frames", "Description", "Race", "Gender", "Packets" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.Item), global::Game.Item.Parser, new[]{ "Id", "Name", "Slot", "Quantity", "Stats" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, })
           }));
@@ -5533,6 +5533,7 @@ namespace Game {
       facing_ = other.facing_;
       name_ = other.name_;
       distanceToPlayer_ = other.distanceToPlayer_;
+      scale_ = other.scale_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -5677,6 +5678,21 @@ namespace Game {
       }
     }
 
+    /// <summary>Field number for the "scale" field.</summary>
+    public const int ScaleFieldNumber = 11;
+    private float scale_;
+    /// <summary>
+    /// Object scale (from OBJECT_FIELD_SCALE_X descriptor)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float Scale {
+      get { return scale_; }
+      set {
+        scale_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -5702,6 +5718,7 @@ namespace Game {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(Facing, other.Facing)) return false;
       if (Name != other.Name) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(DistanceToPlayer, other.DistanceToPlayer)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(Scale, other.Scale)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -5719,6 +5736,7 @@ namespace Game {
       if (Facing != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(Facing);
       if (Name.Length != 0) hash ^= Name.GetHashCode();
       if (DistanceToPlayer != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(DistanceToPlayer);
+      if (Scale != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(Scale);
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -5777,6 +5795,10 @@ namespace Game {
         output.WriteRawTag(85);
         output.WriteFloat(DistanceToPlayer);
       }
+      if (Scale != 0F) {
+        output.WriteRawTag(93);
+        output.WriteFloat(Scale);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -5827,6 +5849,10 @@ namespace Game {
         output.WriteRawTag(85);
         output.WriteFloat(DistanceToPlayer);
       }
+      if (Scale != 0F) {
+        output.WriteRawTag(93);
+        output.WriteFloat(Scale);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -5865,6 +5891,9 @@ namespace Game {
         size += 1 + pb::CodedOutputStream.ComputeStringSize(Name);
       }
       if (DistanceToPlayer != 0F) {
+        size += 1 + 4;
+      }
+      if (Scale != 0F) {
         size += 1 + 4;
       }
       if (_unknownFields != null) {
@@ -5911,6 +5940,9 @@ namespace Game {
       }
       if (other.DistanceToPlayer != 0F) {
         DistanceToPlayer = other.DistanceToPlayer;
+      }
+      if (other.Scale != 0F) {
+        Scale = other.Scale;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -5974,6 +6006,10 @@ namespace Game {
             DistanceToPlayer = input.ReadFloat();
             break;
           }
+          case 93: {
+            Scale = input.ReadFloat();
+            break;
+          }
         }
       }
     #endif
@@ -6034,6 +6070,10 @@ namespace Game {
           }
           case 85: {
             DistanceToPlayer = input.ReadFloat();
+            break;
+          }
+          case 93: {
+            Scale = input.ReadFloat();
             break;
           }
         }
@@ -7522,6 +7562,7 @@ namespace Game {
       splineId_ = other.splineId_;
       splineNodes_ = other.splineNodes_.Clone();
       splineFinalDestination_ = other.splineFinalDestination_ != null ? other.splineFinalDestination_.Clone() : null;
+      systemTick_ = other.systemTick_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -7981,6 +8022,22 @@ namespace Game {
       }
     }
 
+    /// <summary>Field number for the "systemTick" field.</summary>
+    public const int SystemTickFieldNumber = 36;
+    private uint systemTick_;
+    /// <summary>
+    /// System tick (GetTickCount / Environment.TickCount) for sub-frame timing.
+    /// Same clock as FallStartTime — enables exact fall duration calculation.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint SystemTick {
+      get { return systemTick_; }
+      set {
+        systemTick_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -8031,6 +8088,7 @@ namespace Game {
       if (SplineId != other.SplineId) return false;
       if(!splineNodes_.Equals(other.splineNodes_)) return false;
       if (!object.Equals(SplineFinalDestination, other.SplineFinalDestination)) return false;
+      if (SystemTick != other.SystemTick) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -8073,6 +8131,7 @@ namespace Game {
       if (SplineId != 0) hash ^= SplineId.GetHashCode();
       hash ^= splineNodes_.GetHashCode();
       if (splineFinalDestination_ != null) hash ^= SplineFinalDestination.GetHashCode();
+      if (SystemTick != 0) hash ^= SystemTick.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -8222,6 +8281,10 @@ namespace Game {
         output.WriteRawTag(154, 2);
         output.WriteMessage(SplineFinalDestination);
       }
+      if (SystemTick != 0) {
+        output.WriteRawTag(160, 2);
+        output.WriteUInt32(SystemTick);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -8363,6 +8426,10 @@ namespace Game {
         output.WriteRawTag(154, 2);
         output.WriteMessage(SplineFinalDestination);
       }
+      if (SystemTick != 0) {
+        output.WriteRawTag(160, 2);
+        output.WriteUInt32(SystemTick);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -8471,6 +8538,9 @@ namespace Game {
       size += splineNodes_.CalculateSize(_repeated_splineNodes_codec);
       if (splineFinalDestination_ != null) {
         size += 2 + pb::CodedOutputStream.ComputeMessageSize(SplineFinalDestination);
+      }
+      if (SystemTick != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(SystemTick);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -8591,6 +8661,9 @@ namespace Game {
           SplineFinalDestination = new global::Game.Position();
         }
         SplineFinalDestination.MergeFrom(other.SplineFinalDestination);
+      }
+      if (other.SystemTick != 0) {
+        SystemTick = other.SystemTick;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -8760,6 +8833,10 @@ namespace Game {
             input.ReadMessage(SplineFinalDestination);
             break;
           }
+          case 288: {
+            SystemTick = input.ReadUInt32();
+            break;
+          }
         }
       }
     #endif
@@ -8926,6 +9003,10 @@ namespace Game {
               SplineFinalDestination = new global::Game.Position();
             }
             input.ReadMessage(SplineFinalDestination);
+            break;
+          }
+          case 288: {
+            SystemTick = input.ReadUInt32();
             break;
           }
         }

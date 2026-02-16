@@ -5,7 +5,10 @@ using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
 using System.Reactive.Subjects; // Added for Subject
-using System.Reactive.Disposables; // Added for CompositeDisposable
+using System.Reactive.Disposables;
+using System;
+using System.Threading.Tasks;
+using System.Threading; // Added for CompositeDisposable
 
 namespace WoWSharpClient.Networking.ClientComponents
 {

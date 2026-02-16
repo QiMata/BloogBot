@@ -1,4 +1,8 @@
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using PromptHandlingService.Cache;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace PromptHandlingService
 {

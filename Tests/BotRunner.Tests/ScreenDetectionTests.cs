@@ -1,12 +1,12 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using WinImports;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests;
@@ -122,16 +122,10 @@ internal static class CreateProcessHelper
 /// We must use multiple signals to determine the actual state.
 /// </summary>
 [RequiresInfrastructure]
-public class ScreenDetectionTests : IClassFixture<ScreenDetectionTestFixture>
+public class ScreenDetectionTests(ScreenDetectionTestFixture fixture, ITestOutputHelper output) : IClassFixture<ScreenDetectionTestFixture>
 {
-    private readonly ScreenDetectionTestFixture _fixture;
-    private readonly ITestOutputHelper _output;
-
-    public ScreenDetectionTests(ScreenDetectionTestFixture fixture, ITestOutputHelper output)
-    {
-        _fixture = fixture;
-        _output = output;
-    }
+    private readonly ScreenDetectionTestFixture _fixture = fixture;
+    private readonly ITestOutputHelper _output = output;
 
     /// <summary>
     /// Memory offsets for screen detection (Vanilla 1.12.1)

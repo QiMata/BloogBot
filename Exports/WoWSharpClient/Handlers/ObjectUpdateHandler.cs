@@ -6,6 +6,9 @@ using WoWSharpClient.Parsers;
 using WoWSharpClient.Utils;
 using Serilog;
 using static GameData.Core.Enums.UpdateFields;
+using System.IO;
+using System;
+using System.Linq;
 
 namespace WoWSharpClient.Handlers
 {

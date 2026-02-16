@@ -17,8 +17,8 @@ namespace PhysicsHelpers
         // Use shared MovementFlags from PhysicsBridge.h to avoid mismatches
         if (moveFlags & MOVEFLAG_FORWARD)      { dirX += c;  dirY += s; }
         if (moveFlags & MOVEFLAG_BACKWARD)     { dirX -= c;  dirY -= s; }
-        if (moveFlags & MOVEFLAG_STRAFE_LEFT)  { dirX += s;  dirY -= c; }
-        if (moveFlags & MOVEFLAG_STRAFE_RIGHT) { dirX -= s;  dirY += c; }
+        if (moveFlags & MOVEFLAG_STRAFE_LEFT)  { dirX -= s;  dirY += c; }
+        if (moveFlags & MOVEFLAG_STRAFE_RIGHT) { dirX += s;  dirY -= c; }
 
         float mag = std::sqrt(dirX * dirX + dirY * dirY);
         if (mag > 0.0001f) { dirX /= mag; dirY /= mag; intent.hasInput = true; }

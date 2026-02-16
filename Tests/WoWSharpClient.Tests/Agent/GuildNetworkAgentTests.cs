@@ -4,9 +4,13 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using WoWSharpClient.Client;
 using WoWSharpClient.Networking.ClientComponents;
-using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Networking.ClientComponents.Models;
 using System.Reactive.Subjects;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.IO;
+using System.Collections.Generic;
 
 namespace WoWSharpClient.Tests.Agent
 {

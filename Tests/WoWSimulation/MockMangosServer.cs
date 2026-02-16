@@ -204,18 +204,11 @@ public class MockGameObject
     public int MaxHealth { get; set; }
 }
 
-public struct Position3D
+public struct Position3D(float x, float y, float z)
 {
-    public float X { get; set; }
-    public float Y { get; set; }
-    public float Z { get; set; }
-
-    public Position3D(float x, float y, float z)
-    {
-        X = x;
-        Y = y;
-        Z = z;
-    }
+    public float X { get; set; } = x;
+    public float Y { get; set; } = y;
+    public float Z { get; set; } = z;
 }
 
 public enum GameObjectType

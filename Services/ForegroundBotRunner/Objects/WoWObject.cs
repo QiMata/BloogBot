@@ -4,6 +4,8 @@ using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Runtime.InteropServices;
 using Serilog;
+using System;
+using System.Collections.Generic;
 
 namespace ForegroundBotRunner.Objects
 {

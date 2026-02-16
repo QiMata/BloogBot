@@ -2,6 +2,9 @@ using WoWSharpClient.Networking.Implementation;
 using WoWSharpClient.Client;
 using GameData.Core.Enums;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
+using System;
+using System.IO;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -92,16 +95,12 @@ namespace WowSharpClient.NetworkTests
             var sentData = connection.GetSentData();
             Assert.Single(sentData);
 
-            // Decode the sent packet to verify it was properly encoded
+            // Parse the sent CMSG packet: size(2 BE) + opcode(4 LE) + payload
             var sentPacket = sentData[0];
-            var decryptedPacket = encryptor.Decrypt(sentPacket);
-            
-            framer.Append(decryptedPacket);
-            Assert.True(framer.TryPop(out var framedMessage));
-            
-            Assert.True(codec.TryDecode(framedMessage, out var decodedOpcode, out var decodedPayload));
+            var (decodedOpcode, decodedPayload) = ParseCmsgPacket(sentPacket);
+
             Assert.Equal(Opcode.MSG_MOVE_START_FORWARD, decodedOpcode);
-            Assert.Equal(movementInfo, decodedPayload.ToArray());
+            Assert.Equal(movementInfo, decodedPayload);
         }
 
         [Fact]
@@ -224,19 +223,15 @@ namespace WowSharpClient.NetworkTests
             var sentData = connection.GetSentData();
             Assert.Single(sentData);
 
-            // Decode and verify ping packet
+            // Parse the sent CMSG packet: size(2 BE) + opcode(4 LE) + payload
             var sentPacket = sentData[0];
-            var decryptedPacket = encryptor.Decrypt(sentPacket);
-            
-            framer.Append(decryptedPacket);
-            Assert.True(framer.TryPop(out var framedMessage));
-            
-            Assert.True(codec.TryDecode(framedMessage, out var decodedOpcode, out var decodedPayload));
+            var (decodedOpcode, decodedPayload) = ParseCmsgPacket(sentPacket);
+
             Assert.Equal(Opcode.CMSG_PING, decodedOpcode);
             Assert.Equal(8, decodedPayload.Length); // 4 bytes sequence + 4 bytes latency
 
             // Verify sequence number
-            var sequence = BitConverter.ToUInt32(decodedPayload.Span[0..4]);
+            var sequence = BitConverter.ToUInt32(decodedPayload, 0);
             Assert.Equal(0x12345678u, sequence);
         }
 
@@ -275,17 +270,25 @@ namespace WowSharpClient.NetworkTests
             Assert.NotNull(newEncryptedData);
         }
 
+        /// <summary>
+        /// Creates an SMSG-format packet for injection: size(2 BE) + opcode(2 LE) + payload.
+        /// </summary>
         private static byte[] CreateWoWPacket(Opcode opcode, byte[] payload)
         {
-            using var framer = new WoWMessageFramer();
-            var codec = new WoWPacketCodec();
-            var encryptor = new NoEncryption();
+            return NetworkingAbstractionsTests.CreateSmsgPacket(opcode, payload);
+        }
 
-            var encodedPacket = codec.Encode(opcode, payload);
-            var framedMessage = framer.Frame(encodedPacket);
-            var encryptedMessage = encryptor.Encrypt(framedMessage);
-
-            return encryptedMessage.ToArray();
+        /// <summary>
+        /// Parses a sent CMSG packet: size(2 BE) + opcode(4 LE) + payload.
+        /// Returns (opcode, payload).
+        /// </summary>
+        private static (Opcode opcode, byte[] payload) ParseCmsgPacket(byte[] raw)
+        {
+            // CMSG header: size(2 big-endian) + opcode(4 little-endian)
+            var opcodeValue = (uint)(raw[2] | (raw[3] << 8) | (raw[4] << 16) | (raw[5] << 24));
+            var payload = new byte[raw.Length - 6];
+            Array.Copy(raw, 6, payload, 0, payload.Length);
+            return ((Opcode)opcodeValue, payload);
         }
 
         private static byte[] CreateMockMovementInfo()

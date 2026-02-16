@@ -11,6 +11,12 @@ using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
 using RecordedTests.Shared.Configuration;
 using RecordedTests.Shared.Recording;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RecordedTests.PathingTests;
 
@@ -377,14 +383,9 @@ public class ConsoleTestLogger : ITestLogger
 /// <summary>
 /// Simple server availability checker that always returns the configured server as available.
 /// </summary>
-internal class AlwaysAvailableServerChecker : IServerAvailabilityChecker
+internal class AlwaysAvailableServerChecker(ServerInfo serverInfo) : IServerAvailabilityChecker
 {
-    private readonly ServerInfo _serverInfo;
-
-    public AlwaysAvailableServerChecker(ServerInfo serverInfo)
-    {
-        _serverInfo = serverInfo;
-    }
+    private readonly ServerInfo _serverInfo = serverInfo;
 
     public Task<ServerInfo> WaitForAvailableAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {

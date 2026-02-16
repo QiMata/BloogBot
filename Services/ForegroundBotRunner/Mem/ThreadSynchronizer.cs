@@ -1,7 +1,10 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using Serilog;
 
 namespace ForegroundBotRunner.Mem
@@ -147,7 +150,12 @@ namespace ForegroundBotRunner.Mem
 
             _successCount++;
             signal.Dispose();
-            return (T)resultHolder[0]!;
+
+            // If the delegate threw on the main thread, resultHolder[0] is null.
+            // Unboxing null to a value type (e.g. int) would throw NullReferenceException.
+            if (resultHolder[0] is T typed)
+                return typed;
+            return default!;
         }
 
         // Simple diagnostic logging to file

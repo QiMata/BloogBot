@@ -260,4 +260,9 @@ vendor_section.txt
 # Debug breadcrumbs from ForegroundBotRunner
 Bot/Debug/net8.0/*.txt
 Bot/Debug/net8.0/WWoWLogs/
+Services/ForegroundBotRunner/Resources/FastCall.dll
+
+Exports/Loader/cmake_build_x86/
+Exports/Navigation/cmake_build_x64/
+Exports/Navigation/cmake_build_x86/
 

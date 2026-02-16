@@ -1,6 +1,9 @@
 
 using GameData.Core.Enums;
 using PromptHandlingService.Predefined.CharacterSkills;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace PromptHandlingService.Tests
 {

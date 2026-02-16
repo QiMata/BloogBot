@@ -4,12 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using RecordedTests.Shared;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
 using RecordedTests.Shared.Tests.Scenarios;
 using RecordedTests.Shared.Tests.TestInfrastructure;
-using Xunit;
 
 namespace RecordedTests.Shared.Tests;
 
@@ -139,14 +137,9 @@ public sealed class RecordedScenarioTests
         return new ServerInfo(host, port, realm);
     }
 
-    private sealed class ImmediateServerAvailabilityChecker : IServerAvailabilityChecker
+    private sealed class ImmediateServerAvailabilityChecker(ServerInfo serverInfo) : IServerAvailabilityChecker
     {
-        private readonly ServerInfo _serverInfo;
-
-        public ImmediateServerAvailabilityChecker(ServerInfo serverInfo)
-        {
-            _serverInfo = serverInfo;
-        }
+        private readonly ServerInfo _serverInfo = serverInfo;
 
         public Task<ServerInfo?> WaitForAvailableAsync(TimeSpan timeout, CancellationToken cancellationToken)
         {
@@ -154,19 +147,13 @@ public sealed class RecordedScenarioTests
         }
     }
 
-    private sealed class TestDesiredState : IServerDesiredState
+    private sealed class TestDesiredState(string name, ITestLogger logger) : IServerDesiredState
         {
-            private readonly ITestLogger _logger;
+            private readonly ITestLogger _logger = logger;
 
-            public TestDesiredState(string name, ITestLogger logger)
-            {
-                Name = name;
-                _logger = logger;
-            }
+        public string Name { get; } = name;
 
-            public string Name { get; }
-
-            public int ApplyCalls { get; private set; }
+        public int ApplyCalls { get; private set; }
 
             public Task ApplyAsync(IBotRunner gmRunner, IRecordedTestContext context, CancellationToken cancellationToken)
             {

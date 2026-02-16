@@ -1,4 +1,7 @@
-﻿namespace PromptHandlingService
+﻿using System.Threading;
+using System.Threading.Tasks;
+
+namespace PromptHandlingService
 {
     public interface IPromptFunction
     {

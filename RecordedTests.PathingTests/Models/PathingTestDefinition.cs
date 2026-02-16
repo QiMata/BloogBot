@@ -1,4 +1,5 @@
 using GameData.Core.Models;
+using System;
 
 namespace RecordedTests.PathingTests.Models;
 

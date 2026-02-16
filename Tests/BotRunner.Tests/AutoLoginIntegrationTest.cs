@@ -1,13 +1,15 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using WinImports;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests;
@@ -33,16 +35,10 @@ namespace BotRunner.Tests;
 /// To run: dotnet test --filter "FullyQualifiedName~AutoLogin" --logger "console;verbosity=detailed"
 /// </summary>
 [RequiresInfrastructure]
-public class AutoLoginIntegrationTest : IClassFixture<AutoLoginTestFixture>
+public class AutoLoginIntegrationTest(AutoLoginTestFixture fixture, ITestOutputHelper output) : IClassFixture<AutoLoginTestFixture>
 {
-    private readonly AutoLoginTestFixture _fixture;
-    private readonly ITestOutputHelper _output;
-
-    public AutoLoginIntegrationTest(AutoLoginTestFixture fixture, ITestOutputHelper output)
-    {
-        _fixture = fixture;
-        _output = output;
-    }
+    private readonly AutoLoginTestFixture _fixture = fixture;
+    private readonly ITestOutputHelper _output = output;
 
     /// <summary>
     /// Memory offsets for screen detection (Vanilla 1.12.1)

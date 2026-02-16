@@ -4,8 +4,6 @@
     <UserSecretsId>dotnet-DecisionEngine-63dd65ad-447e-4f8b-a148-a87a20cf98c0</UserSecretsId>
     <OutputType>Library</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <Platforms>AnyCPU</Platforms>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,6 +1,6 @@
 using FluentAssertions;
+using System;
 using System.IO;
-using RecordedTests.PathingTests;
 
 namespace RecordedTests.PathingTests.Tests;
 

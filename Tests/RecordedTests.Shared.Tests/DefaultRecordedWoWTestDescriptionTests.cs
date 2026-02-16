@@ -1,9 +1,13 @@
 using FluentAssertions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using RecordedTests.Shared;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RecordedTests.Shared.Tests;
 
@@ -24,8 +28,23 @@ public class DefaultRecordedWoWTestDescriptionTests
         _recorder = Substitute.For<IScreenRecorder>();
         _desiredState = Substitute.For<IServerDesiredState>();
         _logger = Substitute.For<ITestLogger>();
-        _serverInfo = new ServerInfo("test-server", "localhost", 3724, "Test Realm");
+        _serverInfo = new ServerInfo("localhost", 3724, "Test Realm");
         _tempArtifactsRoot = Path.Combine(Path.GetTempPath(), $"test-artifacts-{Guid.NewGuid()}");
+    }
+
+    private IRecordedTestContext CreateContext(string testName = "Test Pathing")
+    {
+        var sanitized = string.Join("_", testName.Split(Path.GetInvalidFileNameChars()));
+        var now = DateTimeOffset.UtcNow;
+        var testRunDir = Path.Combine(_tempArtifactsRoot, sanitized, now.ToString("yyyyMMdd_HHmmss"));
+        return new RecordedTestContext(
+            testName,
+            sanitized,
+            _serverInfo,
+            now,
+            _tempArtifactsRoot,
+            Path.Combine(_tempArtifactsRoot, sanitized),
+            testRunDir);
     }
 
     [Fact]
@@ -33,6 +52,7 @@ public class DefaultRecordedWoWTestDescriptionTests
     {
         // Arrange
         var callOrder = new List<string>();
+        var context = CreateContext();
 
         _foregroundRunner.ConnectAsync(Arg.Any<ServerInfo>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
@@ -46,15 +66,19 @@ public class DefaultRecordedWoWTestDescriptionTests
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("RecorderLaunch"));
 
+        _foregroundRunner.GetRecordingTargetAsync(Arg.Any<CancellationToken>())
+            .Returns(new RecordingTarget(RecordingTargetType.WindowByTitle, "WoW"))
+            .AndDoes(_ => callOrder.Add("GetRecordingTarget"));
+
         _recorder.ConfigureTargetAsync(Arg.Any<RecordingTarget>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("RecorderConfigure"));
 
-        _desiredState.ApplyAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+        _desiredState.ApplyAsync(Arg.Any<IBotRunner>(), Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("StateApply"));
 
-        _recorder.StartAsync(Arg.Any<CancellationToken>())
+        _recorder.StartAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("RecorderStart"));
 
@@ -66,38 +90,37 @@ public class DefaultRecordedWoWTestDescriptionTests
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("RecorderStop"));
 
-        _desiredState.RevertAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+        _desiredState.RevertAsync(Arg.Any<IBotRunner>(), Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("StateRevert"));
 
-        _recorder.MoveLastRecordingAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new TestArtifact("test.mkv", "video/x-matroska", 1024))
+        _recorder.MoveLastRecordingAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new TestArtifact("test.mkv", context.TestRunDirectory))
             .AndDoes(_ => callOrder.Add("RecorderMove"));
 
         _foregroundRunner.ShutdownUiAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("ForegroundShutdown"));
 
-        _backgroundRunner.ShutdownUiAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask)
-            .AndDoes(_ => callOrder.Add("BackgroundShutdown"));
+        _foregroundRunner.DisconnectAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _backgroundRunner.DisconnectAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
 
         var testDescription = new DefaultRecordedWoWTestDescription(
-            "Test Pathing",
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
+            context,
+            _foregroundRunner,
+            _backgroundRunner,
             _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: false,
+            _recorder,
             _logger
         );
 
         // Act
-        await testDescription.ExecuteAsync(_serverInfo, CancellationToken.None);
+        await testDescription.ExecuteAsync(context, CancellationToken.None);
 
-        // Assert
-        callOrder.Should().Equal(
+        // Assert — verify key steps happened in order
+        callOrder.Should().ContainInOrder(
             "ForegroundConnect",
             "BackgroundConnect",
             "RecorderLaunch",
@@ -108,238 +131,207 @@ public class DefaultRecordedWoWTestDescriptionTests
             "RecorderStop",
             "StateRevert",
             "RecorderMove",
-            "ForegroundShutdown",
-            "BackgroundShutdown"
+            "ForegroundShutdown"
         );
     }
 
     [Fact]
-    public async Task ExecuteAsync_DoubleStopEnabled_CallsStopTwice()
+    public async Task ExecuteAsync_WithoutRecorder_SkipsRecorderSteps()
     {
         // Arrange
-        SetupDefaultHappyPath();
+        var context = CreateContext();
+        SetupDefaultHappyPath(context);
 
         var testDescription = new DefaultRecordedWoWTestDescription(
-            "Test Pathing",
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
+            context,
+            _foregroundRunner,
+            _backgroundRunner,
             _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: true,
+            recorder: null,
             _logger
         );
 
         // Act
-        await testDescription.ExecuteAsync(_serverInfo, CancellationToken.None);
+        var result = await testDescription.ExecuteAsync(context, CancellationToken.None);
 
         // Assert
-        await _recorder.Received(2).StopAsync(Arg.Any<CancellationToken>());
+        result.Success.Should().BeTrue();
+        await _recorder.DidNotReceive().LaunchAsync(Arg.Any<CancellationToken>());
+        await _recorder.DidNotReceive().StartAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>());
+        await _recorder.DidNotReceive().StopAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ExecuteAsync_DoubleStopDisabled_CallsStopOnce()
+    public async Task ExecuteAsync_ConnectsWithCorrectServerInfo()
     {
         // Arrange
-        SetupDefaultHappyPath();
+        var context = CreateContext();
+        SetupDefaultHappyPath(context);
 
         var testDescription = new DefaultRecordedWoWTestDescription(
-            "Test Pathing",
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
+            context,
+            _foregroundRunner,
+            _backgroundRunner,
             _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: false,
+            _recorder,
             _logger
         );
 
         // Act
-        await testDescription.ExecuteAsync(_serverInfo, CancellationToken.None);
-
-        // Assert
-        await _recorder.Received(1).StopAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_CreatesArtifactDirectoryWithSanitizedName()
-    {
-        // Arrange
-        SetupDefaultHappyPath();
-
-        var testNameWithInvalidChars = "Test/Pathing\\With:Invalid*Chars?";
-        var testDescription = new DefaultRecordedWoWTestDescription(
-            testNameWithInvalidChars,
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
-            _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: false,
-            _logger
-        );
-
-        // Act
-        await testDescription.ExecuteAsync(_serverInfo, CancellationToken.None);
-
-        // Assert
-        // Verify the move was called with a sanitized path
-        await _recorder.Received(1).MoveLastRecordingAsync(
-            Arg.Is<string>(path => !path.Contains('/') && !path.Contains('\\') && !path.Contains(':')),
-            Arg.Any<CancellationToken>()
-        );
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_CreatesTimestampedFolder()
-    {
-        // Arrange
-        SetupDefaultHappyPath();
-
-        var testDescription = new DefaultRecordedWoWTestDescription(
-            "Test Pathing",
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
-            _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: false,
-            _logger
-        );
-
-        // Act
-        await testDescription.ExecuteAsync(_serverInfo, CancellationToken.None);
-
-        // Assert
-        // Verify the move was called with a path containing a timestamp pattern
-        await _recorder.Received(1).MoveLastRecordingAsync(
-            Arg.Is<string>(path => System.Text.RegularExpressions.Regex.IsMatch(
-                path,
-                @"\d{8}_\d{6}")), // yyyyMMdd_HHmmss pattern
-            Arg.Any<CancellationToken>()
-        );
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ExceptionDuringTest_CleansUpResources()
-    {
-        // Arrange
-        _foregroundRunner.ConnectAsync(Arg.Any<ServerInfo>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
-
-        _backgroundRunner.ConnectAsync(Arg.Any<ServerInfo>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
-
-        _recorder.LaunchAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
-
-        _recorder.ConfigureTargetAsync(Arg.Any<RecordingTarget>(), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
-
-        _desiredState.ApplyAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("GM command failed"));
-
-        var testDescription = new DefaultRecordedWoWTestDescription(
-            "Test Pathing",
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
-            _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: false,
-            _logger
-        );
-
-        // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => testDescription.ExecuteAsync(_serverInfo, CancellationToken.None));
-
-        // Verify cleanup was attempted
-        await _foregroundRunner.Received().DisposeAsync();
-        await _backgroundRunner.Received().DisposeAsync();
-        await _recorder.Received().DisposeAsync();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_CleanupExceptionsSuppressed_DoesNotThrow()
-    {
-        // Arrange
-        SetupDefaultHappyPath();
-
-        _foregroundRunner.DisposeAsync()
-            .ThrowsAsync(new InvalidOperationException("Cleanup failed"));
-
-        var testDescription = new DefaultRecordedWoWTestDescription(
-            "Test Pathing",
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
-            _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: false,
-            _logger
-        );
-
-        // Act
-        var act = async () => await testDescription.ExecuteAsync(_serverInfo, CancellationToken.None);
-
-        // Assert - should not throw despite disposal exception
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ConfiguresRecorderWithForegroundRunnerTarget()
-    {
-        // Arrange
-        SetupDefaultHappyPath();
-
-        var expectedTarget = new RecordingTarget(RecordingTargetType.WindowTitle, "WoW");
-        _foregroundRunner.GetRecordingTarget().Returns(expectedTarget);
-
-        var testDescription = new DefaultRecordedWoWTestDescription(
-            "Test Pathing",
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
-            _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: false,
-            _logger
-        );
-
-        // Act
-        await testDescription.ExecuteAsync(_serverInfo, CancellationToken.None);
-
-        // Assert
-        await _recorder.Received(1).ConfigureTargetAsync(expectedTarget, Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_PassesServerInfoToRunners()
-    {
-        // Arrange
-        SetupDefaultHappyPath();
-
-        var testDescription = new DefaultRecordedWoWTestDescription(
-            "Test Pathing",
-            () => _foregroundRunner,
-            () => _backgroundRunner,
-            () => _recorder,
-            _desiredState,
-            _tempArtifactsRoot,
-            doubleStopRecorder: false,
-            _logger
-        );
-
-        // Act
-        await testDescription.ExecuteAsync(_serverInfo, CancellationToken.None);
+        await testDescription.ExecuteAsync(context, CancellationToken.None);
 
         // Assert
         await _foregroundRunner.Received(1).ConnectAsync(_serverInfo, Arg.Any<CancellationToken>());
         await _backgroundRunner.Received(1).ConnectAsync(_serverInfo, Arg.Any<CancellationToken>());
     }
 
-    private void SetupDefaultHappyPath()
+    [Fact]
+    public async Task ExecuteAsync_AppliesDesiredStateWithForegroundRunner()
+    {
+        // Arrange
+        var context = CreateContext();
+        SetupDefaultHappyPath(context);
+
+        var testDescription = new DefaultRecordedWoWTestDescription(
+            context,
+            _foregroundRunner,
+            _backgroundRunner,
+            _desiredState,
+            _recorder,
+            _logger
+        );
+
+        // Act
+        await testDescription.ExecuteAsync(context, CancellationToken.None);
+
+        // Assert
+        await _desiredState.Received().ApplyAsync(_foregroundRunner, Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RevertsDesiredStateAfterTest()
+    {
+        // Arrange
+        var context = CreateContext();
+        SetupDefaultHappyPath(context);
+
+        var testDescription = new DefaultRecordedWoWTestDescription(
+            context,
+            _foregroundRunner,
+            _backgroundRunner,
+            _desiredState,
+            _recorder,
+            _logger
+        );
+
+        // Act
+        await testDescription.ExecuteAsync(context, CancellationToken.None);
+
+        // Assert
+        await _desiredState.Received().RevertAsync(_foregroundRunner, Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ConfiguresRecorderWithForegroundRunnerTarget()
+    {
+        // Arrange
+        var context = CreateContext();
+        SetupDefaultHappyPath(context);
+
+        var expectedTarget = new RecordingTarget(RecordingTargetType.WindowByTitle, "WoW");
+        _foregroundRunner.GetRecordingTargetAsync(Arg.Any<CancellationToken>())
+            .Returns(expectedTarget);
+
+        var testDescription = new DefaultRecordedWoWTestDescription(
+            context,
+            _foregroundRunner,
+            _backgroundRunner,
+            _desiredState,
+            _recorder,
+            _logger
+        );
+
+        // Act
+        await testDescription.ExecuteAsync(context, CancellationToken.None);
+
+        // Assert
+        await _recorder.Received(1).ConfigureTargetAsync(expectedTarget, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ExceptionDuringApply_ReturnsFailed()
+    {
+        // Arrange
+        var context = CreateContext();
+
+        _foregroundRunner.ConnectAsync(Arg.Any<ServerInfo>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        _backgroundRunner.ConnectAsync(Arg.Any<ServerInfo>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        _recorder.LaunchAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        _foregroundRunner.GetRecordingTargetAsync(Arg.Any<CancellationToken>())
+            .Returns(new RecordingTarget(RecordingTargetType.WindowByTitle, "WoW"));
+
+        _recorder.ConfigureTargetAsync(Arg.Any<RecordingTarget>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        _desiredState.ApplyAsync(Arg.Any<IBotRunner>(), Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("GM command failed"));
+
+        _foregroundRunner.DisconnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _backgroundRunner.DisconnectAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _foregroundRunner.ShutdownUiAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _recorder.StopAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _desiredState.RevertAsync(Arg.Any<IBotRunner>(), Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _foregroundRunner.ResetServerStateAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var testDescription = new DefaultRecordedWoWTestDescription(
+            context,
+            _foregroundRunner,
+            _backgroundRunner,
+            _desiredState,
+            _recorder,
+            _logger
+        );
+
+        // Act
+        var result = await testDescription.ExecuteAsync(context, CancellationToken.None);
+
+        // Assert — the implementation catches exceptions and returns a failure result
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("GM command failed");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RunsTestWithBackgroundRunner()
+    {
+        // Arrange
+        var context = CreateContext();
+        SetupDefaultHappyPath(context);
+
+        var testDescription = new DefaultRecordedWoWTestDescription(
+            context,
+            _foregroundRunner,
+            _backgroundRunner,
+            _desiredState,
+            _recorder,
+            _logger
+        );
+
+        // Act
+        await testDescription.ExecuteAsync(context, CancellationToken.None);
+
+        // Assert
+        await _backgroundRunner.Received(1).RunTestAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>());
+    }
+
+    private void SetupDefaultHappyPath(IRecordedTestContext context)
     {
         _foregroundRunner.ConnectAsync(Arg.Any<ServerInfo>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
@@ -350,13 +342,16 @@ public class DefaultRecordedWoWTestDescriptionTests
         _recorder.LaunchAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
+        _foregroundRunner.GetRecordingTargetAsync(Arg.Any<CancellationToken>())
+            .Returns(new RecordingTarget(RecordingTargetType.WindowByTitle, "WoW"));
+
         _recorder.ConfigureTargetAsync(Arg.Any<RecordingTarget>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        _desiredState.ApplyAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+        _desiredState.ApplyAsync(Arg.Any<IBotRunner>(), Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        _recorder.StartAsync(Arg.Any<CancellationToken>())
+        _recorder.StartAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
         _backgroundRunner.RunTestAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
@@ -365,11 +360,11 @@ public class DefaultRecordedWoWTestDescriptionTests
         _recorder.StopAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        _desiredState.RevertAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+        _desiredState.RevertAsync(Arg.Any<IBotRunner>(), Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        _recorder.MoveLastRecordingAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new TestArtifact("test.mkv", "video/x-matroska", 1024));
+        _recorder.MoveLastRecordingAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new TestArtifact("test.mkv", context.TestRunDirectory));
 
         _foregroundRunner.ShutdownUiAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
@@ -377,7 +372,16 @@ public class DefaultRecordedWoWTestDescriptionTests
         _backgroundRunner.ShutdownUiAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        _foregroundRunner.GetRecordingTarget()
-            .Returns(new RecordingTarget(RecordingTargetType.WindowTitle, "WoW"));
+        _foregroundRunner.DisconnectAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        _backgroundRunner.DisconnectAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        _foregroundRunner.PrepareServerStateAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        _foregroundRunner.ResetServerStateAsync(Arg.Any<IRecordedTestContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
     }
 }

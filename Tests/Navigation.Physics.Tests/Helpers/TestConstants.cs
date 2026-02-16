@@ -17,6 +17,7 @@ public static class MoveFlags
     public const uint Swimming = 0x00200000;
     public const uint SplineEnabled = 0x00400000;
     public const uint SplineElevation = 0x04000000;
+    public const uint TeleportToPlane = 0x08000000;
 
     /// <summary>Forward/Backward/StrafeLeft/StrafeRight combined.</summary>
     public const uint DirectionalMask = 0x0000000F;
@@ -29,59 +30,69 @@ public static class MoveFlags
 }
 
 /// <summary>
-/// Recording filenames for the 2026-02-08 session (Orc Female, 60 FPS).
+/// Recording filenames for calibrated sessions (Orc Female, 60 FPS).
 /// All tests reference these constants instead of duplicating filename strings.
+/// Empty strings indicate recordings that need to be captured.
 /// </summary>
 public static class Recordings
 {
-    // Orgrimmar � urban terrain with slopes and jumps
+    // Orgrimmar - urban terrain with slopes and jumps
     public const string OrgFlatRunForward = "Dralrahgra_Orgrimmar_2026-02-08_11-32-13";
     public const string OrgStandingJump = "Dralrahgra_Orgrimmar_2026-02-08_11-31-46";
     public const string OrgRunningJumps = "Dralrahgra_Orgrimmar_2026-02-08_11-01-15";
     public const string OrgFallFromHeight = "Dralrahgra_Orgrimmar_2026-02-08_11-32-44";
     public const string OrgFallFromHeight2 = "Dralrahgra_Orgrimmar_2026-02-08_11-32-24";
+    public const string OrgCityLoop = "Dralrahgra_Orgrimmar_2026-02-12_20-20-05";       // ramps, speed curves, circular path
+    public const string OrgCityClimb = "Dralrahgra_Orgrimmar_2026-02-12_20-20-38";      // lower → upper city, Z delta 41.6y
 
-    // Durotar � open terrain, mixed movement
-    public const string DurotarMixedMovement = "Dralrahgra_Durotar_2026-02-08_11-06-59";
-    public const string DurotarDiagonalStrafe = "Dralrahgra_Durotar_2026-02-08_11-24-45";
+    // Durotar - open terrain
     public const string DurotarLongFlatRun = "Dralrahgra_Durotar_2026-02-08_11-37-56";
+    public const string DurotarMixedMovement = "Dralrahgra_Durotar_2026-02-12_20-15-52"; // strafe all directions, backward, jumps on flat
+    public const string DurotarDiagonalStrafe = "Dralrahgra_Durotar_2026-02-12_20-15-52"; // same recording covers diagonal strafe
 
-    // Undercity � indoor, falling, complex geometry
+    // Undercity - indoor, falling, complex geometry
     public const string UndercityMixed = "Dralrahgra_Undercity_2026-02-08_11-30-52";
 
-    // Swimming � populate after recording session
-    // Record via: /say rec swim_forward ? swim ? /say rec
-    // Or use BLOOGBOT_AUTOMATED_RECORDING=1 (scenario 08_swim_forward)
-    public const string Swimming = "Dralrahgra_Durotar_2026-02-09_19-16-08";
+    // Swimming - comprehensive: forward, backward, strafing, turning, 10+ water transitions
+    public const string Swimming = "Dralrahgra_Durotar_2026-02-12_20-13-25";
+    public const string SwimForward = "Dralrahgra_Durotar_2026-02-12_20-13-25";
+    public const string SwimBackward = "Dralrahgra_Durotar_2026-02-12_20-13-25";
+    public const string SwimAscend = "Dralrahgra_Durotar_2026-02-12_20-13-25";
+    public const string SwimDescend = "Dralrahgra_Durotar_2026-02-12_20-13-25";
+    public const string WaterEntry = "Dralrahgra_Durotar_2026-02-12_20-13-25";
+    public const string WaterExit = "Dralrahgra_Durotar_2026-02-12_20-13-25";
 
-    // Swimming sub-categories — all captured in the main Swimming recording
-    public const string SwimForward = "Dralrahgra_Durotar_2026-02-09_19-16-08";
-    public const string SwimBackward = "";   // no dedicated backward recording yet
-    public const string SwimAscend = "Dralrahgra_Durotar_2026-02-09_19-16-08";
-    public const string SwimDescend = "Dralrahgra_Durotar_2026-02-09_19-16-08";
-    public const string WaterEntry = "Dralrahgra_Durotar_2026-02-09_19-16-08";
-    public const string WaterExit = "Dralrahgra_Durotar_2026-02-09_19-16-08";
+    // Transport - Undercity elevator (both directions, with NearbyGameObjects captured)
+    public const string UndercityElevatorDown = "Dralrahgra_Undercity_2026-02-12_19-29-23";  // top → bottom, 647 transport frames
+    public const string UndercityElevatorUp = "Dralrahgra_Undercity_2026-02-12_20-14-05";    // bottom → top, 393 transport frames
+    public const string UndercityElevator = "Dralrahgra_Undercity_2026-02-12_19-29-23";      // default: down ride
+
+    // Undercity v2 - re-recorded 2026-02-13 with GoState tracking + door/elevator data
+    // Bottom→top, 1754 frames, 29s, Z range -43→+60, 9 GOs (3 elevators + 6 doors)
+    // Note: all doors remain goState=1 throughout — MaNGOS doesn't send door transitions
+    public const string UndercityElevatorV2 = "Dralrahgra_Undercity_2026-02-13_19-26-54";
 }
 
 /// <summary>
 /// Common tolerances for recording-based tests.
+/// Single uniform precision standard — all recordings must meet the same bar.
 /// </summary>
 public static class Tolerances
 {
-    // --- Average position error (per-frame, 3D) ---
-    // Calibrated 2026-02-09 after air-snap-margin fix (0.5y instead of 4.0y STEP_DOWN_HEIGHT).
-    public const float Position = 0.05f;         // yards - strict steady-state frame-by-frame
-    public const float GroundMovement = 0.08f;   // yards - flat run, strafe, swim (worst avg: 0.054y FlatRunForward)
-    public const float Airborne = 0.07f;         // yards - falls (worst avg: 0.044y FallFromHeight)
-    public const float MixedMovement = 0.08f;    // yards - turns, mode transitions (worst avg: 0.057y RunningJumps)
-
-    // --- P99 position error (99th percentile, single-frame) ---
-    public const float P99Ground = 0.25f;        // yards - 99% of ground frames (worst P99: 0.167y SwimForward)
-    public const float P99Airborne = 0.55f;      // yards - 99% of airborne frames (worst P99: 0.375y FallFromHeight)
-    public const float P99Mixed = 0.30f;         // yards - 99% of mixed frames (worst P99: 0.184y ComplexMixed)
+    // --- Uniform precision targets ---
+    // Ground aggregate: avg=0.034y, P99=0.186y (13k frames)
+    // Worst per-recording SS P99: FlatRunForward=0.239y, RunningJumps=0.233y
+    public const float AvgPosition = 0.055f;      // yards - avg position error (all recordings)
+    public const float P99Position = 0.25f;       // yards - P99 position error (all recordings)
 
     // --- Speed/velocity ---
-    public const float Velocity = 0.5f;         // yards/second
+    public const float Velocity = 0.5f;          // yards/second
+
+    // --- Transport / elevator ---
+    // Transport frames simulated via DynamicObjectRegistry with world-coord transform.
+    // Elevator model mesh not in map data — position error dominated by vertical drift.
+    public const float TransportAvg = 0.13f;      // yards - avg including transport frames
+    public const float TransportP99 = 1.0f;       // yards - P99 for transport frames
 
     // Recording-level measurement tolerance (client-side variation, not engine precision)
     public const float RelaxedPosition = 0.15f;

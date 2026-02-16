@@ -6,6 +6,9 @@ using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 using System.Reactive.Subjects;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
 
 namespace WoWSharpClient.Tests.Agent
 {

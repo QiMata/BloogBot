@@ -1,6 +1,8 @@
 using FluentAssertions;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Configuration;
+using System;
+using System.Collections.Generic;
 
 namespace RecordedTests.Shared.Tests.Configuration;
 

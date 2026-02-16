@@ -1,12 +1,15 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using BotRunner.Clients;
 using GameData.Core.Enums;
 using GameData.Core.Models;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RecordedTests.PathingTests.Models;
-using RecordedTests.Shared;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
 using WoWSharpClient;
@@ -18,14 +21,23 @@ namespace RecordedTests.PathingTests.Runners;
 /// Background bot runner that executes the actual pathfinding test by connecting to the WoW server,
 /// navigating from start to end position, and handling transport scenarios.
 /// </summary>
-public class BackgroundRecordedTestRunner : IBotRunner
+/// <remarks>
+/// Initializes a new instance of the BackgroundRecordedTestRunner.
+/// </remarks>
+public class BackgroundRecordedTestRunner(
+    PathingTestDefinition testDefinition,
+    PathfindingClient pathfindingClient,
+    string account,
+    string password,
+    string character,
+    ITestLogger logger) : IBotRunner
 {
-    private readonly PathingTestDefinition _testDefinition;
-    private readonly PathfindingClient _pathfindingClient;
-    private readonly string _account;
-    private readonly string _password;
-    private readonly string _character;
-    private readonly ITestLogger _logger;
+    private readonly PathingTestDefinition _testDefinition = testDefinition ?? throw new ArgumentNullException(nameof(testDefinition));
+    private readonly PathfindingClient _pathfindingClient = pathfindingClient ?? throw new ArgumentNullException(nameof(pathfindingClient));
+    private readonly string _account = account ?? throw new ArgumentNullException(nameof(account));
+    private readonly string _password = password ?? throw new ArgumentNullException(nameof(password));
+    private readonly string _character = character ?? throw new ArgumentNullException(nameof(character));
+    private readonly ITestLogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     private WoWClientOrchestrator? _orchestrator;
     private WoWSharpObjectManager? _objectManager;
@@ -34,25 +46,6 @@ public class BackgroundRecordedTestRunner : IBotRunner
     private const int StuckCheckHistorySize = 10;
     private const float StuckDistanceThreshold = 1.0f;
     private const float SuccessRadiusYards = 50.0f;
-
-    /// <summary>
-    /// Initializes a new instance of the BackgroundRecordedTestRunner.
-    /// </summary>
-    public BackgroundRecordedTestRunner(
-        PathingTestDefinition testDefinition,
-        PathfindingClient pathfindingClient,
-        string account,
-        string password,
-        string character,
-        ITestLogger logger)
-    {
-        _testDefinition = testDefinition ?? throw new ArgumentNullException(nameof(testDefinition));
-        _pathfindingClient = pathfindingClient ?? throw new ArgumentNullException(nameof(pathfindingClient));
-        _account = account ?? throw new ArgumentNullException(nameof(account));
-        _password = password ?? throw new ArgumentNullException(nameof(password));
-        _character = character ?? throw new ArgumentNullException(nameof(character));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
 
     /// <inheritdoc />
     public async Task ConnectAsync(ServerInfo server, CancellationToken cancellationToken)

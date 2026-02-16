@@ -55,6 +55,19 @@ enum MovementFlags
 // Values may be either ADT indices (0..3) or WMO entry IDs (1,2,3,4,21).
 // 21 (NaxxSlime) is treated as Slime for mask logic.
 
+// Info about a nearby dynamic game object (elevator, door, chest, etc.)
+// Passed as an array in PhysicsInput. The engine auto-registers models
+// on first encounter by displayId and updates world positions each frame.
+struct DynamicObjectInfo
+{
+    uint64_t guid;
+    uint32_t displayId;
+    float x, y, z;           // World position of the object
+    float orientation;        // Rotation around Z axis (radians)
+    float scale;              // Object scale (default 1.0)
+    uint32_t goState;         // Game object state (0=closed/default, 1=open/active)
+};
+
 // Physics input from the game
 struct PhysicsInput
 {
@@ -119,12 +132,27 @@ struct PhysicsInput
 	float standingOnLocalY;
 	float standingOnLocalZ;
 
+    // Nearby dynamic objects (elevators, doors, chests).
+    // Pointer to array of DynamicObjectInfo structs, with count.
+    // Engine auto-registers models on first displayId encounter and updates positions.
+    // When transportGuid != 0, engine finds matching object here for coordinate transform.
+    DynamicObjectInfo* nearbyObjects;
+    int nearbyObjectCount;
+
     // Context
     uint32_t mapId;            // Current map ID
     float deltaTime;           // Time since last update
 
     uint32_t frameCounter;
+
+    // Behaviour flags (bitfield)
+    // PHYSICS_FLAG_TRUST_INPUT_VELOCITY (0x1): Use input vx/vy as-is for airborne
+    //   horizontal movement instead of recalculating from moveFlags + orientation.
+    //   Useful for replay testing with recording-derived velocity.
+    uint32_t physicsFlags;
 };
+
+constexpr uint32_t PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
 
 // Physics output back to the game
 struct PhysicsOutput

@@ -1,6 +1,9 @@
 ﻿using GameData.Core.Models;
 using System.Runtime.InteropServices;
-using GameData.Core.Enums; // Access MovementFlags for sanitization
+using GameData.Core.Enums;
+using System;
+using System.IO;
+using System.Linq; // Access MovementFlags for sanitization
 
 namespace PathfindingService.Repository
 {
@@ -209,9 +212,13 @@ namespace PathfindingService.Repository
 		public float standingOnLocalY;
 		public float standingOnLocalZ;
 
+		public IntPtr nearbyObjects;
+		public int nearbyObjectCount;
+
         public uint mapId;
         public float deltaTime;
         public uint frameCounter;
+        public uint physicsFlags;
     }
 
     [StructLayout(LayoutKind.Sequential)]

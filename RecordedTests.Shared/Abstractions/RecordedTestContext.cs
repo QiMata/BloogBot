@@ -1,32 +1,22 @@
 using RecordedTests.Shared.Abstractions.I;
+using System;
 
 namespace RecordedTests.Shared.Abstractions;
 
-public class RecordedTestContext : IRecordedTestContext
+public class RecordedTestContext(
+    string testName,
+    string sanitizedTestName,
+    ServerInfo server,
+    DateTimeOffset startedAt,
+    string artifactsRootDirectory,
+    string testRootDirectory,
+    string testRunDirectory) : IRecordedTestContext
 {
-    public RecordedTestContext(
-        string testName,
-        string sanitizedTestName,
-        ServerInfo server,
-        DateTimeOffset startedAt,
-        string artifactsRootDirectory,
-        string testRootDirectory,
-        string testRunDirectory)
-    {
-        TestName = testName;
-        SanitizedTestName = sanitizedTestName;
-        Server = server;
-        StartedAt = startedAt;
-        ArtifactsRootDirectory = artifactsRootDirectory;
-        TestRootDirectory = testRootDirectory;
-        TestRunDirectory = testRunDirectory;
-    }
-
-    public string TestName { get; }
-    public string SanitizedTestName { get; }
-    public ServerInfo Server { get; }
-    public DateTimeOffset StartedAt { get; }
-    public string ArtifactsRootDirectory { get; }
-    public string TestRootDirectory { get; }
-    public string TestRunDirectory { get; }
+    public string TestName { get; } = testName;
+    public string SanitizedTestName { get; } = sanitizedTestName;
+    public ServerInfo Server { get; } = server;
+    public DateTimeOffset StartedAt { get; } = startedAt;
+    public string ArtifactsRootDirectory { get; } = artifactsRootDirectory;
+    public string TestRootDirectory { get; } = testRootDirectory;
+    public string TestRunDirectory { get; } = testRunDirectory;
 }

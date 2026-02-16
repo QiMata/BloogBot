@@ -1,3 +1,6 @@
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace RecordedTests.Shared.Abstractions.I;
 
 public interface ITestDescription

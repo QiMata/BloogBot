@@ -7,6 +7,10 @@ using System.Text;
 using System.Reactive;
 using System.Reactive.Subjects;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
+using System;
+using System.Threading;
+using System.IO;
 
 namespace WoWSharpClient.Client
 {
@@ -224,6 +228,8 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.SMSG_SPELL_START, Handlers.SpellHandler.HandleSpellStart);
             BridgeToLegacy(Opcode.SMSG_ATTACKERSTATEUPDATE, Handlers.SpellHandler.HandleAttackerStateUpdate);
             BridgeToLegacy(Opcode.SMSG_DESTROY_OBJECT, Handlers.SpellHandler.HandleDestroyObject);
+            BridgeToLegacy(Opcode.SMSG_CAST_FAILED, Handlers.SpellHandler.HandleCastFailed);
+            BridgeToLegacy(Opcode.SMSG_SPELLHEALLOG, Handlers.SpellHandler.HandleSpellHealLog);
 
             // Stand state / world state
             BridgeToLegacy(Opcode.SMSG_STANDSTATE_UPDATE, Handlers.StandStateHandler.HandleStandStateUpdate);

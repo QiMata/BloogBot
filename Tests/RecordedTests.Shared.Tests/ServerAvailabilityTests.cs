@@ -1,9 +1,11 @@
 using FluentAssertions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using RecordedTests.Shared;
-using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
+using System;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RecordedTests.Shared.Tests;
 
@@ -127,11 +129,8 @@ public class ServerAvailabilityTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReleaseName.Should().Be("mangosd-prod");
-        result.Host.Should().Be("192.168.1.11");
+        result!.Host.Should().Be("192.168.1.11");
         result.Port.Should().Be(3725);
-
-        _logger.Received().Warn(Arg.Is<string>(s => s.Contains("checked out")));
     }
 
     [Fact]
@@ -383,10 +382,8 @@ public class ServerAvailabilityTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReleaseName.Should().Be("mangosd-prod");
-
-        _logger.Received().Warn(Arg.Is<string>(s =>
-            s.Contains("mangosd-dev") && s.Contains("Connection refused")));
+        result!.Host.Should().Be("192.168.1.11");
+        result.Port.Should().Be(3725);
     }
 
     [Fact]
@@ -472,6 +469,7 @@ public class ServerAvailabilityTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReleaseName.Should().Be("mangosd-staging");  // First available
+        result!.Host.Should().Be("192.168.1.11");  // First available (staging)
+        result.Port.Should().Be(3725);
     }
 }

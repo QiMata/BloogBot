@@ -6,6 +6,11 @@ using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Runtime.InteropServices;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System.IO;
 
 namespace ForegroundBotRunner.Statics
 {
@@ -1033,6 +1038,14 @@ namespace ForegroundBotRunner.Statics
         private bool _prevIsConnected = true;
         private LoginStates _prevLoginState = LoginStates.login;
         private uint _prevContinentId = 0xFFFFFFFF;
+        private volatile bool _isContinentTransition;
+
+        /// <summary>
+        /// True when the client is in a continent/map transition (ContinentId == 0xFF or 0xFFFFFFFF
+        /// while HasEnteredWorld). Object pointers are invalid during this period — do NOT access
+        /// WoWObject properties. Checked by MovementRecorder and snapshot builders to avoid crashes.
+        /// </summary>
+        public bool IsContinentTransition => _isContinentTransition;
 
         internal async Task StartSimplePollingLoop()
         {
@@ -1091,9 +1104,29 @@ namespace ForegroundBotRunner.Statics
                     // IMPORTANT: Skip during continent transitions (ContinentId == 0xFFFFFFFF while HasEnteredWorld)
                     // — zeppelin/boat crossings temporarily clear the GUID and ContinentId
                     bool isContinentTransition = HasEnteredWorld && (continentId == 0xFFFFFFFF || continentId == 0xFF);
-                    if (isContinentTransition && loopCount % 4 == 0)
+                    _isContinentTransition = isContinentTransition;
+
+                    // When a continent transition starts, immediately clear stale objects.
+                    // Object pointers become invalid during map changes — any access to
+                    // stale WoWObject.Pointer would hit unmapped memory and crash (.NET 8
+                    // does not catch AccessViolationException).
+                    if (isContinentTransition)
                     {
-                        DiagLog($"SimplePolling: Continent transition detected (ContinentId=0x{continentId:X}), skipping enumeration and logout detection");
+                        lock (_objectsLock)
+                        {
+                            if (ObjectsBuffer.Count > 0)
+                            {
+                                DiagLog($"SimplePolling: Continent transition — clearing {ObjectsBuffer.Count} stale objects");
+                                ObjectsBuffer.Clear();
+                            }
+                        }
+                        Player = null;
+                        Pet = null;
+
+                        if (loopCount % 4 == 0)
+                        {
+                            DiagLog($"SimplePolling: Continent transition detected (ContinentId=0x{continentId:X}), skipping enumeration and logout detection");
+                        }
                     }
                     if (loginState == LoginStates.charselect && HasEnteredWorld && !isLoggedIn && !isContinentTransition)
                     {
@@ -1832,6 +1865,15 @@ namespace ForegroundBotRunner.Statics
             throw new NotImplementedException();
         }
 
+        public IReadOnlyCollection<uint> KnownSpellIds
+        {
+            get
+            {
+                if (Player is not LocalPlayer lp) return [];
+                return lp.PlayerSpells.Values.SelectMany(v => v).Select(id => (uint)id).ToArray();
+            }
+        }
+
         public void UseItem(int bagId, int slotId, ulong targetGuid = 0)
         {
             throw new NotImplementedException();
@@ -1933,6 +1975,11 @@ namespace ForegroundBotRunner.Statics
             var player = Players.FirstOrDefault(p => p.Guid == guid);
             if (player != null)
                 Functions.LuaCall($"InviteByName('{player.Name}')");
+        }
+
+        public void InviteByName(string characterName)
+        {
+            Functions.LuaCall($"InviteByName('{characterName}')");
         }
 
         public void KickPlayer(ulong guid)
@@ -2039,12 +2086,11 @@ namespace ForegroundBotRunner.Statics
 
         public void StopAllMovement()
         {
-            if (Player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
-            {
-                var bits = ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight;
-
-                StopMovement(bits);
-            }
+            // Always clear all movement control bits unconditionally.
+            // MovementFlags can read 0x0 when opposing directions cancel out,
+            // but the underlying control bits are still set.
+            var bits = ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight;
+            StopMovement(bits);
         }
 
         public void StopMovement(ControlBits bits)

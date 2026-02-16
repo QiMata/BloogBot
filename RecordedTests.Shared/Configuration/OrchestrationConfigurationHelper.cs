@@ -1,4 +1,5 @@
 using RecordedTests.Shared.Abstractions;
+using System;
 
 namespace RecordedTests.Shared.Configuration;
 

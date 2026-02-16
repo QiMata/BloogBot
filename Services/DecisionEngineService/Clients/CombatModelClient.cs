@@ -1,5 +1,6 @@
 ﻿using BotCommLayer;
 using Communication;
+using Microsoft.Extensions.Logging;
 
 namespace DecisionEngineService.Clients
 {

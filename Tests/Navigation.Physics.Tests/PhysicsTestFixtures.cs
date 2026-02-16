@@ -1,11 +1,23 @@
 // PhysicsTestFixtures.cs - Shared test fixtures for physics tests
 
+using System;
+using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Navigation.Physics.Tests.Helpers;
 
 namespace Navigation.Physics.Tests;
 
 using static NavigationInterop;
+
+/// <summary>
+/// Collection definition that shares a single PhysicsEngineFixture across all test classes
+/// tagged with [Collection("PhysicsEngine")]. This avoids re-initializing the native physics
+/// engine (VMAP, map loader, etc.) for every test class.
+/// </summary>
+[CollectionDefinition("PhysicsEngine")]
+public class PhysicsEngineCollection : ICollectionFixture<PhysicsEngineFixture> { }
 
 /// <summary>
 /// Module initializer ensures WWOW_DATA_DIR is set and crash dialogs are suppressed
@@ -36,12 +48,28 @@ public class PhysicsEngineFixture : IDisposable
 {
     public bool IsInitialized { get; }
 
+    /// <summary>
+    /// Shared replay cache — each recording replayed at most once across all test classes.
+    /// </summary>
+    public ReplayResultsCache ReplayCache { get; } = new();
+
     public PhysicsEngineFixture()
     {
         try
         {
             EnsureDataDir();
+            // InitializePhysics now auto-loads the displayId→model mapping
             IsInitialized = InitializePhysics();
+
+            // Also initialize MapLoader for ADT terrain data (used by GetGroundZ, SweepCapsule)
+            if (IsInitialized)
+            {
+                var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR") ?? "";
+                var mapsPath = string.IsNullOrEmpty(dataDir)
+                    ? "maps/"
+                    : Path.Combine(dataDir, "maps") + Path.DirectorySeparatorChar;
+                try { InitializeMapLoader(mapsPath); } catch { /* optional */ }
+            }
         }
         catch (DllNotFoundException)
         {

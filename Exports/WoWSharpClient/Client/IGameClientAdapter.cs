@@ -13,19 +13,19 @@ namespace WoWSharpClient.Client
         void SendNameQuery(ulong guid);
     }
 
-    public sealed class NetworkGameClientAdapter : IGameClientAdapter
+    public sealed class NetworkGameClientAdapter(WoWClient client) : IGameClientAdapter
     {
-        private readonly WoWClient _client;
+        private readonly WoWClient _client = client;
         public WoWClient Client => _client;
-        public NetworkGameClientAdapter(WoWClient client) => _client = client;
-        public void SendMovementOpcode(Opcode opcode, byte[] movementInfo) => _client.SendMovementOpcode(opcode, movementInfo);
-        public void SendMSGPacked(Opcode opcode, byte[] payload) => _client.SendMSGPacked(opcode, payload);
-        public void SendPing() => _client.SendPing();
-        public void QueryTime() => _client.QueryTime();
-        public void SendSetActiveMover(ulong guid) => _client.SendSetActiveMover(guid);
-        public void SendMoveWorldPortAcknowledge() => _client.SendMoveWorldPortAcknowledge();
-        public void SendNameQuery(ulong guid) => _client.SendNameQuery(guid);
-        public void EnterWorld(ulong guid) => _client.EnterWorld(guid);
+
+        public void SendMovementOpcode(Opcode opcode, byte[] movementInfo) => _ = _client.SendMovementOpcodeAsync(opcode, movementInfo);
+        public void SendMSGPacked(Opcode opcode, byte[] payload) => _ = _client.SendMSGPackedAsync(opcode, payload);
+        public void SendPing() => _ = _client.SendPingAsync();
+        public void QueryTime() => _ = _client.QueryTimeAsync();
+        public void SendSetActiveMover(ulong guid) => _ = _client.SendSetActiveMoverAsync(guid);
+        public void SendMoveWorldPortAcknowledge() => _ = _client.SendMoveWorldPortAcknowledgeAsync();
+        public void SendNameQuery(ulong guid) => _ = _client.SendNameQueryAsync(guid);
+        public void EnterWorld(ulong guid) => _ = _client.EnterWorldAsync(guid);
     }
 
     public sealed class InProcessGameClientAdapter : IGameClientAdapter

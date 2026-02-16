@@ -1,4 +1,7 @@
 using GameData.Core.Interfaces;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.I;
 
 namespace BotRunner.Combat
@@ -9,16 +12,10 @@ namespace BotRunner.Combat
         Task EngageAsync(IWoWUnit target, CancellationToken cancellationToken);
     }
 
-    public class TargetEngagementService : ITargetEngagementService
+    public class TargetEngagementService(IAgentFactory agentFactory, BotCombatState combatState) : ITargetEngagementService
     {
-        private readonly IAgentFactory _agentFactory;
-        private readonly BotCombatState _combatState;
-
-        public TargetEngagementService(IAgentFactory agentFactory, BotCombatState combatState)
-        {
-            _agentFactory = agentFactory ?? throw new ArgumentNullException(nameof(agentFactory));
-            _combatState = combatState ?? throw new ArgumentNullException(nameof(combatState));
-        }
+        private readonly IAgentFactory _agentFactory = agentFactory ?? throw new ArgumentNullException(nameof(agentFactory));
+        private readonly BotCombatState _combatState = combatState ?? throw new ArgumentNullException(nameof(combatState));
 
         public ulong? CurrentTargetGuid => _combatState.CurrentTargetGuid;
 

@@ -6,6 +6,9 @@ using WoWSharpClient.Models;
 using WoWSharpClient.Parsers;
 using Serilog;
 using WoWSharpClient.Utils;
+using System.IO;
+using System.Linq;
+using System;
 
 namespace WoWSharpClient.Handlers
 {

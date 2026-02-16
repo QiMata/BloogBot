@@ -2,6 +2,8 @@
 using Microsoft.Data.Sqlite;
 using System.Text;
 using Serilog;
+using System.Collections.Generic;
+using System;
 
 namespace WoWStateManager.Repository
 {

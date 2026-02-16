@@ -1,17 +1,14 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using ShamanEnhancement.Tasks;
-
 using BotProfiles.Common;
+
 namespace ShamanEnhancement
 {
-    [Export(typeof(IBot))]
-    internal class ShamanEnhancement : BotBase
+    public class ShamanEnhancement : BotBase
     {
         public override string Name => "Enhancement Shaman";
 
         public override string FileName => "ShamanEnhancement.dll";
-
 
         public override IBotTask CreateRestTask(IBotContext botContext) =>
             new RestTask(botContext);

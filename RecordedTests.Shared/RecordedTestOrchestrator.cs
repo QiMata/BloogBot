@@ -6,21 +6,14 @@ using System.Threading.Tasks;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
 
-public sealed class RecordedTestOrchestrator
+public sealed class RecordedTestOrchestrator(
+    IServerAvailabilityChecker serverChecker,
+    OrchestrationOptions? options = null,
+    ITestLogger? logger = null)
 {
-    private readonly IServerAvailabilityChecker _serverChecker;
-    private readonly ITestLogger _logger;
-    private readonly OrchestrationOptions _options;
-
-    public RecordedTestOrchestrator(
-        IServerAvailabilityChecker serverChecker,
-        OrchestrationOptions? options = null,
-        ITestLogger? logger = null)
-    {
-        _serverChecker = serverChecker ?? throw new ArgumentNullException(nameof(serverChecker));
-        _options = options ?? new OrchestrationOptions();
-        _logger = logger ?? new NullTestLogger();
-    }
+    private readonly IServerAvailabilityChecker _serverChecker = serverChecker ?? throw new ArgumentNullException(nameof(serverChecker));
+    private readonly ITestLogger _logger = logger ?? new NullTestLogger();
+    private readonly OrchestrationOptions _options = options ?? new OrchestrationOptions();
 
     // The orchestrator's single responsibility: find an available server, then delegate execution to the test description.
     public async Task<OrchestrationResult> RunAsync(ITestDescription test, CancellationToken cancellationToken)

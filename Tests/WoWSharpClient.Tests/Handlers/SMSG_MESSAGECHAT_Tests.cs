@@ -1,4 +1,5 @@
 ﻿using GameData.Core.Enums;
+using System.IO;
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Tests.Util;
 

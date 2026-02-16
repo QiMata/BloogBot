@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace BotRunner.Combat
 {
     public class BotCombatState

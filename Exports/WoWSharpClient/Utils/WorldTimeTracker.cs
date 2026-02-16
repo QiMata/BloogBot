@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 namespace WoWSharpClient.Utils
 {
     public class WorldTimeTracker

@@ -6,6 +6,10 @@ using GameData.Core.Enums;
 using WoWSharpClient.Networking.ClientComponents;
 using WoWSharpClient.Networking.ClientComponents.I;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
+using System.Collections.Generic;
 
 namespace WoWSharpClient.Tests.Agent
 {

@@ -6,6 +6,7 @@
 #include "PhysicsBridge.h"
 #include "MapLoader.h"
 #include "SceneQuery.h"
+#include "DynamicObjectRegistry.h"
 
 #define NOMINMAX
 #include <windows.h>
@@ -95,6 +96,8 @@ void InitializeAllSystems()
                     // Initialize factory and set base path
                     VMAP::VMapFactory::initialize();
                     g_vmapManager->setBasePath(path);
+                    // Load displayId→model mapping for dynamic objects (elevators, doors)
+                    DynamicObjectRegistry::Instance()->LoadDisplayIdMapping(path);
                     break;
                 }
             }

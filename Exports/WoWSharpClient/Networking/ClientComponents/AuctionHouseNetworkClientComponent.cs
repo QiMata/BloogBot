@@ -1,6 +1,10 @@
+using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using WoWSharpClient.Client;
@@ -14,12 +18,12 @@ namespace WoWSharpClient.Networking.ClientComponents
     /// AUCTION_REMOVED_NOTIFICATION (12 bytes), BIDDER_NOTIFICATION (32 bytes), OWNER_NOTIFICATION (28 bytes).
     /// CMSG formats: All include auctioneerGuid prefix as required by the server.
     /// </summary>
-    public class AuctionHouseNetworkClientComponent : NetworkClientComponent, IAuctionHouseNetworkClientComponent, IDisposable
+    public class AuctionHouseNetworkClientComponent(IWorldClient worldClient, ILogger<AuctionHouseNetworkClientComponent> logger) : NetworkClientComponent, IAuctionHouseNetworkClientComponent, IDisposable
     {
         private const int AUCTION_ENTRY_SIZE = 64;
 
-        private readonly IWorldClient _worldClient;
-        private readonly ILogger<AuctionHouseNetworkClientComponent> _logger;
+        private readonly IWorldClient _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
+        private readonly ILogger<AuctionHouseNetworkClientComponent> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         private bool _isAuctionHouseOpen;
         private ulong? _currentAuctioneerGuid;
@@ -28,12 +32,6 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly List<AuctionData> _bidderAuctions = [];
         private uint _totalSearchResultCount;
         private bool _disposed;
-
-        public AuctionHouseNetworkClientComponent(IWorldClient worldClient, ILogger<AuctionHouseNetworkClientComponent> logger)
-        {
-            _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        }
 
         /// <inheritdoc />
         public bool IsAuctionHouseOpen => _isAuctionHouseOpen;

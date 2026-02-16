@@ -2,6 +2,11 @@
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Utils;
 using Serilog;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
+using System.Linq;
+using System.IO;
 
 namespace WoWSharpClient
 {
@@ -93,6 +98,8 @@ namespace WoWSharpClient
             _handlers[Opcode.SMSG_SPELL_START] = SpellHandler.HandleSpellStart;
             _handlers[Opcode.SMSG_ATTACKERSTATEUPDATE] = SpellHandler.HandleAttackerStateUpdate;
             _handlers[Opcode.SMSG_DESTROY_OBJECT] = SpellHandler.HandleDestroyObject;
+            _handlers[Opcode.SMSG_CAST_FAILED] = SpellHandler.HandleCastFailed;
+            _handlers[Opcode.SMSG_SPELLHEALLOG] = SpellHandler.HandleSpellHealLog;
 
             _handlers[Opcode.SMSG_STANDSTATE_UPDATE] = StandStateHandler.HandleStandStateUpdate;
 

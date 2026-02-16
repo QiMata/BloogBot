@@ -5,6 +5,8 @@ using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
+using System;
+using System.Linq;
 
 namespace ForegroundBotRunner.Grouping
 {
@@ -12,9 +14,9 @@ namespace ForegroundBotRunner.Grouping
     /// Manages party state: invite handling, role assignment, group-aware target selection,
     /// and follow-leader behavior. Works alongside GrindBot for group grinding.
     /// </summary>
-    public class GroupManager
+    public class GroupManager(ObjectManager objectManager)
     {
-        private readonly ObjectManager _objectManager;
+        private readonly ObjectManager _objectManager = objectManager;
         private GroupRole _myRole = GroupRole.DPS;
         private bool _autoAcceptInvites = true;
         private int _lastInviteCheckTick;
@@ -27,11 +29,6 @@ namespace ForegroundBotRunner.Grouping
         public bool IsLeader => IsInGroup && _objectManager.PartyLeaderGuid == _objectManager.Player?.Guid;
         public int PartySize => _objectManager.PartyMembers.Count();
         public bool AutoAcceptInvites { get => _autoAcceptInvites; set => _autoAcceptInvites = value; }
-
-        public GroupManager(ObjectManager objectManager)
-        {
-            _objectManager = objectManager;
-        }
 
         /// <summary>
         /// Call every tick from bot main loop. Handles invite auto-accept and role detection.

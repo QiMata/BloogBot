@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.Runtime.InteropServices;
 
 public static class WinProcessImports
 {
@@ -111,6 +112,19 @@ public static class WinProcessImports
 
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool GetExitCodeThread(IntPtr hThread, out uint lpExitCode);
+
+    // Window enumeration for process window detection (avoids Process.GetProcessById access denied)
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
 
     // Additional safe injection functions
     [DllImport("kernel32.dll", SetLastError = true)]

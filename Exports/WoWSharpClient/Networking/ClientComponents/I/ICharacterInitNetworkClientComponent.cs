@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using WoWSharpClient.Networking.ClientComponents.Models;
 
 namespace WoWSharpClient.Networking.ClientComponents.I

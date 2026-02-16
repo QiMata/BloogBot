@@ -1,4 +1,6 @@
-﻿namespace GameData.Core.Models
+﻿using System;
+
+namespace GameData.Core.Models
 {
     public class HighGuid
     {

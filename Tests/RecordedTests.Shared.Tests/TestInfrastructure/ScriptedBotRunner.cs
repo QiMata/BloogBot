@@ -2,29 +2,20 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using RecordedTests.Shared;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
 
 namespace RecordedTests.Shared.Tests.TestInfrastructure;
 
-internal sealed class ScriptedBotRunner : IBotRunner, IGmCommandHost
+internal sealed class ScriptedBotRunner(string role, BotScript script, ScenarioLog log, ScenarioState state) : IBotRunner, IGmCommandHost
 {
-    private readonly string _role;
-    private readonly BotScript _script;
-    private readonly ScenarioLog _log;
-    private readonly ScenarioState _state;
+    private readonly string _role = role ?? throw new ArgumentNullException(nameof(role));
+    private readonly BotScript _script = script ?? throw new ArgumentNullException(nameof(script));
+    private readonly ScenarioLog _log = log ?? throw new ArgumentNullException(nameof(log));
+    private readonly ScenarioState _state = state ?? throw new ArgumentNullException(nameof(state));
     private readonly List<string> _executed = new();
     private readonly List<string> _gmCommands = new();
     private bool _disposed;
-
-    public ScriptedBotRunner(string role, BotScript script, ScenarioLog log, ScenarioState state)
-    {
-        _role = role ?? throw new ArgumentNullException(nameof(role));
-        _script = script ?? throw new ArgumentNullException(nameof(script));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
-        _state = state ?? throw new ArgumentNullException(nameof(state));
-    }
 
     public IReadOnlyList<string> ExecutedSteps => _executed;
 

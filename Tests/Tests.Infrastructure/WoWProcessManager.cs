@@ -1,6 +1,10 @@
+using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 
 namespace Tests.Infrastructure;
@@ -35,23 +39,18 @@ public record InjectionResult(
 /// Manages WoW client processes for integration testing.
 /// Handles launching WoW and injecting Loader.dll to bootstrap .NET 8 runtime.
 /// </summary>
-public class WoWProcessManager : IDisposable
+public class WoWProcessManager(WoWProcessConfig config, ILogger<WoWProcessManager>? logger = null) : IDisposable
 {
-    private readonly ILogger<WoWProcessManager>? _logger;
-    private readonly WoWProcessConfig _config;
+    private readonly ILogger<WoWProcessManager>? _logger = logger;
+    private readonly WoWProcessConfig _config = config ?? throw new ArgumentNullException(nameof(config));
     
     private Process? _wowProcess;
     private IntPtr _processHandle;
+    private IntPtr _threadHandle;
     private IntPtr _allocatedMemory;
     private InjectionState _state = InjectionState.NotStarted;
     
     private bool _disposed;
-
-    public WoWProcessManager(WoWProcessConfig config, ILogger<WoWProcessManager>? logger = null)
-    {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
-        _logger = logger;
-    }
 
     /// <summary>
     /// Current state of the injection process.
@@ -62,6 +61,41 @@ public class WoWProcessManager : IDisposable
     /// The WoW process ID if launched.
     /// </summary>
     public int? ProcessId => _wowProcess?.Id;
+
+    /// <summary>
+    /// Enables SeDebugPrivilege for the current process, which is required to
+    /// open handles to processes owned by other users or with higher integrity.
+    /// </summary>
+    private static bool EnableDebugPrivilege()
+    {
+        if (!OpenProcessToken(
+                GetCurrentProcess(),
+                TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                out var tokenHandle))
+        {
+            return false;
+        }
+
+        try
+        {
+            if (!LookupPrivilegeValue(null, SE_DEBUG_NAME, out var luid))
+                return false;
+
+            var tp = new TOKEN_PRIVILEGES
+            {
+                PrivilegeCount = 1,
+                Luid = luid,
+                Attributes = SE_PRIVILEGE_ENABLED
+            };
+
+            return AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero)
+                   && Marshal.GetLastWin32Error() == 0;
+        }
+        finally
+        {
+            CloseHandle(tokenHandle);
+        }
+    }
 
     /// <summary>
     /// Launches WoW.exe and injects Loader.dll.
@@ -83,16 +117,38 @@ public class WoWProcessManager : IDisposable
                 return Fail($"Loader.dll not found at: {_config.LoaderDllPath}");
             }
 
+            // Enable SeDebugPrivilege so we can open process handles
+            if (!EnableDebugPrivilege())
+            {
+                _logger?.LogWarning("Failed to enable SeDebugPrivilege (Error: {Error}). " +
+                    "Injection may fail if not running as Administrator.",
+                    Marshal.GetLastWin32Error());
+            }
+            else
+            {
+                _logger?.LogDebug("SeDebugPrivilege enabled successfully");
+            }
+
             _logger?.LogInformation("Launching WoW from: {Path}", _config.WoWExecutablePath);
 
-            // Step 1: Launch WoW process
-            _wowProcess = LaunchWoWProcess();
-            if (_wowProcess == null || _wowProcess.HasExited)
+            // Step 1: Launch WoW process using CreateProcess to get a handle with full access
+            if (!LaunchWoWProcessWithHandle(out var processId))
             {
-                return Fail("Failed to launch WoW process");
+                return Fail("Failed to launch WoW process via CreateProcess");
             }
+
+            // Wrap in a Process object for lifecycle management
+            try
+            {
+                _wowProcess = Process.GetProcessById(processId);
+            }
+            catch (ArgumentException)
+            {
+                return Fail($"WoW process (PID {processId}) exited immediately after creation");
+            }
+
             _state = InjectionState.ProcessLaunched;
-            _logger?.LogInformation("WoW launched with PID: {Pid}", _wowProcess.Id);
+            _logger?.LogInformation("WoW launched with PID: {Pid}", processId);
 
             // Wait a bit for the process to initialize
             await Task.Delay(_config.ProcessInitDelayMs, cancellationToken);
@@ -102,15 +158,19 @@ public class WoWProcessManager : IDisposable
                 return Fail($"WoW process exited immediately with code: {_wowProcess.ExitCode}");
             }
 
-            // Step 2: Open process handle with required access
-            _processHandle = OpenProcess(
-                ProcessAccessFlags.All,
-                false,
-                _wowProcess.Id);
-
+            // Step 2: We already have _processHandle from CreateProcess.
+            // If it was not obtained (shouldn't happen), fall back to OpenProcess.
             if (_processHandle == IntPtr.Zero)
             {
-                return Fail($"Failed to open process handle. Error: {Marshal.GetLastWin32Error()}");
+                _processHandle = OpenProcess(
+                    ProcessAccessFlags.All,
+                    false,
+                    processId);
+
+                if (_processHandle == IntPtr.Zero)
+                {
+                    return Fail($"Failed to open process handle. Error: {Marshal.GetLastWin32Error()}");
+                }
             }
 
             // Step 3: Allocate memory in target process for DLL path
@@ -230,17 +290,46 @@ public class WoWProcessManager : IDisposable
     /// </summary>
     public bool IsProcessRunning => _wowProcess != null && !_wowProcess.HasExited;
 
-    private Process? LaunchWoWProcess()
+    /// <summary>
+    /// Launches WoW.exe using Win32 CreateProcess to obtain a process handle with
+    /// full access rights directly, bypassing the need for OpenProcess.
+    /// </summary>
+    private bool LaunchWoWProcessWithHandle(out int processId)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _config.WoWExecutablePath,
-            WorkingDirectory = Path.GetDirectoryName(_config.WoWExecutablePath),
-            UseShellExecute = false,
-            CreateNoWindow = false
-        };
+        processId = 0;
 
-        return Process.Start(startInfo);
+        var si = new STARTUPINFO();
+        si.cb = (uint)Marshal.SizeOf<STARTUPINFO>();
+
+        var workingDir = Path.GetDirectoryName(_config.WoWExecutablePath) ?? ".";
+
+        if (!CreateProcess(
+                _config.WoWExecutablePath,
+                null!,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                false,
+                0, // CREATE_DEFAULT flags
+                IntPtr.Zero,
+                workingDir,
+                ref si,
+                out var pi))
+        {
+            _logger?.LogError("CreateProcess failed. Error: {Error}", Marshal.GetLastWin32Error());
+            return false;
+        }
+
+        // Store the process handle (PROCESS_ALL_ACCESS from creation)
+        _processHandle = pi.hProcess;
+        processId = (int)pi.dwProcessId;
+
+        // Close the thread handle — we don't need it
+        if (pi.hThread != IntPtr.Zero)
+        {
+            _threadHandle = pi.hThread;
+        }
+
+        return true;
     }
 
     private InjectionResult Fail(string message)
@@ -266,17 +355,24 @@ public class WoWProcessManager : IDisposable
             _allocatedMemory = IntPtr.Zero;
         }
 
+        // Close the initial thread handle if we still hold it
+        if (_threadHandle != IntPtr.Zero)
+        {
+            CloseHandle(_threadHandle);
+            _threadHandle = IntPtr.Zero;
+        }
+
+        // Terminate process if requested (before closing our handle)
+        if (_config.TerminateOnDispose)
+        {
+            TerminateProcess();
+        }
+
         // Close process handle
         if (_processHandle != IntPtr.Zero)
         {
             CloseHandle(_processHandle);
             _processHandle = IntPtr.Zero;
-        }
-
-        // Terminate process if requested
-        if (_config.TerminateOnDispose)
-        {
-            TerminateProcess();
         }
 
         _wowProcess?.Dispose();
@@ -311,6 +407,91 @@ public class WoWProcessManager : IDisposable
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+    // CreateProcess to launch WoW and get a handle with full access directly
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool CreateProcess(
+        string? lpApplicationName,
+        string? lpCommandLine,
+        IntPtr lpProcessAttributes,
+        IntPtr lpThreadAttributes,
+        bool bInheritHandles,
+        uint dwCreationFlags,
+        IntPtr lpEnvironment,
+        string? lpCurrentDirectory,
+        ref STARTUPINFO lpStartupInfo,
+        out PROCESS_INFORMATION lpProcessInformation);
+
+    // Privilege elevation APIs
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr processHandle, uint desiredAccess, out IntPtr tokenHandle);
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool LookupPrivilegeValue(string? lpSystemName, string lpName, out LUID lpLuid);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool AdjustTokenPrivileges(
+        IntPtr tokenHandle,
+        bool disableAllPrivileges,
+        ref TOKEN_PRIVILEGES newState,
+        uint bufferLength,
+        IntPtr previousState,
+        IntPtr returnLength);
+
+    private const uint TOKEN_ADJUST_PRIVILEGES = 0x0020;
+    private const uint TOKEN_QUERY = 0x0008;
+    private const uint SE_PRIVILEGE_ENABLED = 0x00000002;
+    private const string SE_DEBUG_NAME = "SeDebugPrivilege";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LUID
+    {
+        public uint LowPart;
+        public int HighPart;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TOKEN_PRIVILEGES
+    {
+        public uint PrivilegeCount;
+        public LUID Luid;
+        public uint Attributes;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct STARTUPINFO
+    {
+        public uint cb;
+        public string lpReserved;
+        public string lpDesktop;
+        public string lpTitle;
+        public uint dwX;
+        public uint dwY;
+        public uint dwXSize;
+        public uint dwYSize;
+        public uint dwXCountChars;
+        public uint dwYCountChars;
+        public uint dwFillAttribute;
+        public uint dwFlags;
+        public short wShowWindow;
+        public short cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROCESS_INFORMATION
+    {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public uint dwProcessId;
+        public uint dwThreadId;
+    }
 
     [Flags]
     private enum ProcessAccessFlags : uint
@@ -350,15 +531,29 @@ public class WoWProcessConfig
     /// Override: WWOW_TEST_WOW_PATH
     /// </summary>
     public string WoWExecutablePath { get; init; } =
-        Environment.GetEnvironmentVariable("WWOW_TEST_WOW_PATH") ?? @"C:\Games\WoW-1.12.1\WoW.exe";
+        Environment.GetEnvironmentVariable("WWOW_TEST_WOW_PATH") ?? @"E:\Elysium Project Game Client\WoW.exe";
 
     /// <summary>
     /// Path to Loader.dll.
     /// Override: WWOW_TEST_LOADER_PATH
+    /// Resolution order: env var ? test output dir ? Bot output dir
     /// </summary>
-    public string LoaderDllPath { get; init; } =
-        Environment.GetEnvironmentVariable("WWOW_TEST_LOADER_PATH") ?? 
-        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Loader.dll");
+    public string LoaderDllPath { get; init; } = ResolveLoaderDllPath();
+
+    private static string ResolveLoaderDllPath()
+    {
+        var envPath = Environment.GetEnvironmentVariable("WWOW_TEST_LOADER_PATH");
+        if (!string.IsNullOrEmpty(envPath) && File.Exists(envPath))
+            return envPath;
+
+        // Check test output dir (copied by Directory.Build.targets)
+        var localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Loader.dll");
+        if (File.Exists(localPath))
+            return localPath;
+
+        // Fall back to Bot output dir
+        return Path.Combine(BotServiceFixture.BotOutputDirectory, "Loader.dll");
+    }
 
     /// <summary>
     /// Delay after launching process before injection (ms).

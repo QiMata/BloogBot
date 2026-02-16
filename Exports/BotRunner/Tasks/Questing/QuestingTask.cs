@@ -2,6 +2,9 @@ using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace BotRunner.Tasks.Questing;
 
@@ -9,12 +12,10 @@ namespace BotRunner.Tasks.Questing;
 /// Main quest coordinator task that manages the quest loop.
 /// Scans for quest objectives, moves to hotspots, and coordinates sub-tasks.
 /// </summary>
-public class QuestingTask : BotTask, IBotTask
+public class QuestingTask(IBotContext botContext) : BotTask(botContext), IBotTask
 {
     private static readonly Dictionary<int, QuestTaskData> _questCache = new();
     private static Position? _currentHotSpot;
-
-    public QuestingTask(IBotContext botContext) : base(botContext) { }
 
     /// <summary>
     /// Current quest being worked on.

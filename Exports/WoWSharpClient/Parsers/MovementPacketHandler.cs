@@ -1,7 +1,8 @@
 ﻿using GameData.Core.Enums;
 using GameData.Core.Models;
+using System.Collections.Generic;
+using System.IO;
 using WoWSharpClient.Models;
-using WoWSharpClient.Utils;
 
 namespace WoWSharpClient.Parsers
 {

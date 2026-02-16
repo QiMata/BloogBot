@@ -5,6 +5,9 @@ using ForegroundBotRunner.Statics;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace ForegroundBotRunner.Questing
 {
@@ -15,10 +18,10 @@ namespace ForegroundBotRunner.Questing
     /// Returns quest-driven actions (positions to move to, NPCs to interact with)
     /// that GrindBot can execute through its existing movement and combat systems.
     /// </summary>
-    public class QuestCoordinator
+    public class QuestCoordinator(IQuestRepository questRepo, ObjectManager objectManager)
     {
-        private readonly IQuestRepository _questRepo;
-        private readonly ObjectManager _objectManager;
+        private readonly IQuestRepository _questRepo = questRepo;
+        private readonly ObjectManager _objectManager = objectManager;
         private List<QuestLogEntry> _cachedQuests = new();
         private int _lastQuestRefreshTick;
         private const int QUEST_REFRESH_INTERVAL_MS = 5000;
@@ -31,12 +34,6 @@ namespace ForegroundBotRunner.Questing
         private int _interactionStartTick;
         private int _interactionAttempts;
         private const int INTERACTION_TIMEOUT_MS = 15000;
-
-        public QuestCoordinator(IQuestRepository questRepo, ObjectManager objectManager)
-        {
-            _questRepo = questRepo;
-            _objectManager = objectManager;
-        }
 
         public enum QuestAction
         {
