@@ -33,6 +33,9 @@ namespace WoWSharpClient.Handlers
             {
                 try
                 {
+                    if (opcode == Opcode.MSG_MOVE_TELEPORT || opcode == Opcode.MSG_MOVE_TELEPORT_ACK)
+                        Log.Information("[MovementHandler] Received teleport opcode: {Opcode} ({Size} bytes)", opcode, data.Length);
+
                     switch (opcode)
                     {
                         case Opcode.MSG_MOVE_TELEPORT:
@@ -47,7 +50,17 @@ namespace WoWSharpClient.Handlers
                                 MovementPacketHandler.ParseMovementInfo(reader);
                             movementUpdateData.MovementCounter = movementCounter;
 
-                            //_objectManager.QueueUpdate(new(guid, ObjectUpdateOperation.Update, WoWObjectType.Player, movementUpdateData, []));
+                            // Queue the position update so the local player position reflects the teleport.
+                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
+                            WoWSharpObjectManager.Instance.QueueUpdate(
+                                new WoWSharpObjectManager.ObjectStateUpdate(
+                                    guid,
+                                    WoWSharpObjectManager.ObjectUpdateOperation.Update,
+                                    WoWObjectType.Player,
+                                    movementUpdateData,
+                                    []
+                                )
+                            );
 
                             WoWSharpEventEmitter.Instance.FireOnTeleport(
                                 new RequiresAcknowledgementArgs(guid, movementCounter)
@@ -186,6 +199,10 @@ namespace WoWSharpClient.Handlers
 
             MovementInfoUpdate movementData = MovementPacketHandler.ParseMovementInfo(reader);
             movementData.MovementCounter = counter;
+
+            // Signal teleport BEFORE queuing the position update so the write guard
+            // in ProcessUpdatesAsync allows the position change through.
+            WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
 
             WoWSharpObjectManager.Instance.QueueUpdate(
                 new WoWSharpObjectManager.ObjectStateUpdate(

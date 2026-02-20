@@ -1,83 +1,55 @@
 ```prompt
-## Session Handoff — Physics Engine Calibration
+## Context
 
-### What Was Accomplished Last Session
+This is the BloogBot (Westworld of Warcraft) project — a WoW 1.12.1 bot with dual-bot architecture (ForegroundBotRunner DLL injection + BackgroundBotRunner headless protocol emulation). Read `CLAUDE.md` for full architecture overview and `docs/TASKS.md` for the task list.
 
-1. **Fixed π speed multiplier bug** — `MovementController.ApplyPhysicsResult()` used growing `_accumulatedDelta` instead of per-frame `deltaSec` for dead-reckoning, causing ~3.14x movement speed. Fixed in `Exports/WoWSharpClient/Movement/MovementController.cs`.
+## What Was Accomplished This Session
 
-2. **Fixed CAST_FAILED spam** — Three-pronged fix:
-   - `Services/WoWStateManager/Coordination/CombatCoordinator.cs`: `ACTION_COOLDOWN_SEC` 1.5→3.0 (Lightning Bolt = 2.5s cast)
-   - `Exports/BotRunner/BotRunnerService.cs`: Added stop movement + face target before cast in `BuildCastSpellSequence`
-   - Root causes were: 0x61=SPELL_IN_PROGRESS, 0x23=INTERRUPTED, 0x7C=UNIT_NOT_INFRONT
+### FishingProfessionTests — FULLY PASSING (dual-client BG + FG)
 
-3. **Fixed collection modified thread-safety** — `Exports/WoWSharpClient/WoWSharpObjectManager.cs`: Added `_objectsLock`, `Objects` property now returns `_objects.ToArray()` snapshot. All mutations wrapped in `lock (_objectsLock)`.
+Fixed three issues preventing the BG (headless) bot from fishing:
 
-4. **Merged latest `main` into `cpp_physics_system`** — Commit `fe3526e`, pushed to remote. All conflicts resolved favoring our branch.
+1. **SOAP `.teleport name` with coordinates is invalid** — silently fails. Switched to `BotTeleportAsync` (`.go xyz` via chat) for both bots. MaNGOS sends `MSG_MOVE_TELEPORT` back; `NotifyTeleportIncoming()` ensures the position write guard allows the update.
 
-5. **Physics tests: 58 passed, 1 skipped, 0 failed** — All recordings replay within current tolerances (avg<0.055y, P99<0.25y).
+2. **Added `SET_FACING` ActionType (proto 63)** — Characters face toward water before casting. Implemented end-to-end: proto → Communication.cs → CharacterAction → BotRunnerService behavior tree handler.
 
-### What to Work On Next
+3. **Corrected dock position** — Mapped dock geometry from MaNGOS creature positions. Dock is ~5yd wide (X: -991 to -986), southern tip at Y≈-3836. Fishing position: (-988.5, -3834.0, 5.7) centered on dock, facing 6.21 rad (east toward fishing node).
 
-**Primary goal: Achieve P99 position error < 0.0001y (4+ decimal places) between simulated and recorded WoW client frames.**
+### Documentation Updated
+- MEMORY.md — Added teleport/facing lessons, updated test safety notes
+- ARCHIVE.md — Added teleport fix + SET_FACING entry
+- TASKS.md — Updated FishingProfessionTests status
 
-Read `docs/TASKS.md` for the full prioritized task list. Start with:
+## What to Work On Next
 
-#### CRITICAL: Task 2.5a — Fix Physics Engine Returning Unchanged Positions
+### Priority 1: Bobber activation (catching fish)
+FishingProfessionTests currently detects the bobber (Fishing Bobber displayId=668, type=17) but doesn't activate it to actually catch fish. Next step:
+- Send CMSG_GAMEOBJ_USE on the bobber GUID to activate it when it splashes
+- Verify loot window opens with fish
+- This exercises the full fishing → loot pipeline
 
-The background bot's MovementController calls the PathfindingService physics engine every tick, but the C++ engine returns the SAME position as input (`physics=0` count vs `deadReckon=1451`). Dead-reckoning does ALL the actual movement. The engine works perfectly in tests (58/58 pass) but fails in live operation.
+### Priority 2: Run remaining LiveValidation tests
+8 tests pass (BasicLoopTests 6 + FishingProfessionTests 1 + GroupFormationTests 1). See TASKS.md section 1 for the other 11 test classes.
 
-**Investigation path:**
-1. Add verbose logging to `Services/PathfindingService/PathfindingSocketServer.cs:HandlePhysics()` — log the actual `moveFlags`, `runSpeed`, `deltaTime` received by the native engine, and the output position delta
-2. Check if `prevGroundZ = float.NegativeInfinity` (initial value in MovementController) causes the engine to treat the character as "no ground found" and skip movement
-3. Verify the proto PhysicsInput field mapping in `PathfindingSocketServer.cs:ToPhysicsInput()` produces a valid `Repository.PhysicsInput` struct
-4. Check if `SanitizeOutput()` in `Repository/Physics.cs:146` is zeroing velocities (it checks `MOVEFLAG_MASK_MOVING_OR_TURN`)
+### Priority 3: Implement Phase 2 from plan (Atomic BotTask architecture)
+Plan file: `C:\Users\lrhod\.claude\plans\parsed-greeting-bengio.md`
 
-**Key files:**
-- `Exports/WoWSharpClient/Movement/MovementController.cs` — builds PhysicsInput, calls PathfindingClient
-- `Services/PathfindingService/PathfindingSocketServer.cs:190` — `HandlePhysics()` + `ToPhysicsInput()`
-- `Services/PathfindingService/Repository/Physics.cs:130` — `StepPhysicsV2()` P/Invoke + `SanitizeOutput()`
-- `Exports/Navigation/PhysicsBridge.h` — C++ struct layout (MUST match C# `PhysicsInput` in Repository/Physics.cs)
-- `Exports/Navigation/PhysicsEngine.cpp:1432` — `StepV2()` C++ entry point
+## Key Technical Details
 
-#### After 2.5a: Task 2.5b — Epsilon Calibration
+- **SET_FACING**: proto 63, 1 float param (radians). Formula: `atan2(targetY - srcY, targetX - srcX)`, add 2π if negative.
+- **Teleport**: Use `.go xyz` via chat (`BotTeleportAsync`), NOT SOAP `.teleport name` with coordinates. SOAP `.tele name <player> <location>` works for named locations only.
+- **Position write guard**: `NotifyTeleportIncoming()` must be called BEFORE `QueueUpdate`, not after.
+- **Ratchet dock**: 5yd wide (X: -991 to -986), surface Z≈5.7, southern tip Y≈-3836. Safe fishing: (-988.5, -3834.0, 5.7).
+- **Key Ports**: 3724 (auth), 8085 (world), 3306 (MySQL root/root), 7878 (SOAP), 5001 (PathfindingService), 5002 (IPC), 8088 (StateManager API)
 
-Key constants affecting precision (see TASKS.md 2.5b for full list):
-- `AIR_SWEEP_MARGIN = 0.5f` (PhysicsMovement.cpp:83)
-- `LANDING_TOLERANCE = 0.1f` (PhysicsMovement.cpp:84)
-- `contactOffset = 0.02f` (PhysicsTolerances.h)
-- `STEP_DOWN_HEIGHT = 4.0f` (PhysicsEngine.h:33)
+## Files Modified This Session
 
-For each: sweep values, replay all recordings, find minimum P99.
-
-#### After calibration target met: Continue with TASKS.md
-
-Make bots operate more intelligently (Phase 4.4) and ensure all actions work on both injected and headless clients (Phase 3 feature parity table in TASKS.md).
-
-### Known Gaps in the Stateless Physics System
-
-See TASKS.md section 2.5c for the full gap analysis table. Key gaps:
-1. Ground contact persistence — re-probing every frame causes slope jitter
-2. Velocity continuity — no validation between position delta and velocity
-3. Dead-reckoning divergence — two movement systems fighting when physics returns unchanged pos
-4. Transport frame lag — NearbyGameObjects position may lag 1+ frames
-
-### Test Commands
-
-```bash
-# Physics tests (58 pass, ~17 min due to map loading)
-dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj -v n
-
-# Build specific projects
-dotnet build Exports/WoWSharpClient/WoWSharpClient.csproj --no-restore
-dotnet build Services/PathfindingService/PathfindingService.csproj --no-restore
-
-# Kill project processes (NEVER kill 'dotnet' blanket!)
-powershell -Command "Stop-Process -Name WoWStateManager,BackgroundBotRunner,PathfindingService,WoW -Force -ErrorAction SilentlyContinue"
-```
-
-### Current Branch State
-- Branch: `cpp_physics_system`
-- Latest commit: `fe3526e` (merged main)
-- Remote: pushed and up to date
-- All builds succeed, all physics tests pass
+- `Exports/WoWSharpClient/Handlers/MovementHandler.cs` — NotifyTeleportIncoming() + ACK handler fix
+- `Exports/WoWSharpClient/WoWSharpObjectManager.cs` — Added NotifyTeleportIncoming() method
+- `Exports/BotCommLayer/Models/ProtoDef/communication.proto` — SET_FACING = 63
+- `Exports/BotCommLayer/Models/Communication.cs` — SetFacing enum value
+- `Exports/GameData.Core/Enums/CharacterAction.cs` — SetFacing enum value
+- `Exports/BotRunner/BotRunnerService.cs` — SetFacing mapping + behavior tree handler
+- `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs` — Dock position, facing, .go xyz teleport
+- `docs/TASKS.md`, `docs/ARCHIVE.md`, `docs/next-session-prompt.md` — Updated
 ```

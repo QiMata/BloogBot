@@ -71,4 +71,12 @@ public enum CharacterAction
     CreateCharacter,    // Create a new character.
     DeleteCharacter,    // Delete an existing character.
     EnterWorld,         // Enter the game world with a character.
+
+    LootCorpse,         // Loot a nearby corpse by GUID.
+    ReleaseCorpse,      // Release spirit (die → ghost form).
+    RetrieveCorpse,     // Navigate to corpse and resurrect.
+    SkinCorpse,         // Skin a lootable corpse by GUID.
+    GatherNode,         // Gather a resource node (herb/ore) by GUID.
+    SendChat,           // Send a chat message (used for GM commands).
+    SetFacing,          // Set the character's facing orientation (radians).
 }
