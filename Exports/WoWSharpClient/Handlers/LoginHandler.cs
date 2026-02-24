@@ -53,6 +53,52 @@ namespace WoWSharpClient.Handlers
                 Log.Error($"Unexpected error: {ex.Message}");
             }
         }
+        /// <summary>
+        /// Handles SMSG_TRANSFER_PENDING (0x3F) — server is initiating a cross-map transfer.
+        /// Format: uint32 mapId, [optional: uint32 transportId, uint32 transportMapId]
+        /// The actual worldport ACK is deferred to HandleNewWorld (SMSG_NEW_WORLD).
+        /// </summary>
+        public static void HandleTransferPending(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint mapId = reader.ReadUInt32();
+                Log.Information("[LoginHandler] SMSG_TRANSFER_PENDING: transferring to map {MapId} (ACK deferred to SMSG_NEW_WORLD)", mapId);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("[LoginHandler] Error handling SMSG_TRANSFER_PENDING: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Handles SMSG_NEW_WORLD (0x3E) — server has placed us in a new map after a far teleport.
+        /// Format: uint32 mapId, float x, float y, float z, float orientation
+        /// We must respond with MSG_MOVE_WORLDPORT_ACK to finalize the transfer.
+        /// </summary>
+        public static void HandleNewWorld(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint mapId = reader.ReadUInt32();
+                float x = reader.ReadSingle();
+                float y = reader.ReadSingle();
+                float z = reader.ReadSingle();
+                float orientation = reader.ReadSingle();
+                Log.Information("[LoginHandler] SMSG_NEW_WORLD: map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) facing={O:F2}",
+                    mapId, x, y, z, orientation);
+
+                // NOW send the worldport ACK — this is the correct time per 1.12.1 protocol
+                WoWSharpObjectManager.Instance.SendWorldportAck();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("[LoginHandler] Error handling SMSG_NEW_WORLD: {Error}", ex.Message);
+            }
+        }
+
         public static void HandleSetTimeSpeed(Opcode opcode, byte[] data)
         {
             using var reader = new BinaryReader(new MemoryStream(data));

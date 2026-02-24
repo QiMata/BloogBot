@@ -203,6 +203,11 @@ namespace ForegroundBotRunner.Statics
         public event EventHandler<OnXpGainArgs> OnXpGain;
 
         /// <summary>
+        ///     Occurs when copper is looted from a corpse
+        /// </summary>
+        public event EventHandler<OnLootMoneyArgs> OnLootMoney;
+
+        /// <summary>
         ///     Occurs when a aura is removed/added to an unit
         /// </summary>
         public event EventHandler<AuraChangedArgs> AuraChanged;

@@ -16,10 +16,7 @@ namespace GameData.Core.Models
 
         public string Tooltip { get; } = tooltip;
 
-        public Spell Clone()
-        {
-            throw new NotImplementedException();
-        }
+        public Spell Clone() => new(Id, Cost, Name, Description, Tooltip);
     }
     public class SpellEffect(string icon, uint stackCount, EffectType type) : ISpellEffect
     {

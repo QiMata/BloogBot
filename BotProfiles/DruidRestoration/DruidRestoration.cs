@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using DruidRestoration.Tasks;
 
 using BotProfiles.Common;
 namespace DruidRestoration
 {
-    [Export(typeof(IBot))]
-    internal class DruidRestoration : BotBase
+    public class DruidRestoration : BotBase
     {
         public override string Name => "Restoration Druid";
 

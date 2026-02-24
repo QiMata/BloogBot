@@ -1,5 +1,9 @@
+using BotRunner.Constants;
 using BotRunner.Interfaces;
+using BotRunner.Movement;
 using GameData.Core.Interfaces;
+using GameData.Core.Models;
+using Serilog;
 using System;
 using System.Collections.Generic;
 
@@ -28,9 +32,58 @@ public abstract class BotTask(IBotContext botContext)
     protected IDependencyContainer Container => BotContext.Container;
 
     /// <summary>
+    /// Per-bot behavior configuration.
+    /// </summary>
+    protected BotBehaviorConfig Config => BotContext.Config;
+
+    /// <summary>
+    /// Event handler for game events (combat, parry, slam, etc.).
+    /// </summary>
+    protected IWoWEventHandler EventHandler => BotContext.EventHandler;
+
+    /// <summary>
     /// Utility for tracking wait times.
     /// </summary>
     protected static WaitTracker Wait { get; } = new();
+
+    private NavigationPath? _navPath;
+
+    /// <summary>
+    /// Move toward a destination using cached pathfinding. Only re-queries the pathfinding
+    /// service when the destination changes significantly or a cooldown expires.
+    /// Call ClearNavigation() when switching targets.
+    /// </summary>
+    protected void NavigateToward(Position destination)
+    {
+        _navPath ??= new NavigationPath(Container.PathfindingClient);
+        var player = ObjectManager.Player;
+        if (player?.Position == null)
+            return;
+
+        var waypoint = _navPath.GetNextWaypoint(player.Position, destination, player.MapId);
+        if (waypoint != null)
+            ObjectManager.MoveToward(waypoint);
+    }
+
+    /// <summary>
+    /// Clear the cached navigation path. Call when the target dies or changes
+    /// so the next NavigateToward() calculates a fresh path.
+    /// </summary>
+    protected void ClearNavigation() => _navPath?.Clear();
+
+    /// <summary>
+    /// Pop the current task with a reason code for live diagnostics.
+    /// </summary>
+    protected void PopTask(string reason)
+    {
+        if (BotTasks.Count == 0)
+            return;
+
+        var top = BotTasks.Peek();
+        BotTasks.Pop();
+        Log.Information("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
+            top.GetType().Name, reason, BotTasks.Count);
+    }
 }
 
 /// <summary>

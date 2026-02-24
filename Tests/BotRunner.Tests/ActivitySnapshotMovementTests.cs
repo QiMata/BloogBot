@@ -239,5 +239,135 @@ namespace BotRunner.Tests
 
             Assert.Equal(expectedValid, isValid);
         }
+
+        [Fact]
+        public void InventoryMap_ShouldRoundTripThroughProtobuf()
+        {
+            // Arrange: snapshot with Player + Inventory map entries
+            var snapshot = new WoWActivitySnapshot
+            {
+                AccountName = "TESTACCOUNT",
+                CharacterName = "TestChar",
+                ScreenState = "InWorld",
+                Player = new WoWPlayer()
+            };
+
+            // Equipment slot 15 (MAINHAND) with a 64-bit GUID
+            snapshot.Player.Inventory[15] = 0x4000000000000239;
+            // Equipment slot 16 (OFFHAND) with another GUID
+            snapshot.Player.Inventory[16] = 0x400000000000023A;
+
+            _output.WriteLine($"Before serialization: Inventory.Count = {snapshot.Player.Inventory.Count}");
+            foreach (var kvp in snapshot.Player.Inventory)
+                _output.WriteLine($"  [{kvp.Key}] = 0x{kvp.Value:X}");
+
+            // Act: Serialize and deserialize (same path as ProtobufSocketServer)
+            var bytes = snapshot.ToByteArray();
+            var deserialized = WoWActivitySnapshot.Parser.ParseFrom(bytes);
+
+            _output.WriteLine($"Serialized size: {bytes.Length} bytes");
+            _output.WriteLine($"After deserialization: Inventory.Count = {deserialized.Player?.Inventory.Count}");
+            if (deserialized.Player != null)
+            {
+                foreach (var kvp in deserialized.Player.Inventory)
+                    _output.WriteLine($"  [{kvp.Key}] = 0x{kvp.Value:X}");
+            }
+
+            // Assert
+            Assert.NotNull(deserialized.Player);
+            Assert.Equal(2, deserialized.Player.Inventory.Count);
+            Assert.Equal(0x4000000000000239UL, deserialized.Player.Inventory[15]);
+            Assert.Equal(0x400000000000023AUL, deserialized.Player.Inventory[16]);
+        }
+
+        [Fact]
+        public void InventoryMap_ShouldSurviveStateChangeResponseWrapping()
+        {
+            // This tests the EXACT path: snapshot → StateChangeResponse → bytes → deserialize
+            // This is what happens between StateManager (port 8088) and the test client.
+
+            // Arrange: snapshot with inventory data
+            var snapshot = new WoWActivitySnapshot
+            {
+                AccountName = "ORWR1",
+                CharacterName = "Dralrahgra",
+                ScreenState = "InWorld",
+                Player = new WoWPlayer()
+            };
+            snapshot.Player.Inventory[15] = 0x4000000000000239;
+
+            // Also add some bag contents
+            snapshot.Player.BagContents[0] = 36;  // Worn Mace in slot 0
+
+            // Wrap in StateChangeResponse (same as HandleSnapshotQuery does)
+            var response = new StateChangeResponse();
+            response.Snapshots.Add(snapshot);
+            response.Response = ResponseResult.Success;
+
+            _output.WriteLine($"Before serialization:");
+            _output.WriteLine($"  Response.Snapshots.Count = {response.Snapshots.Count}");
+            _output.WriteLine($"  Snapshots[0].Player.Inventory.Count = {response.Snapshots[0].Player.Inventory.Count}");
+            _output.WriteLine($"  Snapshots[0].Player.BagContents.Count = {response.Snapshots[0].Player.BagContents.Count}");
+
+            // Act: Serialize StateChangeResponse → bytes → deserialize
+            var bytes = response.ToByteArray();
+            var deserialized = StateChangeResponse.Parser.ParseFrom(bytes);
+
+            _output.WriteLine($"Serialized size: {bytes.Length} bytes");
+            _output.WriteLine($"After deserialization:");
+            _output.WriteLine($"  Response.Snapshots.Count = {deserialized.Snapshots.Count}");
+            if (deserialized.Snapshots.Count > 0 && deserialized.Snapshots[0].Player != null)
+            {
+                _output.WriteLine($"  Snapshots[0].Player.Inventory.Count = {deserialized.Snapshots[0].Player.Inventory.Count}");
+                _output.WriteLine($"  Snapshots[0].Player.BagContents.Count = {deserialized.Snapshots[0].Player.BagContents.Count}");
+                foreach (var kvp in deserialized.Snapshots[0].Player.Inventory)
+                    _output.WriteLine($"    Inventory[{kvp.Key}] = 0x{kvp.Value:X}");
+            }
+
+            // Assert
+            Assert.Equal(1, deserialized.Snapshots.Count);
+            Assert.NotNull(deserialized.Snapshots[0].Player);
+            Assert.Equal(1, deserialized.Snapshots[0].Player.Inventory.Count);
+            Assert.Equal(0x4000000000000239UL, deserialized.Snapshots[0].Player.Inventory[15]);
+            Assert.Equal(1, deserialized.Snapshots[0].Player.BagContents.Count);
+            Assert.Equal(36u, deserialized.Snapshots[0].Player.BagContents[0]);
+        }
+
+        [Fact]
+        public void InventoryMap_ShouldSurviveMergeFromDeserialization()
+        {
+            // Test using MergeFrom (how ProtobufSocketClient deserializes) instead of ParseFrom
+
+            var snapshot = new WoWActivitySnapshot
+            {
+                AccountName = "TESTACCOUNT",
+                ScreenState = "InWorld",
+                Player = new WoWPlayer()
+            };
+            snapshot.Player.Inventory[15] = 0x4000000000000239;
+
+            var response = new StateChangeResponse();
+            response.Snapshots.Add(snapshot);
+
+            // Serialize
+            var bytes = response.ToByteArray();
+
+            // Deserialize using MergeFrom (same as test client does)
+            var deserialized = new StateChangeResponse();
+            deserialized.MergeFrom(bytes);
+
+            _output.WriteLine($"MergeFrom result: Snapshots.Count = {deserialized.Snapshots.Count}");
+            if (deserialized.Snapshots.Count > 0 && deserialized.Snapshots[0].Player != null)
+            {
+                _output.WriteLine($"  Inventory.Count = {deserialized.Snapshots[0].Player.Inventory.Count}");
+                foreach (var kvp in deserialized.Snapshots[0].Player.Inventory)
+                    _output.WriteLine($"    [{kvp.Key}] = 0x{kvp.Value:X}");
+            }
+
+            Assert.Equal(1, deserialized.Snapshots.Count);
+            Assert.NotNull(deserialized.Snapshots[0].Player);
+            Assert.Equal(1, deserialized.Snapshots[0].Player.Inventory.Count);
+            Assert.Equal(0x4000000000000239UL, deserialized.Snapshots[0].Player.Inventory[15]);
+        }
     }
 }

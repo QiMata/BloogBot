@@ -64,6 +64,9 @@ namespace WoWSharpClient.Handlers
                 string text = ReaderUtils.ReadString(reader, textLength);
                 playerChatTag = (PlayerChatTag)reader.ReadByte();
 
+                Log.Information("[ChatHandler] type={ChatType} lang={Language} sender=0x{Sender:X} text=\"{Text}\"",
+                    chatType, language, senderGuid, text);
+
                 WoWSharpEventEmitter.Instance.FireOnChatMessage(
                     chatType,
                     language,

@@ -1,4 +1,5 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -8,7 +9,7 @@ namespace DruidBalance.Tasks
     /// PvP combat rotation for a balance druid. Maintains Moonkin Form and
     /// uses typical balance damage spells.
     /// </summary>
-    internal class PvPRotationTask : CombatRotationTask, IBotTask
+    public class PvPRotationTask : CombatRotationTask, IBotTask
     {
         private const string Starfire = "Starfire";
         private const string EclipseSolar = "Eclipse (Solar)";

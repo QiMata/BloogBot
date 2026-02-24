@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using RogueSubtlety.Tasks;
 
 using BotProfiles.Common;
 namespace RogueSubtlety
 {
-    [Export(typeof(IBot))]
-    internal class RogueSubtlety : BotBase
+    public class RogueSubtlety : BotBase
     {
         public override string Name => "Subtlety Rogue";
 

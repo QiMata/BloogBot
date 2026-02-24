@@ -1521,7 +1521,8 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	MovementState st{};
 	st.x = simX; st.y = simY; st.z = simZ;
 	st.orientation = simO; st.pitch = input.pitch;
-	st.vx = input.vx; st.vy = input.vy; st.vz = input.vz; st.fallTime = input.fallTime;
+	st.vx = input.vx; st.vy = input.vy; st.vz = input.vz;
+	st.fallTime = input.fallTime / 1000.0f;  // Convert ms (from client) → seconds for internal physics
 	st.groundNormal = { 0,0,1 };
 	const bool inputSwimmingFlag = (input.moveFlags & MOVEFLAG_SWIMMING) != 0;
 	const bool inputAirborneFlag = (input.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) != 0;
@@ -2037,7 +2038,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	}
 
 	out.groundZ = st.z;
-	out.fallTime = st.fallTime;
+	out.fallTime = st.fallTime * 1000.0f;  // Convert seconds (internal) → ms for output
 	out.liquidZ = finalLiq.level;
 	out.liquidType = finalLiq.type;
 	out.groundNx = st.groundNormal.x;

@@ -107,7 +107,7 @@ namespace WoWStateManager
             var psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = botExePath,
+                Arguments = $"\"{botExePath}\"",
                 WorkingDirectory = AppContext.BaseDirectory,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -294,33 +294,103 @@ namespace WoWStateManager
 
         private void OnWorldStateUpdate(AsyncRequest dataMessage)
         {
-            _logger.LogInformation($"Received world state update message with ID {dataMessage.Id}.");
+            _logger.LogInformation($"Received world state update message with ID {dataMessage.Id}, Case={dataMessage.ParameterCase}.");
 
-            StateChangeRequest stateChange = dataMessage.StateChange;
+            var response = new StateChangeResponse();
 
-            if (stateChange != null)
+            switch (dataMessage.ParameterCase)
             {
-                string? parameterDetails = null;
-                if (stateChange.RequestParameter != null)
-                {
-                    RequestParameter param = stateChange.RequestParameter;
-                    parameterDetails = param.ParameterCase switch
-                    {
-                        RequestParameter.ParameterOneofCase.FloatParam => param.FloatParam.ToString(),
-                        RequestParameter.ParameterOneofCase.IntParam => param.IntParam.ToString(),
-                        RequestParameter.ParameterOneofCase.LongParam => param.LongParam.ToString(),
-                        RequestParameter.ParameterOneofCase.StringParam => param.StringParam,
-                        _ => null
-                    };
-                }
+                case AsyncRequest.ParameterOneofCase.StateChange:
+                    HandleStateChange(dataMessage.StateChange);
+                    break;
 
-                _logger.LogInformation(
-                    $"State change request received: ChangeType={stateChange.ChangeType}, Parameter={parameterDetails ?? "<none>"}");
+                case AsyncRequest.ParameterOneofCase.SnapshotQuery:
+                    HandleSnapshotQuery(dataMessage.SnapshotQuery, response);
+                    break;
+
+                case AsyncRequest.ParameterOneofCase.ActionForward:
+                    HandleActionForward(dataMessage.ActionForward, response);
+                    break;
+
+                default:
+                    _logger.LogWarning($"Unknown request type: {dataMessage.ParameterCase}");
+                    break;
             }
 
-            StateChangeResponse stateChangeResponse = new();
-            _worldStateManagerSocketListener.SendMessageToClient(dataMessage.Id, stateChangeResponse);
-            _logger.LogInformation($"StateChangeResponse dispatched to {dataMessage.Id}.");
+            _worldStateManagerSocketListener.SendMessageToClient(dataMessage.Id, response);
+            _logger.LogDebug($"StateChangeResponse dispatched to {dataMessage.Id}.");
+        }
+
+        private void HandleStateChange(StateChangeRequest stateChange)
+        {
+            string? parameterDetails = null;
+            if (stateChange.RequestParameter != null)
+            {
+                RequestParameter param = stateChange.RequestParameter;
+                parameterDetails = param.ParameterCase switch
+                {
+                    RequestParameter.ParameterOneofCase.FloatParam => param.FloatParam.ToString(),
+                    RequestParameter.ParameterOneofCase.IntParam => param.IntParam.ToString(),
+                    RequestParameter.ParameterOneofCase.LongParam => param.LongParam.ToString(),
+                    RequestParameter.ParameterOneofCase.StringParam => param.StringParam,
+                    _ => null
+                };
+            }
+
+            _logger.LogInformation(
+                $"State change request received: ChangeType={stateChange.ChangeType}, Parameter={parameterDetails ?? "<none>"}");
+        }
+
+        private void HandleSnapshotQuery(SnapshotQueryRequest query, StateChangeResponse response)
+        {
+            var snapshots = _activityMemberSocketListener.CurrentActivityMemberList;
+
+            if (!string.IsNullOrEmpty(query.AccountName))
+            {
+                // Filtered: return snapshot for specific account
+                if (snapshots.TryGetValue(query.AccountName, out var snapshot))
+                {
+                    response.Snapshots.Add(snapshot);
+                    var invCount = snapshot.Player?.Inventory?.Count ?? -1;
+                    var bagCount = snapshot.Player?.BagContents?.Count ?? -1;
+                    _logger.LogInformation($"Snapshot query: returning snapshot for '{query.AccountName}' (Inventory={invCount}, BagContents={bagCount})");
+                }
+                else
+                {
+                    _logger.LogWarning($"Snapshot query: account '{query.AccountName}' not found");
+                    response.Response = ResponseResult.Failure;
+                }
+            }
+            else
+            {
+                // Unfiltered: return all snapshots
+                foreach (var kvp in snapshots)
+                {
+                    response.Snapshots.Add(kvp.Value);
+                    var invCount = kvp.Value.Player?.Inventory?.Count ?? -1;
+                    var errCount = kvp.Value.RecentErrors?.Count ?? -1;
+                    var chatCount = kvp.Value.RecentChatMessages?.Count ?? -1;
+                    _logger.LogInformation($"Snapshot query: '{kvp.Key}' Inventory={invCount}, RecentErrors={errCount}, RecentChat={chatCount}");
+                }
+                _logger.LogInformation($"Snapshot query: returning {response.Snapshots.Count} snapshots");
+            }
+
+            if (response.Response != ResponseResult.Failure)
+                response.Response = ResponseResult.Success;
+        }
+
+        private void HandleActionForward(ActionForwardRequest forward, StateChangeResponse response)
+        {
+            if (string.IsNullOrEmpty(forward.AccountName) || forward.Action == null)
+            {
+                _logger.LogWarning("Action forward: missing account name or action");
+                response.Response = ResponseResult.Failure;
+                return;
+            }
+
+            _activityMemberSocketListener.EnqueueAction(forward.AccountName, forward.Action);
+            response.Response = ResponseResult.Success;
+            _logger.LogInformation($"Action forward: queued {forward.Action.ActionType} for '{forward.AccountName}'");
         }
 
         /// <summary>
@@ -450,8 +520,13 @@ namespace WoWStateManager
                     _logger.LogInformation($"Creating new account: {accountName}");
                     await _mangosSOAPClient.CreateAccountAsync(accountName);
                     await Task.Delay(100);
-                    await _mangosSOAPClient.SetGMLevelAsync(accountName, 3);
                 }
+
+                // Always ensure GM level 6 (console) via direct DB update (SOAP writes to account_access
+                // but brotalnia's build reads from account.gmlevel at login)
+                _logger.LogInformation($"Ensuring GM level 6 for account: {accountName}");
+                var gmResult = ReamldRepository.SetGMLevel(accountName, 6);
+                _logger.LogInformation($"SetGMLevel result for {accountName}: {gmResult}");
 
                 // Start the appropriate bot worker based on RunnerType
                 switch (characterSettings.RunnerType)
@@ -1129,6 +1204,36 @@ namespace WoWStateManager
             }
         }
 
+        /// <summary>
+        /// Kill a managed process by PID. Used during shutdown to clean up
+        /// WoW.exe (foreground bots) and dotnet BackgroundBotRunner processes.
+        /// Only kills specific PIDs that StateManager launched — never blanket-kills.
+        /// </summary>
+        private void KillManagedProcess(string accountName, uint? processId)
+        {
+            if (!processId.HasValue) return;
+
+            try
+            {
+                var process = Process.GetProcessById((int)processId.Value);
+                if (!process.HasExited)
+                {
+                    _logger.LogInformation($"Killing managed process for {accountName} (PID: {processId.Value})");
+                    process.Kill();
+                    process.WaitForExit(5000);
+                    _logger.LogInformation($"Process {processId.Value} for {accountName} terminated");
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Process already exited
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, $"Failed to kill process {processId.Value} for {accountName}");
+            }
+        }
+
         public void StopManagedService(string accountName)
         {
             (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId) serviceTuple;
@@ -1153,6 +1258,9 @@ namespace WoWStateManager
                 {
                     _ = System.Threading.Tasks.Task.Run(async () => await Service.StopAsync(CancellationToken.None));
                 }
+
+                // Kill the managed process (WoW.exe for FG, dotnet BackgroundBotRunner for BG)
+                KillManagedProcess(accountName, ProcessId);
 
                 _logger.LogInformation($"Stopped managed service for account {accountName}");
             }
@@ -1192,6 +1300,9 @@ namespace WoWStateManager
                     {
                         await Service.StopAsync(CancellationToken.None);
                     }
+
+                    // Kill the managed process (WoW.exe for FG, dotnet BackgroundBotRunner for BG)
+                    KillManagedProcess(accountName, ProcessId);
 
                     // Wait for monitoring task to complete (with timeout)
                     try
@@ -1291,12 +1402,24 @@ namespace WoWStateManager
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error in StateManagerWorker main loop");
-                    await Task.Delay(1000, stoppingToken); // Brief delay before retrying
+                    try { await Task.Delay(1000, stoppingToken); }
+                    catch (OperationCanceledException) { break; }
                 }
             }
 
-            await StopAllManagedServices();
             _logger.LogInformation($"StateManagerServiceWorker has stopped.");
+        }
+
+        /// <summary>
+        /// Guaranteed cleanup on host shutdown — even if ExecuteAsync throws.
+        /// The .NET host calls StopAsync on all IHostedService instances during shutdown.
+        /// </summary>
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("StateManagerWorker.StopAsync — cleaning up managed processes...");
+            await StopAllManagedServices();
+            await base.StopAsync(cancellationToken);
+            _logger.LogInformation("StateManagerWorker.StopAsync — complete.");
         }
     }
 

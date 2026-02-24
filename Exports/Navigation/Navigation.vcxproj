@@ -259,6 +259,7 @@
     <ClInclude Include="PhysicsTolerances.h" />
     <ClInclude Include="QueryHit.h" />
     <ClInclude Include="Ray.h" />
+    <ClInclude Include="SceneCache.h" />
     <ClInclude Include="SceneQuery.h" />
     <ClInclude Include="StaticMapTree.h" />
     <ClInclude Include="Vector3.h" />
@@ -307,6 +308,7 @@
     <ClCompile Include="PhysicsMovement.cpp" />
     <ClCompile Include="PhysicsTestExports.cpp" />
     <ClCompile Include="Ray.cpp" />
+    <ClCompile Include="SceneCache.cpp" />
     <ClCompile Include="SceneQuery.cpp" />
     <ClCompile Include="StaticMapTree.cpp" />
     <ClCompile Include="Vector3.cpp" />

@@ -1,16 +1,16 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarriorFury.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         private bool slamReady;
         private int slamReadyStartTime;
-        private bool backpedaling;
-        private int backpedalStartTime;
-        private int backpedalDuration;
 
         internal PvERotationTask(IBotContext botContext) : base(botContext)
         {
@@ -24,15 +24,7 @@ namespace WarriorFury.Tasks
 
         public void Update()
         {
-            if (Environment.TickCount - backpedalStartTime > backpedalDuration)
-            {
-                ObjectManager.Player.StopMovement(ControlBits.Back);
-                // ObjectManager.Player.StopMovement(ControlBits.StrafeLeft);
-                // ObjectManager.Player.StopMovement(ControlBits.Right);
-                backpedaling = false;
-            }
-
-            if (backpedaling)
+            if (IsKiting)
                 return;
 
             if (Environment.TickCount - slamReadyStartTime > 250)
@@ -46,16 +38,8 @@ namespace WarriorFury.Tasks
             //    return;
             //}
 
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(5))
                 return;
@@ -97,25 +81,11 @@ namespace WarriorFury.Tasks
             }
         }
 
-        private void WalkBack(int milleseconds)
-        {
-            backpedaling = true;
-            backpedalStartTime = Environment.TickCount;
-            backpedalDuration = milleseconds;
-            ObjectManager.Player.StartMovement(ControlBits.Back);
-            // ObjectManager.Player.StartMovement(ControlBits.StrafeLeft);
-            // ObjectManager.Player.StartMovement(ControlBits.Right);
-        }
+        private void WalkBack(int milliseconds) => StartKite(milliseconds);
 
         public override void PerformCombatRotation()
         {
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                if (ObjectManager.Aggressors.Any())
-                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-                else
-                    return;
-            }
+            if (!EnsureTarget()) return;
 
             ExecuteRotation();
         }

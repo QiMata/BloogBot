@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using MageArcane.Tasks;
 
 using BotProfiles.Common;
 namespace MageArcane
 {
-    [Export(typeof(IBot))]
-    internal class MageArcane : BotBase
+    public class MageArcane : BotBase
     {
         public override string Name => "Arcane Mage";
 

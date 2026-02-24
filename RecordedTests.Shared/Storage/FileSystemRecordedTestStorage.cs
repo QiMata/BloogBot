@@ -61,7 +61,7 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
             }
 
             // Write metadata
-            var metadataPath = Path.Combine(testDirectory, "metadata.json");
+            var metadataPath = Path.Combine(testDirectory, "run-metadata.json");
             var metadata = new Dictionary<string, object?>
             {
                 ["testName"] = context.TestName,
@@ -71,6 +71,14 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
                 ["startedAt"] = context.StartedAt,
                 ["completedAt"] = context.CompletedAt
             };
+
+            if (context.Metadata is not null)
+            {
+                foreach (var (key, value) in context.Metadata)
+                {
+                    metadata[$"metadata.{key}"] = value;
+                }
+            }
 
             var json = System.Text.Json.JsonSerializer.Serialize(metadata, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(metadataPath, json, cancellationToken);

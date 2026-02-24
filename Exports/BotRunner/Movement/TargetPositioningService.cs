@@ -9,11 +9,19 @@ namespace BotRunner.Movement
         bool EnsureInCombatRange(IWoWUnit target);
     }
 
-    public class TargetPositioningService(IObjectManager objectManager, PathfindingClient pathfindingClient, float engagementRange = 25f) : ITargetPositioningService
+    public class TargetPositioningService : ITargetPositioningService
     {
-        private readonly IObjectManager _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-        private readonly PathfindingClient _pathfindingClient = pathfindingClient ?? throw new ArgumentNullException(nameof(pathfindingClient));
-        private readonly float _engagementRange = engagementRange;
+        private readonly IObjectManager _objectManager;
+        private readonly float _engagementRange;
+        private readonly NavigationPath _navPath;
+
+        public TargetPositioningService(IObjectManager objectManager, PathfindingClient pathfindingClient, float engagementRange = 25f)
+        {
+            _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
+            ArgumentNullException.ThrowIfNull(pathfindingClient);
+            _engagementRange = engagementRange;
+            _navPath = new NavigationPath(pathfindingClient);
+        }
 
         public bool EnsureInCombatRange(IWoWUnit target)
         {
@@ -34,16 +42,14 @@ namespace BotRunner.Movement
                 return false;
             }
 
-            var pathDistance = _pathfindingClient.GetPathingDistance(player.MapId, playerPosition, targetPosition);
+            float directDistance = playerPosition.DistanceTo(targetPosition);
 
-            if (pathDistance > _engagementRange)
+            if (directDistance > _engagementRange)
             {
-                var positions = _pathfindingClient.GetPath(player.MapId, playerPosition, targetPosition, true);
-                var nextWaypoint = BotRunnerService.ResolveNextWaypoint(positions);
-
-                if (nextWaypoint != null)
+                var waypoint = _navPath.GetNextWaypoint(playerPosition, targetPosition, player.MapId);
+                if (waypoint != null)
                 {
-                    _objectManager.MoveToward(nextWaypoint);
+                    _objectManager.MoveToward(waypoint);
                 }
 
                 return false;

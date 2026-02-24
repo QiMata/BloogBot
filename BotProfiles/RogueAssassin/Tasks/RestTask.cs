@@ -1,67 +1,28 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using GameData.Core.Interfaces;
+using GameData.Core.Enums;
 using static BotRunner.Constants.Spellbook;
 
 namespace RogueAssassin.Tasks
 {
-    internal class RestTask : BotTask, IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-        private const int stackCount = 5;
-        private readonly IWoWItem foodItem;
-
-        public RestTask(IBotContext botContext) : base(botContext)
-        {
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
-            {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.repairitems')");
-                }
-            }
-        }
-
         public void Update()
         {
-            if (ObjectManager.Player.IsChanneling)
-                return;
-
             if (ObjectManager.Player.HealthPercent >= 95 ||
-                ObjectManager.Player.HealthPercent >= 80 && !ObjectManager.Player.IsEating ||                                                                
+                (ObjectManager.Player.HealthPercent >= 80 && !ObjectManager.Player.IsEating) ||
                 ObjectManager.Player.IsInCombat ||
                 ObjectManager.Units.Any(u => u.TargetGuid == ObjectManager.Player.Guid))
             {
                 Wait.RemoveAll();
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
-
-                uint foodCount = foodItem == null ? 0 : ObjectManager.GetItemCount(foodItem.ItemId);
-
-                if (!InCombat && foodCount == 0)
-                {
-                    uint foodToBuy = 24 - (foodCount / stackCount);
-                    //var itemsToBuy = new Dictionary<string, int>
-                    //{
-                    //    { container.BotSettings.Food, foodToBuy }
-                    //};
-
-                    //var currentHotspot = container.GetCurrentHotspot();
-                    //if (currentHotspot.TravelPath != null)
-                    //{
-                    //    BotTasks.Push(new TravelState(botTasks, container, currentHotspot.TravelPath.Waypoints, 0));
-                    //    BotTasks.Push(new MoveToPositionState(botTasks, container, currentHotspot.TravelPath.Waypoints[0]));
-                    //}
-
-                    //BotTasks.Push(new BuyItemsState(botTasks, currentHotspot.Innkeeper.Name, itemsToBuy));
-                    //BotTasks.Push(new SellItemsState(botTasks, container, currentHotspot.Innkeeper.Name));
-                    //BotTasks.Push(new MoveToPositionState(botTasks, container, currentHotspot.Innkeeper.Position));
-                    //container.CheckForTravelPath(botTasks, true, false);
-                }
-
                 return;
             }
+
+            if (ObjectManager.Player.IsChanneling)
+                return;
 
             if (ObjectManager.IsSpellReady(Cannibalize) && ObjectManager.Player.TastyCorpsesNearby)
             {
@@ -69,10 +30,27 @@ namespace RogueAssassin.Tasks
                 return;
             }
 
-            if (foodItem != null && !ObjectManager.Player.IsEating && Wait.For("EatDelay", 500, true))
-                foodItem.Use();
-        }
+            // Use bandage first if health is very low (faster than food)
+            if (ObjectManager.Player.HealthPercent < 60
+                && !ObjectManager.Player.IsEating
+                && !ObjectManager.Player.HasDebuff("Recently Bandaged")
+                && Wait.For("UseBandageDelay", 3000, true))
+            {
+                ObjectManager.StopAllMovement();
+                var bandage = ConsumableData.FindBestBandage(ObjectManager);
+                if (bandage != null)
+                {
+                    bandage.Use();
+                    return;
+                }
+            }
 
-        private bool InCombat => ObjectManager.Aggressors.Any();
+            if (!ObjectManager.Player.IsEating && Wait.For("EatFoodDelay", 3000, true))
+            {
+                ObjectManager.StopAllMovement();
+                var foodItem = ConsumableData.FindBestFood(ObjectManager);
+                foodItem?.Use();
+            }
+        }
     }
 }

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RecordedTests.Shared.Abstractions;
 using RecordedTests.Shared.Abstractions.I;
+using RecordedTests.Shared.Storage;
 using RecordedTests.Shared.Tests.TestInfrastructure;
 
 namespace RecordedTests.Shared.Tests;

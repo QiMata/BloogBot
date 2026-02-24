@@ -1,4 +1,5 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -7,7 +8,7 @@ namespace DruidRestoration.Tasks
     /// <summary>
     /// Basic PvP rotation for a restoration druid. Uses simple heals and damage spells.
     /// </summary>
-    internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
+    public class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
         public void Update()
         {

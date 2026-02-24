@@ -1,3 +1,4 @@
+using BotRunner.Constants;
 using GameData.Core.Interfaces;
 using System.Collections.Generic;
 
@@ -22,4 +23,14 @@ public interface IBotContext
     /// Container providing pathfinding and other services.
     /// </summary>
     IDependencyContainer Container { get; }
+
+    /// <summary>
+    /// Per-bot behavior configuration (rest thresholds, pull range, vendor triggers, etc.).
+    /// </summary>
+    BotBehaviorConfig Config { get; }
+
+    /// <summary>
+    /// Event handler for game events (combat, spells, UI).
+    /// </summary>
+    IWoWEventHandler EventHandler { get; }
 }

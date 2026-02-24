@@ -1,9 +1,11 @@
 using BotRunner.Interfaces;
+using static BotRunner.Constants.Spellbook;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 
 namespace PriestHoly.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
@@ -24,12 +26,20 @@ namespace PriestHoly.Tasks
             TryCastSpell(InnerFire, 0, int.MaxValue,
                          !ObjectManager.Player.HasBuff(InnerFire));
 
+            // Group healing: heal party members before DPS
+            if (IsInGroup)
+            {
+                if (TryCastHeal(Renew, 80, 40)) return;
+                if (TryCastHeal(Heal, 60, 40)) return;
+            }
+            else if (ObjectManager.Player.HealthPercent < 50)
+            {
+                TryCastSpell(Renew, 0, int.MaxValue, castOnSelf: true);
+            }
+
             TryCastSpell(HolyFire, 0, 29,
                          !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(HolyFire));
             TryCastSpell(Smite, 0, 29);
-
-            if (ObjectManager.Player.HealthPercent < 50)
-                TryCastSpell(Renew, 0, int.MaxValue, castOnSelf: true);
         }
     }
 }

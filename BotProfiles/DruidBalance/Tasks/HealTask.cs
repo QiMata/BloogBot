@@ -1,10 +1,11 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidBalance.Tasks
 {
-    internal class HealTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class HealTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
 
         public void Update()

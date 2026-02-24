@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using MageFrost.Tasks;
 
 using BotProfiles.Common;
 namespace MageFrost
 {
-    [Export(typeof(IBot))]
-    internal class MageFrost : BotBase
+    public class MageFrost : BotBase
     {
         public override string Name => "Frost Mage";
 

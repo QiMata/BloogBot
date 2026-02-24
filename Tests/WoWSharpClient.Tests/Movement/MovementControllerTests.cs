@@ -420,9 +420,10 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void DeadReckoning_AppliesWhenPhysicsReturnsUnchangedPosition()
+        public void PhysicsEchoesPosition_PlayerDoesNotMove()
         {
-            // Physics echoes back position unchanged (e.g., map not loaded)
+            // Physics echoes back position unchanged (e.g., map not loaded).
+            // Dead reckoning was removed — physics engine handles all movement.
             _player.Position = new Position(100f, 200f, 50f);
             _player.Facing = 0f; // Facing east (cos=1, sin=0)
             _player.RunSpeed = 7.0f;
@@ -430,9 +431,8 @@ namespace WoWSharpClient.Tests.Movement
 
             _controller.Update(0.1f, 1000);
 
-            // Dead reckoning should have moved forward by ~0.7 units (7.0 * 0.1)
-            Assert.True(_player.Position.X > 100f,
-                $"Expected X > 100 after dead reckoning, got {_player.Position.X}");
+            // Position should NOT change when physics returns same coords
+            Assert.Equal(100f, _player.Position.X);
         }
 
         // ======== SPECIAL PACKETS ========
@@ -608,18 +608,18 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void DeadReckoning_ZStaysConstant()
+        public void PhysicsEchoesPosition_ZStaysConstant()
         {
-            // Default mock returns position unchanged → triggers dead reckoning
-            // Dead reckoning should NOT change Z
+            // Default mock returns position unchanged — no dead reckoning fallback.
+            // Position should remain completely unchanged.
             _player.Position = new Position(100f, 200f, 50f);
             _player.Facing = 0f;
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
 
             _controller.Update(0.1f, 1000);
 
-            Assert.True(_player.Position.X > 100f, "X should move via dead reckoning");
-            Assert.Equal(50f, _player.Position.Z, 2); // Z must NOT change
+            Assert.Equal(100f, _player.Position.X);
+            Assert.Equal(50f, _player.Position.Z, 2);
         }
 
         [Fact]

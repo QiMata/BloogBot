@@ -6,6 +6,8 @@
 #include <fstream>
 #include <filesystem>
 #include <stdio.h>
+#define NOMINMAX
+#include <windows.h>
 
 #include "DetourCommon.h"
 using namespace std;
@@ -162,32 +164,48 @@ void Navigation::InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned
 {
 	if (!manager->zoneMap.contains(mapId))
 	{
-		for (auto& p : std::filesystem::directory_iterator(Navigation::GetMmapsPath()))
+		const auto mmapsPath = Navigation::GetMmapsPath();
+		if (!std::filesystem::exists(mmapsPath))
 		{
-			string path = p.path().string();
-			string extension = path.substr(path.find_last_of(".") + 1);
-			if (extension == "mmtile")
-			{
-				string filename = path.substr(path.find_last_of("\\") + 1);
+			return;
+		}
 
+		for (auto& p : std::filesystem::directory_iterator(mmapsPath))
+		{
+			if (!p.is_regular_file())
+				continue;
+
+			const auto& filePath = p.path();
+			if (filePath.extension() != ".mmtile")
+				continue;
+
+			string filename = filePath.filename().string();
+			if (filename.size() < 7)
+				continue;
+
+			std::string mapIdString;
+			if (mapId < 10)
+				mapIdString = "00" + std::to_string(mapId);
+			else if (mapId < 100)
+				mapIdString = "0" + std::to_string(mapId);
+			else
+				mapIdString = std::to_string(mapId);
+
+			if (filename.rfind(mapIdString, 0) == 0)
+			{
 				int xTens = filename[3] - '0';
 				int xOnes = filename[4] - '0';
 				int yTens = filename[5] - '0';
 				int yOnes = filename[6] - '0';
+				if (xTens < 0 || xTens > 9 || xOnes < 0 || xOnes > 9 ||
+					yTens < 0 || yTens > 9 || yOnes < 0 || yOnes > 9)
+				{
+					continue;
+				}
 
 				int x = (xTens * 10) + xOnes;
 				int y = (yTens * 10) + yOnes;
-
-				std::string mapIdString;
-				if (mapId < 10)
-					mapIdString = "00" + std::to_string(mapId);
-				else if (mapId < 100)
-					mapIdString = "0" + std::to_string(mapId);
-				else
-					mapIdString = std::to_string(mapId);
-
-				if (filename[0] == mapIdString[0] && filename[1] == mapIdString[1] && filename[2] == mapIdString[2])
-					manager->loadMap(mapId, x, y);
+				manager->loadMap(mapId, x, y);
 			}
 		}
 
@@ -303,16 +321,14 @@ std::vector<NavPoly> Navigation::CapsuleOverlapSweep(uint32_t mapId,
 
 string Navigation::GetMmapsPath()
 {
-	// Check for WWOW_DATA_DIR environment variable first
-	char* envDataRoot = nullptr;
-	size_t envSize = 0;
-	if (_dupenv_s(&envDataRoot, &envSize, "WWOW_DATA_DIR") == 0 && envDataRoot != nullptr)
+	// Check for WWOW_DATA_DIR using Win32 process environment (not CRT cache).
 	{
-		std::string dataRoot = envDataRoot;
-		free(envDataRoot);
-		if (!dataRoot.empty())
+		char envDataRoot[1024] = { 0 };
+		DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", envDataRoot, sizeof(envDataRoot));
+		if (len > 0 && len < sizeof(envDataRoot))
 		{
-			if (dataRoot.back() != '/' && dataRoot.back() != '\\')
+			std::string dataRoot = envDataRoot;
+			if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
 				dataRoot += '\\';
 			std::string mmapsPath = dataRoot + "mmaps\\";
 			if (std::filesystem::exists(mmapsPath))
@@ -320,11 +336,18 @@ string Navigation::GetMmapsPath()
 		}
 	}
 
-	// Fall back to DLL-relative path
-	WCHAR DllPath[MAX_PATH] = { 0 };
-	GetModuleFileNameW((HINSTANCE)&__ImageBase, DllPath, _countof(DllPath));
-	wstring ws(DllPath);
-	string pathAndFile(ws.begin(), ws.end());
+	// Prefer current working directory if mmaps is present there.
+	{
+		std::string cwdMmaps = (std::filesystem::current_path() / "mmaps").string() + "\\";
+		if (std::filesystem::exists(cwdMmaps))
+			return cwdMmaps;
+	}
+
+	// Fall back to DLL-relative path.
+	WCHAR dllPath[MAX_PATH] = { 0 };
+	GetModuleFileNameW((HINSTANCE)&__ImageBase, dllPath, _countof(dllPath));
+	std::wstring ws(dllPath);
+	std::string pathAndFile(ws.begin(), ws.end());
 	char* c = const_cast<char*>(pathAndFile.c_str());
 	int strLength = strlen(c);
 	int lastOccur = 0;
@@ -332,8 +355,9 @@ string Navigation::GetMmapsPath()
 	{
 		if (c[i] == '\\') lastOccur = i;
 	}
+
 	string pathToMmap = pathAndFile.substr(0, lastOccur + 1);
-	pathToMmap = pathToMmap.append("mmaps\\");
+	pathToMmap.append("mmaps\\");
 
 	return pathToMmap;
 }

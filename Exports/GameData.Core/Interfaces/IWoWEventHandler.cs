@@ -52,6 +52,7 @@ namespace GameData.Core.Interfaces
         event EventHandler OnTrainerShow;
         event EventHandler OnTrainerClosed;
         event EventHandler<OnXpGainArgs> OnXpGain;
+        event EventHandler<OnLootMoneyArgs> OnLootMoney;
         event EventHandler<AuraChangedArgs> AuraChanged;
         event EventHandler<OnRequestArgs> OnDuelRequest;
         event EventHandler<GuildInviteArgs> OnGuildInvite;
@@ -115,6 +116,11 @@ namespace GameData.Core.Interfaces
     public class OnXpGainArgs(int xp) : EventArgs
     {
         public readonly int Xp = xp;
+    }
+
+    public class OnLootMoneyArgs(int copperAmount) : EventArgs
+    {
+        public readonly int CopperAmount = copperAmount;
     }
 
     public class AuraChangedArgs(string affectedUnit) : EventArgs

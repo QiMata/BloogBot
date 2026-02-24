@@ -130,6 +130,10 @@ message PhysicsInput {
 	float standing_on_local_x = 35;
 	float standing_on_local_y = 36;
 	float standing_on_local_z = 37;
+
+	// Behaviour flags (bitfield)
+	// PHYSICS_FLAG_TRUST_INPUT_VELOCITY (0x1): Use input vx/vy as-is for airborne
+	uint32 physics_flags = 38;
 }
 
 // Physics output

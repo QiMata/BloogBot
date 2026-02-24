@@ -7,7 +7,18 @@ namespace WoWSharpClient.Models
 {
     public class WoWItem(HighGuid highGuid, WoWObjectType objectType = WoWObjectType.Item) : WoWObject(highGuid, objectType), IWoWItem
     {
-        public uint ItemId { get; set; }
+        private uint _itemId;
+
+        /// <summary>
+        /// Item template ID. Falls back to OBJECT_FIELD_ENTRY when not explicitly set
+        /// (VisibleItems get ItemId set explicitly; inventory items use Entry from object fields).
+        /// </summary>
+        public uint ItemId
+        {
+            get => _itemId != 0 ? _itemId : Entry;
+            set => _itemId = value;
+        }
+
         public uint Quantity { get; set; }
         public uint StackCount { get; set; }
         public uint MaxDurability { get; set; }
@@ -54,7 +65,7 @@ namespace WoWSharpClient.Models
             if (sourceBase is not WoWItem source)
                 return;
 
-            ItemId = source.ItemId;
+            _itemId = source._itemId;
             Quantity = source.Quantity;
             StackCount = source.StackCount;
             MaxDurability = source.MaxDurability;

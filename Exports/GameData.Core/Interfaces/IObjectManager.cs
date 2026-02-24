@@ -4,11 +4,14 @@ using GameData.Core.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace GameData.Core.Interfaces
 {
     public interface IObjectManager
     {
+        IWoWEventHandler EventHandler { get; }
         ILoginScreen LoginScreen { get; }
         IRealmSelectScreen RealmSelectScreen { get; }
         ICharacterSelectScreen CharacterSelectScreen { get; }
@@ -76,6 +79,12 @@ namespace GameData.Core.Interfaces
             var bits = ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight;
             StopMovement(bits);
         }
+        /// <summary>
+        /// Clears all movement flags AND immediately sends MSG_MOVE_STOP to the server.
+        /// Use before actions that require the player to be stationary (e.g., CMSG_GAMEOBJ_USE).
+        /// Default implementation just calls StopAllMovement(); WoWSharpClient overrides to also send the packet.
+        /// </summary>
+        public void ForceStopImmediate() => StopAllMovement();
         public IEnumerable<IWoWGameObject> GameObjects => Objects.OfType<IWoWGameObject>();
         public IEnumerable<IWoWUnit> Units => Objects.OfType<IWoWUnit>();
         public IEnumerable<IWoWPlayer> Players => Objects.OfType<IWoWPlayer>();
@@ -154,6 +163,7 @@ namespace GameData.Core.Interfaces
         void SetNavigationPath(Position[] path) { } // default no-op for foreground
         void RefreshSkills();
         void RefreshSpells();
+        void ReleaseSpirit();
         void RetrieveCorpse();
         void SetTarget(ulong guid);
         void StopAttack();
@@ -166,6 +176,8 @@ namespace GameData.Core.Interfaces
         void StopCasting();
         void CastSpell(string spellName, int rank = -1, bool castOnSelf = false);
         void CastSpell(int spellId, int rank = -1, bool castOnSelf = false);
+        void CastSpellOnGameObject(int spellId, ulong gameObjectGuid);
+        void InteractWithGameObject(ulong gameObjectGuid);
         bool CanCastSpell(int spellId, ulong targetGuid);
         IReadOnlyCollection<uint> KnownSpellIds { get; }
         void UseItem(int bagId, int slotId, ulong targetGuid = 0);
@@ -185,5 +197,80 @@ namespace GameData.Core.Interfaces
         void UnequipItem(EquipSlot slot);
         void AcceptResurrect();
         void EnterWorld(ulong characterGuid);
+
+        // Inventory helpers
+        int CountFreeSlots(bool countSpecialSlots = false);
+        uint GetItemCount(uint itemId);
+#if NET8_0_OR_GREATER
+        IWoWItem GetItem(int bag, int slot) => GetContainedItem(bag, slot);
+        void UseContainerItem(int bag, int slot) => UseItem(bag, slot);
+#else
+        IWoWItem GetItem(int bag, int slot);
+        void UseContainerItem(int bag, int slot);
+#endif
+
+        // Wand helpers
+        void StartWandAttack();
+        void StopWandAttack();
+
+        // Looting — FG: right-click interact, BG: CMSG_LOOT packet via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task LootTargetAsync(ulong targetGuid, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task LootTargetAsync(ulong targetGuid, CancellationToken ct = default);
+#endif
+
+        // Vendor — FG: Lua NPC interaction, BG: packet-based via AgentFactory
+        // Opens vendor, sells junk, repairs, optionally buys items, closes.
+#if NET8_0_OR_GREATER
+        public Task QuickVendorVisitAsync(ulong vendorGuid, Dictionary<uint, uint>? itemsToBuy = null, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task QuickVendorVisitAsync(ulong vendorGuid, Dictionary<uint, uint>? itemsToBuy = null, CancellationToken ct = default);
+#endif
+
+        // Mail collection — FG: Lua mailbox interaction, BG: packet-based via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default);
+#endif
+
+        // Trainer — FG: Lua trainer interaction, BG: packet-based via AgentFactory
+        // Opens trainer, learns all affordable spells, closes.
+#if NET8_0_OR_GREATER
+        public Task<int> LearnAllAvailableSpellsAsync(ulong trainerGuid, CancellationToken ct = default) => Task.FromResult(0);
+#else
+        Task<int> LearnAllAvailableSpellsAsync(ulong trainerGuid, CancellationToken ct = default);
+#endif
+
+        // Flight master — FG: Lua taxi interaction, BG: packet-based via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task<IReadOnlyList<uint>> DiscoverTaxiNodesAsync(ulong flightMasterGuid, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<uint>>(Array.Empty<uint>());
+        public Task<bool> ActivateFlightAsync(ulong flightMasterGuid, uint destinationNodeId, CancellationToken ct = default) => Task.FromResult(false);
+#else
+        Task<IReadOnlyList<uint>> DiscoverTaxiNodesAsync(ulong flightMasterGuid, CancellationToken ct = default);
+        Task<bool> ActivateFlightAsync(ulong flightMasterGuid, uint destinationNodeId, CancellationToken ct = default);
+#endif
+
+        // Banking — FG: Lua banker interaction, BG: packet-based via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task DepositExcessItemsAsync(ulong bankerGuid, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task DepositExcessItemsAsync(ulong bankerGuid, CancellationToken ct = default);
+#endif
+
+        // Auction house — FG: Lua AH interaction, BG: packet-based via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task PostAuctionItemsAsync(ulong auctioneerGuid, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task PostAuctionItemsAsync(ulong auctioneerGuid, CancellationToken ct = default);
+#endif
+
+        // Crafting — FG: Lua craft window, BG: spell casting via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task CraftAvailableRecipesAsync(CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task CraftAvailableRecipesAsync(CancellationToken ct = default);
+#endif
     }
 }

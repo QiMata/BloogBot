@@ -1,11 +1,13 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 
 namespace PaladinProtection.Tasks
 {
-    internal class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-        private const int stackCount = 5;
         private const string HolyLight = "Holy Light";
 
         public void Update()
@@ -18,11 +20,11 @@ namespace PaladinProtection.Tasks
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
-
             }
-            
+
             if (!ObjectManager.Player.IsDrinking && Wait.For("HealSelfDelay", 3500, true))
             {
+                ObjectManager.StopAllMovement();
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 if (ObjectManager.Player.HealthPercent < 70)
                     ObjectManager.CastSpell(HolyLight);
@@ -30,36 +32,17 @@ namespace PaladinProtection.Tasks
                     ObjectManager.CastSpell(HolyLight, 1);
             }
 
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
+            // Eat food if available and not already eating
+            if (!ObjectManager.Player.IsEating && ObjectManager.Player.HealthPercent < 80 && Wait.For("EatFoodDelay", 3000, true))
             {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.repairitems')");
-                }
-
-                List<IWoWItem> foodItems = ObjectManager.Items.Where(x => x.ItemId == 5479).ToList();
-                uint foodItemsCount = (uint)foodItems.Sum(x => x.StackCount);
-
-                if (foodItemsCount < 20)
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.additem 5479 " + (20 - foodItemsCount) + "')");
-                }
-
-                List<IWoWItem> drinkItems = ObjectManager.Items.Where(x => x.ItemId == 1179).ToList();
-                uint drinkItemsCount = (uint)drinkItems.Sum(x => x.StackCount);
-
-                if (drinkItemsCount < 20)
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.additem 1179 " + (20 - drinkItemsCount) + "')");
-                }
+                var foodItem = ConsumableData.FindBestFood(ObjectManager);
+                foodItem?.Use();
             }
 
-            IWoWItem foodItem = ObjectManager.Items.First(x => x.ItemId == 5479);
-            IWoWItem drinkItem = ObjectManager.Items.First(x => x.ItemId == 1179);
+            // Use best available drink from inventory
+            IWoWItem? drinkItem = ConsumableData.FindBestDrink(ObjectManager);
 
-            if (ObjectManager.Player.Level > 10 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60 && Wait.For("UseDrinkDelay", 1000, true))
+            if (ObjectManager.Player.Level > 10 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60)
                 drinkItem.Use();
         }
 

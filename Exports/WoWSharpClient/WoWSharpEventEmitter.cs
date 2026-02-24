@@ -89,6 +89,7 @@ namespace WoWSharpClient
         public event EventHandler OnTrainerShow;
         public event EventHandler OnTrainerClosed;
         public event EventHandler<OnXpGainArgs> OnXpGain;
+        public event EventHandler<OnLootMoneyArgs> OnLootMoney;
         public event EventHandler<AuraChangedArgs> AuraChanged;
         public event EventHandler<OnRequestArgs> OnDuelRequest;
         public event EventHandler<GuildInviteArgs> OnGuildInvite;
@@ -181,6 +182,7 @@ namespace WoWSharpClient
         public void FireOnTrainerShow() => FireEvent(OnTrainerShow);
         public void FireOnTrainerClosed() => FireEvent(OnTrainerClosed);
         public void FireOnXpGain(int xp) => FireEvent(OnXpGain, new OnXpGainArgs(xp));
+        public void FireOnLootMoney(int copperAmount) => FireEvent(OnLootMoney, new OnLootMoneyArgs(copperAmount));
         public void FireAuraChanged(string affectedUnit) => FireEvent(AuraChanged, new AuraChangedArgs(affectedUnit));
         public void FireOnDuelRequest(string player) => FireEvent(OnDuelRequest, new OnRequestArgs(player));
         public void FireOnGuildInvite(string player, string guild) => FireEvent(OnGuildInvite, new GuildInviteArgs(player, guild));

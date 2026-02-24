@@ -1,6 +1,5 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace ShamanEnhancement.Tasks
@@ -16,7 +15,7 @@ namespace ShamanEnhancement.Tasks
                 return;
             }
 
-            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 27 && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(LightningBolt) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
+            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 27 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(LightningBolt) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
             {
                 if (ObjectManager.Player.IsMoving)
                     ObjectManager.StopAllMovement();
@@ -37,8 +36,7 @@ namespace ShamanEnhancement.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.Player.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            ObjectManager.MoveToward(nextWaypoint[1]);
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

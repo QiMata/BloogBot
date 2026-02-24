@@ -4,7 +4,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace WarlockDestruction.Tasks
 {
-    internal class PvPRotationTask(IBotContext botContext) : WarlockBaseRotationTask(botContext), IBotTask
+    public class PvPRotationTask(IBotContext botContext) : WarlockBaseRotationTask(botContext), IBotTask
     {
         protected override void BeforeRotation()
         {
@@ -18,6 +18,6 @@ namespace WarlockDestruction.Tasks
         }
 
         protected override void AfterImmolate() =>
-            TryCastSpell(Conflagrate, 0, 28, GetDebuffRemaining(Immolate) > 3);
+            TryCastSpell(Conflagrate, 0, 28, ObjectManager.GetTarget(ObjectManager.Player)?.HasDebuff(Immolate) == true);
     }
 }

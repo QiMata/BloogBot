@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <cstdint>
+#include <string>
+#include <unordered_map>
 #include "Vector3.h"
 #include "AABox.h"
 #include "Ray.h"
@@ -9,6 +11,7 @@
 
 namespace VMAP { class StaticMapTree; class ModelInstance; class VMapManager2; }
 class MapLoader; // forward declaration (global namespace)
+class SceneCache; // forward declaration
 
 // Unified query parameter set (from main branch - similar conceptually to UE4/UE5 query params)
 // Placed in global namespace to align with SceneQuery/SceneHit architecture
@@ -233,10 +236,21 @@ class SceneQuery
         // More precise than capsule sweep for exact XY positions (no lateral contact offset).
         static float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist = 10.0f);
 
+        // --- Scene Cache (pre-processed collision geometry) ---
+        static void SetSceneCache(uint32_t mapId, SceneCache* cache);
+        static SceneCache* GetSceneCache(uint32_t mapId);
+        static void ClearSceneCaches();
+        static void SetScenesDir(const std::string& dir) { m_scenesDir = dir; }
+        static const std::string& GetScenesDir() { return m_scenesDir; }
+
     private:
         inline static VMAP::VMapManager2* m_vmapManager = nullptr;
         inline static MapLoader* m_mapLoader = nullptr;
         inline static bool m_initialized = false;
+        inline static std::string m_scenesDir;
+
+        // Per-map scene caches (pre-processed collision geometry)
+        inline static std::unordered_map<uint32_t, SceneCache*> m_sceneCaches;
 
         // BIH-based ground Z query: uses AABB overlap against the BIH tree to find
         // walkable triangles when getHeight's downward ray misses (e.g. WMO interiors).

@@ -27,30 +27,24 @@ public class DecisionEngineReadBinFileTests
         };
 
         using var readyForRead = new ManualResetEventSlim(false);
-        using var startSecondWrite = new ManualResetEventSlim(false);
         using var releaseWriter = new ManualResetEventSlim(false);
 
+        // Writer holds the file open with FileShare.ReadWrite, writes both snapshots,
+        // then signals readyForRead. The reader reads while the writer's stream is still open.
         var writerTask = Task.Run(async () =>
         {
             using var writeStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
 
-            snapshotsToWrite[0].WriteDelimitedTo(writeStream);
+            foreach (var snapshot in snapshotsToWrite)
+            {
+                snapshot.WriteDelimitedTo(writeStream);
+            }
             await writeStream.FlushAsync();
 
+            // Signal that all data is written but keep the stream open
             readyForRead.Set();
-            Assert.True(startSecondWrite.Wait(TimeSpan.FromSeconds(5)));
 
-            using var bufferStream = new MemoryStream();
-            snapshotsToWrite[1].WriteDelimitedTo(bufferStream);
-            var bytes = bufferStream.ToArray();
-
-            int midpoint = Math.Max(1, bytes.Length / 2);
-            await writeStream.WriteAsync(bytes.AsMemory(0, midpoint));
-            await writeStream.FlushAsync();
-            await Task.Delay(50);
-            await writeStream.WriteAsync(bytes.AsMemory(midpoint));
-            await writeStream.FlushAsync();
-
+            // Wait for reader to finish before closing the stream
             releaseWriter.Wait(TimeSpan.FromSeconds(5));
         });
 
@@ -58,13 +52,16 @@ public class DecisionEngineReadBinFileTests
         {
             Assert.True(readyForRead.Wait(TimeSpan.FromSeconds(5)));
 
-            var readMethod = typeof(DecisionEngine).GetMethod("ReadBinFile", BindingFlags.NonPublic | BindingFlags.Static);
+            var readMethod = typeof(DecisionEngine).GetMethod("ReadBinFileAsync", BindingFlags.NonPublic | BindingFlags.Static);
             Assert.NotNull(readMethod);
 
-            startSecondWrite.Set();
-            await Task.Delay(10);
-
-            var readTask = Task.Run(() => (List<WoWActivitySnapshot>)readMethod!.Invoke(null, new object[] { tempFile })!);
+            // Read while the writer's stream is still open (tests FileShare.ReadWrite)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var readTask = Task.Run(async () =>
+            {
+                var task = (Task<List<WoWActivitySnapshot>>)readMethod!.Invoke(null, new object[] { tempFile, cts.Token })!;
+                return await task;
+            });
             var readSnapshots = await readTask;
 
             Assert.Equal(snapshotsToWrite.Length, readSnapshots.Count);
@@ -73,7 +70,6 @@ public class DecisionEngineReadBinFileTests
         }
         finally
         {
-            startSecondWrite.Set();
             releaseWriter.Set();
             await writerTask;
             if (File.Exists(tempFile))

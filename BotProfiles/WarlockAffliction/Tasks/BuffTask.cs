@@ -1,11 +1,11 @@
 using BotRunner.Interfaces;
+using GameData.Core.Enums;
 using BotRunner.Tasks;
-using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarlockAffliction.Tasks
 {
-    internal class BuffTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class BuffTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         public void Update()
         {
@@ -13,36 +13,20 @@ namespace WarlockAffliction.Tasks
 
             if ((!ObjectManager.IsSpellReady(DemonSkin) || ObjectManager.Player.HasBuff(DemonSkin)) && (!ObjectManager.IsSpellReady(DemonArmor) || ObjectManager.Player.HasBuff(DemonArmor)))
             {
-                if (HasEnoughSoulShards)
-                {
-                    BotTasks.Pop();
-                    return;
-                }
-                else
-                    DeleteSoulShard();
+                BotTasks.Pop();
+                return;
             }
 
             if (ObjectManager.IsSpellReady(DemonArmor))
-                TryCastSpell(DemonArmor);
+                TryCastBuff(DemonArmor);
             else
-                TryCastSpell(DemonSkin);
+                TryCastBuff(DemonSkin);
         }
 
-        private void TryCastSpell(string name, int requiredLevel = 1)
+        private void TryCastBuff(string name)
         {
-            if (!ObjectManager.Player.HasBuff(name) && ObjectManager.Player.Level >= requiredLevel && ObjectManager.IsSpellReady(name))
+            if (!ObjectManager.Player.HasBuff(name) && ObjectManager.IsSpellReady(name))
                 ObjectManager.CastSpell(name);
         }
-
-        private void DeleteSoulShard()
-        {
-            var ss = GetSoulShards.Last();
-            ObjectManager.PickupContainerItem(ObjectManager.GetBagId(ss.Guid), ObjectManager.GetSlotId(ss.Guid));
-            ObjectManager.DeleteCursorItem();
-        }
-
-        private bool HasEnoughSoulShards => GetSoulShards.Count() <= 1;
-
-        private IEnumerable<IWoWItem> GetSoulShards => ObjectManager.Items.Where(i => i.Info.Name == "Soul Shard");
     }
 }

@@ -1,10 +1,12 @@
 using BotRunner.Interfaces;
+using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestShadow.Tasks
 {
-    internal class HealTask : BotTask, IBotTask
+    public class HealTask : BotTask, IBotTask
     {
         private readonly string healingSpell;
 
@@ -48,18 +50,7 @@ namespace PriestShadow.Tasks
             }
             else
             {
-                Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-
-                if (nextWaypoint.Length > 1)
-                {
-                    ObjectManager.MoveToward(nextWaypoint[1]);
-                }
-                else
-                {
-                    ObjectManager.StopAllMovement();
-                    BotTasks.Pop();
-                    return;
-                }
+                NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
             }
         }
     }

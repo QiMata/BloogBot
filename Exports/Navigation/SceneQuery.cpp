@@ -1,4 +1,5 @@
 #include "SceneQuery.h"
+#include "SceneCache.h"
 #include "StaticMapTree.h"
 #include "ModelInstance.h"
 #include "WorldModel.h"
@@ -395,10 +396,58 @@ void SceneQuery::Initialize()
 
 void SceneQuery::EnsureMapLoaded(uint32_t mapId)
 {
+    // 1. Already have a scene cache? Done.
+    if (GetSceneCache(mapId))
+        return;
+
+    // 2. Check for .scene file on disk (fast path)
+    if (!m_scenesDir.empty())
+    {
+        std::string scenePath = m_scenesDir + std::to_string(mapId) + ".scene";
+        if (std::filesystem::exists(scenePath))
+        {
+            auto* cache = SceneCache::LoadFromFile(scenePath.c_str());
+            if (cache)
+            {
+                SetSceneCache(mapId, cache);
+                return;
+            }
+        }
+    }
+
+    // 3. Fall back to live VMAP loading (slow, 30-60s per map)
     if (m_vmapManager && !m_vmapManager->isMapInitialized(mapId))
     {
         m_vmapManager->initializeMap(mapId);
     }
+}
+
+// --- SceneCache management ---
+void SceneQuery::SetSceneCache(uint32_t mapId, SceneCache* cache)
+{
+    auto it = m_sceneCaches.find(mapId);
+    if (it != m_sceneCaches.end())
+    {
+        delete it->second;
+        it->second = cache;
+    }
+    else
+    {
+        m_sceneCaches[mapId] = cache;
+    }
+}
+
+SceneCache* SceneQuery::GetSceneCache(uint32_t mapId)
+{
+    auto it = m_sceneCaches.find(mapId);
+    return (it != m_sceneCaches.end()) ? it->second : nullptr;
+}
+
+void SceneQuery::ClearSceneCaches()
+{
+    for (auto& [id, cache] : m_sceneCaches)
+        delete cache;
+    m_sceneCaches.clear();
 }
 
 float SceneQuery::GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t& liquidType)
@@ -431,6 +480,10 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
 {
     EnsureMapLoaded(mapId);
 
+    // Scene cache fast path: pre-processed triangles with spatial index
+    if (auto* cache = GetSceneCache(mapId))
+        return cache->GetGroundZ(x, y, z, maxSearchDist);
+
     // Collect candidate ground heights from all sources, then pick the one
     // closest to z. "Closest to z" correctly handles:
     //   - Outdoor: ADT ground is closest, VMAP roof is above (filtered by z+0.5)
@@ -447,10 +500,10 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
         if (!VMAP::IsValidHeight(vmapZ)) vmapZ = PhysicsConstants::INVALID_HEIGHT;
     }
 
-    // 2. ADT terrain interpolation
+    // 2. ADT terrain (triangle-based Z for consistency with capsule sweep)
     if (m_mapLoader && m_mapLoader->IsInitialized())
     {
-        float h = m_mapLoader->GetHeight(mapId, x, y);
+        float h = m_mapLoader->GetTriangleZ(mapId, x, y);
         if (h > MapFormat::INVALID_HEIGHT + 1.0f)
             adtZ = h;
     }
@@ -469,7 +522,7 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
     float bestErr = std::numeric_limits<float>::max();
     auto consider = [&](float candidate) {
         if (candidate <= PhysicsConstants::INVALID_HEIGHT + 1.0f) return;
-        if (candidate > z + 0.5f) return;
+        if (candidate > z + maxSearchDist) return;
         if (candidate < z - maxSearchDist) return;
         float err = std::fabs(candidate - z);
         if (err < bestErr) {
@@ -621,6 +674,25 @@ SceneQuery::LiquidInfo SceneQuery::EvaluateLiquidAt(uint32_t mapId, float x, flo
 {
     using namespace PhysicsLiquid;
     LiquidInfo out{};
+
+    // Scene cache fast path
+    if (auto* cache = GetSceneCache(mapId))
+    {
+        if (cache->HasLiquidData())
+        {
+            LiquidCell cell = cache->GetLiquidAt(x, y);
+            if (cell.flags & 0x01) // hasLevel
+            {
+                out.hasLevel = true;
+                out.level = cell.level;
+                out.type = cell.type;
+                out.fromVmap = (cell.flags & 0x02) != 0;
+                // Determine swimming based on z vs liquid level
+                out.isSwimming = (z < cell.level - 0.5f);
+            }
+        }
+        return out;
+    }
 
     // Gather ADT
     float adtLevel = VMAP::VMAP_INVALID_LIQUID_HEIGHT; uint32_t adtType = VMAP::MAP_LIQUID_TYPE_NO_WATER; bool adtHas = false;
@@ -1165,6 +1237,129 @@ int SceneQuery::SweepCapsule(uint32_t mapId,
     };
     // Ensure map VMAP data is initialized before querying
     EnsureMapLoaded(mapId);
+
+    // ---- Scene Cache fast path ----
+    // When a pre-processed SceneCache is loaded, use it for all static geometry
+    // queries instead of BIH tree traversal + MapLoader terrain.
+    // Dynamic objects are still handled separately via DynamicObjectRegistry.
+    if (auto* scCache = GetSceneCache(mapId))
+    {
+        outHits.clear();
+        G3D::Vector3 wP0(capsuleStart.p0.x, capsuleStart.p0.y, capsuleStart.p0.z);
+        G3D::Vector3 wP1(capsuleStart.p1.x, capsuleStart.p1.y, capsuleStart.p1.z);
+
+        // Compute world-space AABB of sweep
+        G3D::Vector3 wP0End = wP0 + dir * std::max(0.0f, distance);
+        G3D::Vector3 wP1End = wP1 + dir * std::max(0.0f, distance);
+        float queryMinX = std::min({wP0.x, wP1.x, wP0End.x, wP1End.x}) - capsuleStart.r;
+        float queryMaxX = std::max({wP0.x, wP1.x, wP0End.x, wP1End.x}) + capsuleStart.r;
+        float queryMinY = std::min({wP0.y, wP1.y, wP0End.y, wP1End.y}) - capsuleStart.r;
+        float queryMaxY = std::max({wP0.y, wP1.y, wP0End.y, wP1End.y}) + capsuleStart.r;
+
+        // Query cached triangles
+        std::vector<CapsuleCollision::Triangle> cachedTris;
+        std::vector<uint32_t> cachedInstIds;
+        scCache->QueryTrianglesInAABB(queryMinX, queryMinY, queryMaxX, queryMaxY,
+                                       cachedTris, &cachedInstIds);
+
+        // Z window for vertical gating
+        float capMinZWorld, capMaxZWorld;
+        {
+            float feetZ = std::min(wP0.z, wP1.z);
+            float topZ = std::max(wP0.z, wP1.z);
+            if (dir.z < -0.5f) {
+                capMinZWorld = feetZ - PhysicsConstants::STEP_DOWN_HEIGHT - 0.05f;
+                capMaxZWorld = topZ + 0.05f;
+            } else {
+                capMinZWorld = feetZ - capsuleStart.r - 0.05f;
+                capMaxZWorld = topZ + capsuleStart.r + 0.05f;
+            }
+        }
+
+        // Test capsule against each cached triangle in world space
+        CapsuleCollision::Capsule Cw;
+        Cw.p0 = { wP0.x, wP0.y, wP0.z };
+        Cw.p1 = { wP1.x, wP1.y, wP1.z };
+        Cw.r = capsuleStart.r;
+
+        for (size_t ti = 0; ti < cachedTris.size(); ++ti)
+        {
+            CapsuleCollision::Hit chW;
+            if (CapsuleCollision::intersectCapsuleTriangle(Cw, cachedTris[ti], chW))
+            {
+                G3D::Vector3 wPoint(chW.point.x, chW.point.y, chW.point.z);
+                if (wPoint.z < capMinZWorld || wPoint.z > capMaxZWorld)
+                    continue;
+
+                // Compute world normal
+                const auto& t = cachedTris[ti];
+                G3D::Vector3 wA(t.a.x, t.a.y, t.a.z), wB(t.b.x, t.b.y, t.b.z), wC(t.c.x, t.c.y, t.c.z);
+                G3D::Vector3 wN = (wB - wA).cross(wC - wA).directionOrZero();
+                G3D::Vector3 capsuleMidW = (wP0 + wP1) * 0.5f;
+                G3D::Vector3 chosenN = OrientNormalForOverlap(wN, capsuleMidW, wPoint);
+                bool flipped = (chosenN.dot(wN) < 0.0f);
+
+                SceneHit h;
+                h.hit = true;
+                h.distance = 0.0f;
+                h.time = 0.0f;
+                h.normal = chosenN;
+                h.point = wPoint;
+                h.triIndex = static_cast<int>(ti);
+                h.instanceId = cachedInstIds[ti];
+                h.startPenetrating = true;
+                h.penetrationDepth = chW.depth;
+                h.normalFlipped = flipped;
+                outHits.push_back(h);
+            }
+        }
+
+        // Dynamic objects (elevators, doors) — always queried live
+        {
+            auto* dynReg = DynamicObjectRegistry::Instance();
+            if (dynReg)
+            {
+                G3D::AABox dynAABB(
+                    G3D::Vector3(queryMinX, queryMinY, std::min(wP0.z, wP1.z) - capsuleStart.r),
+                    G3D::Vector3(queryMaxX, queryMaxY, std::max(wP0.z, wP1.z) + capsuleStart.r));
+                std::vector<CapsuleCollision::Triangle> dynTris;
+                dynReg->QueryTriangles(mapId, dynAABB, dynTris);
+                for (size_t di = 0; di < dynTris.size(); ++di)
+                {
+                    CapsuleCollision::Hit chD;
+                    if (CapsuleCollision::intersectCapsuleTriangle(Cw, dynTris[di], chD))
+                    {
+                        G3D::Vector3 wPoint(chD.point.x, chD.point.y, chD.point.z);
+                        if (wPoint.z < capMinZWorld || wPoint.z > capMaxZWorld) continue;
+                        G3D::Vector3 wA(dynTris[di].a.x, dynTris[di].a.y, dynTris[di].a.z);
+                        G3D::Vector3 wB(dynTris[di].b.x, dynTris[di].b.y, dynTris[di].b.z);
+                        G3D::Vector3 wC(dynTris[di].c.x, dynTris[di].c.y, dynTris[di].c.z);
+                        G3D::Vector3 wN = (wB - wA).cross(wC - wA).directionOrZero();
+                        bool fl = false; G3D::Vector3 cN = wN; if (cN.z < 0) { cN = -cN; fl = true; }
+                        SceneHit h; h.hit = true; h.distance = 0.0f; h.time = 0.0f;
+                        h.normal = cN; h.point = wPoint; h.triIndex = (int)di;
+                        h.instanceId = 0x80000000u | (uint32_t)di;
+                        h.startPenetrating = true; h.penetrationDepth = chD.depth; h.normalFlipped = fl;
+                        outHits.push_back(h);
+                    }
+                }
+            }
+        }
+
+        // Sort overlap hits by Z descending (highest ground contact first)
+        if (!outHits.empty())
+        {
+            std::sort(outHits.begin(), outHits.end(), [](const SceneHit& a, const SceneHit& b) {
+                if (std::fabs(a.point.z - b.point.z) > 1e-4f) return a.point.z > b.point.z;
+                if (std::fabs(a.penetrationDepth - b.penetrationDepth) > 1e-5f) return a.penetrationDepth > b.penetrationDepth;
+                return a.triIndex < b.triIndex;
+            });
+        }
+
+        flushSweepLog();
+        return static_cast<int>(outHits.size());
+    }
+    // ---- End Scene Cache fast path ----
 
     // Acquire map tree from injected manager
     const VMAP::StaticMapTree* map = nullptr;

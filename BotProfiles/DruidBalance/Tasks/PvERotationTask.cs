@@ -5,7 +5,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace DruidBalance.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         private const string Starfire = "Starfire";
         private const string EclipseSolar = "Eclipse (Solar)";
@@ -13,8 +13,6 @@ namespace DruidBalance.Tasks
         private static readonly string[] ImmuneToNatureDamage = ["Vortex", "Whirlwind", "Whirling", "Dust", "Cyclone"];
         private IWoWUnit secondaryTarget;
         private bool castingEntanglingRoots;
-        private bool backpedaling;
-        private int backpedalStartTime;
 
         private Action EntanglingRootsCallback => () =>
         {
@@ -28,23 +26,13 @@ namespace DruidBalance.Tasks
             if (castingEntanglingRoots)
             {
                 if (secondaryTarget.HasDebuff(EntanglingRoots))
-                {
-                    backpedaling = true;
-                    backpedalStartTime = Environment.TickCount;
-                    ObjectManager.Player.StartMovement(ControlBits.Back);
-                }
+                    StartKite(1500);
 
                 ObjectManager.SetTarget(ObjectManager.GetTarget(ObjectManager.Player).Guid);
                 castingEntanglingRoots = false;
             }
 
-            // handle backpedaling during entangling roots
-            if (Environment.TickCount - backpedalStartTime > 1500)
-            {
-                ObjectManager.Player.StopMovement(ControlBits.Back);
-                backpedaling = false;
-            }
-            if (backpedaling)
+            if (IsKiting)
                 return;
 
             // heal self if we're injured
@@ -55,16 +43,8 @@ namespace DruidBalance.Tasks
                 return;
             }
 
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(30))
                 return;
@@ -76,7 +56,7 @@ namespace DruidBalance.Tasks
             if (secondaryTarget != null && !secondaryTarget.HasDebuff(EntanglingRoots))
             {
                 ObjectManager.SetTarget(secondaryTarget.Guid);
-                TryCastSpell(EntanglingRoots, 0, 30, !secondaryTarget.HasDebuff(EntanglingRoots), EntanglingRootsCallback);
+                TryCastSpell(EntanglingRoots, 0, 30, !secondaryTarget.HasDebuff(EntanglingRoots), callback: EntanglingRootsCallback);
             }
 
             TryCastSpell(MoonkinForm, !ObjectManager.Player.HasBuff(MoonkinForm));

@@ -1,23 +1,18 @@
 using BotRunner.Interfaces;
+using GameData.Core.Enums;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace PaladinRetribution.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
 
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
         public override void PerformCombatRotation()
         {
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                if (ObjectManager.Aggressors.Any())
-                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-                else
-                    return;
-            }
+            if (!EnsureTarget()) return;
 
             ExecuteRotation();
         }
@@ -32,16 +27,8 @@ namespace PaladinRetribution.Tasks
                 return;
             }
 
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(3))
                 return;

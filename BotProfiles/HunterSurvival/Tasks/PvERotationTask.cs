@@ -1,32 +1,31 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace HunterSurvival.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
         {
-            ObjectManager.Pet?.Attack();
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (IsKiting)
                 return;
-            }
 
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
+            ObjectManager.Pet?.Attack();
+            if (!EnsureTarget())
+                return;
 
             if (Update(34))
                 return;
 
             ObjectManager.StopAllMovement();
-            IWoWItem ranged = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
-            bool canShoot = ranged != null && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5 &&
+            IWoWItem rangedWeapon = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
+            bool canShoot = rangedWeapon != null && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5 &&
                              ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 34;
 
             if (canShoot)
@@ -43,8 +42,10 @@ namespace HunterSurvival.Tasks
                 return;
             }
 
+            // melee — apply Wing Clip then kite back to ranged distance
+            if (rangedWeapon != null && TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
+                return;
             TryCastSpell(MongooseBite, 0, 5);
-            TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip));
             TryCastSpell(RaptorStrike, 0, 5);
         }
 

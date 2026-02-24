@@ -1,5 +1,6 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidRestoration.Tasks
@@ -7,7 +8,7 @@ namespace DruidRestoration.Tasks
     /// <summary>
     /// Moves toward and pulls the selected target using Moonfire.
     /// </summary>
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
         private const int PullRange = 30;
 
@@ -25,7 +26,7 @@ namespace DruidRestoration.Tasks
             }
 
             float distance = ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            if (distance < PullRange && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(Moonfire))
+            if (distance < PullRange && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(Moonfire))
             {
                 if (ObjectManager.Player.IsMoving)
                     ObjectManager.StopAllMovement();
@@ -46,9 +47,7 @@ namespace DruidRestoration.Tasks
                 return;
             }
 
-            Position[] path = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            if (path.Length > 0)
-                ObjectManager.MoveToward(path[0]);
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

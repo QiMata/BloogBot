@@ -216,7 +216,8 @@ namespace ForegroundBotRunner.Mem
 
         static public void RetrieveCorpse()
         {
-            RetrieveCorpseFunction();
+            var result = RetrieveCorpseFunction();
+            Log.Information("[FG] RetrieveCorpse() returned {Result}", result);
         }
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
@@ -225,9 +226,17 @@ namespace ForegroundBotRunner.Mem
         private static readonly SetTargetDelegate SetTargetFunction =
             Marshal.GetDelegateForFunctionPointer<SetTargetDelegate>(MemoryAddresses.SetTargetFunPtr);
 
+        [HandleProcessCorruptedStateExceptions]
         static public void SetTarget(ulong guid)
         {
-            SetTargetFunction(guid);
+            try
+            {
+                SetTargetFunction(guid);
+            }
+            catch (AccessViolationException)
+            {
+                Log.Error("[FG] AccessViolationException in SetTarget for GUID 0x{Guid:X}", guid);
+            }
         }
 
         [DllImport("FastCall.dll", EntryPoint = "SellItemByGuid")]

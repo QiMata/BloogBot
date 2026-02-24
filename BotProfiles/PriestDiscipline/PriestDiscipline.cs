@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using PriestDiscipline.Tasks;
 
 using BotProfiles.Common;
 namespace PriestDiscipline
 {
-    [Export(typeof(IBot))]
-    internal class PriestDiscipline : BotBase
+    public class PriestDiscipline : BotBase
     {
         public override string Name => "Discipline Priest";
 

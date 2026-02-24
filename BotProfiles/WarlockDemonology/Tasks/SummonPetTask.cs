@@ -1,4 +1,5 @@
 using BotRunner.Interfaces;
+using GameData.Core.Enums;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 

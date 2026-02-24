@@ -3,6 +3,7 @@ using ForegroundBotRunner;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using PromptHandlingService;
 using System;
 using System.Collections.Generic;
@@ -128,9 +129,38 @@ namespace WoWStateManager
             // Wait for PathfindingService to become available before starting bot profiles
             WaitForPathfindingService();
 
-            CreateHostBuilder(args)
-                .Build()
-                .Run();
+            try
+            {
+                CreateHostBuilder(args)
+                    .Build()
+                    .Run();
+            }
+            finally
+            {
+                // Kill PathfindingService if WE launched it (don't kill pre-existing instances)
+                if (_pathfindingProcess != null && _serviceState != PathfindingServiceState.AlreadyRunning)
+                {
+                    try
+                    {
+                        if (!_pathfindingProcess.HasExited)
+                        {
+                            Console.WriteLine($"Stopping PathfindingService (PID: {_pathfindingProcess.Id})...");
+                            _pathfindingProcess.Kill();
+                            _pathfindingProcess.WaitForExit(5000);
+                            Console.WriteLine("PathfindingService stopped.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Warning: Could not stop PathfindingService: {ex.Message}");
+                    }
+                    finally
+                    {
+                        _pathfindingProcess.Dispose();
+                        _pathfindingProcess = null;
+                    }
+                }
+            }
         }
 
         private static Process LaunchPathfindingService()
@@ -445,6 +475,12 @@ namespace WoWStateManager
 
                     if (args != null)
                         builder.AddCommandLine(args);
+                })
+                .ConfigureLogging(logging =>
+                {
+                    // Avoid default Windows EventLog provider dependency in test/runtime environments.
+                    logging.ClearProviders();
+                    logging.AddConsole();
                 })
                 .ConfigureServices((hostContext, services) =>
                 {

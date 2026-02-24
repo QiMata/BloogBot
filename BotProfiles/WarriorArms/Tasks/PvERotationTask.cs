@@ -21,16 +21,8 @@ namespace WarriorArms.Tasks
 
         public void Update()
         {
-            if (ObjectManager.Aggressors.Count() == 0)
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(3))
                 return;
@@ -40,13 +32,7 @@ namespace WarriorArms.Tasks
 
         public override void PerformCombatRotation()
         {
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                if (ObjectManager.Aggressors.Any())
-                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-                else
-                    return;
-            }
+            if (!EnsureTarget()) return;
 
             ExecuteRotation();
         }

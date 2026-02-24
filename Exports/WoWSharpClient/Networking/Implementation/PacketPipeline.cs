@@ -17,6 +17,18 @@ namespace WoWSharpClient.Networking.Implementation
     /// <typeparam name="TOpcode">The type of opcode to use for packets.</typeparam>
     public sealed class PacketPipeline<TOpcode> : IDisposable where TOpcode : Enum
     {
+        /// <summary>
+        /// When true, logs every received opcode to Console for diagnostics.
+        /// Toggle via PacketPipeline&lt;Opcode&gt;.DiagnosticOpcodeLogging = true.
+        /// </summary>
+        public static bool DiagnosticOpcodeLogging { get; set; }
+
+        /// <summary>
+        /// When set, logs ALL received opcodes until this time. Set by SendAsync when sending
+        /// CMSG_CAST_SPELL to capture the server's response (or lack thereof).
+        /// </summary>
+        private static DateTime _logReceiveUntil = DateTime.MinValue;
+
         private const int ServerHeaderSize = 4; // S→C: 2 size (BE) + 2 opcode (LE)
 
         private readonly IConnection _connection;
@@ -27,6 +39,10 @@ namespace WoWSharpClient.Networking.Implementation
         private IDisposable? _discSubscription;
         private IDisposable? _connSubscription;
         private bool _disposed;
+
+        // Serializes the entire encode→encrypt→send chain to prevent RC4 cipher state corruption.
+        // The WoW stream cipher (RC4) is stateful — concurrent Encrypt calls corrupt the key stream.
+        private readonly SemaphoreSlim _sendLock = new(1, 1);
 
         // Raw receive buffer for per-packet header decryption
         private readonly MemoryStream _rawReceiveBuffer = new();
@@ -92,23 +108,38 @@ namespace WoWSharpClient.Networking.Implementation
 
         /// <summary>
         /// Sends a packet with the specified opcode and payload.
+        /// The entire encode→encrypt→send chain is serialized to prevent RC4 cipher state corruption
+        /// from concurrent fire-and-forget sends (spell cast + movement heartbeat, etc.).
         /// </summary>
         public async Task SendAsync(TOpcode opcode, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(PacketPipeline<TOpcode>));
 
-            // Encode opcode and payload into packet
-            var packetData = _codec.Encode(opcode, payload);
+            await _sendLock.WaitAsync(cancellationToken);
+            try
+            {
+                var packetData = _codec.Encode(opcode, payload);
+                var framedData = _framer.Frame(packetData);
+                var encryptedData = Encryptor.Encrypt(framedData);
 
-            // Frame the packet
-            var framedData = _framer.Frame(packetData);
+                // Always log CMSG_CAST_SPELL and CMSG_GAMEOBJ_USE for diagnostics
+                var opcodeStr = opcode.ToString();
+                if (opcodeStr.Contains("CAST_SPELL") || opcodeStr.Contains("GAMEOBJ_USE") || DiagnosticOpcodeLogging)
+                {
+                    Console.WriteLine($"[TX] {DateTime.Now:HH:mm:ss.fff} opcode={opcodeStr} payloadLen={payload.Length} encodedLen={packetData.Length} encryptedLen={encryptedData.Length}");
+                    Console.WriteLine($"[TX]   payload: {BitConverter.ToString(payload.ToArray())}");
+                    Console.WriteLine($"[TX]   encoded(pre-encrypt): {BitConverter.ToString(packetData.ToArray())}");
+                    // Enable receive logging for next 10 seconds to capture server response
+                    _logReceiveUntil = DateTime.UtcNow.AddSeconds(10);
+                }
 
-            // Encrypt the framed data
-            var encryptedData = Encryptor.Encrypt(framedData);
-
-            // Send through connection
-            await _connection.SendAsync(encryptedData, cancellationToken);
+                await _connection.SendAsync(encryptedData, cancellationToken);
+            }
+            finally
+            {
+                _sendLock.Release();
+            }
         }
 
         /// <summary>
@@ -174,6 +205,14 @@ namespace WoWSharpClient.Networking.Implementation
                     }
 
                     // Step 2: Read size from decrypted header and check if full message available
+                    // WoW 1.12.1 large packet check: if high bit of byte 0 is set, it's a 3-byte size
+                    // (header = 5 bytes instead of 4). This is rare but can happen for large SMSG_UPDATE_OBJECT.
+                    bool isLargePacket = (_pendingDecryptedHeader[0] & 0x80) != 0;
+                    if (isLargePacket)
+                    {
+                        Console.WriteLine($"[RX] WARNING: Large packet detected (high bit set). Byte0=0x{_pendingDecryptedHeader[0]:X2}. " +
+                            "3-byte size headers are not fully supported — this may cause packet desync!");
+                    }
                     ushort size = (ushort)((_pendingDecryptedHeader[0] << 8) | _pendingDecryptedHeader[1]);
                     int totalMessageSize = size + 2; // size field doesn't include itself
 
@@ -189,6 +228,20 @@ namespace WoWSharpClient.Networking.Implementation
                     // Step 4: Decode and route
                     if (_codec.TryDecode(new ReadOnlyMemory<byte>(message), out var opcode, out var payload))
                     {
+                        var opcodeStr2 = opcode.ToString();
+
+                        // Always log spell/loot/cast opcodes (critical for gathering debug)
+                        if (opcodeStr2.Contains("SPELL") || opcodeStr2.Contains("CAST") ||
+                            opcodeStr2.Contains("LOOT") || opcodeStr2.Contains("DESTROY"))
+                        {
+                            Console.WriteLine($"[RX] {DateTime.Now:HH:mm:ss.fff} opcode={opcodeStr2} size={size} payload={payload.Length}b");
+                            if (payload.Length <= 256)
+                                Console.WriteLine($"[RX]   payload: {BitConverter.ToString(payload.ToArray())}");
+                        }
+                        else if (DiagnosticOpcodeLogging || DateTime.UtcNow < _logReceiveUntil)
+                        {
+                            Console.WriteLine($"[RX] {DateTime.Now:HH:mm:ss.fff} opcode={opcodeStr2} size={size} payload={payload.Length}b");
+                        }
                         await _router.RouteAsync(opcode, payload);
                     }
                     else
@@ -220,6 +273,7 @@ namespace WoWSharpClient.Networking.Implementation
                 _connSubscription?.Dispose();
                 _connection.Dispose();
                 _rawReceiveBuffer.Dispose();
+                _sendLock.Dispose();
 
                 if (_framer is IDisposable disposableFramer)
                     disposableFramer.Dispose();

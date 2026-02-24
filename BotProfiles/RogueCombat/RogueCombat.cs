@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using RogueCombat.Tasks;
 
 using BotProfiles.Common;
 namespace RogueCombat
 {
-    [Export(typeof(IBot))]
-    internal class RogueCombat : BotBase
+    public class RogueCombat : BotBase
     {
         public override string Name => "Combat Rogue";
 

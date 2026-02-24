@@ -1,44 +1,47 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
 
 namespace WarriorProtection.Tasks
 {
-    internal class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         public void Update()
         {
             if (ObjectManager.Player.HealthPercent >= 95 ||
-                ObjectManager.Player.HealthPercent >= 80 && !ObjectManager.Player.IsEating ||
+                (ObjectManager.Player.HealthPercent >= 80 && !ObjectManager.Player.IsEating) ||
                 ObjectManager.Player.IsInCombat ||
                 ObjectManager.Units.Any(u => u.TargetGuid == ObjectManager.Player.Guid))
             {
+                Wait.RemoveAll();
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
             }
 
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
+            // Use bandage first if health is very low (faster than food)
+            if (ObjectManager.Player.HealthPercent < 60
+                && !ObjectManager.Player.IsEating
+                && !ObjectManager.Player.IsChanneling
+                && !ObjectManager.Player.HasDebuff("Recently Bandaged")
+                && Wait.For("UseBandageDelay", 3000, true))
             {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
+                ObjectManager.StopAllMovement();
+                var bandage = ConsumableData.FindBestBandage(ObjectManager);
+                if (bandage != null)
                 {
-                    ObjectManager.SendChatMessage(".repairitems");
-                }
-
-                List<IWoWItem> foodItems = ObjectManager.Items.Where(x => x.ItemId == 5479).ToList();
-                uint foodItemsCount = (uint)foodItems.Sum(x => x.StackCount);
-
-                if (foodItemsCount < 20)
-                {
-                    ObjectManager.SendChatMessage($".additem 5479 {20 - foodItemsCount}");
+                    bandage.Use();
+                    return;
                 }
             }
 
-            IWoWItem foodItem = ObjectManager.Items.First(x => x.ItemId == 5479);
-
-            if (foodItem != null && !ObjectManager.Player.IsEating)
-                foodItem.Use();
+            if (!ObjectManager.Player.IsEating && !ObjectManager.Player.IsChanneling && Wait.For("EatFoodDelay", 3000, true))
+            {
+                ObjectManager.StopAllMovement();
+                var foodItem = ConsumableData.FindBestFood(ObjectManager);
+                foodItem?.Use();
+            }
         }
     }
 }

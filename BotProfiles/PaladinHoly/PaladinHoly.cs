@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using PaladinHoly.Tasks;
 
 using BotProfiles.Common;
 namespace PaladinHoly
 {
-    [Export(typeof(IBot))]
-    internal class PaladinHoly : BotBase
+    public class PaladinHoly : BotBase
     {
         public override string Name => "Holy Paladin";
 

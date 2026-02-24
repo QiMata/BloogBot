@@ -4,19 +4,19 @@ namespace ForegroundBotRunner.CombatRotations
 {
     /// <summary>
     /// Interface for class-specific combat spell rotations.
-    /// Called once per GrindBot tick (~500ms) during the Combat phase.
+    /// Called once per bot tick (~500ms) during the Combat phase.
     /// </summary>
     public interface ICombatRotation
     {
         /// <summary>
-        /// Preferred combat range in yards. GrindBot will approach to this distance.
+        /// Preferred combat range in yards. Bot will approach to this distance.
         /// Melee classes return ~5, ranged return ~25-30.
         /// </summary>
         float DesiredRange { get; }
 
         /// <summary>
         /// Pull range in yards. Returns 0 if class has no ranged pull.
-        /// GrindBot will use Pull() when within this range but outside DesiredRange.
+        /// Bot will use Pull() when within this range but outside DesiredRange.
         /// </summary>
         float PullRange { get; }
 

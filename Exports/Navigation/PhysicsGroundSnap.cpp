@@ -72,7 +72,7 @@ bool TryStepUpSnap(
         // Refine Z with direct height query at exact XY (no capsule lateral offset bias)
         float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z, maxUp + 0.5f);
         if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
-            preciseZ <= st.z + 0.05f && preciseZ >= st.z - 0.5f)
+            preciseZ <= st.z + 0.1f && preciseZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT)
             st.z = preciseZ;
         st.isGrounded = true;
         st.vz = 0.0f;
@@ -165,7 +165,7 @@ bool TryDownwardStepSnap(
         float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z,
             PhysicsConstants::STEP_DOWN_HEIGHT);
         if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
-            preciseZ <= st.z + 0.05f && preciseZ >= st.z - 0.5f)
+            preciseZ <= st.z + 0.1f && preciseZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT)
             st.z = preciseZ;
         st.isGrounded = true;
         st.vz = 0.0f;
@@ -211,7 +211,7 @@ bool TryDownwardStepSnap(
                     float preciseZ2 = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z,
                         PhysicsConstants::STEP_DOWN_HEIGHT);
                     if (preciseZ2 > PhysicsConstants::INVALID_HEIGHT &&
-                        preciseZ2 <= st.z + 0.05f && preciseZ2 >= st.z - 0.5f)
+                        preciseZ2 <= st.z + 0.1f && preciseZ2 >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT)
                         st.z = preciseZ2;
                     st.isGrounded = true;
                     st.vz = 0.0f;
@@ -255,7 +255,7 @@ bool VerticalSweepSnapDown(
             // Refine Z with direct height query at exact XY
             float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z, maxDown + 0.5f);
             if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
-                preciseZ <= st.z + 0.05f && preciseZ >= st.z - 0.5f)
+                preciseZ <= st.z + 0.1f && preciseZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT)
                 st.z = preciseZ;
             st.isGrounded = true;
             st.vz = 0.0f;
@@ -333,7 +333,7 @@ float ApplyVerticalDepenetration(
             float preciseZ = SceneQuery::GetGroundZ(mapId, st.x, st.y, st.z,
                 PhysicsConstants::STEP_DOWN_HEIGHT);
             if (preciseZ > PhysicsConstants::INVALID_HEIGHT &&
-                preciseZ <= st.z + 0.05f && preciseZ >= st.z - 0.5f)
+                preciseZ <= st.z + 0.1f && preciseZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT)
                 st.z = preciseZ;
             st.isGrounded = true;
             st.vz = 0.0f;

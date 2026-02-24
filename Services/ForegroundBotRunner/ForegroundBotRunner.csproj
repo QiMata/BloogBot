@@ -11,6 +11,9 @@
   <EnableDynamicLoading>true</EnableDynamicLoading>
   <!-- Roll forward to latest major version for flexibility with .NET 9+ -->
   <RollForward>LatestMajor</RollForward>
+  <!-- Fasm.NET 1.70.3.2 is .NET Framework only; suppress NU1701 compatibility warning.
+       Still actively used by SignalEventManager for x86 ASM event hook injection. -->
+  <NoWarn>$(NoWarn);NU1701</NoWarn>
 </PropertyGroup>
 
   <ItemGroup>
@@ -22,11 +25,12 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.5" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.5" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
+    <ProjectReference Include="..\..\BotProfiles\BotProfiles.csproj" />
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
     <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
     <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
@@ -43,10 +47,5 @@
     <None Include="Resources\FastCall.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- Frames excluded - UI code not needed for injected mode -->
-  <ItemGroup>
-    <Compile Remove="Frames\**\*.cs" />
-  </ItemGroup>
-
-  <!-- Mem, Objects, Statics are the core direct memory implementation - INCLUDE them -->
+  <!-- Mem, Objects, Statics, Frames are the core direct memory implementation - all auto-included by SDK -->
 </Project>

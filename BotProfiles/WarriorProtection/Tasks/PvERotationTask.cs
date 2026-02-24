@@ -1,5 +1,6 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System.Diagnostics;
@@ -7,7 +8,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace WarriorProtection.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         private readonly Stopwatch overpowerStopwatch = new();
         private readonly Position tankSpot;
@@ -79,12 +80,7 @@ namespace WarriorProtection.Tasks
 
                 if (tankSpot.DistanceTo(ObjectManager.Player.Position) > 5)
                 {
-                    Position[] locations = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, tankSpot, true);
-
-                    if (locations.Length > 1)
-                        ObjectManager.MoveToward(locations[1]);
-                    else
-                        ObjectManager.StopAllMovement();
+                    NavigateToward(tankSpot);
                 }
                 else
                 {

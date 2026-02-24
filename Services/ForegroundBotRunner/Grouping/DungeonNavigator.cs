@@ -74,7 +74,7 @@ namespace ForegroundBotRunner.Grouping
 
         /// <summary>
         /// Main update - returns a position to move toward, or null if no movement needed.
-        /// The caller (GrindBot) handles actual movement and combat.
+        /// The caller handles actual movement and combat.
         /// </summary>
         public Position? Update(IWoWLocalPlayer player)
         {
@@ -126,7 +126,7 @@ namespace ForegroundBotRunner.Grouping
             if (HasNearbyHostiles(player))
             {
                 SetPhase(DungeonPhase.ClearingTrash);
-                return null; // Let GrindBot handle combat
+                return null; // Let combat system handle it
             }
 
             // Reached waypoint
@@ -188,7 +188,7 @@ namespace ForegroundBotRunner.Grouping
                 return null;
             }
 
-            // Return null to let GrindBot's combat system handle the fighting
+            // Return null to let the combat system handle the fighting
             return null;
         }
 
@@ -252,7 +252,7 @@ namespace ForegroundBotRunner.Grouping
                     return boss.RangedPosition.ToPosition();
             }
 
-            // Default: if in combat, let GrindBot handle it
+            // Default: if in combat, let the combat system handle it
             if (player.IsInCombat)
                 return null;
 

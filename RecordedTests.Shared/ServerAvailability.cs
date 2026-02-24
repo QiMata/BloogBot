@@ -140,18 +140,18 @@ public sealed class TrueNasAppServerAvailabilityChecker : IServerAvailabilityChe
     {
         if (string.IsNullOrWhiteSpace(definition))
         {
-            throw new ArgumentException("Server definition cannot be null or whitespace.", nameof(definition));
+            throw new FormatException("Server definition cannot be null or whitespace.");
         }
 
         var parts = definition.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 3)
         {
-            throw new ArgumentException("Server definition must follow 'releaseName|host|port[|realm]' format.", nameof(definition));
+            throw new FormatException("Server definition must follow 'releaseName|host|port[|realm]' format.");
         }
 
         if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var port))
         {
-            throw new ArgumentException($"Unable to parse port from '{definition}'.", nameof(definition));
+            throw new FormatException($"Unable to parse port from '{definition}'.");
         }
 
         var realm = parts.Length > 3 ? parts[3] : null;

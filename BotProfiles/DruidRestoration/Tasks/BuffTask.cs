@@ -7,7 +7,7 @@ namespace DruidRestoration.Tasks
     /// <summary>
     /// Applies restoration druid buffs when out of combat.
     /// </summary>
-    internal class BuffTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class BuffTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         public void Update()
         {

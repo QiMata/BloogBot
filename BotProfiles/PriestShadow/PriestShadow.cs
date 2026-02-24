@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using PriestShadow.Tasks;
 
 using BotProfiles.Common;
 namespace PriestShadow
 {
-    [Export(typeof(IBot))]
-    internal class PriestShadow : BotBase
+    public class PriestShadow : BotBase
     {
         public override string Name => "Shadow Priest";
 

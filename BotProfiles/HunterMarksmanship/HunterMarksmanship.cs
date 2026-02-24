@@ -1,12 +1,10 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using HunterMarksmanship.Tasks;
-using System.ComponentModel.Composition;
 
 using BotProfiles.Common;
 namespace HunterMarksmanship
 {
-    [Export(typeof(IBot))]
-    internal class HunterMarksmanship : BotBase
+    public class HunterMarksmanship : BotBase
     {
         public override string Name => "Marksmanship Hunter";
 

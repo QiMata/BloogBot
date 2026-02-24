@@ -69,6 +69,13 @@ public class PhysicsEngineFixture : IDisposable
                     ? "maps/"
                     : Path.Combine(dataDir, "maps") + Path.DirectorySeparatorChar;
                 try { InitializeMapLoader(mapsPath); } catch { /* optional */ }
+
+                // Set scenes directory for pre-cached collision data (production code path).
+                // SceneQuery::EnsureMapLoaded() will auto-discover .scene files here.
+                var scenesPath = string.IsNullOrEmpty(dataDir)
+                    ? "scenes/"
+                    : Path.Combine(dataDir, "scenes") + Path.DirectorySeparatorChar;
+                try { SetScenesDir(scenesPath); } catch { /* optional */ }
             }
         }
         catch (DllNotFoundException)

@@ -73,8 +73,8 @@ public class TrueNasAppsClientTests
     [InlineData("false", false)]
     [InlineData("1", true)]
     [InlineData("0", false)]
-    [InlineData("True", true)]
-    [InlineData("False", false)]
+    [InlineData("\"True\"", true)]
+    [InlineData("\"False\"", false)]
     public async Task GetReleaseAsync_CheckedOutParsing_HandlesBoolAndIntAndString(string checkedOutValue, bool expected)
     {
         // Arrange

@@ -4,7 +4,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace PaladinRetribution.Tasks
 {
-    internal class HealTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class HealTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         public void Update()
         {

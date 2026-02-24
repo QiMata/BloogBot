@@ -25,15 +25,11 @@ namespace WoWSharpClient.Models
 
         public byte[] Bytes1 { get; set; } = new byte[4];
 
-        public bool IsBones()
-        {
-            throw new NotImplementedException();
-        }
+        public bool IsBones() =>
+            CorpseFlags.HasFlag(CorpseFlags.CORPSE_FLAG_BONES);
 
-        public bool IsPvP()
-        {
-            throw new NotImplementedException();
-        }
+        public bool IsPvP() =>
+            Type == CorpseType.CORPSE_RESURRECTABLE_PVP;
 
         public override WoWObject Clone()
         {

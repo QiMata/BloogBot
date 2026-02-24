@@ -48,7 +48,7 @@
         }
 
         public async Task<string> CreateAccountAsync(string accountName) => await ExecuteGMCommandAsync($".account create {accountName} PASSWORD");
-        public async Task<string> SetGMLevelAsync(string accountName, int gmLevel) => await ExecuteGMCommandAsync($".account set gmlevel {accountName} {gmLevel} -1");
+        public async Task<string> SetGMLevelAsync(string accountName, int gmLevel) => await ExecuteGMCommandAsync($".account set gmlevel {accountName} {gmLevel}");
 
         public async Task<string> ExecuteGMCommandAsync(string gmCommand)
         {
@@ -82,12 +82,25 @@
                     return string.Empty;
                 }
 
+                _logger.LogDebug($"SOAP raw response: {responseContent}");
+
                 var xml = XDocument.Parse(responseContent);
-                var result = xml.Descendants(XName.Get("result", "urn:MaNGOS")).FirstOrDefault()?.Value;
+
+                // Check for SOAP fault
+                var faultString = xml.Descendants("faultstring").FirstOrDefault()?.Value;
+                if (!string.IsNullOrEmpty(faultString))
+                {
+                    _logger.LogWarning($"SOAP fault for '{gmCommand}': {faultString}");
+                    return $"FAULT: {faultString}";
+                }
+
+                // Try namespace-qualified result first, then unqualified
+                var result = xml.Descendants(XName.Get("result", "urn:MaNGOS")).FirstOrDefault()?.Value
+                          ?? xml.Descendants("result").FirstOrDefault()?.Value;
 
                 _logger.LogInformation($"GM command response: {result}");
 
-                return result ?? "No result element found.";
+                return result ?? "OK (no output)";
             }
             catch (Exception ex)
             {

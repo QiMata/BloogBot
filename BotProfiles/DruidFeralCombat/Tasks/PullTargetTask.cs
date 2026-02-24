@@ -1,10 +1,11 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidFeral.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
         internal PullTargetTask(IBotContext botContext) : base(botContext) { }
         public void Update()
@@ -17,7 +18,7 @@ namespace DruidFeral.Tasks
                 return;
             }
             
-            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 27 && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(Wrath) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
+            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 27 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(Wrath) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
             {
                 if (ObjectManager.Player.IsMoving)
                     ObjectManager.StopAllMovement();
@@ -38,8 +39,7 @@ namespace DruidFeral.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            ObjectManager.MoveToward(nextWaypoint[0]);
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

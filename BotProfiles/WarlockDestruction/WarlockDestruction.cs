@@ -1,12 +1,9 @@
-﻿using BotRunner.Interfaces;
-using System.ComponentModel.Composition;
+using BotRunner.Interfaces;
 using WarlockDestruction.Tasks;
 
 using BotProfiles.Common;
 namespace WarlockDestruction
-{
-    [Export(typeof(IBot))]
-    internal class WarlockDestruction : BotBase
+{    public class WarlockDestruction : BotBase
     {
         public override string Name => "Destruction Warlock";
 

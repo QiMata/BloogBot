@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using PaladinProtection.Tasks;
 
 using BotProfiles.Common;
 namespace PaladinProtection
 {
-    [Export(typeof(IBot))]
-    internal class PaladinProtection : BotBase
+    public class PaladinProtection : BotBase
     {
         public override string Name => "Protection Paladin";
 

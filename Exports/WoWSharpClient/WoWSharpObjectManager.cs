@@ -8,6 +8,7 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -16,6 +17,7 @@ using System.Timers;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
+using WoWSharpClient.Networking.ClientComponents.I;
 using WoWSharpClient.Parsers;
 using WoWSharpClient.Screens;
 using WoWSharpClient.Utils;
@@ -62,6 +64,10 @@ namespace WoWSharpClient
         private bool _isBeingTeleported = true;
         private ulong _currentTargetGuid;
 
+        // Temporary diagnostic: log all opcodes received after GAMEOBJ_USE
+        internal volatile bool _sniffingGameObjUse = false;
+        private DateTime _sniffStartTime;
+
         private TimeSpan _lastPositionUpdate = TimeSpan.Zero;
         private WorldTimeTracker _worldTimeTracker;
 
@@ -77,6 +83,11 @@ namespace WoWSharpClient
         /// Wire this to SpellCastingNetworkClientComponent.CanCastSpell().
         /// </summary>
         public void SetSpellCooldownChecker(Func<uint, bool> checker) => _spellCooldownChecker = checker;
+
+        // Optional agent factory accessor — set by BackgroundBotWorker for LootTargetAsync
+        private Func<IAgentFactory> _agentFactoryAccessor;
+
+        public void SetAgentFactoryAccessor(Func<IAgentFactory> accessor) => _agentFactoryAccessor = accessor;
 
         private WoWSharpObjectManager() { }
 
@@ -139,8 +150,10 @@ namespace WoWSharpClient
         {
             _isInControl = true;
             _isBeingTeleported = false;
+            ResetMovementStateForTeleport("client-control-update");
 
-            Log.Debug("[OnClientControlUpdate] {Position}", Player.Position);
+            Log.Information("[OnClientControlUpdate] pos=({X:F1},{Y:F1},{Z:F1}) — server confirmed teleport complete",
+                Player.Position.X, Player.Position.Y, Player.Position.Z);
         }
 
         private void EventEmitter_OnSetTimeSpeed(object? sender, OnSetTimeSpeedArgs e)
@@ -265,6 +278,21 @@ namespace WoWSharpClient
             // Clear path when forward movement stops
             if (bits.HasFlag(ControlBits.Front))
                 _movementController?.ClearPath();
+        }
+
+        /// <summary>
+        /// Clears all movement flags AND immediately sends MSG_MOVE_STOP to the server.
+        /// Use before interactions that require the player to be stationary (CMSG_GAMEOBJ_USE, etc.).
+        /// </summary>
+        void IObjectManager.ForceStopImmediate()
+        {
+            var player = (WoWLocalPlayer)Player;
+            if (player == null) return;
+
+            player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _movementController?.ClearPath();
+            _movementController?.SendStopPacket((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
+            Log.Information("[ForceStopImmediate] Cleared all movement flags and sent MSG_MOVE_STOP");
         }
 
         private MovementFlags ConvertControlBitsToFlags(ControlBits bits, MovementFlags currentFlags, bool add)
@@ -417,10 +445,14 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnForceMoveUnroot(object? sender, RequiresAcknowledgementArgs e)
         {
+            // Clear MOVEFLAG_ROOT before ACK — MaNGOS validates the flag is absent
+            var player = (WoWLocalPlayer)Player;
+            player.MovementFlags &= ~MovementFlags.MOVEFLAG_ROOT;
+
             _ = _woWClient.SendMSGPackedAsync(
                 Opcode.CMSG_FORCE_MOVE_UNROOT_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
-                    (WoWLocalPlayer)Player,
+                    player,
                     e.Counter,
                     (uint)_worldTimeTracker.NowMS.TotalMilliseconds
                 )
@@ -429,10 +461,15 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnForceMoveRoot(object? sender, RequiresAcknowledgementArgs e)
         {
+            // Set MOVEFLAG_ROOT and clear movement flags incompatible with root
+            var player = (WoWLocalPlayer)Player;
+            player.MovementFlags |= MovementFlags.MOVEFLAG_ROOT;
+            player.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING;
+
             _ = _woWClient.SendMSGPackedAsync(
                 Opcode.CMSG_FORCE_MOVE_ROOT_ACK,
                 MovementPacketHandler.BuildForceMoveAck(
-                    (WoWLocalPlayer)Player,
+                    player,
                     e.Counter,
                     (uint)_worldTimeTracker.NowMS.TotalMilliseconds
                 )
@@ -465,7 +502,7 @@ namespace WoWSharpClient
 
                 if (e.Text.StartsWith("You are being teleported"))
                 {
-                    StopMovement(_controlBits);
+                    ResetMovementStateForTeleport("chat-teleport-message");
                     _isBeingTeleported = true;
                 }
             }
@@ -480,27 +517,53 @@ namespace WoWSharpClient
         public void NotifyTeleportIncoming()
         {
             _isBeingTeleported = true;
+            ResetMovementStateForTeleport("notify-teleport-incoming");
         }
 
         private void EventEmitter_OnTeleport(object? sender, RequiresAcknowledgementArgs e)
         {
-            Log.Debug("[ACK] TELEPORT counter={Counter}", e.Counter);
-
             // _isBeingTeleported is already set by NotifyTeleportIncoming() before the update was queued.
             _isBeingTeleported = true;
+            ResetMovementStateForTeleport("teleport-opcode");
+
+            var player = (WoWLocalPlayer)Player;
+            var ackPayload = MovementPacketHandler.BuildMoveTeleportAckPayload(
+                player,
+                e.Counter,
+                (uint)_worldTimeTracker.NowMS.TotalMilliseconds
+            );
+
+            Log.Information("[ACK] TELEPORT counter={Counter} guid=0x{Guid:X} pos=({X:F1},{Y:F1},{Z:F1}) payloadLen={Len}",
+                e.Counter, player.Guid, player.Position.X, player.Position.Y, player.Position.Z, ackPayload.Length);
 
             _ = _woWClient.SendMSGPackedAsync(
                 Opcode.MSG_MOVE_TELEPORT_ACK,
-                MovementPacketHandler.BuildMoveTeleportAckPayload(
-                    e.Guid,
-                    e.Counter,
-                    (uint)_worldTimeTracker.NowMS.TotalMilliseconds
-                )
+                ackPayload
             );
 
             // Clear after a delay so ProcessUpdatesAsync has time to apply the position update.
             // SMSG_CLIENT_CONTROL_UPDATE will also clear this if it arrives sooner.
-            Task.Delay(500).ContinueWith(_ => _isBeingTeleported = false);
+            // Also send a stop packet so the server knows we're stationary after teleport
+            // (prevents stale MOVEFLAG_FORWARD from persisting on the server side).
+            Task.Delay(500).ContinueWith(_ =>
+            {
+                Log.Information("[ACK] TELEPORT 500ms fallback: clearing _isBeingTeleported");
+                _isBeingTeleported = false;
+                _movementController?.SendStopPacket((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
+            });
+        }
+
+        private void ResetMovementStateForTeleport(string source)
+        {
+            if (Player is not WoWLocalPlayer player)
+                return;
+
+            _controlBits = ControlBits.Nothing;
+            player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _movementController?.Reset();
+
+            Log.Information("[TeleportReset] source={Source} flags cleared; pos=({X:F1},{Y:F1},{Z:F1})",
+                source, player.Position.X, player.Position.Y, player.Position.Z);
         }
 
         private void EventEmitter_OnLoginVerifyWorld(object? sender, WorldInfo e)
@@ -637,9 +700,13 @@ namespace WoWSharpClient
 
         public void EnterWorld(ulong characterGuid)
         {
+            // Use the property setter (not the backing field) so it also
+            // recreates the Player object with the correct GUID.
+            // Set PlayerGuid BEFORE HasEnteredWorld so snapshots never see
+            // HasEnteredWorld=true with a stale zero-GUID player.
+            PlayerGuid = new HighGuid(characterGuid);
             HasEnteredWorld = true;
 
-            _playerGuid = new HighGuid(characterGuid);
             _ = _woWClient.EnterWorldAsync(characterGuid);
 
             InitializeMovementController();
@@ -730,12 +797,22 @@ namespace WoWSharpClient
                                         // Only guard position writes for the local player (client-side prediction handles it).
                                         // Other units should always accept server position updates.
                                         bool isLocalPlayer = obj.Guid == PlayerGuid.FullGuid;
+                                        var movementData = update.MovementData;
+
+                                        // During teleports, clear queued moving/turn flags for local player updates.
+                                        // This prevents stale MOVEFLAG_FORWARD from pre-teleport packets from getting re-applied.
+                                        if (isLocalPlayer && _isBeingTeleported && movementData != null)
+                                        {
+                                            movementData = movementData.Clone();
+                                            movementData.MovementFlags &= ~MovementFlags.MOVEFLAG_MASK_MOVING_OR_TURN;
+                                        }
+
                                         bool allowPositionWrite = !isLocalPlayer || !(_isInControl && !_isBeingTeleported);
-                                        ApplyMovementData((WoWUnit)obj, update.MovementData, allowPositionWrite);
+                                        ApplyMovementData((WoWUnit)obj, movementData, allowPositionWrite);
 
                                         Log.Verbose("[Movement-Update] Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}{Local}",
-                                            update.Guid, update.MovementData.X, update.MovementData.Y,
-                                            update.MovementData.Z, (uint)update.MovementData.MovementFlags,
+                                            update.Guid, movementData.X, movementData.Y,
+                                            movementData.Z, (uint)movementData.MovementFlags,
                                             obj is WoWLocalPlayer ? " [LOCAL]" : "");
                                     }
 
@@ -1356,50 +1433,78 @@ namespace WoWSharpClient
                     go.CreatedBy.HighGuidValue = (byte[])value;
                     break;
                 case EGameObjectFields.GAMEOBJECT_DISPLAYID:
-                    go.DisplayId = (uint)value;
+                    go.DisplayId = ToUInt32(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_FLAGS:
-                    go.Flags = (uint)value;
+                    go.Flags = ToUInt32(value);
                     break;
                 case >= EGameObjectFields.GAMEOBJECT_ROTATION
                 and < EGameObjectFields.GAMEOBJECT_STATE:
-                    go.Rotation[key - (uint)EGameObjectFields.GAMEOBJECT_ROTATION] = (float)value;
+                    go.Rotation[key - (uint)EGameObjectFields.GAMEOBJECT_ROTATION] = ToSingle(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_STATE:
-                    go.GoState = (GOState)value;
+                    go.GoState = (GOState)ToUInt32(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_POS_X:
-                    go.Position.X = (float)value;
+                    go.Position.X = ToSingle(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_POS_Y:
-                    go.Position.Y = (float)value;
+                    go.Position.Y = ToSingle(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_POS_Z:
-                    go.Position.Z = (float)value;
+                    go.Position.Z = ToSingle(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_FACING:
-                    go.Facing = (float)value;
+                    go.Facing = ToSingle(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_DYN_FLAGS:
-                    go.DynamicFlags = (DynamicFlags)value;
+                    go.DynamicFlags = (DynamicFlags)ToUInt32(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_FACTION:
-                    go.FactionTemplate = (uint)value;
+                    go.FactionTemplate = ToUInt32(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_TYPE_ID:
-                    go.TypeId = (uint)value;
+                    go.TypeId = ToUInt32(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_LEVEL:
-                    go.Level = (uint)value;
+                    go.Level = ToUInt32(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_ARTKIT:
-                    go.ArtKit = (uint)value;
+                    go.ArtKit = ToUInt32(value);
                     break;
                 case EGameObjectFields.GAMEOBJECT_ANIMPROGRESS:
-                    go.AnimProgress = (uint)value;
+                    go.AnimProgress = ToUInt32(value);
                     break;
             }
         }
+
+        private static uint ToUInt32(object value) => value switch
+        {
+            uint u => u,
+            int i => unchecked((uint)i),
+            ushort us => us,
+            short s => unchecked((uint)s),
+            byte b => b,
+            sbyte sb => unchecked((uint)sb),
+            ulong ul => unchecked((uint)ul),
+            long l => unchecked((uint)l),
+            float f => unchecked((uint)MathF.Max(0f, f)),
+            double d => unchecked((uint)Math.Max(0d, d)),
+            Enum e => Convert.ToUInt32(e, CultureInfo.InvariantCulture),
+            _ => Convert.ToUInt32(value, CultureInfo.InvariantCulture),
+        };
+
+        private static float ToSingle(object value) => value switch
+        {
+            float f => f,
+            double d => (float)d,
+            uint u => u,
+            int i => i,
+            long l => l,
+            ulong ul => ul,
+            Enum e => Convert.ToUInt32(e, CultureInfo.InvariantCulture),
+            _ => Convert.ToSingle(value, CultureInfo.InvariantCulture),
+        };
 
         private static void ApplyDynamicObjectFieldDiffs(
             WoWDynamicObject dyn,
@@ -1740,22 +1845,29 @@ namespace WoWSharpClient
                 case >= EPlayerFields.PLAYER_SKILL_INFO_1_1
                 and <= EPlayerFields.PLAYER_SKILL_INFO_1_1 + 383:
                     {
-                        uint skillField = (field - EPlayerFields.PLAYER_SKILL_INFO_1_1) % 4;
-                        int skillIndex = (int)((field - EPlayerFields.PLAYER_SKILL_INFO_1_1) / 4);
-                        switch (skillField)
+                        // WoW 1.12.1 PLAYER_SKILL_INFO layout: INTERLEAVED, 3 fields per skill.
+                        // Each skill slot occupies 3 consecutive uint32 fields:
+                        //   offset + 0: SkillLine (low16) | Step (high16)   → SkillInt1
+                        //   offset + 1: Current (low16)   | Max (high16)    → SkillInt2
+                        //   offset + 2: TempBonus (low16) | PermBonus (high16) → SkillInt3
+                        // Total: 128 skills × 3 fields = 384 fields.
+                        int offset = (int)(field - EPlayerFields.PLAYER_SKILL_INFO_1_1);
+                        int skillIndex = offset / 3;
+                        int fieldType = offset % 3;
+                        if (skillIndex < 128)
                         {
-                            case 0:
-                                player.SkillInfo[skillIndex].SkillInt1 = (uint)value;
-                                break;
-                            case 1:
-                                player.SkillInfo[skillIndex].SkillInt2 = (uint)value;
-                                break;
-                            case 2:
-                                player.SkillInfo[skillIndex].SkillInt3 = (uint)value;
-                                break;
-                            case 3:
-                                player.SkillInfo[skillIndex].SkillInt4 = (uint)value;
-                                break;
+                            switch (fieldType)
+                            {
+                                case 0:
+                                    player.SkillInfo[skillIndex].SkillInt1 = (uint)value;
+                                    break;
+                                case 1:
+                                    player.SkillInfo[skillIndex].SkillInt2 = (uint)value;
+                                    break;
+                                case 2:
+                                    player.SkillInfo[skillIndex].SkillInt3 = (uint)value;
+                                    break;
+                            }
                         }
                     }
                     break;
@@ -2080,6 +2192,23 @@ namespace WoWSharpClient
                 });
         }
 
+        public void CastSpellOnGameObject(int spellId, ulong gameObjectGuid)
+        {
+            if (_woWClient == null) return;
+
+            using var ms = new MemoryStream();
+            using var w = new BinaryWriter(ms);
+            w.Write((uint)spellId);
+            // TARGET_FLAG_OBJECT = 0x0800 — MaNGOS reads packed GO GUID for this flag
+            w.Write((ushort)0x0800);
+            ReaderUtils.WritePackedGuid(w, gameObjectGuid);
+
+            var payload = ms.ToArray();
+            Log.Information("[CastSpellOnGameObject] spell={SpellId} target=0x{Guid:X} ({Len} bytes): {Hex}",
+                spellId, gameObjectGuid, payload.Length, BitConverter.ToString(payload));
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, payload);
+        }
+
         public bool CanCastSpell(int spellId, ulong targetGuid)
         {
             return Spells.Any(s => s.Id == (uint)spellId);
@@ -2281,11 +2410,13 @@ namespace WoWSharpClient
 
         public void DestroyItemInContainer(int bagSlot, int slotId, int quantity = -1)
         {
-            if (_woWClient == null) return;
+            if (_woWClient == null) { Log.Warning("[DestroyItem] _woWClient is null, cannot send packet"); return; }
             // For backpack (0xFF): slot uses ABSOLUTE inventory index (23 = INVENTORY_SLOT_ITEM_START).
             byte srcBag = bagSlot == 0 ? (byte)0xFF : (byte)(18 + bagSlot);
             byte srcSlot = bagSlot == 0 ? (byte)(23 + slotId) : (byte)slotId;
             byte count = quantity < 0 ? (byte)0xFF : (byte)Math.Min(quantity, 255);
+            Log.Information("[DestroyItem] Sending CMSG_DESTROYITEM: bag=0x{Bag:X2}, slot={Slot}, count={Count}",
+                srcBag, srcSlot, count);
             // CMSG_DESTROYITEM: bag(1) + slot(1) + count(1) + reserved(3) = 6 bytes
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_DESTROYITEM, [srcBag, srcSlot, count, 0, 0, 0]);
         }
@@ -2512,12 +2643,17 @@ namespace WoWSharpClient
             if (!Player.IsFacing(pos))
                 SetFacing(Player.GetFacingForPosition(pos));
 
-            // Start forward movement
+            // Keep directional intent deterministic: clear lateral/back flags before driving forward.
+            StopMovement(ControlBits.Back | ControlBits.StrafeLeft | ControlBits.StrafeRight);
             StartMovement(ControlBits.Front);
 
-            // Set single waypoint only if no full path is active (SetNavigationPath takes precedence)
-            if (_movementController != null && _movementController.CurrentWaypoint == null)
-                _movementController.SetTargetWaypoint(pos);
+            // Refresh waypoint when target changes; otherwise corpse-run can keep driving a stale blocked point.
+            if (_movementController != null)
+            {
+                var currentWaypoint = _movementController.CurrentWaypoint;
+                if (currentWaypoint == null || currentWaypoint.DistanceTo(pos) > 1f)
+                    _movementController.SetTargetWaypoint(pos);
+            }
         }
 
         public void MoveToward(Position position, float facing)
@@ -2531,11 +2667,16 @@ namespace WoWSharpClient
             //   - Position update
             //   - Network packet sending (MSG_MOVE_START_FORWARD, heartbeats, etc.)
             player.Facing = facing;
+            player.MovementFlags &= ~(MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
             player.MovementFlags |= MovementFlags.MOVEFLAG_FORWARD;
 
-            // Set single waypoint only if no full path is active (SetNavigationPath takes precedence)
-            if (_movementController != null && _movementController.CurrentWaypoint == null)
-                _movementController.SetTargetWaypoint(position);
+            // Refresh waypoint when target changes; otherwise corpse-run can keep driving a stale blocked point.
+            if (_movementController != null)
+            {
+                var currentWaypoint = _movementController.CurrentWaypoint;
+                if (currentWaypoint == null || currentWaypoint.DistanceTo(position) > 1f)
+                    _movementController.SetTargetWaypoint(position);
+            }
         }
 
         /// <summary>
@@ -2554,14 +2695,286 @@ namespace WoWSharpClient
         public void ReleaseSpirit()
         {
             if (_woWClient == null) return;
+            Log.Information("[OBJMGR] ReleaseSpirit: sending CMSG_REPOP_REQUEST");
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_REPOP_REQUEST, []);
         }
 
         public void RetrieveCorpse()
         {
-            if (_woWClient == null || Player == null) return;
-            var payload = BitConverter.GetBytes(Player.Guid);
+            if (_woWClient == null) return;
+            // CMSG_RECLAIM_CORPSE: 8-byte ObjectGuid (zero = server infers from session)
+            // Matches DeadActorClientComponent.ResurrectAtCorpseAsync() pattern.
+            Log.Information("[OBJMGR] RetrieveCorpse: sending CMSG_RECLAIM_CORPSE (Player.Guid=0x{Guid:X16})", Player?.Guid ?? 0);
+            var payload = new byte[8];
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_RECLAIM_CORPSE, payload);
+        }
+
+        public void InteractWithGameObject(ulong guid)
+        {
+            if (_woWClient == null) return;
+
+            // Log player position + node distance for diagnostics (server silently drops if out of range)
+            var player = Player;
+            if (player != null)
+            {
+                var node = Objects.FirstOrDefault(o => o.Guid == guid);
+                var nodeDist = node != null ? player.Position.DistanceTo(node.Position) : -1f;
+                Log.Information("[GAMEOBJ_USE] Player pos=({X:F1},{Y:F1},{Z:F1}) flags=0x{Flags:X} nodeDist={Dist:F1}",
+                    player.Position.X, player.Position.Y, player.Position.Z,
+                    (uint)((WoWLocalPlayer)player).MovementFlags, nodeDist);
+            }
+
+            Log.Information("[GAMEOBJ_USE] _isBeingTeleported={Tp} _isInControl={Ctrl}",
+                _isBeingTeleported, _isInControl);
+
+            var payload = BitConverter.GetBytes(guid);
+            Log.Information("[GAMEOBJ_USE] Sending CMSG_GAMEOBJ_USE for GUID=0x{Guid:X} (8 bytes: {Hex})",
+                guid, BitConverter.ToString(payload));
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_GAMEOBJ_USE, payload);
+
+            // Temporary packet sniffer: log all opcodes received for 5 seconds after GAMEOBJ_USE
+            _sniffingGameObjUse = true;
+            _sniffStartTime = DateTime.UtcNow;
+            Task.Delay(5000).ContinueWith(_ =>
+            {
+                _sniffingGameObjUse = false;
+                Log.Information("[GAMEOBJ_USE] Packet sniffer ended — no more logging");
+            });
+        }
+
+        public void AutoStoreLootItem(byte slot)
+        {
+            if (_woWClient == null) return;
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_AUTOSTORE_LOOT_ITEM, new byte[] { slot });
+        }
+
+        public void ReleaseLoot(ulong lootGuid)
+        {
+            if (_woWClient == null) return;
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_LOOT_RELEASE, BitConverter.GetBytes(lootGuid));
+        }
+
+        public async Task LootTargetAsync(ulong targetGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory != null)
+            {
+                await factory.LootingAgent.QuickLootAsync(targetGuid, ct);
+            }
+            else if (_woWClient != null)
+            {
+                // Fallback: send raw CMSG_LOOT packet
+                await _woWClient.SendMSGPackedAsync(Opcode.CMSG_LOOT, BitConverter.GetBytes(targetGuid));
+            }
+        }
+
+        public async Task QuickVendorVisitAsync(ulong vendorGuid, Dictionary<uint, uint>? itemsToBuy = null, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory != null)
+            {
+                await factory.VendorAgent.QuickVendorVisitAsync(vendorGuid, itemsToBuy, cancellationToken: ct);
+            }
+        }
+
+        public async Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory != null)
+            {
+                await factory.MailAgent.QuickCollectAllMailAsync(mailboxGuid, ct);
+            }
+        }
+
+        public async Task<int> LearnAllAvailableSpellsAsync(ulong trainerGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return 0;
+
+            var trainer = factory.TrainerAgent;
+            await trainer.OpenTrainerAsync(trainerGuid, ct);
+            await Task.Delay(500, ct);
+
+            var available = trainer.GetAvailableServices();
+            if (available == null || available.Length == 0)
+            {
+                await trainer.CloseTrainerAsync(ct);
+                return 0;
+            }
+
+            // Sort by cost (cheapest first), filter by player coinage
+            var coinage = Player?.Coinage ?? uint.MaxValue;
+            var affordable = available
+                .Where(s => s.Cost <= coinage)
+                .OrderBy(s => s.Cost)
+                .ToList();
+
+            int learned = 0;
+            foreach (var spell in affordable)
+            {
+                try
+                {
+                    await trainer.LearnSpellAsync(trainerGuid, spell.SpellId, ct);
+                    coinage -= spell.Cost;
+                    learned++;
+                    await Task.Delay(200, ct);
+                }
+                catch { break; }
+            }
+
+            await trainer.CloseTrainerAsync(ct);
+            return learned;
+        }
+
+        public async Task<IReadOnlyList<uint>> DiscoverTaxiNodesAsync(ulong flightMasterGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return Array.Empty<uint>();
+
+            var fm = factory.FlightMasterAgent;
+            await fm.HelloFlightMasterAsync(flightMasterGuid, ct);
+
+            for (int i = 0; i < 20; i++)
+            {
+                if (fm.IsTaxiMapOpen) break;
+                await Task.Delay(100, ct);
+            }
+
+            var nodes = fm.AvailableTaxiNodes;
+            try { await fm.CloseTaxiMapAsync(ct); } catch { }
+            return nodes;
+        }
+
+        public async Task<bool> ActivateFlightAsync(ulong flightMasterGuid, uint destinationNodeId, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return false;
+
+            var fm = factory.FlightMasterAgent;
+
+            if (!fm.IsTaxiMapOpen)
+            {
+                await fm.HelloFlightMasterAsync(flightMasterGuid, ct);
+                for (int i = 0; i < 20; i++)
+                {
+                    if (fm.IsTaxiMapOpen) break;
+                    await Task.Delay(100, ct);
+                }
+                if (!fm.IsTaxiMapOpen) return false;
+            }
+
+            var sourceNodeId = fm.CurrentNodeId;
+            if (!sourceNodeId.HasValue || !fm.IsNodeAvailable(destinationNodeId))
+            {
+                try { await fm.CloseTaxiMapAsync(ct); } catch { }
+                return false;
+            }
+
+            try
+            {
+                await fm.ActivateFlightAsync(flightMasterGuid, sourceNodeId.Value, destinationNodeId, ct);
+                return true;
+            }
+            catch
+            {
+                try { await fm.CloseTaxiMapAsync(ct); } catch { }
+                return false;
+            }
+        }
+
+        public async Task DepositExcessItemsAsync(ulong bankerGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+
+            var bank = factory.BankAgent;
+            await bank.OpenBankAsync(bankerGuid, ct);
+
+            for (int i = 0; i < 20; i++)
+            {
+                if (bank.IsBankWindowOpen) break;
+                await Task.Delay(100, ct);
+            }
+
+            if (!bank.IsBankWindowOpen) return;
+
+            int deposited = 0;
+            for (byte bag = 0; bag < 5 && deposited < 10; bag++)
+            {
+                byte maxSlots = bag == 0 ? (byte)16 : (byte)20;
+                for (byte slot = 0; slot < maxSlots && deposited < 10; slot++)
+                {
+                    var item = GetContainedItem(bag, slot);
+                    if (item == null) continue;
+
+                    // Keep consumables, quest items, reagents, keys, ammo
+                    var info = item.Info;
+                    if (info != null && (info.ItemClass == GameData.Core.Enums.ItemClass.Consumable
+                        || info.ItemClass == GameData.Core.Enums.ItemClass.Quest
+                        || info.ItemClass == GameData.Core.Enums.ItemClass.Reagent
+                        || info.ItemClass == GameData.Core.Enums.ItemClass.Key
+                        || info.ItemClass == GameData.Core.Enums.ItemClass.Lockpick
+                        || info.ItemClass == GameData.Core.Enums.ItemClass.Arrow
+                        || info.ItemClass == GameData.Core.Enums.ItemClass.Bullet))
+                        continue;
+
+                    try
+                    {
+                        await bank.DepositItemAsync(bag, slot, 0, ct);
+                        deposited++;
+                        await Task.Delay(200, ct);
+                    }
+                    catch { }
+                }
+            }
+
+            await bank.CloseBankAsync(ct);
+        }
+
+        public async Task PostAuctionItemsAsync(ulong auctioneerGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+
+            var ah = factory.AuctionHouseAgent;
+            await ah.OpenAuctionHouseAsync(auctioneerGuid, ct);
+
+            for (int i = 0; i < 20; i++)
+            {
+                if (ah.IsAuctionHouseOpen) break;
+                await Task.Delay(100, ct);
+            }
+
+            if (!ah.IsAuctionHouseOpen) return;
+
+            var items = GetContainedItems()
+                .Where(item => item.Quality >= GameData.Core.Enums.ItemQuality.Uncommon)
+                .Take(5)
+                .ToList();
+
+            foreach (var item in items)
+            {
+                uint basePrice = item.Quality switch
+                {
+                    GameData.Core.Enums.ItemQuality.Uncommon => 5000u,
+                    GameData.Core.Enums.ItemQuality.Rare => 50000u,
+                    GameData.Core.Enums.ItemQuality.Epic => 500000u,
+                    _ => 5000u,
+                };
+                int reqLevel = item.Info?.RequiredLevel ?? 1;
+                uint startBid = (uint)(basePrice * (1f + reqLevel / 10f));
+                uint buyout = (uint)(startBid * 1.5f);
+
+                try
+                {
+                    await ah.PostAuctionAsync(item.Guid, startBid, buyout,
+                        AuctionDuration.TwentyFourHours, ct);
+                    await Task.Delay(300, ct);
+                }
+                catch { }
+            }
+
+            try { await ah.CloseAuctionHouseAsync(ct); } catch { }
         }
 
         public void SetTarget(ulong guid)

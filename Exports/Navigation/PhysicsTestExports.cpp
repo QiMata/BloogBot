@@ -3,6 +3,7 @@
 
 #include "PhysicsEngine.h"
 #include "SceneQuery.h"
+#include "SceneCache.h"
 #include "CapsuleCollision.h"
 #include "MapLoader.h"
 #include "CoordinateTransforms.h"
@@ -373,6 +374,65 @@ extern "C"
     __declspec(dllexport) int GetCachedModelCount()
     {
         return DynamicObjectRegistry::Instance()->CachedModelCount();
+    }
+
+    // ==========================================================================
+    // SCENE CACHE (pre-processed collision geometry)
+    // ==========================================================================
+
+    /// Extract collision geometry for a map and save to .scene file.
+    /// Requires VMAP + MapLoader to be initialized (slow, one-time).
+    __declspec(dllexport) bool ExtractSceneCache(
+        uint32_t mapId, const char* outPath,
+        float minX, float minY, float maxX, float maxY)
+    {
+        try
+        {
+            auto* vmapMgr = static_cast<VMAP::VMapManager2*>(
+                VMAP::VMapFactory::createOrGetVMapManager());
+            SceneCache::ExtractBounds bounds;
+            bounds.minX = minX; bounds.minY = minY;
+            bounds.maxX = maxX; bounds.maxY = maxY;
+            auto* cache = SceneCache::Extract(mapId, vmapMgr, g_testMapLoader, bounds);
+            if (!cache) return false;
+            bool ok = cache->SaveToFile(outPath);
+            // Also register in SceneQuery for immediate use
+            SceneQuery::SetSceneCache(mapId, cache);
+            return ok;
+        }
+        catch (...) { return false; }
+    }
+
+    /// Load a pre-cached .scene file (fast, ~10ms).
+    __declspec(dllexport) bool LoadSceneCache(uint32_t mapId, const char* path)
+    {
+        try
+        {
+            auto* cache = SceneCache::LoadFromFile(path);
+            if (!cache) return false;
+            SceneQuery::SetSceneCache(mapId, cache);
+            return true;
+        }
+        catch (...) { return false; }
+    }
+
+    /// Check if a map has a loaded scene cache.
+    __declspec(dllexport) bool HasSceneCache(uint32_t mapId)
+    {
+        return SceneQuery::GetSceneCache(mapId) != nullptr;
+    }
+
+    /// Unload scene cache for a map.
+    __declspec(dllexport) void UnloadSceneCache(uint32_t mapId)
+    {
+        SceneQuery::SetSceneCache(mapId, nullptr);
+    }
+
+    /// Set the scenes directory for auto-discovery.
+    __declspec(dllexport) void SetScenesDir(const char* dir)
+    {
+        if (dir)
+            SceneQuery::SetScenesDir(dir);
     }
 
 } // extern "C"

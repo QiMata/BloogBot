@@ -1,3 +1,4 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
@@ -35,25 +36,8 @@ namespace ShamanEnhancement.Tasks
                 }
             }
 
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
-            {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage(".repairitems");
-                }
-
-                List<IWoWItem> drinkItems = ObjectManager.Items.Where(x => x.ItemId == 1179).ToList();
-                uint drinkItemsCount = (uint)drinkItems.Sum(x => x.StackCount);
-
-                if (drinkItemsCount < 20)
-                {
-                    ObjectManager.SendChatMessage($".additem 1179 {20 - drinkItemsCount}");
-                }
-            }
-
-            IWoWItem drinkItem = ObjectManager.Items.First(x => x.ItemId == 1179);
+            // Use best available drink from inventory
+            IWoWItem? drinkItem = ConsumableData.FindBestDrink(ObjectManager);
 
             if (ObjectManager.Player.Level > 10 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60)
                 drinkItem.Use();

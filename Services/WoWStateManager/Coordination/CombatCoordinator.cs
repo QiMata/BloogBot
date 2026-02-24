@@ -1,13 +1,14 @@
 using Communication;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace WoWStateManager.Coordination;
 
 /// <summary>
-/// Coordinates combat between a foreground warrior (autonomous GrindBot) and a
+/// Coordinates combat between a foreground warrior and a
 /// background shaman (receives actions from StateManager). Reads both bots'
 /// snapshots and injects appropriate actions for the shaman: heal when warrior
 /// is low, DPS the warrior's target, follow when out of combat.
@@ -72,7 +73,7 @@ public class CombatCoordinator
     /// </summary>
     public ActionMessage? GetAction(
         string requestingAccount,
-        Dictionary<string, WoWActivitySnapshot> snapshots)
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         if (!snapshots.TryGetValue(_foregroundAccount, out var fgSnapshot) ||
             !snapshots.TryGetValue(_backgroundAccount, out var bgSnapshot))
@@ -102,8 +103,8 @@ public class CombatCoordinator
 
         return _state switch
         {
-            CoordinatorState.WaitingForBots => HandleWaitingForBots(requestingAccount),
-            CoordinatorState.FormGroup_SendInvite => HandleFormGroupSendInvite(requestingAccount),
+            CoordinatorState.WaitingForBots => HandleWaitingForBots(requestingAccount, fgSnapshot, bgSnapshot),
+            CoordinatorState.FormGroup_SendInvite => HandleFormGroupSendInvite(requestingAccount, fgSnapshot, bgSnapshot),
             CoordinatorState.FormGroup_WaitForAccept => HandleFormGroupWaitForAccept(requestingAccount),
             CoordinatorState.FormGroup_VerifyGroup => HandleFormGroupVerify(requestingAccount, fgSnapshot, bgSnapshot),
             CoordinatorState.GroupFormed => HandleGroupFormed(requestingAccount, fgSnapshot, bgSnapshot),
@@ -123,15 +124,33 @@ public class CombatCoordinator
 
     // ===== State Handlers =====
 
-    private ActionMessage? HandleWaitingForBots(string requestingAccount)
+    private ActionMessage? HandleWaitingForBots(string requestingAccount,
+        WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
+        // Check if bots are already in a group — skip formation if so
+        if (fgSnapshot.PartyLeaderGuid != 0 || bgSnapshot.PartyLeaderGuid != 0)
+        {
+            _logger.LogInformation($"COMBAT_COORD: Bots already grouped (FG PartyLeader={fgSnapshot.PartyLeaderGuid:X}, BG PartyLeader={bgSnapshot.PartyLeaderGuid:X}). Skipping group formation.");
+            TransitionTo(CoordinatorState.GroupFormed);
+            return null;
+        }
+
         _logger.LogInformation($"COMBAT_COORD: Both bots InWorld. Starting group formation.");
         TransitionTo(CoordinatorState.FormGroup_SendInvite);
         return null;
     }
 
-    private ActionMessage? HandleFormGroupSendInvite(string requestingAccount)
+    private ActionMessage? HandleFormGroupSendInvite(string requestingAccount,
+        WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
+        // Double-check: if already grouped (race condition), skip to GroupFormed
+        if (fgSnapshot.PartyLeaderGuid != 0 || bgSnapshot.PartyLeaderGuid != 0)
+        {
+            _logger.LogInformation($"COMBAT_COORD: Already grouped during SendInvite. Skipping.");
+            TransitionTo(CoordinatorState.GroupFormed);
+            return null;
+        }
+
         // Foreground invites background
         if (requestingAccount == _foregroundAccount)
         {

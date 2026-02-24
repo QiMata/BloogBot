@@ -5,7 +5,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace BotProfiles.Common
 {
-    internal abstract class WarlockBaseRotationTask : CombatRotationTask, IBotTask
+    public abstract class WarlockBaseRotationTask : CombatRotationTask, IBotTask
     {
         protected WarlockBaseRotationTask(IBotContext botContext) : base(botContext) { }
 
@@ -52,24 +52,24 @@ namespace BotProfiles.Common
 
             if (target.HealthPercent <= 20)
             {
-                ObjectManager.Player.StopWand();
+                ObjectManager.StopWandAttack();
                 TryCastSpell(DrainSoul, 0, 29);
                 return;
             }
 
             TryCastSpell(CurseOfAgony, 0, 28,
-                ShouldReapply(CurseOfAgony) && target.HealthPercent > 90);
+                !target.HasDebuff(CurseOfAgony) && target.HealthPercent > 90);
 
             TryCastSpell(Immolate, 0, 28,
-                ShouldReapply(Immolate) && target.HealthPercent > 30);
+                !target.HasDebuff(Immolate) && target.HealthPercent > 30);
 
             AfterImmolate();
 
             TryCastSpell(Corruption, 0, 28,
-                ShouldReapply(Corruption) && target.HealthPercent > 30);
+                !target.HasDebuff(Corruption) && target.HealthPercent > 30);
 
             TryCastSpell(SiphonLife, 0, 28,
-                ShouldReapply(SiphonLife) && target.HealthPercent > 50);
+                !target.HasDebuff(SiphonLife) && target.HealthPercent > 50);
 
             AfterDots();
 
@@ -81,62 +81,26 @@ namespace BotProfiles.Common
         protected virtual void AfterImmolate() { }
         protected virtual void AfterDots() { }
 
-        protected double GetDebuffRemaining(string debuff)
+        protected bool ShouldReapply(string debuff)
         {
-            var result = Functions.LuaCallWithResult(
-                $"local _,_,_,_,_,expires = UnitDebuff('target','{debuff}'); if expires then {{0}} = expires - GetTime() else {{0}} = 0 end");
-            return result.Length > 0 &&
-                   double.TryParse(result[0], System.Globalization.NumberStyles.Any,
-                       System.Globalization.CultureInfo.InvariantCulture, out var v)
-                ? v
-                : 0;
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            return target != null && !target.HasDebuff(debuff);
         }
 
-        protected double GetCastTime(string spell)
+        private bool AllDotsActive()
         {
-            var result = Functions.LuaCallWithResult(
-                $"local _,_,_,castTime = GetSpellInfo('{spell}'); if castTime then {{0}} = castTime / 1000 else {{0}} = 0 end");
-            return result.Length > 0 &&
-                   double.TryParse(result[0], System.Globalization.NumberStyles.Any,
-                       System.Globalization.CultureInfo.InvariantCulture, out var v)
-                ? v
-                : 0;
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            if (target == null) return false;
+            return DotSpells.All(d => ObjectManager.IsSpellReady(d) && target.HasDebuff(d));
         }
-
-        protected bool ShouldReapply(string debuff, double threshold = 3)
-        {
-            var castTime = GetCastTime(debuff);
-            return !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(debuff) ||
-                   GetDebuffRemaining(debuff) < threshold + castTime;
-        }
-
-        private bool AllDotsActive() => DotSpells.All(d => GetDebuffRemaining(d) > 3);
 
         private void UseCooldowns()
         {
-            var trinket1 = ObjectManager.GetEquippedItem(EquipSlot.Trinket1);
-            var trinket2 = ObjectManager.GetEquippedItem(EquipSlot.Trinket2);
-
-            if (ItemReady(trinket1))
-                trinket1.Use();
-
-            if (ItemReady(trinket2))
-                trinket2.Use();
-
             if (ObjectManager.IsSpellReady(BloodFury))
                 ObjectManager.CastSpell(BloodFury);
 
             if (ObjectManager.IsSpellReady(Berserking))
                 ObjectManager.CastSpell(Berserking);
-        }
-
-        private bool ItemReady(IWoWItem? item)
-        {
-            if (item == null)
-                return false;
-
-            var result = Functions.LuaCallWithResult($"startTime, duration, enable = GetItemCooldown({item.ItemId}); {{0}} = duration;");
-            return result.Length > 0 && result[0] == "0";
         }
     }
 }

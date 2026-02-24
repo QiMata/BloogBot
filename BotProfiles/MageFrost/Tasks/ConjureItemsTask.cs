@@ -5,7 +5,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace MageFrost.Tasks
 {
-    internal class ConjureItemsTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class ConjureItemsTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         private IWoWItem foodItem;
         private IWoWItem drinkItem;

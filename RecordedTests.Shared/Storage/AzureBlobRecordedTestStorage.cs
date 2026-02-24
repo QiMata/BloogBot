@@ -142,8 +142,13 @@ public sealed class AzureBlobRecordedTestStorage(
 
     private static string SanitizeBlobName(string name)
     {
-        // Azure Blob naming restrictions: forward slashes are allowed, backslashes are not
-        return name.Replace('\\', '/');
+        // Azure Blob naming restrictions: replace backslashes and invalid chars
+        var sanitized = name.Replace('\\', '_');
+        foreach (var c in new[] { ':', '*', '?', '"', '<', '>', '|' })
+        {
+            sanitized = sanitized.Replace(c, '_');
+        }
+        return sanitized;
     }
 
     /// <summary>

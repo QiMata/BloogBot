@@ -1,12 +1,10 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using DruidFeral.Tasks;
-using System.ComponentModel.Composition;
 
 using BotProfiles.Common;
 namespace DruidFeral
 {
-    [Export(typeof(IBot))]
-    internal class DruidFeral : BotBase
+    public class DruidFeral : BotBase
     {
         public override string Name => "Feral Druid";
 

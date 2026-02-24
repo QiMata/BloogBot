@@ -1,12 +1,14 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestShadow.Tasks
 {
-    internal class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-
         public void Update()
         {
             if (ObjectManager.Player.IsCasting) return;
@@ -29,39 +31,12 @@ namespace PriestShadow.Tasks
                 Wait.RemoveAll();
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
-                    BotTasks.Push(new BuffTask(BotContext));
+                BotTasks.Push(new BuffTask(BotContext));
 
                 return;
             }
             else
                 ObjectManager.StopAllMovement();
-
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null) return;
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
-            {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.repairitems')");
-                }
-
-                List<IWoWItem> drinkItems = ObjectManager.Items.Where(x => x.ItemId == 1179).ToList();
-                uint drinkItemsCount = (uint)drinkItems.Sum(x => x.StackCount);
-
-                if (drinkItemsCount < 20)
-                {
-                    ObjectManager.SendChatMessage($".additem 1179 {20 - drinkItemsCount}");
-                }
-
-                IWoWItem drinkItem = ObjectManager.Items.First(x => x.ItemId == 1179);
-
-                if (ObjectManager.Player.Level >= 5 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60)
-                {
-                    drinkItem.Use();
-                }
-            }
 
             if (!ObjectManager.Player.IsDrinking && Wait.For("HealSelfDelay", 3500, true))
             {
@@ -84,6 +59,12 @@ namespace PriestShadow.Tasks
                 if (ObjectManager.Player.HealthPercent < 70)
                     ObjectManager.CastSpell(LesserHeal, castOnSelf: true);
             }
+
+            // Use best available drink from inventory
+            IWoWItem? drinkItem = ConsumableData.FindBestDrink(ObjectManager);
+
+            if (ObjectManager.Player.Level >= 5 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60)
+                drinkItem.Use();
         }
 
         private bool HealthOk => ObjectManager.Player.HealthPercent > 90;

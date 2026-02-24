@@ -4,7 +4,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace WarlockDemonology.Tasks
 {
-    internal class PvPRotationTask(IBotContext botContext) : WarlockBaseRotationTask(botContext), IBotTask
+    public class PvPRotationTask(IBotContext botContext) : WarlockBaseRotationTask(botContext), IBotTask
     {
         protected override void BeforeRotation()
         {

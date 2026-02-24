@@ -1,24 +1,17 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidFeral.Tasks
 {
-    internal class PvERotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
+    public class PvERotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
 
         public void Update()
         {
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(3))
                 return;
@@ -52,7 +45,6 @@ namespace DruidFeral.Tasks
                 {
                     ObjectManager.StopAllMovement();
                     BotTasks.Pop();
-                    BotTasks.Push(new LootTask(BotContext));
                     Wait.Remove(waitKey);
                 }
 
@@ -74,7 +66,7 @@ namespace DruidFeral.Tasks
                 // if low on mana, move into melee range
                 if (ObjectManager.Player.ManaPercent < 20 && ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 5)
                 {
-                    ObjectManager.MoveToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
+                    NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
                     return;
                 }
                 else ObjectManager.StopAllMovement();
@@ -89,8 +81,7 @@ namespace DruidFeral.Tasks
                 // ensure we're in melee range
                 if ((ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 3 && ObjectManager.Player.CurrentShapeshiftForm == BearForm && ObjectManager.GetTarget(ObjectManager.Player).IsInCombat && !TargetMovingTowardPlayer) || (!ObjectManager.GetTarget(ObjectManager.Player).IsInCombat && ObjectManager.Player.IsCasting))
                 {
-                    Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                    ObjectManager.MoveToward(nextWaypoint[0]);
+                    NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
                 }
                 else
                     ObjectManager.StopAllMovement();
@@ -112,8 +103,7 @@ namespace DruidFeral.Tasks
                 // ensure we're in melee range
                 if ((ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) > 3 && ObjectManager.Player.CurrentShapeshiftForm == CatForm && ObjectManager.GetTarget(ObjectManager.Player).IsInCombat && !TargetMovingTowardPlayer) || (!ObjectManager.GetTarget(ObjectManager.Player).IsInCombat && ObjectManager.Player.IsCasting))
                 {
-                    Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                    ObjectManager.MoveToward(nextWaypoint[0]);
+                    NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
                 }
                 else
                     ObjectManager.StopAllMovement();

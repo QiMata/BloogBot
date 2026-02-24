@@ -83,6 +83,7 @@ public sealed class TrueNasAppsClient : IMangosAppsClient
         var name = root.TryGetProperty("name", out var nameElement) ? nameElement.GetString() ?? releaseName : releaseName;
 
         var state = TryGetString(root,
+            "status",
             "status.state",
             "app_state.state",
             "state");
@@ -95,6 +96,9 @@ public sealed class TrueNasAppsClient : IMangosAppsClient
             "config.checkedout",
             "config.checked_out",
             "config.checkedOut",
+            "config.iscsi_target.checkedout",
+            "chart_metadata.checkedout",
+            "resources.checkedout",
             "user_values.checkedout",
             "user_values.checked_out",
             "values.checkedout",
@@ -102,8 +106,13 @@ public sealed class TrueNasAppsClient : IMangosAppsClient
             "metadata.checkedout") ?? false;
 
         var host = TryGetString(root,
+            "host",
+            "mangos_host",
             "server_host",
             "game_host",
+            "config.host",
+            "config.mangos_host",
+            "config.mangosd.host",
             "config.server_host",
             "user_values.server_host",
             "values.server_host",
@@ -111,8 +120,13 @@ public sealed class TrueNasAppsClient : IMangosAppsClient
             "chart_metadata.server_host");
 
         var port = TryGetInt32(root,
+            "port",
+            "mangos_port",
             "server_port",
             "game_port",
+            "config.port",
+            "config.mangos_port",
+            "config.mangosd.port",
             "config.server_port",
             "user_values.server_port",
             "values.server_port",
@@ -120,13 +134,17 @@ public sealed class TrueNasAppsClient : IMangosAppsClient
             "chart_metadata.server_port");
 
         var realm = TryGetString(root,
+            "realm",
+            "mangos_realm",
             "server_realm",
+            "config.realm",
+            "config.mangos_realm",
+            "config.mangosd.realm",
             "config.server_realm",
             "user_values.server_realm",
             "values.server_realm",
             "metadata.server_realm",
-            "chart_metadata.server_realm",
-            "realm");
+            "chart_metadata.server_realm");
 
         return new TrueNasAppRelease(name, isRunning, isCheckedOut, host, port, realm);
     }

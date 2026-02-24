@@ -120,6 +120,7 @@ message WoWPlayer {
     uint32 sessionKills = 40;
     uint32 watchedFactionIndex = 41;
     map<uint32, uint32> combatRating = 42;
+    uint32 corpseRecoveryDelaySeconds = 43;
 }
 
 // Reusable message for WoWItem, extending WoWGameObject

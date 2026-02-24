@@ -54,7 +54,16 @@ namespace WoWSharpClient.Models
                 SplineDuration = SplineDuration,
                 SplineId = SplineId,
                 SplineNodes = SplineNodes != null ? [.. SplineNodes] : null,
-                SplineFinalDestination = SplineFinalDestination
+                SplineFinalDestination = SplineFinalDestination,
+                SplineType = SplineType,
+                FacingTargetGuid = FacingTargetGuid,
+                FacingAngle = FacingAngle,
+                FacingSpot = FacingSpot,
+                SplineTimestamp = SplineTimestamp,
+                SplinePoints = [.. SplinePoints],
+                HighGuid = HighGuid,
+                UpdateAll = UpdateAll,
+                TargetGuid = TargetGuid
             };
         }
     }
@@ -105,6 +114,10 @@ namespace WoWSharpClient.Models
             return new MovementInfoUpdate
             {
                 Guid = Guid,
+                TargetGuid = TargetGuid,
+                HighGuid = HighGuid,
+                UpdateAll = UpdateAll,
+                MovementCounter = MovementCounter,
                 MovementFlags = MovementFlags,
                 LastUpdated = LastUpdated,
                 X = X,

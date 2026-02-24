@@ -28,6 +28,20 @@
 | 64a | DelegateServerDesiredState consolidation | Done |
 | 64b | TestConstants swimming + 8/8 SwimmingValidationTests | Done |
 | 6.1 | Class Coverage Expansion — all 27 profiles compiling, 9/9 classes routed | Done |
+| 0.5.1 | Unified BotRunner — FG + BG share BotRunnerService, deleted ILootingService, ~1000 line FG reduction | Done |
+| 0.5.2 | StateManager Teardown — StopAsync override, PathfindingService cleanup in Program.Main finally, Task.Delay edge case fix | Done |
+| 0.5.3 | Test Fixture Teardown — 3-layer cleanup already robust, added logging | Done |
+| 0.5.4 | FG Login Flow Fixes — stale continentId, FgRealmSelectScreen rewrite, dual-bot StateManagerSettings | Done |
+| 0.5.5 | FG World Server Disconnect — IsLoggedIn guard, re-entry guard, abort path cleanup | Done |
+| 0.5.6 | BG Snapshot GUID + FG Player Protobuf — PlayerGuid setter fix, BuildUnitProtobuf try-catch | Done |
+| 1.0 | Live Validation Tests — 38 tests, 14 classes, all passing | Done |
+| 1.5 | Task Architecture — IdleTask bottom-of-stack, PushDeathRecoveryIfNeeded, GrindTask deleted | Done |
+| 1.5.1 | VendorService Deleted — IObjectManager.QuickVendorVisitAsync DIM, tasks call ObjectManager directly | Done |
+| 1.5.2 | Shared Repository & Enums — SqliteQuestRepository + GroupRole moved to shared projects | Done |
+| 2.1 | Service Wrappers Deleted — 7 services + 6 Dynamic* classes removed, 5 IObjectManager DIMs added | Done |
+| 2.2 | Test Observability — UI_ERROR_MESSAGE in snapshots, FG chat/error event wiring | Done |
+| 2.3 | FG UpdateBehaviorTree Fix — HasEnteredWorld early guard, FgCharacterSelectScreen InWorld fix | Done |
+| 2.4 | BotRunnerService Refactoring — 2586-line file split into 12 partial class files | Done |
 
 ## Completed Task Details
 
@@ -1357,6 +1371,18 @@ All 6 implementation steps completed.
 - Added `SET_FACING` ActionType (proto 63) end-to-end: communication.proto → Communication.cs → CharacterAction → BotRunnerService behavior tree
 - `FishingProfessionTests` now passes dual-client: both BG+FG bots teleport to Ratchet dock, face water, cast fishing, detect bobber
 
+### Bobber Activation + Full Fishing Catch Pipeline (2026-02-20)
+- Wired up `WoWGameObject.Interact()` in headless client (WoWSharpClient) to call `WoWSharpObjectManager.Instance.InteractWithGameObject(guid)` → sends `CMSG_GAMEOBJ_USE`
+- Added `InteractWithGameObject(ulong guid)` to `WoWSharpObjectManager` — enables `BuildInteractWithSequence` to work for BG bot
+- Test polls every 3s sending INTERACT_WITH with bobber GUID; server ignores before splash, accepts during splash window
+- Both BG (6 polls) and FG (4 polls) successfully caught fish. Bobber disappears = catch confirmed.
+
+### Teleport ACK MovementInfo Fix (2026-02-20)
+- `BuildMoveTeleportAckPayload` was incomplete: only sent GUID + counter + timestamp (16 bytes)
+- MaNGOS expects full MovementInfo (position, facing, flags, fall time) — same as `BuildForceMoveAck` format
+- Without position data in ACK, MaNGOS doesn't persist teleported position across logout/login
+- Fixed to pass `WoWLocalPlayer` and build full MovementInfo block
+
 ### Section 12.1: Unit Test Inventory (1095+ passing)
 See TASKS.md git history for full catalog. Key test suites:
 - CombatRotationTaskTests (72), SpellDataTests (99), TalentBuildDefinitionsTests (165)
@@ -1366,3 +1392,70 @@ See TASKS.md git history for full catalog. Key test suites:
 - FlightPathDataTests (20), FishingDataTests (24), EquipmentServiceTests (12)
 - LengthPrefixedFramerTests (30), ReaderUtilsTests (26), WoWSharpEventEmitterTests (18)
 - Many more — see test projects for full list
+
+### BG Protocol Fix: CMSG_FORCE_MOVE_ROOT_ACK / UNROOT_ACK
+**File:** `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+- MaNGOS logged: `HandleMoveRootAck: Player Lokgarn sent root apply ack, but movement info does not have rooted movement flag!`
+- Root cause: `EventEmitter_OnForceMoveRoot` built ACK without setting `MOVEFLAG_ROOT` (0x1000) on the player first
+- Fix: Set MOVEFLAG_ROOT + clear MOVEFLAG_MASK_MOVING before ACK; clear MOVEFLAG_ROOT before unroot ACK
+
+### Unified FG BotRunnerService (Phases 1-3 Complete)
+ForegroundBotWorker consolidated from ~1380 lines to ~500 lines, delegating all login/snapshot/action dispatch to BotRunnerService.
+
+**Phase 1: FG Screen Implementations**
+- `Services/ForegroundBotRunner/Frames/FgLoginScreen.cs` — ILoginScreen for FG (memory + Lua)
+- `Services/ForegroundBotRunner/Frames/FgRealmSelectScreen.cs` — IRealmSelectScreen stub (WoW.exe handles)
+- `Services/ForegroundBotRunner/Frames/FgCharacterSelectScreen.cs` — ICharacterSelectScreen for FG
+- Wired into `ObjectManager.cs` — returns real implementations instead of null
+
+**Phase 2: ILootingService Removed**
+- `LootTargetAsync` DIM added to IObjectManager
+- LootCorpseTask/SkinCorpseTask use ObjectManager.LootTargetAsync() directly
+- ILootingService + LootingService + DynamicLootingService deleted
+- LootCorpse/SkinCorpse cases wired into BotRunnerService.BuildBehaviorTreeFromActions
+
+**Phase 3: BotRunnerService in ForegroundBotWorker**
+- ForegroundBotWorker is now a thin shell: create ObjectManager → request account from StateManager → create BotRunnerService → run anti-AFK loop
+- `ProcessLoginStateMachineAsync`, `ProcessPendingAction`, `SendActivitySnapshot` deleted (~1000 lines)
+- `CreateClassContainer` moved to ForegroundBotWorker (shared pattern with BackgroundBotWorker)
+
+### Test Reliability Fixes (6 issues)
+1. **CombatCoordinator group invite spam**: Added PartyLeaderGuid check before group formation
+2. **GatheringProfessionTests node spawn**: Removed `.gobject add`, uses natural spawns + `.respawn`
+3. **CraftingProfessionTests item spam**: Added safe zone teleport + inventory cleanup
+4. **LiveBotFixture dead on startup**: Added `EnsureCleanCharacterStateAsync()` to fixture init
+5. **Zombie gameobjects**: Cleaned 8,324 test-spawned objects from DB
+6. **FishingProfessionTests**: Fixed CastAndWaitForCatch to track channel observation instead of fragile skill check
+
+### 2.2 Test Observability — UI_ERROR_MESSAGE + Chat Events
+
+- Fixed UI_ERROR_MESSAGE not reaching test output through snapshot pipeline
+- BotRunnerService.Messages.cs subscribes to OnChatMessage, OnErrorMessage, OnUiMessage, OnSystemMessage, OnSkillMessage
+- FlushMessageBuffers copies queued messages to snapshot each tick
+
+### 2.3 FG UpdateBehaviorTree Early-Return Fix
+
+- **Bug**: FgCharacterSelectScreen.HasReceivedCharacterList returned false when InWorld, causing UpdateBehaviorTree to return early before InitializeTaskSequence ever ran
+- **Fix**: Added `HasEnteredWorld` early guard in UpdateBehaviorTree (line 209) — when already in-world, skip all login/charselect checks and go straight to InWorld handling
+- **File**: `Exports/BotRunner/BotRunnerService.cs` (line 209-219)
+
+### 2.4 BotRunnerService Partial Class Refactoring
+
+Split 2586-line monolith into 12 focused partial class files:
+
+| File | Lines | Content |
+|------|-------|---------|
+| `BotRunnerService.cs` | 360 | Core: fields, constructor, lifecycle, main tick loop, UpdateBehaviorTree, death recovery |
+| `BotRunnerService.ActionMapping.cs` | 144 | Proto→CharacterAction mapping, ConvertActionMessageToCharacterActions, BotRunnerContext |
+| `BotRunnerService.ActionDispatch.cs` | 297 | BuildBehaviorTreeFromActions — 50+ case switch |
+| `BotRunnerService.Sequences.Movement.cs` | 177 | GoTo, InteractWith, GatherNode, CheckForTarget |
+| `BotRunnerService.Sequences.NPC.cs` | 184 | Gossip, taxi, quest, trainer, merchant |
+| `BotRunnerService.Sequences.Combat.cs` | 119 | MeleeAttack, CastSpell, StopAttack, Resurrect |
+| `BotRunnerService.Sequences.Trade.cs` | 146 | OfferTrade, OfferMoney, OfferItem, AcceptTrade |
+| `BotRunnerService.Sequences.Party.cs` | 323 | 15 party/group methods (invite, accept, kick, loot rules, etc.) |
+| `BotRunnerService.Sequences.Inventory.cs` | 312 | UseItem, EquipItem, DestroyItem, MoveItem, Craft, Repair |
+| `BotRunnerService.Sequences.Login.cs` | 152 | Login, realm, character select/create, enter world |
+| `BotRunnerService.Messages.cs` | 105 | Chat/error event subscription + buffer flush |
+| `BotRunnerService.Snapshot.cs` | 377 | PopulateSnapshotFromObjectManager + protobuf builders |
+
+All files in `Exports/BotRunner/`. Build verified: 0 errors across BotRunner, ForegroundBotRunner, BackgroundBotRunner, and BotRunner.Tests.

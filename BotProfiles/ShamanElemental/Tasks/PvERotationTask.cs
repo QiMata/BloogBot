@@ -1,10 +1,11 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace ShamanElemental.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
 
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
@@ -16,29 +17,15 @@ namespace ShamanElemental.Tasks
 
         public override void PerformCombatRotation()
         {
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                if (ObjectManager.Aggressors.Any())
-                    ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-                else
-                    return;
-            }
+            if (!EnsureTarget()) return;
 
             ExecuteRotation();
         }
 
         public void Update()
         {
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HealingWave))
             {

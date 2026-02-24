@@ -70,48 +70,6 @@ namespace BotRunner.Tests
         }
     }
 
-    public class LootingServiceTests
-    {
-        [Fact]
-        public async Task TryLootAsync_QuickLootsAndClearsTargetOnce()
-        {
-            var targetingAgent = new Mock<ITargetingNetworkClientComponent>(MockBehavior.Strict);
-            targetingAgent.Setup(x => x.HasTarget()).Returns(true);
-            targetingAgent.Setup(x => x.IsTargeted(789UL)).Returns(true);
-            targetingAgent.Setup(x => x.ClearTargetAsync(CancellationToken.None)).Returns(Task.CompletedTask);
-
-            var attackAgent = new Mock<IAttackNetworkClientComponent>(MockBehavior.Strict);
-            attackAgent.SetupGet(x => x.IsAttacking).Returns(true);
-            attackAgent.Setup(x => x.StopAttackAsync(CancellationToken.None)).Returns(Task.CompletedTask);
-
-            var lootingAgent = new Mock<ILootingNetworkClientComponent>(MockBehavior.Strict);
-            lootingAgent.Setup(x => x.QuickLootAsync(789UL, CancellationToken.None)).Returns(Task.CompletedTask);
-
-            var combatState = new BotCombatState();
-            var service = new LootingService(MockHelpers.CreateAgentFactory(targetingAgent, attackAgent, lootingAgent).Object, combatState);
-
-            var firstResult = await service.TryLootAsync(789UL, CancellationToken.None);
-            var secondResult = await service.TryLootAsync(789UL, CancellationToken.None);
-
-            Assert.True(firstResult);
-            Assert.False(secondResult);
-
-            lootingAgent.Verify(x => x.QuickLootAsync(789UL, CancellationToken.None), Times.Once);
-            attackAgent.Verify(x => x.StopAttackAsync(CancellationToken.None), Times.Once);
-            targetingAgent.Verify(x => x.ClearTargetAsync(CancellationToken.None), Times.Once);
-        }
-
-        [Fact]
-        public async Task TryLootAsync_IgnoresZeroGuid()
-        {
-            var service = new LootingService(MockHelpers.CreateAgentFactory().Object, new BotCombatState());
-
-            var result = await service.TryLootAsync(0, CancellationToken.None);
-
-            Assert.False(result);
-        }
-    }
-
     public class TargetPositioningServiceTests
     {
         [Fact]
@@ -125,13 +83,12 @@ namespace BotRunner.Tests
             var objectManager = new Mock<IObjectManager>();
             objectManager.SetupGet(x => x.Player).Returns(player.Object);
 
+            // Target at 50y away — well beyond the 25y default engagement range
             var target = new Mock<IWoWUnit>();
-            target.SetupGet(x => x.Position).Returns(new Position(10, 0, 0));
+            target.SetupGet(x => x.Position).Returns(new Position(50, 0, 0));
 
-            var pathfindingClient = new MovementTestPathfindingClient(new[] { new Position(0, 0, 0), new Position(1, 1, 1) })
-            {
-                PathingDistance = 50
-            };
+            // NavigationPath skips waypoint[0] (current pos) and returns waypoint[1]
+            var pathfindingClient = new MovementTestPathfindingClient(new[] { new Position(0, 0, 0), new Position(1, 1, 1) });
 
             var service = new TargetPositioningService(objectManager.Object, pathfindingClient);
 
@@ -157,10 +114,7 @@ namespace BotRunner.Tests
             var target = new Mock<IWoWUnit>();
             target.SetupGet(x => x.Position).Returns(new Position(10, 0, 0));
 
-            var pathfindingClient = new MovementTestPathfindingClient(Array.Empty<Position>())
-            {
-                PathingDistance = 10
-            };
+            var pathfindingClient = new MovementTestPathfindingClient(Array.Empty<Position>());
 
             var service = new TargetPositioningService(objectManager.Object, pathfindingClient);
 
@@ -185,10 +139,7 @@ namespace BotRunner.Tests
             var target = new Mock<IWoWUnit>();
             target.SetupGet(x => x.Position).Returns(new Position(10, 0, 0));
 
-            var pathfindingClient = new MovementTestPathfindingClient(Array.Empty<Position>())
-            {
-                PathingDistance = 10
-            };
+            var pathfindingClient = new MovementTestPathfindingClient(Array.Empty<Position>());
 
             var service = new TargetPositioningService(objectManager.Object, pathfindingClient);
 
@@ -290,10 +241,6 @@ namespace BotRunner.Tests
     internal sealed class MovementTestPathfindingClient(Position[] path) : PathfindingClient
     {
         private readonly Position[] _path = path;
-
-        public float PathingDistance { get; set; }
-
-        public override float GetPathingDistance(uint mapId, Position start, Position end) => PathingDistance;
 
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
     }

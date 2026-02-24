@@ -1,38 +1,55 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using static BotRunner.Constants.Spellbook;
 
 namespace HunterBeastMastery.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-
-        internal PullTargetTask(IBotContext botContext) : base(botContext) { }
+        private bool _petSent;
 
         public void Update()
         {
-            if (ObjectManager.Hostiles.Any())
-            {
-                IWoWUnit potentialNewTarget = ObjectManager.Hostiles.First();
-
-                if (potentialNewTarget != null && potentialNewTarget.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid)
-                {
-                    ObjectManager.SetTarget(potentialNewTarget.TargetGuid);
-                }
-            }
-
-            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 28)
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            if (target == null || target.Health <= 0 || target.TappedByOther)
             {
                 ObjectManager.StopAllMovement();
-                ObjectManager.StartRangedAttack();
+                BotTasks.Pop();
+                return;
+            }
+
+            if (ObjectManager.Player.IsInCombat || ObjectManager.Aggressors.Any())
+            {
+                ObjectManager.StopAllMovement();
+                BotTasks.Pop();
+                BotTasks.Push(new PvERotationTask(BotContext));
+                return;
+            }
+
+            float distanceToTarget = ObjectManager.Player.Position.DistanceTo(target.Position);
+
+            if (distanceToTarget < 28)
+            {
+                ObjectManager.StopAllMovement();
+
+                // Send pet first to establish aggro (BM pet is the main tank)
+                if (!_petSent && ObjectManager.Pet != null && ObjectManager.Pet.Health > 0)
+                {
+                    ObjectManager.Pet.Attack();
+                    _petSent = true;
+                }
+
+                if (ObjectManager.IsSpellReady(HuntersMark) && !target.HasDebuff(HuntersMark))
+                    ObjectManager.CastSpell(HuntersMark);
+                else
+                    ObjectManager.StartRangedAttack();
 
                 BotTasks.Pop();
-                BotTasks.Push(Container.CreatePvERotationTask(BotContext));
+                BotTasks.Push(new PvERotationTask(BotContext));
                 return;
-            } else
-            {
-                Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                ObjectManager.MoveToward(nextWaypoint[1]);
             }
+
+            NavigateToward(target.Position);
         }
     }
 }
