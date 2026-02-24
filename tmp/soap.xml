@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <ns1:executeCommand xmlns:ns1="urn:MaNGOS">
+      <command>.go xyz 326.81 -4706.65 515.3 1</command>
+    </ns1:executeCommand>
+  </soap:Body>
+</soap:Envelope>

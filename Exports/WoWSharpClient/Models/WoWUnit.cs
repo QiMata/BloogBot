@@ -98,6 +98,10 @@ namespace WoWSharpClient.Models
         public uint PetNextLevelExperience { get; set; }
 
         public uint ChannelingId { get; set; }
+        public uint SpellcastId { get; set; }
+        public bool IsCasting => SpellcastId > 0;
+        public bool IsChanneling => ChannelingId > 0;
+        public bool IsInCombat => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_IN_COMBAT);
         public float ModCastSpeed { get; set; }
 
         public uint CreatedBySpell { get; set; }
@@ -228,6 +232,7 @@ namespace WoWSharpClient.Models
             PetExperience = source.PetExperience;
             PetNextLevelExperience = source.PetNextLevelExperience;
             ChannelingId = source.ChannelingId;
+            SpellcastId = source.SpellcastId;
             ModCastSpeed = source.ModCastSpeed;
             CreatedBySpell = source.CreatedBySpell;
             NPCEmoteState = source.NPCEmoteState;
@@ -237,6 +242,21 @@ namespace WoWSharpClient.Models
             Stamina = source.Stamina;
             Intellect = source.Intellect;
             Spirit = source.Spirit;
+            BaseMana = source.BaseMana;
+            BaseHealth = source.BaseHealth;
+            AttackPower = source.AttackPower;
+            AttackPowerMods = source.AttackPowerMods;
+            AttackPowerMultipler = source.AttackPowerMultipler;
+            RangedAttackPower = source.RangedAttackPower;
+            RangedAttackPowerMods = source.RangedAttackPowerMods;
+            RangedAttackPowerMultipler = source.RangedAttackPowerMultipler;
+            MinRangedDamage = source.MinRangedDamage;
+            MaxRangedDamage = source.MaxRangedDamage;
+            FacingAngle = source.FacingAngle;
+            SplineType = source.SplineType;
+            FacingSpot = source.FacingSpot;
+            SplineTimestamp = source.SplineTimestamp;
+            SplinePoints = [.. source.SplinePoints];
             Buffs.Clear();
             Buffs.AddRange(source.Buffs.Select(b => b.Clone()));
             Debuffs.Clear();
@@ -245,18 +265,30 @@ namespace WoWSharpClient.Models
 
         public bool HasBuff(string name) => Buffs.Any(a => a.Name == name);
         public bool HasDebuff(string name) => Debuffs.Any(a => a.Name == name);
-        public bool DismissBuff(string buffName) => throw new NotImplementedException();
-        public IEnumerable<ISpellEffect> GetDebuffs() => throw new NotImplementedException();
-        public IEnumerable<ISpellEffect> GetBuffs() => throw new NotImplementedException();
+        public bool DismissBuff(string buffName)
+        {
+            // TODO: Send CMSG_CANCEL_AURA when WoWUnit has client access
+            return false;
+        }
+
+        public IEnumerable<ISpellEffect> GetDebuffs() =>
+            Debuffs.Select(d => (ISpellEffect)new SpellEffect("", d.Id, EffectType.None));
+
+        public IEnumerable<ISpellEffect> GetBuffs() =>
+            Buffs.Select(b => (ISpellEffect)new SpellEffect("", b.Id, EffectType.None));
 
         public Position GetPointBehindUnit(float distance)
         {
-            throw new NotImplementedException();
+            // "Behind" = opposite of facing direction (facing + π)
+            float behindAngle = FacingAngle + (float)Math.PI;
+            float x = Position.X + (float)Math.Cos(behindAngle) * distance;
+            float y = Position.Y + (float)Math.Sin(behindAngle) * distance;
+            return new Position(x, y, Position.Z);
         }
 
         public void Interact()
         {
-            throw new NotImplementedException();
+            // BG bot interaction is handled via network client components
         }
     }
 }

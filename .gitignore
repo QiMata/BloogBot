@@ -256,6 +256,21 @@ next-session-prompt.md
 # Root artifact files (accidental output)
 nul
 vendor_section.txt
+Log.txt
+
+# Diagnostic/debug files from physics development
+*_diag.txt
+*_diag_*.txt
+step_all.txt
+sweep_*.txt
+vmap_*.txt
+acq_model.txt
+bcm_diag.txt
+inst_bounds.txt
+resolve_diag.txt
+test_output.txt
+down_pass_diag.txt
+slope_analysis*.js
 
 # Debug breadcrumbs from ForegroundBotRunner
 Bot/Debug/net8.0/*.txt

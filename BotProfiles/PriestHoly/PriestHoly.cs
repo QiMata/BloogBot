@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using PriestHoly.Tasks;
 
 using BotProfiles.Common;
 namespace PriestHoly
 {
-    [Export(typeof(IBot))]
-    internal class PriestHoly : BotBase
+    public class PriestHoly : BotBase
     {
         public override string Name => "Holy Priest";
 

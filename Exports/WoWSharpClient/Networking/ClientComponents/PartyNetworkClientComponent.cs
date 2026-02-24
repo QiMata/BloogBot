@@ -679,8 +679,8 @@ namespace WoWSharpClient.Networking.ClientComponents
         }
 
         /// <summary>
-        /// SMSG_GROUP_LIST (1.12.1 cmangos-classic format):
-        /// groupType(1) + ownSubGroup(1) + ownFlags(1) + memberCount(4)
+        /// SMSG_GROUP_LIST (1.12.1 MaNGOS format):
+        /// groupType(1) + ownFlags(1) + memberCount(4)
         /// + [CString name + guid(8) + online(1) + flags(1)] * memberCount
         /// + leaderGuid(8)
         /// + [if memberCount > 0: lootMethod(1) + looterGuid(8) + lootThreshold(1)]
@@ -690,15 +690,15 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 var span = payload.Span;
-                // Header: groupType(1) + subGroup(1) + flags(1) + count(4) = 7 bytes
-                if (span.Length < 7) return (IsInRaid, GroupSize);
+                // Header: groupType(1) + ownFlags(1) + count(4) = 6 bytes
+                if (span.Length < 6) return (IsInRaid, GroupSize);
 
                 byte groupType = span[0];
-                // span[1] = ownSubGroup, span[2] = ownFlags (unused here)
-                uint count = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(3, 4));
+                // span[1] = ownFlags (group/subgroup + assistant bit) - currently unused here
+                uint count = BinaryPrimitives.ReadUInt32LittleEndian(span.Slice(2, 4));
 
                 var members = new List<GroupMember>((int)count);
-                int offset = 7;
+                int offset = 6;
 
                 for (uint i = 0; i < count && offset < span.Length; i++)
                 {

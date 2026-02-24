@@ -89,19 +89,28 @@ namespace WoWSharpClient
             _handlers[Opcode.SMSG_NAME_QUERY_RESPONSE] = CharacterSelectHandler.HandleNameQueryResponse;
 
             _handlers[Opcode.SMSG_LOGIN_VERIFY_WORLD] = LoginHandler.HandleLoginVerifyWorld;
+            _handlers[Opcode.SMSG_TRANSFER_PENDING] = LoginHandler.HandleTransferPending;
             _handlers[Opcode.SMSG_LOGIN_SETTIMESPEED] = LoginHandler.HandleSetTimeSpeed;
             _handlers[Opcode.SMSG_QUERY_TIME_RESPONSE] = LoginHandler.HandleTimeQueryResponse;
 
             _handlers[Opcode.SMSG_INITIAL_SPELLS] = SpellHandler.HandleInitialSpells;
+            _handlers[Opcode.SMSG_LEARNED_SPELL] = SpellHandler.HandleLearnedSpell;
             _handlers[Opcode.SMSG_SPELLLOGMISS] = SpellHandler.HandleSpellLogMiss;
             _handlers[Opcode.SMSG_SPELL_GO] = SpellHandler.HandleSpellGo;
             _handlers[Opcode.SMSG_SPELL_START] = SpellHandler.HandleSpellStart;
+            _handlers[Opcode.SMSG_ATTACKSTART] = SpellHandler.HandleAttackStart;
+            _handlers[Opcode.SMSG_ATTACKSTOP] = SpellHandler.HandleAttackStop;
             _handlers[Opcode.SMSG_ATTACKERSTATEUPDATE] = SpellHandler.HandleAttackerStateUpdate;
             _handlers[Opcode.SMSG_DESTROY_OBJECT] = SpellHandler.HandleDestroyObject;
             _handlers[Opcode.SMSG_CAST_FAILED] = SpellHandler.HandleCastFailed;
+            _handlers[Opcode.SMSG_SPELL_FAILURE] = SpellHandler.HandleSpellFailure;
             _handlers[Opcode.SMSG_SPELLHEALLOG] = SpellHandler.HandleSpellHealLog;
+            _handlers[Opcode.SMSG_LOG_XPGAIN] = SpellHandler.HandleLogXpGain;
+            _handlers[Opcode.SMSG_LEVELUP_INFO] = SpellHandler.HandleLevelUpInfo;
+            _handlers[Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM] = SpellHandler.HandleGameObjectCustomAnim;
 
             _handlers[Opcode.SMSG_STANDSTATE_UPDATE] = StandStateHandler.HandleStandStateUpdate;
+            _handlers[Opcode.SMSG_CORPSE_RECLAIM_DELAY] = DeathHandler.HandleCorpseReclaimDelay;
 
             _handlers[Opcode.SMSG_INIT_WORLD_STATES] = WorldStateHandler.HandleInitWorldStates;
             _handlers[Opcode.SMSG_SET_REST_START] = CharacterSelectHandler.HandleSetRestStart;
@@ -109,13 +118,19 @@ namespace WoWSharpClient
 
         public void Dispatch(Opcode opcode, byte[] data)
         {
+            // Temporary diagnostic: log all opcodes received while sniffing post-GAMEOBJ_USE
+            if (WoWSharpObjectManager.Instance?._sniffingGameObjUse == true)
+            {
+                Log.Information("[SNIFFER] Opcode={Op} (0x{Val:X4}) len={Len}", opcode, (int)opcode, data.Length);
+            }
+
             if (_handlers.TryGetValue(opcode, out var handler))
             {
                 _queue.Enqueue(() => handler(opcode, data));
             }
             else
             {
-                //Log.Error($"Unhandled opcode: {opcode} byte[{data.Length}]");
+                Log.Information("Unhandled opcode: {Opcode} (0x{Value:X4}) byte[{Length}]", opcode, (int)opcode, data.Length);
             }
         }
         private async Task Runner()

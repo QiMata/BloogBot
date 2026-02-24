@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using PaladinRetribution.Tasks;
 
 using BotProfiles.Common;
 namespace PaladinRetribution
 {
-    [Export(typeof(IBot))]
-    internal class PaladinRetribution : BotBase
+    public class PaladinRetribution : BotBase
     {
         public override string Name => "Retribution Paladin";
 

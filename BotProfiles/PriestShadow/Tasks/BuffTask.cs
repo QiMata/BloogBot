@@ -1,4 +1,6 @@
 using BotRunner.Interfaces;
+using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -25,18 +27,7 @@ namespace PriestShadow.Tasks
 
             if (woWUnit.Position.DistanceTo(ObjectManager.Player.Position) > 15 || !ObjectManager.Player.InLosWith(woWUnit))
             {
-                Position[] locations = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, woWUnit.Position, true);
-
-                if (locations.Length > 1)
-                {
-                    ObjectManager.MoveToward(locations[1]);
-                }
-                else
-                {
-                    ObjectManager.StopAllMovement();
-                    BotTasks.Pop();
-                    return;
-                }
+                NavigateToward(woWUnit.Position);
             }
 
             ObjectManager.SetTarget(woWUnit.Guid);

@@ -1,4 +1,5 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -24,10 +25,9 @@ namespace WarriorFury.Tasks
             }
 
             float distanceToTarget = ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            if (distanceToTarget < 25 && distanceToTarget > 8 && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady("Charge") && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
+            if (distanceToTarget < 25 && distanceToTarget > 8 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady("Charge") && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
             {
-                if (ObjectManager.Player.IsCasting)
-                    ObjectManager.CastSpell(Charge);
+                ObjectManager.CastSpell(Charge);
             }
 
             if (distanceToTarget < 3)
@@ -38,8 +38,7 @@ namespace WarriorFury.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            ObjectManager.MoveToward(nextWaypoint[0]);
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

@@ -1,3 +1,4 @@
+using BotRunner.Constants;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
@@ -83,5 +84,12 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("TargetProcessId")]
         public int? TargetProcessId { get; set; }
+
+        /// <summary>
+        /// Optional bot behavior tuning. If null/omitted, uses defaults.
+        /// Controls pull range, rest thresholds, vendor triggers, gathering, etc.
+        /// </summary>
+        [JsonProperty("BehaviorConfig", NullValueHandling = NullValueHandling.Ignore)]
+        public BotBehaviorConfig? BehaviorConfig { get; set; }
     }
 }

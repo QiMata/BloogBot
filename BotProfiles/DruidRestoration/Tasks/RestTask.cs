@@ -1,13 +1,13 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidRestoration.Tasks
 {
-    /// <summary>
-    /// Handles resting logic for the restoration druid.
-    /// </summary>
-    internal class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         public void Update()
         {
@@ -41,6 +41,10 @@ namespace DruidRestoration.Tasks
             {
                 ObjectManager.CastSpell(Rejuvenation);
             }
+
+            IWoWItem? drinkItem = ConsumableData.FindBestDrink(ObjectManager);
+            if (ObjectManager.Player.Level >= 6 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60)
+                drinkItem.Use();
         }
 
         private bool HealthOk => ObjectManager.Player.HealthPercent >= 90;

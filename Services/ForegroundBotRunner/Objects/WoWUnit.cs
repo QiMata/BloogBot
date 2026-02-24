@@ -228,12 +228,15 @@ namespace ForegroundBotRunner.Objects
 
         public IEnumerable<ISpellEffect> GetDebuffs()
         {
-            throw new NotImplementedException();
+            return GetDebuffs(LuaTarget.Target);
         }
 
         public Position GetPointBehindUnit(float distance)
         {
-            throw new NotImplementedException();
+            float behindAngle = Facing + (float)Math.PI;
+            float x = Position.X + (float)Math.Cos(behindAngle) * distance;
+            float y = Position.Y + (float)Math.Sin(behindAngle) * distance;
+            return new Position(x, y, Position.Z);
         }
 
         public bool DismissBuff(string buffName)
@@ -243,7 +246,7 @@ namespace ForegroundBotRunner.Objects
 
         public IEnumerable<ISpellEffect> GetBuffs()
         {
-            throw new NotImplementedException();
+            return Buffs.Select(b => (ISpellEffect)new SpellEffect("", 1, EffectType.None));
         }
 
         public bool IsImmobilized
@@ -270,25 +273,81 @@ namespace ForegroundBotRunner.Objects
 
         public uint FactionTemplate => throw new NotImplementedException();
 
-        public uint TypeId => throw new NotImplementedException();
+        public uint TypeId => 0; // Units are not GameObjects; TypeId only meaningful for WoWGameObject
 
         public NPCFlags NPCFlags => (NPCFlags)MemoryManager.ReadInt(GetDescriptorPtr() + MemoryAddresses.WoWUnit_NPCFlagsOffset);
 
-        public uint[] Bytes0 => throw new NotImplementedException();
+        public uint[] Bytes0 => ReadPackedByteField(UpdateFields.EUnitFields.UNIT_FIELD_BYTES_0);
 
         public uint[] VirtualItemInfo => throw new NotImplementedException();
 
         public uint[] VirtualItemSlotDisplay => throw new NotImplementedException();
 
-        public uint[] AuraFields => throw new NotImplementedException();
+        public uint[] AuraFields
+        {
+            get
+            {
+                const int count = 48; // UNIT_FIELD_AURA: 48 spell ID slots
+                var result = new uint[count];
+                var descriptorPtr = GetDescriptorPtr();
+                int baseOffset = (int)UpdateFields.EUnitFields.UNIT_FIELD_AURA * 4;
+                for (int i = 0; i < count; i++)
+                    result[i] = MemoryManager.ReadUint(descriptorPtr + baseOffset + i * 4);
+                return result;
+            }
+        }
 
-        public uint[] AuraFlags => throw new NotImplementedException();
+        public uint[] AuraFlags
+        {
+            get
+            {
+                const int count = 6; // UNIT_FIELD_AURAFLAGS: 6 uint32 values
+                var result = new uint[count];
+                var descriptorPtr = GetDescriptorPtr();
+                int baseOffset = (int)UpdateFields.EUnitFields.UNIT_FIELD_AURAFLAGS * 4;
+                for (int i = 0; i < count; i++)
+                    result[i] = MemoryManager.ReadUint(descriptorPtr + baseOffset + i * 4);
+                return result;
+            }
+        }
 
-        public uint[] AuraLevels => throw new NotImplementedException();
+        public uint[] AuraLevels
+        {
+            get
+            {
+                const int count = 12; // UNIT_FIELD_AURALEVELS: 12 uint32 values
+                var result = new uint[count];
+                var descriptorPtr = GetDescriptorPtr();
+                int baseOffset = (int)UpdateFields.EUnitFields.UNIT_FIELD_AURALEVELS * 4;
+                for (int i = 0; i < count; i++)
+                    result[i] = MemoryManager.ReadUint(descriptorPtr + baseOffset + i * 4);
+                return result;
+            }
+        }
 
-        public uint[] AuraApplications => throw new NotImplementedException();
+        public uint[] AuraApplications
+        {
+            get
+            {
+                const int count = 12; // UNIT_FIELD_AURAAPPLICATIONS: 12 uint32 values
+                var result = new uint[count];
+                var descriptorPtr = GetDescriptorPtr();
+                int baseOffset = (int)UpdateFields.EUnitFields.UNIT_FIELD_AURAAPPLICATIONS * 4;
+                for (int i = 0; i < count; i++)
+                    result[i] = MemoryManager.ReadUint(descriptorPtr + baseOffset + i * 4);
+                return result;
+            }
+        }
 
-        public uint AuraState => throw new NotImplementedException();
+        public uint AuraState
+        {
+            get
+            {
+                var descriptorPtr = GetDescriptorPtr();
+                int offset = (int)UpdateFields.EUnitFields.UNIT_FIELD_AURASTATE * 4;
+                return MemoryManager.ReadUint(descriptorPtr + offset);
+            }
+        }
 
         public float BaseAttackTime => throw new NotImplementedException();
 
@@ -304,7 +363,7 @@ namespace ForegroundBotRunner.Objects
 
         public uint MaxOffhandDamage => throw new NotImplementedException();
 
-        public uint[] Bytes1 => throw new NotImplementedException();
+        public uint[] Bytes1 => ReadPackedByteField(UpdateFields.EUnitFields.UNIT_FIELD_BYTES_1);
 
         public uint PetNumber => throw new NotImplementedException();
 
@@ -340,7 +399,7 @@ namespace ForegroundBotRunner.Objects
 
         public uint BaseHealth => throw new NotImplementedException();
 
-        public uint[] Bytes2 => throw new NotImplementedException();
+        public uint[] Bytes2 => ReadPackedByteField(UpdateFields.EUnitFields.UNIT_FIELD_BYTES_2);
 
         public uint AttackPower => throw new NotImplementedException();
 
@@ -361,6 +420,19 @@ namespace ForegroundBotRunner.Objects
         public uint[] PowerCostModifers => throw new NotImplementedException();
 
         public uint[] PowerCostMultipliers => throw new NotImplementedException();
+
+        private uint[] ReadPackedByteField(UpdateFields.EUnitFields field)
+        {
+            var descriptorPtr = GetDescriptorPtr();
+            var packed = MemoryManager.ReadUint(descriptorPtr + (int)field * 4);
+            return
+            [
+                packed & 0xFF,
+                (packed >> 8) & 0xFF,
+                (packed >> 16) & 0xFF,
+                (packed >> 24) & 0xFF
+            ];
+        }
 
         /// <summary>
         /// Tick count when the fall began. Use with current tick to calculate fall duration.

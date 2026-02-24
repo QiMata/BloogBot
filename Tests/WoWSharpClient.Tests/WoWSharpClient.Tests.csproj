@@ -1,12 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.5" />
@@ -16,24 +13,18 @@
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\Exports\BotCommLayer\BotCommLayer.csproj" />
     <ProjectReference Include="..\..\Exports\BotRunner\BotRunner.csproj" />
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
     <!-- Build-order only: PathfindingService is x64 and runs as a separate process.
          Integration tests communicate with it over TCP, not via assembly reference. -->
-    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj"
-                      ReferenceOutputAssembly="false"
-                      SkipGetTargetFrameworkProperties="true"
-                      Private="false" />
+    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" Private="false" />
     <ProjectReference Include="..\Tests.Infrastructure\Tests.Infrastructure.csproj" />
   </ItemGroup>
-
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
-
   <ItemGroup>
     <None Update="Resources\MSG_MOVE_FALL_LAND\20240815_084650695.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -828,5 +819,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
+  <PropertyGroup>
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\..\test.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
 </Project>

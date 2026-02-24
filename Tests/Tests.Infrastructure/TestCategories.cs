@@ -31,6 +31,7 @@ public static class TestCategories
     public const string Integration = "Integration";
     public const string EndToEnd = "EndToEnd";
     public const string Performance = "Performance";
+    public const string RequiresInfrastructure = "RequiresInfrastructure";
 
     // Service values
     public const string WoWServer = "WoWServer";
@@ -113,4 +114,15 @@ public class RequiresAllServicesAttribute : Attribute, Xunit.Sdk.ITraitAttribute
             new KeyValuePair<string, string>(TestCategories.Category, TestCategories.Integration),
             new KeyValuePair<string, string>(TestCategories.RequiresService, TestCategories.AllServices)
         ];
+}
+
+/// <summary>
+/// Marks tests that require infrastructure (WoW process, StateManager, etc.).
+/// Filter: dotnet test --filter "Category!=RequiresInfrastructure"
+/// </summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = true)]
+public class RequiresInfrastructureAttribute : Attribute, Xunit.Sdk.ITraitAttribute
+{
+    public IReadOnlyCollection<KeyValuePair<string, string>> GetTraits()
+        => [new KeyValuePair<string, string>(TestCategories.Category, TestCategories.RequiresInfrastructure)];
 }

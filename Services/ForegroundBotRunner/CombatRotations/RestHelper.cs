@@ -13,7 +13,9 @@ namespace ForegroundBotRunner.CombatRotations
     {
         private static int _lastFoodAttempt;
         private static int _lastDrinkAttempt;
+        private static int _lastBandageAttempt;
         private const int ATTEMPT_COOLDOWN_MS = 3000;
+        private const int BANDAGE_COOLDOWN_MS = 16000; // Bandage channels ~8s + buffer
 
         /// <summary>
         /// Try to eat food from inventory. Returns true if food was used.
@@ -99,6 +101,57 @@ namespace ForegroundBotRunner.CombatRotations
             catch (Exception ex)
             {
                 Log.Debug(ex, "[RestHelper] TryDrinkWater error");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Try to use a bandage from inventory. Returns true if bandage was used.
+        /// Checks for "Recently Bandaged" debuff before scanning bags.
+        /// Bandage tooltip text: "Use: Heals X damage over Y sec."
+        /// </summary>
+        public static bool TryUseBandage(WoWPlayer player)
+        {
+            if (player.IsChanneling) return true; // Already channeling (possibly bandaging)
+
+            // Throttle attempts — bandage channel is ~8s + 60s "Recently Bandaged" debuff
+            if (Environment.TickCount - _lastBandageAttempt < BANDAGE_COOLDOWN_MS)
+                return false;
+
+            _lastBandageAttempt = Environment.TickCount;
+
+            try
+            {
+                // Lua: check for "Recently Bandaged" debuff, then scan bags for bandage tooltip
+                Functions.LuaCall(
+                    "for i=1,40 do " +
+                        "local n=UnitDebuff('player',i) " +
+                        "if not n then break end " +
+                        "if n=='Recently Bandaged' then return end " +
+                    "end " +
+                    "for bag=0,4 do " +
+                        "for slot=1,GetContainerNumSlots(bag) do " +
+                            "local link=GetContainerItemLink(bag,slot) " +
+                            "if link then " +
+                                "GameTooltip:SetOwner(UIParent,'ANCHOR_NONE') " +
+                                "GameTooltip:SetBagItem(bag,slot) " +
+                                "for i=1,GameTooltip:NumLines() do " +
+                                    "local t=getglobal('GameTooltipTextLeft'..i):GetText() " +
+                                    "if t and strfind(t,'Use: Heals %d+ damage') then " +
+                                        "UseContainerItem(bag,slot) " +
+                                        "GameTooltip:Hide() " +
+                                        "return " +
+                                    "end " +
+                                "end " +
+                                "GameTooltip:Hide() " +
+                            "end " +
+                        "end " +
+                    "end");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[RestHelper] TryUseBandage error");
                 return false;
             }
         }

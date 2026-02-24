@@ -1,10 +1,11 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace MageFire.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
         private readonly string pullingSpell;
 
@@ -43,8 +44,7 @@ namespace MageFire.Tasks
             }
             else
             {
-                Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                ObjectManager.MoveToward(nextWaypoint[0]);
+                NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
             }
         }
     }

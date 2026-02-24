@@ -18,6 +18,12 @@ GameData.Core (interfaces, zero dependencies)
 
 ## Build & Test Commands
 
+**Always kill WoW.exe before building.** The ForegroundBotRunner injects DLLs into WoW.exe from the build output directory. A running WoW.exe locks those DLLs and causes MSB3027 copy errors. Find and kill WoW.exe PIDs first:
+```bash
+tasklist //FI "IMAGENAME eq WoW.exe" //FO LIST
+taskkill //F //PID <pid>
+```
+
 ```bash
 # .NET build (primary)
 dotnet build WestworldOfWarcraft.sln
@@ -25,12 +31,11 @@ dotnet build WestworldOfWarcraft.sln
 # .NET tests (MSTest + Moq, 11 test projects)
 dotnet test WestworldOfWarcraft.sln --configuration Release
 
-# C++ native components (Navigation, Loader, FastCall)
-cmake -B build && cmake --build build
-
-# Or via CMake dotnet targets
-cmake --build build --target dotnet_build
-cmake --build build --target dotnet_test
+# C++ native components via MSBuild (VS 2025 Community)
+MSBUILD="C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"
+"$MSBUILD" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal
+"$MSBUILD" Exports/Loader/Loader.vcxproj -p:Configuration=Release -p:Platform=x86 -p:PlatformToolset=v145 -v:minimal
+"$MSBUILD" Exports/FastCall/FastCall.vcxproj -p:Configuration=Release -p:Platform=x86 -p:PlatformToolset=v145 -v:minimal
 ```
 
 ## Code Search Guide
@@ -91,6 +96,29 @@ This is important because the layered architecture means changes in Exports/ can
 
 **Why:** The D2Bot repo runs 7-bot integration tests (7 Game.exe + dotnet test host). Blanket process killing destroys those runs and leaves orphan processes.
 
+## MaNGOS Data Access — SOAP over MySQL
+
+**NEVER edit the MaNGOS MySQL database directly.** All character/server operations MUST use the SOAP API (port 7878).
+
+- **SOAP endpoint:** `http://127.0.0.1:7878/` with `ADMINISTRATOR:PASSWORD`
+- **Test helpers:** `LiveBotFixture.ExecuteGMCommandAsync()` (SOAP) or `SendGmChatCommandAsync()` (bot chat)
+- **Read-only MySQL is acceptable** for connectivity checks (`MangosServerFixture`) and non-mutating queries (e.g., starter item lists from `mangos.playercreateinfo_item`)
+- **Never use** `DirectLearnSpellAsync` or any method that INSERTs/UPDATEs MaNGOS tables directly
+- **`.reset` subcommands (ALL work):** `.reset honor`, `.reset level`, `.reset spells`, `.reset stats`, `.reset talents`, `.reset items`, `.reset all`. Use `.reset items` to strip all gear/inventory in test setup.
+- **Exception:** `EnsureGmCommandsEnabledAsync()` bootstraps ADMINISTRATOR GM level via MySQL because SOAP requires GM access to function. This is the only acceptable MySQL write.
+
+### GM Command Behavior (Online vs Offline)
+
+- **Offline characters:** SOAP GM commands write directly to the DB. Changes take effect on next login.
+- **Online characters:** GM commands affect in-memory server state immediately (client sees it), but the DB is NOT updated until the server does a periodic save or the character logs out.
+- **Stale DB reads:** If a character has a running client, MySQL reads return stale data. Never trust DB reads for online character state — use snapshots via StateManager instead.
+
+### Teleport Commands
+
+- `.tele name <charName> <locationName>` — teleport to a named location (use `.lookup tele <keyword>` to find names)
+- `.teleport name <charName> <mapId> <x> <y> <z>` — coordinate-based teleport (requires command table entry)
+- `.go xyz <x> <y> <z> <mapId>` — self-teleport (bot chat only, via `SendGmChatCommandAsync`)
+
 ## File Reading Guidelines
 
 When working with data files (JSON, CSV, logs, etc.):
@@ -126,40 +154,29 @@ When working on any phase or task from `docs/TASKS.md`:
 
 ## Session Handoff Protocol
 
-Before completing ANY session, Claude MUST create `docs/next-session-prompt.md`.
+Before completing ANY session, update the active task files directly:
 
-### Requirements
+1. `docs/TASKS.md` (master handoff section)
+2. Each impacted directory-local `TASKS.md`
+3. Relevant `TASKS_ARCHIVE.md` files for completed items
 
-The file must contain a single fenced code block tagged as `prompt` with a complete, self-contained prompt for the next session:
+### Required Handoff Fields
 
-````markdown
-```prompt
-<Your complete handoff prompt here>
-```
-````
-
-### The prompt MUST include:
-
-1. **What was accomplished** - Summary of completed work this session
-2. **What to work on next** - Specific files, functions, and approach
-3. **Blockers or failed attempts** - What didn't work and why
-4. **Decisions made** - Design choices, trade-offs, rationale
-5. **Current state of in-progress work** - Partial implementations, uncommitted changes, test status
+Every session handoff update must include:
+1. What was completed
+2. Exact commands run and outcomes
+3. Snapshot/log/command-response evidence when applicable
+4. Files changed
+5. The very next command/task to run
 
 ### Completion
 
-If all tasks in TASKS.md are complete, write `ALL_TASKS_COMPLETE` inside the code block instead:
-
-````markdown
-```prompt
-ALL_TASKS_COMPLETE
-```
-````
+When all tracked work is complete, mark completion in `docs/TASKS.md` handoff section rather than creating separate prompt files.
 
 ### Important
 
-- The handoff prompt must be **self-contained** - the next session starts fresh with no prior context
-- Include exact file paths and line numbers for any in-progress work
+- Do not create or rely on a separate next-session prompt file.
+- Keep handoff entries self-contained and precise so any model can continue immediately.
 - If a task was partially completed, describe what's done and what remains
 - Reference `docs/TASKS.md` for the overall task list
 

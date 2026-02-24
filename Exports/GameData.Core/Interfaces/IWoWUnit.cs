@@ -135,8 +135,8 @@ namespace GameData.Core.Interfaces
         Position SplineFinalDestination { get; set; }
         IWoWGameObject Transport { get; set; }
 #if NET8_0_OR_GREATER
-        bool IsCasting => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_IN_COMBAT);
-        bool IsChanneling => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_IN_COMBAT);
+        bool IsCasting => false;
+        bool IsChanneling => ChannelingId > 0;
         bool IsInCombat => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_IN_COMBAT);
         bool IsStunned => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_STUNNED);
         bool IsConfused => UnitFlags.HasFlag(UnitFlags.UNIT_FLAG_CONFUSED);

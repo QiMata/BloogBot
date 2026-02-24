@@ -81,7 +81,7 @@ void ProcessAirMovement(
     const float r = input.radius;
     const float h = input.height;
     constexpr float AIR_SWEEP_MARGIN = 0.5f;   // Generous sweep to detect nearby ground
-    constexpr float LANDING_TOLERANCE = 0.1f;   // Snap when endPos is within 0.1y of ground
+    constexpr float LANDING_TOLERANCE = 0.3f;   // Snap when endPos is within 0.3y of ground
 
     CapsuleCollision::Capsule cap = PhysShapes::BuildFullHeightCapsule(startPos.x, startPos.y, startPos.z, r, h);
     G3D::Vector3 downDir(0, 0, -1);

@@ -3,7 +3,7 @@ using BotRunner.Tasks;
 
 namespace DruidFeral.Tasks
 {
-    internal class BuffTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class BuffTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         private const string MarkOfTheWild = "Mark of the Wild";
         private const string Thorns = "Thorns";

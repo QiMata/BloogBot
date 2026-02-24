@@ -39,10 +39,48 @@ namespace WoWSharpClient.Handlers
                     switch (opcode)
                     {
                         case Opcode.MSG_MOVE_TELEPORT:
+                        {
+                            // MSG_MOVE_TELEPORT format: packed_guid + MovementInfo (NO counter).
+                            // Different from MSG_MOVE_TELEPORT_ACK which includes a counter field.
+                            ulong teleportGuid = ReaderUtils.ReadPackedGuid(reader);
+                            MovementInfoUpdate teleportData =
+                                MovementPacketHandler.ParseMovementInfo(reader);
+
+                            Log.Information(
+                                "[MovementHandler] MSG_MOVE_TELEPORT: guid={Guid:X} pos=({X:F1},{Y:F1},{Z:F1})",
+                                teleportGuid, teleportData.X, teleportData.Y, teleportData.Z);
+
+                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
+                            WoWSharpObjectManager.Instance.QueueUpdate(
+                                new WoWSharpObjectManager.ObjectStateUpdate(
+                                    teleportGuid,
+                                    WoWSharpObjectManager.ObjectUpdateOperation.Update,
+                                    WoWObjectType.Player,
+                                    teleportData,
+                                    []
+                                )
+                            );
+
+                            // Directly update player position so MovementController uses the
+                            // teleported position in its very next heartbeat/stop packet.
+                            {
+                                var player = WoWSharpObjectManager.Instance.Player;
+                                if (player != null && player.Guid == teleportGuid)
+                                {
+                                    player.Position.X = teleportData.X;
+                                    player.Position.Y = teleportData.Y;
+                                    player.Position.Z = teleportData.Z;
+                                    Log.Information(
+                                        "[MovementHandler] Teleport: directly updated player position to ({X:F1},{Y:F1},{Z:F1})",
+                                        teleportData.X, teleportData.Y, teleportData.Z);
+                                }
+                            }
+
                             WoWSharpEventEmitter.Instance.FireOnTeleport(
-                                ParseAcknowledgementPacket(reader)
+                                new RequiresAcknowledgementArgs(teleportGuid, 0)
                             );
                             break;
+                        }
                         case Opcode.MSG_MOVE_TELEPORT_ACK:
                             ulong guid = ReaderUtils.ReadPackedGuid(reader);
                             uint movementCounter = reader.ReadUInt32();
@@ -61,6 +99,23 @@ namespace WoWSharpClient.Handlers
                                     []
                                 )
                             );
+
+                            // Also directly update the player position immediately.
+                            // ProcessUpdatesAsync may not run before the next MovementController tick,
+                            // causing heartbeats to send the OLD position to the server (overwriting
+                            // the server-side teleport). This direct write ensures the MovementController
+                            // uses the teleported position in its very next heartbeat.
+                            {
+                                var player = WoWSharpObjectManager.Instance.Player;
+                                if (player != null && player.Guid == guid)
+                                {
+                                    player.Position.X = movementUpdateData.X;
+                                    player.Position.Y = movementUpdateData.Y;
+                                    player.Position.Z = movementUpdateData.Z;
+                                    Log.Information("[MovementHandler] Teleport: directly updated player position to ({X:F1},{Y:F1},{Z:F1})",
+                                        movementUpdateData.X, movementUpdateData.Y, movementUpdateData.Z);
+                                }
+                            }
 
                             WoWSharpEventEmitter.Instance.FireOnTeleport(
                                 new RequiresAcknowledgementArgs(guid, movementCounter)
@@ -190,31 +245,6 @@ namespace WoWSharpClient.Handlers
                     Log.Information($"[MovementHandler] {ex}");
                 }
             }
-        }
-
-        private static RequiresAcknowledgementArgs ParseAcknowledgementPacket(BinaryReader reader)
-        {
-            var packedGuid = ReaderUtils.ReadPackedGuid(reader);
-            var counter = reader.ReadUInt32();
-
-            MovementInfoUpdate movementData = MovementPacketHandler.ParseMovementInfo(reader);
-            movementData.MovementCounter = counter;
-
-            // Signal teleport BEFORE queuing the position update so the write guard
-            // in ProcessUpdatesAsync allows the position change through.
-            WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
-
-            WoWSharpObjectManager.Instance.QueueUpdate(
-                new WoWSharpObjectManager.ObjectStateUpdate(
-                    packedGuid,
-                    WoWSharpObjectManager.ObjectUpdateOperation.Update,
-                    WoWObjectType.Player,
-                    movementData,
-                    []
-                )
-            );
-
-            return new(packedGuid, counter);
         }
 
         private static RequiresAcknowledgementArgs ParseGuidCounterPacket(BinaryReader reader)

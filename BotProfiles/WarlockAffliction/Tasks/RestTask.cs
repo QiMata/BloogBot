@@ -1,20 +1,22 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarlockAffliction.Tasks
 {
-    internal class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-
         public void Update()
         {
-            if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 60 && ObjectManager.Pet.CanUse(ConsumeShadows) && ObjectManager.Pet.IsCasting && ObjectManager.Pet.ChannelingId == 0)
+            if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 60 && ObjectManager.Pet.CanUse(ConsumeShadows) && !ObjectManager.Pet.IsCasting && ObjectManager.Pet.ChannelingId == 0)
                 ObjectManager.Pet.Cast(ConsumeShadows);
 
             if (InCombat || (HealthOk && ManaOk))
             {
-                if (ObjectManager.Player.IsCasting && ObjectManager.Player.ChannelingId == 0)
+                if (!ObjectManager.Player.IsCasting && ObjectManager.Player.ChannelingId == 0)
                     ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
 
                 if (InCombat || PetHealthOk)
@@ -26,7 +28,7 @@ namespace WarlockAffliction.Tasks
                 }
                 else
                 {
-                    if (ObjectManager.Player.ChannelingId == 0 && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(HealthFunnel) && ObjectManager.Player.HealthPercent > 30)
+                    if (ObjectManager.Player.ChannelingId == 0 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(HealthFunnel) && ObjectManager.Player.HealthPercent > 30)
                         ObjectManager.CastSpell(HealthFunnel);
                 }
 
@@ -37,37 +39,18 @@ namespace WarlockAffliction.Tasks
 
             TryCastSpell(LifeTap, 0, int.MaxValue, ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
 
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
+            // Eat food if available and not already eating
+            if (!ObjectManager.Player.IsEating && ObjectManager.Player.HealthPercent < 80 && Wait.For("EatFoodDelay", 3000, true))
             {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.repairitems')");
-                }
-
-                List<IWoWItem> foodItems = ObjectManager.Items.Where(x => x.ItemId == 5479).ToList();
-                uint foodItemsCount = (uint)foodItems.Sum(x => x.StackCount);
-
-                if (foodItemsCount < 20)
-                    ObjectManager.SendChatMessage($".additem 5479 {20 - foodItemsCount}");
-
-                IWoWItem foodItem = ObjectManager.Items.First(x => x.ItemId == 5479);
-
-                List<IWoWItem> drinkItems = ObjectManager.Items.Where(x => x.ItemId == 1179).ToList();
-                int drinkItemsCount = (int)drinkItems.Sum(x => x.StackCount);
-
-                if (drinkItemsCount < 20)
-                    ObjectManager.SendChatMessage($".additem 1179 {20 - drinkItemsCount}");
-
-                IWoWItem drinkItem = ObjectManager.Items.First(x => x.ItemId == 1179);
-
-                if (foodItem != null && !ObjectManager.Player.IsEating && ObjectManager.Player.HealthPercent < 80 && Wait.For("EatDelay", 500, true))
-                    foodItem.Use();
-
-                if (drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60 && Wait.For("DrinkDelay", 500, true))
-                    drinkItem.Use();
+                var foodItem = ConsumableData.FindBestFood(ObjectManager);
+                foodItem?.Use();
             }
+
+            // Use best available drink from inventory
+            IWoWItem? drinkItem = ConsumableData.FindBestDrink(ObjectManager);
+
+            if (drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60 && Wait.For("DrinkDelay", 500, true))
+                drinkItem.Use();
         }
 
         private bool HealthOk => ObjectManager.Player.HealthPercent >= 90 || (ObjectManager.Player.HealthPercent >= 70 && !ObjectManager.Player.IsEating);

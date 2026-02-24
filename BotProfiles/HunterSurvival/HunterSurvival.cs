@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using HunterSurvival.Tasks;
 
 using BotProfiles.Common;
 namespace HunterSurvival
 {
-    [Export(typeof(IBot))]
-    internal class HunterSurvival : BotBase
+    public class HunterSurvival : BotBase
     {
         public override string Name => "Survival Hunter";
 

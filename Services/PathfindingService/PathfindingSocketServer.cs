@@ -316,7 +316,12 @@ namespace PathfindingService
 				standingOnInstanceId = proto.StandingOnInstanceId,
 				standingOnLocalX = proto.StandingOnLocalX,
 				standingOnLocalY = proto.StandingOnLocalY,
-				standingOnLocalZ = proto.StandingOnLocalZ
+				standingOnLocalZ = proto.StandingOnLocalZ,
+
+				// Behaviour flags: 0 = default (no TRUST_INPUT_VELOCITY).
+				// The proto field physics_flags (38) is defined but not yet
+				// wired into generated code. Always 0 for live operation.
+				physicsFlags = 0
             };
         }
 

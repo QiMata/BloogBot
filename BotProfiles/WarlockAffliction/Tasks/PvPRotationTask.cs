@@ -4,7 +4,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace WarlockAffliction.Tasks
 {
-    internal class PvPRotationTask(IBotContext botContext) : WarlockBaseRotationTask(botContext), IBotTask
+    public class PvPRotationTask(IBotContext botContext) : WarlockBaseRotationTask(botContext), IBotTask
     {
         protected override IEnumerable<string> DotSpells =>
             new[] { CurseOfAgony, Immolate, Corruption, SiphonLife, Haunt };

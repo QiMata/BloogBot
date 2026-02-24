@@ -1,10 +1,11 @@
 using BotRunner.Interfaces;
+using GameData.Core.Enums;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarlockAffliction.Tasks
 {
-    internal class SummonPetTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class SummonPetTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
 
         public void Update()

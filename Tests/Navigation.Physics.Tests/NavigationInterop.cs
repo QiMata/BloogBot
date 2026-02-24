@@ -405,4 +405,45 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "GetCachedModelCount", CallingConvention = CallingConvention.Cdecl)]
     public static extern int GetCachedModelCount();
+
+    // ==========================================================================
+    // SCENE CACHE (pre-processed collision geometry)
+    // ==========================================================================
+
+    /// <summary>
+    /// Extracts collision geometry for a map and saves to a .scene file.
+    /// Pass 0 for all bounds to extract the entire map.
+    /// Requires VMAP + MapLoader to be initialized (slow, one-time).
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "ExtractSceneCache", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool ExtractSceneCache(
+        uint mapId, string outPath,
+        float minX, float minY, float maxX, float maxY);
+
+    /// <summary>
+    /// Loads a pre-cached .scene file (fast, ~10ms).
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "LoadSceneCache", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool LoadSceneCache(uint mapId, string path);
+
+    /// <summary>
+    /// Checks if a map has a loaded scene cache.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "HasSceneCache", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool HasSceneCache(uint mapId);
+
+    /// <summary>
+    /// Unloads the scene cache for a map.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "UnloadSceneCache", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void UnloadSceneCache(uint mapId);
+
+    /// <summary>
+    /// Sets the scenes directory for auto-discovery during EnsureMapLoaded.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "SetScenesDir", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    public static extern void SetScenesDir(string dir);
 }

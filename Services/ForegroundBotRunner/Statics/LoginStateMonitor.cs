@@ -13,6 +13,8 @@ namespace ForegroundBotRunner.Statics
     {
         private static readonly string LogPath;
         private static readonly object LogLock = new();
+        private static readonly bool Enabled =
+            string.Equals(Environment.GetEnvironmentVariable("WWOW_LOGIN_STATE_MONITOR"), "1", StringComparison.Ordinal);
         private static int _snapshotCount = 0;
         private static DateTime _startTime = DateTime.Now;
 
@@ -33,6 +35,9 @@ namespace ForegroundBotRunner.Statics
         /// </summary>
         public static void CaptureSnapshot(string phase)
         {
+            if (!Enabled)
+                return;
+
             try
             {
                 _snapshotCount++;
@@ -239,6 +244,10 @@ namespace ForegroundBotRunner.Statics
                     File.AppendAllText(LogPath, sb.ToString());
                 }
             }
+            catch (AccessViolationException ex)
+            {
+                try { File.AppendAllText(LogPath, $"SNAPSHOT AV ERROR: {ex}\n"); } catch { }
+            }
             catch (Exception ex)
             {
                 try { File.AppendAllText(LogPath, $"SNAPSHOT ERROR: {ex}\n"); } catch { }
@@ -250,6 +259,9 @@ namespace ForegroundBotRunner.Statics
         /// </summary>
         public static void Reset()
         {
+            if (!Enabled)
+                return;
+
             _snapshotCount = 0;
             _startTime = DateTime.Now;
             try { File.WriteAllText(LogPath, $"=== Login State Monitor RESET at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n\n"); } catch { }
@@ -260,6 +272,9 @@ namespace ForegroundBotRunner.Statics
         /// </summary>
         public static void Log(string message)
         {
+            if (!Enabled)
+                return;
+
             try
             {
                 var elapsed = (DateTime.Now - _startTime).TotalMilliseconds;

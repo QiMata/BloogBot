@@ -25,10 +25,6 @@
             public static nint CorpsePositionY = 0x00B4E288;
             public static nint CorpsePositionZ = 0x00B4E28C;
 
-            public static nint CtmX = 0xC4D890;
-            public static nint CtmY = 0xC4D894;
-            public static nint CtmZ = 0xC4D898;
-            public static nint CtmState = 0xC4D888;
 
             public static int MovementStruct = 0x9A8;
 
@@ -120,7 +116,6 @@
             public static nint SetTarget = 0x493540;
             public static nint LastHardwareAction = 0x00CF0BC8;
             public static nint AutoLoot = 0x4C1FA0;
-            public static nint ClickToMove = 0x00611130;
             public static nint AcceptQuest = 0x005EAC10;
             public static nint CompleteQuest = 0x005EACA0;
             public static nint GetText = 0x703BF0;

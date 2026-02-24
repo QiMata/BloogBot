@@ -13,10 +13,9 @@ namespace ForegroundBotRunner.Questing
 {
     /// <summary>
     /// Coordinates quest activities: pickup, objectives, turn-in.
-    /// Called from GrindBot during FindTarget phase when questing is enabled.
     ///
     /// Returns quest-driven actions (positions to move to, NPCs to interact with)
-    /// that GrindBot can execute through its existing movement and combat systems.
+    /// that the bot can execute through its movement and combat systems.
     /// </summary>
     public class QuestCoordinator(IQuestRepository questRepo, ObjectManager objectManager)
     {
@@ -49,7 +48,7 @@ namespace ForegroundBotRunner.Questing
 
         /// <summary>
         /// Evaluate quest state and return recommended action.
-        /// Called each tick from GrindBot's FindTarget phase.
+        /// Called each tick during the FindTarget phase.
         /// Returns a Position to move toward, or null if no quest action needed.
         /// </summary>
         public Position? Update(IWoWLocalPlayer player)

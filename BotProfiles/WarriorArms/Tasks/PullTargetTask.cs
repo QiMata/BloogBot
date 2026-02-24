@@ -26,7 +26,7 @@ namespace WarriorArms.Tasks
             }
 
             float distanceToTarget = ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            if (distanceToTarget < 25 && distanceToTarget > 8 && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady("Charge") && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)) && !ObjectManager.Player.IsCasting)
+            if (distanceToTarget < 25 && distanceToTarget > 8 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady("Charge") && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
                 ObjectManager.CastSpell("Charge");
 
             if (distanceToTarget < 3)
@@ -37,8 +37,7 @@ namespace WarriorArms.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.Player.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            ObjectManager.MoveToward(nextWaypoint[0]);
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

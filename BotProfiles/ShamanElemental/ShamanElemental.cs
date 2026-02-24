@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using ShamanElemental.Tasks;
 
 using BotProfiles.Common;
 namespace ShamanElemental
 {
-    [Export(typeof(IBot))]
-    internal class ShamanElemental : BotBase
+    public class ShamanElemental : BotBase
     {
         public override string Name => "Elemental Shaman";
 

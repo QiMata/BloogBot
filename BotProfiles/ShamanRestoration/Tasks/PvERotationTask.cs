@@ -1,24 +1,18 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
+using static BotRunner.Constants.Spellbook;
 
 namespace ShamanRestoration.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
         {
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(12))
                 return;
@@ -31,7 +25,15 @@ namespace ShamanRestoration.Tasks
             ObjectManager.StopAllMovement();
             ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
-            TryCastSpell(HealingWave, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 50, castOnSelf: true);
+            // Group healing: heal party members before DPS
+            if (IsInGroup)
+            {
+                if (TryCastHeal(HealingWave, 60, 40)) return;
+            }
+            else
+            {
+                TryCastSpell(HealingWave, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 50, castOnSelf: true);
+            }
 
             TryCastSpell(ManaSpringTotem, 0, int.MaxValue, !ObjectManager.Units.Any(u => u.Position.DistanceTo(ObjectManager.Player.Position) < 19 && u.HealthPercent > 0 && u.Name.Contains(ManaSpringTotem)));
 

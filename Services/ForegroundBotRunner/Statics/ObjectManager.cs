@@ -1,4 +1,5 @@
-﻿using ForegroundBotRunner.Mem;
+﻿using ForegroundBotRunner.Frames;
+using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
@@ -9,6 +10,7 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 
@@ -92,9 +94,45 @@ namespace ForegroundBotRunner.Statics
         internal IList<WoWObject> ObjectsBuffer = [];
 
         private readonly object _objectsLock = new();
+        public IWoWEventHandler EventHandler { get; }
+
+        /// <summary>
+        /// Wraps Functions.LuaCall in ThreadSynchronizer.RunOnMainThread.
+        /// All Lua calls MUST execute on WoW's main thread — calling from a background
+        /// thread (e.g., BotRunnerService) silently fails.
+        /// </summary>
+        private static void MainThreadLuaCall(string lua) =>
+            ThreadSynchronizer.RunOnMainThread(() => Functions.LuaCall(lua));
+
+        /// <summary>
+        /// Wraps Functions.LuaCallWithResult in ThreadSynchronizer.RunOnMainThread.
+        /// Returns the Lua result array; blocks until the main thread processes the call.
+        /// </summary>
+        private static string[] MainThreadLuaCallWithResult(string lua) =>
+            ThreadSynchronizer.RunOnMainThread(() => Functions.LuaCallWithResult(lua));
+
+        // Login screen implementations for BotRunnerService integration
+        private readonly FgLoginScreen _fgLoginScreen;
+        private readonly FgRealmSelectScreen _fgRealmSelectScreen;
+        private readonly FgCharacterSelectScreen _fgCharacterSelectScreen;
+
         public ObjectManager(IWoWEventHandler eventHandler, IWoWActivitySnapshot parProbe)
         {
+            EventHandler = eventHandler;
             _characterState = parProbe;
+
+            _fgLoginScreen = new FgLoginScreen(
+                () => GetCurrentScreenState(),
+                (user, pass) => DefaultServerLogin(user, pass),
+                () => ResetLogin());
+            _fgRealmSelectScreen = new FgRealmSelectScreen(
+                () => GetCurrentScreenState(),
+                () => MaxCharacterCount,
+                lua => MainThreadLuaCall(lua));
+            _fgCharacterSelectScreen = new FgCharacterSelectScreen(
+                () => GetCurrentScreenState(),
+                () => MaxCharacterCount,
+                lua => MainThreadLuaCall(lua));
 
             CallbackDelegate = CallbackVanilla;
             callbackPtr = Marshal.GetFunctionPointerForDelegate(CallbackDelegate);
@@ -200,6 +238,7 @@ namespace ForegroundBotRunner.Statics
         /// Set by ForegroundBotWorker before clicking EnterWorld, cleared after world load or disconnect.
         /// </summary>
         public static volatile bool PauseNativeCallsDuringWorldEntry = false;
+        private static DateTime? _enterWorldStartedAt;
 
         public bool IsLoggedIn
         {
@@ -371,6 +410,14 @@ namespace ForegroundBotRunner.Statics
                     if (continentId == 0xFF)
                     {
                         return WoWScreenState.LoadingWorld;
+                    }
+
+                    // If we haven't entered the world yet, continentId may be stale
+                    // (leftover from a previous WoW session or WoW.exe startup defaults).
+                    // Treat as CharacterSelect until HasEnteredWorld confirms we're actually in-world.
+                    if (!HasEnteredWorld)
+                    {
+                        return WoWScreenState.CharacterSelect;
                     }
 
                     // Any other ContinentId value is a valid map ID - we're in world
@@ -546,7 +593,7 @@ namespace ForegroundBotRunner.Statics
         // talentIndex is counter left to right, top to bottom, starting at 1
         public static sbyte GetTalentRank(int tabIndex, int talentIndex)
         {
-            var results = Functions.LuaCallWithResult($"{{0}}, {{1}}, {{2}}, {{3}}, {{4}} = GetTalentInfo({tabIndex},{talentIndex})");
+            var results = MainThreadLuaCallWithResult($"{{0}}, {{1}}, {{2}}, {{3}}, {{4}} = GetTalentInfo({tabIndex},{talentIndex})");
 
             if (results.Length == 5)
                 return Convert.ToSByte(results[4]);
@@ -556,50 +603,100 @@ namespace ForegroundBotRunner.Statics
 
         public static void PickupInventoryItem(int inventorySlot)
         {
-            Functions.LuaCall($"PickupInventoryItem({inventorySlot})");
+            MainThreadLuaCall($"PickupInventoryItem({inventorySlot})");
         }
 
         public void DeleteCursorItem()
         {
-            Functions.LuaCall("DeleteCursorItem()");
+            MainThreadLuaCall("DeleteCursorItem()");
         }
 
         public void SendChatMessage(string chatMessage)
         {
-            Functions.LuaCall($"SendChatMessage(\"{chatMessage}\")");
+            MainThreadLuaCall($"SendChatMessage(\"{chatMessage}\")");
         }
 
         public void SetRaidTarget(IWoWUnit target, TargetMarker targetMarker)
         {
             SetTarget(target.Guid);
-            Functions.LuaCall($"SetRaidTarget('target', {targetMarker})");
+            MainThreadLuaCall($"SetRaidTarget('target', {targetMarker})");
         }
 
         public void SetTarget(ulong guid)
         {
-            Functions.SetTarget(guid);
+            if (guid == 0)
+            {
+                Log.Debug("[FG] SetTarget skipped for GUID 0.");
+                return;
+            }
+
+            ThreadSynchronizer.RunOnMainThread<int>(() =>
+            {
+                var targetPtr = Functions.GetObjectPtr(guid);
+                if (targetPtr == nint.Zero)
+                {
+                    Log.Warning("[FG] SetTarget skipped; GUID 0x{Guid:X} is not in object manager.", guid);
+                    return 0;
+                }
+
+                Functions.SetTarget(guid);
+                return 0;
+            });
         }
         public void AcceptGroupInvite()
         {
-            ThreadSynchronizer.RunOnMainThread(() =>
-            {
-                Functions.LuaCall($"StaticPopup1Button1:Click()");
-                Functions.LuaCall($"AcceptGroup()");
-            });
+            MainThreadLuaCall($"StaticPopup1Button1:Click()");
+            MainThreadLuaCall($"AcceptGroup()");
         }
 
         public void EquipCursorItem()
         {
-            Functions.LuaCall("AutoEquipCursorItem()");
+            MainThreadLuaCall("AutoEquipCursorItem()");
         }
 
         public void ConfirmItemEquip()
         {
-            Functions.LuaCall($"AutoEquipCursorItem()");
-            Functions.LuaCall($"StaticPopup1Button1:Click()");
+            MainThreadLuaCall($"AutoEquipCursorItem()");
+            MainThreadLuaCall($"StaticPopup1Button1:Click()");
         }
         public void EnterWorld(ulong characterGuid)
         {
+            // Guard 1: If the player GUID is already non-zero (detected from memory),
+            // the world entry handshake succeeded. Don't re-trigger — let the polling
+            // loop's normal player detection path set HasEnteredWorld on the next tick.
+            if (IsLoggedIn)
+            {
+                DiagLog("EnterWorld: SKIP - IsLoggedIn=true (GUID detected, world entry in progress)");
+                // Ensure the pause flag is cleared so polling loop can detect the player
+                PauseNativeCallsDuringWorldEntry = false;
+                _enterWorldStartedAt = null;
+                return;
+            }
+
+            // Guard 2: Re-entry during active world entry handshake.
+            // BotRunnerService calls this every 100ms because HasEnteredWorld stays false.
+            if (PauseNativeCallsDuringWorldEntry)
+            {
+                // Allow retry after 30 seconds (in case enter-world silently failed)
+                if (_enterWorldStartedAt.HasValue && (DateTime.UtcNow - _enterWorldStartedAt.Value).TotalSeconds > 30)
+                {
+                    DiagLog("EnterWorld: TIMEOUT - resetting world entry guard after 30s");
+                    PauseNativeCallsDuringWorldEntry = false;
+                    _enterWorldStartedAt = null;
+                }
+                else
+                {
+                    DiagLog("EnterWorld: SKIP - already in world entry process");
+                    return;
+                }
+            }
+
+            _enterWorldStartedAt = DateTime.UtcNow;
+
+            // Pause ThreadSynchronizer WM_USER messages during world server handshake
+            // to prevent disconnect. Cleared when InWorld state is detected in polling loop.
+            PauseNativeCallsDuringWorldEntry = true;
+
             var charCount = MaxCharacterCount;
             DiagLog($"EnterWorld: charCount={charCount}, characterGuid={characterGuid}");
 
@@ -609,6 +706,9 @@ namespace ForegroundBotRunner.Statics
             if (charCount <= 0)
             {
                 DiagLog("EnterWorld: ABORT - no characters");
+                // Don't leave the pause flag set when aborting — allows polling loop to proceed
+                PauseNativeCallsDuringWorldEntry = false;
+                _enterWorldStartedAt = null;
                 return;
             }
 
@@ -633,14 +733,16 @@ namespace ForegroundBotRunner.Statics
                     {
                         DiagLog($"EnterWorld: ERROR - dismissing dialog and aborting");
                         LoginStateMonitor.CaptureSnapshot("EnterWorld_ERROR_DIALOG");
-                        Functions.LuaCall("GlueDialogButton1:Click()");
+                        MainThreadLuaCall("GlueDialogButton1:Click()");
+                        PauseNativeCallsDuringWorldEntry = false;
+                        _enterWorldStartedAt = null;
                         return;
                     }
                     else
                     {
                         // Informational message like "Character list retrieved" - just dismiss and continue
                         DiagLog($"EnterWorld: Informational dialog - dismissing and continuing");
-                        Functions.LuaCall("GlueDialogButton1:Click()");
+                        MainThreadLuaCall("GlueDialogButton1:Click()");
                         System.Threading.Thread.Sleep(200); // Brief delay after dismissing
                     }
                 }
@@ -657,7 +759,7 @@ namespace ForegroundBotRunner.Statics
             {
                 try
                 {
-                    var buttonCheck = Functions.LuaCallWithResult(
+                    var buttonCheck = MainThreadLuaCallWithResult(
                         "{0} = CharSelectEnterWorldButton and CharSelectEnterWorldButton:IsVisible() and '1' or '0'");
                     if (buttonCheck.Length > 0 && buttonCheck[0] == "1")
                     {
@@ -674,6 +776,8 @@ namespace ForegroundBotRunner.Statics
             {
                 DiagLog("EnterWorld: Button not visible after 5s - aborting");
                 LoginStateMonitor.CaptureSnapshot("EnterWorld_BUTTON_NOT_VISIBLE");
+                PauseNativeCallsDuringWorldEntry = false;
+                _enterWorldStartedAt = null;
                 return;
             }
 
@@ -687,7 +791,7 @@ namespace ForegroundBotRunner.Statics
             // Just click the button - this is all the original bot does
             DiagLog("EnterWorld: Clicking CharSelectEnterWorldButton (original approach)");
             LoginStateMonitor.Log("Clicking CharSelectEnterWorldButton NOW");
-            Functions.LuaCall("CharSelectEnterWorldButton:Click()");
+            MainThreadLuaCall("CharSelectEnterWorldButton:Click()");
 
             // Capture state immediately after click
             LoginStateMonitor.CaptureSnapshot("EnterWorld_POST_CLICK");
@@ -697,26 +801,26 @@ namespace ForegroundBotRunner.Statics
         public void DefaultServerLogin(string accountName, string password)
         {
             if (LoginState != LoginStates.login) return;
-            Functions.LuaCall($"DefaultServerLogin('{accountName}', '{password}');");
+            MainThreadLuaCall($"DefaultServerLogin('{accountName}', '{password}');");
         }
 
-        public string GlueDialogText => Functions.LuaCallWithResult("{0} = GlueDialogText:GetText()")[0];
+        public string GlueDialogText => MainThreadLuaCallWithResult("{0} = GlueDialogText:GetText()")[0];
 
         public static int MaxCharacterCount => MemoryManager.ReadInt(0x00B42140);
         public static void ResetLogin()
         {
-            Functions.LuaCall("arg1 = 'ESCAPE' GlueDialog_OnKeyDown()");
-            Functions.LuaCall("if RealmListCancelButton ~= nil then if RealmListCancelButton:IsVisible() then RealmListCancelButton:Click(); end end ");
+            MainThreadLuaCall("arg1 = 'ESCAPE' GlueDialog_OnKeyDown()");
+            MainThreadLuaCall("if RealmListCancelButton ~= nil then if RealmListCancelButton:IsVisible() then RealmListCancelButton:Click(); end end ");
         }
 
         public void JoinBattleGroundQueue()
         {
-            string enabled = Functions.LuaCallWithResult("{0} = BattlefieldFrameGroupJoinButton:IsEnabled()")[0];
+            string enabled = MainThreadLuaCallWithResult("{0} = BattlefieldFrameGroupJoinButton:IsEnabled()")[0];
 
             if (enabled == "1")
-                Functions.LuaCall("BattlefieldFrameGroupJoinButton:Click()");
+                MainThreadLuaCall("BattlefieldFrameGroupJoinButton:Click()");
             else
-                Functions.LuaCall("BattlefieldFrameJoinButton:Click()");
+                MainThreadLuaCall("BattlefieldFrameJoinButton:Click()");
         }
         public int GetItemCount(string parItemName)
         {
@@ -839,33 +943,20 @@ namespace ForegroundBotRunner.Statics
             }
         }
 
-        ILoginScreen IObjectManager.LoginScreen => throw new NotImplementedException();
-
-        IRealmSelectScreen IObjectManager.RealmSelectScreen => throw new NotImplementedException();
-
-        ICharacterSelectScreen IObjectManager.CharacterSelectScreen => throw new NotImplementedException();
-
-        IGossipFrame IObjectManager.GossipFrame => throw new NotImplementedException();
-
-        ILootFrame IObjectManager.LootFrame => throw new NotImplementedException();
-
-        IMerchantFrame IObjectManager.MerchantFrame => throw new NotImplementedException();
-
-        ICraftFrame IObjectManager.CraftFrame => throw new NotImplementedException();
-
-        IQuestFrame IObjectManager.QuestFrame => throw new NotImplementedException();
-
-        IQuestGreetingFrame IObjectManager.QuestGreetingFrame => throw new NotImplementedException();
-
-        ITaxiFrame IObjectManager.TaxiFrame => throw new NotImplementedException();
-
-        ITradeFrame IObjectManager.TradeFrame => throw new NotImplementedException();
-
-        ITrainerFrame IObjectManager.TrainerFrame => throw new NotImplementedException();
-
-        ITalentFrame IObjectManager.TalentFrame => throw new NotImplementedException();
-
-        public List<CharacterSelect> CharacterSelects => throw new NotImplementedException();
+        ILoginScreen IObjectManager.LoginScreen => _fgLoginScreen;
+        IRealmSelectScreen IObjectManager.RealmSelectScreen => _fgRealmSelectScreen;
+        ICharacterSelectScreen IObjectManager.CharacterSelectScreen => _fgCharacterSelectScreen;
+        IGossipFrame IObjectManager.GossipFrame => null;
+        ILootFrame IObjectManager.LootFrame => null;
+        IMerchantFrame IObjectManager.MerchantFrame => null;
+        ICraftFrame IObjectManager.CraftFrame => null;
+        IQuestFrame IObjectManager.QuestFrame => null;
+        IQuestGreetingFrame IObjectManager.QuestGreetingFrame => null;
+        ITaxiFrame IObjectManager.TaxiFrame => null;
+        ITradeFrame IObjectManager.TradeFrame => null;
+        ITrainerFrame IObjectManager.TrainerFrame => null;
+        ITalentFrame IObjectManager.TalentFrame => null;
+        public List<CharacterSelect> CharacterSelects => [];
 
         public uint GetBagId(ulong itemGuid)
         {
@@ -1246,7 +1337,7 @@ namespace ForegroundBotRunner.Statics
                                     {
                                         try
                                         {
-                                            var result = Functions.LuaCallWithResult("{0} = UnitName('player')");
+                                            var result = MainThreadLuaCallWithResult("{0} = UnitName('player')");
                                             if (result != null && result.Length > 0 && !string.IsNullOrEmpty(result[0]))
                                             {
                                                 playerName = result[0];
@@ -1285,6 +1376,18 @@ namespace ForegroundBotRunner.Statics
                         {
                             DiagLog($"SimplePolling player detection error: {ex.Message}");
                         }
+                    }
+                    // WORLD ENTRY COMPLETION DETECTION (during PauseNativeCallsDuringWorldEntry):
+                    // Both branches above are skipped when PauseNativeCallsDuringWorldEntry is true.
+                    // But GetPlayerGuidFromMemory() (called by IsLoggedIn) can detect the GUID
+                    // becoming non-zero purely from memory reads. When this happens, the world
+                    // entry has succeeded — clear the flag so the normal player detection path
+                    // (above) can run on the next iteration with native calls.
+                    else if (PauseNativeCallsDuringWorldEntry && isLoggedIn && !isLoadingWorld)
+                    {
+                        DiagLog($"SimplePolling[{loopCount}]: World entry detected via memory GUID during pause phase — clearing PauseNativeCallsDuringWorldEntry");
+                        PauseNativeCallsDuringWorldEntry = false;
+                        _enterWorldStartedAt = null;
                     }
                     await Task.Delay(500);
                 }
@@ -1535,7 +1638,7 @@ namespace ForegroundBotRunner.Statics
                     {
                         try
                         {
-                            var result = Functions.LuaCallWithResult("{0} = UnitName('player')");
+                            var result = MainThreadLuaCallWithResult("{0} = UnitName('player')");
                             if (result != null && result.Length > 0 && !string.IsNullOrEmpty(result[0]))
                             {
                                 playerName = result[0];
@@ -1566,8 +1669,8 @@ namespace ForegroundBotRunner.Statics
 
                     //_characterState.Guid = playerGuid;
                     //_characterState.Zone = MinimapZoneText;
-                    //_characterState.InParty = int.Parse(Functions.LuaCallWithResult("{0} = GetNumPartyMembers()")[0]) > 0;
-                    //_characterState.InRaid = int.Parse(Functions.LuaCallWithResult("{0} = GetNumRaidMembers()")[0]) > 0;
+                    //_characterState.InParty = int.Parse(MainThreadLuaCallWithResult("{0} = GetNumPartyMembers()")[0]) > 0;
+                    //_characterState.InRaid = int.Parse(MainThreadLuaCallWithResult("{0} = GetNumRaidMembers()")[0]) > 0;
                     //_characterState.MapId = (int)MapId;
                     //_characterState.Race = Enum.GetValues(typeof(Race)).Cast<Race>().Where(x => x.GetDescription() == Player.Race).First();
                     //_characterState.Facing = Player.Facing;
@@ -1755,32 +1858,32 @@ namespace ForegroundBotRunner.Statics
 
         public void LeaveGroup()
         {
-            Functions.LuaCall("LeaveParty()");
+            MainThreadLuaCall("LeaveParty()");
         }
 
         public void ResetInstances()
         {
-            Functions.LuaCall("ResetInstances()");
+            MainThreadLuaCall("ResetInstances()");
         }
 
         public void PickupMacro(uint v)
         {
-            Functions.LuaCall($"PickupMacro({v})");
+            MainThreadLuaCall($"PickupMacro({v})");
         }
 
         public void PlaceAction(uint v)
         {
-            Functions.LuaCall($"PlaceAction({v})");
+            MainThreadLuaCall($"PlaceAction({v})");
         }
 
         public void ConvertToRaid()
         {
-            Functions.LuaCall("ConvertToRaid()");
+            MainThreadLuaCall("ConvertToRaid()");
         }
 
         public static void InviteToGroup(string characterName)
         {
-            Functions.LuaCall($"InviteByName('{characterName}')");
+            MainThreadLuaCall($"InviteByName('{characterName}')");
         }
         public ulong GetBackpackItemGuid(int slot) => MemoryManager.ReadUlong(((LocalPlayer)Player).GetDescriptorPtr() + (MemoryAddresses.LocalPlayer_BackpackFirstItemOffset + slot * 8));
 
@@ -1791,58 +1894,73 @@ namespace ForegroundBotRunner.Statics
         {
             if (!Player.IsCasting && (Player.Class == Class.Warlock || Player.Class == Class.Mage || Player.Class == Class.Priest))
             {
-                Functions.LuaCall(WandLuaScript);
+                MainThreadLuaCall(WandLuaScript);
             }
             else if (Player.Class != Class.Hunter)
             {
-                Functions.LuaCall(AutoAttackLuaScript);
+                MainThreadLuaCall(AutoAttackLuaScript);
             }
         }
 
         public void DoEmote(Emote emote)
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"DoEmote(\"{emote}\")");
         }
 
         public void DoEmote(TextEmote emote)
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"DoEmote(\"{emote}\")");
         }
 
-        public uint GetManaCost(string healingTouch)
+        public uint GetManaCost(string spellName)
         {
-            throw new NotImplementedException();
+            if (Player is not LocalPlayer lp) return 0;
+            return (uint)lp.GetManaCost(spellName);
         }
 
         public void StartRangedAttack()
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall(AutoAttackLuaScript);
         }
 
         public void StopAttack()
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall(TurnOffAutoAttackLuaScript);
         }
 
         public bool IsSpellReady(string spellName)
         {
-            throw new NotImplementedException();
+            if (Player is not LocalPlayer lp) return false;
+            return lp.IsSpellReady(spellName);
         }
 
         public void CastSpell(string spellName, int rank = -1, bool castOnSelf = false)
         {
-            throw new NotImplementedException();
+            if (castOnSelf)
+                MainThreadLuaCall($"SpellTargetUnit('player')");
+            if (rank > 0)
+                MainThreadLuaCall($"CastSpellByName('{spellName}(Rank {rank})')");
+            else
+                MainThreadLuaCall($"CastSpellByName('{spellName}')");
         }
 
         public void CastSpell(uint spellId, int rank = -1, bool castOnSelf = false)
         {
-            throw new NotImplementedException();
+            // Foreground bot uses LuaCall; no direct spell-ID cast available.
+            // Callers should prefer string overload.
         }
 
         public void StartWandAttack()
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall(WandLuaScript);
         }
+
+        public void StopWandAttack()
+        {
+            MainThreadLuaCall(TurnOffWandLuaScript);
+        }
+
+        public uint GetItemCount(uint itemId) => (uint)GetItemCount((int)itemId);
 
         public void MoveToward(Position position, float facing)
         {
@@ -1852,17 +1970,37 @@ namespace ForegroundBotRunner.Statics
 
         public void StopCasting()
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall("SpellStopCasting()");
         }
 
         public void CastSpell(int spellId, int rank = -1, bool castOnSelf = false)
         {
-            throw new NotImplementedException();
+            // Foreground uses LuaCall by name; int overload is a no-op
+        }
+
+        public void CastSpellOnGameObject(int spellId, ulong gameObjectGuid)
+        {
+            // FG bot: native WoW.exe handles gathering via CGGameObject_C::OnRightClick,
+            // which automatically sends both CMSG_GAMEOBJ_USE + CMSG_CAST_SPELL. No-op here.
+        }
+
+        public void InteractWithGameObject(ulong gameObjectGuid)
+        {
+            // FG bot: right-click interaction is handled natively by WoW.exe. No-op here.
+        }
+
+        public Task LootTargetAsync(ulong targetGuid, CancellationToken ct = default)
+        {
+            var unit = Objects.FirstOrDefault(o => o.Guid == targetGuid);
+            if (unit is WoWObject obj)
+                obj.Interact(); // CGUnit_C::OnRightClick / CGGameObject_C::OnRightClick
+            return Task.CompletedTask;
         }
 
         public bool CanCastSpell(int spellId, ulong targetGuid)
         {
-            throw new NotImplementedException();
+            if (Player is not LocalPlayer lp) return false;
+            return !Functions.IsSpellOnCooldown(spellId);
         }
 
         public IReadOnlyCollection<uint> KnownSpellIds
@@ -1876,97 +2014,124 @@ namespace ForegroundBotRunner.Statics
 
         public void UseItem(int bagId, int slotId, ulong targetGuid = 0)
         {
-            throw new NotImplementedException();
+            // WoW Lua bags are 0-based: 0=backpack, 1-4=extra bags
+            // Slot is 1-based in Lua
+            MainThreadLuaCall($"UseContainerItem({bagId},{slotId + 1})");
         }
 
         public IWoWItem GetContainedItem(int bagSlot, int slotId)
         {
-            throw new NotImplementedException();
+            return GetItem(bagSlot, slotId);
         }
 
         public IEnumerable<IWoWItem> GetContainedItems()
         {
-            throw new NotImplementedException();
+            var items = new List<IWoWItem>();
+            for (var bag = 0; bag < 5; bag++)
+            {
+                int slots;
+                if (bag == 0)
+                {
+                    slots = 16;
+                }
+                else
+                {
+                    var extraBag = GetExtraBag(bag - 1);
+                    if (extraBag == null) continue;
+                    slots = extraBag.NumOfSlots;
+                }
+                for (var slot = 0; slot < slots; slot++)
+                {
+                    var item = GetItem(bag, slot);
+                    if (item != null)
+                        items.Add(item);
+                }
+            }
+            return items;
         }
 
         public uint GetBagGuid(EquipSlot equipSlot)
         {
-            throw new NotImplementedException();
+            return (uint)GetEquippedItemGuid(equipSlot);
         }
 
         public void PickupContainedItem(int bagSlot, int slotId, int quantity)
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"PickupContainerItem({bagSlot},{slotId + 1})");
+            if (quantity > 0)
+                MainThreadLuaCall($"SplitContainerItem({bagSlot},{slotId + 1},{quantity})");
         }
 
         public void PlaceItemInContainer(int bagSlot, int slotId)
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"PickupContainerItem({bagSlot},{slotId + 1})");
         }
 
         public void DestroyItemInContainer(int bagSlot, int slotId, int quantity = -1)
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"PickupContainerItem({bagSlot},{slotId + 1})");
+            MainThreadLuaCall("DeleteCursorItem()");
         }
 
         public void Logout()
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall("Logout()");
         }
 
         public void SplitStack(int bag, int slot, int quantity, int destinationBag, int destinationSlot)
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"SplitContainerItem({bag},{slot + 1},{quantity})");
+            MainThreadLuaCall($"PickupContainerItem({destinationBag},{destinationSlot + 1})");
         }
 
         public void EquipItem(int bagSlot, int slotId, EquipSlot? equipSlot = null)
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"UseContainerItem({bagSlot},{slotId + 1})");
         }
 
         public void UnequipItem(EquipSlot slot)
         {
-            throw new NotImplementedException();
+            PickupInventoryItem((int)slot);
+            // Put item in first free bag slot
+            MainThreadLuaCall("PutItemInBackpack()");
         }
 
         public void AcceptResurrect()
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall("AcceptResurrect()");
         }
 
         public void Initialize(IWoWActivitySnapshot parProbe)
         {
-            throw new NotImplementedException();
+            // FG ObjectManager is initialized in constructor; this is a no-op
         }
 
-        public sbyte GetTalentRank(uint tabIndex, uint talentIndex)
+        sbyte IObjectManager.GetTalentRank(uint tabIndex, uint talentIndex)
         {
-            throw new NotImplementedException();
+            return GetTalentRank((int)tabIndex, (int)talentIndex);
         }
 
-        public void PickupInventoryItem(uint inventorySlot)
+        void IObjectManager.PickupInventoryItem(uint inventorySlot)
         {
-            throw new NotImplementedException();
+            PickupInventoryItem((int)inventorySlot);
         }
 
-        public uint GetItemCount(uint itemId)
+        public void UseContainerItem(int bag, int slot)
         {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"UseContainerItem({bag},{slot})");
         }
 
-        public void UseContainerItem(int v1, int v2)
+        public void PickupContainerItem(uint bag, uint slot)
         {
-            throw new NotImplementedException();
-        }
-
-        public void PickupContainerItem(uint v1, uint v2)
-        {
-            throw new NotImplementedException();
+            MainThreadLuaCall($"PickupContainerItem({bag},{slot})");
         }
 
         public IWoWUnit GetTarget(IWoWUnit woWUnit)
         {
-            throw new NotImplementedException();
+            if (woWUnit == null) return null;
+            var targetGuid = woWUnit.TargetGuid;
+            if (targetGuid == 0) return null;
+            return Units.FirstOrDefault(u => u.Guid == targetGuid);
         }
 
         public void InviteToGroup(ulong guid)
@@ -1974,46 +2139,43 @@ namespace ForegroundBotRunner.Statics
             // Find the player name by GUID from enumerated objects
             var player = Players.FirstOrDefault(p => p.Guid == guid);
             if (player != null)
-                Functions.LuaCall($"InviteByName('{player.Name}')");
+                MainThreadLuaCall($"InviteByName('{player.Name}')");
         }
 
         public void InviteByName(string characterName)
         {
-            Functions.LuaCall($"InviteByName('{characterName}')");
+            MainThreadLuaCall($"InviteByName('{characterName}')");
         }
 
         public void KickPlayer(ulong guid)
         {
             var player = Players.FirstOrDefault(p => p.Guid == guid);
             if (player != null)
-                Functions.LuaCall($"UninviteByName('{player.Name}')");
+                MainThreadLuaCall($"UninviteByName('{player.Name}')");
         }
 
         public void DeclineGroupInvite()
         {
-            ThreadSynchronizer.RunOnMainThread(() =>
-            {
-                Functions.LuaCall("DeclineGroup()");
-                Functions.LuaCall("StaticPopup1Button2:Click()");
-            });
+            MainThreadLuaCall("DeclineGroup()");
+            MainThreadLuaCall("StaticPopup1Button2:Click()");
         }
 
         public void DisbandGroup()
         {
             // In vanilla, leader leaving disbands the group
-            Functions.LuaCall("LeaveParty()");
+            MainThreadLuaCall("LeaveParty()");
         }
 
         public bool HasPendingGroupInvite()
         {
-            var result = Functions.LuaCallWithResult("{0} = StaticPopup1:IsVisible() and StaticPopup1.which == 'PARTY_INVITE'");
+            var result = MainThreadLuaCallWithResult("{0} = StaticPopup1:IsVisible() and StaticPopup1.which == 'PARTY_INVITE'");
             return result.Length > 0 && result[0] == "1";
         }
 
         public bool HasLootRollWindow(int itemId)
         {
             // Check if a loot roll frame is visible for this item
-            var result = Functions.LuaCallWithResult(
+            var result = MainThreadLuaCallWithResult(
                 $"{{0}} = 0; for i=1,4 do local f = getglobal('GroupLootFrame'..i); if f and f:IsVisible() then {{0}} = 1 end end");
             return result.Length > 0 && result[0] == "1";
         }
@@ -2021,17 +2183,17 @@ namespace ForegroundBotRunner.Statics
         public void LootPass(int itemId)
         {
             // Pass on loot roll (rollID is 1-based, we approximate by clicking pass on visible frame)
-            Functions.LuaCall("for i=1,4 do local f = getglobal('GroupLootFrame'..i); if f and f:IsVisible() then local b = getglobal('GroupLootFrame'..i..'PassButton'); if b then b:Click() end end end");
+            MainThreadLuaCall("for i=1,4 do local f = getglobal('GroupLootFrame'..i); if f and f:IsVisible() then local b = getglobal('GroupLootFrame'..i..'PassButton'); if b then b:Click() end end end");
         }
 
         public void LootRollGreed(int itemId)
         {
-            Functions.LuaCall("for i=1,4 do local f = getglobal('GroupLootFrame'..i); if f and f:IsVisible() then local b = getglobal('GroupLootFrame'..i..'GreedButton'); if b then b:Click() end end end");
+            MainThreadLuaCall("for i=1,4 do local f = getglobal('GroupLootFrame'..i); if f and f:IsVisible() then local b = getglobal('GroupLootFrame'..i..'GreedButton'); if b then b:Click() end end end");
         }
 
         public void LootRollNeed(int itemId)
         {
-            Functions.LuaCall("for i=1,4 do local f = getglobal('GroupLootFrame'..i); if f and f:IsVisible() then local b = getglobal('GroupLootFrame'..i..'NeedButton'); if b then b:Click() end end end");
+            MainThreadLuaCall("for i=1,4 do local f = getglobal('GroupLootFrame'..i); if f and f:IsVisible() then local b = getglobal('GroupLootFrame'..i..'NeedButton'); if b then b:Click() end end end");
         }
 
         public void AssignLoot(int itemId, ulong playerGuid)
@@ -2040,35 +2202,35 @@ namespace ForegroundBotRunner.Statics
             var player = Players.FirstOrDefault(p => p.Guid == playerGuid);
             if (player != null)
             {
-                Functions.LuaCall($"for i=1,GetNumLootItems() do GiveMasterLoot(i, 1) end");
+                MainThreadLuaCall($"for i=1,GetNumLootItems() do GiveMasterLoot(i, 1) end");
             }
         }
 
         public void SetGroupLoot(GroupLootSetting setting)
         {
             // 0=FFA, 1=RoundRobin, 2=MasterLooter, 3=GroupLoot, 4=NeedBeforeGreed
-            Functions.LuaCall($"SetLootMethod('group')");
+            MainThreadLuaCall($"SetLootMethod('group')");
         }
 
         public void PromoteLootManager(ulong playerGuid)
         {
             var player = Players.FirstOrDefault(p => p.Guid == playerGuid);
             if (player != null)
-                Functions.LuaCall($"SetLootMethod('master', '{player.Name}')");
+                MainThreadLuaCall($"SetLootMethod('master', '{player.Name}')");
         }
 
         public void PromoteAssistant(ulong playerGuid)
         {
             var player = Players.FirstOrDefault(p => p.Guid == playerGuid);
             if (player != null)
-                Functions.LuaCall($"PromoteToAssistant('{player.Name}')");
+                MainThreadLuaCall($"PromoteToAssistant('{player.Name}')");
         }
 
         public void PromoteLeader(ulong playerGuid)
         {
             var player = Players.FirstOrDefault(p => p.Guid == playerGuid);
             if (player != null)
-                Functions.LuaCall($"PromoteToLeader('{player.Name}')");
+                MainThreadLuaCall($"PromoteToLeader('{player.Name}')");
         }
         public void SetFacing(float facing)
         {
@@ -2109,11 +2271,36 @@ namespace ForegroundBotRunner.Statics
             ThreadSynchronizer.SimulateSpacebarPress();
         }
 
-        public static void Stand() => Functions.LuaCall("DoEmote(\"STAND\")");
+        public static void Stand() => MainThreadLuaCall("DoEmote(\"STAND\")");
 
         public void ReleaseCorpse() => Functions.ReleaseCorpse(((LocalPlayer)Player).Pointer);
 
-        public void RetrieveCorpse() => Functions.RetrieveCorpse();
+        public void ReleaseSpirit() => ReleaseCorpse();
+
+        public void RetrieveCorpse()
+        {
+            // Prefer in-client Lua reclaim; this mirrors the normal UI reclaim action.
+            // Keep native fallback for older offsets/builds.
+            try
+            {
+                MainThreadLuaCall("RetrieveCorpse()");
+                DiagLog("RetrieveCorpse: Lua RetrieveCorpse() invoked");
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"RetrieveCorpse: Lua path failed: {ex.Message}");
+            }
+
+            try
+            {
+                Functions.RetrieveCorpse();
+                DiagLog("RetrieveCorpse: native function invoked");
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"RetrieveCorpse: native path failed: {ex.Message}");
+            }
+        }
 
         // ── Smooth turning state (ported from reference LocalPlayer.cs) ──
         private readonly Random _facingRandom = new();

@@ -1,12 +1,9 @@
-﻿using WarlockAffliction.Tasks;
-using System.ComponentModel.Composition;
+using WarlockAffliction.Tasks;
 using BotRunner.Interfaces;
 
 using BotProfiles.Common;
 namespace WarlockAffliction
-{
-    [Export(typeof(IBot))]
-    internal class WarlockAffliction : BotBase
+{    public class WarlockAffliction : BotBase
     {
         public override string Name => "Warlock Affliction";
 

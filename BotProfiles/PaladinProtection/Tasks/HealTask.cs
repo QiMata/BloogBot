@@ -3,7 +3,7 @@ using BotRunner.Tasks;
 
 namespace PaladinProtection.Tasks
 {
-    internal class HealTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class HealTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         private const string DivineProtection = "Divine Protection";
         private const string HolyLight = "Holy Light";

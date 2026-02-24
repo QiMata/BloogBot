@@ -1,9 +1,10 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 
 namespace DruidFeral.Tasks
 {
-    internal class HealTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class HealTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         private const string BearForm = "Bear Form";
         private const string CatForm = "Cat Form";

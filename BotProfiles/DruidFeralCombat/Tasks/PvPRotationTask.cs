@@ -1,10 +1,11 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace DruidFeral.Tasks;
 
-internal class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
+public class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
 {
     public void Update()
     {

@@ -1,12 +1,10 @@
-﻿using BotRunner.Interfaces;
-using System.ComponentModel.Composition;
+using BotRunner.Interfaces;
 using WarriorFury.Tasks;
 
 using BotProfiles.Common;
 namespace WarriorFury
 {
-    [Export(typeof(IBot))]
-    internal class WarriorFury : BotBase
+    public class WarriorFury : BotBase
     {
         public override string Name => "Fury Warrior";
 

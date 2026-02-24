@@ -1,9 +1,10 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 
 namespace DruidBalance.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
         private const string Wrath = "Wrath";
         private const string Starfire = "Starfire";
@@ -43,7 +44,7 @@ namespace DruidBalance.Tasks
                 ObjectManager.CastSpell(MoonkinForm);
             }
 
-            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < range && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(pullingSpell) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
+            if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < range && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(pullingSpell) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
             {
                 if (ObjectManager.Player.IsMoving)
                     ObjectManager.StopAllMovement();
@@ -64,8 +65,7 @@ namespace DruidBalance.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            ObjectManager.MoveToward(nextWaypoint[0]);
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

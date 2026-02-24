@@ -1,12 +1,11 @@
-﻿using BotRunner.Interfaces;
-using System.ComponentModel.Composition;
+using BotRunner.Interfaces;
+using GameData.Core.Models;
 using WarriorProtection.Tasks;
 
 using BotProfiles.Common;
 namespace WarriorProtection
 {
-    [Export(typeof(IBot))]
-    internal class WarriorProtection : BotBase
+    public class WarriorProtection : BotBase
     {
         public override string Name => "Protection Warrior";
 

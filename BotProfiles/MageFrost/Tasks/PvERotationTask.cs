@@ -1,15 +1,15 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace MageFrost.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         private readonly string nuke;
         private readonly int range;
-        private bool frostNovaBackpedaling;
-        private int frostNovaBackpedalStartTime;
 
         internal PvERotationTask(IBotContext botContext) : base(botContext)
         {
@@ -29,28 +29,14 @@ namespace MageFrost.Tasks
 
         public void Update()
         {
-            if (frostNovaBackpedaling && Environment.TickCount - frostNovaBackpedalStartTime > 1500)
-            {
-                ObjectManager.Player.StopMovement(ControlBits.Back);
-                frostNovaBackpedaling = false;
-            }
-
-            if (frostNovaBackpedaling)
+            if (IsKiting)
             {
                 TryCastSpell(FrostNova); // sometimes we try to cast too early and get into this state while FrostNova is still ready.
                 return;
             }
 
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(29 + (ObjectManager.GetTalentRank(3, 11) * 3)))
                 return;
@@ -58,8 +44,8 @@ namespace MageFrost.Tasks
             TryCastSpell(Evocation, 0, int.MaxValue, (ObjectManager.Player.HealthPercent > 50 || ObjectManager.Player.HasBuff(IceBarrier)) && ObjectManager.Player.ManaPercent < 8 && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 15);
 
             IWoWItem wand = ObjectManager.GetEquippedItem(EquipSlot.Ranged);
-            if (wand != null && ObjectManager.Player.ManaPercent <= 10 && ObjectManager.Player.IsCasting && ObjectManager.Player.ChannelingId == 0)
-                ObjectManager.Player.StartWand();
+            if (wand != null && ObjectManager.Player.ManaPercent <= 10 && !ObjectManager.Player.IsCasting && ObjectManager.Player.ChannelingId == 0)
+                ObjectManager.CastSpell("Shoot");
             else
             {
                 TryCastSpell(SummonWaterElemental, !ObjectManager.Units.Any(u => u.Name == "Water Elemental" && u.SummonedByGuid == ObjectManager.Player.Guid));
@@ -98,17 +84,9 @@ namespace MageFrost.Tasks
             }
         }
 
-        public override void PerformCombatRotation()
-        {
-            throw new NotImplementedException();
-        }
+        public override void PerformCombatRotation() { }
 
-        private Action FrostNovaCallback => () =>
-        {
-            frostNovaBackpedaling = true;
-            frostNovaBackpedalStartTime = Environment.TickCount;
-            ObjectManager.Player.StartMovement(ControlBits.Back);
-        };
+        private Action FrostNovaCallback => () => StartKite(1500);
 
         private bool IsTargetFrozen => ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Frostbite) || ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(FrostNova);
     }

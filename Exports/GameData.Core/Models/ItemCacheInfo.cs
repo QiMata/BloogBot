@@ -26,7 +26,7 @@ namespace GameData.Core.Models
     {
         readonly ItemCacheEntry itemCacheEntry;
 
-        internal ItemCacheInfo(ItemCacheEntry itemCacheEntry) => this.itemCacheEntry = itemCacheEntry;
+        public ItemCacheInfo(ItemCacheEntry itemCacheEntry) => this.itemCacheEntry = itemCacheEntry;
 
         public ItemClass ItemClass => itemCacheEntry.ItemClass;
 

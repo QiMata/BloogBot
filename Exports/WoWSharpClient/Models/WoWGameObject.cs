@@ -53,12 +53,15 @@ namespace WoWSharpClient.Models
 
         public Position GetPointBehindUnit(float distance)
         {
-            throw new NotImplementedException();
+            float behindAngle = Facing + (float)Math.PI;
+            float x = Position.X + (float)Math.Cos(behindAngle) * distance;
+            float y = Position.Y + (float)Math.Sin(behindAngle) * distance;
+            return new Position(x, y, Position.Z);
         }
 
         public void Interact()
         {
-            throw new NotImplementedException();
+            WoWSharpObjectManager.Instance.InteractWithGameObject(Guid);
         }
     }
 }

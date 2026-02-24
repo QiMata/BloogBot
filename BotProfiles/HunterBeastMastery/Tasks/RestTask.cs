@@ -1,96 +1,50 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using GameData.Core.Interfaces;
+using GameData.Core.Enums;
+using static BotRunner.Constants.Spellbook;
 
 namespace HunterBeastMastery.Tasks
 {
-    // TODO: add in ammo buying/management
-    internal class RestTask : BotTask, IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-        private const int stackCount = 5;
-        private const string noPetErrorMessage = "You do not have a pet";
-        private readonly IWoWLocalPet pet;
-        private readonly IWoWItem foodItem;
-        private readonly IWoWItem drinkItem;
-        private readonly IWoWItem petFood;
-        public RestTask(IBotContext botContext) : base(botContext)
-        {
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
-            {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.repairitems')");
-                }
-            }
-        }
-
         public void Update()
         {
-            // keep pet summoned and happy
+            // Keep pet summoned and healthy
             if (ObjectManager.Pet == null && ObjectManager.IsSpellReady(CallPet))
                 ObjectManager.CastSpell(CallPet);
             if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 40 && ObjectManager.IsSpellReady(MendPet))
                 ObjectManager.CastSpell(MendPet);
 
-            if (pet != null && !PetHappy && !PetBeingFed && petFood != null && ObjectManager.IsSpellReady(FeedPet))
-            {
-                ObjectManager.CastSpell(FeedPet);
-                petFood.Use();
-            }
-
-            if (ObjectManager.Player.AmmoId != 0 && ObjectManager.GetItemCount(ObjectManager.Player.AmmoId) < 20)
-                ObjectManager.SendChatMessage("Low ammo - consider buying more");
             if (ObjectManager.Player.HealthPercent >= 95 ||
-                ObjectManager.Player.HealthPercent >= 80 && !ObjectManager.Player.IsEating ||
+                (ObjectManager.Player.HealthPercent >= 80 && !ObjectManager.Player.IsEating) ||
                 ObjectManager.Player.IsInCombat ||
                 ObjectManager.Units.Any(u => u.TargetGuid == ObjectManager.Player.Guid))
             {
                 Wait.RemoveAll();
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
-
-                uint foodCount = foodItem == null ? 0 : ObjectManager.GetItemCount(foodItem.ItemId);
-                uint drinkCount = drinkItem == null ? 0 : ObjectManager.GetItemCount(drinkItem.ItemId);
-
-                if (!InCombat && (foodCount == 0 || drinkCount == 0))
-                {
-                    uint foodToBuy = 12 - (foodCount / stackCount);
-                    uint drinkToBuy = 28 - (drinkCount / stackCount);
-
-                    Dictionary<string, uint> itemsToBuy = [];
-                    //if (foodToBuy > 0)
-                    //    itemsToBuy.Add(container.BotSettings.Food, foodToBuy);
-                    //if (drinkToBuy > 0)
-                    //    itemsToBuy.Add(container.BotSettings.Drink, drinkToBuy);
-
-                    //var currentHotspot = container.GetCurrentHotspot();
-                    //if (currentHotspot.TravelPath != null)
-                    //{
-                    //    BotTasks.Push(new TravelState(botTasks, container, currentHotspot.TravelPath.Waypoints, 0));
-                    //    BotTasks.Push(new MoveToPositionState(botTasks, container, currentHotspot.TravelPath.Waypoints[0]));
-                    //}
-
-                    //BotTasks.Push(new BuyItemsState(botTasks, currentHotspot.Innkeeper.Name, itemsToBuy));
-                    //BotTasks.Push(new SellItemsState(botTasks, container, currentHotspot.Innkeeper.Name));
-                    //BotTasks.Push(new MoveToPositionState(botTasks, container, currentHotspot.Innkeeper.Position));
-                    //container.CheckForTravelPath(botTasks, true, false);
-                }
-
                 return;
             }
 
-            if (foodItem != null && !ObjectManager.Player.IsEating && Wait.For("EatDelay", 250, true))
-                foodItem.Use();
+            if (ObjectManager.Player.IsChanneling)
+                return;
+
+            // Eat food if health is low
+            if (!ObjectManager.Player.IsEating && ObjectManager.Player.HealthPercent < 80 && Wait.For("EatFoodDelay", 3000, true))
+            {
+                ObjectManager.StopAllMovement();
+                var foodItem = ConsumableData.FindBestFood(ObjectManager);
+                foodItem?.Use();
+            }
+
+            // Drink if mana is low
+            if (!ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60 && Wait.For("DrinkDelay", 3000, true))
+            {
+                ObjectManager.StopAllMovement();
+                var drinkItem = ConsumableData.FindBestDrink(ObjectManager);
+                drinkItem?.Use();
+            }
         }
-
-        private bool InCombat => ObjectManager.Aggressors.Any();
-
-        private bool PetHealthOk => ObjectManager.Pet == null || ObjectManager.Pet.HealthPercent >= 80;
-
-        private bool PetHappy => pet.IsHappy();
-
-        private bool PetBeingFed => pet.HasBuff("Feed Pet Effect");
     }
 }

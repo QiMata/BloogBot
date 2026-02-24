@@ -2,6 +2,7 @@ using BotCommLayer;
 using Communication;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using WoWStateManager.Coordination;
@@ -11,7 +12,25 @@ namespace WoWStateManager.Listeners
 {
     public class CharacterStateSocketListener : ProtobufSocketServer<WoWActivitySnapshot, WoWActivitySnapshot>
     {
-        public Dictionary<string, WoWActivitySnapshot> CurrentActivityMemberList { get; } = [];
+        /// <summary>
+        /// Thread-safe snapshot storage. Written by port 5002 (bot polls), read by port 8088 (test queries).
+        /// Must be ConcurrentDictionary because these ports run on separate threads.
+        /// </summary>
+        public ConcurrentDictionary<string, WoWActivitySnapshot> CurrentActivityMemberList { get; } = new();
+
+        /// <summary>
+        /// Pending actions queued by external callers (e.g. test fixtures via port 8088).
+        /// Stored per-account and consumed in FIFO order on subsequent bot polls.
+        /// </summary>
+        private readonly ConcurrentDictionary<string, ConcurrentQueue<ActionMessage>> _pendingActions = new();
+
+        /// <summary>
+        /// After delivering a forwarded action, suppress CombatCoordinator for that account
+        /// until this time. Prevents the coordinator from overwriting multi-second actions
+        /// (e.g. GatherNode mining channel) on the very next poll cycle.
+        /// </summary>
+        private readonly ConcurrentDictionary<string, DateTime> _coordinatorSuppressedUntil = new();
+        private readonly int _coordinatorSuppressionSeconds;
 
         private readonly List<CharacterSettings> _characterSettings;
         private CombatCoordinator? _combatCoordinator;
@@ -19,7 +38,17 @@ namespace WoWStateManager.Listeners
         public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
         {
             _characterSettings = characterSettings;
-            characterSettings.ForEach(settings => CurrentActivityMemberList.Add(settings.AccountName, new()));
+            _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
+            characterSettings.ForEach(settings => CurrentActivityMemberList.TryAdd(settings.AccountName, new()));
+        }
+
+        private static int GetCoordinatorSuppressionSeconds()
+        {
+            var raw = Environment.GetEnvironmentVariable("WWOW_TEST_COORD_SUPPRESS_SECONDS");
+            if (!int.TryParse(raw, out var seconds))
+                return 15;
+
+            return Math.Clamp(seconds, 1, 3600);
         }
 
         protected override WoWActivitySnapshot HandleRequest(WoWActivitySnapshot request)
@@ -35,7 +64,9 @@ namespace WoWStateManager.Listeners
             if (!string.IsNullOrEmpty(screenState))
             {
                 var charInfo = !string.IsNullOrEmpty(characterName) ? $", Character='{characterName}'" : "";
-                _logger.LogInformation($"SNAPSHOT_RECEIVED: Account='{accountName}', ScreenState='{screenState}'{charInfo}");
+                var errCount = request.RecentErrors?.Count ?? 0;
+                var errSuffix = errCount > 0 ? $", RecentErrors={errCount}" : "";
+                _logger.LogInformation($"SNAPSHOT_RECEIVED: Account='{accountName}', ScreenState='{screenState}'{charInfo}{errSuffix}");
             }
 
             // Handle "?" account name - assign to first available idle slot
@@ -77,6 +108,32 @@ namespace WoWStateManager.Listeners
             // Coordinate combat (group formation + combat support)
             InjectCoordinatedActions(accountName, response);
 
+            // Inject pending test/external action (overrides coordinated action if present).
+            // Use FIFO so rapid multi-step setup actions (target -> chat command, etc.) are not dropped.
+            if (_pendingActions.TryGetValue(accountName, out var pendingQueue))
+            {
+                while (pendingQueue.TryDequeue(out var pendingAction))
+                {
+                    // Drop stale chat actions if the sender is dead/ghost.
+                    // Action forwarding can be delayed by coordinator suppression; by delivery time the bot may have died.
+                    if (pendingAction.ActionType == ActionType.SendChat && IsDeadOrGhostState(response, out var deadReason))
+                    {
+                        _logger.LogInformation($"DROPPING PENDING ACTION for '{accountName}': SendChat blocked while dead/ghost ({deadReason})");
+                        continue;
+                    }
+
+                    response.CurrentAction = pendingAction;
+                    // Suppress CombatCoordinator so multi-second forwarded actions
+                    // are not overwritten on the next poll cycle.
+                    _coordinatorSuppressedUntil[accountName] = DateTime.UtcNow.AddSeconds(_coordinatorSuppressionSeconds);
+                    _logger.LogInformation($"INJECTING PENDING ACTION to '{accountName}': {pendingAction.ActionType} (coordinator suppressed {_coordinatorSuppressionSeconds}s)");
+                    break;
+                }
+
+                if (pendingQueue.IsEmpty)
+                    _pendingActions.TryRemove(accountName, out _);
+            }
+
             // Log when an action is being delivered to a bot
             if (response.CurrentAction != null && response.CurrentAction.ActionType != ActionType.Wait)
             {
@@ -86,8 +143,75 @@ namespace WoWStateManager.Listeners
             return response;
         }
 
+        /// <summary>
+        /// Queues an action to be delivered to the specified bot on its next poll.
+        /// Used by the test fixture (via port 8088) to send commands to bots.
+        /// </summary>
+        public void EnqueueAction(string accountName, ActionMessage action)
+        {
+            if (action.ActionType == ActionType.SendChat
+                && CurrentActivityMemberList.TryGetValue(accountName, out var current)
+                && IsDeadOrGhostState(current, out var deadReason))
+            {
+                _logger.LogInformation($"DROPPING QUEUED ACTION for '{accountName}': SendChat blocked while dead/ghost ({deadReason})");
+                return;
+            }
+
+            var queue = _pendingActions.GetOrAdd(accountName, _ => new ConcurrentQueue<ActionMessage>());
+            queue.Enqueue(action);
+            _logger.LogInformation($"QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
+        }
+
+        private static bool IsDeadOrGhostState(WoWActivitySnapshot? snap, out string reason)
+        {
+            reason = string.Empty;
+
+            var player = snap?.Player;
+            var unit = player?.Unit;
+            if (player == null || unit == null)
+                return false;
+
+            const uint playerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
+            const uint standStateMask = 0xFF;
+            const uint standStateDead = 7; // UNIT_STAND_STATE_DEAD
+
+            var reasons = new List<string>();
+            if (unit.Health == 0)
+                reasons.Add("health=0");
+
+            if ((player.PlayerFlags & playerFlagGhost) != 0)
+                reasons.Add("ghostFlag=1");
+
+            var standState = unit.Bytes1 & standStateMask;
+            if (standState == standStateDead)
+                reasons.Add("standState=dead");
+
+            var deadTextSeen =
+                (snap?.RecentErrors?.Any(e =>
+                    e.Contains("dead", StringComparison.OrdinalIgnoreCase) ||
+                    e.Contains("can't chat", StringComparison.OrdinalIgnoreCase) ||
+                    e.Contains("cannot chat", StringComparison.OrdinalIgnoreCase)) ?? false)
+                || (snap?.RecentChatMessages?.Any(m =>
+                    m.Contains("dead", StringComparison.OrdinalIgnoreCase) ||
+                    m.Contains("can't chat", StringComparison.OrdinalIgnoreCase) ||
+                    m.Contains("cannot chat", StringComparison.OrdinalIgnoreCase)) ?? false);
+
+            if (deadTextSeen)
+                reasons.Add("deadTextSeen=1");
+
+            if (reasons.Count == 0)
+                return false;
+
+            reason = string.Join(", ", reasons);
+            return true;
+        }
+
         private void InjectCoordinatedActions(string accountName, WoWActivitySnapshot response)
         {
+            // Skip if a forwarded action was recently delivered — let it complete without interference
+            if (_coordinatorSuppressedUntil.TryGetValue(accountName, out var until) && DateTime.UtcNow < until)
+                return;
+
             if (CurrentActivityMemberList.Count < 2)
             {
                 _logger.LogDebug($"COMBAT_COORD_DEBUG: Skipping — only {CurrentActivityMemberList.Count} members");

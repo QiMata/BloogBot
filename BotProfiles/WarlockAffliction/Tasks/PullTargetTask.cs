@@ -1,14 +1,13 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using GameData.Core.Models;
+using GameData.Core.Enums;
 using static BotRunner.Constants.Spellbook;
 
 namespace WarlockAffliction.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
         private readonly string pullingSpell;
-        private Position currentWaypoint;
 
         internal PullTargetTask(IBotContext botContext) : base(botContext)
         {
@@ -29,7 +28,7 @@ namespace WarlockAffliction.Tasks
             }
 
             float distanceToTarget = ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position);
-            if (distanceToTarget < 27 && ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(pullingSpell))
+            if (distanceToTarget < 27 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(pullingSpell))
             {
                 if (ObjectManager.Player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
                     ObjectManager.StopAllMovement();
@@ -37,6 +36,10 @@ namespace WarlockAffliction.Tasks
                 if (Wait.For("WarlockAfflictionPullDelay", 250))
                 {
                     ObjectManager.StopAllMovement();
+
+                    // Send pet to attack (Voidwalker tanks, Imp adds DPS)
+                    ObjectManager.Pet?.Attack();
+
                     ObjectManager.CastSpell(pullingSpell);
 
                     BotTasks.Pop();
@@ -46,18 +49,7 @@ namespace WarlockAffliction.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            if (nextWaypoint.Length > 1)
-            {
-                currentWaypoint = nextWaypoint[1];
-            }
-            else
-            {
-                BotTasks.Pop();
-                return;
-            }
-
-            ObjectManager.MoveToward(currentWaypoint);
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

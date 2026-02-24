@@ -1,12 +1,9 @@
-﻿using BotRunner.Interfaces;
-using System.ComponentModel.Composition;
+using BotRunner.Interfaces;
 using WarlockDemonology.Tasks;
 
 using BotProfiles.Common;
 namespace WarlockDemonology
-{
-    [Export(typeof(IBot))]
-    internal class WarlockDemonology : BotBase
+{    public class WarlockDemonology : BotBase
     {
         public override string Name => "Demonology Warlock";
 

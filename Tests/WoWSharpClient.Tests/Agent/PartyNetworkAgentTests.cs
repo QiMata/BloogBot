@@ -63,20 +63,19 @@ namespace WoWSharpClient.Tests.Agent
 
         /// <summary>
         /// Builds an SMSG_GROUP_LIST payload in 1.12.1 format:
-        /// groupType(1) + subGroup(1) + flags(1) + count(4)
+        /// groupType(1) + ownFlags(1) + count(4)
         /// + [name\0 + guid(8) + online(1) + flags(1)] * count
         /// + leaderGuid(8)
         /// + [if count > 0: lootMethod(1) + looterGuid(8) + lootThreshold(1)]
         /// </summary>
         private static byte[] BuildGroupListPayload(
-            byte groupType, byte ownSubGroup, byte ownFlags,
+            byte groupType, byte ownFlags,
             (string Name, ulong Guid, byte Online, byte Flags)[] members,
             ulong leaderGuid,
             byte lootMethod = 0, ulong looterGuid = 0, byte lootThreshold = 0)
         {
             using var ms = new MemoryStream();
             ms.WriteByte(groupType);
-            ms.WriteByte(ownSubGroup);
             ms.WriteByte(ownFlags);
 
             var buf = new byte[8];
@@ -153,7 +152,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // leaderGuid that doesn't match any member -> self is leader
             var payload = BuildGroupListPayload(
-                (byte)(isRaid ? 1 : 0), 0, 0, memberData, 0xDEADUL,
+                (byte)(isRaid ? 1 : 0), 0, memberData, 0xDEADUL,
                 lootMethod: 0, looterGuid: 0, lootThreshold: 0);
 
             using var sub = _partyAgent.GroupUpdates.Subscribe(_ => { });
@@ -665,7 +664,7 @@ namespace WoWSharpClient.Tests.Agent
             using var sub = _partyAgent.GroupUpdates.Subscribe(r => result = r);
 
             var payload = BuildGroupListPayload(
-                groupType: 0, ownSubGroup: 0, ownFlags: 0,
+                groupType: 0, ownFlags: 0,
                 members: [("Dwalin", 0x100, 1, 0)],
                 leaderGuid: 0xDEAD, // not matching any member -> self is leader
                 lootMethod: 3, looterGuid: 0, lootThreshold: 2);
@@ -685,7 +684,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             using var sub = _partyAgent.GroupUpdates.Subscribe(_ => { });
 
-            var payload = BuildGroupListPayload(0, 0, 0,
+            var payload = BuildGroupListPayload(0, 0,
                 [("Alpha", 0xA, 1, 0), ("Bravo", 0xB, 0, 1)],
                 leaderGuid: 0xA,
                 lootMethod: 0, looterGuid: 0, lootThreshold: 0);
@@ -713,7 +712,7 @@ namespace WoWSharpClient.Tests.Agent
             using var sub = _partyAgent.GroupUpdates.Subscribe(_ => { });
 
             // leaderGuid doesn't match any member -> self is leader
-            var payload = BuildGroupListPayload(0, 0, 0,
+            var payload = BuildGroupListPayload(0, 0,
                 [("Other", 0x50, 1, 0)],
                 leaderGuid: 0x999,
                 lootMethod: 0, looterGuid: 0, lootThreshold: 0);
@@ -730,7 +729,7 @@ namespace WoWSharpClient.Tests.Agent
             using var sub = _partyAgent.GroupUpdates.Subscribe(_ => { });
 
             // leaderGuid matches a member -> self is NOT leader
-            var payload = BuildGroupListPayload(0, 0, 0,
+            var payload = BuildGroupListPayload(0, 0,
                 [("Leader", 0x50, 1, 0)],
                 leaderGuid: 0x50,
                 lootMethod: 0, looterGuid: 0, lootThreshold: 0);
@@ -747,7 +746,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             using var sub = _partyAgent.GroupUpdates.Subscribe(_ => { });
 
-            var payload = BuildGroupListPayload(1, 0, 0,
+            var payload = BuildGroupListPayload(1, 0,
                 [("Raider", 0x60, 1, 2)],
                 leaderGuid: 0xDEAD,
                 lootMethod: 2, looterGuid: 0x60, lootThreshold: 3);
@@ -763,7 +762,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             using var sub = _partyAgent.GroupUpdates.Subscribe(_ => { });
 
-            var payload = BuildGroupListPayload(0, 0, 0,
+            var payload = BuildGroupListPayload(0, 0,
                 [("Tank", 0x70, 1, 0)],
                 leaderGuid: 0xDEAD,
                 lootMethod: (byte)LootMethod.MasterLooter,
@@ -781,7 +780,7 @@ namespace WoWSharpClient.Tests.Agent
             using var sub = _partyAgent.GroupUpdates.Subscribe(_ => { });
 
             // First populate with members
-            var payload1 = BuildGroupListPayload(0, 0, 0,
+            var payload1 = BuildGroupListPayload(0, 0,
                 [("Old", 0x80, 1, 0)],
                 leaderGuid: 0xDEAD,
                 lootMethod: 0, looterGuid: 0, lootThreshold: 0);
@@ -791,7 +790,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.Single(_partyAgent.GetGroupMembers());
 
             // Now send empty group list (count=0, no loot block)
-            var payload2 = BuildGroupListPayload(0, 0, 0,
+            var payload2 = BuildGroupListPayload(0, 0,
                 [], leaderGuid: 0);
             GetSubject(Opcode.SMSG_GROUP_LIST)
                 .OnNext(new ReadOnlyMemory<byte>(payload2));

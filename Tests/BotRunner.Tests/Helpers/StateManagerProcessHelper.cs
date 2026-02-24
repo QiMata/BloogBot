@@ -16,7 +16,7 @@ namespace BotRunner.Tests.Helpers
     /// </summary>
     public enum BotTaskMode
     {
-        /// <summary>Default mode - runs GrindBot after entering world.</summary>
+        /// <summary>Default mode - idles after entering world, awaiting StateManager actions.</summary>
         Default,
         /// <summary>Manual recording mode - user controls the character and toggles recording via spells.</summary>
         ManualRecording,

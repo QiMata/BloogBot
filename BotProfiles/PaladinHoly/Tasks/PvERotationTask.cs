@@ -4,7 +4,7 @@ using static BotRunner.Constants.Spellbook;
 
 namespace PaladinHoly.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
@@ -17,17 +17,8 @@ namespace PaladinHoly.Tasks
                 return;
             }
 
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null ||
-                ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(3))
                 return;
@@ -43,9 +34,19 @@ namespace PaladinHoly.Tasks
         private void ExecuteRotation()
         {
             TryCastSpell(DevotionAura, !ObjectManager.Player.HasBuff(DevotionAura));
+
+            // Group healing: heal party members before DPS
+            if (IsInGroup)
+            {
+                if (TryCastHeal(HolyLight, 60, 40)) return;
+            }
+            else if (ObjectManager.Player.HealthPercent < 60)
+            {
+                TryCastSpell(HolyLight, castOnSelf: true, condition: true);
+            }
+
             TryCastSpell(SealOfTheCrusader, !ObjectManager.Player.HasBuff(SealOfTheCrusader));
             TryCastSpell(Judgement, ObjectManager.Player.HasBuff(SealOfTheCrusader));
-            TryCastSpell(HolyLight, ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
         }
     }
 }

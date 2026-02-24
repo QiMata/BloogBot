@@ -1,9 +1,11 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
+using static BotRunner.Constants.Spellbook;
 
 namespace ShamanRestoration.Tasks
 {
-    internal class PvPRotationTask : CombatRotationTask, IBotTask
+    public class PvPRotationTask : CombatRotationTask, IBotTask
     {
         internal PvPRotationTask(IBotContext botContext) : base(botContext) { }
 

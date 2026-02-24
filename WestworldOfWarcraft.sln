@@ -96,7 +96,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{6828FD47-F
 		docs\FILE_INVENTORY.md = docs\FILE_INVENTORY.md
 		docs\GUIDELINES.md = docs\GUIDELINES.md
 		docs\IPC_COMMUNICATION.md = docs\IPC_COMMUNICATION.md
-		docs\next-session-prompt.md = docs\next-session-prompt.md
 		docs\PHYSICS_ENGINE_PROMPT.md = docs\PHYSICS_ENGINE_PROMPT.md
 		docs\PROJECT_STRUCTURE.md = docs\PROJECT_STRUCTURE.md
 		docs\README.md = docs\README.md

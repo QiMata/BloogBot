@@ -1,24 +1,19 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace HunterMarksmanship.Tasks
 {
-    internal class PvPRotationTask : CombatRotationTask, IBotTask
+    public class PvPRotationTask : CombatRotationTask, IBotTask
     {
         internal PvPRotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
         {
             ObjectManager.Pet?.Attack();
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null)
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
 
             if (Update(34))
                 return;

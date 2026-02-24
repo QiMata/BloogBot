@@ -132,10 +132,17 @@ namespace WoWSharpClient.Handlers
         {
             ulong guid = ReaderUtils.ReadPackedGuid(reader);
 
+            // Look up the existing object type so ReadValuesUpdateBlock can
+            // dispatch unit/player/item fields correctly.  Without this the
+            // type stays None and every field beyond OBJECT_END is silently
+            // skipped — corrupting the stream position for the rest of the packet.
+            var existingObj = WoWSharpObjectManager.Instance.GetObjectByGuid(guid);
+            var objectType = existingObj?.ObjectType ?? WoWObjectType.None;
+
             var update = new WoWSharpObjectManager.ObjectStateUpdate(
                 guid,
                 WoWSharpObjectManager.ObjectUpdateOperation.Update,
-                WoWObjectType.None,
+                objectType,
                 null,
                 []
             );
@@ -171,6 +178,32 @@ namespace WoWSharpClient.Handlers
             byte blockCount = reader.ReadByte();
             byte[] updateMask = reader.ReadBytes(blockCount * 4);
             BitArray updateMaskBits = new(updateMask);
+
+            // Diagnostic: log update mask stats for Player objects
+            if (objectUpdate.ObjectType == WoWObjectType.Player)
+            {
+                int totalSet = 0, maxSet = -1;
+                int packSlotSet = 0;
+                int skillFieldSet = 0;
+                int skillInfoStart = (int)EPlayerFields.PLAYER_SKILL_INFO_1_1;
+                int skillInfoEnd = skillInfoStart + 383;
+                for (int j = 0; j < updateMaskBits.Length; j++)
+                {
+                    if (updateMaskBits[j])
+                    {
+                        totalSet++;
+                        maxSet = j;
+                        if (j >= (int)EPlayerFields.PLAYER_FIELD_PACK_SLOT_1
+                            && j <= (int)EPlayerFields.PLAYER_FIELD_PACK_SLOT_LAST)
+                            packSlotSet++;
+                        if (j >= skillInfoStart && j <= skillInfoEnd)
+                            skillFieldSet++;
+                    }
+                }
+                Log.Information(
+                    "[ReadValuesUpdateBlock] Player GUID=0x{Guid:X}: blockCount={BC}, maskBits={MB}, totalSetBits={Set}, maxSetBit={Max}, packSlotBits={Pack}, skillBits={Skill} (skillRange={SR}-{SE})",
+                    objectUpdate.Guid, blockCount, updateMaskBits.Length, totalSet, maxSet, packSlotSet, skillFieldSet, skillInfoStart, skillInfoEnd);
+            }
 
             for (int i = 0; i < updateMaskBits.Length; )
             {
@@ -232,6 +265,12 @@ namespace WoWSharpClient.Handlers
                 else if (objectUpdate.ObjectType == WoWObjectType.Corpse)
                 {
                     ReadCorpseField(reader, objectUpdate, (ECorpseFields)i);
+                }
+                else
+                {
+                    // Safety fallback: consume the 4-byte field value so the stream
+                    // stays in sync even if the object type is unknown/None.
+                    reader.ReadUInt32();
                 }
 
                 i++; // Move to the next field index
@@ -636,7 +675,13 @@ namespace WoWSharpClient.Handlers
             else if (field < EPlayerFields.PLAYER_FIELD_PACK_SLOT_1)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
             else if (field <= EPlayerFields.PLAYER_FIELD_PACK_SLOT_LAST)
-                objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
+            {
+                var val = reader.ReadUInt32();
+                objectUpdate.UpdatedFields[(uint)field] = val;
+                if (val != 0)
+                    Log.Information("[ReadPlayerField] PACK_SLOT field=0x{Field:X} value=0x{Value:X8}",
+                        (uint)field, val);
+            }
             else if (field <= EPlayerFields.PLAYER_FIELD_BANK_SLOT_LAST)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
             else if (field <= EPlayerFields.PLAYER_FIELD_BANKBAG_SLOT_LAST)
@@ -711,19 +756,8 @@ namespace WoWSharpClient.Handlers
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
             else if (field <= EPlayerFields.PLAYER_FIELD_BUYBACK_TIMESTAMP_LAST)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
-            else if (field == EPlayerFields.PLAYER_FIELD_KILLS)
-                objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
-            else if (field == EPlayerFields.PLAYER_FIELD_YESTERDAY_KILLS)
-                objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
-            else if (field == EPlayerFields.PLAYER_FIELD_LAST_WEEK_KILLS)
-                objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
-            else if (field == EPlayerFields.PLAYER_FIELD_LAST_WEEK_KILLS)
-                objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
-            else if (field == EPlayerFields.PLAYER_FIELD_LAST_WEEK_CONTRIBUTION)
-                objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
-            else if (field == EPlayerFields.PLAYER_FIELD_LIFETIME_HONORABLE_KILLS)
-                objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
-            else if (field == EPlayerFields.PLAYER_FIELD_LIFETIME_DISHONORABLE_KILLS)
+            // Honor fields: KILLS through LAST_WEEK_RANK are all uint32
+            else if (field <= EPlayerFields.PLAYER_FIELD_LAST_WEEK_RANK)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
             else if (field == EPlayerFields.PLAYER_FIELD_BYTES2)
                 objectUpdate.UpdatedFields[(uint)field] = new byte[]
@@ -735,8 +769,10 @@ namespace WoWSharpClient.Handlers
                 };
             else if (field == EPlayerFields.PLAYER_FIELD_WATCHED_FACTION_INDEX)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
-            else if (field <= EPlayerFields.PLAYER_FIELD_COMBAT_RATING_1 + 20)
+            else if (field <= EPlayerFields.PLAYER_FIELD_COMBAT_RATING_1 + 19)
                 objectUpdate.UpdatedFields[(uint)field] = reader.ReadUInt32();
+            else
+                reader.ReadUInt32(); // safety: consume unrecognized player field
         }
 
         private static void ReadItemField(

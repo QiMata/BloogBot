@@ -1,15 +1,13 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Interfaces;
-using GameData.Core.Models;
 
 namespace ShamanElemental.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
         private const string LightningBolt = "Lightning Bolt";
         private readonly int stuckCount;
-        private Position currentWaypoint;
         private IWoWUnit target;
 
         internal PullTargetTask(IBotContext botContext) : base(botContext) { }
@@ -20,7 +18,7 @@ namespace ShamanElemental.Tasks
             {
                 ObjectManager.StopAllMovement();
                 BotTasks.Pop();
-                BotTasks.Push(Container.CreatePvERotationTask(BotContext));
+                BotTasks.Push(Container.ClassContainer.CreatePvERotationTask(BotContext));
                 return;
             }
 
@@ -44,12 +42,7 @@ namespace ShamanElemental.Tasks
                 return;
             }
 
-            Position[] locations = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-
-            if (locations.Length > 1)
-            {
-                ObjectManager.MoveToward(locations[1]);
-            }
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

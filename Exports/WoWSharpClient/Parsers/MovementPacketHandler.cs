@@ -17,18 +17,19 @@ namespace WoWSharpClient.Parsers
         /* ------------------------------------------------------------------ */
 
         /// <summary>
-        /// Basic teleport ACK – no movement‑block, just GUID + counter + time.
+        /// Teleport ACK: full 8-byte GUID + counter + client time.
+        /// MaNGOS HandleMoveTeleportAck reads: guid(8) + counter(4) + time(4).
         /// </summary>
-        public static byte[] BuildMoveTeleportAckPayload(ulong guid,
+        public static byte[] BuildMoveTeleportAckPayload(WoWLocalPlayer player,
                                                         uint movementCounter,
-                                                        uint timestamp)
+                                                        uint clientTimeMs)
         {
             using var ms = new MemoryStream();
             using var w = new BinaryWriter(ms);
 
-            w.Write(guid);
-            w.Write(movementCounter);
-            w.Write(timestamp);
+            w.Write(player.Guid);       // full 8-byte GUID
+            w.Write(movementCounter);   // counter from server packet (0 for MSG_MOVE_TELEPORT)
+            w.Write(clientTimeMs);      // client timestamp
             return ms.ToArray();
         }
 

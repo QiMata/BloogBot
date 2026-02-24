@@ -4,6 +4,8 @@ using Serilog;
 using System.Collections.Generic;
 using System.IO;
 using System;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace WoWSharpClient.Handlers
 {
@@ -47,6 +49,27 @@ namespace WoWSharpClient.Handlers
             }
         }
 
+        /// <summary>
+        /// Parses SMSG_LEARNED_SPELL (0x12B).
+        /// Format: uint32 spellId
+        /// Adds the newly learned spell to the local spell list.
+        /// </summary>
+        public static void HandleLearnedSpell(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint spellId = reader.ReadUInt32();
+                var existing = WoWSharpObjectManager.Instance.Spells;
+                if (existing != null && !existing.Exists(s => s.Id == spellId))
+                {
+                    existing.Add(new GameData.Core.Models.Spell(spellId, 0, "", "", ""));
+                    Log.Information("[SpellHandler] Learned new spell: {SpellId} (total: {Count})", spellId, existing.Count);
+                }
+            }
+            catch (EndOfStreamException) { }
+        }
+
         public static void HandleSpellLogMiss(Opcode opcode, byte[] data)
         {
             using var reader = new BinaryReader(new MemoryStream(data));
@@ -84,24 +107,38 @@ namespace WoWSharpClient.Handlers
                 // Hit targets
                 byte hitCount = reader.ReadByte();
                 ulong firstHitTarget = 0;
+                var hitGuids = new List<ulong>(hitCount);
                 for (int i = 0; i < hitCount; i++)
                 {
                     ulong hitGuid = ReaderUtils.ReadPackedGuid(reader);
+                    hitGuids.Add(hitGuid);
                     if (i == 0) firstHitTarget = hitGuid;
                 }
 
                 // Miss targets
                 byte missCount = reader.ReadByte();
+                var missGuids = new List<(ulong guid, byte condition)>(missCount);
                 for (int i = 0; i < missCount; i++)
                 {
                     ulong missGuid = ReaderUtils.ReadPackedGuid(reader);
                     byte missCondition = reader.ReadByte();
+                    missGuids.Add((missGuid, missCondition));
                     if (missCondition == 11) // SPELL_MISS_REFLECT
                         reader.ReadByte(); // reflect result
                 }
 
                 // SpellCastTargets (variable structure) - skip for event purposes
                 // We've extracted the key data we need
+
+                // Clear SpellcastId when cast completes so IsCasting becomes false
+                if (WoWSharpObjectManager.Instance.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
+                    casterUnit.SpellcastId = 0;
+
+                // Detailed logging for gathering spell diagnostics
+                var hitStr = string.Join(", ", hitGuids.Select(g => $"0x{g:X}"));
+                var missStr = string.Join(", ", missGuids.Select(m => $"0x{m.guid:X}(cond={m.condition})"));
+                Log.Information("[SpellHandler] SPELL_GO: caster=0x{Caster:X} spell={SpellId} hits=[{Hits}] misses=[{Misses}] castFlags=0x{CastFlags:X}",
+                    casterGuid, spellId, hitStr, missStr, castFlags);
 
                 WoWSharpEventEmitter.Instance.FireOnSpellGo(spellId, casterGuid, firstHitTarget);
             }
@@ -140,6 +177,13 @@ namespace WoWSharpClient.Handlers
                     if ((targetMask & 0x0002) != 0)
                         targetGuid = ReaderUtils.ReadPackedGuid(reader);
                 }
+
+                Log.Information("[SpellHandler] SPELL_START: caster=0x{Caster:X} spell={SpellId} castTime={CastTime}ms target=0x{Target:X}",
+                    casterGuid, spellId, castTime, targetGuid);
+
+                // Update SpellcastId on the caster's WoWUnit model so IsCasting works
+                if (WoWSharpObjectManager.Instance.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
+                    casterUnit.SpellcastId = spellId;
 
                 WoWSharpEventEmitter.Instance.FireOnSpellStart(spellId, casterGuid, targetGuid, castTime);
             }
@@ -225,9 +269,9 @@ namespace WoWSharpClient.Handlers
         }
 
         /// <summary>
-        /// Parses SMSG_CAST_FAILED (0x130).
-        /// Format: uint32 spellId, byte result, [byte reason if result != 0]
-        /// Logs spell cast failures so we can diagnose rejected casts.
+        /// Parses SMSG_CAST_FAILED (0x130) for vanilla 1.12.1.
+        /// Format: uint32 spellId, uint8 status(always 2), uint8 failReason, [optional extra data]
+        /// The status byte is SimpleSpellCastResult (0=detailed, 2=simple failure).
         /// </summary>
         public static void HandleCastFailed(Opcode opcode, byte[] data)
         {
@@ -235,15 +279,127 @@ namespace WoWSharpClient.Handlers
             try
             {
                 uint spellId = reader.ReadUInt32();
-                byte result = reader.ReadByte();
+                byte status = reader.ReadByte(); // SimpleSpellCastResult: 0=detailed, 2=simple failure
 
-                if (result != 0)
+                // SMSG_CAST_FAILED is always about the local player — clear their SpellcastId
+                if (WoWSharpObjectManager.Instance.Player is Models.WoWUnit playerUnit)
+                    playerUnit.SpellcastId = 0;
+
+                if (status == 2 && reader.BaseStream.Position >= reader.BaseStream.Length)
                 {
-                    var remaining = data.Length - 5; // 4 bytes spellId + 1 byte result
-                    var hex = BitConverter.ToString(data);
-                    Log.Warning("[SpellHandler] CAST_FAILED: spell={SpellId} result={Result} dataLen={DataLen} remaining={Remaining} hex={Hex}",
-                        spellId, result, data.Length, remaining, hex);
+                    // Simple failure with no details
+                    Console.WriteLine($"[CAST_FAILED] spell={spellId} status=FAILURE (no details) raw={BitConverter.ToString(data)}");
+                    Log.Warning("[SpellHandler] CAST_FAILED: spell={SpellId} status=FAILURE (no details)", spellId);
+                    return;
                 }
+
+                byte reason = reader.ReadByte();
+                var reasonName = GetCastFailureReasonName(reason);
+                Console.WriteLine($"[CAST_FAILED] spell={spellId} reason=0x{reason:X2} ({reasonName}) raw={BitConverter.ToString(data)}");
+                Log.Warning("[SpellHandler] CAST_FAILED: spell={SpellId} reason=0x{Reason:X2} ({ReasonName})", spellId, reason, reasonName);
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// Maps vanilla 1.12.1 CastFailureReason wire values to human-readable names.
+        /// </summary>
+        private static string GetCastFailureReasonName(byte reason) => reason switch
+        {
+            0x00 => "AFFECTING_COMBAT",
+            0x01 => "ALREADY_AT_FULL_HEALTH",
+            0x02 => "ALREADY_AT_FULL_POWER",
+            0x03 => "ALREADY_BEING_TAMED",
+            0x04 => "ALREADY_HAVE_CHARM",
+            0x05 => "ALREADY_HAVE_SUMMON",
+            0x06 => "ALREADY_OPEN",
+            0x07 => "AURA_BOUNCED",
+            0x08 => "AUTOTRACK_INTERRUPTED",
+            0x09 => "BAD_IMPLICIT_TARGETS",
+            0x0A => "BAD_TARGETS",
+            0x0B => "CANT_BE_CHARMED",
+            0x0C => "CANT_BE_DISENCHANTED",
+            0x0D => "CANT_BE_PROSPECTED",
+            0x0E => "CANT_CAST_ON_TAPPED",
+            0x12 => "CASTER_AURASTATE",
+            0x13 => "CASTER_DEAD",
+            0x14 => "CHARMED",
+            0x16 => "CONFUSED",
+            0x17 => "DONT_REPORT",
+            0x18 => "EQUIPPED_ITEM",
+            0x19 => "EQUIPPED_ITEM_CLASS",
+            0x1C => "ERROR",
+            0x1D => "FIZZLE",
+            0x1E => "FLEEING",
+            0x1F => "FOOD_LOWLEVEL",
+            0x22 => "IMMUNE",
+            0x23 => "INTERRUPTED",
+            0x24 => "INTERRUPTED_COMBAT",
+            0x27 => "ITEM_NOT_FOUND",
+            0x28 => "ITEM_NOT_READY",
+            0x2A => "LINE_OF_SIGHT",
+            0x2E => "MOVING",
+            0x32 => "NOPATH",
+            0x33 => "NOT_BEHIND",
+            0x34 => "NOT_FISHABLE",
+            0x35 => "NOT_HERE",
+            0x36 => "NOT_INFRONT",
+            0x37 => "NOT_IN_CONTROL",
+            0x38 => "NOT_KNOWN",
+            0x39 => "NOT_MOUNTED",
+            0x3C => "NOT_READY",
+            0x3E => "NOT_STANDING",
+            0x43 => "NO_AMMO",
+            0x44 => "NO_CHARGES_REMAIN",
+            0x47 => "NO_DUELING",
+            0x49 => "NO_FISH",
+            0x4B => "NO_MOUNTS_ALLOWED",
+            0x4C => "NO_PET",
+            0x4D => "NO_POWER",
+            0x50 => "ONLY_ABOVEWATER",
+            0x51 => "ONLY_DAYTIME",
+            0x52 => "ONLY_INDOORS",
+            0x53 => "ONLY_MOUNTED",
+            0x54 => "ONLY_NIGHTTIME",
+            0x55 => "ONLY_OUTDOORS",
+            0x56 => "ONLY_SHAPESHIFT",
+            0x57 => "ONLY_STEALTHED",
+            0x58 => "ONLY_UNDERWATER",
+            0x59 => "OUT_OF_RANGE",
+            0x5A => "PACIFIED",
+            0x5D => "REQUIRES_AREA",
+            0x5E => "REQUIRES_SPELL_FOCUS",
+            0x5F => "ROOTED",
+            0x60 => "SILENCED",
+            0x61 => "SPELL_IN_PROGRESS",
+            0x64 => "STUNNED",
+            0x65 => "TARGETS_DEAD",
+            0x76 => "TOO_CLOSE",
+            0x7B => "UNIT_NOT_BEHIND",
+            0x7C => "UNIT_NOT_INFRONT",
+            _ => $"UNKNOWN_0x{reason:X2}"
+        };
+
+        /// <summary>
+        /// Parses SMSG_SPELL_FAILURE (0x133).
+        /// Format: PackGUID caster, uint32 spellId, byte reason
+        /// Broadcast to nearby players when a spell fails after SPELL_START.
+        /// </summary>
+        public static void HandleSpellFailure(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                ulong casterGuid = ReaderUtils.ReadPackedGuid(reader);
+                uint spellId = reader.ReadUInt32();
+                byte reason = reader.ReadByte();
+
+                // Clear SpellcastId on the caster
+                if (WoWSharpObjectManager.Instance.GetObjectByGuid(casterGuid) is Models.WoWUnit casterUnit)
+                    casterUnit.SpellcastId = 0;
+
+                Log.Warning("[SpellHandler] SPELL_FAILURE: caster=0x{Caster:X} spell={SpellId} reason={Reason}",
+                    casterGuid, spellId, reason);
             }
             catch (EndOfStreamException) { }
         }
@@ -266,6 +422,117 @@ namespace WoWSharpClient.Handlers
 
                 Log.Information("[SpellHandler] HEAL_LOG: caster=0x{Caster:X} target=0x{Target:X} spell={SpellId} healed={Amount}{Crit}",
                     casterGuid, targetGuid, spellId, healAmount, critical != 0 ? " CRIT" : "");
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// SMSG_LOG_XPGAIN (0x1D0) — fired when player gains XP from kills or quests.
+        /// </summary>
+        public static void HandleLogXpGain(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                ulong victimGuid = reader.ReadUInt64(); // 0 for quest/explore XP
+                uint xpAmount = reader.ReadUInt32();
+                byte type = reader.ReadByte(); // 0 = kill, 1 = non-kill (quest)
+
+                WoWSharpEventEmitter.Instance.FireOnXpGain((int)xpAmount);
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// SMSG_LEVELUP_INFO (0x1D4) — fired when player levels up.
+        /// </summary>
+        public static void HandleLevelUpInfo(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint newLevel = reader.ReadUInt32();
+                // Remaining fields: health delta, mana delta, stat deltas — not needed for event
+                WoWSharpEventEmitter.Instance.FireLevelUp();
+                Log.Information("[SpellHandler] LEVELUP: Player reached level {Level}", newLevel);
+            }
+            catch (EndOfStreamException) { }
+        }
+        /// <summary>
+        /// SMSG_ATTACKSTART (0x143) — server confirms melee auto-attack has started.
+        /// Format: uint64 attackerGuid, uint64 targetGuid
+        /// </summary>
+        public static void HandleAttackStart(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                ulong attackerGuid = reader.ReadUInt64();
+                ulong targetGuid = reader.ReadUInt64();
+
+                var player = WoWSharpObjectManager.Instance.Player;
+                if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
+                    localPlayer.IsAutoAttacking = true;
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// SMSG_ATTACKSTOP (0x144) — server confirms melee auto-attack has stopped.
+        /// Format: PackGUID attacker, PackGUID target, uint32 unknown
+        /// </summary>
+        public static void HandleAttackStop(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                ulong attackerGuid = ReaderUtils.ReadPackedGuid(reader);
+                ulong targetGuid = ReaderUtils.ReadPackedGuid(reader);
+
+                var player = WoWSharpObjectManager.Instance.Player;
+                if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
+                    localPlayer.IsAutoAttacking = false;
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// Handles SMSG_GAMEOBJECT_CUSTOM_ANIM (0x0B3).
+        /// Format: uint64 guid, uint32 anim
+        /// For fishing bobbers, anim 0 signals a fish bite. We auto-interact (CMSG_GAMEOBJ_USE)
+        /// so the catch happens instantly without requiring external polling.
+        /// </summary>
+        public static void HandleGameObjectCustomAnim(Opcode opcode, byte[] data)
+        {
+            if (data.Length < 12) return;
+
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                ulong guid = reader.ReadUInt64();
+                uint anim = reader.ReadUInt32();
+
+                var om = WoWSharpObjectManager.Instance;
+                var obj = om.GetObjectByGuid(guid);
+                if (obj is not Models.WoWGameObject go) return;
+
+                // Fish bite: anim 0 on a bobber created by our player
+                if (anim == 0 && go.CreatedBy.FullGuid == om.PlayerGuid.FullGuid)
+                {
+                    Log.Information("[FishBite] Bobber 0x{Guid:X} — auto-interacting", guid);
+                    om.InteractWithGameObject(guid);
+
+                    // Auto-loot the catch after server processes interaction
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(1500);
+                        Log.Information("[FishBite] Auto-looting slot 0...");
+                        om.AutoStoreLootItem(0);
+                        await Task.Delay(500);
+                        om.ReleaseLoot(guid);
+                        Log.Information("[FishBite] Released loot for bobber 0x{Guid:X}", guid);
+                    });
+                }
             }
             catch (EndOfStreamException) { }
         }

@@ -12,11 +12,21 @@ namespace ForegroundBotRunner.Objects
     public unsafe abstract class WoWObject(nint pointer, HighGuid guid, WoWObjectType objectType) : IWoWObject
     {
         public nint Pointer { get; } = pointer;
-        // used for interacting in vanilla
+        // Right-click interaction delegates for Vanilla 1.12.1.
+        // Units and GameObjects use DIFFERENT native functions with DIFFERENT signatures.
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate void RightClickObjectDelegate(nint unitPtr, int autoLoot);
+        private delegate void RightClickUnitDelegate(nint objectPtr, int autoLoot);
 
-        private readonly RightClickObjectDelegate rightClickObjectFunction = Marshal.GetDelegateForFunctionPointer<RightClickObjectDelegate>(0x60BEA0);
+        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        private delegate void RightClickGameObjDelegate(nint objectPtr);
+
+        // 0x60BEA0 = CGUnit_C::OnRightClick(int autoLoot) — for units/NPCs
+        private static readonly RightClickUnitDelegate rightClickUnitFunction =
+            Marshal.GetDelegateForFunctionPointer<RightClickUnitDelegate>(0x60BEA0);
+
+        // 0x5F8660 = CGGameObject_C::OnRightClick() — for game objects (no extra params)
+        private static readonly RightClickGameObjDelegate rightClickGameObjectFunction =
+            Marshal.GetDelegateForFunctionPointer<RightClickGameObjDelegate>(0x5F8660);
 
         public float ScaleX => MemoryManager.ReadFloat(nint.Add(GetDescriptorPtr(), MemoryAddresses.WoWObject_ScaleXOffset));
         public float Height => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWObject_HeightOffset));
@@ -222,7 +232,10 @@ namespace ForegroundBotRunner.Objects
 
         public void Interact()
         {
-            rightClickObjectFunction(Pointer, 0);
+            if (ObjectType == WoWObjectType.GameObj)
+                rightClickGameObjectFunction(Pointer);  // CGGameObject_C::OnRightClick — no extra params
+            else
+                rightClickUnitFunction(Pointer, 0);     // CGUnit_C::OnRightClick(int autoLoot)
         }
 
         public nint GetDescriptorPtr() => MemoryManager.ReadIntPtr(nint.Add(Pointer, MemoryAddresses.WoWObject_DescriptorOffset));

@@ -71,6 +71,20 @@ public class IntegrationTestConfig
         int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_MYSQL_PORT") ?? "3306");
 
     /// <summary>
+    /// MySQL username for MaNGOS databases.
+    /// Override: WWOW_TEST_MYSQL_USER
+    /// </summary>
+    public string MySqlUser { get; init; } =
+        Environment.GetEnvironmentVariable("WWOW_TEST_MYSQL_USER") ?? "root";
+
+    /// <summary>
+    /// MySQL password for MaNGOS databases.
+    /// Override: WWOW_TEST_MYSQL_PASSWORD
+    /// </summary>
+    public string MySqlPassword { get; init; } =
+        Environment.GetEnvironmentVariable("WWOW_TEST_MYSQL_PASSWORD") ?? "root";
+
+    /// <summary>
     /// MaNGOS SOAP port.
     /// Override: WWOW_TEST_SOAP_PORT
     /// </summary>

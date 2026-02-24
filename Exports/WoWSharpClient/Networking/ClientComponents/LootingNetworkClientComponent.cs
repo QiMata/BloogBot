@@ -1018,6 +1018,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 uint amount = BitConverter.ToUInt32(payload.Span[..4]);
                 _logger.LogDebug("SMSG_LOOT_MONEY_NOTIFY: amount={Amount}", amount);
                 HandleMoneyLooted(_currentLootTarget ?? 0, amount);
+                WoWSharpEventEmitter.Instance.FireOnLootMoney((int)amount);
             }
             catch (Exception ex)
             {

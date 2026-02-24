@@ -10,42 +10,8 @@ namespace ForegroundBotRunner.Mem
 {
     public static unsafe class MemoryManager
     {
-        [Flags]
-        private enum ProcessAccessFlags
-        {
-            DELETE = 0x00010000,
-            READ_CONTROL = 0x00020000,
-            SYNCHRONIZE = 0x00100000,
-            WRITE_DAC = 0x00040000,
-            WRITE_OWNER = 0x00080000,
-            PROCESS_ALL_ACCESS = 0x001F0FFF,
-            PROCESS_CREATE_PROCESS = 0x0080,
-            PROCESS_CREATE_THREAD = 0x0002,
-            PROCESS_DUP_HANDLE = 0x0040,
-            PROCESS_QUERY_INFORMATION = 0x0400,
-            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000,
-            PROCESS_SET_INFORMATION = 0x0200,
-            PROCESS_SET_QUOTA = 0x0100,
-            PROCESS_SUSPEND_RESUME = 0x0800,
-            PROCESS_TERMINATE = 0x0001,
-            PROCESS_VM_OPERATION = 0x0008,
-            PROCESS_VM_READ = 0x0010,
-            PROCESS_VM_WRITE = 0x0020
-        }
-
         [DllImport("kernel32.dll")]
         private static extern bool VirtualProtect(nint address, int size, uint newProtect, out uint oldProtect);
-
-        [DllImport("kernel32.dll")]
-        private static extern nint OpenProcess(ProcessAccessFlags desiredAccess, bool inheritHandle, int processId);
-
-        [DllImport("kernel32.dll")]
-        private static extern bool WriteProcessMemory(
-            nint hProcess,
-            nint lpBaseAddress,
-            byte[] lpBuffer,
-            int dwSize,
-            ref int lpNumberOfBytesWritten);
 
         [Flags]
         public enum Protection
@@ -62,9 +28,6 @@ namespace ForegroundBotRunner.Mem
             PAGE_NOCACHE = 0x200,
             PAGE_WRITECOMBINE = 0x400
         }
-
-        [DllImport("kernel32.dll")]
-        private static extern bool VirtualProtect(nint lpAddress, nuint dwSize, uint flNewProtect, out uint lpflOldProtect);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
         private static extern nint GetModuleHandle(string? lpModuleName);
@@ -343,33 +306,20 @@ namespace ForegroundBotRunner.Mem
 
         static internal void WriteInt(nint address, int value) => Marshal.StructureToPtr(value, address, false);
 
-        // certain memory locations (Warden for example) are protected from modification.
-        // we use OpenAccess with ProcessAccessFlags to remove the protection.
-        // you can check whether memory is successfully being modified by setting a breakpoint
-        // here and checking Debug -> Windows -> Disassembly.
-        // if you have further issues, you may need to use VirtualProtect from the Win32 API.
+        static internal void WriteFloat(nint address, float value) => *(float*)address = value;
+
+        // In-process memory write: VirtualProtect to make writable, then direct copy.
+        // WriteProcessMemory via OpenProcess fails in .NET 8 injected context — use direct writes instead.
         static internal void WriteBytes(nint address, byte[] bytes)
         {
-            if (address == nint.Zero)
+            if (address == nint.Zero || bytes.Length == 0)
                 return;
 
-            var access = ProcessAccessFlags.PROCESS_CREATE_THREAD |
-                         ProcessAccessFlags.PROCESS_QUERY_INFORMATION |
-                         ProcessAccessFlags.PROCESS_SET_INFORMATION |
-                         ProcessAccessFlags.PROCESS_TERMINATE |
-                         ProcessAccessFlags.PROCESS_VM_OPERATION |
-                         ProcessAccessFlags.PROCESS_VM_READ |
-                         ProcessAccessFlags.PROCESS_VM_WRITE |
-                         ProcessAccessFlags.SYNCHRONIZE;
+            // Make the target page writable + executable
+            VirtualProtect(address, bytes.Length, (uint)Protection.PAGE_EXECUTE_READWRITE, out uint oldProtect);
 
-            var process = OpenProcess(access, false, Environment.ProcessId);
-
-            int ret = 0;
-            WriteProcessMemory(process, address, bytes, bytes.Length, ref ret);
-
-            var protection = Protection.PAGE_EXECUTE_READWRITE;
-            // now set the memory to be executable
-            VirtualProtect(address, bytes.Length, (uint)protection, out uint _);
+            // Direct in-process memory write (no OpenProcess/WriteProcessMemory needed)
+            Marshal.Copy(bytes, 0, address, bytes.Length);
         }
 
         static internal nint InjectAssembly(string hackName, string[] instructions)
@@ -387,7 +337,7 @@ namespace ForegroundBotRunner.Mem
             }
             catch (FasmAssemblerException ex)
             {
-                Log.Error(ex.StackTrace);
+                Log.Error("[FASM] Assemble failed for {Name}: {Error}", hackName, ex.Message);
             }
 
             var start = Marshal.AllocHGlobal(byteCode.Length);

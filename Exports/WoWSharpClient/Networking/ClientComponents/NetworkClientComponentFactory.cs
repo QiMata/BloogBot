@@ -87,7 +87,9 @@ namespace WoWSharpClient.Networking.ClientComponents
             // Touch each property to force lazy creation and opcode handler registration
             _ = CharacterInitAgent;
             _ = PartyAgent;
-            _logger?.LogInformation("Essential agents initialized (CharacterInit, Party).");
+            _ = LootingAgent;
+            _ = GameObjectAgent;
+            _logger?.LogInformation("Essential agents initialized (CharacterInit, Party, Looting, GameObject).");
         }
 
         private void EnsureLazyAvailable()

@@ -2,6 +2,7 @@
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System;
+using System.Linq;
 
 namespace WoWSharpClient.Models
 {
@@ -11,8 +12,8 @@ namespace WoWSharpClient.Models
         public Race Race { get; set; }
         public Class Class { get; set; }
         public Gender Gender { get; set; }
-        public bool IsDrinking { get; set; }
-        public bool IsEating { get; set; }
+        public bool IsDrinking => HasBuff("Drink");
+        public bool IsEating => HasBuff("Food");
         public HighGuid DuelArbiter { get; } = new HighGuid(new byte[4], new byte[4]);
         public HighGuid ComboTarget { get; } = new HighGuid(new byte[4], new byte[4]);
         public PlayerFlags PlayerFlags { get; set; }
@@ -40,23 +41,7 @@ namespace WoWSharpClient.Models
         public uint Farsight { get; set; }
         public uint XP { get; set; }
         public uint NextLevelXP { get; set; }
-        public SkillInfo[] SkillInfo { get; } = [   new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(),
-                                                    new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo(), new SkillInfo()];
+        public SkillInfo[] SkillInfo { get; } = Enumerable.Range(0, 128).Select(_ => new SkillInfo()).ToArray();
         public uint CharacterPoints1 { get; set; }
         public uint CharacterPoints2 { get; set; }
         public uint TrackCreatures { get; set; }
@@ -113,11 +98,11 @@ namespace WoWSharpClient.Models
 
             if (sourceBase is not WoWPlayer source) return;
 
+            MapId = source.MapId;
             Race = source.Race;
             Class = source.Class;
             Gender = source.Gender;
-            IsDrinking = source.IsDrinking;
-            IsEating = source.IsEating;
+            // IsDrinking/IsEating are computed from HasBuff("Drink"/"Food") — no copy needed
             PlayerFlags = source.PlayerFlags;
             GuildId = source.GuildId;
             GuildRank = source.GuildRank;

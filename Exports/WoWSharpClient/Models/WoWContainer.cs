@@ -9,11 +9,17 @@ namespace WoWSharpClient.Models
     {
         public int NumOfSlots { get; set; }
 
-        public uint[] Slots { get; } = new uint[32];
+        /// <summary>
+        /// Raw GUID field values for container slots. Stored as pairs: [slot*2]=low, [slot*2+1]=high.
+        /// Supports up to 36 slots (72 uint32 entries).
+        /// </summary>
+        public uint[] Slots { get; } = new uint[72];
 
         public ulong GetItemGuid(int parSlot)
         {
-            throw new NotImplementedException();
+            int index = parSlot * 2;
+            if (index < 0 || index + 1 >= Slots.Length) return 0;
+            return ((ulong)Slots[index + 1] << 32) | Slots[index];
         }
 
         public override WoWObject Clone()

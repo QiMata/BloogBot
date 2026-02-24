@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using ShamanRestoration.Tasks;
 
 using BotProfiles.Common;
 namespace ShamanRestoration
 {
-    [Export(typeof(IBot))]
-    internal class ShamanRestoration : BotBase
+    public class ShamanRestoration : BotBase
     {
         public override string Name => "Restoration Shaman";
 

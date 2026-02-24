@@ -1,11 +1,12 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
 using HunterBeastMastery.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace HunterBeastMastery
 {
-    internal class PetManagerState(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class PetManagerState(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         public void Update()
         {

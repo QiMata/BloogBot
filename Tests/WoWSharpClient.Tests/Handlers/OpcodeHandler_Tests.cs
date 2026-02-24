@@ -1,9 +1,4 @@
-using BotRunner.Clients;
 using GameData.Core.Enums;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
-using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
@@ -12,27 +7,6 @@ using WoWSharpClient.Tests.Util;
 
 namespace WoWSharpClient.Tests.Handlers
 {
-    public class ObjectManagerFixture : IDisposable
-    {
-        public readonly Mock<WoWClient> _woWClient;
-        public readonly Mock<PathfindingClient> _pathfindingClient;
-        private readonly ILogger<WoWSharpObjectManager> _logger = NullLoggerFactory.Instance.CreateLogger<WoWSharpObjectManager>();
-        public ObjectManagerFixture()
-        {
-            _woWClient = new();
-            _pathfindingClient = new();
-
-            WoWSharpObjectManager.Instance.Initialize(_woWClient.Object, _pathfindingClient.Object, _logger);
-        }
-
-        public void Dispose()
-        {
-            WoWSharpObjectManager.Instance.Initialize(_woWClient.Object, _pathfindingClient.Object, _logger);
-        }
-    }
-    [CollectionDefinition("Sequential ObjectManager tests", DisableParallelization = true)]
-    public class SequentialCollection : ICollectionFixture<ObjectManagerFixture> { }
-    
     [Collection("Sequential ObjectManager tests")]
     public class OpcodeHandler_Tests(ObjectManagerFixture _) : IClassFixture<ObjectManagerFixture>
     {

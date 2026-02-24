@@ -1,10 +1,12 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace RogueCombat.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
 
         internal PullTargetTask(IBotContext botContext) : base(botContext) { }
@@ -56,8 +58,7 @@ namespace RogueCombat.Tasks
                 return;
             }
 
-            Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-            ObjectManager.MoveToward(nextWaypoint[0]);
+            NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
         }
     }
 }

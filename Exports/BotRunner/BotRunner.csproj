@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="Stateless" Version="5.16.0" />
     <PackageReference Include="System.Composition" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.2" />
     <PackageReference Include="Xas.FluentBehaviourTree" Version="1.0.0" />
   </ItemGroup>
 

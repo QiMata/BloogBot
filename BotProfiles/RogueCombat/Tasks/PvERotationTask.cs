@@ -1,11 +1,12 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace RogueCombat.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
 
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }

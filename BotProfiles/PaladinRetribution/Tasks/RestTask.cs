@@ -1,26 +1,14 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 
 namespace PaladinRetribution.Tasks
 {
-    internal class RestTask : BotTask, IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-        private const int stackCount = 5;
         private const string HolyLight = "Holy Light";
-        private readonly IWoWItem drinkItem;
-        public RestTask(IBotContext botContext) : base(botContext)
-        {
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
-            {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.repairitems')");
-                }
-            }
-        }
 
         public void Update()
         {
@@ -31,35 +19,13 @@ namespace PaladinRetribution.Tasks
                 Wait.RemoveAll();
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
-
-                uint drinkCount = drinkItem == null ? 0 : ObjectManager.GetItemCount(drinkItem.ItemId);
-                if (!InCombat && drinkCount == 0)
-                {
-                    uint drinkToBuy = 28 - (drinkCount / stackCount);
-                    //var itemsToBuy = new Dictionary<string, int>
-                    //{
-                    //    { container.BotSettings.Drink, drinkToBuy }
-                    //};
-
-                    //var currentHotspot = container.GetCurrentHotspot();
-                    //if (currentHotspot.TravelPath != null)
-                    //{
-                    //    BotTasks.Push(new TravelState(botTasks, container, currentHotspot.TravelPath.Waypoints, 0));
-                    //    BotTasks.Push(new MoveToPositionState(botTasks, container, currentHotspot.TravelPath.Waypoints[0]));
-                    //}
-
-                    //BotTasks.Push(new BuyItemsState(botTasks, currentHotspot.Innkeeper.Name, itemsToBuy));
-                    //BotTasks.Push(new SellItemsState(botTasks, container, currentHotspot.Innkeeper.Name));
-                    //BotTasks.Push(new MoveToPositionState(botTasks, container, currentHotspot.Innkeeper.Position));
-                    //container.CheckForTravelPath(botTasks, true, false);
-                }
-                else
-                    BotTasks.Push(new BuffTask(BotContext));
-
+                BotTasks.Push(new BuffTask(BotContext));
+                return;
             }
-            
+
             if (!ObjectManager.Player.IsDrinking && Wait.For("HealSelfDelay", 3500, true))
             {
+                ObjectManager.StopAllMovement();
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 if (ObjectManager.Player.HealthPercent < 70)
                     ObjectManager.CastSpell(HolyLight);
@@ -67,7 +33,10 @@ namespace PaladinRetribution.Tasks
                     ObjectManager.CastSpell(HolyLight, 1);
             }
 
-            if (ObjectManager.Player.Level > 10 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60 && Wait.For("UseDrinkDelay", 1000, true))
+            // Use best available drink from inventory
+            IWoWItem? drinkItem = ConsumableData.FindBestDrink(ObjectManager);
+
+            if (ObjectManager.Player.Level > 10 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 60)
                 drinkItem.Use();
         }
 

@@ -53,7 +53,7 @@ namespace Communication {
             "DjIcLmNvbW11bmljYXRpb24uQm90UnVubmVyVHlwZSJ5ChBSZXF1ZXN0UGFy",
             "YW1ldGVyEhUKC2Zsb2F0X3BhcmFtGAEgASgCSAASEwoJaW50X3BhcmFtGAIg",
             "ASgFSAASFAoKbG9uZ19wYXJhbRgDIAEoA0gAEhYKDHN0cmluZ19wYXJhbRgE",
-            "IAEoCUgAQgsKCXBhcmFtZXRlciKIAwoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
+            "IAEoCUgAQgsKCXBhcmFtZXRlciK6AwoTV29XQWN0aXZpdHlTbmFwc2hvdBIR",
             "Cgl0aW1lc3RhbXAYASABKA0SEwoLYWNjb3VudE5hbWUYAiABKAkSHwoGcGxh",
             "eWVyGAMgASgLMg8uZ2FtZS5Xb1dQbGF5ZXISNAoOcHJldmlvdXNBY3Rpb24Y",
             "BCABKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2USMwoNY3VycmVu",
@@ -62,38 +62,39 @@ namespace Communication {
             "C25lYXJieVVuaXRzGAcgAygLMg0uZ2FtZS5Xb1dVbml0EhUKDWNoYXJhY3Rl",
             "ck5hbWUYCCABKAkSEwoLc2NyZWVuU3RhdGUYCSABKAkSKAoMbW92ZW1lbnRE",
             "YXRhGAogASgLMhIuZ2FtZS5Nb3ZlbWVudERhdGESFwoPcGFydHlMZWFkZXJH",
-            "dWlkGAsgASgEKoQJCgpBY3Rpb25UeXBlEggKBFdBSVQQABIICgRHT1RPEAES",
-            "EQoNSU5URVJBQ1RfV0lUSBACEhEKDVNFTEVDVF9HT1NTSVAQAxIUChBTRUxF",
-            "Q1RfVEFYSV9OT0RFEAQSEAoMQUNDRVBUX1FVRVNUEAUSEQoNREVDTElORV9R",
-            "VUVTVBAGEhEKDVNFTEVDVF9SRVdBUkQQBxISCg5DT01QTEVURV9RVUVTVBAI",
-            "Eg8KC1RSQUlOX1NLSUxMEAkSEAoMVFJBSU5fVEFMRU5UEAoSDwoLT0ZGRVJf",
-            "VFJBREUQCxIOCgpPRkZFUl9HT0xEEAwSDgoKT0ZGRVJfSVRFTRANEhAKDEFD",
-            "Q0VQVF9UUkFERRAOEhEKDURFQ0xJTkVfVFJBREUQDxIRCg1FTkNIQU5UX1RS",
-            "QURFEBASEgoOTE9DS1BJQ0tfVFJBREUQERISCg5QUk9NT1RFX0xFQURFUhAS",
-            "EhUKEVBST01PVEVfQVNTSVNUQU5UEBMSGAoUUFJPTU9URV9MT09UX01BTkFH",
-            "RVIQFBISCg5TRVRfR1JPVVBfTE9PVBAVEg8KC0FTU0lHTl9MT09UEBYSEgoO",
-            "TE9PVF9ST0xMX05FRUQQFxITCg9MT09UX1JPTExfR1JFRUQQGBINCglMT09U",
-            "X1BBU1MQGRIVChFTRU5EX0dST1VQX0lOVklURRAaEhcKE0FDQ0VQVF9HUk9V",
-            "UF9JTlZJVEUQGxIYChRERUNMSU5FX0dST1VQX0lOVklURRAcEg8KC0tJQ0tf",
-            "UExBWUVSEB0SDwoLTEVBVkVfR1JPVVAQHhIRCg1ESVNCQU5EX0dST1VQEB8S",
-            "FgoSU1RBUlRfTUVMRUVfQVRUQUNLECASFwoTU1RBUlRfUkFOR0VEX0FUVEFD",
-            "SxAhEhUKEVNUQVJUX1dBTkRfQVRUQUNLECISDwoLU1RPUF9BVFRBQ0sQIxIO",
-            "CgpDQVNUX1NQRUxMECQSDQoJU1RPUF9DQVNUECUSDAoIVVNFX0lURU0QJhIO",
-            "CgpFUVVJUF9JVEVNECcSEAoMVU5FUVVJUF9JVEVNECgSEAoMREVTVFJPWV9J",
-            "VEVNECkSDQoJTU9WRV9JVEVNECoSDwoLU1BMSVRfU1RBQ0sQKxIMCghCVVlf",
-            "SVRFTRAsEhAKDEJVWUJBQ0tfSVRFTRAtEg0KCVNFTExfSVRFTRAuEg8KC1JF",
-            "UEFJUl9JVEVNEC8SFAoQUkVQQUlSX0FMTF9JVEVNUxAwEhAKDERJU01JU1Nf",
-            "QlVGRhAxEg0KCVJFU1VSUkVDVBAyEgkKBUNSQUZUEDMSCQoFTE9HSU4QNBIK",
-            "CgZMT0dPVVQQNRIUChBDUkVBVEVfQ0hBUkFDVEVSEDYSFAoQREVMRVRFX0NI",
-            "QVJBQ1RFUhA3Eg8KC0VOVEVSX1dPUkxEEDgSDwoLTE9PVF9DT1JQU0UQORIS",
-            "Cg5SRUxFQVNFX0NPUlBTRRA6EhMKD1JFVFJJRVZFX0NPUlBTRRA7Eg8KC1NL",
-            "SU5fQ09SUFNFEDwSDwoLR0FUSEVSX05PREUQPRINCglTRU5EX0NIQVQQPiov",
-            "Cg1Cb3RSdW5uZXJUeXBlEg4KCkZPUkVHUk9VTkQQABIOCgpCQUNLR1JPVU5E",
-            "EAEqdgoPU3RhdGVDaGFuZ2VUeXBlEggKBE5BTUUQABIMCghPUEVOTkVTUxAB",
-            "EhUKEUNPTlNDSUVOVElPVVNORVNTEAISEAoMRVhUUkFWRVJTSU9OEAMSEQoN",
-            "QUdSRUVBQkxFTkVTUxAEEg8KC05FVVJPVElDSVNNEAUqOwoOUmVzcG9uc2VS",
-            "ZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZBSUxVUkUQARIPCgtJTl9QUk9HUkVT",
-            "UxACYgZwcm90bzM="));
+            "dWlkGAsgASgEEhoKEnJlY2VudENoYXRNZXNzYWdlcxgMIAMoCRIUCgxyZWNl",
+            "bnRFcnJvcnMYDSADKAkqlAkKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdP",
+            "VE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBADEhQK",
+            "EFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1ERUNM",
+            "SU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRFX1FV",
+            "RVNUEAgSDwoLVFJBSU5fU0tJTEwQCRIQCgxUUkFJTl9UQUxFTlQQChIPCgtP",
+            "RkZFUl9UUkFERRALEg4KCk9GRkVSX0dPTEQQDBIOCgpPRkZFUl9JVEVNEA0S",
+            "EAoMQUNDRVBUX1RSQURFEA4SEQoNREVDTElORV9UUkFERRAPEhEKDUVOQ0hB",
+            "TlRfVFJBREUQEBISCg5MT0NLUElDS19UUkFERRAREhIKDlBST01PVEVfTEVB",
+            "REVSEBISFQoRUFJPTU9URV9BU1NJU1RBTlQQExIYChRQUk9NT1RFX0xPT1Rf",
+            "TUFOQUdFUhAUEhIKDlNFVF9HUk9VUF9MT09UEBUSDwoLQVNTSUdOX0xPT1QQ",
+            "FhISCg5MT09UX1JPTExfTkVFRBAXEhMKD0xPT1RfUk9MTF9HUkVFRBAYEg0K",
+            "CUxPT1RfUEFTUxAZEhUKEVNFTkRfR1JPVVBfSU5WSVRFEBoSFwoTQUNDRVBU",
+            "X0dST1VQX0lOVklURRAbEhgKFERFQ0xJTkVfR1JPVVBfSU5WSVRFEBwSDwoL",
+            "S0lDS19QTEFZRVIQHRIPCgtMRUFWRV9HUk9VUBAeEhEKDURJU0JBTkRfR1JP",
+            "VVAQHxIWChJTVEFSVF9NRUxFRV9BVFRBQ0sQIBIXChNTVEFSVF9SQU5HRURf",
+            "QVRUQUNLECESFQoRU1RBUlRfV0FORF9BVFRBQ0sQIhIPCgtTVE9QX0FUVEFD",
+            "SxAjEg4KCkNBU1RfU1BFTEwQJBINCglTVE9QX0NBU1QQJRIMCghVU0VfSVRF",
+            "TRAmEg4KCkVRVUlQX0lURU0QJxIQCgxVTkVRVUlQX0lURU0QKBIQCgxERVNU",
+            "Uk9ZX0lURU0QKRINCglNT1ZFX0lURU0QKhIPCgtTUExJVF9TVEFDSxArEgwK",
+            "CEJVWV9JVEVNECwSEAoMQlVZQkFDS19JVEVNEC0SDQoJU0VMTF9JVEVNEC4S",
+            "DwoLUkVQQUlSX0lURU0QLxIUChBSRVBBSVJfQUxMX0lURU1TEDASEAoMRElT",
+            "TUlTU19CVUZGEDESDQoJUkVTVVJSRUNUEDISCQoFQ1JBRlQQMxIJCgVMT0dJ",
+            "ThA0EgoKBkxPR09VVBA1EhQKEENSRUFURV9DSEFSQUNURVIQNhIUChBERUxF",
+            "VEVfQ0hBUkFDVEVSEDcSDwoLRU5URVJfV09STEQQOBIPCgtMT09UX0NPUlBT",
+            "RRA5EhIKDlJFTEVBU0VfQ09SUFNFEDoSEwoPUkVUUklFVkVfQ09SUFNFEDsS",
+            "DwoLU0tJTl9DT1JQU0UQPBIPCgtHQVRIRVJfTk9ERRA9Eg0KCVNFTkRfQ0hB",
+            "VBA+Eg4KClNFVF9GQUNJTkcQPyovCg1Cb3RSdW5uZXJUeXBlEg4KCkZPUkVH",
+            "Uk9VTkQQABIOCgpCQUNLR1JPVU5EEAEqdgoPU3RhdGVDaGFuZ2VUeXBlEggK",
+            "BE5BTUUQABIMCghPUEVOTkVTUxABEhUKEUNPTlNDSUVOVElPVVNORVNTEAIS",
+            "EAoMRVhUUkFWRVJTSU9OEAMSEQoNQUdSRUVBQkxFTkVTUxAEEg8KC05FVVJP",
+            "VElDSVNNEAUqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZB",
+            "SUxVUkUQARIPCgtJTl9QUk9HUkVTUxACYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -106,7 +107,7 @@ namespace Communication {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors" }, null, null, null, null)
           }));
     }
     #endregion
@@ -2926,6 +2927,8 @@ namespace Communication {
       screenState_ = other.screenState_;
       movementData_ = other.movementData_ != null ? other.movementData_.Clone() : null;
       partyLeaderGuid_ = other.partyLeaderGuid_;
+      recentChatMessages_ = other.recentChatMessages_.Clone();
+      recentErrors_ = other.recentErrors_.Clone();
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3077,6 +3080,34 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "recentChatMessages" field.</summary>
+    public const int RecentChatMessagesFieldNumber = 12;
+    private static readonly pb::FieldCodec<string> _repeated_recentChatMessages_codec
+        = pb::FieldCodec.ForString(98);
+    private readonly pbc::RepeatedField<string> recentChatMessages_ = new pbc::RepeatedField<string>();
+    /// <summary>
+    /// Recent chat messages (GM command responses, system messages)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<string> RecentChatMessages {
+      get { return recentChatMessages_; }
+    }
+
+    /// <summary>Field number for the "recentErrors" field.</summary>
+    public const int RecentErrorsFieldNumber = 13;
+    private static readonly pb::FieldCodec<string> _repeated_recentErrors_codec
+        = pb::FieldCodec.ForString(106);
+    private readonly pbc::RepeatedField<string> recentErrors_ = new pbc::RepeatedField<string>();
+    /// <summary>
+    /// Recent error/UI messages from the game client
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<string> RecentErrors {
+      get { return recentErrors_; }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3103,6 +3134,8 @@ namespace Communication {
       if (ScreenState != other.ScreenState) return false;
       if (!object.Equals(MovementData, other.MovementData)) return false;
       if (PartyLeaderGuid != other.PartyLeaderGuid) return false;
+      if(!recentChatMessages_.Equals(other.recentChatMessages_)) return false;
+      if(!recentErrors_.Equals(other.recentErrors_)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3121,6 +3154,8 @@ namespace Communication {
       if (ScreenState.Length != 0) hash ^= ScreenState.GetHashCode();
       if (movementData_ != null) hash ^= MovementData.GetHashCode();
       if (PartyLeaderGuid != 0UL) hash ^= PartyLeaderGuid.GetHashCode();
+      hash ^= recentChatMessages_.GetHashCode();
+      hash ^= recentErrors_.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3177,6 +3212,8 @@ namespace Communication {
         output.WriteRawTag(88);
         output.WriteUInt64(PartyLeaderGuid);
       }
+      recentChatMessages_.WriteTo(output, _repeated_recentChatMessages_codec);
+      recentErrors_.WriteTo(output, _repeated_recentErrors_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3225,6 +3262,8 @@ namespace Communication {
         output.WriteRawTag(88);
         output.WriteUInt64(PartyLeaderGuid);
       }
+      recentChatMessages_.WriteTo(ref output, _repeated_recentChatMessages_codec);
+      recentErrors_.WriteTo(ref output, _repeated_recentErrors_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -3264,6 +3303,8 @@ namespace Communication {
       if (PartyLeaderGuid != 0UL) {
         size += 1 + pb::CodedOutputStream.ComputeUInt64Size(PartyLeaderGuid);
       }
+      size += recentChatMessages_.CalculateSize(_repeated_recentChatMessages_codec);
+      size += recentErrors_.CalculateSize(_repeated_recentErrors_codec);
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -3317,6 +3358,8 @@ namespace Communication {
       if (other.PartyLeaderGuid != 0UL) {
         PartyLeaderGuid = other.PartyLeaderGuid;
       }
+      recentChatMessages_.Add(other.recentChatMessages_);
+      recentErrors_.Add(other.recentErrors_);
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -3392,6 +3435,14 @@ namespace Communication {
             PartyLeaderGuid = input.ReadUInt64();
             break;
           }
+          case 98: {
+            recentChatMessages_.AddEntriesFrom(input, _repeated_recentChatMessages_codec);
+            break;
+          }
+          case 106: {
+            recentErrors_.AddEntriesFrom(input, _repeated_recentErrors_codec);
+            break;
+          }
         }
       }
     #endif
@@ -3465,6 +3516,14 @@ namespace Communication {
           }
           case 88: {
             PartyLeaderGuid = input.ReadUInt64();
+            break;
+          }
+          case 98: {
+            recentChatMessages_.AddEntriesFrom(ref input, _repeated_recentChatMessages_codec);
+            break;
+          }
+          case 106: {
+            recentErrors_.AddEntriesFrom(ref input, _repeated_recentErrors_codec);
             break;
           }
         }

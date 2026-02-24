@@ -26,6 +26,7 @@ namespace WoWSharpClient.Models
         private bool _canRiposte;
         private bool _mainhandIsEnchanted;
         private bool _tastyCorpsesNearby;
+        private DateTime _corpseRecoveryReadyAtUtc = DateTime.MinValue;
 
         // Set from SMSG_CORPSE_QUERY response
         public Position CorpsePosition
@@ -34,8 +35,27 @@ namespace WoWSharpClient.Models
             set => _corpsePosition = value;
         }
 
-        // Ghost form: check for Ghost buff (set when player is dead and released spirit)
-        public bool InGhostForm => HasBuff("Ghost");
+        // Descriptor-backed ghost detection is authoritative for parity with FG snapshots.
+        // Keep buff check only as a final fallback for incomplete descriptor updates.
+        public bool InGhostForm
+        {
+            get
+            {
+                const uint playerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
+                const uint standStateMask = 0xFF;
+                const uint standStateDead = 7; // UNIT_STAND_STATE_DEAD
+
+                var hasGhostFlag = (((uint)PlayerFlags) & playerFlagGhost) != 0;
+                if (hasGhostFlag)
+                    return true;
+
+                var standState = Bytes1[0] & standStateMask;
+                if (Health == 0 || standState == standStateDead)
+                    return false;
+
+                return HasBuff("Ghost");
+            }
+        }
 
         // Debuff type checks: scan debuffs by name pattern until GetDebuffs() provides EffectType
         // These work if debuff Spell objects are populated with spell names from the spell DB.
@@ -105,12 +125,45 @@ namespace WoWSharpClient.Models
             set => _isAutoAttacking = value;
         }
 
-        // Can resurrect if dead (health == 0) and corpse position is known
+        // Can resurrect while ghosted when corpse position is known and reclaim delay has elapsed.
         public bool CanResurrect =>
-            Health == 0 &&
+            InGhostForm &&
             _corpsePosition.X != 0 &&
             _corpsePosition.Y != 0 &&
-            _corpsePosition.Z != 0;
+            _corpsePosition.Z != 0 &&
+            CorpseRecoveryDelaySeconds == 0;
+
+        // Remaining delay before CMSG_RECLAIM_CORPSE is accepted by the server.
+        public int CorpseRecoveryDelaySeconds
+        {
+            get
+            {
+                const uint playerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
+                const uint standStateMask = 0xFF;
+                const uint standStateDead = 7; // UNIT_STAND_STATE_DEAD
+
+                var standState = Bytes1[0] & standStateMask;
+                var deadOrGhost = Health == 0
+                                  || (((uint)PlayerFlags & playerFlagGhost) != 0)
+                                  || standState == standStateDead;
+                if (!deadOrGhost)
+                    return 0;
+
+                if (_corpseRecoveryReadyAtUtc <= DateTime.UtcNow)
+                    return 0;
+                return (int)Math.Ceiling((_corpseRecoveryReadyAtUtc - DateTime.UtcNow).TotalSeconds);
+            }
+            set
+            {
+                if (value <= 0)
+                {
+                    _corpseRecoveryReadyAtUtc = DateTime.MinValue;
+                    return;
+                }
+
+                _corpseRecoveryReadyAtUtc = DateTime.UtcNow.AddSeconds(value);
+            }
+        }
 
         // Check if current map is a battleground
         public bool InBattleground => BattlegroundMapIds.Contains(MapId);
@@ -137,6 +190,7 @@ namespace WoWSharpClient.Models
             _canRiposte = source._canRiposte;
             _mainhandIsEnchanted = source._mainhandIsEnchanted;
             _tastyCorpsesNearby = source._tastyCorpsesNearby;
+            CorpseRecoveryDelaySeconds = source.CorpseRecoveryDelaySeconds;
         }
     }
 }

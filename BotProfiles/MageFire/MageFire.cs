@@ -1,12 +1,10 @@
-﻿using System.ComponentModel.Composition;
 using BotRunner.Interfaces;
 using MageFire.Tasks;
 
 using BotProfiles.Common;
 namespace MageFire
 {
-    [Export(typeof(IBot))]
-    internal class MageFire : BotBase
+    public class MageFire : BotBase
     {
         public override string Name => "Fire Mage";
 

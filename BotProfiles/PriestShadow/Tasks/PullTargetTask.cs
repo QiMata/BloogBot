@@ -1,15 +1,13 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Interfaces;
-using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestShadow.Tasks
 {
-    internal class PullTargetTask : BotTask, IBotTask
+    public class PullTargetTask : BotTask, IBotTask
     {
         private readonly string pullingSpell;
-        private Position currentWaypoint;
         internal PullTargetTask(IBotContext botContext) : base(botContext)
         {
             if (ObjectManager.Player.HasBuff(ShadowForm))
@@ -38,7 +36,7 @@ namespace PriestShadow.Tasks
                 if (ObjectManager.Player.IsMoving)
                     ObjectManager.StopAllMovement();
 
-                if (ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(pullingSpell))
+                if (!ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(pullingSpell))
                 {
                     if (!ObjectManager.IsSpellReady(PowerWordShield) || ObjectManager.Player.HasBuff(PowerWordShield) || ObjectManager.Player.IsInCombat)
                     {
@@ -64,19 +62,7 @@ namespace PriestShadow.Tasks
             }
             else
             {
-                Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-                if (nextWaypoint.Length > 1)
-                {
-                    currentWaypoint = nextWaypoint[1];
-                }
-                else
-                {
-                    ObjectManager.StopAllMovement();
-                    BotTasks.Pop();
-                    return;
-                }
-
-                ObjectManager.MoveToward(currentWaypoint);
+                NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
             }
         }
     }

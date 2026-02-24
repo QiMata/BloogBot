@@ -120,14 +120,18 @@ public class S3RecordedTestStorageTests
         // Act
         var key = S3RecordedTestStorage.GenerateS3Key(keyPrefix, testName, timestamp, artifactName);
 
-        // Assert
-        key.Should().NotContain("/");
-        key.Should().NotContain("\\");
-        key.Should().NotContain(":");
-        key.Should().NotContain("*");
-        key.Should().NotContain("?");
+        // Assert — check structure
         key.Should().StartWith(keyPrefix);
         key.Should().EndWith($"/{timestamp}/{artifactName}");
+
+        // Extract sanitized test name portion and verify invalid chars were replaced
+        var sanitizedPortion = key.Substring(keyPrefix.Length,
+            key.Length - keyPrefix.Length - $"/{timestamp}/{artifactName}".Length);
+        sanitizedPortion.Should().NotContain("/");
+        sanitizedPortion.Should().NotContain("\\");
+        sanitizedPortion.Should().NotContain(":");
+        sanitizedPortion.Should().NotContain("*");
+        sanitizedPortion.Should().NotContain("?");
     }
 
     [Fact]

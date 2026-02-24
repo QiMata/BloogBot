@@ -1,26 +1,25 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace HunterMarksmanship.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
 
         public void Update()
         {
-            ObjectManager.Pet?.Attack();
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (IsKiting)
                 return;
-            }
 
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
+            ObjectManager.Pet?.Attack();
+            if (!EnsureTarget())
+                return;
 
             if (Update(34))
                 return;
@@ -45,9 +44,10 @@ namespace HunterMarksmanship.Tasks
                 return;
             }
 
-            // melee fallback
+            // melee — apply Wing Clip then kite back to ranged distance
+            if (bow != null && TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
+                return;
             TryCastSpell(MongooseBite, 0, 5);
-            TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip));
             TryCastSpell(RaptorStrike, 0, 5);
         }
         public override void PerformCombatRotation() => Update();

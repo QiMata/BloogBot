@@ -1,4 +1,5 @@
 using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
@@ -8,7 +9,7 @@ namespace DruidRestoration.Tasks
     /// Basic PvE rotation for a restoration druid.
     /// Focuses on staying alive while dealing modest damage.
     /// </summary>
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
@@ -36,9 +37,17 @@ namespace DruidRestoration.Tasks
             ObjectManager.StopAllMovement();
             ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
-            // keep ourselves alive
-            TryCastSpell(Rejuvenation, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
-            TryCastSpell(HealingTouch, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
+            // Group healing: heal party members before DPS
+            if (IsInGroup)
+            {
+                if (TryCastHeal(Rejuvenation, 80, 40)) return;
+                if (TryCastHeal(HealingTouch, 55, 40)) return;
+            }
+            else
+            {
+                TryCastSpell(Rejuvenation, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 80 && !ObjectManager.Player.HasBuff(Rejuvenation), castOnSelf: true);
+                TryCastSpell(HealingTouch, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 60, castOnSelf: true);
+            }
 
             // offensive abilities
             TryCastSpell(Moonfire, 0, 30, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Moonfire));

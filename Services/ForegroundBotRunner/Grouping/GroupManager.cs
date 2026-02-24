@@ -12,7 +12,7 @@ namespace ForegroundBotRunner.Grouping
 {
     /// <summary>
     /// Manages party state: invite handling, role assignment, group-aware target selection,
-    /// and follow-leader behavior. Works alongside GrindBot for group grinding.
+    /// and follow-leader behavior.
     /// </summary>
     public class GroupManager(ObjectManager objectManager)
     {

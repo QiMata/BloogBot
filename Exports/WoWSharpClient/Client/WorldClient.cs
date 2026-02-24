@@ -194,6 +194,19 @@ namespace WoWSharpClient.Client
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_DEADTARGET, HandleAttackSwingDeadTarget);
             _pipeline.RegisterHandler(Opcode.SMSG_ATTACKSWING_CANT_ATTACK, HandleAttackSwingCantAttack);
 
+            // Inventory diagnostics
+            _pipeline.RegisterHandler(Opcode.SMSG_INVENTORY_CHANGE_FAILURE, payload =>
+            {
+                if (payload.Length >= 1)
+                {
+                    byte errorCode = payload.Span[0];
+                    Console.WriteLine($"[INVENTORY_CHANGE_FAILURE] errorCode=0x{errorCode:X2} ({GetInventoryErrorName(errorCode)}) len={payload.Length} raw={BitConverter.ToString(payload.ToArray())}");
+                    Serilog.Log.Warning("[WorldClient] INVENTORY_CHANGE_FAILURE: errorCode={Error} (0x{ErrorHex:X2}) len={Len}",
+                        errorCode, errorCode, payload.Length);
+                }
+                return Task.CompletedTask;
+            });
+
             // Bridge all legacy OpCodeDispatcher handlers so WoWSharpObjectManager
             // receives events for object updates, movement, position, spells, etc.
             BridgeToLegacy(Opcode.SMSG_CHAR_ENUM, Handlers.CharacterSelectHandler.HandleCharEnum);
@@ -204,6 +217,8 @@ namespace WoWSharpClient.Client
 
             // Login/World
             BridgeToLegacy(Opcode.SMSG_LOGIN_VERIFY_WORLD, Handlers.LoginHandler.HandleLoginVerifyWorld);
+            BridgeToLegacy(Opcode.SMSG_TRANSFER_PENDING, Handlers.LoginHandler.HandleTransferPending);
+            BridgeToLegacy(Opcode.SMSG_NEW_WORLD, Handlers.LoginHandler.HandleNewWorld);
             BridgeToLegacy(Opcode.SMSG_LOGIN_SETTIMESPEED, Handlers.LoginHandler.HandleSetTimeSpeed);
             BridgeToLegacy(Opcode.SMSG_QUERY_TIME_RESPONSE, Handlers.LoginHandler.HandleTimeQueryResponse);
 
@@ -223,13 +238,20 @@ namespace WoWSharpClient.Client
 
             // Spells
             BridgeToLegacy(Opcode.SMSG_INITIAL_SPELLS, Handlers.SpellHandler.HandleInitialSpells);
+            BridgeToLegacy(Opcode.SMSG_LEARNED_SPELL, Handlers.SpellHandler.HandleLearnedSpell);
             BridgeToLegacy(Opcode.SMSG_SPELLLOGMISS, Handlers.SpellHandler.HandleSpellLogMiss);
             BridgeToLegacy(Opcode.SMSG_SPELL_GO, Handlers.SpellHandler.HandleSpellGo);
             BridgeToLegacy(Opcode.SMSG_SPELL_START, Handlers.SpellHandler.HandleSpellStart);
             BridgeToLegacy(Opcode.SMSG_ATTACKERSTATEUPDATE, Handlers.SpellHandler.HandleAttackerStateUpdate);
             BridgeToLegacy(Opcode.SMSG_DESTROY_OBJECT, Handlers.SpellHandler.HandleDestroyObject);
             BridgeToLegacy(Opcode.SMSG_CAST_FAILED, Handlers.SpellHandler.HandleCastFailed);
+            BridgeToLegacy(Opcode.SMSG_SPELL_FAILURE, Handlers.SpellHandler.HandleSpellFailure);
             BridgeToLegacy(Opcode.SMSG_SPELLHEALLOG, Handlers.SpellHandler.HandleSpellHealLog);
+            BridgeToLegacy(Opcode.SMSG_LOG_XPGAIN, Handlers.SpellHandler.HandleLogXpGain);
+            BridgeToLegacy(Opcode.SMSG_LEVELUP_INFO, Handlers.SpellHandler.HandleLevelUpInfo);
+            BridgeToLegacy(Opcode.SMSG_ATTACKSTART, Handlers.SpellHandler.HandleAttackStart);
+            BridgeToLegacy(Opcode.SMSG_ATTACKSTOP, Handlers.SpellHandler.HandleAttackStop);
+            BridgeToLegacy(Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM, Handlers.SpellHandler.HandleGameObjectCustomAnim);
 
             // Stand state / world state
             BridgeToLegacy(Opcode.SMSG_STANDSTATE_UPDATE, Handlers.StandStateHandler.HandleStandStateUpdate);
@@ -509,5 +531,43 @@ namespace WoWSharpClient.Client
                 _disposed = true;
             }
         }
+
+        /// <summary>
+        /// Returns a human-readable name for SMSG_INVENTORY_CHANGE_FAILURE error codes (vanilla 1.12.1).
+        /// </summary>
+        private static string GetInventoryErrorName(byte code) => code switch
+        {
+            0x00 => "OK",
+            0x01 => "CANT_EQUIP_LEVEL_I",
+            0x02 => "CANT_EQUIP_SKILL",
+            0x03 => "ITEM_DOESNT_GO_TO_SLOT",
+            0x04 => "BAG_FULL",
+            0x05 => "NONEMPTY_BAG_OVER_OTHER_BAG",
+            0x06 => "CANT_TRADE_EQUIP_BAGS",
+            0x07 => "ONLY_AMMO_CAN_GO_HERE",
+            0x08 => "NO_REQUIRED_PROFICIENCY",
+            0x09 => "NO_EQUIPMENT_SLOT_AVAILABLE",
+            0x0A => "YOU_CAN_NEVER_USE_THAT_ITEM",
+            0x0B => "YOU_CAN_NEVER_USE_THAT_ITEM2",
+            0x0C => "NO_EQUIPMENT_SLOT_AVAILABLE2",
+            0x0D => "CANT_EQUIP_WITH_TWOHANDED",
+            0x0E => "CANT_DUAL_WIELD",
+            0x10 => "ITEM_DOESNT_GO_INTO_BAG",
+            0x11 => "ITEM_DOESNT_GO_INTO_BAG2",
+            0x12 => "CANT_CARRY_MORE_OF_THIS",
+            0x13 => "NO_EQUIPMENT_SLOT_AVAILABLE3",
+            0x14 => "ITEM_CANT_STACK",
+            0x15 => "ITEM_CANT_BE_EQUIPPED",
+            0x16 => "ITEMS_CANT_BE_SWAPPED",
+            0x17 => "SLOT_IS_EMPTY",
+            0x18 => "ITEM_NOT_FOUND",
+            0x19 => "CANT_DROP_SOULBOUND",
+            0x1A => "OUT_OF_RANGE",
+            0x1B => "TRIED_TO_SPLIT_MORE_THAN_COUNT",
+            0x1C => "COULDNT_SPLIT_ITEMS",
+            0x1D => "MISSING_REAGENT",
+            0x31 => "CANT_EQUIP_RATING",
+            _ => $"UNKNOWN_0x{code:X2}"
+        };
     }
 }

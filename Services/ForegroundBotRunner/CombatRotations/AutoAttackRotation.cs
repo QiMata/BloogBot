@@ -14,7 +14,7 @@ namespace ForegroundBotRunner.CombatRotations
 
         public void Execute(LocalPlayer player, WoWUnit target, int aggressorCount)
         {
-            // Auto-attack is handled by GrindBot via StartAutoAttack()
+            // Auto-attack is handled via StateManager StartMeleeAttack action
         }
 
         public void Buff(LocalPlayer player)

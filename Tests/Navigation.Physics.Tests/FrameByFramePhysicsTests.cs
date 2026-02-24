@@ -47,7 +47,7 @@ public class FrameByFramePhysicsTests : IClassFixture<PhysicsEngineFixture>
             MoveFlags = (uint)MoveFlags.Forward,
             RunSpeed = 7.0f,
             SwimSpeed = 4.0f,
-            FlySpeed = 0
+            FlightSpeed = 0
         };
 
         const float dt = 1.0f / 60.0f;
@@ -188,7 +188,7 @@ public class FrameByFramePhysicsTests : IClassFixture<PhysicsEngineFixture>
         const float dt = 1.0f / 60.0f;
 
         // Calculate expected jump arc using physics
-        // h(t) = h0 + v0*t - 0.5*g*t²
+        // h(t) = h0 + v0*t - 0.5*g*tï¿½
         // v(t) = v0 - g*t
         
         var expectedPositions = new List<(float time, float z, float vz)>();
@@ -209,7 +209,7 @@ public class FrameByFramePhysicsTests : IClassFixture<PhysicsEngineFixture>
         }
 
         // Calculate max height
-        // max height = v0² / (2g)
+        // max height = v0ï¿½ / (2g)
         float expectedMaxHeight = (PhysicsTestConstants.JumpVelocity * PhysicsTestConstants.JumpVelocity) /
                                   (2.0f * PhysicsTestConstants.Gravity);
 

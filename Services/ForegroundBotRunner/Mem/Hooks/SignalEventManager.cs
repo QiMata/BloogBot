@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
@@ -10,7 +10,7 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private delegate void SignalEventNoArgsDelegate(string eventName);
 
-        // Diagnostic logging path (same as ForegroundBotWorker)
+        // Diagnostic logging path
         private static readonly string DiagnosticLogPath;
         private static readonly object DiagnosticLogLock = new();
         private static int _eventCount = 0;
@@ -19,7 +19,6 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         static SignalEventManager()
         {
-            // Initialize diagnostic log path
             string wowDir;
             try
             {
@@ -34,31 +33,25 @@ namespace ForegroundBotRunner.Mem.Hooks
             DiagnosticLogPath = Path.Combine(logsDir, "signal_event_manager.log");
             try { File.WriteAllText(DiagnosticLogPath, $"=== SignalEventManager Log Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); } catch { }
 
-            // DEFERRED: Hooks are NOT initialized here. They inject assembly into WoW's
-            // event functions, which interferes with the world server handshake if done
-            // before the player enters the world. Call InitializeHooks() after world entry.
+            // DEFERRED: Hooks inject assembly into WoW's event functions, which interferes
+            // with the world server handshake if done before world entry.
             DiagLog("SignalEventManager static constructor COMPLETED (hooks DEFERRED)");
         }
 
         /// <summary>
         /// Initialize the assembly hooks into WoW's signal event system.
-        /// Must be called AFTER the player has successfully entered the world
-        /// to avoid interfering with the world server handshake.
+        /// Must be called AFTER the player has successfully entered the world.
         /// </summary>
         public static void InitializeHooks()
         {
             if (_hooksInitialized)
-            {
-                DiagLog("InitializeHooks called but hooks already initialized");
                 return;
-            }
 
             DiagLog("InitializeHooks STARTING");
 
             try
             {
                 InitializeSignalEventHook();
-                DiagLog("InitializeSignalEventHook completed");
             }
             catch (Exception ex)
             {
@@ -67,7 +60,6 @@ namespace ForegroundBotRunner.Mem.Hooks
             try
             {
                 InitializeSignalEventHookNoArgs();
-                DiagLog("InitializeSignalEventHookNoArgs completed");
             }
             catch (Exception ex)
             {
@@ -75,7 +67,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             }
 
             _hooksInitialized = true;
-            DiagLog("InitializeHooks COMPLETED (hooks ENABLED)");
+            DiagLog("InitializeHooks COMPLETED");
         }
 
         private static void DiagLog(string message)
@@ -120,16 +112,25 @@ namespace ForegroundBotRunner.Mem.Hooks
             };
             var signalEventDetour = MemoryManager.InjectAssembly("SignalEventDetour", instructions);
             MemoryManager.InjectAssembly("SignalEventHook", (uint)MemoryAddresses.SignalEventFunPtr, "jmp " + signalEventDetour);
+
+            // Verify hook was written
+            var hookBytes = MemoryManager.ReadBytes((nint)MemoryAddresses.SignalEventFunPtr, 5);
+            if (hookBytes != null && hookBytes[0] == 0xE9)
+                DiagLog($"SignalEvent hook INSTALLED at 0x{MemoryAddresses.SignalEventFunPtr:X8} → detour 0x{(uint)signalEventDetour:X8}");
+            else
+                DiagLog($"SignalEvent hook FAILED at 0x{MemoryAddresses.SignalEventFunPtr:X8}: first byte=0x{(hookBytes?[0] ?? 0):X2}");
         }
 
         private static void SignalEventHook(string eventName, string typesArg, uint firstArgPtr)
         {
-            // Log first few events for debugging
             _eventCount++;
-            if (_eventCount <= 20)
-            {
+            // Log first 20 events unconditionally, then only log interesting events (errors, skills, chat)
+            if (_eventCount <= 20
+                || eventName.StartsWith("UI_ERROR")
+                || eventName.StartsWith("UI_INFO")
+                || eventName.StartsWith("CHAT_MSG_SKILL")
+                || eventName == "CHAT_MSG_SYSTEM")
                 DiagLog($"EVENT[{_eventCount}]: {eventName} format={typesArg}");
-            }
 
             var types = typesArg.TrimStart('%').Split('%');
             var list = new object[types.Length];
@@ -198,16 +199,20 @@ namespace ForegroundBotRunner.Mem.Hooks
             };
             var signalEventNoArgsDetour = MemoryManager.InjectAssembly("SignalEventNoArgsDetour", instructions);
             MemoryManager.InjectAssembly("SignalEventNoArgsHook", (uint)MemoryAddresses.SignalEventNoParamsFunPtr, "jmp " + signalEventNoArgsDetour);
+
+            // Verify hook was written
+            var hookBytes = MemoryManager.ReadBytes((nint)MemoryAddresses.SignalEventNoParamsFunPtr, 5);
+            if (hookBytes != null && hookBytes[0] == 0xE9)
+                DiagLog($"SignalEventNoArgs hook INSTALLED at 0x{MemoryAddresses.SignalEventNoParamsFunPtr:X8} → detour 0x{(uint)signalEventNoArgsDetour:X8}");
+            else
+                DiagLog($"SignalEventNoArgs hook FAILED at 0x{MemoryAddresses.SignalEventNoParamsFunPtr:X8}: first byte=0x{(hookBytes?[0] ?? 0):X2}");
         }
 
         private static void SignalEventNoArgsHook(string eventName)
         {
-            // Log first few events for debugging
             _eventCount++;
             if (_eventCount <= 20)
-            {
                 DiagLog($"EVENT_NOARGS[{_eventCount}]: {eventName}");
-            }
 
             OnNewSignalEventNoArgs?.Invoke(eventName);
         }

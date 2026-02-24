@@ -1,15 +1,13 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
-using GameData.Core.Interfaces;
+using GameData.Core.Enums;
+using static BotRunner.Constants.Spellbook;
 
 namespace MageArcane.Tasks
 {
-    internal class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
+    public class RestTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
-        private const string Evocation = "Evocation";
-        private readonly IWoWItem foodItem;
-        private readonly IWoWItem drinkItem;
-
         public void Update()
         {
             if (InCombat)
@@ -21,6 +19,7 @@ namespace MageArcane.Tasks
 
             if (HealthOk && ManaOk)
             {
+                Wait.RemoveAll();
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 BotTasks.Push(new BuffTask(BotContext));
@@ -36,21 +35,19 @@ namespace MageArcane.Tasks
                 return;
             }
 
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player).Guid == ObjectManager.Player.Guid)
+            if (!ObjectManager.Player.IsEating && ObjectManager.Player.HealthPercent < 80 && Wait.For("EatFoodDelay", 3000, true))
             {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage("SendChatMessage('.repairitems')");
-                }
+                ObjectManager.StopAllMovement();
+                var foodItem = ConsumableData.FindBestFood(ObjectManager);
+                foodItem?.Use();
             }
 
-            if (ObjectManager.Player.Level > 3 && foodItem != null && !ObjectManager.Player.IsEating && ObjectManager.Player.HealthPercent < 80)
-                foodItem.Use();
-
-            if (ObjectManager.Player.Level > 3 && drinkItem != null && !ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 80)
-                drinkItem.Use();
+            if (!ObjectManager.Player.IsDrinking && ObjectManager.Player.ManaPercent < 80 && Wait.For("DrinkDelay", 3000, true))
+            {
+                ObjectManager.StopAllMovement();
+                var drinkItem = ConsumableData.FindBestDrink(ObjectManager);
+                drinkItem?.Use();
+            }
         }
 
         private bool HealthOk => ObjectManager.Player.HealthPercent > 90;

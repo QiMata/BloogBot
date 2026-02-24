@@ -1,12 +1,10 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
 using DruidBalance.Tasks;
-using System.ComponentModel.Composition;
 
 using BotProfiles.Common;
 namespace DruidBalance
 {
-    [Export(typeof(IBot))]
-    internal class DruidBalance : BotBase
+    public class DruidBalance : BotBase
     {
         public override string Name => "Balance Druid";
 

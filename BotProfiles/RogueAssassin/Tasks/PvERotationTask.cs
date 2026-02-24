@@ -1,12 +1,13 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 using Serilog;
 
 namespace RogueAssassin.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
         private IWoWUnit secondaryTarget;
         private bool SwapDaggerReady;
@@ -28,17 +29,9 @@ namespace RogueAssassin.Tasks
             if (Environment.TickCount - riposteStartTime > 5000 && readyToRiposte)
                 readyToRiposte = false;
 
-            
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
-                return;
-            }
 
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
+            if (!EnsureTarget())
+                return;
 
             if (Update(3))
                 return;
@@ -152,10 +145,7 @@ namespace RogueAssassin.Tasks
 
         private bool ReadyToInterrupt() => ObjectManager.GetTarget(ObjectManager.Player).Mana > 0 && (ObjectManager.GetTarget(ObjectManager.Player).IsCasting || ObjectManager.GetTarget(ObjectManager.Player).IsChanneling);
 
-        public override void PerformCombatRotation()
-        {
-            throw new NotImplementedException();
-        }
+        public override void PerformCombatRotation() { }
 
         private Action RiposteCallback => () => readyToRiposte = false;
 

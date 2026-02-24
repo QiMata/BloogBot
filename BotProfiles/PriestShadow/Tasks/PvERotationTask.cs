@@ -1,10 +1,13 @@
 using BotRunner.Interfaces;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestShadow.Tasks
 {
-    internal class PvERotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
+    public class PvERotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
         public void Update()
         {
@@ -34,7 +37,7 @@ namespace PriestShadow.Tasks
                 if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 40 && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
                 {
                     ObjectManager.StopAllMovement();
-                    ObjectManager.Player.StopWand();
+                    ObjectManager.StopWandAttack();
 
                     ObjectManager.StopAllMovement();
 
@@ -47,16 +50,7 @@ namespace PriestShadow.Tasks
                 }
                 else
                 {
-                    Position[] nextWaypoint = Container.PathfindingClient.GetPath(ObjectManager.MapId, ObjectManager.Player.Position, ObjectManager.GetTarget(ObjectManager.Player).Position, true);
-
-                    if (nextWaypoint.Length > 1)
-                    {
-                        ObjectManager.MoveToward(nextWaypoint[1]);
-                    }
-                    else
-                    {
-                        ObjectManager.StopAllMovement();
-                    }
+                    NavigateToward(ObjectManager.GetTarget(ObjectManager.Player).Position);
                     return;
                 }
             }
@@ -100,7 +94,7 @@ namespace PriestShadow.Tasks
             ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
             if (ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(ShadowWordPain) || ObjectManager.Player.ManaPercent < 50)
-                ObjectManager.Player.StartWand();
+                ObjectManager.StartWandAttack();
             else
             {
                 TryCastSpell(ShadowForm, 0, int.MaxValue, !ObjectManager.Player.HasBuff(ShadowForm));

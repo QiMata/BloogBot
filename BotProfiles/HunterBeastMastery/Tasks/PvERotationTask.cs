@@ -1,10 +1,13 @@
-﻿using BotRunner.Interfaces;
+using BotRunner.Interfaces;
+using GameData.Core.Models;
 using BotRunner.Tasks;
+using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using static BotRunner.Constants.Spellbook;
 
 namespace HunterBeastMastery.Tasks
 {
-    internal class PvERotationTask : CombatRotationTask, IBotTask
+    public class PvERotationTask : CombatRotationTask, IBotTask
     {
 
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
@@ -16,6 +19,9 @@ namespace HunterBeastMastery.Tasks
 
         public void Update()
         {
+            if (IsKiting)
+                return;
+
             // ensure our pet is helping and alive
             ObjectManager.Pet?.Attack();
             if (ObjectManager.Pet == null && ObjectManager.IsSpellReady(CallPet))
@@ -23,16 +29,8 @@ namespace HunterBeastMastery.Tasks
             else if (ObjectManager.Pet != null && ObjectManager.Pet.HealthPercent < 40)
                 TryCastSpell(MendPet, castOnSelf: true);
 
-            if (!ObjectManager.Aggressors.Any())
-            {
-                BotTasks.Pop();
+            if (!EnsureTarget())
                 return;
-            }
-
-            if (ObjectManager.GetTarget(ObjectManager.Player) == null || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 0)
-            {
-                ObjectManager.SetTarget(ObjectManager.Aggressors.First().Guid);
-            }
 
             if (Update(28))
                 return;
@@ -66,9 +64,10 @@ namespace HunterBeastMastery.Tasks
             }
             else
             {
-                // melee rotation
+                // melee — apply Wing Clip then kite back to ranged distance
+                if (gun != null && TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip), callback: () => StartKite(1500)))
+                    return;
                 TryCastSpell(MongooseBite, 0, 5);
-                TryCastSpell(WingClip, 0, 5, !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(WingClip));
                 TryCastSpell(RaptorStrike, 0, 5);
             }
         }

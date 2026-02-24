@@ -1,3 +1,4 @@
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
@@ -8,15 +9,6 @@ namespace WarriorArms.Tasks
     {
         public RestTask(IBotContext botContext) : base(botContext)
         {
-            ObjectManager.SetTarget(ObjectManager.Player.Guid);
-
-            if (ObjectManager.GetTarget(ObjectManager.Player)?.Guid == ObjectManager.Player.Guid)
-            {
-                if (ObjectManager.GetEquippedItems().Any(x => x.DurabilityPercentage > 0 && x.DurabilityPercentage < 100))
-                {
-                    ObjectManager.SendChatMessage(".repairitems");
-                }
-            }
         }
 
         public void Update()
@@ -30,6 +22,30 @@ namespace WarriorArms.Tasks
                 ObjectManager.DoEmote(Emote.EMOTE_STATE_STAND);
                 BotTasks.Pop();
                 return;
+            }
+
+            // Use bandage first if health is very low (faster than food)
+            if (ObjectManager.Player.HealthPercent < 60
+                && !ObjectManager.Player.IsEating
+                && !ObjectManager.Player.IsChanneling
+                && !ObjectManager.Player.HasDebuff("Recently Bandaged")
+                && Wait.For("UseBandageDelay", 3000, true))
+            {
+                ObjectManager.StopAllMovement();
+                var bandage = ConsumableData.FindBestBandage(ObjectManager);
+                if (bandage != null)
+                {
+                    bandage.Use();
+                    return;
+                }
+            }
+
+            // Eat food if available and not already eating
+            if (!ObjectManager.Player.IsEating && !ObjectManager.Player.IsChanneling && Wait.For("EatFoodDelay", 3000, true))
+            {
+                ObjectManager.StopAllMovement();
+                var foodItem = ConsumableData.FindBestFood(ObjectManager);
+                foodItem?.Use();
             }
         }
     }

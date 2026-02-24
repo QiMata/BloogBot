@@ -8,9 +8,43 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Common\BotBase.cs" />
+    <Compile Include="Common\**\*.cs" />
+    <!-- Warriors -->
     <Compile Include="WarriorArms\**\*.cs" />
+    <Compile Include="WarriorFury\**\*.cs" />
+    <Compile Include="WarriorProtection\**\*.cs" />
+    <!-- Shamans -->
     <Compile Include="ShamanEnhancement\**\*.cs" />
+    <Compile Include="ShamanElemental\**\*.cs" />
+    <Compile Include="ShamanRestoration\**\*.cs" />
+    <!-- Rogues -->
+    <Compile Include="RogueAssassin\**\*.cs" />
+    <Compile Include="RogueCombat\**\*.cs" />
+    <Compile Include="RogueSubtlety\**\*.cs" />
+    <!-- Hunters -->
+    <Compile Include="HunterBeastMastery\**\*.cs" />
+    <Compile Include="HunterMarksmanship\**\*.cs" />
+    <Compile Include="HunterSurvival\**\*.cs" />
+    <!-- Mages -->
+    <Compile Include="MageArcane\**\*.cs" />
+    <Compile Include="MageFire\**\*.cs" />
+    <Compile Include="MageFrost\**\*.cs" />
+    <!-- Paladins -->
+    <Compile Include="PaladinHoly\**\*.cs" />
+    <Compile Include="PaladinProtection\**\*.cs" />
+    <Compile Include="PaladinRetribution\**\*.cs" />
+    <!-- Priests -->
+    <Compile Include="PriestDiscipline\**\*.cs" />
+    <Compile Include="PriestHoly\**\*.cs" />
+    <Compile Include="PriestShadow\**\*.cs" />
+    <!-- Druids -->
+    <Compile Include="DruidBalance\**\*.cs" />
+    <Compile Include="DruidFeralCombat\**\*.cs" />
+    <Compile Include="DruidRestoration\**\*.cs" />
+    <!-- Warlocks -->
+    <Compile Include="WarlockAffliction\**\*.cs" />
+    <Compile Include="WarlockDemonology\**\*.cs" />
+    <Compile Include="WarlockDestruction\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
