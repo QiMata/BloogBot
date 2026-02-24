@@ -68,6 +68,16 @@ namespace WoWSharpClient
         private readonly SemaphoreSlim _updateSemaphore = new(1, 1);
         private Task _backgroundUpdateTask;
         private CancellationTokenSource _updateCancellation;
+
+        // Optional cooldown checker — set by BackgroundBotWorker after SpellCastingNetworkClientComponent is created
+        private Func<uint, bool> _spellCooldownChecker;
+
+        /// <summary>
+        /// Set a delegate that checks if a spell ID is off cooldown (returns true if ready).
+        /// Wire this to SpellCastingNetworkClientComponent.CanCastSpell().
+        /// </summary>
+        public void SetSpellCooldownChecker(Func<uint, bool> checker) => _spellCooldownChecker = checker;
+
         private WoWSharpObjectManager() { }
 
         public void Initialize(
@@ -463,12 +473,20 @@ namespace WoWSharpClient
             Log.Information("[Chat] {MsgType} {Prefix}{Text}", e.MsgType, prefix, e.Text);
         }
 
+        /// <summary>
+        /// Called by MovementHandler BEFORE queuing a teleport position update,
+        /// so the position write guard in ProcessUpdatesAsync allows it through.
+        /// </summary>
+        public void NotifyTeleportIncoming()
+        {
+            _isBeingTeleported = true;
+        }
+
         private void EventEmitter_OnTeleport(object? sender, RequiresAcknowledgementArgs e)
         {
             Log.Debug("[ACK] TELEPORT counter={Counter}", e.Counter);
 
-            // Allow the queued position update through the position write guard.
-            // ParseAcknowledgementPacket already queued the new position before this event fired.
+            // _isBeingTeleported is already set by NotifyTeleportIncoming() before the update was queued.
             _isBeingTeleported = true;
 
             _ = _woWClient.SendMSGPackedAsync(
@@ -541,14 +559,27 @@ namespace WoWSharpClient
             }
         }
 
+        public IWoWEventHandler EventHandler => WoWSharpEventEmitter.Instance;
+
         public IWoWLocalPlayer Player { get; set; } =
             new WoWLocalPlayer(new HighGuid(new byte[4], new byte[4]));
 
-        public IWoWLocalPet Pet => throw new NotImplementedException();
+        public IWoWLocalPet Pet => null;
 
         private static readonly List<WoWObject> _objects = [];
         private static readonly object _objectsLock = new();
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _systemMessages = new();
+
+        /// <summary>
+        /// Returns an object by its full GUID, or null if not found.
+        /// Checks the local player first, then the objects list.
+        /// </summary>
+        public WoWObject GetObjectByGuid(ulong guid)
+        {
+            if (guid == PlayerGuid.FullGuid)
+                return Player as WoWObject;
+            lock (_objectsLock) return _objects.FirstOrDefault(o => o.Guid == guid);
+        }
 
         /// <summary>
         /// Returns a snapshot of the objects list. Safe to enumerate from any thread
@@ -558,6 +589,37 @@ namespace WoWSharpClient
         {
             get { lock (_objectsLock) return _objects.ToArray(); }
         }
+
+        /// <summary>
+        /// Units that are alive and targeting the player or party members.
+        /// In WoWSharpClient, UnitReaction is not reliably set from server packets,
+        /// so we use target-based detection instead of faction-based.
+        /// </summary>
+        public IEnumerable<IWoWUnit> Hostiles
+        {
+            get
+            {
+                var playerGuid = PlayerGuid.FullGuid;
+                if (playerGuid == 0) return [];
+                return Objects.OfType<IWoWUnit>()
+                    .Where(u => u.Health > 0 && u.Guid != playerGuid)
+                    .Where(u => u.TargetGuid == playerGuid || u.IsInCombat);
+            }
+        }
+
+        /// <summary>
+        /// Units actively in combat that are targeting the player or party.
+        /// </summary>
+        public IEnumerable<IWoWUnit> Aggressors =>
+            Hostiles.Where(u => u.IsInCombat || u.IsFleeing);
+
+        /// <summary>Aggressors that have mana (likely casters).</summary>
+        public IEnumerable<IWoWUnit> CasterAggressors =>
+            Aggressors.Where(u => u.ManaPercent > 0);
+
+        /// <summary>Aggressors that have no mana (melee).</summary>
+        public IEnumerable<IWoWUnit> MeleeAggressors =>
+            Aggressors.Where(u => u.ManaPercent <= 0);
 
         /// <summary>
         /// Drains all pending system messages (CHAT_MSG_SYSTEM) received since last call.
@@ -616,6 +678,10 @@ namespace WoWSharpClient
                                         update.UpdatedFields
                                     );
                                     lock (_objectsLock) _objects.Add(newObject);
+
+                                    if (newObject is WoWItem item)
+                                        Log.Information("[ProcessUpdates] ITEM CREATED: Guid={Guid:X} ItemId={ItemId} Fields={FieldCount}",
+                                            update.Guid, item.ItemId, update.UpdatedFields.Count);
 
                                     if (update.MovementData != null && newObject is WoWUnit)
                                     {
@@ -769,26 +835,15 @@ namespace WoWSharpClient
                     break;
                 case >= EContainerFields.CONTAINER_FIELD_SLOT_1
                 and <= EContainerFields.CONTAINER_FIELD_SLOT_LAST:
-                    if (
-                        field >= EContainerFields.CONTAINER_FIELD_SLOT_1
-                        && field <= EContainerFields.CONTAINER_FIELD_SLOT_LAST
-                    )
                     {
-                        // Calculate slot index and whether this is the low or high GUID part
+                        // Store both low and high GUID parts at their natural offsets
+                        // Slots[slot*2] = low part, Slots[slot*2+1] = high part
                         var slotFieldOffset =
                             (uint)field - (uint)EContainerFields.CONTAINER_FIELD_SLOT_1;
-                        var slotIndex = slotFieldOffset / 2; // Each slot GUID takes 2 fields (low + high)
-                        var isHighPart = (slotFieldOffset % 2) == 1;
 
-                        if (slotIndex < container.Slots.Length)
+                        if (slotFieldOffset < container.Slots.Length)
                         {
-                            if (!isHighPart)
-                            {
-                                // Store low part GUID value in slot
-                                container.Slots[slotIndex] = (uint)value;
-                            }
-                            // Note: Currently not storing high part since Slots is uint[]
-                            // This could be enhanced to support full 64-bit GUIDs if needed
+                            container.Slots[slotFieldOffset] = (uint)value;
                         }
                     }
                     break;
@@ -899,6 +954,14 @@ namespace WoWSharpClient
                     unit.Bytes0[1] = value1[1];
                     unit.Bytes0[2] = value1[2];
                     unit.Bytes0[3] = value1[3];
+
+                    // Unpack Race/Class/Gender for player objects
+                    if (unit is WoWPlayer player0)
+                    {
+                        player0.Race = (Race)value1[0];
+                        player0.Class = (Class)value1[1];
+                        player0.Gender = (Gender)value1[2];
+                    }
                     break;
                 case >= EUnitFields.UNIT_VIRTUAL_ITEM_SLOT_DISPLAY
                 and <= EUnitFields.UNIT_VIRTUAL_ITEM_SLOT_DISPLAY_02:
@@ -1118,12 +1181,16 @@ namespace WoWSharpClient
                 // WoWPlayer/WoWLocalPlayer (inherits from WoWUnit)
                 else if (obj is WoWPlayer player)
                 {
-                    if (Enum.IsDefined(typeof(EPlayerFields), key))
+                    // Player fields use ranges (e.g., PACK_SLOT_1..PACK_SLOT_LAST) where only
+                    // the first and last values are in the enum. Enum.IsDefined returns false for
+                    // intermediate values, silently dropping inventory/bank slot fields.
+                    // Use a range check instead.
+                    if (key >= (uint)EPlayerFields.PLAYER_DUEL_ARBITER && key <= (uint)EPlayerFields.PLAYER_END)
                     {
                         ApplyPlayerFieldDiffs(player, key, value, _objects);
                         fieldHandled = true;
                     }
-                    else if (Enum.IsDefined(typeof(EUnitFields), key))
+                    else if (key >= (uint)EUnitFields.UNIT_FIELD_CHARM && key < (uint)EUnitFields.UNIT_END)
                     {
                         ApplyUnitFieldDiffs(player, key, value);
                         fieldHandled = true;
@@ -1132,7 +1199,9 @@ namespace WoWSharpClient
                 // WoWUnit (but not player since player was handled above)
                 else if (obj is WoWUnit unit)
                 {
-                    if (Enum.IsDefined(typeof(EUnitFields), key))
+                    // Same range-based check as player fields — unit fields have arrays
+                    // (auras, aura flags, etc.) where intermediate values aren't in the enum.
+                    if (key >= (uint)EUnitFields.UNIT_FIELD_CHARM && key < (uint)EUnitFields.UNIT_END)
                     {
                         ApplyUnitFieldDiffs(unit, key, value);
                         fieldHandled = true;
@@ -1464,7 +1533,7 @@ namespace WoWSharpClient
                     player.GuildTimestamp = (uint)value;
                     break;
                 case >= EPlayerFields.PLAYER_QUEST_LOG_1_1
-                and <= EPlayerFields.PLAYER_QUEST_LOG_25_2:
+                and <= EPlayerFields.PLAYER_QUEST_LOG_LAST_3:
                     {
                         uint questField = (field - EPlayerFields.PLAYER_QUEST_LOG_1_1) % 3;
                         int questIndex = (int)((field - EPlayerFields.PLAYER_QUEST_LOG_1_1) / 3);
@@ -1580,7 +1649,11 @@ namespace WoWSharpClient
                         var packIndex = field - EPlayerFields.PLAYER_FIELD_PACK_SLOT_1;
                         if (packIndex >= 0 && packIndex < player.PackSlots.Length)
                         {
+                            var oldVal = player.PackSlots[packIndex];
                             player.PackSlots[packIndex] = (uint)value;
+                            if ((uint)value != 0 && oldVal == 0)
+                                Log.Information("[PackSlots] index={Index} set to 0x{Value:X8} (slot {Slot})",
+                                    packIndex, (uint)value, packIndex / 2);
                         }
                         else
                         {
@@ -1839,13 +1912,7 @@ namespace WoWSharpClient
                     break;
                 case >= EPlayerFields.PLAYER_FIELD_ARENA_TEAM_INFO_1_1
                 and <= EPlayerFields.PLAYER_FIELD_ARENA_TEAM_INFO_1_1 + 17:
-                    // Note: ArenaTeamInfo array not implemented in WoWPlayer yet
-                    break;
-                case EPlayerFields.PLAYER_FIELD_HONOR_CURRENCY:
-                    // Note: HonorCurrency property not implemented in WoWPlayer yet
-                    break;
-                case EPlayerFields.PLAYER_FIELD_ARENA_CURRENCY:
-                    // Note: ArenaCurrency property not implemented in WoWPlayer yet
+                    // Note: TBC-only — ArenaTeamInfo, HonorCurrency, ArenaCurrency
                     break;
                 case EPlayerFields.PLAYER_FIELD_MOD_MANA_REGEN:
                     // Note: ModManaRegen property not implemented in WoWPlayer yet
@@ -1942,13 +2009,18 @@ namespace WoWSharpClient
 
         public bool IsSpellReady(string spellName)
         {
-            // Check if the spell exists in our spellbook (received via SMSG_INITIAL_SPELLS)
-            var spell = Spells.FirstOrDefault(s => s.Name.Equals(spellName, StringComparison.OrdinalIgnoreCase));
-            if (spell == null) return false;
+            // Resolve spell name to highest-rank ID the player knows
+            var knownIds = Spells.Select(s => s.Id);
+            var spellId = GameData.Core.Constants.SpellData.GetHighestKnownRank(spellName, knownIds);
 
-            // Check cooldowns
-            var cooldown = Cooldowns.FirstOrDefault(c => c.Icon == spellName);
-            return cooldown == null;
+            // Spell not known
+            if (spellId == 0) return false;
+
+            // Check cooldown via delegate if wired, otherwise assume ready (server validates)
+            if (_spellCooldownChecker != null)
+                return _spellCooldownChecker(spellId);
+
+            return true;
         }
 
         public void StopCasting()
@@ -1959,9 +2031,17 @@ namespace WoWSharpClient
 
         public void CastSpell(string spellName, int rank = -1, bool castOnSelf = false)
         {
-            var spell = Spells.FirstOrDefault(s => s.Name.Equals(spellName, StringComparison.OrdinalIgnoreCase));
-            if (spell == null) return;
-            CastSpell((int)spell.Id, rank, castOnSelf);
+            // Resolve spell name to highest-rank ID the player knows
+            var knownIds = Spells.Select(s => s.Id);
+            var spellId = GameData.Core.Constants.SpellData.GetHighestKnownRank(spellName, knownIds);
+
+            if (spellId == 0)
+            {
+                Log.Warning("[CastSpell] Spell '{SpellName}' not found in known spells or SpellData lookup", spellName);
+                return;
+            }
+
+            CastSpell((int)spellId, rank, castOnSelf);
         }
 
         public void CastSpell(int spellId, int rank = -1, bool castOnSelf = false)
@@ -1987,7 +2067,17 @@ namespace WoWSharpClient
                     spellId, _currentTargetGuid, BitConverter.ToString(ms.ToArray()));
             }
 
-            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, ms.ToArray());
+            var payload = ms.ToArray();
+            Log.Information("[CastSpell] Sending CMSG_CAST_SPELL ({Len} bytes): {Hex}",
+                payload.Length, BitConverter.ToString(payload));
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, payload)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                        Log.Error(t.Exception, "[CastSpell] SEND FAILED for spell {SpellId}", spellId);
+                    else
+                        Log.Information("[CastSpell] SEND OK for spell {SpellId}", spellId);
+                });
         }
 
         public bool CanCastSpell(int spellId, ulong targetGuid)
@@ -1999,88 +2089,237 @@ namespace WoWSharpClient
 
         public void UseItem(int bagId, int slotId, ulong targetGuid = 0)
         {
-            throw new NotImplementedException();
+            if (_woWClient == null) return;
+            // For backpack (0xFF): slot uses ABSOLUTE inventory index (23 = INVENTORY_SLOT_ITEM_START).
+            byte srcBag = bagId == 0 ? (byte)0xFF : (byte)(18 + bagId);
+            byte srcSlot = bagId == 0 ? (byte)(23 + slotId) : (byte)slotId;
+            using var ms = new MemoryStream();
+            using var w = new BinaryWriter(ms);
+            w.Write(srcBag);
+            w.Write(srcSlot);
+            w.Write((byte)0); // spellSlot
+            w.Write((ushort)0x0000); // TARGET_FLAG_SELF
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_USE_ITEM, ms.ToArray());
         }
 
         public ulong GetBackpackItemGuid(int parSlot)
         {
-            throw new NotImplementedException();
+            var player = Player as WoWPlayer;
+            if (player == null) return 0;
+            int index = parSlot * 2;
+            if (index < 0 || index + 1 >= player.PackSlots.Length) return 0;
+            return ((ulong)player.PackSlots[index + 1] << 32) | player.PackSlots[index];
         }
 
         public ulong GetEquippedItemGuid(EquipSlot slot)
         {
-            throw new NotImplementedException();
+            var player = Player as WoWPlayer;
+            if (player == null) return 0;
+            // EquipSlot enum is offset by 1 from WoW internal slot numbering
+            // (EquipSlot.Head=1 → internal slot 0, etc.)
+            int internalSlot = (int)slot - 1;
+            if (internalSlot < 0) return 0; // Ammo=0 has no inventory slot
+            int index = internalSlot * 2;
+            if (index + 1 >= player.Inventory.Length) return 0;
+            return ((ulong)player.Inventory[index + 1] << 32) | player.Inventory[index];
         }
 
-        public IWoWItem GetEquippedItem(EquipSlot ranged)
+        public IWoWItem GetEquippedItem(EquipSlot slot)
         {
-            throw new NotImplementedException();
+            var player = Player as WoWPlayer;
+            if (player == null) return null;
+
+            // Try VisibleItems first (already populated with full item data)
+            int slotIndex = (int)slot - 1;
+            if (slotIndex >= 0 && slotIndex < player.VisibleItems.Length)
+            {
+                var visible = player.VisibleItems[slotIndex];
+                if (visible?.ItemId > 0) return visible;
+            }
+
+            // Fall back to GUID lookup in objects list
+            var guid = GetEquippedItemGuid(slot);
+            return FindItemByGuid(guid);
         }
 
         public IWoWItem GetContainedItem(int bagSlot, int slotId)
         {
-            throw new NotImplementedException();
+            ulong itemGuid;
+            if (bagSlot == 0)
+            {
+                // Backpack — look up from PackSlots
+                itemGuid = GetBackpackItemGuid(slotId);
+            }
+            else
+            {
+                // Extra bag — find the bag container, then look up its slot
+                var bagEquipSlot = (EquipSlot)(19 + bagSlot); // Bag0=20 for bagSlot 1
+                var bagGuid = GetEquippedItemGuid(bagEquipSlot);
+                if (bagGuid == 0) return null;
+
+                WoWContainer container;
+                lock (_objectsLock)
+                    container = _objects.FirstOrDefault(o => o.Guid == bagGuid) as WoWContainer;
+                if (container == null) return null;
+
+                itemGuid = container.GetItemGuid(slotId);
+            }
+
+            return FindItemByGuid(itemGuid);
         }
 
         public IEnumerable<IWoWItem> GetEquippedItems()
         {
-            throw new NotImplementedException();
+            var player = Player as WoWPlayer;
+            if (player == null) return [];
+
+            var items = new List<IWoWItem>();
+            // Equipment slots: Head(1) through Ranged(18)
+            for (var slot = EquipSlot.Head; slot <= EquipSlot.Ranged; slot++)
+            {
+                var item = GetEquippedItem(slot);
+                if (item != null && item.ItemId > 0) items.Add(item);
+            }
+            return items;
         }
 
         public IEnumerable<IWoWItem> GetContainedItems()
         {
-            throw new NotImplementedException();
+            var player = Player as WoWPlayer;
+            if (player == null) return [];
+
+            var items = new List<IWoWItem>();
+
+            // Backpack (bag 0): 16 slots
+            for (int slot = 0; slot < 16; slot++)
+            {
+                var item = GetContainedItem(0, slot);
+                if (item != null && item.ItemId > 0) items.Add(item);
+            }
+
+            // Extra bags (bag 1-4)
+            for (int bag = 1; bag <= 4; bag++)
+            {
+                var bagEquipSlot = (EquipSlot)(19 + bag);
+                var bagGuid = GetEquippedItemGuid(bagEquipSlot);
+                if (bagGuid == 0) continue;
+
+                WoWContainer container;
+                lock (_objectsLock)
+                    container = _objects.FirstOrDefault(o => o.Guid == bagGuid) as WoWContainer;
+                if (container == null) continue;
+
+                for (int slot = 0; slot < container.NumOfSlots; slot++)
+                {
+                    var item = FindItemByGuid(container.GetItemGuid(slot));
+                    if (item != null && item.ItemId > 0) items.Add(item);
+                }
+            }
+
+            return items;
+        }
+
+        public int CountFreeSlots(bool countSpecialSlots = false)
+        {
+            int freeSlots = 0;
+            // Backpack: 16 slots
+            for (int i = 0; i < 16; i++)
+                if (GetContainedItem(0, i) == null) freeSlots++;
+            // Extra bags
+            for (int bag = 1; bag <= 4; bag++)
+            {
+                var bagEquipSlot = (EquipSlot)(19 + bag);
+                var bagGuid = GetEquippedItemGuid(bagEquipSlot);
+                if (bagGuid == 0) continue;
+                WoWContainer container;
+                lock (_objectsLock)
+                    container = _objects.FirstOrDefault(o => o.Guid == bagGuid) as WoWContainer;
+                if (container == null) continue;
+                for (int slot = 0; slot < container.NumOfSlots; slot++)
+                    if (FindItemByGuid(container.GetItemGuid(slot)) == null) freeSlots++;
+            }
+            return freeSlots;
+        }
+
+        public uint GetItemCount(uint itemId)
+        {
+            uint count = 0;
+            foreach (var item in GetContainedItems())
+                if (item.ItemId == itemId) count += item.StackCount;
+            return count;
+        }
+
+        public void StartWandAttack()
+        {
+            // BG bot: cast "Shoot" spell (wand auto-attack)
+            CastSpell("Shoot");
+        }
+
+        public void StopWandAttack()
+        {
+            // BG bot: stop casting to cancel wand auto-attack
+            StopCasting();
         }
 
         public uint GetBagGuid(EquipSlot equipSlot)
         {
-            throw new NotImplementedException();
+            // Return low 32 bits of the bag GUID for compatibility
+            var guid = GetEquippedItemGuid(equipSlot);
+            return (uint)(guid & 0xFFFFFFFF);
         }
 
-        public void PickupContainedItem(int bagSlot, int slotId, int quantity)
+        private WoWItem FindItemByGuid(ulong guid)
         {
-            throw new NotImplementedException();
+            if (guid == 0) return null;
+            lock (_objectsLock)
+                return _objects.FirstOrDefault(o => o.Guid == guid) as WoWItem;
         }
 
-        public void PlaceItemInContainer(int bagSlot, int slotId)
-        {
-            throw new NotImplementedException();
-        }
+        public void PickupContainedItem(int bagSlot, int slotId, int quantity) { }
+
+        public void PlaceItemInContainer(int bagSlot, int slotId) { }
 
         public void DestroyItemInContainer(int bagSlot, int slotId, int quantity = -1)
         {
-            throw new NotImplementedException();
+            if (_woWClient == null) return;
+            // For backpack (0xFF): slot uses ABSOLUTE inventory index (23 = INVENTORY_SLOT_ITEM_START).
+            byte srcBag = bagSlot == 0 ? (byte)0xFF : (byte)(18 + bagSlot);
+            byte srcSlot = bagSlot == 0 ? (byte)(23 + slotId) : (byte)slotId;
+            byte count = quantity < 0 ? (byte)0xFF : (byte)Math.Min(quantity, 255);
+            // CMSG_DESTROYITEM: bag(1) + slot(1) + count(1) + reserved(3) = 6 bytes
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_DESTROYITEM, [srcBag, srcSlot, count, 0, 0, 0]);
         }
 
         public void Logout()
         {
-            throw new NotImplementedException();
+            if (_woWClient == null) return;
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_LOGOUT_REQUEST, []);
         }
 
-        public void SplitStack(
-            int bag,
-            int slot,
-            int quantity,
-            int destinationBag,
-            int destinationSlot
-        )
-        {
-            throw new NotImplementedException();
-        }
+        public void SplitStack(int bag, int slot, int quantity, int destinationBag, int destinationSlot) { }
 
         public void EquipItem(int bagSlot, int slotId, EquipSlot? equipSlot = null)
         {
-            throw new NotImplementedException();
+            if (_woWClient == null) return;
+            // Map logical bag index (0=backpack, 1-4=extra bags) to WoW packet bag/slot values.
+            // For backpack (0xFF): slot uses ABSOLUTE inventory index (23 = INVENTORY_SLOT_ITEM_START).
+            // For extra bags (19-22): slot is relative within the bag container.
+            byte srcBag = bagSlot == 0 ? (byte)0xFF : (byte)(18 + bagSlot);
+            byte srcSlot = bagSlot == 0 ? (byte)(23 + slotId) : (byte)slotId;
+            // CMSG_AUTOEQUIP_ITEM: srcBag(1) + srcSlot(1) = 2 bytes
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_AUTOEQUIP_ITEM, [srcBag, srcSlot]);
         }
 
-        public void UnequipItem(EquipSlot slot)
-        {
-            throw new NotImplementedException();
-        }
+        public void UnequipItem(EquipSlot slot) { }
 
         public void AcceptResurrect()
         {
-            throw new NotImplementedException();
+            if (_woWClient == null) return;
+            using var ms = new MemoryStream();
+            using var w = new BinaryWriter(ms);
+            w.Write(0UL); // resurrectorGuid — 0 = spirit healer
+            w.Write((byte)1); // status = accept
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_RESURRECT_RESPONSE, ms.ToArray());
         }
 
         public IWoWPlayer PartyLeader => null;
@@ -2095,31 +2334,43 @@ namespace WoWSharpClient
 
         public ulong Party4Guid => 0;
 
-        public ulong StarTargetGuid => throw new NotImplementedException();
+        public ulong StarTargetGuid => 0;
 
-        public ulong CircleTargetGuid => throw new NotImplementedException();
+        public ulong CircleTargetGuid => 0;
 
-        public ulong DiamondTargetGuid => throw new NotImplementedException();
+        public ulong DiamondTargetGuid => 0;
 
-        public ulong TriangleTargetGuid => throw new NotImplementedException();
+        public ulong TriangleTargetGuid => 0;
 
-        public ulong MoonTargetGuid => throw new NotImplementedException();
+        public ulong MoonTargetGuid => 0;
 
-        public ulong SquareTargetGuid => throw new NotImplementedException();
+        public ulong SquareTargetGuid => 0;
 
-        public ulong CrossTargetGuid => throw new NotImplementedException();
+        public ulong CrossTargetGuid => 0;
 
-        public ulong SkullTargetGuid => throw new NotImplementedException();
+        public ulong SkullTargetGuid => 0;
 
-        public string GlueDialogText => throw new NotImplementedException();
+        public string GlueDialogText => string.Empty;
 
-        public LoginStates LoginState => throw new NotImplementedException();
+        public LoginStates LoginState => LoginStates.login;
 
         public void AntiAfk() { }
 
         public IWoWUnit GetTarget(IWoWUnit woWUnit)
         {
-            return null;
+            if (woWUnit == null) return null;
+            var targetGuid = woWUnit.TargetGuid;
+            if (targetGuid == 0) return null;
+
+            // Check if targeting the player
+            if (targetGuid == PlayerGuid.FullGuid)
+                return Player as IWoWUnit;
+
+            // Search objects list
+            lock (_objectsLock)
+            {
+                return _objects.OfType<IWoWUnit>().FirstOrDefault(u => u.Guid == targetGuid);
+            }
         }
 
         public sbyte GetTalentRank(uint tabIndex, uint talentIndex)
@@ -2134,6 +2385,17 @@ namespace WoWSharpClient
         public void EquipCursorItem() { }
 
         public void ConfirmItemEquip() { }
+
+        /// <summary>
+        /// Send MSG_MOVE_WORLDPORT_ACK to acknowledge a cross-map transfer.
+        /// Called when SMSG_TRANSFER_PENDING is received.
+        /// </summary>
+        public void SendWorldportAck()
+        {
+            if (_woWClient == null) return;
+            Serilog.Log.Information("[WorldportAck] Sending MSG_MOVE_WORLDPORT_ACK");
+            _ = _woWClient.SendMSGPackedAsync(Opcode.MSG_MOVE_WORLDPORT_ACK, []);
+        }
 
         public void SendChatMessage(string chatMessage)
         {
@@ -2218,17 +2480,28 @@ namespace WoWSharpClient
 
         public void DoEmote(Emote emote)
         {
-            throw new NotImplementedException();
+            if (_woWClient == null) return;
+            var packet = BitConverter.GetBytes((uint)emote);
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_EMOTE, packet);
         }
 
         public void DoEmote(TextEmote emote)
         {
-            throw new NotImplementedException();
+            if (_woWClient == null) return;
+            // CMSG_TEXT_EMOTE: uint32 textEmoteId + uint32 emoteNum + uint64 targetGuid
+            using var ms = new System.IO.MemoryStream();
+            using var w = new System.IO.BinaryWriter(ms);
+            w.Write((uint)emote);
+            w.Write(0u); // emoteNum
+            w.Write(0UL); // targetGuid (self)
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_TEXT_EMOTE, ms.ToArray());
         }
 
-        public uint GetManaCost(string healingTouch)
+        public uint GetManaCost(string spellName)
         {
-            throw new NotImplementedException();
+            // Spell cost data not available from server packets in vanilla 1.12.1
+            // Return 0 to indicate "can always attempt" — the server will reject if insufficient mana
+            return 0;
         }
 
         public void MoveToward(Position pos)
@@ -2274,19 +2547,21 @@ namespace WoWSharpClient
             _movementController?.SetPath(path);
         }
 
-        public void RefreshSkills()
-        {
-            throw new NotImplementedException();
-        }
+        public void RefreshSkills() { }
 
-        public void RefreshSpells()
+        public void RefreshSpells() { }
+
+        public void ReleaseSpirit()
         {
-            throw new NotImplementedException();
+            if (_woWClient == null) return;
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_REPOP_REQUEST, []);
         }
 
         public void RetrieveCorpse()
         {
-            throw new NotImplementedException();
+            if (_woWClient == null || Player == null) return;
+            var payload = BitConverter.GetBytes(Player.Guid);
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_RECLAIM_CORPSE, payload);
         }
 
         public void SetTarget(ulong guid)

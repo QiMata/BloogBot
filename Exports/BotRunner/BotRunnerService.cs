@@ -23,16 +23,33 @@ namespace BotRunner
 
         private readonly CharacterStateUpdateClient _characterStateUpdateClient;
         private readonly ILootingService _lootingService;
+        private readonly IVendorService? _vendorService;
+        private readonly ITrainerService? _trainerService;
+        private readonly ITalentService? _talentService;
+        private readonly IEquipmentService? _equipmentService;
+        private readonly IFlightMasterService? _flightMasterService;
+        private readonly IMailCollectionService? _mailCollectionService;
+        private readonly IBankingService? _bankingService;
+        private readonly IAuctionHouseService? _auctionHouseService;
+        private readonly ICraftingService? _craftingService;
         private readonly IDependencyContainer _container;
         private readonly Func<IAgentFactory?>? _agentFactoryAccessor;
+        private readonly Constants.BotBehaviorConfig _behaviorConfig;
 
         private WoWActivitySnapshot _activitySnapshot;
+        private int _lastLoggedContainedItems = -1;
+        private int _lastLoggedItemObjects = -1;
 
         private Task? _asyncBotTaskRunnerTask;
         private CancellationTokenSource? _cts;
 
         private IBehaviourTreeNode? _behaviorTree;
         private BehaviourTreeStatus _behaviorTreeStatus = BehaviourTreeStatus.Success;
+
+        // Spell-cast lockout: prevents movement actions from interrupting active spell casts.
+        // Channeled spells like fishing need time to complete without being overridden by GoTo.
+        private DateTime _spellCastLockoutUntil = DateTime.MinValue;
+        private const double SpellCastLockoutSeconds = 20.0;
 
         private readonly Stack<IBotTask> _botTasks = new();
         private bool _tasksInitialized;
@@ -42,7 +59,17 @@ namespace BotRunner
                                  ILootingService lootingService,
                                  IDependencyContainer container,
                                  Func<IAgentFactory?>? agentFactoryAccessor = null,
-                                 string? accountName = null)
+                                 string? accountName = null,
+                                 IVendorService? vendorService = null,
+                                 ITrainerService? trainerService = null,
+                                 ITalentService? talentService = null,
+                                 IEquipmentService? equipmentService = null,
+                                 IFlightMasterService? flightMasterService = null,
+                                 IMailCollectionService? mailCollectionService = null,
+                                 IBankingService? bankingService = null,
+                                 IAuctionHouseService? auctionHouseService = null,
+                                 ICraftingService? craftingService = null,
+                                 Constants.BotBehaviorConfig? behaviorConfig = null)
         {
             _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
             _activitySnapshot = new() { AccountName = accountName ?? "?" };
@@ -50,7 +77,17 @@ namespace BotRunner
 
             _characterStateUpdateClient = characterStateUpdateClient ?? throw new ArgumentNullException(nameof(characterStateUpdateClient));
             _lootingService = lootingService ?? throw new ArgumentNullException(nameof(lootingService));
+            _vendorService = vendorService;
+            _trainerService = trainerService;
+            _talentService = talentService;
+            _equipmentService = equipmentService;
+            _flightMasterService = flightMasterService;
+            _mailCollectionService = mailCollectionService;
+            _bankingService = bankingService;
+            _auctionHouseService = auctionHouseService;
+            _craftingService = craftingService;
             _container = container ?? throw new ArgumentNullException(nameof(container));
+            _behaviorConfig = behaviorConfig ?? new Constants.BotBehaviorConfig();
         }
 
         public void Start()
@@ -122,10 +159,25 @@ namespace BotRunner
                 && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait)
             {
                 var action = incomingActivityMemberState.CurrentAction;
+
+                // Spell-cast lockout: don't let movement actions interrupt active spell casts.
+                // Channeled spells (fishing, etc.) need time to complete.
+                if (action.ActionType == Communication.ActionType.Goto
+                    && DateTime.UtcNow < _spellCastLockoutUntil)
+                {
+                    return;
+                }
+
                 Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ActionType} ({(int)action.ActionType})");
                 var actionList = ConvertActionMessageToCharacterActions(action);
                 if (actionList.Count > 0)
                 {
+                    // Set lockout when casting a spell
+                    if (action.ActionType == Communication.ActionType.CastSpell)
+                    {
+                        _spellCastLockoutUntil = DateTime.UtcNow.AddSeconds(SpellCastLockoutSeconds);
+                    }
+
                     Log.Information($"[BOT RUNNER] Building behavior tree for: {actionList[0].Item1}");
                     _behaviorTree = BuildBehaviorTreeFromActions(actionList);
                     _behaviorTreeStatus = BehaviourTreeStatus.Running;
@@ -228,17 +280,17 @@ namespace BotRunner
                 return;
             }
 
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig);
 
             try
             {
                 var classCode = accountName.Substring(2, 2);
                 var @class = WoWNameGenerator.ParseClassCode(classCode);
 
-                // All classes use unified GrindTask — class-specific behavior comes from
-                // the ClassContainer's task factories (rest, buff, pull, combat rotation).
+                // IdleTask sits at the bottom of the stack — all behavior is
+                // directed by StateManager via ActionMessage IPC.
                 // Push tasks in reverse order (stack is LIFO)
-                _botTasks.Push(new Tasks.GrindTask(context, _lootingService));
+                _botTasks.Push(new Tasks.IdleTask(context));
                 _botTasks.Push(new Tasks.WaitTask(context, 3000));
                 _botTasks.Push(new Tasks.TeleportTask(context, "valleyoftrials"));
                 Log.Information("[BOT RUNNER] Initialized {Class} task sequence for {Account} using {Profile}",
@@ -313,6 +365,13 @@ namespace BotRunner
             Communication.ActionType.CreateCharacter => CharacterAction.CreateCharacter,
             Communication.ActionType.DeleteCharacter => CharacterAction.DeleteCharacter,
             Communication.ActionType.EnterWorld => CharacterAction.EnterWorld,
+            Communication.ActionType.LootCorpse => CharacterAction.LootCorpse,
+            Communication.ActionType.ReleaseCorpse => CharacterAction.ReleaseCorpse,
+            Communication.ActionType.RetrieveCorpse => CharacterAction.RetrieveCorpse,
+            Communication.ActionType.SkinCorpse => CharacterAction.SkinCorpse,
+            Communication.ActionType.GatherNode => CharacterAction.GatherNode,
+            Communication.ActionType.SendChat => CharacterAction.SendChat,
+            Communication.ActionType.SetFacing => CharacterAction.SetFacing,
             _ => null,
         };
 
@@ -352,11 +411,13 @@ namespace BotRunner
             return result;
         }
 
-        private sealed class BotRunnerContext(IObjectManager objectManager, Stack<IBotTask> tasks, IDependencyContainer container) : IBotContext
+        private sealed class BotRunnerContext(IObjectManager objectManager, Stack<IBotTask> tasks, IDependencyContainer container, Constants.BotBehaviorConfig config) : IBotContext
         {
             public IObjectManager ObjectManager => objectManager;
             public Stack<IBotTask> BotTasks => tasks;
             public IDependencyContainer Container => container;
+            public Constants.BotBehaviorConfig Config => config;
+            public IWoWEventHandler EventHandler => objectManager.EventHandler;
         }
 
         /// <summary>
@@ -496,7 +557,8 @@ namespace BotRunner
                         builder.Splice(StopAttackSequence);
                         break;
                     case CharacterAction.CastSpell:
-                        builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], UnboxGuid(actionEntry.Item2[1])));
+                        var castTargetGuid = actionEntry.Item2.Count > 1 ? UnboxGuid(actionEntry.Item2[1]) : 0UL;
+                        builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], castTargetGuid));
                         break;
                     case CharacterAction.StopCast:
                         builder.Splice(StopCastSequence);
@@ -506,7 +568,12 @@ namespace BotRunner
                         builder.Splice(BuildUseItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (ulong)actionEntry.Item2[2]));
                         break;
                     case CharacterAction.EquipItem:
-                        builder.Splice(BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (EquipSlot)actionEntry.Item2[2]));
+                        if (actionEntry.Item2.Count >= 3)
+                            builder.Splice(BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (EquipSlot)actionEntry.Item2[2]));
+                        else if (actionEntry.Item2.Count >= 2)
+                            builder.Splice(BuildEquipItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                        else
+                            builder.Splice(BuildEquipItemByIdSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.UnequipItem:
                         builder.Splice(BuildUnequipItemSequence((EquipSlot)actionEntry.Item2[0]));
@@ -567,6 +634,26 @@ namespace BotRunner
                         break;
                     case CharacterAction.EnterWorld:
                         builder.Splice(BuildEnterWorldSequence((ulong)actionEntry.Item2[0]));
+                        break;
+
+                    case CharacterAction.SendChat:
+                        var chatMsg = (string)actionEntry.Item2[0];
+                        builder.Do($"Send Chat: {chatMsg}", time =>
+                        {
+                            Log.Information($"[BOT RUNNER] Sending chat message: {chatMsg}");
+                            _objectManager.SendChatMessage(chatMsg);
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+
+                    case CharacterAction.SetFacing:
+                        var facingAngle = (float)actionEntry.Item2[0];
+                        builder.Do($"Set Facing: {facingAngle:F2}", time =>
+                        {
+                            Log.Information("[BOT RUNNER] Setting facing to {Facing:F2} rad", facingAngle);
+                            _objectManager.SetFacing(facingAngle);
+                            return BehaviourTreeStatus.Success;
+                        });
                         break;
 
                     default:
@@ -1448,6 +1535,54 @@ namespace BotRunner
         /// <param name="bag">The bag where the item is located.</param>
         /// <param name="slot">The slot in the bag where the item is located.</param>
         /// <returns>IBehaviourTreeNode that manages equipping the item.</returns>
+        private IBehaviourTreeNode BuildEquipItemByIdSequence(int itemId)
+        {
+            var allItems = _objectManager.GetContainedItems().ToList();
+            var allObjects = _objectManager.Objects.ToList();
+            var objectsByType = allObjects.GroupBy(o => o.ObjectType)
+                .Select(g => $"{g.Key}={g.Count()}")
+                .ToList();
+            Log.Information("[BOT RUNNER] BuildEquipItemByIdSequence: itemId={ItemId}, containedItems={Count}, itemIds=[{Items}], totalObjects={Total}, byType=[{Types}]",
+                itemId, allItems.Count, string.Join(",", allItems.Select(i => i.ItemId)),
+                allObjects.Count, string.Join(",", objectsByType));
+            return new BehaviourTreeBuilder()
+                .Sequence("Equip Item By ID")
+                    .Do("Find and Equip Item", time =>
+                    {
+                        // Fast path: find item by ID in tracked inventory
+                        foreach (var item in _objectManager.GetContainedItems())
+                        {
+                            if (item.ItemId == (uint)itemId)
+                            {
+                                for (int bag = 0; bag <= 4; bag++)
+                                {
+                                    int maxSlot = bag == 0 ? 16 : 36;
+                                    for (int slot = 0; slot < maxSlot; slot++)
+                                    {
+                                        var contained = _objectManager.GetContainedItem(bag, slot);
+                                        if (contained != null && contained.ItemId == (uint)itemId)
+                                        {
+                                            Log.Information("[BOT RUNNER] Found item {ItemId} at bag={Bag}, slot={Slot}. Equipping.", itemId, bag, slot);
+                                            _objectManager.EquipItem(bag, slot);
+                                            return BehaviourTreeStatus.Success;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Fallback: item not tracked in ObjectManager (e.g., added via GM command).
+                        // Send CMSG_AUTOEQUIP_ITEM for all 16 backpack slots. The server will
+                        // equip valid items and ignore empty/non-equippable slots.
+                        Log.Warning("[BOT RUNNER] Item {ItemId} not found in tracked inventory. Trying brute-force equip for all backpack slots.", itemId);
+                        for (int slot = 0; slot < 16; slot++)
+                            _objectManager.EquipItem(0, slot);
+                        return BehaviourTreeStatus.Success;
+                    })
+                .End()
+                .Build();
+        }
+
         private IBehaviourTreeNode BuildEquipItemSequence(int bag, int slot) => new BehaviourTreeBuilder()
             .Sequence("Equip Item Sequence")
                 // Ensure the bot has the item to equip
@@ -1861,6 +1996,70 @@ namespace BotRunner
                 Log.Warning($"[BOT RUNNER] Error populating spell list: {ex.Message}");
             }
 
+            // Equipment slots (inventory map: slot 0-18 → 64-bit GUID)
+            // WoWPlayer.Inventory stores GUID pairs: [slot*2]=LOW, [slot*2+1]=HIGH
+            try
+            {
+                if (_activitySnapshot.Player != null && player is GameData.Core.Interfaces.IWoWPlayer wp)
+                {
+                    _activitySnapshot.Player.Inventory.Clear();
+                    int nonZeroCount = 0;
+                    for (uint slot = 0; slot < 19; slot++)
+                    {
+                        uint lowIdx = slot * 2;
+                        uint highIdx = slot * 2 + 1;
+                        if (highIdx < (uint)wp.Inventory.Length)
+                        {
+                            ulong guid = ((ulong)wp.Inventory[highIdx] << 32) | wp.Inventory[lowIdx];
+                            if (guid != 0)
+                            {
+                                _activitySnapshot.Player.Inventory[slot] = guid;
+                                nonZeroCount++;
+                            }
+                        }
+                    }
+                    if (nonZeroCount > 0)
+                        Log.Information("[BOT RUNNER] Equipment: {Count} slots occupied (Inventory[].Length={Len})", nonZeroCount, wp.Inventory.Length);
+                }
+                else
+                {
+                    Log.Warning("[BOT RUNNER] Equipment skipped: Player={HasPlayer}, IsIWoWPlayer={IsType}",
+                        _activitySnapshot.Player != null, player is GameData.Core.Interfaces.IWoWPlayer);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating equipment inventory: {ex.Message}");
+            }
+
+            // Inventory items (bagContents map: sequential index → itemId)
+            try
+            {
+                if (_activitySnapshot.Player != null)
+                {
+                    _activitySnapshot.Player.BagContents.Clear();
+                    uint slotIndex = 0;
+                    foreach (var item in _objectManager.GetContainedItems())
+                    {
+                        _activitySnapshot.Player.BagContents[slotIndex++] = item.ItemId;
+                    }
+
+                    // Diagnostic: log item counts when they change
+                    var itemObjectCount = _objectManager.Objects.Count(o => o.ObjectType == GameData.Core.Enums.WoWObjectType.Item);
+                    if (slotIndex != _lastLoggedContainedItems || itemObjectCount != _lastLoggedItemObjects)
+                    {
+                        _lastLoggedContainedItems = (int)slotIndex;
+                        _lastLoggedItemObjects = itemObjectCount;
+                        Log.Information("[BOT RUNNER] Inventory changed: {ContainedItems} contained items, {ItemObjects} item objects in OM",
+                            slotIndex, itemObjectCount);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error populating inventory: {ex.Message}");
+            }
+
             // Nearby units (within 40y)
             try
             {
@@ -1986,6 +2185,11 @@ namespace BotRunner
                     ObjectType = (uint)go.ObjectType,
                     Facing = go.Facing,
                 },
+                DisplayId = go.DisplayId,
+                GoState = (uint)go.GoState,
+                GameObjectType = go.TypeId,
+                Flags = go.Flags,
+                Level = go.Level,
             };
 
             if (pos != null)

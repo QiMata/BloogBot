@@ -1,6 +1,0 @@
-dataRoot='E:\repos\BloogBot\Bot\Debug\net8.0/'
-cwd='e:\repos\BloogBot\Bot\Debug\x64'
-candidate[0]='E:\repos\BloogBot\Bot\Debug\net8.0/vmaps/' exists=1
-candidate[1]='vmaps/' exists=0
-candidate[2]='Data/vmaps/' exists=0
-candidate[3]='../Data/vmaps/' exists=0

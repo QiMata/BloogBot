@@ -9,7 +9,23 @@ message AsyncRequest {
     oneof parameter {
         WoWActivitySnapshot activity_snapshot = 2;
         StateChangeRequest state_change = 3;
+        SnapshotQueryRequest snapshot_query = 4;
+        ActionForwardRequest action_forward = 5;
     }
+}
+
+// Request current activity snapshots from StateManager.
+// If account_name is empty, returns snapshots for ALL connected bots.
+// If account_name is set, returns snapshot for that specific bot only.
+message SnapshotQueryRequest {
+    string account_name = 1;
+}
+
+// Forward an ActionMessage to a specific bot via StateManager.
+// StateManager routes the action to the bot identified by account_name.
+message ActionForwardRequest {
+    string account_name = 1;
+    ActionMessage action = 2;
 }
 
 message ActionMessage {
@@ -76,6 +92,13 @@ enum ActionType {
     CREATE_CHARACTER = 54;
     DELETE_CHARACTER = 55;
     ENTER_WORLD = 56;
+    LOOT_CORPSE = 57;
+    RELEASE_CORPSE = 58;
+    RETRIEVE_CORPSE = 59;
+    SKIN_CORPSE = 60;
+    GATHER_NODE = 61;
+    SEND_CHAT = 62;
+    SET_FACING = 63;
 }
 
 message ActionMap {
@@ -89,6 +112,7 @@ message StateChangeRequest {
 
 message StateChangeResponse {
     ResponseResult response = 1;
+    repeated WoWActivitySnapshot snapshots = 2;  // Populated by SnapshotQueryRequest responses
 }
 
 enum BotRunnerType {

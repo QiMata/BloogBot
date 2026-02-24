@@ -1,5 +1,0 @@
-[MapLoad] map=229 vmapMgr=0000021D026512B0 isInit=0
-[MapLoad] map=229 vmapMgr=0000021D026512B0 isInit=0
-[MapLoad] map=229 vmapMgr=0000021D026512B0 isInit=0
-[MapLoad] map=229 vmapMgr=0000021D026512B0 isInit=0
-[MapLoad] map=229 vmapMgr=0000021D026512B0 isInit=0

@@ -1,4 +1,0 @@
-[initMap] map=229 basePath='E:\repos\BloogBot\Bot\Debug\net8.0/vmaps/' file='229.vmtree' fullPath='E:\repos\BloogBot\Bot\Debug\net8.0/vmaps/229.vmtree' exists=1
-[initMap] map=1 basePath='E:\repos\BloogBot\Bot\Debug\net8.0/vmaps/' file='001.vmtree' fullPath='E:\repos\BloogBot\Bot\Debug\net8.0/vmaps/001.vmtree' exists=1
-[initMap] map=0 basePath='E:\repos\BloogBot\Bot\Debug\net8.0/vmaps/' file='000.vmtree' fullPath='E:\repos\BloogBot\Bot\Debug\net8.0/vmaps/000.vmtree' exists=1
-[initMap] map=0 InitMap=1 fileSize=2659301

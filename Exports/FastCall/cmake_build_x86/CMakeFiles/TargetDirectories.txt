@@ -1,3 +1,0 @@
-E:/repos/BloogBot/Exports/FastCall/cmake_build_x86/CMakeFiles/FastCall.dir
-E:/repos/BloogBot/Exports/FastCall/cmake_build_x86/CMakeFiles/ALL_BUILD.dir
-E:/repos/BloogBot/Exports/FastCall/cmake_build_x86/CMakeFiles/ZERO_CHECK.dir
