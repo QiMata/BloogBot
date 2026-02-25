@@ -70,3 +70,20 @@ Track native physics/pathfinding tasks for WoW 1.12.1 behavior parity.
 
 ## Archive
 Move completed items to `Exports/Navigation/TASKS_ARCHIVE.md`.
+
+## Behavior Cards
+1. AirTeleportFallRecovery
+- [ ] Behavior: after airborne teleport/spawn, BG transitions into gravity/fall states like FG instead of hovering or plateauing.
+- [ ] FG Baseline: FG trace shows immediate vertical velocity integration, falling state, and landing transition after air teleport.
+- [ ] BG Target: BG frame-by-frame vertical position/velocity and fall flags closely track FG for the same scenario.
+- [ ] Implementation Targets: `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/PhysicsMovement.cpp`, `Exports/Navigation/PhysicsThreePass.cpp`, `Exports/Navigation/PathFinder.cpp`.
+- [ ] Simple Command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementControllerPhysicsTests|FullyQualifiedName~FrameByFramePhysicsTests" --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: no hover/no-fall regressions in calibration tests, pre/post interpolation deltas show improvement, and movement-affecting failures produce linked research + implementation tasks.
+- [ ] If Fails: add `Research:AirTeleportFallMismatch::<trace-segment>` and `Implement:PhysicsInterpolationFix::<function>` tasks with trace artifacts.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

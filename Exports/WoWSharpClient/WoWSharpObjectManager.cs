@@ -150,7 +150,6 @@ namespace WoWSharpClient
         {
             _isInControl = true;
             _isBeingTeleported = false;
-            ResetMovementStateForTeleport("client-control-update");
 
             Log.Information("[OnClientControlUpdate] pos=({X:F1},{Y:F1},{Z:F1}) — server confirmed teleport complete",
                 Player.Position.X, Player.Position.Y, Player.Position.Z);
@@ -2647,12 +2646,11 @@ namespace WoWSharpClient
             StopMovement(ControlBits.Back | ControlBits.StrafeLeft | ControlBits.StrafeRight);
             StartMovement(ControlBits.Front);
 
-            // Refresh waypoint when target changes; otherwise corpse-run can keep driving a stale blocked point.
+            // Always refresh the waypoint so path-driven callers can steer every tick.
+            // A large refresh threshold can leave movement locked to an old heading into walls.
             if (_movementController != null)
             {
-                var currentWaypoint = _movementController.CurrentWaypoint;
-                if (currentWaypoint == null || currentWaypoint.DistanceTo(pos) > 1f)
-                    _movementController.SetTargetWaypoint(pos);
+                _movementController.SetTargetWaypoint(pos);
             }
         }
 
@@ -2670,12 +2668,11 @@ namespace WoWSharpClient
             player.MovementFlags &= ~(MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
             player.MovementFlags |= MovementFlags.MOVEFLAG_FORWARD;
 
-            // Refresh waypoint when target changes; otherwise corpse-run can keep driving a stale blocked point.
+            // Always refresh the waypoint so path-driven callers can steer every tick.
+            // A large refresh threshold can leave movement locked to an old heading into walls.
             if (_movementController != null)
             {
-                var currentWaypoint = _movementController.CurrentWaypoint;
-                if (currentWaypoint == null || currentWaypoint.DistanceTo(position) > 1f)
-                    _movementController.SetTargetWaypoint(position);
+                _movementController.SetTargetWaypoint(position);
             }
         }
 

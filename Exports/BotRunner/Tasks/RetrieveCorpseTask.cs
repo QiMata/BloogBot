@@ -17,34 +17,34 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private const uint StandStateMask = 0xFF;
     private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
-    private readonly NavigationPath _navPath = new(botContext.Container.PathfindingClient);
+    // Corpse runback must follow the full service path exactly.
+    // Disable probe heuristics/pruning so corners are not skipped into walls.
+    private readonly NavigationPath _navPath = new(
+        botContext.Container.PathfindingClient,
+        enableProbeHeuristics: false,
+        enableDynamicProbeSkipping: false,
+        strictPathValidation: true);
     private DateTime _startTime = DateTime.UtcNow;
     private DateTime _lastReclaimAttempt = DateTime.MinValue;
     private DateTime _lastCooldownLog = DateTime.MinValue;
     private DateTime? _noPathSinceUtc;
-    private float? _bestNoPathDistance2D;
+    private DateTime _lastNoPathRecoveryKickUtc = DateTime.MinValue;
     private bool _loggedPathfindingMode;
     private DateTime? _nonGhostSinceUtc;
-    private DateTime _lastProbeAttemptUtc = DateTime.MinValue;
-    private Position? _cachedProbeWaypoint;
-    private DateTime _cachedProbeWaypointExpiresUtc = DateTime.MinValue;
     private Position? _lastRunbackPosition;
     private DateTime _lastRunbackSampleUtc = DateTime.MinValue;
     private DateTime _lastRunbackRecoveryUtc = DateTime.MinValue;
-    private DateTime _preferProbeRoutingUntilUtc = DateTime.MinValue;
     private DateTime _lastWaypointDriveLogUtc = DateTime.MinValue;
-    private DateTime _unstickManeuverUntilUtc = DateTime.MinValue;
-    private DateTime _lastUnstickLogUtc = DateTime.MinValue;
-    private DateTime _lastDetourLogUtc = DateTime.MinValue;
-    private ControlBits _unstickControlBits = ControlBits.Nothing;
     private int _runbackNoDisplacementTicks;
     private int _runbackStaleForwardTicks;
     private int _runbackRecoveryCount;
+    private float _bestRunbackCorpseDistance2D = float.MaxValue;
+    private DateTime _lastRunbackProgressUtc = DateTime.MinValue;
+    private Position? _trackedRunbackWaypoint;
+    private float _bestRunbackWaypointDistance = float.MaxValue;
+    private DateTime _lastRunbackWaypointProgressUtc = DateTime.MinValue;
     private Position? _lastDrivenWaypoint;
-    private Position? _blockedWaypoint;
-    private DateTime _blockedWaypointExpiresUtc = DateTime.MinValue;
-    private Position? _detourTarget;
-    private DateTime _detourUntilUtc = DateTime.MinValue;
+    private DateTime _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
 
     // Vanilla corpse reclaim interaction radius is roughly 39 yards.
     // Staying at 5y causes long ghost stalls when the graveyard drop is already within reclaim range.
@@ -53,38 +53,24 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private static readonly TimeSpan NoPathTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ReclaimRetryInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan CooldownLogInterval = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan ProbeInterval = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan ProbeWaypointTtl = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RunbackSampleInterval = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan RunbackRecoveryInterval = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan PreferProbeRoutingDuration = TimeSpan.FromSeconds(8);
-    private static readonly TimeSpan UnstickManeuverDuration = TimeSpan.FromMilliseconds(900);
-    private static readonly TimeSpan BlockedWaypointDuration = TimeSpan.FromSeconds(8);
-    private static readonly TimeSpan RunbackDetourDuration = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan RunbackRecoveryHold = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan RunbackProgressTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan RunbackWaypointProgressTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan NoPathRecoveryInterval = TimeSpan.FromSeconds(4);
     private const float MaxCorpseZDeltaForNavigation = 120f;
     private const float MovementStepThreshold = 0.2f;
+    private const float RunbackProgressImprovementThreshold = 2f;
+    private const float RunbackWaypointProgressImprovementThreshold = 0.75f;
+    private const float RunbackWaypointIdentityRadius = 2f;
+    private const float RunbackWaypointIdentityZTolerance = 4f;
     private const float NearWaypointThreshold = 1.5f;
-    private const float MinimumDriveWaypointDistance = 6f;
-    private const float BlockedWaypointRadius = 2.5f;
-    private const float BlockedWaypointZTolerance = 6f;
-    private const float RunbackDetourDistance = 18f;
-    private const float RunbackDetourReachDistance = 4f;
+    private const float MinimumDriveWaypointDistance = 3f;
     private const int RunbackNoDisplacementThreshold = 8;
+    private const int RunbackNoIntentDisplacementThreshold = 12;
     private const int RunbackStaleForwardThreshold = 6;
     private const int MaxRunbackRecoveryAttempts = 8;
-    private static readonly (float X, float Y)[] StartProbeOffsets =
-    [
-        (0f, 0f),
-        (2f, 0f), (-2f, 0f), (0f, 2f), (0f, -2f),
-        (4f, 4f), (-4f, 4f), (4f, -4f), (-4f, -4f),
-        (6f, 0f), (-6f, 0f), (0f, 6f), (0f, -6f),
-    ];
-    private static readonly (float X, float Y)[] CorpseApproachOffsets =
-    [
-        (5f, 0f), (-5f, 0f), (0f, 5f), (0f, -5f),
-        (10f, 0f), (-10f, 0f), (0f, 10f), (0f, -10f),
-        (7f, 7f), (-7f, 7f), (7f, -7f), (-7f, -7f),
-    ];
 
     private static bool HasGhostFlag(IWoWLocalPlayer player)
     {
@@ -152,153 +138,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         return new Position(corpsePosition.X, corpsePosition.Y, currentPosition.Z);
     }
 
-    private static bool IsWaypointApproximatelyEqual(Position a, Position b)
-        => a.DistanceTo2D(b) <= BlockedWaypointRadius && MathF.Abs(a.Z - b.Z) <= BlockedWaypointZTolerance;
-
-    private bool IsBlockedWaypoint(Position waypoint)
-        => _blockedWaypoint != null
-            && DateTime.UtcNow <= _blockedWaypointExpiresUtc
-            && IsWaypointApproximatelyEqual(waypoint, _blockedWaypoint);
-
     private void TrackDrivenWaypoint(Position waypoint)
         => _lastDrivenWaypoint = CopyPosition(waypoint);
-
-    private void ClearRunbackDetour()
-    {
-        _detourTarget = null;
-        _detourUntilUtc = DateTime.MinValue;
-    }
-
-    private Position ResolveRunbackNavigationTarget(Position currentPosition, Position corpseNavTarget)
-    {
-        if (_detourTarget == null)
-            return corpseNavTarget;
-
-        if (DateTime.UtcNow > _detourUntilUtc)
-        {
-            ClearRunbackDetour();
-            return corpseNavTarget;
-        }
-
-        var detourDistance2D = currentPosition.DistanceTo2D(_detourTarget);
-        if (detourDistance2D <= RunbackDetourReachDistance)
-        {
-            ClearRunbackDetour();
-            return corpseNavTarget;
-        }
-
-        if (DateTime.UtcNow - _lastDetourLogUtc >= TimeSpan.FromSeconds(2))
-        {
-            Log.Information("[RETRIEVE_CORPSE] Detour active toward ({X:F1}, {Y:F1}, {Z:F1}) detourDist={DetourDist:F1}",
-                _detourTarget.X, _detourTarget.Y, _detourTarget.Z, detourDistance2D);
-            _lastDetourLogUtc = DateTime.UtcNow;
-        }
-
-        return _detourTarget;
-    }
-
-    private void ScheduleRunbackDetour(Position currentPosition, Position corpseNavTarget, DateTime now)
-    {
-        var angleToCorpse = MathF.Atan2(corpseNavTarget.Y - currentPosition.Y, corpseNavTarget.X - currentPosition.X);
-        var side = (_runbackRecoveryCount % 2 == 0) ? 1f : -1f;
-        var detourAngle = angleToCorpse + side * (MathF.PI / 2f);
-        _detourTarget = new Position(
-            currentPosition.X + MathF.Cos(detourAngle) * RunbackDetourDistance,
-            currentPosition.Y + MathF.Sin(detourAngle) * RunbackDetourDistance,
-            currentPosition.Z);
-        _detourUntilUtc = now + RunbackDetourDuration;
-        _lastDetourLogUtc = DateTime.MinValue;
-    }
-
-    private bool TryGetOffsetApproachWaypoint(
-        Position currentPosition,
-        Position corpseNavTarget,
-        uint mapId,
-        out Position? waypoint,
-        out Position? probeStart,
-        out Position? probeTarget,
-        out bool fromCache)
-    {
-        waypoint = null;
-        probeStart = null;
-        probeTarget = null;
-        fromCache = false;
-
-        // Keep moving toward a recently discovered probe waypoint between expensive probe rounds.
-        if (_cachedProbeWaypoint != null
-            && DateTime.UtcNow <= _cachedProbeWaypointExpiresUtc
-            && !IsBlockedWaypoint(_cachedProbeWaypoint)
-            && currentPosition.DistanceTo(_cachedProbeWaypoint) > 2f)
-        {
-            waypoint = _cachedProbeWaypoint;
-            fromCache = true;
-            return true;
-        }
-
-        if (DateTime.UtcNow - _lastProbeAttemptUtc < ProbeInterval)
-            return false;
-
-        _lastProbeAttemptUtc = DateTime.UtcNow;
-
-        foreach (var (startOffsetX, startOffsetY) in StartProbeOffsets)
-        {
-            var adjustedStart = new Position(
-                currentPosition.X + startOffsetX,
-                currentPosition.Y + startOffsetY,
-                currentPosition.Z);
-
-            // Try direct corpse target first.
-            {
-                var directProbePath = new NavigationPath(Container.PathfindingClient);
-                var directWaypoint = directProbePath.GetNextWaypoint(
-                    adjustedStart,
-                    corpseNavTarget,
-                    mapId,
-                    allowDirectFallback: false,
-                    minWaypointDistance: MinimumDriveWaypointDistance);
-                if (directWaypoint != null && !IsBlockedWaypoint(directWaypoint))
-                {
-                    _cachedProbeWaypoint = directWaypoint;
-                    _cachedProbeWaypointExpiresUtc = DateTime.UtcNow + ProbeWaypointTtl;
-                    waypoint = directWaypoint;
-                    probeStart = adjustedStart;
-                    probeTarget = corpseNavTarget;
-                    return true;
-                }
-            }
-
-            foreach (var (targetOffsetX, targetOffsetY) in CorpseApproachOffsets)
-            {
-                var approachTarget = new Position(
-                    corpseNavTarget.X + targetOffsetX,
-                    corpseNavTarget.Y + targetOffsetY,
-                    corpseNavTarget.Z);
-
-                // Use a fresh path object for probing so internal path-calc cooldown on the
-                // main corpse path does not block alternate target attempts.
-                var probePath = new NavigationPath(Container.PathfindingClient);
-                var offsetWaypoint = probePath.GetNextWaypoint(
-                    adjustedStart,
-                    approachTarget,
-                    mapId,
-                    allowDirectFallback: false,
-                    minWaypointDistance: MinimumDriveWaypointDistance);
-                if (offsetWaypoint != null && !IsBlockedWaypoint(offsetWaypoint))
-                {
-                    _cachedProbeWaypoint = offsetWaypoint;
-                    _cachedProbeWaypointExpiresUtc = DateTime.UtcNow + ProbeWaypointTtl;
-                    waypoint = offsetWaypoint;
-                    probeStart = adjustedStart;
-                    probeTarget = approachTarget;
-                    return true;
-                }
-            }
-        }
-
-        _cachedProbeWaypoint = null;
-        _cachedProbeWaypointExpiresUtc = DateTime.MinValue;
-        return false;
-    }
 
     private void ResetRunbackStallTracking(Position position)
     {
@@ -308,21 +149,79 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         _runbackStaleForwardTicks = 0;
     }
 
-    private bool ShouldRecoverRunbackStall(IWoWLocalPlayer player, out string reason)
+    private void ResetRunbackProgressTracking(float corpseHorizontalDistance)
+    {
+        _bestRunbackCorpseDistance2D = corpseHorizontalDistance;
+        _lastRunbackProgressUtc = DateTime.UtcNow;
+    }
+
+    private void TrackRunbackProgress(float corpseHorizontalDistance, DateTime now)
+    {
+        if (_lastRunbackProgressUtc == DateTime.MinValue || _bestRunbackCorpseDistance2D == float.MaxValue)
+        {
+            _bestRunbackCorpseDistance2D = corpseHorizontalDistance;
+            _lastRunbackProgressUtc = now;
+            return;
+        }
+
+        if (corpseHorizontalDistance + RunbackProgressImprovementThreshold < _bestRunbackCorpseDistance2D)
+        {
+            _bestRunbackCorpseDistance2D = corpseHorizontalDistance;
+            _lastRunbackProgressUtc = now;
+        }
+    }
+
+    private void ResetWaypointProgressTracking()
+    {
+        _trackedRunbackWaypoint = null;
+        _bestRunbackWaypointDistance = float.MaxValue;
+        _lastRunbackWaypointProgressUtc = DateTime.MinValue;
+    }
+
+    private static bool IsSameRunbackWaypoint(Position a, Position b)
+        => a.DistanceTo2D(b) <= RunbackWaypointIdentityRadius
+            && MathF.Abs(a.Z - b.Z) <= RunbackWaypointIdentityZTolerance;
+
+    private void TrackRunbackWaypointProgress(Position currentPosition, Position activeWaypoint, DateTime now)
+    {
+        var waypointDistance = currentPosition.DistanceTo(activeWaypoint);
+        if (_trackedRunbackWaypoint == null || !IsSameRunbackWaypoint(_trackedRunbackWaypoint, activeWaypoint))
+        {
+            _trackedRunbackWaypoint = CopyPosition(activeWaypoint);
+            _bestRunbackWaypointDistance = waypointDistance;
+            _lastRunbackWaypointProgressUtc = now;
+            return;
+        }
+
+        if (_lastRunbackWaypointProgressUtc == DateTime.MinValue || _bestRunbackWaypointDistance == float.MaxValue)
+        {
+            _bestRunbackWaypointDistance = waypointDistance;
+            _lastRunbackWaypointProgressUtc = now;
+            return;
+        }
+
+        if (waypointDistance + RunbackWaypointProgressImprovementThreshold < _bestRunbackWaypointDistance)
+        {
+            _bestRunbackWaypointDistance = waypointDistance;
+            _lastRunbackWaypointProgressUtc = now;
+        }
+    }
+
+    private bool ShouldRecoverRunbackStall(IWoWLocalPlayer player, float corpseHorizontalDistance, Position? activeWaypoint, out string reason)
     {
         reason = string.Empty;
         var now = DateTime.UtcNow;
 
-        // A recovery maneuver is already active; do not immediately trigger another one.
-        if (_unstickControlBits != ControlBits.Nothing && now < _unstickManeuverUntilUtc)
-        {
-            ResetRunbackStallTracking(player.Position);
-            return false;
-        }
+        TrackRunbackProgress(corpseHorizontalDistance, now);
+        if (activeWaypoint != null)
+            TrackRunbackWaypointProgress(player.Position, activeWaypoint, now);
+        else
+            ResetWaypointProgressTracking();
 
         if (_lastRunbackPosition == null || _lastRunbackSampleUtc == DateTime.MinValue)
         {
             ResetRunbackStallTracking(player.Position);
+            ResetRunbackProgressTracking(corpseHorizontalDistance);
             return false;
         }
 
@@ -331,7 +230,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
         var stepDistance = player.Position.DistanceTo(_lastRunbackPosition);
         var hasHorizontalIntent = HasHorizontalMovementIntent(player);
-        var hasRunbackCommandIntent = hasHorizontalIntent || _lastDrivenWaypoint != null || _detourTarget != null;
+        var hasRunbackCommandIntent = hasHorizontalIntent || _lastDrivenWaypoint != null;
         var noDisplacement = stepDistance < MovementStepThreshold;
 
         if (noDisplacement)
@@ -347,7 +246,6 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         if (stepDistance >= 1f)
         {
             _runbackRecoveryCount = 0;
-            _preferProbeRoutingUntilUtc = DateTime.MinValue;
         }
 
         _lastRunbackPosition = CopyPosition(player.Position);
@@ -367,10 +265,38 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             return true;
         }
 
+        if (!hasRunbackCommandIntent && _runbackNoDisplacementTicks >= RunbackNoIntentDisplacementThreshold)
+        {
+            reason = $"runback stalled for {_runbackNoDisplacementTicks} samples with no movement intent";
+            return true;
+        }
+
+        if (activeWaypoint != null
+            && hasRunbackCommandIntent
+            && _lastRunbackWaypointProgressUtc != DateTime.MinValue
+            && now - _lastRunbackWaypointProgressUtc >= RunbackWaypointProgressTimeout
+            && player.Position.DistanceTo(activeWaypoint) > NearWaypointThreshold + 1f)
+        {
+            var stalledSeconds = (int)(now - _lastRunbackWaypointProgressUtc).TotalSeconds;
+            var currentWaypointDistance = player.Position.DistanceTo(activeWaypoint);
+            reason = $"waypoint distance did not improve for {stalledSeconds}s (best={_bestRunbackWaypointDistance:F1}, current={currentWaypointDistance:F1})";
+            return true;
+        }
+
+        if (hasRunbackCommandIntent
+            && corpseHorizontalDistance > RetrieveRange + 2f
+            && _lastRunbackProgressUtc != DateTime.MinValue
+            && now - _lastRunbackProgressUtc >= RunbackProgressTimeout)
+        {
+            var stalledSeconds = (int)(now - _lastRunbackProgressUtc).TotalSeconds;
+            reason = $"corpse distance did not improve for {stalledSeconds}s (best2D={_bestRunbackCorpseDistance2D:F1}, current2D={corpseHorizontalDistance:F1})";
+            return true;
+        }
+
         return false;
     }
 
-    private bool RecoverRunbackStall(IWoWLocalPlayer player, Position corpseNavTarget, float corpseHorizontalDistance, string reason)
+    private bool RecoverRunbackStall(IWoWLocalPlayer player, float corpseHorizontalDistance, string reason)
     {
         var now = DateTime.UtcNow;
         if (now - _lastRunbackRecoveryUtc < RunbackRecoveryInterval)
@@ -378,32 +304,16 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
         _lastRunbackRecoveryUtc = now;
         _runbackRecoveryCount++;
-        _preferProbeRoutingUntilUtc = now + PreferProbeRoutingDuration;
-
-        if (_lastDrivenWaypoint != null)
-        {
-            _blockedWaypoint = CopyPosition(_lastDrivenWaypoint);
-            _blockedWaypointExpiresUtc = now + BlockedWaypointDuration;
-        }
-
-        ScheduleRunbackDetour(player.Position, corpseNavTarget, now);
 
         ObjectManager.ForceStopImmediate();
         _navPath.Clear();
-        _cachedProbeWaypoint = null;
-        _cachedProbeWaypointExpiresUtc = DateTime.MinValue;
-        _lastProbeAttemptUtc = DateTime.MinValue;
         _noPathSinceUtc = null;
+        _lastNoPathRecoveryKickUtc = now;
         ResetRunbackStallTracking(player.Position);
-        _unstickControlBits = ((_runbackRecoveryCount - 1) % 3) switch
-        {
-            0 => ControlBits.StrafeLeft,
-            1 => ControlBits.StrafeRight,
-            _ => ControlBits.Back
-        };
-        _unstickManeuverUntilUtc = now + UnstickManeuverDuration;
-        _lastUnstickLogUtc = DateTime.MinValue;
+        ResetRunbackProgressTracking(corpseHorizontalDistance);
+        ResetWaypointProgressTracking();
         _lastDrivenWaypoint = null;
+        _runbackRecoveryHoldUntilUtc = now + RunbackRecoveryHold;
 
         Log.Warning("[RETRIEVE_CORPSE] Runback stall recovery #{Attempt}: {Reason} (distance2D={Distance2D:F1}). Cleared movement and rebuilding path.",
             _runbackRecoveryCount, reason, corpseHorizontalDistance);
@@ -417,40 +327,6 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         }
 
         return false;
-    }
-
-    private bool ExecuteUnstickManeuver(IWoWLocalPlayer player, Position corpseNavTarget, float corpseHorizontalDistance)
-    {
-        if (_unstickControlBits == ControlBits.Nothing)
-            return false;
-
-        var now = DateTime.UtcNow;
-        if (now >= _unstickManeuverUntilUtc)
-        {
-            ObjectManager.StopMovement(_unstickControlBits);
-            _unstickControlBits = ControlBits.Nothing;
-            return false;
-        }
-
-        try
-        {
-            var facing = player.GetFacingForPosition(corpseNavTarget);
-            ObjectManager.SetFacing(facing);
-        }
-        catch
-        {
-            // Keep maneuver active even if facing query transiently fails.
-        }
-
-        ObjectManager.StartMovement(_unstickControlBits);
-        if (now - _lastUnstickLogUtc >= TimeSpan.FromSeconds(2))
-        {
-            Log.Information("[RETRIEVE_CORPSE] Unstick maneuver active: {Maneuver} distance2D={Distance2D:F1}",
-                _unstickControlBits, corpseHorizontalDistance);
-            _lastUnstickLogUtc = now;
-        }
-
-        return true;
     }
 
     public void Update()
@@ -476,9 +352,6 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
         if (corpseHorizontalDistance > RetrieveRange)
         {
-            if (ExecuteUnstickManeuver(player, corpseNavTarget, corpseHorizontalDistance))
-                return;
-
             if (!_loggedPathfindingMode)
             {
                 Log.Information("[RETRIEVE_CORPSE] Using pathfinding toward corpse at ({X:F0}, {Y:F0}, {Z:F0})",
@@ -487,108 +360,32 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             }
 
             var now = DateTime.UtcNow;
-            var preferProbeRouting = now <= _preferProbeRoutingUntilUtc;
-            var runbackTarget = ResolveRunbackNavigationTarget(player.Position, corpseNavTarget);
-
-            Position? waypoint = null;
-            if (!preferProbeRouting)
+            if (now < _runbackRecoveryHoldUntilUtc)
             {
-                waypoint = _navPath.GetNextWaypoint(
-                    player.Position,
-                    runbackTarget,
-                    player.MapId,
-                    allowDirectFallback: false,
-                    minWaypointDistance: MinimumDriveWaypointDistance);
-                if (waypoint != null && player.Position.DistanceTo2D(waypoint) <= NearWaypointThreshold)
-                {
-                    Log.Warning("[RETRIEVE_CORPSE] Main route waypoint is too close while corpse remains far (distance2D={Distance2D:F1}); forcing probe reroute.",
-                        corpseHorizontalDistance);
-                    _navPath.Clear();
-                    waypoint = null;
-                    preferProbeRouting = true;
-                }
-
-                if (waypoint != null && IsBlockedWaypoint(waypoint))
-                {
-                    Log.Warning("[RETRIEVE_CORPSE] Main route repeated blocked waypoint ({X:F1}, {Y:F1}, {Z:F1}); forcing probe reroute.",
-                        waypoint.X, waypoint.Y, waypoint.Z);
-                    _navPath.Clear();
-                    waypoint = null;
-                    preferProbeRouting = true;
-                }
+                _lastDrivenWaypoint = null;
+                ObjectManager.StopAllMovement();
+                return;
             }
 
-            if (preferProbeRouting || waypoint == null)
+            var waypoint = _navPath.GetNextWaypoint(
+                player.Position,
+                corpseNavTarget,
+                player.MapId,
+                allowDirectFallback: false,
+                minWaypointDistance: MinimumDriveWaypointDistance);
+
+            if (waypoint == null)
             {
-                if (TryGetOffsetApproachWaypoint(
-                    player.Position,
-                    runbackTarget,
-                    player.MapId,
-                    out var probeWaypoint,
-                    out var probeStart,
-                    out var probeTarget,
-                    out var fromCache)
-                    && probeWaypoint != null)
+                _noPathSinceUtc ??= now;
+                if (now - _lastCooldownLog >= CooldownLogInterval)
                 {
-                    if (!fromCache && probeTarget != null && DateTime.UtcNow - _lastCooldownLog >= CooldownLogInterval)
-                    {
-                        if (probeStart != null)
-                        {
-                            Log.Information("[RETRIEVE_CORPSE] No direct route; using probe start ({SX:F1}, {SY:F1}, {SZ:F1}) and target ({TX:F1}, {TY:F1}, {TZ:F1})",
-                                probeStart.X, probeStart.Y, probeStart.Z,
-                                probeTarget.X, probeTarget.Y, probeTarget.Z);
-                        }
-                        else
-                        {
-                            Log.Information("[RETRIEVE_CORPSE] No direct route; using probe target ({TX:F1}, {TY:F1}, {TZ:F1})",
-                                probeTarget.X, probeTarget.Y, probeTarget.Z);
-                        }
-                        _lastCooldownLog = DateTime.UtcNow;
-                    }
-
-                    _noPathSinceUtc = null;
-                    _bestNoPathDistance2D = null;
-                    if (DateTime.UtcNow - _lastWaypointDriveLogUtc >= TimeSpan.FromSeconds(2))
-                    {
-                        var waypointDistance = player.Position.DistanceTo(probeWaypoint);
-                        Log.Information("[RETRIEVE_CORPSE] Driving probe waypoint ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1}",
-                            probeWaypoint.X, probeWaypoint.Y, probeWaypoint.Z, waypointDistance, corpseHorizontalDistance);
-                        _lastWaypointDriveLogUtc = DateTime.UtcNow;
-                    }
-                    if (ShouldRecoverRunbackStall(player, out var probeStallReason)
-                        && RecoverRunbackStall(player, corpseNavTarget, corpseHorizontalDistance, probeStallReason))
-                    {
-                        return;
-                    }
-                    TrackDrivenWaypoint(probeWaypoint);
-                    ObjectManager.MoveToward(probeWaypoint);
-                    return;
+                    var stalledSeconds = (int)(now - _noPathSinceUtc.Value).TotalSeconds;
+                    Log.Warning("[RETRIEVE_CORPSE] No pathfinding route for corpse target ({X:F1}, {Y:F1}, {Z:F1}) stalledFor={Seconds}s distance2D={Distance2D:F1} zDelta={ZDelta:F1}",
+                        corpseNavTarget.X, corpseNavTarget.Y, corpseNavTarget.Z, stalledSeconds, corpseHorizontalDistance, corpseDeltaZ);
+                    _lastCooldownLog = now;
                 }
 
-                var noPathNow = DateTime.UtcNow;
-                _noPathSinceUtc ??= noPathNow;
-
-                // Keep no-path timeout focused on true stalls. As long as distance to corpse
-                // keeps improving, continue driving direct runback movement and reset the stall timer.
-                if (_bestNoPathDistance2D == null || corpseHorizontalDistance + 0.5f < _bestNoPathDistance2D.Value)
-                {
-                    _bestNoPathDistance2D = corpseHorizontalDistance;
-                    _noPathSinceUtc = noPathNow;
-                }
-                else if (corpseHorizontalDistance < _bestNoPathDistance2D.Value)
-                {
-                    _bestNoPathDistance2D = corpseHorizontalDistance;
-                }
-
-                if (noPathNow - _lastCooldownLog >= CooldownLogInterval)
-                {
-                    var stalledSeconds = (int)(noPathNow - _noPathSinceUtc.Value).TotalSeconds;
-                    Log.Warning("[RETRIEVE_CORPSE] No pathfinding route; driving fallback target ({X:F1}, {Y:F1}, {Z:F1}) stalledFor={Seconds}s distance2D={Distance2D:F1} zDelta={ZDelta:F1}",
-                        runbackTarget.X, runbackTarget.Y, runbackTarget.Z, stalledSeconds, corpseHorizontalDistance, corpseDeltaZ);
-                    _lastCooldownLog = noPathNow;
-                }
-
-                if (noPathNow - _noPathSinceUtc.Value > NoPathTimeout)
+                if (now - _noPathSinceUtc.Value > NoPathTimeout)
                 {
                     Log.Warning("[RETRIEVE_CORPSE] No pathfinding route after {Seconds}s; aborting corpse run task.",
                         (int)NoPathTimeout.TotalSeconds);
@@ -597,57 +394,55 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
                     return;
                 }
 
-                if (DateTime.UtcNow - _lastWaypointDriveLogUtc >= TimeSpan.FromSeconds(2))
+                if (ShouldRecoverRunbackStall(player, corpseHorizontalDistance, null, out var noPathStallReason))
                 {
-                    var fallbackDistance = player.Position.DistanceTo(runbackTarget);
-                    Log.Information("[RETRIEVE_CORPSE] Driving fallback target ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1}",
-                        runbackTarget.X, runbackTarget.Y, runbackTarget.Z, fallbackDistance, corpseHorizontalDistance);
-                    _lastWaypointDriveLogUtc = DateTime.UtcNow;
-                }
-                if (ShouldRecoverRunbackStall(player, out var noPathStallReason)
-                    && RecoverRunbackStall(player, corpseNavTarget, corpseHorizontalDistance, noPathStallReason))
-                {
+                    RecoverRunbackStall(player, corpseHorizontalDistance, noPathStallReason);
                     return;
                 }
-                TrackDrivenWaypoint(runbackTarget);
-                ObjectManager.MoveToward(runbackTarget);
-                return;
-            }
 
-            _cachedProbeWaypoint = null;
-            _cachedProbeWaypointExpiresUtc = DateTime.MinValue;
-            _noPathSinceUtc = null;
-            _bestNoPathDistance2D = null;
-            if (waypoint == null)
-            {
+                if (now - _lastNoPathRecoveryKickUtc >= NoPathRecoveryInterval)
+                {
+                    _lastNoPathRecoveryKickUtc = now;
+                    if (RecoverRunbackStall(player, corpseHorizontalDistance, "pathfinding returned no route"))
+                        return;
+                }
+
+                _lastDrivenWaypoint = null;
                 ObjectManager.StopAllMovement();
                 return;
             }
-            if (DateTime.UtcNow - _lastWaypointDriveLogUtc >= TimeSpan.FromSeconds(2))
+
+            _noPathSinceUtc = null;
+            _lastNoPathRecoveryKickUtc = DateTime.MinValue;
+            if (now - _lastWaypointDriveLogUtc >= TimeSpan.FromSeconds(2))
             {
                 var waypointDistance = player.Position.DistanceTo(waypoint);
-                Log.Information("[RETRIEVE_CORPSE] Driving main waypoint ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1}",
+                Log.Information("[RETRIEVE_CORPSE] Driving path waypoint ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1}",
                     waypoint.X, waypoint.Y, waypoint.Z, waypointDistance, corpseHorizontalDistance);
-                _lastWaypointDriveLogUtc = DateTime.UtcNow;
+                _lastWaypointDriveLogUtc = now;
             }
-            if (ShouldRecoverRunbackStall(player, out var stallReason)
-                && RecoverRunbackStall(player, corpseNavTarget, corpseHorizontalDistance, stallReason))
+
+            if (ShouldRecoverRunbackStall(player, corpseHorizontalDistance, waypoint, out var stallReason))
             {
+                RecoverRunbackStall(player, corpseHorizontalDistance, stallReason);
                 return;
             }
+
             TrackDrivenWaypoint(waypoint);
+            // Drive the active waypoint continuously; MoveToward already normalizes direction flags.
             ObjectManager.MoveToward(waypoint);
             return;
         }
 
         _runbackRecoveryCount = 0;
-        _preferProbeRoutingUntilUtc = DateTime.MinValue;
-        _unstickControlBits = ControlBits.Nothing;
         _lastDrivenWaypoint = null;
         _noPathSinceUtc = null;
-        _bestNoPathDistance2D = null;
-        ClearRunbackDetour();
+        _lastNoPathRecoveryKickUtc = DateTime.MinValue;
+        _bestRunbackCorpseDistance2D = float.MaxValue;
+        _lastRunbackProgressUtc = DateTime.MinValue;
+        ResetWaypointProgressTracking();
         ResetRunbackStallTracking(player.Position);
+        _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
         ObjectManager.StopAllMovement();
 
         if (IsStrictAlive(player))

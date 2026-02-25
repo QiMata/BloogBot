@@ -1,4 +1,4 @@
-﻿# WowSharpClient.NetworkTests Tasks
+# WowSharpClient.NetworkTests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. WoWSharpClientNetworkPacketParitySuite
+- [ ] Behavior: network tests validate BG packet emission patterns mirror FG movement/combat expectations under shared scenarios.
+- [ ] FG Baseline: FG packet traces show expected movement/cast sequencing and transition markers for tested flows.
+- [ ] BG Target: BG packet traces align with FG packet order/timing signatures and avoid protocol-level anomalies.
+- [ ] Implementation Targets: `Tests/WowSharpClient.NetworkTests/**/*.cs`, `Exports/WoWSharpClient/Networking/**/*.cs`, `Exports/WoWSharpClient/Movement/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: network suite passes and packet trace diffs stay within approved parity thresholds for covered behaviors.
+- [ ] If Fails: add `Research:NetworkPacketParityGap::<scenario>` and `Implement:NetworkPacketParityFix::<scenario>` tasks with packet diff evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

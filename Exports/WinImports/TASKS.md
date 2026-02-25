@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. RepoScopedLingeringProcessTeardown
+- [ ] Behavior: lingering client/test processes from corpse/combat/gathering runs are detected and stopped by repo scope only, without blanket-killing unrelated `dotnet`.
+- [ ] FG Baseline: FG test cleanup identifies only processes started by this repo/test tree and records their termination outcome.
+- [ ] BG Target: BG cleanup behavior matches FG cleanup strictness and evidence shape during timeout/failure/cancel paths.
+- [ ] Implementation Targets: `Exports/WinImports/WinProcessImports.cs`, `Exports/WinImports/WoWProcessMonitor.cs`, `Exports/WinImports/WoWProcessDetector.cs`, `Exports/WinImports/SafeInjection.cs`, `run-tests.ps1`.
+- [ ] Simple Command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`.
+- [ ] Acceptance: cleanup output contains process name + PID + stop result, no unrelated `dotnet` processes are terminated, and lingering repo-scoped clients/managers are cleared.
+- [ ] If Fails: add `Research:RepoScopedCleanupLeak::<process-type>` and `Implement:RepoScopedCleanupGuard::<component>` tasks with PID evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

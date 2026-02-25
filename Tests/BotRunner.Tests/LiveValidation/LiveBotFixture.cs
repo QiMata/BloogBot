@@ -40,6 +40,7 @@ public class LiveBotFixture : IAsyncLifetime
     private StateManagerTestClient? _stateManagerClient;
     private ITestOutputHelper? _testOutput;
     private readonly object _commandTrackingLock = new();
+    private readonly object _snapshotMessageDeltaLock = new();
     private readonly Dictionary<string, int> _soapCommandCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Dictionary<string, int>> _chatCommandCountsByAccount = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _lastPrintedChatCountByAccount = new(StringComparer.OrdinalIgnoreCase);
@@ -383,14 +384,17 @@ public class LiveBotFixture : IAsyncLifetime
         Dictionary<string, int> lastPrintedCountByAccount,
         string channel)
     {
-        lastPrintedCountByAccount.TryGetValue(accountKey, out var lastPrintedCount);
+        lock (_snapshotMessageDeltaLock)
+        {
+            lastPrintedCountByAccount.TryGetValue(accountKey, out var lastPrintedCount);
 
-        // Snapshot windows are rolling (MaxBufferedMessages). If they shrink or reset, print from 0.
-        var startIndex = messages.Count >= lastPrintedCount ? lastPrintedCount : 0;
-        for (var i = startIndex; i < messages.Count; i++)
-            _testOutput?.WriteLine($"[{label}:{channel}] {messages[i]}");
+            // Snapshot windows are rolling (MaxBufferedMessages). If they shrink or reset, print from 0.
+            var startIndex = messages.Count >= lastPrintedCount ? lastPrintedCount : 0;
+            for (var i = startIndex; i < messages.Count; i++)
+                _testOutput?.WriteLine($"[{label}:{channel}] {messages[i]}");
 
-        lastPrintedCountByAccount[accountKey] = messages.Count;
+            lastPrintedCountByAccount[accountKey] = messages.Count;
+        }
     }
 
     /// <summary>Log key diagnostic fields from a snapshot. Useful for debugging FG issues.</summary>
@@ -738,7 +742,7 @@ public class LiveBotFixture : IAsyncLifetime
 
     /// <summary>Teleport a character to a named tele location via SOAP (.tele name). Works for offline characters.</summary>
     public Task<string> TeleportToNamedAsync(string? characterName, string locationName)
-        => ExecuteGMCommandAsync($".tele name {characterName ?? BgCharacterName} {locationName}");
+        => ExecuteGMCommandWithRetryAsync($".tele name {characterName ?? BgCharacterName} {locationName}");
 
     /// <summary>Teleport the BG bot to a named tele location via SOAP.</summary>
     public Task<string> TeleportToNamedAsync(string locationName)
@@ -1031,6 +1035,18 @@ public class LiveBotFixture : IAsyncLifetime
             || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static string ToEvidenceSnippet(string? text, int maxLength = 120)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        var normalized = text.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (normalized.Length <= maxLength)
+            return normalized;
+
+        return normalized[..maxLength] + "...";
+    }
+
     /// <summary>
     /// Induce death deterministically for a specific character using a single setup path:
     /// select self, issue one direct kill command, then verify transition in snapshots.
@@ -1054,98 +1070,117 @@ public class LiveBotFixture : IAsyncLifetime
             return new DeathInductionResult(true, "(already-dead)", $"already dead/ghost ({alreadyDeadReason})");
         }
 
-        // This server build applies ".kill" to the current selected target, so force self-selection first.
+        // Some self-directed commands require a selected self target.
         var selfGuid = baseline.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
         if (selfGuid == 0)
             return new DeathInductionResult(false, ".kill", "Unable to resolve self GUID for target selection.");
 
         async Task<(ResponseResult dispatch, ulong selected)> EnsureSelfTargetAsync()
         {
-            var selectResult = await SendActionAsync(accountName, new ActionMessage
-            {
-                ActionType = ActionType.StartMeleeAttack,
-                Parameters = { new RequestParameter { LongParam = (long)selfGuid } }
-            });
+            var lastDispatch = ResponseResult.Failure;
+            ulong lastSelectedGuid = 0;
 
-            if (selectResult == ResponseResult.Success)
+            for (var attempt = 0; attempt < 3; attempt++)
             {
+                lastDispatch = await SendActionAsync(accountName, new ActionMessage
+                {
+                    ActionType = ActionType.StartMeleeAttack,
+                    Parameters = { new RequestParameter { LongParam = (long)selfGuid } }
+                });
+
+                if (lastDispatch != ResponseResult.Success)
+                {
+                    await Task.Delay(150);
+                    continue;
+                }
+
                 // Stop any accidental swing attempts; only target selection side effect is needed.
                 _ = await SendActionAsync(accountName, new ActionMessage { ActionType = ActionType.StopAttack });
+
+                var pollSw = Stopwatch.StartNew();
+                while (pollSw.ElapsedMilliseconds < 2500)
+                {
+                    await Task.Delay(150);
+                    var selectSnapshot = await GetSnapshotAsync(accountName);
+                    lastSelectedGuid = selectSnapshot?.Player?.Unit?.TargetGuid ?? 0UL;
+                    if (lastSelectedGuid == selfGuid)
+                        return (lastDispatch, lastSelectedGuid);
+                }
             }
 
-            await Task.Delay(500);
-            var selectSnapshot = await GetSnapshotAsync(accountName);
-            var selectedGuid = selectSnapshot?.Player?.Unit?.TargetGuid ?? 0UL;
-            return (selectResult, selectedGuid);
+            return (lastDispatch, lastSelectedGuid);
         }
 
+        const string selfDamageCommand = ".damage 5000";
         var resolvedKillCommand = await ResolveSelfKillCommandAsync();
         var commandCandidates = new List<string>();
-        if (!string.IsNullOrWhiteSpace(resolvedKillCommand))
-            commandCandidates.Add(resolvedKillCommand);
-        if (!commandCandidates.Contains(".kill", StringComparer.OrdinalIgnoreCase))
-            commandCandidates.Add(".kill");
-        if (!commandCandidates.Contains(".die", StringComparer.OrdinalIgnoreCase))
+        if (requireCorpseTransition)
+        {
+            // Corpse-run setup should use .die deterministically, with self-damage fallback.
             commandCandidates.Add(".die");
+        }
+        else
+        {
+            if (!string.IsNullOrWhiteSpace(resolvedKillCommand))
+                commandCandidates.Add(resolvedKillCommand);
+            if (!commandCandidates.Contains(".kill", StringComparer.OrdinalIgnoreCase))
+                commandCandidates.Add(".kill");
+            if (!commandCandidates.Contains(".die", StringComparer.OrdinalIgnoreCase))
+                commandCandidates.Add(".die");
+        }
         if (singleCommandOnly)
         {
-            var deterministicSingle = commandCandidates.FirstOrDefault(c => string.Equals(c, ".die", StringComparison.OrdinalIgnoreCase))
-                ?? commandCandidates.FirstOrDefault()
-                ?? ".die";
+            var deterministicSingle = requireCorpseTransition
+                ? ".die"
+                : commandCandidates.FirstOrDefault(c => string.Equals(c, ".die", StringComparison.OrdinalIgnoreCase))
+                    ?? commandCandidates.FirstOrDefault()
+                    ?? ".die";
             commandCandidates = [deterministicSingle];
+        }
+
+        if (requireCorpseTransition
+            && !singleCommandOnly
+            && !commandCandidates.Contains(".damage", StringComparer.OrdinalIgnoreCase))
+            commandCandidates.Add(".damage");
+
+        if (requireCorpseTransition)
+            commandCandidates = commandCandidates
+                .Where(command => !string.Equals(command, ".kill", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+        var killAttempts = new List<(string BaseCommand, string CommandToSend)>();
+        foreach (var killCommand in commandCandidates)
+        {
+            if (string.Equals(killCommand, ".die", StringComparison.OrdinalIgnoreCase)
+                && requireCorpseTransition)
+            {
+                var trimmedName = characterName?.Trim();
+                if (!string.IsNullOrWhiteSpace(trimmedName))
+                {
+                    // Different server builds disagree on which ".die" form transitions
+                    // the issuing player into corpse state, so probe both deterministically.
+                    killAttempts.Add((killCommand, $".die {trimmedName}"));
+                }
+            }
+
+            if (string.Equals(killCommand, ".damage", StringComparison.OrdinalIgnoreCase))
+            {
+                killAttempts.Add((killCommand, selfDamageCommand));
+                continue;
+            }
+
+            killAttempts.Add((killCommand, killCommand));
         }
 
         var observedCorpseState = false;
         Game.Position? observedCorpsePosition = null;
         var usedCorpsePositionFallback = false;
         var attemptEvidence = new List<string>();
-        var perCommandTimeoutMs = Math.Max(4000, timeoutMs / Math.Max(1, commandCandidates.Count));
+        var perCommandTimeoutMs = Math.Max(4000, timeoutMs / Math.Max(1, killAttempts.Count));
 
-        foreach (var killCommand in commandCandidates)
+        async Task<DeathInductionResult?> ProbeTransitionAsync(string commandLabel, int commandTimeoutMs)
         {
-            var commandToSend = string.Equals(killCommand, ".die", StringComparison.OrdinalIgnoreCase)
-                ? $".die {characterName}"
-                : killCommand;
-
-            if (string.Equals(killCommand, ".kill", StringComparison.OrdinalIgnoreCase))
-            {
-                var (selectDispatch, selectedGuid) = await EnsureSelfTargetAsync();
-                if (selectDispatch != ResponseResult.Success)
-                {
-                    attemptEvidence.Add($"{killCommand}:self-target-dispatch={selectDispatch}");
-                    continue;
-                }
-
-                _logger.LogInformation("[DEATH-SETUP] Self-target guid for {Account}: 0x{TargetGuid:X} (self=0x{SelfGuid:X})",
-                    accountName, selectedGuid, selfGuid);
-                if (selectedGuid != selfGuid)
-                    attemptEvidence.Add($"{killCommand}:self-target-mismatch");
-            }
-
-            var captureCommandResponse = !requireCorpseTransition;
-            var killTrace = await SendGmChatCommandTrackedAsync(
-                accountName,
-                commandToSend,
-                captureResponse: captureCommandResponse,
-                delayMs: requireCorpseTransition ? 0 : 200,
-                allowWhenDead: false);
-
-            attemptEvidence.Add($"{commandToSend}:dispatch={killTrace.DispatchResult}");
-            if (killTrace.DispatchResult != ResponseResult.Success)
-                continue;
-
-            var rejected = captureCommandResponse
-                && (killTrace.ChatMessages.Any(ContainsCommandRejection) || killTrace.ErrorMessages.Any(ContainsCommandRejection));
-            if (rejected)
-            {
-                attemptEvidence.Add($"{commandToSend}:rejected");
-                continue;
-            }
-
-            var commandTimeoutMs = string.Equals(killCommand, ".kill", StringComparison.OrdinalIgnoreCase)
-                ? Math.Min(2000, perCommandTimeoutMs)
-                : perCommandTimeoutMs;
-
             uint? lastHealth = null;
             bool? lastGhost = null;
             uint? lastStandState = null;
@@ -1178,7 +1213,7 @@ public class LiveBotFixture : IAsyncLifetime
                     if (stateChanged || pollCount % 10 == 0)
                     {
                         _logger.LogInformation("[DEATH-SETUP] Probe({Command}): HP={Health}, ghost={Ghost}, stand={StandState}, reclaimDelay={Delay}s",
-                            commandToSend, unit.Health, hasGhostFlag, standState, reclaimDelay);
+                            commandLabel, unit.Health, hasGhostFlag, standState, reclaimDelay);
                     }
 
                     lastHealth = unit.Health;
@@ -1195,10 +1230,10 @@ public class LiveBotFixture : IAsyncLifetime
                         ? null
                         : new Game.Position { X = corpsePos.X, Y = corpsePos.Y, Z = corpsePos.Z };
                     _logger.LogInformation("[DEATH-SETUP] Transitioned to corpse via {Command} ({Reason})",
-                        commandToSend, corpseReason);
+                        commandLabel, corpseReason);
                     return new DeathInductionResult(
                         true,
-                        commandToSend,
+                        commandLabel,
                         string.Join("; ", attemptEvidence) + $"; transition=corpse ({corpseReason})",
                         observedCorpseState,
                         observedCorpsePosition,
@@ -1209,15 +1244,15 @@ public class LiveBotFixture : IAsyncLifetime
                 {
                     if (requireCorpseTransition)
                     {
-                        attemptEvidence.Add($"{commandToSend}:ghost-before-corpse({deadReason})");
+                        attemptEvidence.Add($"{commandLabel}:ghost-before-corpse({deadReason})");
                         continue;
                     }
 
                     _logger.LogInformation("[DEATH-SETUP] Transitioned to dead/ghost via {Command} ({Reason})",
-                        commandToSend, deadReason);
+                        commandLabel, deadReason);
                     return new DeathInductionResult(
                         true,
-                        commandToSend,
+                        commandLabel,
                         string.Join("; ", attemptEvidence) + $"; transition={deadReason}",
                         observedCorpseState,
                         observedCorpsePosition,
@@ -1226,9 +1261,106 @@ public class LiveBotFixture : IAsyncLifetime
             }
 
             if (requireCorpseTransition)
-                attemptEvidence.Add($"{commandToSend}:no-corpse-transition");
+                attemptEvidence.Add($"{commandLabel}:no-corpse-transition");
             else
-                attemptEvidence.Add($"{commandToSend}:no-transition");
+                attemptEvidence.Add($"{commandLabel}:no-transition");
+
+            return null;
+        }
+
+        foreach (var attempt in killAttempts)
+        {
+            var killCommand = attempt.BaseCommand;
+            var commandToSend = attempt.CommandToSend;
+
+            var requiresSelfTarget = string.Equals(killCommand, ".kill", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(killCommand, ".damage", StringComparison.OrdinalIgnoreCase);
+            if (requiresSelfTarget)
+            {
+                var (selectDispatch, selectedGuid) = await EnsureSelfTargetAsync();
+                if (selectDispatch != ResponseResult.Success)
+                {
+                    attemptEvidence.Add($"{killCommand}:self-target-dispatch={selectDispatch}");
+                    continue;
+                }
+
+                _logger.LogInformation("[DEATH-SETUP] Self-target guid for {Account}: 0x{TargetGuid:X} (self=0x{SelfGuid:X})",
+                    accountName, selectedGuid, selfGuid);
+                if (selectedGuid != selfGuid)
+                {
+                    attemptEvidence.Add($"{killCommand}:self-target-mismatch(selected=0x{selectedGuid:X},self=0x{selfGuid:X})");
+                    // Some BG snapshots intermittently report TargetGuid=0 for self-select attempts.
+                    // In corpse-transition mode we still probe .damage once to avoid false negatives.
+                    var allowAmbiguousDamageFallback =
+                        requireCorpseTransition
+                        && string.Equals(killCommand, ".damage", StringComparison.OrdinalIgnoreCase);
+                    if (!allowAmbiguousDamageFallback)
+                        continue;
+                }
+            }
+
+            var captureCommandResponse = true;
+            var killTrace = await SendGmChatCommandTrackedAsync(
+                accountName,
+                commandToSend,
+                captureResponse: captureCommandResponse,
+                delayMs: requireCorpseTransition ? 300 : 200,
+                allowWhenDead: false);
+
+            attemptEvidence.Add($"{commandToSend}:dispatch={killTrace.DispatchResult}");
+            if (killTrace.DispatchResult != ResponseResult.Success)
+                continue;
+
+            var rejectionSignals = killTrace.ChatMessages
+                .Concat(killTrace.ErrorMessages)
+                .Where(ContainsCommandRejection)
+                .Select(message => ToEvidenceSnippet(message))
+                .Where(message => !string.IsNullOrWhiteSpace(message))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var rejected = rejectionSignals.Length > 0;
+            if (rejected)
+            {
+                foreach (var rejectionSignal in rejectionSignals)
+                    attemptEvidence.Add($"{commandToSend}:rejected({rejectionSignal})");
+                continue;
+            }
+
+            var commandTimeoutMs = perCommandTimeoutMs;
+            var transitionResult = await ProbeTransitionAsync(commandToSend, commandTimeoutMs);
+            if (transitionResult != null)
+                return transitionResult;
+        }
+
+        if (requireCorpseTransition && !string.IsNullOrWhiteSpace(characterName))
+        {
+            // Chat-command dispatch can report success without applying state changes on some
+            // server builds; SOAP .die is the deterministic fallback used only in corpse mode.
+            var soapCommands = new[]
+            {
+                $".die {characterName.Trim()}",
+                ".die"
+            };
+
+            foreach (var soapCommand in soapCommands.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var soapResult = await ExecuteGMCommandAsync(soapCommand);
+                if (!string.IsNullOrWhiteSpace(soapResult))
+                    attemptEvidence.Add($"{soapCommand}:soap={soapResult.Trim()}");
+                else
+                    attemptEvidence.Add($"{soapCommand}:soap=(empty)");
+
+                if (ContainsCommandRejection(soapResult)
+                    || soapResult.StartsWith("FAULT:", StringComparison.OrdinalIgnoreCase))
+                {
+                    attemptEvidence.Add($"{soapCommand}:soap-rejected");
+                    continue;
+                }
+
+                var transitionResult = await ProbeTransitionAsync($"{soapCommand}[SOAP]", perCommandTimeoutMs);
+                if (transitionResult != null)
+                    return transitionResult;
+            }
         }
 
         return new DeathInductionResult(false, commandCandidates.FirstOrDefault() ?? ".kill",
@@ -1432,8 +1564,8 @@ public class LiveBotFixture : IAsyncLifetime
             var cleanupCommands = new[]
             {
                 "DELETE FROM command WHERE name = '' OR name IS NULL",
-                "DELETE FROM command WHERE help LIKE '%Enabled by test fixture%' AND name NOT IN ('die', 'revive')",
-                "DELETE FROM command WHERE name IN ('kill', 'select', 'select player')"
+                // Only remove rows explicitly marked as fixture-owned; never delete core server commands.
+                "DELETE FROM command WHERE help LIKE '%Enabled by test fixture%' AND name NOT IN ('die', 'revive')"
             };
 
             foreach (var sql in cleanupCommands)

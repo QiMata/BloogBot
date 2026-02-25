@@ -8,16 +8,22 @@ namespace PathfindingService.Repository
     public class Navigation
     {
         private const string DLL_NAME = "Navigation.dll";
-        private const float FallbackCellSize = 6f;
-        private const float FallbackSearchMargin = 60f;
+        private const float FallbackMinCellSize = 6f;
+        private const float FallbackMediumCellSize = 8f;
+        private const float FallbackLongRouteCellSize = 10f;
+        private const float FallbackVeryLongRouteCellSize = 12f;
+        private const float FallbackMinSearchMargin = 60f;
+        private const float FallbackMaxSearchMargin = 1200f;
         private const float FallbackGoalDistance = 9f;
-        private const int FallbackMaxExpandedNodes = 2500;
+        private const int FallbackMinExpandedNodes = 2500;
+        private const int FallbackMaxExpandedNodesCap = 120000;
 
         private static readonly (int X, int Y)[] NeighborOffsets =
         [
             (1, 0), (-1, 0), (0, 1), (0, -1),
             (1, 1), (1, -1), (-1, 1), (-1, -1),
         ];
+        private static readonly float[] FallbackLosZOffsets = [0f, 1.0f, 2.0f];
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeXyz
@@ -37,6 +43,7 @@ namespace PathfindingService.Repository
         }
 
         private readonly record struct GridNode(int X, int Y);
+        private readonly record struct FallbackAttempt(float CellSize, float SearchMargin, float ExpansionFactor);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr FindPath(
@@ -53,54 +60,123 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern void PathArrFree(IntPtr pathArr);
 
+        private const string EnableLosFallbackEnv = "WWOW_ENABLE_LOS_FALLBACK";
+
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
         {
             try
             {
-                IntPtr pathPtr = FindPath(
+                var preferredPath = TryFindPathNative(mapId, start, end, smoothPath);
+                if (preferredPath.Length > 0)
+                    return preferredPath;
+
+                var alternatePath = TryFindPathNative(mapId, start, end, !smoothPath);
+                if (alternatePath.Length > 0)
+                    return alternatePath;
+            }
+            catch
+            {
+            }
+
+            // Keep native navmesh as the authoritative source by default.
+            // LOS-grid fallback can create wall-hugging routes that are valid in LOS
+            // but not walkable in practice (notably during corpse runback).
+            if (IsLosFallbackEnabled())
+                return BuildLosFallbackPath(mapId, start, end);
+
+            return Array.Empty<XYZ>();
+        }
+
+        private static bool IsLosFallbackEnabled()
+        {
+            var value = Environment.GetEnvironmentVariable(EnableLosFallbackEnv);
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            return value.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("on", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static XYZ[] TryFindPathNative(uint mapId, XYZ start, XYZ end, bool smoothPath)
+        {
+            IntPtr pathPtr = IntPtr.Zero;
+            try
+            {
+                pathPtr = FindPath(
                     mapId,
                     new NativeXyz(start),
                     new NativeXyz(end),
                     smoothPath,
                     out int length);
 
-                if (pathPtr == IntPtr.Zero || length == 0)
-                    return BuildLosFallbackPath(mapId, start, end);
+                if (pathPtr == IntPtr.Zero || length <= 0)
+                    return Array.Empty<XYZ>();
 
-                try
+                XYZ[] path = new XYZ[length];
+                for (int i = 0; i < length; i++)
                 {
-                    XYZ[] path = new XYZ[length];
-                    for (int i = 0; i < length; i++)
-                    {
-                        IntPtr currentPtr = IntPtr.Add(pathPtr, i * Marshal.SizeOf<NativeXyz>());
-                        path[i] = Marshal.PtrToStructure<NativeXyz>(currentPtr).ToManaged();
-                    }
+                    IntPtr currentPtr = IntPtr.Add(pathPtr, i * Marshal.SizeOf<NativeXyz>());
+                    path[i] = Marshal.PtrToStructure<NativeXyz>(currentPtr).ToManaged();
+                }
 
-                    return path;
-                }
-                finally
-                {
-                    PathArrFree(pathPtr);
-                }
+                return path;
             }
-            catch
+            finally
             {
-                return BuildLosFallbackPath(mapId, start, end);
+                if (pathPtr != IntPtr.Zero)
+                    PathArrFree(pathPtr);
             }
         }
 
         private static XYZ[] BuildLosFallbackPath(uint mapId, XYZ start, XYZ end)
         {
-            if (Distance2D(start, end) < 0.5f)
+            var routeDistance = Distance2D(start, end);
+            if (routeDistance < 0.5f)
                 return [start, end];
 
-            if (TryHasLos(mapId, start, end))
-                return BuildSegmentedPath(start, end, FallbackCellSize);
+            if (TryHasLosForFallback(mapId, start, end))
+                return BuildSegmentedPath(start, end, FallbackMinCellSize);
 
-            var minX = MathF.Min(start.X, end.X) - FallbackSearchMargin;
-            var maxX = MathF.Max(start.X, end.X) + FallbackSearchMargin;
-            var minY = MathF.Min(start.Y, end.Y) - FallbackSearchMargin;
-            var maxY = MathF.Max(start.Y, end.Y) + FallbackSearchMargin;
+            foreach (var attempt in BuildFallbackAttempts(routeDistance))
+            {
+                var path = TryBuildLosFallbackPath(mapId, start, end, attempt);
+                if (path.Length > 0)
+                    return path;
+            }
+
+            return Array.Empty<XYZ>();
+        }
+
+        private static FallbackAttempt[] BuildFallbackAttempts(float routeDistance)
+        {
+            var firstCell = routeDistance > 2200f
+                ? FallbackVeryLongRouteCellSize
+                : (routeDistance > 1200f ? FallbackLongRouteCellSize : (routeDistance > 700f ? FallbackMediumCellSize : FallbackMinCellSize));
+            var secondCell = MathF.Max(FallbackMinCellSize, firstCell - 2f);
+
+            var baseMargin = Math.Clamp(routeDistance * 0.35f, FallbackMinSearchMargin, 700f);
+            var widenedMargin = Math.Clamp(baseMargin + 220f, FallbackMinSearchMargin, 950f);
+            var maxMargin = Math.Clamp(baseMargin + 420f, FallbackMinSearchMargin, FallbackMaxSearchMargin);
+
+            return
+            [
+                new FallbackAttempt(firstCell, baseMargin, 0.55f),
+                new FallbackAttempt(secondCell, widenedMargin, 0.75f),
+                new FallbackAttempt(FallbackMinCellSize, maxMargin, 0.95f),
+            ];
+        }
+
+        private static XYZ[] TryBuildLosFallbackPath(uint mapId, XYZ start, XYZ end, FallbackAttempt attempt)
+        {
+            var cellSize = attempt.CellSize;
+            var searchMargin = attempt.SearchMargin;
+
+            var minX = MathF.Min(start.X, end.X) - searchMargin;
+            var maxX = MathF.Max(start.X, end.X) + searchMargin;
+            var minY = MathF.Min(start.Y, end.Y) - searchMargin;
+            var maxY = MathF.Max(start.Y, end.Y) + searchMargin;
 
             static int ToGrid(float value, float min, float cell) =>
                 (int)MathF.Round((value - min) / cell);
@@ -110,8 +186,8 @@ namespace PathfindingService.Repository
 
             XYZ GridToWorld(GridNode node)
             {
-                var x = ToWorld(node.X, minX, FallbackCellSize);
-                var y = ToWorld(node.Y, minY, FallbackCellSize);
+                var x = ToWorld(node.X, minX, cellSize);
+                var y = ToWorld(node.Y, minY, cellSize);
                 var total = Distance2D(start, end);
                 var traveled = Distance2D(start, new XYZ(x, y, start.Z));
                 var t = total <= 0.001f ? 0f : Math.Clamp(traveled / total, 0f, 1f);
@@ -121,13 +197,20 @@ namespace PathfindingService.Repository
 
             bool InBounds(GridNode node)
             {
-                var x = ToWorld(node.X, minX, FallbackCellSize);
-                var y = ToWorld(node.Y, minY, FallbackCellSize);
+                var x = ToWorld(node.X, minX, cellSize);
+                var y = ToWorld(node.Y, minY, cellSize);
                 return x >= minX && x <= maxX && y >= minY && y <= maxY;
             }
 
-            var startNode = new GridNode(ToGrid(start.X, minX, FallbackCellSize), ToGrid(start.Y, minY, FallbackCellSize));
-            var targetNode = new GridNode(ToGrid(end.X, minX, FallbackCellSize), ToGrid(end.Y, minY, FallbackCellSize));
+            var startNode = new GridNode(ToGrid(start.X, minX, cellSize), ToGrid(start.Y, minY, cellSize));
+            var targetNode = new GridNode(ToGrid(end.X, minX, cellSize), ToGrid(end.Y, minY, cellSize));
+
+            var gridWidth = Math.Max(1, (int)MathF.Ceiling((maxX - minX) / cellSize) + 1);
+            var gridHeight = Math.Max(1, (int)MathF.Ceiling((maxY - minY) / cellSize) + 1);
+            var maxExpandedNodes = Math.Clamp(
+                (int)(gridWidth * gridHeight * attempt.ExpansionFactor),
+                FallbackMinExpandedNodes,
+                FallbackMaxExpandedNodesCap);
 
             var open = new PriorityQueue<GridNode, float>();
             var closed = new HashSet<GridNode>();
@@ -138,8 +221,9 @@ namespace PathfindingService.Repository
 
             var expanded = 0;
             GridNode? reached = null;
+            var completionRadius = MathF.Max(FallbackGoalDistance, cellSize * 1.5f);
 
-            while (open.Count > 0 && expanded < FallbackMaxExpandedNodes)
+            while (open.Count > 0 && expanded < maxExpandedNodes)
             {
                 var current = open.Dequeue();
                 if (!closed.Add(current))
@@ -148,7 +232,7 @@ namespace PathfindingService.Repository
                 expanded++;
                 var currentWorld = GridToWorld(current);
 
-                if (Distance2D(currentWorld, end) <= FallbackGoalDistance && TryHasLos(mapId, currentWorld, end))
+                if (Distance2D(currentWorld, end) <= completionRadius && TryHasLosForFallback(mapId, currentWorld, end))
                 {
                     reached = current;
                     break;
@@ -161,7 +245,7 @@ namespace PathfindingService.Repository
                         continue;
 
                     var nextWorld = GridToWorld(next);
-                    if (!TryHasLos(mapId, currentWorld, nextWorld))
+                    if (!TryHasLosForFallback(mapId, currentWorld, nextWorld))
                         continue;
 
                     var tentative = gScore[current] + Distance2D(currentWorld, nextWorld);
@@ -238,7 +322,7 @@ namespace PathfindingService.Repository
                 var next = anchor + 1;
                 for (int i = points.Count - 1; i > anchor + 1; i--)
                 {
-                    if (TryHasLos(mapId, points[anchor], points[i]))
+                    if (TryHasLosForFallback(mapId, points[anchor], points[i]))
                     {
                         next = i;
                         break;
@@ -262,6 +346,28 @@ namespace PathfindingService.Repository
             {
                 return false;
             }
+        }
+
+        private static bool TryHasLosForFallback(uint mapId, XYZ from, XYZ to)
+        {
+            if (TryHasLos(mapId, from, to))
+                return true;
+
+            foreach (var fromOffset in FallbackLosZOffsets)
+            {
+                foreach (var toOffset in FallbackLosZOffsets)
+                {
+                    if (fromOffset == 0f && toOffset == 0f)
+                        continue;
+
+                    var fromProbe = new XYZ(from.X, from.Y, from.Z + fromOffset);
+                    var toProbe = new XYZ(to.X, to.Y, to.Z + toOffset);
+                    if (TryHasLos(mapId, fromProbe, toProbe))
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         private static float Heuristic(GridNode a, GridNode b)

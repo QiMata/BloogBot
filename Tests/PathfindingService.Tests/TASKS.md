@@ -1,4 +1,4 @@
-﻿# PathfindingService.Tests Tasks
+# PathfindingService.Tests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. PathfindingServiceRouteParitySuite
+- [ ] Behavior: pathfinding service tests enforce deterministic route generation for corpse-run, combat reposition, and gathering travel.
+- [ ] FG Baseline: FG route validations prove stable waypoint outputs and traversal ordering for repeated inputs.
+- [ ] BG Target: BG route validations consume equivalent waypoints so path execution remains indistinguishable from FG runs.
+- [ ] Implementation Targets: `Tests/PathfindingService.Tests/**/*.cs`, `Services/PathfindingService/**/*.cs`, `Exports/Navigation/**/*.cpp`.
+- [ ] Simple Command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: tests pass with deterministic route IDs, no empty routes, and no regressions in corpse-runback path generation.
+- [ ] If Fails: add `Research:PathfindingTestRouteGap::<scenario>` and `Implement:PathfindingTestRouteFix::<scenario>` tasks with failing case IDs.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

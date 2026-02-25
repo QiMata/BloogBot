@@ -1,4 +1,4 @@
-﻿# Tests Tasks
+# Tests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -13,8 +13,6 @@
 
 ## Current P0: Corpse-Run
 1. Setup and flow
-- [x] `DeathCorpseRunTests` setup path switched to `.tele name {NAME} Orgrimmar`.
-- [x] `ValleyOfTrials` removed from corpse-run setup flow.
 - [ ] Re-run BG and FG corpse-run validation and capture fresh evidence.
 
 2. Runtime and cleanup
@@ -98,3 +96,20 @@
 
 ## Archive
 Move completed items to `Tests/TASKS_ARCHIVE.md`.
+
+## Behavior Cards
+1. CrossSuiteParityGateExecution
+- [ ] Behavior: test orchestration runs corpse, combat, and gathering parity suites under shared timeout and teardown guardrails.
+- [ ] FG Baseline: FG side of each suite finishes with player-like completion signals and deterministic evidence capture.
+- [ ] BG Target: BG side of each suite mirrors FG outcomes and records movement/spell/packet parity evidence in the same cycle.
+- [ ] Implementation Targets: `Tests/**/*.cs`, `run-tests.ps1`, `docs/BEHAVIOR_MATRIX.md`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~CombatLoopTests|FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: all selected suites run in one cycle with deterministic teardown evidence and clearly triaged FG/BG parity deltas.
+- [ ] If Fails: add `Research:CrossSuiteParityGap::<suite>` and `Implement:CrossSuiteParityFix::<suite>` tasks mapped to owning project TASKS files.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

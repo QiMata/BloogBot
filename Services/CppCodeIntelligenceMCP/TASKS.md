@@ -1,4 +1,4 @@
-﻿# CppCodeIntelligenceMCP Tasks
+# CppCodeIntelligenceMCP Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. CppCodeIntelligenceSymbolParitySupport
+- [ ] Behavior: code-intelligence symbol lookups resolve corpse, combat, gathering, physics, and movement implementation targets without stale references.
+- [ ] FG Baseline: FG parity work can quickly locate owned source symbols and patch points from deterministic MCP responses.
+- [ ] BG Target: BG parity work receives the same symbol-resolution fidelity so movement and packet fixes land in the correct files on first pass.
+- [ ] Implementation Targets: `Services/CppCodeIntelligenceMCP/**/*.cs`, `Services/CppCodeIntelligenceMCP/*.csproj`, `docs/TASKS.md`.
+- [ ] Simple Command: `dotnet build Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj --configuration Release`.
+- [ ] Acceptance: symbol lookup/build path succeeds and parity tasks can reference concrete file/line owners for movement/corpse/combat gaps.
+- [ ] If Fails: add `Research:CppMcpSymbolResolutionGap::<component>` and `Implement:CppMcpIndexFix::<component>` tasks with failing symbol examples.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

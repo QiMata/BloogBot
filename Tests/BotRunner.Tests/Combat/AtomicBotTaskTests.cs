@@ -33,6 +33,9 @@ internal static class AtomicTaskTestHelpers
                 new Position(start.X, start.Y, start.Z),
                 new Position(end.X, end.Y, end.Z)
             ]);
+        pathfinding
+            .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+            .Returns(true);
         configurePathfinding?.Invoke(pathfinding);
 
         ctx.Setup(c => c.ObjectManager).Returns(om.Object);
@@ -635,13 +638,43 @@ public class RetrieveCorpseTaskTests
         sampleField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(2));
     }
 
-    private static void ForceExpireUnstickManeuver(RetrieveCorpseTask task)
+    private static void ForceRunbackProgressExpired(RetrieveCorpseTask task, float bestDistance2D = 95f)
     {
-        var untilField = typeof(RetrieveCorpseTask).GetField(
-            "_unstickManeuverUntilUtc",
+        var bestField = typeof(RetrieveCorpseTask).GetField(
+            "_bestRunbackCorpseDistance2D",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Missing _unstickManeuverUntilUtc field.");
-        untilField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(1));
+            ?? throw new InvalidOperationException("Missing _bestRunbackCorpseDistance2D field.");
+        bestField.SetValue(task, bestDistance2D);
+
+        var lastProgressField = typeof(RetrieveCorpseTask).GetField(
+            "_lastRunbackProgressUtc",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _lastRunbackProgressUtc field.");
+        lastProgressField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(25));
+    }
+
+    private static void ForceRunbackWaypointProgressExpired(
+        RetrieveCorpseTask task,
+        Position trackedWaypoint,
+        float bestWaypointDistance = 20f)
+    {
+        var trackedField = typeof(RetrieveCorpseTask).GetField(
+            "_trackedRunbackWaypoint",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _trackedRunbackWaypoint field.");
+        trackedField.SetValue(task, trackedWaypoint);
+
+        var bestField = typeof(RetrieveCorpseTask).GetField(
+            "_bestRunbackWaypointDistance",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _bestRunbackWaypointDistance field.");
+        bestField.SetValue(task, bestWaypointDistance);
+
+        var lastProgressField = typeof(RetrieveCorpseTask).GetField(
+            "_lastRunbackWaypointProgressUtc",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Missing _lastRunbackWaypointProgressUtc field.");
+        lastProgressField.SetValue(task, DateTime.UtcNow - TimeSpan.FromSeconds(12));
     }
 
     [Fact]
@@ -705,14 +738,167 @@ public class RetrieveCorpseTaskTests
         // Should still be on stack (navigating)
         Assert.Single(stack);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.StopMovement(
+            ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight), Times.Never);
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
             MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
     }
 
     [Fact]
-    public void Update_FarFromCorpse_NoPath_DrivesFallbackTarget()
+    public void Update_FarFromCorpse_WithProbeStyleLeadIn_DrivesFirstServiceWaypoint()
+    {
+        var corpsePos = new Position(100, 0, 0);
+        var firstWaypoint = new Position(2.8f, 0f, 0f);
+        var secondWaypoint = new Position(4.2f, 0f, 0f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    firstWaypoint,
+                    secondWaypoint,
+                    new Position(end.X, end.Y, end.Z)
+                ]));
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.StopMovement(
+            ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight), Times.Never);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - firstWaypoint.X) < 0.01f &&
+            MathF.Abs(p.Y - firstWaypoint.Y) < 0.01f &&
+            MathF.Abs(p.Z - firstWaypoint.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - secondWaypoint.X) < 0.01f &&
+            MathF.Abs(p.Y - secondWaypoint.Y) < 0.01f &&
+            MathF.Abs(p.Z - secondWaypoint.Z) < 0.01f)), Times.Never);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_WithValidCornerRoute_DrivesFirstServiceWaypointInsteadOfDirectCorpse()
+    {
+        var corpsePos = new Position(100, 100, 0);
+        var firstCorner = new Position(20f, 0f, 0f);
+        var secondCorner = new Position(20f, 40f, 0f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    firstCorner,
+                    secondCorner,
+                    new Position(end.X, end.Y, end.Z)
+                ]));
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.StopMovement(
+            ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight), Times.Never);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - firstCorner.X) < 0.01f &&
+            MathF.Abs(p.Y - firstCorner.Y) < 0.01f &&
+            MathF.Abs(p.Z - firstCorner.Z) < 0.01f)), Times.Once);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - corpsePos.X) < 0.01f &&
+            MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
+            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Never);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_WithInvalidServicePath_DoesNotDriveRouteOrDirectCorpse()
+    {
+        var corpsePos = new Position(500, 500, 0);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    new Position(float.NaN, start.Y + 3f, start.Z),
+                    new Position(end.X, end.Y, end.Z)
+                ]));
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_WithServicePathBlockedByLineOfSight_DoesNotDriveInvalidRoute()
+    {
+        var corpsePos = new Position(100, 100, 0);
+        var firstCorner = new Position(20f, 0f, 0f);
+        var blockedCorner = new Position(20f, 30f, 0f);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+        {
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    firstCorner,
+                    blockedCorner,
+                    new Position(end.X, end.Y, end.Z)
+                ]);
+            pathfinding
+                .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+                .Returns((uint mapId, Position from, Position to) =>
+                {
+                    var blockedSegment =
+                        MathF.Abs(from.X - firstCorner.X) < 0.01f &&
+                        MathF.Abs(from.Y - firstCorner.Y) < 0.01f &&
+                        MathF.Abs(to.X - blockedCorner.X) < 0.01f &&
+                        MathF.Abs(to.Y - blockedCorner.Y) < 0.01f;
+                    return !blockedSegment;
+                });
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.RetrieveCorpse(), Times.Never);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_NoPath_StopsAndTriggersRecoveryInsteadOfDirectFallbackDrive()
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
             pathfinding
@@ -729,11 +915,12 @@ public class RetrieveCorpseTaskTests
 
         Assert.Single(stack);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
-        om.Verify(o => o.StopAllMovement(), Times.Never);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.StopAllMovement(), Times.AtLeastOnce);
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
-            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Once);
+            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Never);
     }
 
     [Fact]
@@ -762,13 +949,13 @@ public class RetrieveCorpseTaskTests
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - corpsePos.X) < 0.01f &&
             MathF.Abs(p.Y - corpsePos.Y) < 0.01f &&
-            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.AtLeastOnce);
-        om.Verify(o => o.StartMovement(It.Is<ControlBits>(b =>
-            b == ControlBits.StrafeLeft || b == ControlBits.StrafeRight || b == ControlBits.Back)), Times.AtLeastOnce);
+            MathF.Abs(p.Z - corpsePos.Z) < 0.01f)), Times.Never);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+        om.Verify(o => o.StopMovement(It.IsAny<ControlBits>()), Times.Never);
     }
 
     [Fact]
-    public void Update_AfterStallRecovery_ExecutesAndStopsUnstickManeuver()
+    public void Update_AfterStallRecovery_DoesNotIssueSyntheticStrafeCommands()
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
             pathfinding
@@ -788,13 +975,76 @@ public class RetrieveCorpseTaskTests
             task.Update();
         }
 
+        Assert.Single(stack);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
+        om.Verify(o => o.StopMovement(It.IsAny<ControlBits>()), Times.Never);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_MovingButNoDistanceProgress_TriggersStallRecovery()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var corpsePos = new Position(100, 0, 0);
+
+        var currentPosition = new Position(0, 0, 0);
+        var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
+        player.Setup(p => p.Position).Returns(() => currentPosition);
+        player.Setup(p => p.MovementFlags).Returns(MovementFlags.MOVEFLAG_FORWARD);
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        // Seed baseline runback tracking.
         task.Update();
-        ForceExpireUnstickManeuver(task);
+
+        // Simulate movement that changes position but does not improve corpse distance.
+        currentPosition = new Position(0, 0.5f, 0);
+        ForceRunbackProgressExpired(task);
+        ForceRunbackSampleReady(task);
+
         task.Update();
 
         Assert.Single(stack);
-        om.Verify(o => o.StartMovement(ControlBits.StrafeLeft), Times.AtLeastOnce);
-        om.Verify(o => o.StopMovement(ControlBits.StrafeLeft), Times.AtLeastOnce);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public void Update_FarFromCorpse_MovingButNoWaypointProgress_TriggersStallRecovery()
+    {
+        var forcedWaypoint = new Position(0, 20, 0);
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
+            pathfinding
+                .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    forcedWaypoint,
+                    new Position(end.X, end.Y, end.Z)
+                ]));
+        var corpsePos = new Position(100, 0, 0);
+
+        var currentPosition = new Position(0, 0, 0);
+        var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
+        player.Setup(p => p.Position).Returns(() => currentPosition);
+        player.Setup(p => p.MovementFlags).Returns(MovementFlags.MOVEFLAG_FORWARD);
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new RetrieveCorpseTask(ctx.Object, corpsePos);
+        stack.Push(task);
+
+        // Seed runback samples and waypoint tracking.
+        task.Update();
+
+        currentPosition = new Position(1f, 0, 0);
+        ForceRunbackSampleReady(task);
+        ForceRunbackWaypointProgressExpired(task, forcedWaypoint, bestWaypointDistance: 20f);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
     }
 
     [Fact]

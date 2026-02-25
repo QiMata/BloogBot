@@ -1,4 +1,4 @@
-﻿# BackgroundBotRunner Tasks
+# BackgroundBotRunner Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -61,3 +61,20 @@ Headless runner integration and behavior alignment with shared BotRunner tasks.
 Move completed items to `Services/BackgroundBotRunner/TASKS_ARCHIVE.md`.
 
 
+
+## Behavior Cards
+1. BackgroundRunnerCommandExecutionParity
+- [ ] Behavior: BG runner executes queued movement/combat actions through teleport and corpse-release transitions without stuck-forward loops.
+- [ ] FG Baseline: FG runner clears or adjusts movement flags as soon as displacement drops to zero and resumes with valid route commands.
+- [ ] BG Target: BG runner mirrors FG command cadence, route requests, and movement-flag resets for the same scenario timeline.
+- [ ] Implementation Targets: `Services/BackgroundBotRunner/**/*.cs`, `Exports/WoWSharpClient/Movement/**/*.cs`, `Exports/BotRunner/Tasks/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: corpse-run completes with no prolonged `MOVEFLAG_FORWARD` plus zero-displacement loops, and teardown evidence records only repo-scoped process shutdown.
+- [ ] If Fails: add `Research:BackgroundRunnerStuckForward::<scenario>` and `Implement:BackgroundRunnerCommandRecovery::<scenario>` tasks with route/log evidence references.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

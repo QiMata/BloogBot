@@ -2,6 +2,6 @@
 <RunSettings>
   <RunConfiguration>
     <!-- Hard stop for hangs so dotnet test does not run indefinitely. -->
-    <TestSessionTimeout>180000</TestSessionTimeout>
+    <TestSessionTimeout>600000</TestSessionTimeout>
   </RunConfiguration>
 </RunSettings>

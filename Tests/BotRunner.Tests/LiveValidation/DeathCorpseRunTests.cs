@@ -38,8 +38,14 @@ public class DeathCorpseRunTests
     private const float MinimumGhostTravelDistance = 12.0f;
     private const float MinimumDistanceImprovement = 10.0f;
     private const int RequiredImprovementTicks = 3;
+    private const float MinimumRunbackYardsPerSecond = 3.5f;
+    private const int RunbackObservationPadSeconds = 45;
+    private const int MinRunbackObservationSeconds = 45;
+    private const int MaxRunbackObservationSeconds = 360;
 
-    private static readonly TimeSpan CorpseRunObservationWindow = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan GhostSettleWindow = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan GhostSettleMinimumDuration = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan GhostRelocationGuardWindow = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan ReleaseToGhostTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan ReclaimTimeout = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan AliveAfterRetrieveTimeout = TimeSpan.FromSeconds(20);
@@ -130,14 +136,10 @@ public class DeathCorpseRunTests
         {
             _output.WriteLine($"=== BG Bot: {bgChar} ({bgAccount}) ===");
             _output.WriteLine($"=== FG Bot: {fgChar} ({fgAccount}) ===");
-            _output.WriteLine("[PARITY] Running BG and FG corpse scenarios concurrently.");
+            _output.WriteLine("[PARITY] Running BG and FG corpse scenarios sequentially for deterministic kill/setup timing.");
 
-            var bgTask = RunDeathScenario(bgAccount!, bgChar!, () => _bot.BackgroundBot, "BG");
-            var fgTask = RunDeathScenario(fgAccount!, fgChar!, () => _bot.ForegroundBot, "FG");
-            await Task.WhenAll(bgTask, fgTask);
-
-            var bgEvidence = await bgTask;
-            var fgEvidence = await fgTask;
+            var bgEvidence = await RunDeathScenario(bgAccount!, bgChar!, () => _bot.BackgroundBot, "BG");
+            var fgEvidence = await RunDeathScenario(fgAccount!, fgChar!, () => _bot.ForegroundBot, "FG");
 
             AssertScenario(bgEvidence);
             AssertScenario(fgEvidence);
@@ -295,7 +297,7 @@ public class DeathCorpseRunTests
             characterName,
             timeoutMs: 20000,
             requireCorpseTransition: true,
-            singleCommandOnly: true);
+            singleCommandOnly: false);
         evidence.KillCommand = deathResult.Command;
         _output.WriteLine($"  [{label}] Death setup: success={deathResult.Succeeded}, command='{deathResult.Command}', details='{deathResult.Details}'");
         if (!deathResult.Succeeded)
@@ -365,7 +367,7 @@ public class DeathCorpseRunTests
         var settleSw = Stopwatch.StartNew();
         var settlePrev = ghostPos;
         var settleStableSamples = 0;
-        while (settleSw.Elapsed < TimeSpan.FromSeconds(8))
+        while (settleSw.Elapsed < GhostSettleWindow)
         {
             await Task.Delay(1000);
             snap = await GetSnapshotForAccountAsync();
@@ -393,127 +395,172 @@ public class DeathCorpseRunTests
 
             ghostPos = settlePos;
             settlePrev = settlePos;
-            if (settleStableSamples >= 2)
+            if (settleStableSamples >= 2 && settleSw.Elapsed >= GhostSettleMinimumDuration)
                 break;
         }
 
         var initialDist2D = DistanceTo2D(ghostPos.X, ghostPos.Y, corpseX, corpseY);
         evidence.InitialDistanceToCorpse2D = initialDist2D;
         evidence.BestDistanceToCorpse2D = initialDist2D;
-        var shortRunbackExpected = initialDist2D <= MinimumGhostToCorpseRunbackDistance;
-        var startedWithinRetrieveRange = initialDist2D <= RetrieveRange;
+        bool shortRunbackExpected = initialDist2D <= MinimumGhostToCorpseRunbackDistance;
+        bool startedWithinRetrieveRange = initialDist2D <= RetrieveRange;
         if (startedWithinRetrieveRange)
+        {
             evidence.ImmediateCorpseRangePhaseObserved = true;
-        _output.WriteLine($"  [{label}] Ghost->corpse initial distance2D: {initialDist2D:F1}y");
+
+            _output.WriteLine($"  [{label}] Ghost inside retrieve radius after release; guarding for delayed graveyard relocation.");
+            var guardPrev = ghostPos;
+            var guardSw = Stopwatch.StartNew();
+            while (guardSw.Elapsed < GhostRelocationGuardWindow)
+            {
+                await Task.Delay(1000);
+                snap = await GetSnapshotForAccountAsync();
+                if (!ValidateNoPostDeathGmCommands("ghost-relocation-guard"))
+                    return await FailAsync(evidence.FailureReason);
+
+                var guardPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+                if (guardPos == null)
+                    continue;
+
+                var guardStep = DistanceTo(guardPos.X, guardPos.Y, guardPos.Z, guardPrev.X, guardPrev.Y, guardPrev.Z);
+                var guardDist2D = DistanceTo2D(guardPos.X, guardPos.Y, corpseX, corpseY);
+                ghostPos = guardPos;
+                guardPrev = guardPos;
+
+                if (guardStep >= 80f || guardDist2D > RetrieveRange + 5f)
+                {
+                    initialDist2D = guardDist2D;
+                    evidence.InitialDistanceToCorpse2D = initialDist2D;
+                    evidence.BestDistanceToCorpse2D = initialDist2D;
+                    shortRunbackExpected = initialDist2D <= MinimumGhostToCorpseRunbackDistance;
+                    startedWithinRetrieveRange = initialDist2D <= RetrieveRange;
+                    evidence.ImmediateCorpseRangePhaseObserved = startedWithinRetrieveRange;
+                    _output.WriteLine($"  [{label}] Late graveyard relocation observed; runback start updated (step={guardStep:F1}y, dist2D={guardDist2D:F1}y).");
+                    break;
+                }
+            }
+        }
+
+        _output.WriteLine($"  [{label}] Ghost->corpse initial distance2D: {evidence.InitialDistanceToCorpse2D:F1}y");
         if (shortRunbackExpected)
-        {
             _output.WriteLine($"  [{label}] Ghost starts near corpse; continuing without reseed/retry loop.");
-        }
         if (startedWithinRetrieveRange)
-        {
             _output.WriteLine($"  [{label}] Ghost already inside retrieve radius; runback movement is not required.");
-        }
 
         // Step 6: pathfind/navigate to corpse (no teleport).
-        _output.WriteLine($"  [{label}] Step 6: Observe pathfinding runback to corpse");
-        var startRunbackDispatch = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.RetrieveCorpse });
-        _output.WriteLine($"  [{label}] RetrieveCorpse(runback start) dispatch result: {startRunbackDispatch}");
-        if (startRunbackDispatch != ResponseResult.Success)
-            return await FailAsync("RetrieveCorpse runback-start action dispatch failed");
-        if (!ValidateNoPostDeathGmCommands("runback-start"))
-            return await FailAsync(evidence.FailureReason);
-
-        var runSw = Stopwatch.StartNew();
-        var previousPos = ghostPos;
-        var noMovementTicks = 0;
-        var staleForwardTicks = 0;
-        var ignoredInitialTeleportJump = false;
-        var arrivedNearCorpse = false;
-        while (runSw.Elapsed < CorpseRunObservationWindow)
+        var arrivedNearCorpse = startedWithinRetrieveRange;
+        if (!startedWithinRetrieveRange)
         {
-            await Task.Delay(3000);
-
-            snap = await GetSnapshotForAccountAsync();
-            if (!ValidateNoPostDeathGmCommands("runback-observation"))
+            _output.WriteLine($"  [{label}] Step 6: Observe pathfinding runback to corpse");
+            var startRunbackDispatch = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.RetrieveCorpse });
+            _output.WriteLine($"  [{label}] RetrieveCorpse(runback start) dispatch result: {startRunbackDispatch}");
+            if (startRunbackDispatch != ResponseResult.Success)
+                return await FailAsync("RetrieveCorpse runback-start action dispatch failed");
+            if (!ValidateNoPostDeathGmCommands("runback-start"))
                 return await FailAsync(evidence.FailureReason);
 
-            var currentPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-            if (currentPos == null)
-                continue;
+            var runbackObservationSeconds = Math.Clamp(
+                (int)Math.Ceiling(evidence.InitialDistanceToCorpse2D / MinimumRunbackYardsPerSecond) + RunbackObservationPadSeconds,
+                MinRunbackObservationSeconds,
+                MaxRunbackObservationSeconds);
+            var runbackObservationWindow = TimeSpan.FromSeconds(runbackObservationSeconds);
+            _output.WriteLine($"  [{label}] Runback observation window: {runbackObservationSeconds}s (initial2D={evidence.InitialDistanceToCorpse2D:F1}y)");
 
-            var stepDistance = DistanceTo(currentPos.X, currentPos.Y, currentPos.Z, previousPos.X, previousPos.Y, previousPos.Z);
-            var distanceToCorpse2D = DistanceTo2D(currentPos.X, currentPos.Y, corpseX, corpseY);
-            var reclaimDelay = GetReclaimDelaySeconds(snap);
-            var movementFlags = GetMovementFlags(snap);
-
-            _output.WriteLine($"  [{label}] Run tick: dist2D={distanceToCorpse2D:F1}, step={stepDistance:F1}, reclaimDelay={reclaimDelay}s, moveFlags=0x{movementFlags:X}");
-
-            if (!ignoredInitialTeleportJump && stepDistance >= 80f)
+            var runSw = Stopwatch.StartNew();
+            var previousPos = ghostPos;
+            var noMovementTicks = 0;
+            var staleForwardTicks = 0;
+            var ignoredInitialTeleportJump = false;
+            while (runSw.Elapsed < runbackObservationWindow)
             {
-                ignoredInitialTeleportJump = true;
-                _output.WriteLine($"  [{label}] Ignoring initial teleport-sized jump ({stepDistance:F1}y) from graveyard transition.");
+                await Task.Delay(3000);
+
+                snap = await GetSnapshotForAccountAsync();
+                if (!ValidateNoPostDeathGmCommands("runback-observation"))
+                    return await FailAsync(evidence.FailureReason);
+
+                var currentPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+                if (currentPos == null)
+                    continue;
+
+                var stepDistance = DistanceTo(currentPos.X, currentPos.Y, currentPos.Z, previousPos.X, previousPos.Y, previousPos.Z);
+                var distanceToCorpse2D = DistanceTo2D(currentPos.X, currentPos.Y, corpseX, corpseY);
+                var reclaimDelay = GetReclaimDelaySeconds(snap);
+                var movementFlags = GetMovementFlags(snap);
+
+                _output.WriteLine($"  [{label}] Run tick: dist2D={distanceToCorpse2D:F1}, step={stepDistance:F1}, reclaimDelay={reclaimDelay}s, moveFlags=0x{movementFlags:X}");
+
+                if (!ignoredInitialTeleportJump && stepDistance >= 80f)
+                {
+                    ignoredInitialTeleportJump = true;
+                    _output.WriteLine($"  [{label}] Ignoring initial teleport-sized jump ({stepDistance:F1}y) from graveyard transition.");
+                    previousPos = currentPos;
+                    continue;
+                }
+
+                Assert.True(stepDistance < 80f, $"{label}: corpse run used teleport-like shortcut ({stepDistance:F1}y)");
+
+                if (stepDistance >= 0.2f)
+                    evidence.CumulativeGhostTravel += stepDistance;
+
+                if (distanceToCorpse2D + 0.5f < evidence.BestDistanceToCorpse2D)
+                {
+                    evidence.BestDistanceToCorpse2D = distanceToCorpse2D;
+                    evidence.DistanceImprovementTicks++;
+                }
+
+                if ((movementFlags & MoveFlagForward) != 0 && stepDistance < 0.2f)
+                    staleForwardTicks++;
+                else
+                    staleForwardTicks = 0;
+
+                if (staleForwardTicks >= 10)
+                {
+                    evidence.StaleForwardFlagObserved = true;
+                    return await RetryOrFailRunbackAsync("stale MOVEFLAG_FORWARD persisted while no displacement during runback");
+                }
+
+                noMovementTicks = stepDistance < 0.2f ? noMovementTicks + 1 : 0;
+                if (noMovementTicks >= 15 && !arrivedNearCorpse && evidence.CumulativeGhostTravel < MinimumGhostTravelDistance)
+                    return await RetryOrFailRunbackAsync($"corpse run stalled with minimal movement (travel={evidence.CumulativeGhostTravel:F1}y, moveFlags=0x{movementFlags:X})");
+
+                if (distanceToCorpse2D <= RetrieveRange)
+                    arrivedNearCorpse = true;
+
+                var totalImprovement = evidence.InitialDistanceToCorpse2D - evidence.BestDistanceToCorpse2D;
+                var strongImprovement =
+                    evidence.DistanceImprovementTicks >= RequiredImprovementTicks
+                    && totalImprovement >= MinimumDistanceImprovement;
+                var meaningfulTravel = evidence.CumulativeGhostTravel >= MinimumGhostTravelDistance
+                    && totalImprovement >= (MinimumDistanceImprovement / 2f);
+                evidence.MovingToCorpsePhaseObserved =
+                    strongImprovement
+                    || meaningfulTravel
+                    || (arrivedNearCorpse && totalImprovement >= 8f);
+                if (arrivedNearCorpse && shortRunbackExpected)
+                    evidence.ImmediateCorpseRangePhaseObserved = true;
+
+                if (reclaimDelay <= 0)
+                    evidence.ReclaimReadyPhaseObserved = true;
+
+                if (arrivedNearCorpse && (evidence.MovingToCorpsePhaseObserved || evidence.ImmediateCorpseRangePhaseObserved))
+                {
+                    previousPos = currentPos;
+                    break;
+                }
+
                 previousPos = currentPos;
-                continue;
             }
 
-            Assert.True(stepDistance < 80f, $"{label}: corpse run used teleport-like shortcut ({stepDistance:F1}y)");
-
-            if (stepDistance >= 0.2f)
-                evidence.CumulativeGhostTravel += stepDistance;
-
-            if (distanceToCorpse2D + 0.5f < evidence.BestDistanceToCorpse2D)
-            {
-                evidence.BestDistanceToCorpse2D = distanceToCorpse2D;
-                evidence.DistanceImprovementTicks++;
-            }
-
-            if ((movementFlags & MoveFlagForward) != 0 && stepDistance < 0.2f)
-                staleForwardTicks++;
-            else
-                staleForwardTicks = 0;
-
-            if (staleForwardTicks >= 10)
-            {
-                evidence.StaleForwardFlagObserved = true;
-                return await RetryOrFailRunbackAsync("stale MOVEFLAG_FORWARD persisted while no displacement during runback");
-            }
-
-            noMovementTicks = stepDistance < 0.2f ? noMovementTicks + 1 : 0;
-            if (noMovementTicks >= 15 && !arrivedNearCorpse && evidence.CumulativeGhostTravel < MinimumGhostTravelDistance)
-                return await RetryOrFailRunbackAsync($"corpse run stalled with minimal movement (travel={evidence.CumulativeGhostTravel:F1}y, moveFlags=0x{movementFlags:X})");
-
-            if (distanceToCorpse2D <= RetrieveRange)
-                arrivedNearCorpse = true;
-
-            var totalImprovement = evidence.InitialDistanceToCorpse2D - evidence.BestDistanceToCorpse2D;
-            var strongImprovement =
-                evidence.DistanceImprovementTicks >= RequiredImprovementTicks
-                && totalImprovement >= MinimumDistanceImprovement;
-            var meaningfulTravel = evidence.CumulativeGhostTravel >= MinimumGhostTravelDistance
-                && totalImprovement >= (MinimumDistanceImprovement / 2f);
-            evidence.MovingToCorpsePhaseObserved =
-                strongImprovement
-                || meaningfulTravel
-                || (arrivedNearCorpse && totalImprovement >= 8f);
-            if (arrivedNearCorpse && shortRunbackExpected)
-                evidence.ImmediateCorpseRangePhaseObserved = true;
-
-            if (reclaimDelay <= 0)
-                evidence.ReclaimReadyPhaseObserved = true;
-
-            if (arrivedNearCorpse && (evidence.MovingToCorpsePhaseObserved || evidence.ImmediateCorpseRangePhaseObserved))
-            {
-                previousPos = currentPos;
-                break;
-            }
-
-            previousPos = currentPos;
+            if (!evidence.MovingToCorpsePhaseObserved && !evidence.ImmediateCorpseRangePhaseObserved && !shortRunbackExpected)
+                return await RetryOrFailRunbackAsync($"movement toward corpse not proven (improvementTicks={evidence.DistanceImprovementTicks}, initial2D={evidence.InitialDistanceToCorpse2D:F1}, best2D={evidence.BestDistanceToCorpse2D:F1})");
+            if (!arrivedNearCorpse)
+                return await RetryOrFailRunbackAsync($"did not reach corpse reclaim range during runback (best2D={evidence.BestDistanceToCorpse2D:F1}y)");
         }
-
-        if (!evidence.MovingToCorpsePhaseObserved && !evidence.ImmediateCorpseRangePhaseObserved && !shortRunbackExpected)
-            return await RetryOrFailRunbackAsync($"movement toward corpse not proven (improvementTicks={evidence.DistanceImprovementTicks}, initial2D={evidence.InitialDistanceToCorpse2D:F1}, best2D={evidence.BestDistanceToCorpse2D:F1})");
-        if (!arrivedNearCorpse)
-            return await RetryOrFailRunbackAsync($"did not reach corpse reclaim range during runback (best2D={evidence.BestDistanceToCorpse2D:F1}y)");
+        else
+        {
+            _output.WriteLine($"  [{label}] Step 6: Ghost already within retrieve range after stabilization; skipping runback dispatch.");
+        }
 
         // Step 7: wait until reclaim delay is zero from snapshot.
         _output.WriteLine($"  [{label}] Step 7: Wait until reclaim delay reaches zero");

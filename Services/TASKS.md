@@ -62,3 +62,20 @@ Move completed items to `Services/TASKS_ARCHIVE.md`.
 
 
 
+
+## Behavior Cards
+1. ServiceOrchestrationParityLoop
+- [ ] Behavior: service orchestration keeps FG/BG lifecycle, action routing, and scenario coordination aligned through corpse/combat/gathering cycles.
+- [ ] FG Baseline: FG service pipeline completes the full validation cycle without dropped actions, stale state, or unmanaged lingering processes.
+- [ ] BG Target: BG service pipeline mirrors FG orchestration timing and action completion semantics in the same run cycle.
+- [ ] Implementation Targets: `Services/WoWStateManager/TASKS.md`, `Services/ForegroundBotRunner/TASKS.md`, `Services/BackgroundBotRunner/TASKS.md`, `Services/PathfindingService/TASKS.md`, `Services/DecisionEngineService/TASKS.md`, `Services/PromptHandlingService/TASKS.md`, `Services/CppCodeIntelligenceMCP/TASKS.md`, `Services/LoggingMCPServer/TASKS.md`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~CombatLoopTests|FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: services support all three scenario families in one cycle with deterministic teardown evidence and no cross-service starvation.
+- [ ] If Fails: add `Research:ServiceOrchestrationGap::<service>` and `Implement:ServiceOrchestrationFix::<service>` tasks and link to owning subproject TASKS file.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

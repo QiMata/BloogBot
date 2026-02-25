@@ -1,4 +1,4 @@
-﻿# Systems.ServiceDefaults Tasks
+# Systems.ServiceDefaults Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. SystemsServiceDefaultsTelemetryParity
+- [ ] Behavior: service-defaults provide consistent telemetry, tracing, and correlation settings across FG/BG parity services.
+- [ ] FG Baseline: FG service telemetry includes scenario and teardown correlation identifiers needed for parity analysis.
+- [ ] BG Target: BG service telemetry uses identical correlation settings so FG/BG traces can be directly compared.
+- [ ] Implementation Targets: `UI/Systems/Systems.ServiceDefaults/**/*.cs`, `UI/Systems/Systems.AppHost/**/*.cs`, `Services/**/*.cs`.
+- [ ] Simple Command: `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release`.
+- [ ] Acceptance: defaults build succeeds and required telemetry/correlation conventions are documented for all parity-critical services.
+- [ ] If Fails: add `Research:ServiceDefaultsTelemetryGap::<field>` and `Implement:ServiceDefaultsTelemetryFix::<field>` tasks with missing field evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

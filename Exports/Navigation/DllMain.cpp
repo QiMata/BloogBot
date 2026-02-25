@@ -171,15 +171,29 @@ extern "C" __declspec(dllexport) void PreloadMap(uint32_t mapId)
 
 extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ end, bool smoothPath, int* length)
 {
-    if (!g_initialized)
-        InitializeAllSystems();
+    __try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
 
-    auto* navigation = Navigation::GetInstance();
-    if (navigation)
-        return navigation->CalculatePath(mapId, start, end, smoothPath, length);
+        auto* navigation = Navigation::GetInstance();
+        if (navigation)
+            return navigation->CalculatePath(mapId, start, end, smoothPath, length);
 
-    *length = 0;
-    return nullptr;
+        if (length)
+            *length = 0;
+        return nullptr;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        OutputDebugStringA("[Navigation.dll] SEH exception in FindPath\n");
+        fprintf(stderr, "[Navigation.dll] SEH exception in FindPath (code=0x%08lx)\n",
+                GetExceptionCode());
+
+        if (length)
+            *length = 0;
+        return nullptr;
+    }
 }
 
 extern "C" __declspec(dllexport) void PathArrFree(XYZ* pathArr)

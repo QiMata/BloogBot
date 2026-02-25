@@ -1,4 +1,4 @@
-﻿# Tests.Infrastructure Tasks
+# Tests.Infrastructure Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -67,3 +67,20 @@ Shared test fixture and client infrastructure for live/integration orchestration
 
 ## Archive
 Move completed items to `Tests/Tests.Infrastructure/TASKS_ARCHIVE.md`.
+
+## Behavior Cards
+1. TestsInfrastructureTeardownGuardParity
+- [ ] Behavior: test infrastructure guarantees timeout/cancel/failure teardown stops only repo-scoped processes and managers.
+- [ ] FG Baseline: FG teardown path reliably disposes launched processes and reports PID outcomes without collateral kills.
+- [ ] BG Target: BG teardown path applies identical repo-scoped shutdown rules and emits equivalent PID evidence.
+- [ ] Implementation Targets: `Tests/Tests.Infrastructure/**/*.cs`, `run-tests.ps1`, `Tests/BotRunner.Tests/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/Tests.Infrastructure/Tests.Infrastructure.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: infrastructure tests prove deterministic cleanup and explicitly reject blanket `dotnet` termination behavior.
+- [ ] If Fails: add `Research:InfraTeardownScopeGap::<scenario>` and `Implement:InfraTeardownScopeFix::<scenario>` tasks with PID evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

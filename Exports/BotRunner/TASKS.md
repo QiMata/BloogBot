@@ -1,4 +1,4 @@
-﻿# BotRunner Tasks
+# BotRunner Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -11,10 +11,6 @@
 3. Combat and gathering parity loops need structured evidence + task expansion.
 
 ## Active Work
-- [x] `RetrieveCorpseTask`: route/probe resolution runs before stall recovery.
-- [x] `RetrieveCorpseTask`: stall detection uses horizontal movement intent.
-- [x] `RetrieveCorpseTask`: nested recovery is suppressed during unstick maneuvers.
-- [x] `RetrieveCorpseTask`: no-path fallback drives toward corpse before timeout abort.
 - [ ] Re-run live corpse retrieval using Orgrimmar setup + 10-minute timeout + teardown guard.
 
 ## Iterative Parity Backlog
@@ -80,3 +76,20 @@
 
 ## Archive
 Move completed items to `Exports/BotRunner/TASKS_ARCHIVE.md`.
+
+## Behavior Cards
+1. CorpseRunOrgrimmarReleaseRecovery
+- [ ] Behavior: after `.tele name {NAME} Orgrimmar` and kill, FG/BG both release spirit, run back from graveyard, wait reclaim timer, retrieve corpse, and return alive.
+- [ ] FG Baseline: FG completes dead -> ghost -> runback -> reclaim-ready -> retrieve -> alive sequence without teleport shortcuts.
+- [ ] BG Target: BG completes the same sequence with comparable route progress, reclaim timing, and retrieve success.
+- [ ] Implementation Targets: `Exports/BotRunner/Tasks/ReleaseCorpseTask.cs`, `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`, `Exports/BotRunner/Tasks/CombatRotationTask.cs`, `Exports/BotRunner/Tasks/GatherNodeTask.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: both clients complete full lifecycle, retrieve only after reclaim delay reaches zero, and timeout/failure path stops repo-scoped lingering clients/managers within 30 seconds with PID evidence.
+- [ ] If Fails: add `Research:CorpseRunFailure::<phase>` and `Implement:CorpseRunFix::<task>` entries with linked logs and teardown records.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

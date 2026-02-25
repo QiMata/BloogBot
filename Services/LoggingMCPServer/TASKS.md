@@ -1,4 +1,4 @@
-﻿# LoggingMCPServer Tasks
+# LoggingMCPServer Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. LoggingMcpScenarioCorrelationParity
+- [ ] Behavior: logging MCP outputs scenario-correlated FG/BG traces including process lifecycle and teardown outcomes.
+- [ ] FG Baseline: FG logs include clear scenario IDs, lifecycle markers, and process stop outcomes for each validation run.
+- [ ] BG Target: BG logs include matching correlation IDs and equivalent lifecycle/process evidence for direct parity comparisons.
+- [ ] Implementation Targets: `Services/LoggingMCPServer/**/*.cs`, `Tests/Tests.Infrastructure/**/*.cs`, `run-tests.ps1`.
+- [ ] Simple Command: `dotnet build Services/LoggingMCPServer/LoggingMCPServer.csproj --configuration Release`.
+- [ ] Acceptance: log pipeline preserves scenario correlation fields and can prove repo-scoped cleanup without ambiguous process ownership.
+- [ ] If Fails: add `Research:LoggingCorrelationGap::<scenario>` and `Implement:LoggingMcpCorrelationFix::<scenario>` tasks with sample log excerpts.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

@@ -261,55 +261,37 @@ namespace WoWStateManager
                 if (tcpConnected)
                 {
                     var status = PathfindingServiceStatus.ReadFromFile();
-                    if (status?.IsReady == true)
+                    if (status != null)
                     {
-                        _serviceState = PathfindingServiceState.Ready;
-                        var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                        var mapsStr = status.LoadedMaps.Count > 0
-                            ? $"Maps loaded: {string.Join(", ", status.LoadedMaps)}"
-                            : "";
-                        Console.WriteLine($"PathfindingService READY after {elapsed:F1}s. {mapsStr}");
-                        return;
-                    }
-                    else if (status != null)
-                    {
-                        // Check if status file is stale (from a different process)
-                        bool isStaleStatus = false;
-                        try
+                        bool statusMatchesLiveService = IsStatusFromLivePathfindingProcess(status, weStartedProcess);
+                        if (status.IsReady && statusMatchesLiveService)
                         {
-                            var runningProcess = Process.GetProcessById(status.ProcessId);
-                            // Process exists but check if it's actually PathfindingService
-                            isStaleStatus = runningProcess.HasExited;
-                        }
-                        catch
-                        {
-                            // Process not found - status file is stale
-                            isStaleStatus = true;
-                        }
-
-                        if (isStaleStatus)
-                        {
-                            // Status file is from a dead process but TCP is connected -
-                            // the running service is ready but didn't update the file
                             _serviceState = PathfindingServiceState.Ready;
                             var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                            Console.WriteLine($"PathfindingService READY after {elapsed:F1}s (status file stale from PID {status.ProcessId}, TCP connected).");
+                            var mapsStr = status.LoadedMaps.Count > 0
+                                ? $"Maps loaded: {string.Join(", ", status.LoadedMaps)}"
+                                : "";
+                            Console.WriteLine($"PathfindingService READY after {elapsed:F1}s. {mapsStr}");
                             return;
                         }
 
-                        // Status file exists but not ready yet - show current status periodically
+                        // Status exists but not usable yet (still loading or stale/mismatched PID)
                         if (attempt % (5000 / delayMs) == 0)
                         {
-                            Console.WriteLine($"  PathfindingService status: {status.StatusMessage}");
+                            if (!statusMatchesLiveService)
+                            {
+                                Console.WriteLine(
+                                    $"  PathfindingService status ignored (stale/mismatched PID {status.ProcessId}). Waiting for live ready status...");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"  PathfindingService status: {status.StatusMessage}");
+                            }
                         }
                     }
-                    else
+                    else if (attempt % (5000 / delayMs) == 0)
                     {
-                        // No status file but TCP connected - service is ready
-                        _serviceState = PathfindingServiceState.Ready;
-                        var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                        Console.WriteLine($"PathfindingService READY after {elapsed:F1}s (TCP connected, no status file).");
-                        return;
+                        Console.WriteLine("  PathfindingService status file not found yet. Waiting for ready status...");
                     }
                 }
 
@@ -327,6 +309,29 @@ namespace WoWStateManager
             Console.WriteLine(
                 $"WARNING: PathfindingService did not become available at {ipAddress}:{port} after {maxAttempts * delayMs / 1000} seconds. " +
                 "Proceeding without pathfinding. Navigation will fall back to direct movement.");
+        }
+
+        private static bool IsStatusFromLivePathfindingProcess(PathfindingServiceStatus status, bool weStartedProcess)
+        {
+            try
+            {
+                var process = Process.GetProcessById(status.ProcessId);
+                if (process.HasExited)
+                    return false;
+
+                // If we launched the service, require exact PID match to avoid stale-status false positives.
+                if (weStartedProcess && _pathfindingProcess != null)
+                    return process.Id == _pathfindingProcess.Id;
+
+                // For pre-existing service, we can't know PID upfront; require plausible process identity.
+                var processName = process.ProcessName;
+                return processName.Contains("dotnet", StringComparison.OrdinalIgnoreCase)
+                    || processName.Contains("PathfindingService", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static void EnsurePathfindingServiceIsAvailable()

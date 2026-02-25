@@ -1,4 +1,4 @@
-﻿# RecordedTests.PathingTests.Tests Tasks
+# RecordedTests.PathingTests.Tests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. RecordedPathingReplayParitySuite
+- [ ] Behavior: recorded pathing tests verify FG/BG replay consistency for corpse runback and movement scenarios.
+- [ ] FG Baseline: FG replay consumes recorded paths and reproduces expected travel timing/waypoint ordering.
+- [ ] BG Target: BG replay uses the same recordings and stays within FG timing/position tolerances.
+- [ ] Implementation Targets: `Tests/RecordedTests.PathingTests.Tests/**/*.cs`, `RecordedTests.PathingTests/**/*.cs`, `RecordedTests.Shared/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/RecordedTests.PathingTests.Tests/RecordedTests.PathingTests.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: replay tests pass consistently with deterministic artifacts and no unexplained FG/BG drift.
+- [ ] If Fails: add `Research:RecordedPathReplayGap::<recording>` and `Implement:RecordedPathReplayFix::<recording>` tasks with replay diff references.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

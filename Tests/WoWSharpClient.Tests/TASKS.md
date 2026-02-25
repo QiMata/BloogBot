@@ -1,4 +1,4 @@
-﻿# WoWSharpClient.Tests Tasks
+# WoWSharpClient.Tests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -63,3 +63,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. WoWSharpClientMovementDeathStateParitySuite
+- [ ] Behavior: WoWSharpClient unit tests enforce movement, death-state, and reclaim-timer behavior needed for corpse-run parity.
+- [ ] FG Baseline: FG client-side state transitions remain deterministic and match expected lifecycle semantics.
+- [ ] BG Target: BG client-side state transitions mirror FG semantics, including teleport recovery and fall-state updates.
+- [ ] Implementation Targets: `Tests/WoWSharpClient.Tests/**/*.cs`, `Exports/WoWSharpClient/**/*.cs`, `Services/WoWStateManager/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: unit suite passes with explicit coverage for death lifecycle, movement flags, and reclaim delay gating behavior.
+- [ ] If Fails: add `Research:WoWSharpClientStateParityGap::<component>` and `Implement:WoWSharpClientStateParityFix::<component>` tasks with failing assertions.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

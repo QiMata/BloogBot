@@ -51,3 +51,20 @@ Move completed items to `RecordedTests.PathingTests/TASKS_ARCHIVE.md`.
 
 
 
+
+## Behavior Cards
+1. RecordedPathReplayParityForRunback
+- [ ] Behavior: recorded pathing replays remain deterministic and expose movement parity regressions for corpse runback/combat approach routes.
+- [ ] FG Baseline: FG replay runner consumes current recordings and produces stable movement traces and completion outcomes.
+- [ ] BG Target: BG replay runner consumes the same recordings and mirrors FG movement progression and completion timing envelope.
+- [ ] Implementation Targets: `RecordedTests.PathingTests/Program.cs`, `RecordedTests.PathingTests/Runners/ForegroundRecordedTestRunner.cs`, `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs`, `RecordedTests.PathingTests/Context/PathingRecordedTestContext.cs`, `RecordedTests.PathingTests/Models/PathingTestDefinitions.cs`.
+- [ ] Simple Command: `dotnet test Tests/RecordedTests.PathingTests.Tests/RecordedTests.PathingTests.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: replay tests pass with deterministic fixture behavior; when parity drift appears, a linked research task and implementation task are added immediately.
+- [ ] If Fails: add `Research:RecordedReplayDrift::<scenario>` and `Implement:RecordedReplayParityFix::<runner-or-definition>` tasks with evidence links.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

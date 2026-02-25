@@ -728,7 +728,12 @@ dtStatus PathFinder::findSmoothPath(const float* startPos, const float* endPos,
 		}
 		else
 		{
-			len = SMOOTH_PATH_STEP_SIZE / len;
+			// Guard against near-zero vector magnitude to avoid invalid step scaling.
+			constexpr float MinStepDenominator = 1e-4f;
+			if (len > MinStepDenominator)
+				len = SMOOTH_PATH_STEP_SIZE / len;
+			else
+				len = 1.0f;
 		}
 
 		float moveTgt[VERTEX_SIZE];

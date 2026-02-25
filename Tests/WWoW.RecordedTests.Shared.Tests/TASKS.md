@@ -1,4 +1,4 @@
-﻿# WWoW.RecordedTests.Shared.Tests Tasks
+# WWoW.RecordedTests.Shared.Tests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. WWoWRecordedSharedDeterminismSuite
+- [ ] Behavior: WWoW recorded shared tests enforce deterministic fixture assets used by replay and parity validation suites.
+- [ ] FG Baseline: FG fixture read/write operations produce stable artifact metadata and indexing order.
+- [ ] BG Target: BG fixture consumption uses equivalent metadata with no ordering/schema drift from FG artifacts.
+- [ ] Implementation Targets: `Tests/WWoW.RecordedTests.Shared.Tests/**/*.cs`, `WWoW.RecordedTests.Shared/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/WWoW.RecordedTests.Shared.Tests/WWoW.RecordedTests.Shared.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: shared suite passes repeatedly with stable artifact outputs and no schema compatibility regressions.
+- [ ] If Fails: add `Research:WWoWRecordedSharedGap::<component>` and `Implement:WWoWRecordedSharedFix::<component>` tasks with artifact examples.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

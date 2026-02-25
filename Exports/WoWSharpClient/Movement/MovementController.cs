@@ -35,6 +35,8 @@ namespace WoWSharpClient.Movement
         private Position[]? _currentPath;
         private int _currentWaypointIndex;
         private const float WAYPOINT_ARRIVE_DIST = 2.0f;
+        private const float TARGET_WAYPOINT_REFRESH_DIST_2D = 0.35f;
+        private const float TARGET_WAYPOINT_REFRESH_Z = 1.0f;
 
         // Network timing
         private uint _lastPacketTime;
@@ -320,9 +322,9 @@ namespace WoWSharpClient.Movement
         private void SendForcedStopPacket(uint gameTimeMs)
         {
             // Always emit a true MSG_MOVE_STOP before resuming movement after reset/recovery.
-            // Without this ordering, a freshly re-applied forward flag can downgrade the packet
-            // to heartbeat/start-forward and leave stale movement state uncleared server-side.
-            var resumeFlags = _player.MovementFlags;
+            // Do not immediately restore pre-stop movement flags in this tick.
+            // Let bot logic re-issue movement intent on the next tick so stale forward/strafe
+            // state is fully cleared server-side first.
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
 
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
@@ -334,11 +336,7 @@ namespace WoWSharpClient.Movement
             _forceStopAfterReset = false;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
-
-            _player.MovementFlags = resumeFlags;
-
-            Log.Information("[MovementController] Forced MSG_MOVE_STOP dispatched before movement resume (restoreFlags=0x{Flags:X})",
-                (uint)resumeFlags);
+            Log.Information("[MovementController] Forced MSG_MOVE_STOP dispatched; movement flags remain cleared for clean resume.");
         }
 
         private static bool IsBefore(uint nowMs, uint targetMs)
@@ -478,8 +476,8 @@ namespace WoWSharpClient.Movement
                 return;
             }
             _currentPath = path;
-            // Start at first waypoint that's ahead of us (skip waypoint 0 if it's our current position)
-            _currentWaypointIndex = path.Length > 1 ? 1 : 0;
+            // Always start from waypoint 0; callers may provide paths that do not include current position.
+            _currentWaypointIndex = 0;
             Log.Debug("[MovementController] Path set: {Count} waypoints, starting at index {Idx}", path.Length, _currentWaypointIndex);
         }
 
@@ -491,8 +489,26 @@ namespace WoWSharpClient.Movement
             if (target == null)
             {
                 _currentPath = null;
+                _currentWaypointIndex = 0;
                 return;
             }
+
+            // Corpse-run and nav-driven loops call this every tick.
+            // Skip rebuilding a one-segment path when the target is effectively unchanged.
+            if (_currentPath != null
+                && _currentPath.Length == 2
+                && _currentWaypointIndex == 1)
+            {
+                var existingTarget = _currentPath[1];
+                var targetDistance2D = HorizontalDistance(existingTarget.X, existingTarget.Y, target.X, target.Y);
+                var targetDeltaZ = MathF.Abs(existingTarget.Z - target.Z);
+                if (targetDistance2D <= TARGET_WAYPOINT_REFRESH_DIST_2D
+                    && targetDeltaZ <= TARGET_WAYPOINT_REFRESH_Z)
+                {
+                    return;
+                }
+            }
+
             _currentPath = [new Position(_player.Position.X, _player.Position.Y, _player.Position.Z), target];
             _currentWaypointIndex = 1;
         }

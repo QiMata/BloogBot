@@ -54,3 +54,20 @@ Protobuf contracts and communication model compatibility across FG/BG paths.
 Move completed items to `Exports/BotCommLayer/TASKS_ARCHIVE.md`.
 
 
+
+## Behavior Cards
+1. SnapshotCorpseMovementContractParity
+- [ ] Behavior: serialized FG/BG activity snapshots expose matching corpse lifecycle and movement fields used by behavior decisions and test assertions.
+- [ ] FG Baseline: FG snapshot payload carries dead/ghost/reclaim and movement values that align with live state transitions.
+- [ ] BG Target: BG snapshot payload matches FG field presence, value semantics, and update timing for the same transitions.
+- [ ] Implementation Targets: `Exports/BotCommLayer/Models/ProtoDef/game.proto`, `Exports/BotCommLayer/Models/ProtoDef/communication.proto`, `Exports/BotCommLayer/Models/WoWActivitySnapshotExtensions.cs`, `Exports/BotCommLayer/ProtobufSocketServer.cs`, `Exports/BotCommLayer/ProtobufSocketClient.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: snapshot tests pass with no missing parity-critical fields and no schema/extension conversion regressions; timeout/failure path includes repo-scoped teardown evidence.
+- [ ] If Fails: add `Research:SnapshotContractMismatch::<field-or-packet>` and `Implement:SnapshotContractFix::<component>` tasks with proto + codeowner references.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

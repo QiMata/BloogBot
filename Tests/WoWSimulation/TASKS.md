@@ -1,4 +1,4 @@
-﻿# WoWSimulation Tasks
+# WoWSimulation Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. WoWSimulationScenarioParitySuite
+- [ ] Behavior: simulation tests model corpse-run, combat, and gathering behavior transitions to catch parity regressions before live runs.
+- [ ] FG Baseline: FG simulation paths produce expected player-like state and timing transitions across scenario fixtures.
+- [ ] BG Target: BG simulation paths mirror FG state/timing transitions and expose divergences before integration testing.
+- [ ] Implementation Targets: `Tests/WoWSimulation/**/*.cs`, `Exports/BotRunner/**/*.cs`, `Services/DecisionEngineService/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/WoWSimulation/WoWSimulation.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: simulation suite passes with deterministic scenario traces and flags any FG/BG divergence requiring follow-up tasks.
+- [ ] If Fails: add `Research:SimulationParityGap::<scenario>` and `Implement:SimulationParityFix::<scenario>` tasks with trace snapshots.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

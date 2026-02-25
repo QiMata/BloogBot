@@ -1,4 +1,4 @@
-﻿# PathfindingService Tasks
+# PathfindingService Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. PathfindingServiceGhostRunbackRouteParity
+- [ ] Behavior: pathfinding service returns deterministic corpse-run routes from Orgrimmar release points for both FG and BG clients.
+- [ ] FG Baseline: FG route requests resolve to valid waypoint chains with no dead-end loops during ghost runback.
+- [ ] BG Target: BG route requests resolve to equivalent waypoint chains and traversal completion timing for the same corpse location.
+- [ ] Implementation Targets: `Services/PathfindingService/**/*.cs`, `Exports/Navigation/**/*.cpp`, `Exports/Navigation/**/*.h`.
+- [ ] Simple Command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: route tests pass with no null/empty paths and runback scenarios avoid route stalls or teleport shortcuts.
+- [ ] If Fails: add `Research:PathfindingRunbackDrift::<map>` and `Implement:PathfindingRouteParityFix::<map>` tasks with failing route IDs.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

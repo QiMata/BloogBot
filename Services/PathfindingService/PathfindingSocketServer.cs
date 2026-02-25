@@ -179,9 +179,21 @@ namespace PathfindingService
             var start = new XYZ(req.Start.X, req.Start.Y, req.Start.Z);
             var end = new XYZ(req.End.X, req.End.Y, req.End.Z);
             var path = _navigation.CalculatePath(req.MapId, start, end, req.Straight);
+            var sanitizedPath = path
+                .Where(IsFinitePoint)
+                .ToArray();
+
+            if (sanitizedPath.Length != path.Length)
+            {
+                logger.LogWarning(
+                    "[PathfindingSocketServer] Filtered {DroppedCount} non-finite path corners (map={MapId}, smooth={Smooth})",
+                    path.Length - sanitizedPath.Length,
+                    req.MapId,
+                    req.Straight);
+            }
 
             var resp = new CalculatePathResponse();
-            resp.Corners.AddRange(path.Select(p => new Game.Position { X = p.X, Y = p.Y, Z = p.Z }));
+            resp.Corners.AddRange(sanitizedPath.Select(p => new Game.Position { X = p.X, Y = p.Y, Z = p.Z }));
 
             return new PathfindingResponse { Path = resp };
         }
@@ -233,9 +245,25 @@ namespace PathfindingService
                 error = ErrorResponse("Missing start/end position.");
                 return false;
             }
+
+            if (!IsFinitePosition(a) || !IsFinitePosition(b))
+            {
+                error = ErrorResponse("Start/end position contains non-finite coordinates.");
+                return false;
+            }
             error = null!;
             return true;
         }
+
+        private static bool IsFinitePosition(Game.Position position)
+            => float.IsFinite(position.X)
+                && float.IsFinite(position.Y)
+                && float.IsFinite(position.Z);
+
+        private static bool IsFinitePoint(XYZ point)
+            => float.IsFinite(point.X)
+                && float.IsFinite(point.Y)
+                && float.IsFinite(point.Z);
 
         private static PathfindingResponse ErrorResponse(string msg)
         {
@@ -318,10 +346,8 @@ namespace PathfindingService
 				standingOnLocalY = proto.StandingOnLocalY,
 				standingOnLocalZ = proto.StandingOnLocalZ,
 
-				// Behaviour flags: 0 = default (no TRUST_INPUT_VELOCITY).
-				// The proto field physics_flags (38) is defined but not yet
-				// wired into generated code. Always 0 for live operation.
-				physicsFlags = 0
+				// Behaviour flags from protobuf (e.g. TRUST_INPUT_VELOCITY).
+				physicsFlags = proto.PhysicsFlags
             };
         }
 

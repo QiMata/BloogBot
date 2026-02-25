@@ -60,9 +60,19 @@ public abstract class BotTask(IBotContext botContext)
         if (player?.Position == null)
             return;
 
-        var waypoint = _navPath.GetNextWaypoint(player.Position, destination, player.MapId);
+        var waypoint = _navPath.GetNextWaypoint(
+            player.Position,
+            destination,
+            player.MapId,
+            allowDirectFallback: false);
+
         if (waypoint != null)
+        {
             ObjectManager.MoveToward(waypoint);
+            return;
+        }
+
+        ObjectManager.StopAllMovement();
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿# WoWStateManager Tasks
+# WoWStateManager Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -18,7 +18,6 @@ State orchestration, snapshot serving, and action forwarding between tests and b
 1. Action forwarding reliability
 - [ ] Verify no dropped/misordered actions during high-frequency test setup.
 - [ ] Keep per-account FIFO delivery observable (queue depth, dequeue trace, dispatch correlation).
-- [x] Ensure coordinator suppression windows never hide test-forwarded actions. Evidence: `INJECTING PENDING ACTION ... (coordinator suppressed 300s)` present for ReleaseCorpse/Goto/RetrieveCorpse in `tmp/deathcorpse_run_current.log`.
 
 2. Snapshot correctness and diagnostics
 - [ ] Keep snapshot query logs concise but sufficient for parity debugging.
@@ -62,3 +61,20 @@ State orchestration, snapshot serving, and action forwarding between tests and b
 Move completed items to `Services/WoWStateManager/TASKS_ARCHIVE.md`.
 
 
+
+## Behavior Cards
+1. WoWStateLifecycleSnapshotParity
+- [ ] Behavior: state manager publishes complete death-to-resurrection lifecycle snapshots for FG and BG without stale transitions.
+- [ ] FG Baseline: FG state stream shows `alive -> dead -> ghost -> runback -> reclaim-ready -> retrieve -> alive` with reclaim delay gating.
+- [ ] BG Target: BG state stream mirrors FG lifecycle ordering, timestamps, and reclaim-delay semantics for the same run.
+- [ ] Implementation Targets: `Services/WoWStateManager/**/*.cs`, `Exports/BotCommLayer/**/*.cs`, `Services/ForegroundBotRunner/**/*.cs`, `Services/BackgroundBotRunner/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: snapshot logs show full lifecycle ordering for FG/BG and resurrection occurs only after reclaim timer reaches zero.
+- [ ] If Fails: add `Research:StateLifecycleParityGap::<scenario>` and `Implement:StateSnapshotOrderingFix::<scenario>` tasks with timestamp evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

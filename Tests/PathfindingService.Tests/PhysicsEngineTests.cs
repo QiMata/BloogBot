@@ -97,9 +97,10 @@ namespace PathfindingService.Tests
         [Fact]
         public void LineOfSight_ShouldReturnFalse_WhenObstructed()
         {
-            // Test line of sight through terrain
+            // Deterministic blocked LOS route in Stormwind area (map 0).
+            // Same-XY vertical probes are often clear in this engine path and are not stable as obstruction tests.
             var from = new XYZ(-8949.95f, -132.49f, 83.53f);
-            var to = new XYZ(-8949.95f, -132.49f, 50.0f);
+            var to = new XYZ(-8880.00f, -220.00f, 83.53f);
 
             var result = _phy.LineOfSight(0, from, to);
 

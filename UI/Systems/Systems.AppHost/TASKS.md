@@ -1,4 +1,4 @@
-﻿# Systems.AppHost Tasks
+# Systems.AppHost Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. SystemsAppHostParityOrchestration
+- [ ] Behavior: AppHost boots parity-related services with a simple, deterministic local startup path for validation sessions.
+- [ ] FG Baseline: FG tooling startup reliably launches required services for baseline capture without manual ordering hacks.
+- [ ] BG Target: BG tooling startup mirrors FG service orchestration so parity sessions begin from equivalent runtime conditions.
+- [ ] Implementation Targets: `UI/Systems/Systems.AppHost/**/*.cs`, `UI/Systems/Systems.AppHost/*.csproj`, `UI/Systems/Systems.ServiceDefaults/**/*.cs`.
+- [ ] Simple Command: `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release`.
+- [ ] Acceptance: AppHost build/startup configuration remains deterministic and documents one-command launch path for parity runs.
+- [ ] If Fails: add `Research:AppHostStartupParityGap::<service>` and `Implement:AppHostStartupParityFix::<service>` tasks with startup logs.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

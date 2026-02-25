@@ -1,4 +1,4 @@
-﻿# WWoWBot.AI Tasks
+# WWoWBot.AI Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -51,3 +51,20 @@ Move completed items to `WWoWBot.AI/TASKS_ARCHIVE.md`.
 
 
 
+
+## Behavior Cards
+1. AiAbilityAndWorldInteractionParity
+- [ ] Behavior: AI planning emits deterministic ability and world-interaction actions that can be mirrored between FG and BG.
+- [ ] FG Baseline: FG AI actions remain efficient and player-like for combat, gathering, and interaction scenarios.
+- [ ] BG Target: BG AI actions mirror FG action selection, movement intent, and timing to remain indistinguishable.
+- [ ] Implementation Targets: `WWoWBot.AI/**/*.cs`, `BotProfiles/**/*.cs`, `Exports/BotRunner/Tasks/**/*.cs`.
+- [ ] Simple Command: `dotnet build WWoWBot.AI/BloogBot.AI.csproj --configuration Release`.
+- [ ] Acceptance: AI build/parity tasks map each ability or interaction behavior to an executable validation path in BotRunner tests.
+- [ ] If Fails: add `Research:AiBehaviorParityGap::<behavior>` and `Implement:AiBehaviorParityFix::<behavior>` tasks linked to scenario evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

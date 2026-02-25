@@ -1,4 +1,4 @@
-﻿# WWoW.RecordedTests.Shared Tasks
+# WWoW.RecordedTests.Shared Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -51,3 +51,20 @@ Move completed items to `WWoW.RecordedTests.Shared/TASKS_ARCHIVE.md`.
 
 
 
+
+## Behavior Cards
+1. WWoWRecordedSharedFixtureParity
+- [ ] Behavior: WWoW shared recorded-test assets remain deterministic and compatible across replay suites.
+- [ ] FG Baseline: FG shared asset generation and lookup produce stable metadata and artifact ordering.
+- [ ] BG Target: BG shared asset usage reads equivalent metadata and avoids drift that would skew parity replay checks.
+- [ ] Implementation Targets: `WWoW.RecordedTests.Shared/**/*.cs`, `WWoW.RecordedTests.Shared/*.csproj`, `Tests/WWoW.RecordedTests.Shared.Tests/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/WWoW.RecordedTests.Shared.Tests/WWoW.RecordedTests.Shared.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: shared asset workflows pass determinism tests and provide stable inputs for WWoW replay parity scenarios.
+- [ ] If Fails: add `Research:WWoWSharedFixtureGap::<component>` and `Implement:WWoWSharedFixtureFix::<component>` tasks with artifact evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

@@ -3,6 +3,7 @@ using GameData.Core.Enums;
 using GameData.Core.Models;
 using Moq;
 using Pathfinding;
+using System.Reflection;
 using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
@@ -730,6 +731,64 @@ namespace WoWSharpClient.Tests.Movement
             Assert.Equal(100u, (uint)secondInput.FallTime);
         }
 
+        [Fact]
+        public void SetPath_StartsAtFirstWaypoint()
+        {
+            var path = new[]
+            {
+                new Position(110f, 210f, 51f),
+                new Position(120f, 220f, 52f),
+            };
+
+            _controller.SetPath(path);
+
+            var waypoint = _controller.CurrentWaypoint;
+            Assert.NotNull(waypoint);
+            Assert.Equal(110f, waypoint!.X);
+            Assert.Equal(210f, waypoint.Y);
+            Assert.Equal(51f, waypoint.Z);
+        }
+
+        [Fact]
+        public void SetTargetWaypoint_SimilarTarget_DoesNotRebuildActiveSingleSegmentPath()
+        {
+            _controller.SetTargetWaypoint(new Position(130f, 230f, 70f));
+            var initialPath = GetCurrentPath(_controller);
+            Assert.NotNull(initialPath);
+            Assert.Equal(2, initialPath!.Length);
+
+            // Simulate movement since last tick; if path is rebuilt, this position becomes new segment start.
+            _player.Position = new Position(101f, 201f, 51f);
+            _controller.SetTargetWaypoint(new Position(130.2f, 230.1f, 70.4f));
+
+            var refreshedPath = GetCurrentPath(_controller);
+            Assert.Same(initialPath, refreshedPath);
+            Assert.Equal(100f, refreshedPath![0].X);
+            Assert.Equal(200f, refreshedPath[0].Y);
+            Assert.Equal(50f, refreshedPath[0].Z);
+        }
+
+        [Fact]
+        public void SetTargetWaypoint_DifferentTarget_RebuildsSingleSegmentPathFromCurrentPosition()
+        {
+            _controller.SetTargetWaypoint(new Position(130f, 230f, 70f));
+            var initialPath = GetCurrentPath(_controller);
+            Assert.NotNull(initialPath);
+
+            _player.Position = new Position(101f, 201f, 51f);
+            _controller.SetTargetWaypoint(new Position(140f, 240f, 72f));
+
+            var rebuiltPath = GetCurrentPath(_controller);
+            Assert.NotNull(rebuiltPath);
+            Assert.NotSame(initialPath, rebuiltPath);
+            Assert.Equal(101f, rebuiltPath![0].X);
+            Assert.Equal(201f, rebuiltPath[0].Y);
+            Assert.Equal(51f, rebuiltPath[0].Z);
+            Assert.Equal(140f, rebuiltPath[1].X);
+            Assert.Equal(240f, rebuiltPath[1].Y);
+            Assert.Equal(72f, rebuiltPath[1].Z);
+        }
+
         // ======== COMPOUND TRANSITIONS ========
 
         [Fact]
@@ -775,6 +834,13 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1000);
             Assert.Equal(3, _sentPackets.Count);
             Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[2].opcode);
+        }
+
+        private static Position[]? GetCurrentPath(MovementController controller)
+        {
+            var field = typeof(MovementController).GetField("_currentPath", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(field);
+            return field!.GetValue(controller) as Position[];
         }
     }
 }

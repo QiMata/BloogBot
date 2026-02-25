@@ -79,3 +79,12 @@ Shared bot action sequencing, behavior trees, task semantics, and snapshot mappi
 Move completed items to `Exports/BotRunner/TASKS_ARCHIVE.md`.
 
 
+
+
+## Archived Snapshot (2026-02-24 19:43:32) - Exports/BotRunner/TASKS.md
+
+- [x] `RetrieveCorpseTask`: route/probe resolution runs before stall recovery.
+- [x] `RetrieveCorpseTask`: stall detection uses horizontal movement intent.
+- [x] `RetrieveCorpseTask`: nested recovery is suppressed during unstick maneuvers.
+- [x] `RetrieveCorpseTask`: no-path fallback drives toward corpse before timeout abort.
+

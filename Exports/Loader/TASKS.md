@@ -50,3 +50,20 @@ Move completed items to `Exports/Loader/TASKS_ARCHIVE.md`.
 
 
 
+
+## Behavior Cards
+1. ForegroundAttachStartupDiagnosticsParity
+- [ ] Behavior: FG client injection/startup is deterministic, surfaces startup diagnostics clearly, and does not leave orphaned loader-hosted processes after failures.
+- [ ] FG Baseline: FG startup path consistently injects and reports attach/host initialization milestones before scenario execution.
+- [ ] BG Target: BG startup dependencies from loader paths do not regress FG/BG comparative scenario runs or teardown safety.
+- [ ] Implementation Targets: `Exports/Loader/dllmain.cpp`, `Exports/Loader/BotHostControl.h`, `Exports/Loader/nethost_helpers.h`, `Exports/Loader/Loader.vcxproj`.
+- [ ] Simple Command: `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32`.
+- [ ] Acceptance: loader build succeeds, startup diagnostics remain available for troubleshooting, and failed startup paths can still be cleaned with repo-scoped PID evidence.
+- [ ] If Fails: add `Research:LoaderStartupFailure::<phase>` and `Implement:LoaderStartupParityFix::<module>` tasks with crash/log references.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

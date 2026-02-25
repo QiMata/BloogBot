@@ -19,9 +19,9 @@ Track profile and rotation behavior tasks for all classes/specs.
 2. Remove duplicate/legacy behavior paths as shared tasks stabilize.
 
 ## Handoff Fields
-- Last profile/spec touched:
-- Validation tests run:
-- Next profile task:
+- Last profile/spec touched: `ProfilePullRotationRestParity` (shared combat loop harness).
+- Validation tests run: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` (Passed, 2026-02-24, evidence: `tmp/row1_combatloop_20260224_031204.txt`, `tmp/row1_pretest_processes_20260224_031204.txt`, `tmp/row1_postcleanup_processes_20260224_031204.txt`).
+- Next profile task: run a combined FG/BG live validation cycle (`DeathCorpseRunTests|CombatLoopTests|GatheringProfessionTests`) and add profile-specific mismatch tasks if parity drifts.
 
 ## Shared Execution Rules (2026-02-24)
 1. Targeted process cleanup.
@@ -51,3 +51,20 @@ Move completed items to `BotProfiles/TASKS_ARCHIVE.md`.
 
 
 
+
+## Behavior Cards
+1. ProfilePullRotationRestParity
+- [ ] Behavior: FG and BG complete the same pull -> rotation -> loot -> rest loop without unnecessary pauses or redundant actions.
+- [ ] FG Baseline: capture a successful FG combat loop cycle that uses profile `PullTargetTask`, `PvERotationTask`, and `RestTask` in expected order.
+- [ ] BG Target: BG mirrors FG ordering, movement cadence, spell cadence, and downtime so behavior is indistinguishable over repeated pulls.
+- [ ] Implementation Targets: `BotProfiles/*/Tasks/PullTargetTask.cs`, `BotProfiles/*/Tasks/PvERotationTask.cs`, `BotProfiles/*/Tasks/RestTask.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: FG and BG both finish combat loops with no stall/retry spirals; action ordering and idle windows are comparable; timeout path includes repo-scoped PID teardown evidence.
+- [ ] If Fails: add `Research:ProfileLoopMismatch::<spec>` and `Implement:ProfileLoopParityFix::<spec>` tasks with evidence links in this file.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

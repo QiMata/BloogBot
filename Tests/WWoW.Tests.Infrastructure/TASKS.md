@@ -1,4 +1,4 @@
-﻿# WWoW.Tests.Infrastructure Tasks
+# WWoW.Tests.Infrastructure Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. WWoWTestsInfrastructureTeardownGuard
+- [ ] Behavior: WWoW test infrastructure enforces repo-scoped teardown and timeout guards identical to primary test infrastructure rules.
+- [ ] FG Baseline: FG WWoW teardown path records PID-scoped process shutdown outcomes without killing unrelated test workloads.
+- [ ] BG Target: BG WWoW teardown path mirrors FG cleanup scope and evidence format for parity runs.
+- [ ] Implementation Targets: `Tests/WWoW.Tests.Infrastructure/**/*.cs`, `run-tests.ps1`, `Tests/WWoW.RecordedTests.PathingTests.Tests/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/WWoW.Tests.Infrastructure/WWoW.Tests.Infrastructure.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: WWoW infrastructure tests confirm scoped cleanup behavior on pass/fail/timeout paths with explicit PID evidence.
+- [ ] If Fails: add `Research:WWoWInfraTeardownGap::<scenario>` and `Implement:WWoWInfraTeardownFix::<scenario>` tasks with cleanup logs.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

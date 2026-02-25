@@ -1,4 +1,4 @@
-﻿# PromptHandlingService Tasks
+# PromptHandlingService Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. PromptHandlingIntentContractParity
+- [ ] Behavior: prompt handling normalizes scenario intents into deterministic action contracts consumed by FG/BG runners.
+- [ ] FG Baseline: FG intent translation produces stable, minimal action plans aligned with player-like behavior goals.
+- [ ] BG Target: BG receives equivalent normalized action contracts so downstream movement, spells, and packets mirror FG behavior.
+- [ ] Implementation Targets: `Services/PromptHandlingService/**/*.cs`, `Services/DecisionEngineService/**/*.cs`, `Services/WoWStateManager/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: identical prompts yield identical normalized action contracts and no scenario-critical intent fields are dropped.
+- [ ] If Fails: add `Research:PromptIntentNormalizationGap::<scenario>` and `Implement:PromptContractParityFix::<scenario>` tasks with failing prompt samples.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

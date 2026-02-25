@@ -1,4 +1,4 @@
-﻿# ForegroundBotRunner Tasks
+# ForegroundBotRunner Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -20,15 +20,10 @@ Injected client behavior, memory reads/writes, FG object manager parity, and sta
 - [ ] Keep pointer validation and main-thread execution constraints enforced.
 
 2. FG parity exposure
-- [x] Ensure FG death/ghost state detection is stable enough for corpse-run parity.
 - [ ] Ensure FG snapshot data remains complete and comparable with BG path.
-- [x] Implement missing descriptor-backed life-state fields (`WoWPlayer.PlayerFlags`, `WoWPlayer.Bytes/Bytes3`, `WoWUnit.Bytes0/1/2`) used by `ActivitySnapshot`.
-- [x] Reduce remaining Lua-only FG life-state paths (`LocalPlayer.InGhostForm`, reclaim-delay fallbacks) now that descriptor fields are available.
-- [x] Implement descriptor-backed FG `WoWPlayer.QuestLog` reads so quest log slots flow into snapshots.
 - [ ] Fix FG `SpellList` parity for learned/already-known talent spells (e.g. `.learn 16462` acknowledged but missing from FG snapshot spell list).
 
 3. Pathfinding wiring
-- [x] Guarantee non-null `PathfindingClient` injection into FG `ClassContainer`.
 - [ ] Add startup diagnostic line that captures configured PF endpoint and connection success/failure for faster live triage.
 
 ## Session Handoff
@@ -75,3 +70,20 @@ Injected client behavior, memory reads/writes, FG object manager parity, and sta
 Move completed items to `Services/ForegroundBotRunner/TASKS_ARCHIVE.md`.
 
 
+
+## Behavior Cards
+1. ForegroundRunnerBaselineDeterminism
+- [ ] Behavior: foreground runner establishes deterministic baseline traces for death, ghost runback, and recovery behavior.
+- [ ] FG Baseline: FG run consistently emits expected lifecycle transitions, movement cadence, and reclaim timing for the same setup.
+- [ ] BG Target: BG comparisons use the FG baseline trace and should remain behaviorally indistinguishable across the same scenario timeline.
+- [ ] Implementation Targets: `Services/ForegroundBotRunner/**/*.cs`, `Services/WoWStateManager/**/*.cs`, `Exports/BotRunner/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: FG baseline traces are stable across reruns and include complete lifecycle + teardown evidence for parity diffing.
+- [ ] If Fails: add `Research:ForegroundBaselineDrift::<scenario>` and `Implement:ForegroundRunnerStabilityFix::<scenario>` tasks with trace diff links.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

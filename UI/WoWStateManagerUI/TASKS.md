@@ -1,4 +1,4 @@
-﻿# WoWStateManagerUI Tasks
+# WoWStateManagerUI Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. WoWStateManagerUiLifecycleParity
+- [ ] Behavior: WoWStateManager UI presents full death lifecycle and runback progress for FG/BG in a parity-comparable timeline.
+- [ ] FG Baseline: FG timeline reflects alive/dead/ghost/runback/reclaim/retrieve transitions with accurate timer rendering.
+- [ ] BG Target: BG timeline mirrors FG transition ordering and timing for the same scenario without stale state gaps.
+- [ ] Implementation Targets: `UI/WoWStateManagerUI/**/*.razor`, `UI/WoWStateManagerUI/**/*.cs`, `Services/WoWStateManager/**/*.cs`.
+- [ ] Simple Command: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
+- [ ] Acceptance: UI components render lifecycle transitions and timer states needed to verify FG/BG corpse-run parity.
+- [ ] If Fails: add `Research:StateManagerUiLifecycleGap::<component>` and `Implement:StateManagerUiLifecycleFix::<component>` tasks with UI evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

@@ -1,4 +1,4 @@
-﻿# RecordedTests.Shared.Tests Tasks
+# RecordedTests.Shared.Tests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. RecordedSharedDeterminismSuite
+- [ ] Behavior: recorded shared tests enforce deterministic fixture serialization, indexing, and lookup behavior.
+- [ ] FG Baseline: FG fixture operations produce stable artifact metadata across repeated runs.
+- [ ] BG Target: BG fixture operations read the same metadata and avoid schema/order drift that would skew parity comparisons.
+- [ ] Implementation Targets: `Tests/RecordedTests.Shared.Tests/**/*.cs`, `RecordedTests.Shared/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/RecordedTests.Shared.Tests/RecordedTests.Shared.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: shared fixture tests pass repeatedly with identical artifact hashes/order and no schema regressions.
+- [ ] If Fails: add `Research:RecordedSharedDeterminismGap::<component>` and `Implement:RecordedSharedDeterminismFix::<component>` tasks with artifact samples.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

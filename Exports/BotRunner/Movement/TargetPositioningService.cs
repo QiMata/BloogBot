@@ -46,10 +46,18 @@ namespace BotRunner.Movement
 
             if (directDistance > _engagementRange)
             {
-                var waypoint = _navPath.GetNextWaypoint(playerPosition, targetPosition, player.MapId);
+                var waypoint = _navPath.GetNextWaypoint(
+                    playerPosition,
+                    targetPosition,
+                    player.MapId,
+                    allowDirectFallback: false);
                 if (waypoint != null)
                 {
                     _objectManager.MoveToward(waypoint);
+                }
+                else
+                {
+                    _objectManager.StopAllMovement();
                 }
 
                 return false;

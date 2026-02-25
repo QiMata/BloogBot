@@ -137,3 +137,14 @@ Drive full LiveValidation and BotRunner integration test refactor until FG and B
 Move completed items to `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`.
 
 
+
+
+## Archived Snapshot (2026-02-24 19:43:32) - Tests/BotRunner.Tests/TASKS.md
+
+- [x] Use `.tele name {NAME} Orgrimmar` before kill in `DeathCorpseRunTests`.
+- [x] Remove `ValleyOfTrials` setup dependency from corpse-run test flow.
+- [x] Removed reseed/variant retry death-loop path from runback setup.
+- [x] Preserved strict corpse lifecycle ordering in test assertions.
+- [x] Added timeout/runsettings plumbing baseline for test sessions.
+- [x] Switched corpse setup teleport from `ValleyOfTrials` to Orgrimmar named teleport command path.
+

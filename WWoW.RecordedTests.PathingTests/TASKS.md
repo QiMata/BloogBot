@@ -1,4 +1,4 @@
-﻿# WWoW.RecordedTests.PathingTests Tasks
+# WWoW.RecordedTests.PathingTests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -51,3 +51,20 @@ Move completed items to `WWoW.RecordedTests.PathingTests/TASKS_ARCHIVE.md`.
 
 
 
+
+## Behavior Cards
+1. WWoWRecordedPathReplayParity
+- [ ] Behavior: WWoW recorded pathing library replays movement scenarios deterministically for FG/BG parity validation.
+- [ ] FG Baseline: FG playback from WWoW recordings reproduces expected waypoint and timing sequences.
+- [ ] BG Target: BG playback from the same recordings remains aligned with FG route/timing behavior.
+- [ ] Implementation Targets: `WWoW.RecordedTests.PathingTests/**/*.cs`, `WWoW.RecordedTests.PathingTests/*.csproj`, `WWoW.RecordedTests.Shared/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/WWoW.RecordedTests.PathingTests.Tests/WWoW.RecordedTests.PathingTests.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: recorded path library supports deterministic replay and exposes drift evidence consumable by parity tasks.
+- [ ] If Fails: add `Research:WWoWPathReplayLibraryGap::<recording>` and `Implement:WWoWPathReplayLibraryFix::<recording>` tasks with replay outputs.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

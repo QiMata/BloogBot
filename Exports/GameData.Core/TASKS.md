@@ -53,3 +53,20 @@ Shared interfaces/models used by both FG and BG object managers and bot logic.
 Move completed items to `Exports/GameData.Core/TASKS_ARCHIVE.md`.
 
 
+
+## Behavior Cards
+1. DeathStateAndReclaimModelParity
+- [ ] Behavior: core interfaces expose consistent dead/ghost/reclaim/movement flags so FG/BG decision logic reads the same lifecycle state.
+- [ ] FG Baseline: FG object model reflects server-authoritative death and reclaim values at each corpse lifecycle phase.
+- [ ] BG Target: BG model fields mirror FG semantics and naming so shared task logic behaves identically.
+- [ ] Implementation Targets: `Exports/GameData.Core/Interfaces/IWoWLocalPlayer.cs`, `Exports/GameData.Core/Interfaces/IWoWCorpse.cs`, `Exports/GameData.Core/Interfaces/IObjectManager.cs`, `Exports/GameData.Core/Enums/DeathState.cs`, `Exports/GameData.Core/Enums/MovementFlags.cs`, `Exports/GameData.Core/Enums/CorpseFlags.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~ReleaseCorpseTaskTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: corpse task tests pass with no interface drift regressions and lifecycle state transitions remain deterministic between FG/BG snapshots.
+- [ ] If Fails: add `Research:GameDataLifecycleMismatch::<field>` and `Implement:GameDataLifecycleParityFix::<interface-or-enum>` tasks with downstream consumer list.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

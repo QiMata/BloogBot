@@ -1,4 +1,4 @@
-﻿# DecisionEngineService Tasks
+# DecisionEngineService Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -57,3 +57,20 @@ Move completed items to TASKS_ARCHIVE.md and keep this file short.
 
 
 
+
+## Behavior Cards
+1. DecisionEngineActionSelectionParity
+- [ ] Behavior: decision engine selects the same next-action sequence for corpse-run, combat, and gathering scenarios under equivalent inputs.
+- [ ] FG Baseline: FG decision traces produce stable player-like action ordering and pacing for scenario goals.
+- [ ] BG Target: BG decision traces mirror FG priorities, cooldown handling, and movement/action transitions for the same state snapshots.
+- [ ] Implementation Targets: `Services/DecisionEngineService/**/*.cs`, `BotProfiles/**/*.cs`, `Exports/BotRunner/Tasks/**/*.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: FG/BG action sequencing deltas stay within expected tolerance and no divergent decision branch blocks scenario completion.
+- [ ] If Fails: add `Research:DecisionEngineParityGap::<scenario>` and `Implement:DecisionEngineSelectionFix::<scenario>` tasks tied to trace evidence.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

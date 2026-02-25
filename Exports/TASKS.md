@@ -63,3 +63,20 @@ Move completed items to `Exports/TASKS_ARCHIVE.md`.
 
 
 
+
+## Behavior Cards
+1. CrossExportCorpseCombatGatheringParity
+- [ ] Behavior: shared export libraries produce consistent FG/BG behavior across corpse-run, combat loop, and gathering loop scenarios.
+- [ ] FG Baseline: establish FG evidence for corpse/combat/gathering flows using the canonical BotRunner live validations.
+- [ ] BG Target: BG mirrors FG outcome, movement/spell cadence, and packet/state transitions across all three scenarios in the same validation cycle.
+- [ ] Implementation Targets: `Exports/BotRunner/TASKS.md`, `Exports/BotCommLayer/TASKS.md`, `Exports/GameData.Core/TASKS.md`, `Exports/WoWSharpClient/TASKS.md`, `Exports/Navigation/TASKS.md`, `Exports/Loader/TASKS.md`, `Exports/WinImports/TASKS.md`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~CombatLoopTests|FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: all scenarios complete for FG/BG with no lingering repo-scoped clients/managers; teardown evidence captured with process name, PID, and stop outcome.
+- [ ] If Fails: add `Research:CrossExportParityGap::<scenario>` and `Implement:CrossExportParityFix::<owner-project>` tasks and link owner TASKS paths.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

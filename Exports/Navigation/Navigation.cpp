@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <new>
 #include <stdio.h>
 #define NOMINMAX
 #include <windows.h>
@@ -56,6 +57,9 @@ const dtNavMeshQuery* Navigation::GetQueryForMap(uint32_t mapId)
 
 XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool straightPath, int* length)
 {
+	if (length)
+		*length = 0;
+
 	MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
 
 	InitializeMapsForContinent(manager, mapId);
@@ -65,8 +69,21 @@ XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool stra
 	pathFinder.calculate(start.X, start.Y, start.Z, end.X, end.Y, end.Z);
 
 	PointsArray pointPath = pathFinder.getPath();
-	*length = pointPath.size();
-	XYZ* pathArr = new XYZ[pointPath.size()];
+	if (pointPath.empty())
+	{
+		return nullptr;
+	}
+
+	if (length)
+		*length = static_cast<int>(pointPath.size());
+
+	XYZ* pathArr = new (std::nothrow) XYZ[pointPath.size()];
+	if (pathArr == nullptr)
+	{
+		if (length)
+			*length = 0;
+		return nullptr;
+	}
 
 	for (unsigned int i = 0; i < pointPath.size(); i++)
 	{

@@ -61,49 +61,115 @@ namespace PathfindingService
 
         private static string? ResolveNavigationDataDirectory(string? existingDataDir)
         {
-            static bool HasNavData(string root)
-            {
-                if (string.IsNullOrWhiteSpace(root))
-                    return false;
-
-                return Directory.Exists(Path.Combine(root, "mmaps"))
-                    && Directory.Exists(Path.Combine(root, "maps"))
-                    && Directory.Exists(Path.Combine(root, "vmaps"));
-            }
-
             var candidates = new List<string>();
-            if (!string.IsNullOrWhiteSpace(existingDataDir))
-                candidates.Add(existingDataDir);
+            AddCandidate(candidates, existingDataDir);
 
-            var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            candidates.Add(baseDir);
-            candidates.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "net8.0")));
-            candidates.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "..", "net8.0")));
-            candidates.Add(Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "net8.0")));
-            candidates.Add(Directory.GetCurrentDirectory());
-            candidates.Add(@"D:\World of Warcraft");
+            var baseDir = NormalizePath(AppContext.BaseDirectory);
+            var currentDir = NormalizePath(Directory.GetCurrentDirectory());
 
-            try
+            AddCommonOutputCandidates(candidates, baseDir);
+            AddCommonOutputCandidates(candidates, currentDir);
+            AddCandidate(candidates, @"D:\World of Warcraft");
+
+            foreach (var ancestor in EnumerateAncestors(baseDir))
+                AddCommonOutputCandidates(candidates, ancestor);
+
+            if (!string.Equals(baseDir, currentDir, StringComparison.OrdinalIgnoreCase))
             {
-                var repoRoot = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".."));
-                candidates.Add(Path.Combine(repoRoot, "Bot", "Debug", "net8.0"));
-                candidates.Add(Path.Combine(repoRoot, "Bot", "Release", "net8.0"));
-            }
-            catch
-            {
-                // Ignore path normalization failures and continue probing.
+                foreach (var ancestor in EnumerateAncestors(currentDir))
+                    AddCommonOutputCandidates(candidates, ancestor);
             }
 
-            foreach (var candidate in candidates
-                         .Where(c => !string.IsNullOrWhiteSpace(c))
-                         .Select(c => c.Trim('"').Trim())
-                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (HasNavData(candidate))
-                    return Path.GetFullPath(candidate);
+                    return candidate;
             }
 
             return null;
+        }
+
+        private static void AddCommonOutputCandidates(List<string> candidates, string? root)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                return;
+
+            AddCandidate(candidates, root);
+            AddCandidate(candidates, Path.Combine(root, "Bot", "Debug", "net8.0"));
+            AddCandidate(candidates, Path.Combine(root, "Bot", "Debug", "x64"));
+            AddCandidate(candidates, Path.Combine(root, "Bot", "Release", "net8.0"));
+            AddCandidate(candidates, Path.Combine(root, "Bot", "Release", "x64"));
+            AddCandidate(candidates, Path.Combine(root, "Tests", "Bot", "Debug", "net8.0"));
+        }
+
+        private static void AddCandidate(List<string> candidates, string? candidate)
+        {
+            var normalized = NormalizePath(candidate);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                candidates.Add(normalized);
+        }
+
+        private static string NormalizePath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            try
+            {
+                return Path.GetFullPath(path.Trim().Trim('"'));
+            }
+            catch
+            {
+                return path.Trim().Trim('"');
+            }
+        }
+
+        private static IEnumerable<string> EnumerateAncestors(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                yield break;
+
+            DirectoryInfo? current;
+            try
+            {
+                current = new DirectoryInfo(path);
+            }
+            catch
+            {
+                yield break;
+            }
+
+            while (current != null)
+            {
+                yield return current.FullName;
+                current = current.Parent;
+            }
+        }
+
+        private static bool HasNavData(string root)
+        {
+            static bool HasEntries(string path)
+            {
+                try
+                {
+                    return Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any();
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(root))
+                return false;
+
+            var mmapsDir = Path.Combine(root, "mmaps");
+            var mapsDir = Path.Combine(root, "maps");
+            var vmapsDir = Path.Combine(root, "vmaps");
+
+            return HasEntries(mmapsDir)
+                && HasEntries(mapsDir)
+                && HasEntries(vmapsDir);
         }
 
         /// <summary>

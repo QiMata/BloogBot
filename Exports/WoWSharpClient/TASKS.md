@@ -1,4 +1,4 @@
-﻿# WoWSharpClient Tasks
+# WoWSharpClient Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -18,22 +18,17 @@ Headless WoW 1.12.1 protocol emulation, movement handling, object updates, and s
 1. Movement and physics parity
 - [ ] Validate teleport/fall/landing movement updates mirror FG behavior.
 - [ ] Ensure movement flags and fall-time transitions are applied and cleared correctly.
-- [x] Implement immediate teleport movement reset to clear stale `MOVEFLAG_FORWARD`/movement flags on teleport events.
 - [ ] Validate live BG snapshots confirm movement flags are cleared immediately after teleport (no stuck-forward state).
 - [ ] Investigate BG `MOVEFLAG_FORWARD` persistence with zero movement after follow `Goto` actions (`flags=0x1`, `Physics returned same position`) to distinguish teleport residue vs path/physics no-op.
 
 2. Death/corpse packet handling
 - [ ] Keep reclaim delay packet handling accurate and synchronized with snapshot countdown.
-- [x] Ensure ghost/dead state transitions are reflected immediately in object/player models (descriptor-first `InGhostForm` in `WoWLocalPlayer`).
 
 3. Object update parity
 - [ ] Audit aura/buff/spell and unit-state field clearing on server updates.
 - [ ] Ensure NearbyObjects/NearbyUnits expose enough data for deterministic test assertions.
-- [x] Harden GameObject field diff numeric conversion to avoid `InvalidCastException` (`Single` -> `UInt32`) during live update processing.
 
 4. Group/party packet parity
-- [x] Fix `SMSG_GROUP_LIST` parsing to MaNGOS 1.12.1 wire format (`groupType(1) + ownFlags(1) + memberCount(4)`).
-- [x] Validate BG party leader snapshot parity in live group formation (`FG PartyLeaderGuid == BG PartyLeaderGuid`).
 - [ ] Add coverage for edge-case group-list payload variants (raid flags/assistant bits/empty-group transitions across live snapshots).
 
 ## Session Handoff
@@ -77,3 +72,20 @@ Headless WoW 1.12.1 protocol emulation, movement handling, object updates, and s
 Move completed items to `Exports/WoWSharpClient/TASKS_ARCHIVE.md`.
 
 
+
+## Behavior Cards
+1. TeleportFlagResetAndFallStateParity
+- [ ] Behavior: teleport and death/corpse transitions clear stale movement flags and apply correct fall/ground states so BG motion matches FG immediately after relocation.
+- [ ] FG Baseline: FG movement/state snapshots show clean flag transitions (no stuck-forward residue) and correct fall/landing behavior after teleport-related transitions.
+- [ ] BG Target: BG packet parsing and movement controller updates produce the same post-teleport state transitions, including corpse/ghost phases.
+- [ ] Implementation Targets: `Exports/WoWSharpClient/Movement/MovementController.cs`, `Exports/WoWSharpClient/Parsers/MovementPacketHandler.cs`, `Exports/WoWSharpClient/Models/WoWLocalPlayer.cs`, `Exports/WoWSharpClient/Models/WoWCorpse.cs`, `Exports/WoWSharpClient/Networking/ClientComponents/PartyNetworkClientComponent.cs`.
+- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: no persistent forward flag with zero displacement after teleport/follow, corpse lifecycle remains synchronized, and logs show deterministic teardown on timeout/failure.
+- [ ] If Fails: add `Research:TeleportStateMismatch::<packet-or-model-field>` and `Implement:TeleportStateParityFix::<component>` tasks with log references.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.

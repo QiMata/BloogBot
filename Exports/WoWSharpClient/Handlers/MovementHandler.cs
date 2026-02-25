@@ -227,6 +227,23 @@ namespace WoWSharpClient.Handlers
                                 ParseMessageMove(reader)
                             );
                             break;
+                        case Opcode.MSG_MOVE_ROOT:
+                        case Opcode.MSG_MOVE_UNROOT:
+                        case Opcode.MSG_MOVE_WATER_WALK:
+                            ParseMessageMove(reader);
+                            break;
+                        case Opcode.MSG_MOVE_SET_RUN_SPEED:
+                            ParseMessageMoveWithTrailingSpeed(
+                                reader,
+                                (movementBlock, speed) => movementBlock.RunSpeed = speed
+                            );
+                            break;
+                        case Opcode.MSG_MOVE_SET_SWIM_SPEED:
+                            ParseMessageMoveWithTrailingSpeed(
+                                reader,
+                                (movementBlock, speed) => movementBlock.SwimSpeed = speed
+                            );
+                            break;
                         case Opcode.MSG_MOVE_START_BACKWARD:
                             WoWSharpEventEmitter.Instance.FireOnCharacterStartBackwards(
                                 ParseMessageMove(reader)
@@ -266,12 +283,40 @@ namespace WoWSharpClient.Handlers
 
         private static ulong ParseMessageMove(BinaryReader reader)
         {
+            var (packedGuid, movementData) = ParseMessageMoveData(reader);
+            QueueMovementUpdate(packedGuid, movementData);
+            return packedGuid;
+        }
+
+        private static ulong ParseMessageMoveWithTrailingSpeed(
+            BinaryReader reader,
+            Action<MovementBlockUpdate, float> applySpeed
+        )
+        {
+            var (packedGuid, movementData) = ParseMessageMoveData(reader);
+
+            if (reader.BaseStream.Length - reader.BaseStream.Position >= sizeof(float))
+            {
+                float speed = reader.ReadSingle();
+                movementData.MovementBlockUpdate ??= new MovementBlockUpdate();
+                applySpeed(movementData.MovementBlockUpdate, speed);
+            }
+
+            QueueMovementUpdate(packedGuid, movementData);
+            return packedGuid;
+        }
+
+        private static (ulong PackedGuid, MovementInfoUpdate MovementData) ParseMessageMoveData(
+            BinaryReader reader
+        )
+        {
             var packedGuid = ReaderUtils.ReadPackedGuid(reader);
-
-            // Parse raw movement data
             var movementData = MovementPacketHandler.ParseMovementInfo(reader);
+            return (packedGuid, movementData);
+        }
 
-            // Queue an update for the object's movement
+        private static void QueueMovementUpdate(ulong packedGuid, MovementInfoUpdate movementData)
+        {
             WoWSharpObjectManager.Instance.QueueUpdate(
                 new WoWSharpObjectManager.ObjectStateUpdate(
                     packedGuid,
@@ -281,8 +326,6 @@ namespace WoWSharpClient.Handlers
                     []
                 )
             );
-
-            return packedGuid;
         }
 
         private static void ParseCompressedMove(BinaryReader reader)

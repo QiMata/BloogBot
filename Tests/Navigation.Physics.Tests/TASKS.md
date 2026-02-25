@@ -1,4 +1,4 @@
-﻿# Navigation.Physics.Tests Tasks
+# Navigation.Physics.Tests Tasks
 
 ## Master Alignment (2026-02-24)
 - Master tracker: `docs/TASKS.md`
@@ -74,3 +74,20 @@ Directory: `Tests/Navigation.Physics.Tests`
 
 ## Archive
 Move completed items to `Tests/Navigation.Physics.Tests/TASKS_ARCHIVE.md`.
+
+## Behavior Cards
+1. NavigationPhysicsCalibrationParitySuite
+- [ ] Behavior: physics calibration tests detect and prevent air-teleport hover regressions and frame interpolation drift.
+- [ ] FG Baseline: FG physics traces show gravity-consistent fall behavior after airborne teleports and terrain transitions.
+- [ ] BG Target: BG physics traces mirror FG vertical velocity/position curves and clear hover artifacts after teleports.
+- [ ] Implementation Targets: `Tests/Navigation.Physics.Tests/**/*.cs`, `Exports/Navigation/PhysicsEngine.cpp`, `Exports/WoWSharpClient/Movement/MovementController.cs`.
+- [ ] Simple Command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: physics suite fails on hover/no-fall drift and passes only when FG/BG interpolation metrics stay within tolerance.
+- [ ] If Fails: add `Research:PhysicsInterpolationGap::<scenario>` and `Implement:PhysicsInterpolationFix::<scenario>` tasks with trace deltas.
+
+## Continuation Instructions
+1. Start with the highest-priority unchecked item in this file.
+2. Execute one simple validation command for the selected behavior.
+3. Log evidence and repo-scoped teardown results in Session Handoff.
+4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
+5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
