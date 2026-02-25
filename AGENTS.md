@@ -246,3 +246,20 @@ Before handing off:
 - Task trackers updated (`docs/TASKS.md` + local `TASKS.md`/`TASKS_ARCHIVE.md` as needed).
 - Process cleanup done repo-scoped only.
 - Next command for follow-up work is explicit.
+
+## 15. Calibration Anti-Loop Rule (Mandatory)
+
+For iterative tuning work (especially PhysicsEngine replay calibration), do this before editing code:
+
+1. Read the latest calibration handoff doc for that subsystem (for PhysicsEngine: `docs/physicsengine-calibration.md`).
+2. Review recent run logs in `logs/` and identify:
+   - best known metrics,
+   - latest regression,
+   - explicit "Do Not Repeat" hypotheses.
+3. Confirm the next planned tweak is new and single-scope.
+
+Additional required behavior:
+
+- One behavioral code change per calibration run.
+- Append every run outcome to the calibration doc immediately after running.
+- If a tweak regresses metrics, record it under "Do Not Repeat" before trying anything else.
