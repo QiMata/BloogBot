@@ -1,69 +1,95 @@
-﻿# Loader Tasks
+# Loader Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+## Scope
+- Project: `Exports/Loader`
+- Owns native DLL bootstrap/injection path that hosts managed `ForegroundBotRunner` inside WoW.
+- This file tracks direct implementation tasks bound to concrete loader files and teardown behavior.
+- Master tracker: `MASTER-SUB-006`.
 
-## Purpose
-Track loader/injection tasks related to FG bot startup stability and diagnostics.
+## Execution Rules
+1. Work only the top unchecked task unless blocked.
+2. Keep loader changes focused on startup determinism, diagnostics, and teardown safety.
+3. Keep commands simple and one-line.
+4. Record `Last delta` and `Next command` in `Session Handoff` every pass.
+5. Move completed tasks to `Exports/Loader/TASKS_ARCHIVE.md` in the same session.
+6. Loop-break guard: if two consecutive passes produce no file delta, log blocker + exact next command and move to next queue file.
+7. `Session Handoff` must include `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
 
-## Rules
-- Execute continuously without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Keep crash diagnostics and guardrails linked to concrete evidence.
+## Environment Checklist
+- [ ] `Exports/Loader/Loader.vcxproj` builds `Release|Win32`.
+- [x] Loader diagnostics are visible in console/log during attach/start failures.
+- [ ] No machine-specific debug artifact paths remain in active loader workflow files.
 
-## Active Priorities
-1. Maintain stable FG injection and startup diagnostics.
-2. Prevent regression in startup/attach paths affecting LiveValidation reliability.
+## Evidence Snapshot (2026-02-25)
+- Build tool availability:
+  - `msbuild` is not on PATH in this shell (`CommandNotFoundException`).
+  - `dotnet msbuild Exports/Loader/Loader.vcxproj ...` fails with `MSB4278` (`Microsoft.Cpp.Default.props` missing), confirming Visual C++ targets are unavailable via current CLI path.
+- Teardown behavior evidence:
+  - `Exports/Loader/dllmain.cpp` waits a fixed `1000ms` on detach (`WaitForSingleObject(g_hThread, 1000)`) before closing the thread handle.
+  - Startup debug wait is fixed `10000ms` (`WaitForSingleObject(hEvent, 10000)` under `_DEBUG`).
+- Console/log visibility evidence:
+  - `AllocConsole()` and stream redirection are called in `ThreadMain`.
+  - `nethost_helpers.h` logs to both console and file (`loader_debug.log`) via `LogMessage`.
+  - `Exports/Loader/README.md` documents debug console and diagnostics flow.
+- Stale debug artifact evidence:
+  - `simple_loader.cpp`, `minimal_loader.cpp`, and `test_minimal.cpp` contain hardcoded machine-specific paths (`C:\\Users\\WowAdmin\\...`, `C:\\Temp\\...`).
+  - `stdafx.h` and `stdafx.cpp` still contain placeholder TODO comments.
+
+## P0 Active Tasks (Ordered)
+
+### LDR-MISS-001 Harden bootstrap thread teardown to prevent lingering loader-hosted work
+- [ ] Problem: detach path currently waits a fixed short interval and closes the thread handle without a deterministic managed shutdown handshake.
+- [ ] Target files:
+  - `Exports/Loader/dllmain.cpp`
+  - `Exports/Loader/nethost_helpers.h`
+- [ ] Required change: add explicit shutdown signaling/observability so attach failures or unload paths do not leave long-lived loader-hosted threads/process side effects.
+- [ ] Validation command: `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32`.
+- [ ] Acceptance: loader unload path is deterministic and emits teardown diagnostics that can be correlated with test-time process cleanup.
+
+### LDR-MISS-002 Add deterministic console/log visibility controls for test runs
+- [ ] Problem: startup diagnostics exist but console visibility and log flow are not explicitly controlled per run mode.
+- [ ] Target files:
+  - `Exports/Loader/dllmain.cpp`
+  - `Exports/Loader/nethost_helpers.h`
+  - `Exports/Loader/README.md`
+- [ ] Required change: define a simple run-mode switch (e.g., debug/test flag) for console allocation and document where logs are written for troubleshooting.
+- [ ] Validation command: `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Debug /p:Platform=Win32`.
+- [ ] Acceptance: operator can force visible loader diagnostics during tests without source edits, and README documents exact behavior.
+
+### LDR-MISS-003 Remove stale local debug stubs and TODO noise from loader workspace
+- [ ] Problem: loader folder contains machine-specific debug stubs and generic TODO comments that create false implementation signals.
+- [ ] Target files:
+  - `Exports/Loader/simple_loader.cpp`
+  - `Exports/Loader/minimal_loader.cpp`
+  - `Exports/Loader/test_minimal.cpp`
+  - `Exports/Loader/stdafx.h`
+  - `Exports/Loader/stdafx.cpp`
+- [ ] Required change: either archive or clearly mark these as non-production diagnostics and remove stale TODO markers that do not map to real backlog work.
+- [ ] Validation command: `rg --line-number "TODO|FIXME" Exports/Loader`.
+- [ ] Acceptance: loader task inventory reflects production code only; no ambiguous placeholder comments remain in active path files.
+
+## Simple Command Set
+1. `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32`
+2. `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Debug /p:Platform=Win32`
+3. `rg --line-number "TODO|FIXME" Exports/Loader`
+4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last loader change:
-- Validation evidence:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `Exports/Loader/TASKS_ARCHIVE.md`.
-
-
-
-
-## Behavior Cards
-1. ForegroundAttachStartupDiagnosticsParity
-- [ ] Behavior: FG client injection/startup is deterministic, surfaces startup diagnostics clearly, and does not leave orphaned loader-hosted processes after failures.
-- [ ] FG Baseline: FG startup path consistently injects and reports attach/host initialization milestones before scenario execution.
-- [ ] BG Target: BG startup dependencies from loader paths do not regress FG/BG comparative scenario runs or teardown safety.
-- [ ] Implementation Targets: `Exports/Loader/dllmain.cpp`, `Exports/Loader/BotHostControl.h`, `Exports/Loader/nethost_helpers.h`, `Exports/Loader/Loader.vcxproj`.
-- [ ] Simple Command: `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32`.
-- [ ] Acceptance: loader build succeeds, startup diagnostics remain available for troubleshooting, and failed startup paths can still be cleaned with repo-scoped PID evidence.
-- [ ] If Fails: add `Research:LoaderStartupFailure::<phase>` and `Implement:LoaderStartupParityFix::<module>` tasks with crash/log references.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last updated: 2026-02-25
+- Current focus: `LDR-MISS-001`
+- Last delta: added evidence-backed checklist and snapshot for loader build prerequisites, fixed-time teardown waits, console/log visibility, and stale machine-specific debug stubs.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32` (fails: `msbuild` not found in PATH)
+  - `dotnet msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32` (fails: `MSB4278`, missing C++ targets)
+  - `dotnet msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Debug /p:Platform=Win32` (fails: `MSB4278`, missing C++ targets)
+  - `rg -n "WaitForSingleObject|CloseHandle|CreateThread|FreeLibraryAndExitThread|shutdown|stop|detach" Exports/Loader/dllmain.cpp Exports/Loader/nethost_helpers.h`
+  - `rg -n "AllocConsole|AttachConsole|FreeConsole|printf|std::cout|log|LOG|diagnostic|DEBUG|console" Exports/Loader/dllmain.cpp Exports/Loader/nethost_helpers.h Exports/Loader/README.md`
+  - `rg -n "C:\\\\|D:\\\\|E:\\\\|Users\\\\|Desktop|Documents|TEMP|TODO|FIXME" Exports/Loader/simple_loader.cpp Exports/Loader/minimal_loader.cpp Exports/Loader/test_minimal.cpp Exports/Loader/stdafx.h Exports/Loader/stdafx.cpp`
+- Blockers:
+  - Native loader build verification is blocked in this shell until Visual Studio C++ `msbuild`/targets are available on PATH.
+- Files changed:
+  - `Exports/Loader/TASKS.md`
+- Next queue file: `Exports/Navigation/TASKS.md`
+- Next command: `Get-Content -Path 'Exports/Navigation/TASKS.md' -TotalCount 360`
+- Loop Break: if two passes produce no delta, record blocker + exact next command and move to next queued file.

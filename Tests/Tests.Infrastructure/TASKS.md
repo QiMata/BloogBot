@@ -1,86 +1,93 @@
 # Tests.Infrastructure Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- This file owns fixture and process-lifecycle safeguards used by live tests.
-- Current priority is preventing lingering clients/managers during long-running scenarios.
-
 ## Scope
-Shared test fixture and client infrastructure for live/integration orchestration.
+- Project: `Tests/Tests.Infrastructure`
+- Master tracker: `MASTER-SUB-028`
+- Directory: `Tests/Tests.Infrastructure`
+- Primary implementation surfaces:
+- `Tests/Tests.Infrastructure/BotServiceFixture.cs`
+- `Tests/Tests.Infrastructure/WoWProcessManager.cs`
+- `Tests/BotRunner.Tests/Helpers/StateManagerProcessHelper.cs`
+- `run-tests.ps1` (repo-scoped test orchestration + cleanup)
 
-## Active Priorities
-1. Hard teardown on abnormal exits
-- [ ] Ensure timeout/failure/cancel paths always stop repo-scoped lingering `WoWStateManager`, test-launched `WoW`, `dotnet`, and `testhost*`.
-- [ ] Keep deterministic teardown order (`WoWStateManager` -> child clients -> repo-scoped `dotnet/testhost*`).
-- [ ] Emit teardown summary with process name, PID, and stop result.
+## Execution Rules
+1. Work tasks in this file top-down; do not branch to another local `TASKS.md` until this list is complete or blocked.
+2. Keep commands one-line and timeout-bounded.
+3. Never blanket-kill `dotnet`; cleanup must be repo-scoped and logged with process name/PID/result.
+4. Use scan-budget discipline: only read this task file plus directly referenced infra/fixture/process files for the current task.
+5. If two passes produce no file delta, record blocker + exact next command in `Session Handoff`, then move to the next queue file.
+6. Move completed items to `Tests/Tests.Infrastructure/TASKS_ARCHIVE.md` in the same session.
+7. Every pass must update `Session Handoff` with `Pass result` (`delta shipped` or `blocked`) and one executable `Next command`.
+8. Start each pass by running the prior `Session Handoff -> Next command` verbatim before any broader scan/search.
+9. After shipping one local delta, set `Session Handoff -> Next command` to the next queue-file read command and execute it in the same session.
 
-2. Fixture determinism
-- [ ] Keep setup snapshot-driven with minimal command count.
-- [ ] Ensure cleanup executes even when a test aborts mid-run.
+## Environment Checklist
+- [x] `Tests/Tests.Infrastructure/Tests.Infrastructure.csproj:5` sets `<IsTestProject>false</IsTestProject>`, so validation must run via consuming test projects.
+- [x] `run-tests.ps1:84` defines `Get-RepoScopedTestProcesses`; `run-tests.ps1:181` defines `Stop-RepoScopedTestProcesses`.
+- [x] `run-tests.ps1:253` sets `--blame-hang-timeout` from `-TestTimeoutMinutes` (default 10).
 
-3. Corpse-run support
-- [ ] Support 10-minute execution windows for `DeathCorpseRunTests`.
-- [ ] Preserve cleanup guarantees even when the full timeout window is consumed.
+## Evidence Snapshot (2026-02-25)
+- `dotnet restore Tests/Tests.Infrastructure/Tests.Infrastructure.csproj` succeeded (all projects up-to-date).
+- Infra project is non-runnable by itself: `Tests.Infrastructure.csproj:5` is `<IsTestProject>false</IsTestProject>`.
+- Repo-scoped cleanup primitives exist in `run-tests.ps1`:
+- `Get-RepoScopedTestProcesses` at line `84`.
+- `Stop-RepoScopedTestProcesses` at line `181`.
+- `--blame-hang-timeout` wiring via `-TestTimeoutMinutes` at line `253`.
+- Current cleanup risks are still present and task-backed:
+- name-only cleanup loops and direct kills in `BotServiceFixture.cs` around `296`, `345-346`, `362-363`, `611-616`, and port-5001 fallback at `633`.
+- hidden console defaults remain at `BotServiceFixture.cs:411` and `StateManagerProcessHelper.cs:255`.
+- Repo-scoped process validation commands executed in this pass:
+- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses` -> `none`.
+- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly -ListRepoScopedProcesses` -> before cleanup `none`, after cleanup `none`.
 
-4. Diagnostic control
-- [ ] Add optional visible console/window mode for local debugging.
-- [ ] Keep default headless behavior for CI and unattended runs.
+## P0 Active Tasks (Ordered)
+1. [ ] `TINF-MISS-001` Replace name-only kill loops in `BotServiceFixture` with repo-scoped process filtering.
+- Evidence: current cleanup loops kill by process name only at `Tests/Tests.Infrastructure/BotServiceFixture.cs:292`, `:341`, `:358`, and `:611`.
+- Gap: these loops can terminate unrelated machine-wide `WoWStateManager`, `WoW`, or `PathfindingService` instances.
+- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`, `run-tests.ps1`.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses`.
 
-## Canonical Verification Commands
-1. Focused corpse-run:
+2. [ ] `TINF-MISS-002` Emit deterministic per-process teardown evidence (name, PID, scope source, outcome) for all cleanup paths.
+- Evidence: `DisposeAsync` reports count-only summary at `Tests/Tests.Infrastructure/BotServiceFixture.cs:309` and stale cleanup summary at `:375`.
+- Gap: failures are hard to audit without per-process outcome records.
+- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`.
+- Validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+
+3. [ ] `TINF-MISS-003` Unify pathfinding service cleanup between process-name and port-based discovery with repo-scoped guard checks.
+- Evidence: pathfinding cleanup currently combines name and port 5001 kill paths at `Tests/Tests.Infrastructure/BotServiceFixture.cs:606` through `:645`, but without repo-root command-line scope checks.
+- Gap: port-based fallback can still hit unrelated processes if port usage collides.
+- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`, `run-tests.ps1`.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly -ListRepoScopedProcesses`.
+
+4. [ ] `TINF-MISS-004` Add optional visible console mode for local debugging while keeping default headless behavior.
+- Evidence: StateManager launch is forced hidden via `CreateNoWindow = true` at `Tests/Tests.Infrastructure/BotServiceFixture.cs:411` and `Tests/BotRunner.Tests/Helpers/StateManagerProcessHelper.cs:255`.
+- Gap: no consistent opt-in path exists to view live StateManager console output in a window when diagnosing hangs.
+- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`, `Tests/BotRunner.Tests/Helpers/StateManagerProcessHelper.cs`.
+- Validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+
+5. [ ] `TINF-MISS-005` Add fixture cleanup verification tests in a consuming test project (not in `Tests.Infrastructure` itself).
+- Evidence: `Tests/Tests.Infrastructure/Tests.Infrastructure.csproj:5` is not a runnable test project.
+- Gap: teardown behavior regressions can land without direct automated assertions.
+- Files: `Tests/BotRunner.Tests/**/*.cs`, `Tests/Navigation.Physics.Tests/**/*.cs`, `Tests/Tests.Infrastructure/BotServiceFixture.cs`.
+- Validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Fixture|FullyQualifiedName~Cleanup|FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+
+6. [ ] `TINF-MISS-006` Keep infra command surface simple and aligned to repo-scoped cleanup primitives.
+- Evidence: `run-tests.ps1` already provides `-ListRepoScopedProcesses` and `-CleanupRepoScopedOnly`, but local infra docs still mixed broad guidance.
+- Files: `Tests/Tests.Infrastructure/TASKS.md`, `docs/TASKS.md`.
+- Validation: run the `Simple Command Set` below unchanged.
+
+## Simple Command Set
+- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses`
+- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly -ListRepoScopedProcesses`
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
-2. Repo-scoped process audit:
-- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses`
-
-3. Repo-scoped cleanup:
-- `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
-
 ## Session Handoff
-- Last infra fix:
-- Validation/tests run:
-- Files changed:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-
-## Archive
-Move completed items to `Tests/Tests.Infrastructure/TASKS_ARCHIVE.md`.
-
-## Behavior Cards
-1. TestsInfrastructureTeardownGuardParity
-- [ ] Behavior: test infrastructure guarantees timeout/cancel/failure teardown stops only repo-scoped processes and managers.
-- [ ] FG Baseline: FG teardown path reliably disposes launched processes and reports PID outcomes without collateral kills.
-- [ ] BG Target: BG teardown path applies identical repo-scoped shutdown rules and emits equivalent PID evidence.
-- [ ] Implementation Targets: `Tests/Tests.Infrastructure/**/*.cs`, `run-tests.ps1`, `Tests/BotRunner.Tests/**/*.cs`.
-- [ ] Simple Command: `dotnet test Tests/Tests.Infrastructure/Tests.Infrastructure.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: infrastructure tests prove deterministic cleanup and explicitly reject blanket `dotnet` termination behavior.
-- [ ] If Fails: add `Research:InfraTeardownScopeGap::<scenario>` and `Implement:InfraTeardownScopeFix::<scenario>` tasks with PID evidence.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last updated: 2026-02-25
+- Active task: `TINF-MISS-001` (repo-scoped process filtering in fixture cleanup).
+- Last delta: Added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction resumes on the next local `TASKS.md`.
+- Pass result: `delta shipped`
+- Validation/tests run: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses` and `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly -ListRepoScopedProcesses` both returned no repo-scoped lingering processes.
+- Files changed: `Tests/Tests.Infrastructure/TASKS.md`.
+- Blockers: None.
+- Next task: `TINF-MISS-001`.
+- Next command: `Get-Content -Path 'Tests/WowSharpClient.NetworkTests/TASKS.md' -TotalCount 360`.

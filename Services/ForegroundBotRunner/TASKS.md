@@ -1,89 +1,77 @@
 # ForegroundBotRunner Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+Master tracker: `MASTER-SUB-016`
 
 ## Scope
-Injected client behavior, memory reads/writes, FG object manager parity, and stability.
+- Directory: `Services/ForegroundBotRunner`
+- Focus: remove FG object-model throw paths that break corpse/combat/gathering parity and stabilization tests.
+- Queue dependency: `docs/TASKS.md` controls execution order and handoff pointers.
 
-## Rules
-- Execute without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Prioritize crash prevention and deterministic state exposure.
+## Execution Rules
+1. Keep this file implementation-focused on FG object/materialization behavior only.
+2. Never blanket-kill `dotnet`; use repo-scoped cleanup only.
+3. Every validation cycle must compare FG and BG behavior for the same scenario.
+4. On completion, move finished items to `Services/ForegroundBotRunner/TASKS_ARCHIVE.md` in the same session.
+5. If two runs in a row produce no code delta, record blocker + exact next command in `Session Handoff` and advance to the next queued file in `docs/TASKS.md`.
+6. Every pass must write one-line `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
 
-## Active Priorities
-1. Stability guards
-- [ ] Maintain AV guards for target setting and login snapshot capture paths.
-- [ ] Keep pointer validation and main-thread execution constraints enforced.
+## Evidence Snapshot (2026-02-25)
+- Build check passes: `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore` -> `0 Error(s)`, `0 Warning(s)`; output still contains a non-blocking `dumpbin` missing message from `vcpkg ... applocal.ps1`.
+- `NotImplementedException` baseline:
+  - `WoWObject.cs`: `31` throw matches across lines `195-231`.
+  - `WoWUnit.cs`: `56` throw matches across lines `244-559`.
+  - `WoWPlayer.cs`: `49` throw matches across lines `41-252`.
+- TODO carryover requiring explicit keep/implement/defer:
+  - `Services/ForegroundBotRunner/Mem/MemoryAddresses.cs:137`
+  - `Services/ForegroundBotRunner/Mem/AntiWarden/WardenDisabler.cs:214`
+  - `Services/ForegroundBotRunner/Mem/AntiWarden/WardenDisabler.cs:386`
 
-2. FG parity exposure
-- [ ] Ensure FG snapshot data remains complete and comparable with BG path.
-- [ ] Fix FG `SpellList` parity for learned/already-known talent spells (e.g. `.learn 16462` acknowledged but missing from FG snapshot spell list).
+## P0 Active Tasks (Ordered)
+1. [ ] `FG-MISS-001` Remove throw paths in `WoWObject.cs`.
+- Problem: movement/spline/transport accessors can still throw during snapshot/materialization.
+- Target files: `Services/ForegroundBotRunner/Objects/WoWObject.cs`.
+- Required change: replace all `NotImplementedException` members with descriptor-backed values or safe defaults that preserve current call contracts.
+- Validation command: `rg --line-number "throw new NotImplementedException\\(\\)" Services/ForegroundBotRunner/Objects/WoWObject.cs`
+- Acceptance criteria: command returns no matches.
 
-3. Pathfinding wiring
-- [ ] Add startup diagnostic line that captures configured PF endpoint and connection success/failure for faster live triage.
+2. [ ] `FG-MISS-002` Remove throw paths in `WoWUnit.cs`.
+- Problem: target/power/combat stat and movement relation fields can still throw.
+- Target files: `Services/ForegroundBotRunner/Objects/WoWUnit.cs`.
+- Required change: implement all currently-thrown members with stable value reads/defaults so corpse/combat/gathering flows do not fail.
+- Validation command: `rg --line-number "throw new NotImplementedException\\(\\)" Services/ForegroundBotRunner/Objects/WoWUnit.cs`
+- Acceptance criteria: command returns no matches.
+
+3. [ ] `FG-MISS-003` Remove throw paths in `WoWPlayer.cs`.
+- Problem: race/class/guild/inventory/xp/combat-rating members can still throw.
+- Target files: `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`.
+- Required change: implement all currently-thrown members with safe, deterministic value reads/defaults used by active bot logic.
+- Validation command: `rg --line-number "throw new NotImplementedException\\(\\)" Services/ForegroundBotRunner/Objects/WoWPlayer.cs`
+- Acceptance criteria: command returns no matches.
+
+4. [ ] `FG-MISS-004` Add regression gate for FG materialization throws.
+- Problem: throw regressions can re-enter without a dedicated test guard.
+- Target files: `Tests/BotRunner.Tests` (corpse/combat/gathering slices) and supporting FG test utilities.
+- Required change: add tests asserting that exercised FG object-member reads do not throw `NotImplementedException`.
+- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~Combat|FullyQualifiedName~Gather" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Acceptance criteria: guard fails when a throw is reintroduced and passes on current implementation.
+
+5. [ ] `FG-MISS-005` Triage remaining FG memory/warden TODOs.
+- Problem: non-object TODO markers are untracked implementation risk.
+- Target files: `Services/ForegroundBotRunner/Mem/MemoryAddresses.cs`, `Services/ForegroundBotRunner/Mem/AntiWarden/WardenDisabler.cs`.
+- Required change: create explicit task IDs or explicit defer rationale for each TODO marker.
+- Validation command: `rg -n "TODO" Services/ForegroundBotRunner/Mem/MemoryAddresses.cs Services/ForegroundBotRunner/Mem/AntiWarden/WardenDisabler.cs`
+- Acceptance criteria: each TODO has a linked task ID or documented defer decision in this file.
+
+## Simple Command Set
+1. Build: `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore`
+2. Corpse-run smoke: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+3. FG parity slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~Combat|FullyQualifiedName~Gather" --logger "console;verbosity=minimal"`
+4. Repo-scoped cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last crash/parity fix:
-  - Implemented descriptor-backed FG snapshot life fields:
-    - `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`: `PlayerFlags`, `Bytes`, `Bytes3`.
-    - `Services/ForegroundBotRunner/Objects/WoWUnit.cs`: `Bytes0`, `Bytes1`, `Bytes2`.
-  - Ensured `ForegroundBotWorker` still supplies non-null `PathfindingClient` into `CreateClassContainer`.
-  - Updated `LocalPlayer.InGhostForm` to descriptor-first detection (`PLAYER_FLAGS_GHOST` + stand-state dead guard), with memory/Lua fallback only when descriptor state is inconclusive.
-  - Implemented descriptor-backed `WoWPlayer.QuestLog` reads (20 slots x 3 fields) to support quest snapshot parity.
-- Validation/tests run:
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~DeathCorpseRunTests" --logger "console;verbosity=normal"` (pass in latest run).
-- Files changed:
-  - `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`
-  - `Services/ForegroundBotRunner/Objects/WoWUnit.cs`
-  - `Services/ForegroundBotRunner/Objects/LocalPlayer.cs`
-  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
-- Next task:
-  - Validate repeated corpse/ghost transitions over multiple live runs to confirm descriptor-first `InGhostForm` no longer drops death-recovery scheduling.
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `Services/ForegroundBotRunner/TASKS_ARCHIVE.md`.
-
-
-
-## Behavior Cards
-1. ForegroundRunnerBaselineDeterminism
-- [ ] Behavior: foreground runner establishes deterministic baseline traces for death, ghost runback, and recovery behavior.
-- [ ] FG Baseline: FG run consistently emits expected lifecycle transitions, movement cadence, and reclaim timing for the same setup.
-- [ ] BG Target: BG comparisons use the FG baseline trace and should remain behaviorally indistinguishable across the same scenario timeline.
-- [ ] Implementation Targets: `Services/ForegroundBotRunner/**/*.cs`, `Services/WoWStateManager/**/*.cs`, `Exports/BotRunner/**/*.cs`.
-- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: FG baseline traces are stable across reruns and include complete lifecycle + teardown evidence for parity diffing.
-- [ ] If Fails: add `Research:ForegroundBaselineDrift::<scenario>` and `Implement:ForegroundRunnerStabilityFix::<scenario>` tasks with trace diff links.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last updated: 2026-02-25
+- Pass result: `delta shipped`
+- Last delta: converted to execution-card format with refreshed evidence and explicit per-task problem/target/validation/acceptance structure.
+- Next task: `FG-MISS-001`
+- Next command: `rg --line-number "throw new NotImplementedException\\(\\)" Services/ForegroundBotRunner/Objects/WoWObject.cs`
+- Blockers: none

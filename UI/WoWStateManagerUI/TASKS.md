@@ -1,76 +1,83 @@
 # WoWStateManagerUI Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
-
 ## Scope
-Directory: .\UI\WoWStateManagerUI
+- Directory: `UI/WoWStateManagerUI`
+- Project: `UI/WoWStateManagerUI/WoWStateManagerUI.csproj`
+- Master tracker: `MASTER-SUB-038`
+- Primary implementation surfaces:
+- `UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs`
+- `UI/WoWStateManagerUI/MainWindow.xaml`
+- `UI/WoWStateManagerUI/Views/StateManagerViewModel.cs`
+- Documentation surface:
+- `UI/WoWStateManagerUI/README.md`
 
-Projects:
-- WoWStateManagerUI.csproj
+## Execution Rules
+1. Execute tasks in this file top-down and keep scans limited to files listed in `Scope`.
+2. Keep commands simple and one-line.
+3. Prioritize deterministic, explicit binding behavior over implicit WPF defaults.
+4. Do not leave converter behavior ambiguous; every converter must define clear one-way or two-way contract.
+5. Move completed items to `UI/WoWStateManagerUI/TASKS_ARCHIVE.md` in the same session.
+6. Every pass must update `Session Handoff` with `Pass result` (`delta shipped` or `blocked`) and one executable `Next command`.
+7. Start each pass by running the prior `Session Handoff -> Next command` verbatim before any broader scan/search.
+8. After shipping one local delta, set `Session Handoff -> Next command` to the next queue-file read command and execute it in the same session.
 
-## Instructions
-- Execute tasks directly without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Keep this file focused on active, unresolved work only.
-- Add new tasks immediately when new gaps are discovered.
-- Archive completed tasks to TASKS_ARCHIVE.md.
+## Environment Checklist
+- [x] `GreaterThanZeroToBooleanConverter.ConvertBack` currently throws `NotImplementedException` (`Converters/GreaterThanZeroToBooleanConverter.cs:18`).
+- [x] Current convert logic enables for non-negative indexes (`intValue >= 0`) (`Converters/GreaterThanZeroToBooleanConverter.cs:12`).
+- [x] `SelectCharacterIndex` is projected from `_selectedCharacterIndex` and is used as the UI selection gate (`Views/StateManagerViewModel.cs:126`).
+- [x] Converter is wired to many `IsEnabled` bindings in `MainWindow.xaml` (`MainWindow.xaml:86-136`) and is a high-impact control gate.
+- [x] No focused converter tests currently exist under `Tests/*` for `GreaterThanZeroToBooleanConverter`/`SelectCharacterIndex` (targeted `rg` returned no matches).
 
-## Active Priorities
-1. Validate this project behavior against current FG/BG parity goals.
-2. Remove stale assumptions and redundant code paths.
-3. Add or adjust tests as needed to keep behavior deterministic.
+## Evidence Snapshot (2026-02-25)
+- `dotnet restore UI/WoWStateManagerUI/WoWStateManagerUI.csproj` succeeded (`All projects are up-to-date for restore`).
+- `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release --no-restore` succeeded (warnings only, no errors).
+- `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release` succeeded with `0 Warning(s)` and `0 Error(s)`.
+- Converter contract drift confirmed:
+- name implies strict `> 0`, but implementation currently uses `>= 0` (`Converters/GreaterThanZeroToBooleanConverter.cs:12`);
+- reverse conversion throws `NotImplementedException` (`Converters/GreaterThanZeroToBooleanConverter.cs:18`).
+- Binding footprint confirmed:
+- converter resource declaration at `MainWindow.xaml:12`;
+- repeated `IsEnabled` usage bound to `SelectCharacterIndex` at `MainWindow.xaml:86-136`.
+- README command drift confirmed:
+- uses stale commands `dotnet build StateManagerUI.csproj` / `dotnet run --project StateManagerUI.csproj` (`README.md:203`, `:209`) instead of `WoWStateManagerUI.csproj`.
+
+## P0 Active Tasks (Ordered)
+1. [ ] `UI-MISS-001` Remove `NotImplementedException` path from `ConvertBack` and make converter direction explicit.
+- Evidence: `ConvertBack` throws in `UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs`.
+- Files: `UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs`, `UI/WoWStateManagerUI/MainWindow.xaml`.
+- Required breakdown: either implement safe reverse mapping for supported scenarios or switch to explicit `NotSupportedException` and enforce one-way binding usage.
+- Validation: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
+
+2. [ ] `UI-MISS-002` Align converter naming and logic with selection semantics (`-1` invalid, `0+` valid).
+- Evidence: converter name says "greater than zero" while code currently enables at `>= 0`.
+- Files: `UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs`, `UI/WoWStateManagerUI/MainWindow.xaml`, `UI/WoWStateManagerUI/README.md`.
+- Required breakdown: choose one contract (strict `> 0` vs non-negative), update converter name/usage accordingly, and document the contract.
+- Validation: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
+
+3. [ ] `UI-MISS-003` Add converter-level regression coverage for selection gating.
+- Evidence: no direct test currently asserts selection-index to enabled-state conversion behavior.
+- Files: `UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs`, `Tests/*` (new/updated focused tests).
+- Required breakdown: add cases for `-1`, `0`, positive values, non-int values, and convert-back behavior contract.
+- Validation: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~UI|FullyQualifiedName~StateManager|FullyQualifiedName~Converter" --logger "console;verbosity=minimal"`.
+
+4. [ ] `UI-MISS-004` Reduce README to a command-first operator/developer flow for this UI project.
+- Evidence: README is broad and includes stale/indirect guidance that slows agent startup.
+- Files: `UI/WoWStateManagerUI/README.md`, `UI/WoWStateManagerUI/TASKS.md`.
+- Required breakdown: keep one build command, one run command, and one converter-binding contract section tied to `UI-MISS-001..003`.
+- Validation: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
+
+## Simple Command Set
+- `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`
+- `dotnet run --project UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`
+- `rg -n "GreaterThanZeroToBooleanConverter|SelectCharacterIndex|IsEnabled=\\\"\\{Binding SelectCharacterIndex" UI/WoWStateManagerUI`
 
 ## Session Handoff
-- Last task completed:
-- Validation/tests run:
-- Files changed:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to TASKS_ARCHIVE.md and keep this file short.
-
-
-
-
-## Behavior Cards
-1. WoWStateManagerUiLifecycleParity
-- [ ] Behavior: WoWStateManager UI presents full death lifecycle and runback progress for FG/BG in a parity-comparable timeline.
-- [ ] FG Baseline: FG timeline reflects alive/dead/ghost/runback/reclaim/retrieve transitions with accurate timer rendering.
-- [ ] BG Target: BG timeline mirrors FG transition ordering and timing for the same scenario without stale state gaps.
-- [ ] Implementation Targets: `UI/WoWStateManagerUI/**/*.razor`, `UI/WoWStateManagerUI/**/*.cs`, `Services/WoWStateManager/**/*.cs`.
-- [ ] Simple Command: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
-- [ ] Acceptance: UI components render lifecycle transitions and timer states needed to verify FG/BG corpse-run parity.
-- [ ] If Fails: add `Research:StateManagerUiLifecycleGap::<component>` and `Implement:StateManagerUiLifecycleFix::<component>` tasks with UI evidence.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last updated: 2026-02-25
+- Active task: `UI-MISS-001` (remove `NotImplementedException` convert-back path and set explicit converter direction).
+- Last delta: Added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction resumes on the next local `TASKS.md`.
+- Pass result: `delta shipped`
+- Validation/tests run: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release` -> succeeded (`0 warnings`, `0 errors`).
+- Files changed: `UI/WoWStateManagerUI/TASKS.md`.
+- Blockers: None.
+- Next task: `UI-MISS-001`.
+- Next command: `Get-Content -Path 'docs/TASKS.md' -TotalCount 420`.

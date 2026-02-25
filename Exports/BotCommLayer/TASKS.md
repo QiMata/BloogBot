@@ -1,73 +1,116 @@
-﻿# BotCommLayer Tasks
-
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+# BotCommLayer Tasks
 
 ## Scope
-Protobuf contracts and communication model compatibility across FG/BG paths.
+- Project: `Exports/BotCommLayer`
+- Owns protobuf contracts and socket transport used by FG/BG snapshot and command exchange.
+- This file tracks direct contract/interop tasks tied to concrete files and tests.
+- Master tracker: `MASTER-SUB-003` in `docs/TASKS.md`.
 
-## Rules
-- Execute without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Keep schema changes backward-safe for all active callers.
+## Execution Rules
+1. Work this file only until the current top unchecked task is completed or blocked.
+2. Limit scans to `Exports/BotCommLayer` plus directly referenced tests.
+3. Keep generated artifacts (`Models/*.cs`) aligned with `.proto` sources.
+4. Preserve corpse-run canonical fields used by live tests (`dead/ghost/reclaim/movement`).
+5. Record `Last delta`, `Pass result`, and `Next command` in `Session Handoff` after each pass.
+6. Move completed items to `Exports/BotCommLayer/TASKS_ARCHIVE.md` in the same session.
+7. Keep commands single-line and runnable as-is from repo root.
+8. Resume-first guard: start each pass by running the prior `Session Handoff -> Next command` verbatim before new scans.
+9. After shipping one local delta, set `Session Handoff -> Next command` to the next queue-file read command and execute it in the same pass.
 
-## Active Priorities
-1. Snapshot schema parity
-- [ ] Ensure parity-critical fields are present and consistently populated.
-- [ ] Add/update compatibility checks when fields are added or changed.
+## Environment Checklist
+- [x] `Exports/BotCommLayer/BotCommLayer.csproj` builds in `Release`.
+- [x] Snapshot serialization tests are runnable from `Tests/BotRunner.Tests` (`WoWActivitySnapshotMovementTests`).
+- [x] Proto regeneration scripts and commands are documented and reproducible (`README.md`, `protocsharp.bat`, `protocpp.bat`).
 
-2. Action contract clarity
-- [ ] Keep action enum and parameter mapping synchronized across producers/consumers.
+## Evidence Snapshot (2026-02-25)
+- [x] Contract fields used by corpse lifecycle are present in proto contracts.
+  - `game.proto`: `WoWPlayer.corpseRecoveryDelaySeconds` at line 123.
+  - `communication.proto`: `WoWActivitySnapshot.player`, `movementData`, `recentChatMessages`, `recentErrors` at lines 161/168/170/171.
+  - `DeathCorpseRunTests.cs`: lifecycle extraction uses `Health`, `Bytes1`, `CorpseRecoveryDelaySeconds`, `MovementFlags` (lines 61, 92, 117, 120).
+- [x] `WoWActivitySnapshotExtensions.cs` is interface-only (`WoWActivitySnapshot : IWoWActivitySnapshot`) and contains no mapping logic.
+- [x] BotCommLayer build passes.
+  - Command: `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore`
+  - Result: success, 0 errors.
+- [x] Snapshot movement tests pass.
+  - Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`
+  - Result: passed 14 tests.
+- [x] Live corpse-run validation fails on BG runback stall (reproduced).
+  - Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  - Result: failed in ~1m47s with `[BG] scenario failed: corpse run stalled with minimal movement (travel=0.0y, moveFlags=0x0)`.
+- [x] Repo-scoped cleanup command executes.
+  - Command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
+  - Result: exit code 0.
+- [x] Teardown hardening gap remains in socket server/client code.
+  - `ProtobufSocketServer.cs`: has `Stop()` and `_isRunning`, no `IDisposable` contract.
+  - `ProtobufAsyncSocketServer.cs`: `while (true)` client loop and direct `client.Close()` without cancellation token flow.
+  - `ProtobufSocketClient.cs`: `Close()` exists but no `IDisposable` contract for deterministic ownership patterns.
+
+## P0 Active Tasks (Ordered)
+
+### BCL-MISS-001 Snapshot contract parity audit for corpse lifecycle fields
+- [ ] Problem: corpse-run behavior depends on `WoWActivitySnapshot` fields, but no single task tracks required contract parity across proto and consumers.
+- [ ] Target files:
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/ProtoDef/game.proto`
+  - `Exports/BotCommLayer/Models/WoWActivitySnapshotExtensions.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+- [ ] Canonical fields to keep in parity:
+  - `dead/ghost` inputs from `player.unit.health`, `player.unit.bytes1` (stand state mask), and movement flags.
+  - reclaim timer from `player.corpseRecoveryDelaySeconds`.
+  - runback movement from `player.unit.movementFlags` with fallback to `movementData.movementFlags`.
+- [ ] Required change: keep this field map explicit in this file and document any intentional omissions instead of implicit assumptions.
+- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: all required fields are explicitly accounted for and consumed consistently in test assertions.
+
+### BCL-MISS-002 Add regression coverage for snapshot serialization of death/runback fields
+- [ ] Problem: existing movement snapshot tests focus on movement payloads; corpse lifecycle field persistence needs explicit round-trip gates.
+- [ ] Target files:
+  - `Tests/BotRunner.Tests/ActivitySnapshotMovementTests.cs`
+  - `Tests/BotRunner.Tests/BotRunner.Tests.csproj`
+- [ ] Evidence gap: current test file asserts movement serialization but has no `CorpseRecoveryDelaySeconds` or life-state (`Health`/`Bytes1`) round-trip assertions.
+- [ ] Required change: add serialization/deserialization assertions for corpse lifecycle + movement fields used during corpse-run decisions.
+- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: tests fail if corpse-run critical snapshot fields are dropped or remapped incorrectly.
+
+### BCL-MISS-003 Harden socket teardown and cancellation paths
+- [ ] Problem: lingering test processes are expensive; socket layers need deterministic stop semantics under timeout/cancel.
+- [ ] Target files:
+  - `Exports/BotCommLayer/ProtobufSocketServer.cs`
+  - `Exports/BotCommLayer/ProtobufAsyncSocketServer.cs`
+  - `Exports/BotCommLayer/ProtobufSocketClient.cs`
+- [ ] Required change: add deterministic dispose/cancel behavior and add task notes for missing teardown tests in owning test project.
+- [ ] Evidence gap:
+  - Async server handles clients in `while (true)` loop without cancellation token.
+  - No explicit `IDisposable` ownership contract on server/client types.
+- [ ] Validation command: `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore`.
+- [ ] Acceptance: timeout/cancel paths do not leave active listeners/clients for this repo scope.
+
+### BCL-MISS-004 Keep proto regeneration workflow explicit and low-friction
+- [ ] Problem: schema edits can drift from generated C# when regeneration workflow is unclear.
+- [ ] Target files:
+  - `Exports/BotCommLayer/README.md`
+  - `Exports/BotCommLayer/Models/ProtoDef/protocsharp.bat`
+  - `Exports/BotCommLayer/Models/ProtoDef/protocpp.bat`
+- [ ] Required change: document exact C# and C++ regeneration command order and output paths; ensure commands still match current repo layout.
+- [ ] Evidence gap: README currently gives direct C# regeneration examples but does not define a single canonical C++ regeneration call sequence.
+- [ ] Acceptance: another agent can regenerate models without scanning unrelated directories.
+
+## Simple Command Set
+1. `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore`
+2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`
+3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last schema/action change:
-- Regeneration/build verification:
-- Files changed:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `Exports/BotCommLayer/TASKS_ARCHIVE.md`.
-
-
-
-## Behavior Cards
-1. SnapshotCorpseMovementContractParity
-- [ ] Behavior: serialized FG/BG activity snapshots expose matching corpse lifecycle and movement fields used by behavior decisions and test assertions.
-- [ ] FG Baseline: FG snapshot payload carries dead/ghost/reclaim and movement values that align with live state transitions.
-- [ ] BG Target: BG snapshot payload matches FG field presence, value semantics, and update timing for the same transitions.
-- [ ] Implementation Targets: `Exports/BotCommLayer/Models/ProtoDef/game.proto`, `Exports/BotCommLayer/Models/ProtoDef/communication.proto`, `Exports/BotCommLayer/Models/WoWActivitySnapshotExtensions.cs`, `Exports/BotCommLayer/ProtobufSocketServer.cs`, `Exports/BotCommLayer/ProtobufSocketClient.cs`.
-- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: snapshot tests pass with no missing parity-critical fields and no schema/extension conversion regressions; timeout/failure path includes repo-scoped teardown evidence.
-- [ ] If Fails: add `Research:SnapshotContractMismatch::<field-or-packet>` and `Implement:SnapshotContractFix::<component>` tasks with proto + codeowner references.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last updated: 2026-02-25
+- Master tracker: `MASTER-SUB-003`
+- Active task: `BCL-MISS-001`
+- Last delta: executed prior handoff build command successfully for `BotRunner`, then added resume-first/next-file continuity guards to keep queue traversal one-by-one.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore` -> pass.
+- Files changed: `Exports/BotCommLayer/TASKS.md`
+- Blockers: none for documentation continuity pass (BG corpse-run stall remains tracked under `BCL-MISS-001` evidence).
+- Next task: move queue to `MASTER-SUB-004` (`Exports/BotRunner/TASKS.md`).
+- Next command: `Get-Content -Path 'Exports/BotRunner/TASKS.md' -TotalCount 360`
+- Loop Break: if no delta after two passes, record blocker with exact missing field/test and move to next queued file.

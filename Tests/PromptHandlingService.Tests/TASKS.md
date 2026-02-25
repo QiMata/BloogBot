@@ -1,76 +1,156 @@
 # PromptHandlingService.Tests Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
-
 ## Scope
-Directory: .\Tests\PromptHandlingService.Tests
+- Directory: `Tests/PromptHandlingService.Tests`
+- Project: `PromptHandlingService.Tests.csproj`
+- Master tracker: `docs/TASKS.md` (`MASTER-SUB-025`)
+- Local goal: make prompt-handling tests deterministic, discovered by xUnit, and directly aligned to `PHS-MISS-001`.
 
-Projects:
-- PromptHandlingService.Tests.csproj
+## Execution Rules
+1. Execute tasks in numeric order unless blocked by fixture prerequisites.
+2. Keep scan scope to this project and directly referenced implementation files only.
+3. Use one-line `dotnet test` commands and include `Tests/test.runsettings` for timeout enforcement.
+4. Never blanket-kill `dotnet`; use repo-scoped cleanup only with process evidence.
+5. Move completed IDs to `Tests/PromptHandlingService.Tests/TASKS_ARCHIVE.md` in the same session.
+6. If two consecutive passes produce no file delta, record blocker and exact next command, then advance queue pointer in `docs/TASKS.md`.
+7. Add a one-line `Pass result` in `Session Handoff` (`delta shipped` or `blocked`) every pass so compaction resumes from `Next command` directly.
+8. Start each pass by running the prior `Session Handoff -> Next command` verbatim before any broader scan/search.
+9. After shipping one local delta, set `Session Handoff -> Next command` to the next queue-file read command and execute it in the same session.
 
-## Instructions
-- Execute tasks directly without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Keep this file focused on active, unresolved work only.
-- Add new tasks immediately when new gaps are discovered.
-- Archive completed tasks to TASKS_ARCHIVE.md.
+## Environment Checklist (Run Before P0)
+- [x] `Tests/test.runsettings` is applied (`TestSessionTimeout=600000`) via csproj runsettings path.
+- [ ] Local prompt-runner tests do not require live network/model access for default CI command path.
+- [ ] If integration prompt tests are enabled, local Ollama endpoint and model names are explicitly documented per test.
 
-## Active Priorities
-1. Validate this project behavior against current FG/BG parity goals.
-2. Remove stale assumptions and redundant code paths.
-3. Add or adjust tests as needed to keep behavior deterministic.
+## Evidence Snapshot (2026-02-25)
+- `dotnet restore Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj` completed successfully.
+- Timeout/runsettings baseline:
+  - `Tests/test.runsettings:5` -> `<TestSessionTimeout>600000</TestSessionTimeout>`
+  - `Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj:23` -> `<RunSettingsFilePath>...\\..\\test.runsettings</RunSettingsFilePath>`
+- Discovery gap evidence for `PHS-TST-001`:
+  - `IntentionParserFunctionTests.cs`, `GMCommandGeneratorFunctionTests.cs`, and `CharacterSkillPrioritizationFunctionTests.cs` contain multiple `public async Task ...` methods without `[Fact]` attributes.
+- Determinism gap evidence for `PHS-TST-002`:
+  - direct Ollama coupling (`http://localhost:11434`) appears in all three prompt-function test files.
+- README command drift evidence for `PHS-TST-005`:
+  - command examples at `README.md:96`, `:99`, `:102`, `:105` do not show explicit `--settings Tests/test.runsettings`.
+- Live validation on the current `PHS-TST-001` filter confirms a discovery gap:
+  - `dotnet test ... --filter "FullyQualifiedName~IntentionParserFunctionTests|FullyQualifiedName~GMCommandGeneratorFunctionTests|FullyQualifiedName~CharacterSkillPrioritizationFunctionTests"` -> `No test matches the given testcase filter`.
+- `dotnet test ... --list-tests` currently discovers only:
+  - `DecisionEngineReadBinFileTests.ReadBinFile_AllowsConcurrentWriter`
+  - `PromptCacheTests.PromptCache_Dispose_ReleasesDatabaseFile`
+
+## P0 Active Tasks (Ordered)
+
+### [ ] PHS-TST-001 - Fix xUnit discovery gaps in prompt function tests
+- Problem: multiple async test methods are missing `[Fact]`, so they are not discovered/executed.
+- Evidence:
+1. `Tests/PromptHandlingService.Tests/IntentionParserFunctionTests.cs:15`
+2. `Tests/PromptHandlingService.Tests/GMCommandGeneratorFunctionTests.cs:12`
+3. `Tests/PromptHandlingService.Tests/CharacterSkillPrioritizationFunctionTests.cs:15`
+4. `Tests/PromptHandlingService.Tests/DecisionEngineReadBinFileTests.cs:16` (discovered baseline pattern)
+- Implementation targets:
+1. `Tests/PromptHandlingService.Tests/IntentionParserFunctionTests.cs`
+2. `Tests/PromptHandlingService.Tests/GMCommandGeneratorFunctionTests.cs`
+3. `Tests/PromptHandlingService.Tests/CharacterSkillPrioritizationFunctionTests.cs`
+- Required change:
+1. Add `[Fact]` (or `[Theory]` where needed) to each intended test method.
+2. Ensure class/fixture constructors remain xUnit-compatible after attribute updates.
+3. Add a short discovery validation step in this file's handoff notes once implemented.
+- Command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~IntentionParserFunctionTests|FullyQualifiedName~GMCommandGeneratorFunctionTests|FullyQualifiedName~CharacterSkillPrioritizationFunctionTests" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. All intended test methods in the three files are discovered by xUnit.
+2. Filtered command executes test cases instead of reporting zero matches.
+3. `dotnet test --list-tests` shows discoverable entries for the three target prompt-function test classes.
+
+### [ ] PHS-TST-002 - Split deterministic unit prompt tests from live-model integration path
+- Problem: prompt tests currently hardcode local Ollama endpoint/model usage, which is non-deterministic and environment-coupled.
+- Evidence:
+1. `Tests/PromptHandlingService.Tests/IntentionParserFunctionTests.cs:11`
+2. `Tests/PromptHandlingService.Tests/GMCommandGeneratorFunctionTests.cs:121`
+3. `Tests/PromptHandlingService.Tests/CharacterSkillPrioritizationFunctionTests.cs:12`
+- Implementation targets:
+1. `Tests/PromptHandlingService.Tests/IntentionParserFunctionTests.cs`
+2. `Tests/PromptHandlingService.Tests/GMCommandGeneratorFunctionTests.cs`
+3. `Tests/PromptHandlingService.Tests/CharacterSkillPrioritizationFunctionTests.cs`
+4. `Tests/PromptHandlingService.Tests` (new deterministic stub/fake prompt runner helper)
+- Required change:
+1. Add deterministic `IPromptRunner` test doubles for default unit path.
+2. Mark live-model tests explicitly as integration-only (trait/category or equivalent).
+3. Document integration prerequisites and opt-in command in this `TASKS.md` and project README.
+- Command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "Category!=Integration" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. Default project test run is deterministic and offline-capable.
+2. Integration prompt tests are isolated and opt-in with explicit prerequisites.
+
+### [ ] PHS-TST-003 - Add contract tests for `PromptFunctionBase.TransferHistory` behavior (`PHS-MISS-001` guard)
+- Problem: `TransferHistory(IPromptFunction)` throws `NotImplementedException` for non-`PromptFunctionBase` targets, and behavior contract is not test-pinned.
+- Evidence:
+1. `Services/PromptHandlingService/PromptFunctionBase.cs:43`
+2. `Services/PromptHandlingService/PromptFunctionBase.cs:47`
+3. `Services/PromptHandlingService/PromptFunctionBase.cs:147`
+- Implementation targets:
+1. `Tests/PromptHandlingService.Tests` (new transfer-history contract tests)
+2. `Services/PromptHandlingService/PromptFunctionBase.cs`
+- Required change:
+1. Define supported/unsupported transfer-target behavior explicitly in tests first.
+2. Replace ambiguous `NotImplementedException` path with explicit supported-path handling or explicit argument/operation exception contract.
+3. Verify system prompt handling and chat history transfer semantics with deterministic assertions.
+- Command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~TransferHistory|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. Transfer behavior is covered by unit tests and no longer relies on an unpinned exception path.
+2. `PHS-MISS-001` has a direct test gate in this project.
+
+### [ ] PHS-TST-004 - Convert legacy repository tests into discoverable and bounded execution slices
+- Problem: `MangosRepositoryTest` contains many static `Test*` methods with no xUnit attributes and no bounded run strategy.
+- Evidence:
+1. `Tests/PromptHandlingService.Tests/MangosRepositoryTest.cs:9`
+2. `Tests/PromptHandlingService.Tests/MangosRepositoryTest.cs:12`
+3. `Tests/PromptHandlingService.Tests/MangosRepositoryTest.cs:3430`
+- Implementation targets:
+1. `Tests/PromptHandlingService.Tests/MangosRepositoryTest.cs`
+2. `Tests/PromptHandlingService.Tests` (optional split into smaller files by table domain)
+- Required change:
+1. Convert high-value smoke cases into discovered tests first.
+2. Gate database-dependent exhaustive checks behind explicit integration markers and preflight checks.
+3. Keep default run path bounded and deterministic under `TestSessionTimeout`.
+- Command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~MangosRepositoryTest" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. At least one discovered repository smoke test executes in default path (or is clearly skipped with preflight reason).
+2. Exhaustive DB coverage is explicit integration scope, not silent non-execution.
+
+### [ ] PHS-TST-005 - Simplify command surface and align README with timeout-safe defaults
+- Problem: README command examples are broad and do not consistently show runsettings/timeout-safe defaults.
+- Evidence:
+1. `Tests/PromptHandlingService.Tests/README.md:96`
+2. `Tests/PromptHandlingService.Tests/README.md:105`
+3. `Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj:23`
+4. `Tests/test.runsettings:6`
+- Implementation targets:
+1. `Tests/PromptHandlingService.Tests/README.md`
+2. `Tests/PromptHandlingService.Tests/TASKS.md`
+- Required change:
+1. Replace ambiguous examples with canonical one-line commands.
+2. Provide separate commands for deterministic unit run and integration opt-in run.
+3. Add repo-scoped cleanup command reference for stale testhost processes.
+- Command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. Engineers can run deterministic tests with one copy/paste command.
+2. Integration path is explicit and does not impact default run reliability.
+
+## Simple Command Set
+1. Default deterministic run: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "Category!=Integration" --logger "console;verbosity=minimal"`.
+2. Prompt function focus: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~IntentionParserFunctionTests|FullyQualifiedName~GMCommandGeneratorFunctionTests|FullyQualifiedName~CharacterSkillPrioritizationFunctionTests" --logger "console;verbosity=minimal"`.
+3. Transfer-history contract focus: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~TransferHistory|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"`.
+4. Repository smoke/integration focus: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~MangosRepositoryTest" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last task completed:
-- Validation/tests run:
-- Files changed:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to TASKS_ARCHIVE.md and keep this file short.
-
-
-
-
-## Behavior Cards
-1. PromptHandlingServiceContractParitySuite
-- [ ] Behavior: prompt-handling tests validate deterministic intent normalization and action contract shaping for parity scenarios.
-- [ ] FG Baseline: FG prompt flows produce consistent action contracts and reject invalid or ambiguous intents cleanly.
-- [ ] BG Target: BG prompt flows consume the same normalized contracts so execution mirrors FG expectations.
-- [ ] Implementation Targets: `Tests/PromptHandlingService.Tests/**/*.cs`, `Services/PromptHandlingService/**/*.cs`, `Services/DecisionEngineService/**/*.cs`.
-- [ ] Simple Command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: contract tests pass with stable outputs per prompt fixture and no dropped scenario-critical fields.
-- [ ] If Fails: add `Research:PromptServiceContractGap::<fixture>` and `Implement:PromptServiceContractFix::<fixture>` tasks with fixture evidence.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last updated: 2026-02-25
+- Active task: `PHS-TST-001`
+- Last delta: added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction always resumes on the next local `TASKS.md`.
+- Pass result: delta shipped
+- Last command run: `Get-Content -Path 'Tests/PromptHandlingService.Tests/TASKS.md' -TotalCount 420`
+- Validation result: `PHS-TST-001` remains open; targeted prompt-function classes are not currently discovered by xUnit.
+- Files changed: `Tests/PromptHandlingService.Tests/TASKS.md`
+- Blockers: none
+- Next task: `PHS-TST-001`
+- Next command: `Get-Content -Path 'Tests/RecordedTests.PathingTests.Tests/TASKS.md' -TotalCount 360`.

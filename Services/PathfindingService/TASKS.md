@@ -1,76 +1,102 @@
 # PathfindingService Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+Master tracker: `MASTER-SUB-018`
 
 ## Scope
-Directory: .\Services\PathfindingService
+- Directory: `Services/PathfindingService`
+- Project: `PathfindingService.csproj`
+- Focus: corpse-run path validity (Orgrimmar runback), native-path usage correctness, and deterministic service readiness/response contracts.
+- Queue dependency: `docs/TASKS.md` controls execution order and handoff pointers.
 
-Projects:
-- PathfindingService.csproj
+## Execution Rules
+1. Execute tasks in order unless blocked by a recorded dependency.
+2. Keep runtime routing on native path output; fallback pathing remains diagnostics-only.
+3. Never blanket-kill `dotnet`; use repo-scoped cleanup only.
+4. Every pathing fix must be validated with a simple command and recorded in `Session Handoff`.
+5. Archive completed items to `Services/PathfindingService/TASKS_ARCHIVE.md` in the same session.
+6. Every pass must write one-line `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
 
-## Instructions
-- Execute tasks directly without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Keep this file focused on active, unresolved work only.
-- Add new tasks immediately when new gaps are discovered.
-- Archive completed tasks to TASKS_ARCHIVE.md.
+## Evidence Snapshot (2026-02-25)
+- Build check passes: `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> `0 Error(s)`, `0 Warning(s)`.
+- Runtime fallback remains wired:
+  - `WWOW_ENABLE_LOS_FALLBACK` gate and fallback return path in `Repository/Navigation.cs:63`, `:85`, `:133`.
+  - Elevated LOS probe logic in `TryHasLosForFallback` (`Repository/Navigation.cs:351`).
+- Path request mode is forwarded directly from protobuf:
+  - `PathfindingSocketServer` calls `_navigation.CalculatePath(..., req.Straight)` (`PathfindingSocketServer.cs:181`) with no explicit semantic mapping layer.
+- Path response is corners-only and does not include source/reason metadata:
+  - `resp.Corners.AddRange(...)` in `PathfindingSocketServer.cs:196`.
+- Startup can continue with unresolved nav roots:
+  - warning-only behavior: `Program.cs:52` (`FindPath may fail`).
+- Current test baseline (`dotnet test Tests/PathfindingService.Tests/...`):
+  - `4` failed, `8` passed.
+  - 3 failures due missing nav data root (`Bot\\Release\\x64\\mmaps`) from `NavigationFixture.cs:71`.
+  - 1 failure in LOS regression (`PhysicsEngineTests.cs:107`).
+  - test output also reports missing `dumpbin` in vcpkg app-local script.
+- Interop chain source files:
+  - proto contract: `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`
+  - C# request handling: `Services/PathfindingService/PathfindingSocketServer.cs`
+  - native call boundary: `Services/PathfindingService/Repository/Navigation.cs`.
 
-## Active Priorities
-1. Validate this project behavior against current FG/BG parity goals.
-2. Remove stale assumptions and redundant code paths.
-3. Add or adjust tests as needed to keep behavior deterministic.
+## P0 Active Tasks (Ordered)
+1. [ ] `PFS-MISS-001` Remove LOS-grid fallback from default production runback routing.
+- Problem: runtime can return `BuildLosFallbackPath` instead of native navmesh output.
+- Target files: `Services/PathfindingService/Repository/Navigation.cs`.
+- Required change: default routing returns native `FindPath` output or explicit no-path result; fallback path generation remains diagnostics-only and opt-in.
+- Validation command: `rg -n "WWOW_ENABLE_LOS_FALLBACK|BuildLosFallbackPath" Services/PathfindingService/Repository/Navigation.cs`
+- Acceptance criteria: default execution path cannot return fallback-generated routes.
+
+2. [ ] `PFS-MISS-002` Remove elevated LOS probe acceptance from runtime path validation.
+- Problem: fallback validity uses elevated LOS probes that can accept unrealistic segments.
+- Target files: `Services/PathfindingService/Repository/Navigation.cs`.
+- Required change: runtime validation/simplification uses navmesh-walkable checks only; LOS probes remain diagnostics-only.
+- Validation command: `rg -n "TryHasLosForFallback|Offset|probe|elevat" Services/PathfindingService/Repository/Navigation.cs`
+- Acceptance criteria: runtime path validation no longer depends on elevated LOS probe checks.
+
+3. [ ] `PFS-MISS-003` Add explicit protobuf->native path mode mapping.
+- Problem: `req.Straight` is passed directly to `smoothPath` without a mapping contract.
+- Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`.
+- Required change: implement explicit mapping function for request mode semantics and document expected behavior.
+- Validation command: `rg -n "req\\.Straight|CalculatePath\\(" Services/PathfindingService/PathfindingSocketServer.cs`
+- Acceptance criteria: each request mode maps deterministically to intended native mode and is covered by tests.
+
+4. [ ] `PFS-MISS-004` Add path provenance and failure-reason metadata to responses.
+- Problem: callers cannot distinguish native-success, no-path, or diagnostic-fallback outcomes.
+- Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, proto definitions in `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`.
+- Required change: add source/reason fields (for example: `native_path`, `no_path_native`, `diagnostic_fallback`) and emit consistently.
+- Validation command: `rg -n "new PathResponse|Corners|ErrorResponse" Services/PathfindingService/PathfindingSocketServer.cs`
+- Acceptance criteria: every response includes explicit path-source/result metadata.
+
+5. [ ] `PFS-MISS-005` Enforce not-ready/fail-fast behavior when nav roots are invalid.
+- Problem: startup logs warning for missing nav data but can continue serving requests.
+- Target files: `Services/PathfindingService/Program.cs`, `Services/PathfindingService/PathfindingServiceWorker.cs`.
+- Required change: service fails fast or serves explicit not-ready state until `maps/mmaps/vmaps` roots are valid.
+- Validation command: `rg -n "FindPath may fail|WWOW_DATA_DIR|mmaps|vmaps|ready" Services/PathfindingService/Program.cs Services/PathfindingService/PathfindingServiceWorker.cs`
+- Acceptance criteria: service never reports ready with missing nav data directories.
+
+6. [ ] `PFS-MISS-006` Add deterministic Orgrimmar corpse-run regression vectors in pathfinding tests.
+- Problem: no fixed corpse-run vectors assert wall-avoidance behavior at service level.
+- Target files: `Tests/PathfindingService.Tests/PathingAndOverlapTests.cs`, fixtures.
+- Required change: add fixed start/end vectors that previously produced wall collisions; assert non-empty, finite, walkable routes.
+- Validation command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PathingAndOverlapTests" --logger "console;verbosity=minimal"`
+- Acceptance criteria: vector regressions fail when output collides with known wall-run patterns.
+
+7. [ ] `PFS-MISS-007` Validate C++ -> protobuf -> C# path data integrity.
+- Problem: no hard gate proves corner count/order/coordinates survive interop unchanged.
+- Target files: `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/PathfindingSocketServer.cs`, `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`, related tests.
+- Required change: add interop assertions for coordinate precision, order preservation, and truncation resistance.
+- Validation command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`
+- Acceptance criteria: tests fail on coordinate drift, dropped nodes, or order mismatch.
+
+## Simple Command Set
+1. Build service: `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore`
+2. Pathfinding tests: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
+3. Corpse-run test: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last task completed:
-- Validation/tests run:
-- Files changed:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to TASKS_ARCHIVE.md and keep this file short.
-
-
-
-
-## Behavior Cards
-1. PathfindingServiceGhostRunbackRouteParity
-- [ ] Behavior: pathfinding service returns deterministic corpse-run routes from Orgrimmar release points for both FG and BG clients.
-- [ ] FG Baseline: FG route requests resolve to valid waypoint chains with no dead-end loops during ghost runback.
-- [ ] BG Target: BG route requests resolve to equivalent waypoint chains and traversal completion timing for the same corpse location.
-- [ ] Implementation Targets: `Services/PathfindingService/**/*.cs`, `Exports/Navigation/**/*.cpp`, `Exports/Navigation/**/*.h`.
-- [ ] Simple Command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: route tests pass with no null/empty paths and runback scenarios avoid route stalls or teleport shortcuts.
-- [ ] If Fails: add `Research:PathfindingRunbackDrift::<map>` and `Implement:PathfindingRouteParityFix::<map>` tasks with failing route IDs.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last updated: 2026-02-25
+- Pass result: `delta shipped`
+- Last delta: converted to execution-card format with refreshed build/test baselines and explicit interop/task validation gates.
+- Next task: `PFS-MISS-001`
+- Next command: `Get-Content -Path 'Services/PromptHandlingService/TASKS.md' -TotalCount 320`
+- Blockers: local test environment missing nav data under `Bot\\Release\\x64\\mmaps`; `dumpbin` missing on PATH in vcpkg app-local script.

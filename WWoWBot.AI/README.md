@@ -9,7 +9,7 @@ WWoW.AI is the intelligent decision-making core of the WWoW ecosystem, providing
 The library provides:
 
 - **Semantic Kernel Integration**: Microsoft Semantic Kernel for AI orchestration
-- **Activity State Machine**: Stateless-based activity transitions with 25+ distinct states
+- **Activity State Machine**: Stateless-based activity transitions with 26 major states
 - **Plugin System**: Extensible activity plugins with attribute-based registration
 - **LLM Advisory System**: AI suggestions validated by deterministic logic
 - **Persistent Memory**: Character memory with PostgreSQL persistence
@@ -99,7 +99,7 @@ BloogBot.AI/
 
 ### BotActivityStateMachine
 
-State orchestration and transition logic supporting 25+ activity states with global triggers.
+State orchestration and transition logic supporting 26 activity states with global triggers.
 
 ### KernelCoordinator
 
@@ -150,8 +150,8 @@ Plugin metadata and activity association enabling declarative configuration.
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| Microsoft.SemanticKernel.Core | 1.54.0 | AI orchestration framework |
-| Microsoft.Extensions.Logging.Abstractions | 8.0.3 | Logging interface |
+| Microsoft.SemanticKernel.Core | 1.72.0 | AI orchestration framework |
+| Microsoft.Extensions.Logging.Abstractions | 10.0.3 | Logging interface |
 | Stateless | 5.17.0 | State machine library |
 
 ## Project References
@@ -187,9 +187,10 @@ var coordinator = new KernelCoordinator(kernel, catalog);
 
 ```csharp
 // Automatically load appropriate AI plugins when activity changes
-stateMachine.OnStateChanged += (state) => {
-    coordinator.OnActivityChanged(state);
-};
+stateMachine.StateObservable.ActivityChanged.Subscribe(change =>
+{
+    coordinator.OnActivityChanged(change.Activity);
+});
 ```
 
 ### Create Custom Plugins

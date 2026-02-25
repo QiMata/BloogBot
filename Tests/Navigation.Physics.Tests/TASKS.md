@@ -1,93 +1,102 @@
 # Navigation.Physics.Tests Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- This file owns calibration evidence and regression tests for movement parity.
-- Corpse-run target stays `.tele name {NAME} Orgrimmar` with 10-minute guarded runtime.
-
 ## Scope
-Directory: `Tests/Navigation.Physics.Tests`
+- Directory: `Tests/Navigation.Physics.Tests`
+- Project: `Navigation.Physics.Tests.csproj`
+- Master tracker: `docs/TASKS.md` (`MASTER-SUB-023`)
+- Local goal: make physics parity regressions deterministic, actionable, and fast to validate.
 
-## Initial Research Snapshot (2026-02-24)
-1. Movement parity drift is still observed in runback logs as low/zero displacement loops with forward intent.
-2. Current tests are not yet strong enough to prove frame-by-frame interpolation equivalence against FG traces.
-3. `MovementController.cs` integration cadence can amplify native interpolation drift when replay timing is uneven.
+## Execution Rules
+1. Execute tasks in numeric order unless blocked by missing fixture/data.
+2. Keep every validation command one-line and runnable without custom wrappers.
+3. Use `test.runsettings` for hard timeout enforcement on every command.
+4. Never blanket-kill `dotnet`; use repo-scoped cleanup only.
+5. Archive completed IDs to `Tests/Navigation.Physics.Tests/TASKS_ARCHIVE.md` in the same session.
+6. Add a one-line `Pass result` in `Session Handoff` (`delta shipped` or `blocked`) every pass so compaction resumes from `Next command` directly.
+7. Start each pass by running the previous `Session Handoff -> Next command` verbatim before any broader scan.
+8. After shipping one local delta, set `Next command` to the next queue-file read command so one-by-one progression survives compaction.
 
-## Active Priorities
-1. Calibration baseline
-- [ ] Build a shared FG vs BG replay corpus for corpse-run, combat pursuit, and gathering route segments.
-- [ ] Add deterministic checks for per-frame position delta, velocity delta, and heading delta.
-- [ ] Define fail thresholds for parity drift and enforce them in CI/local runs.
+## Environment Checklist (Run Before P0)
+- [x] `Navigation.dll` is present for this test project (`Bot/Release/x64/Navigation.dll`).
+- [ ] `WWOW_DATA_DIR` resolves to a root containing `maps/`, `vmaps/`, and `mmaps/`.
+- [x] `Tests/Navigation.Physics.Tests/test.runsettings` is used (10-minute `TestSessionTimeout`).
 
-2. Frame-by-frame interpolation refinement
-- [ ] Add targeted tests that fail on interpolation jitter/plateaus in consecutive frames.
-- [ ] Validate interpolation behavior around turns, slope transitions, and stop-start motion.
-- [ ] Correlate test failures directly to native `PhysicsEngine` frame integration issues.
+## Evidence Snapshot (2026-02-25)
+- `dotnet restore Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj` -> up-to-date.
+- `Tests/Navigation.Physics.Tests/test.runsettings:6` -> `<TestSessionTimeout>600000</TestSessionTimeout>`.
+- `FrameByFramePhysicsTests.cs` still contains placeholder simulation path:
+  - `:380` `// TODO: Call actual physics`
+  - `:381` commented `StepPhysicsV2` invocation
+  - `:373` `SimulatePhysics(...)` entrypoint.
+- `MovementControllerPhysicsTests.cs:123` contains `TeleportRecovery_StopsFreeFall`, confirming `NPT-MISS-002` target location.
+- Environment probe: `WWOW_DATA_DIR` is unset in this shell session; data-root checklist item remains open.
 
-3. Movement controller coordination
-- [ ] Add tests that validate `MovementController.cs` frame dispatch cadence against native interpolation outputs.
-- [ ] Verify command-to-movement latency does not create repeated zero-displacement frames.
-- [ ] Record packet timing evidence for parity triage when failures occur.
+## P0 Active Tasks (Ordered)
 
-4. Scenario gate support
-- [ ] Provide calibration evidence updates for corpse-run validation cycles.
-- [ ] Provide calibration evidence updates for combat/gathering parity cycles.
+### [ ] NPT-MISS-001 - Replace placeholder simulation loop with real native stepping
+- Problem: `SimulatePhysics` currently builds synthetic frames and never calls the C++ physics step.
+- Evidence: `// TODO: Call actual physics` in `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs` around line 380.
+- Implementation targets:
+1. `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`
+2. `Tests/Navigation.Physics.Tests/NavigationInterop.cs` (`StepPhysicsV2`, `PhysicsInput`, `PhysicsOutput`)
+- Required change:
+1. Call `StepPhysicsV2(ref input)` on every frame.
+2. Store `PhysicsOutput` per frame in the `PhysicsFrame` record.
+3. Feed output state (position and velocity) into the next `PhysicsInput`.
+4. Add finite-value checks to fail fast on invalid output.
+- Command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~FrameByFramePhysicsTests" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. No placeholder-only path remains in `SimulatePhysics`.
+2. Frame-by-frame assertions are driven by native physics output.
+3. Failures include frame index and expected vs actual physics state.
 
-## Canonical Commands
-1. Physics calibration suite:
-- `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
+### [ ] NPT-MISS-002 - Add teleport airborne descent assertions to catch hover regression
+- Problem: existing teleport recovery test guards against falling through the world but does not fail on hover.
+- Evidence: `TeleportRecovery_StopsFreeFall` only asserts final Z safety window in `MovementControllerPhysicsTests.cs`.
+- Implementation targets:
+1. `Tests/Navigation.Physics.Tests/MovementControllerPhysicsTests.cs`
+- Required change:
+1. Add a dedicated airborne teleport scenario with start point above terrain.
+2. Assert post-teleport per-frame descent trend (Z decreases across initial frames).
+3. Assert landing settles within expected ground window after descent.
+4. Emit frame-by-frame Z/velocity in assertion messages for triage.
+- Command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~MovementControllerPhysicsTests" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. BG hover behavior fails deterministically.
+2. Corrected fall behavior passes with bounded landing frame window.
+3. Assertion output is specific enough to debug one failing frame set.
 
-2. Movement-controller focused physics tests:
-- `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MovementController|FullyQualifiedName~FrameByFrame" --logger "console;verbosity=minimal"`
+### [ ] NPT-MISS-003 - Add hard drift gate for replay/controller parity
+- Problem: diagnostics report drift but there is no strict gate to block regressions.
+- Evidence: replay tests log detailed metrics but not all key drift metrics are merge-blocking assertions.
+- Implementation targets:
+1. `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
+2. `Tests/Navigation.Physics.Tests/Diagnostics/ErrorPatternDiagnosticTests.cs`
+- Required change:
+1. Define explicit thresholds for overall average, steady-state p99, and worst clean-frame error.
+2. Fail tests when any threshold is exceeded.
+3. Print recording name, frame index, and XYZ error vector for top offenders.
+4. Keep artifact/transport/teleport exclusions explicit in assertions.
+- Command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsReplayTests|FullyQualifiedName~ErrorPatternDiagnosticTests" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. Drift threshold breaches fail the build.
+2. Failure output identifies exact frames to replay.
+3. Clean-frame and artifact-frame handling are clearly separated.
 
-3. Corpse-run parity trigger:
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
+## Simple Command Set
+1. Single project sweep: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"`.
+2. Fast frame-loop verification: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~FrameByFramePhysicsTests" --logger "console;verbosity=minimal"`.
+3. Teleport/fall verification: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~MovementControllerPhysicsTests" --logger "console;verbosity=minimal"`.
+4. Drift diagnostics gate: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsReplayTests|FullyQualifiedName~ErrorPatternDiagnosticTests" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last task completed:
-- Validation/tests run:
-- Files changed:
-- Next task:
-
-## Archive
-Move completed items to `Tests/Navigation.Physics.Tests/TASKS_ARCHIVE.md`.
-
-## Behavior Cards
-1. NavigationPhysicsCalibrationParitySuite
-- [ ] Behavior: physics calibration tests detect and prevent air-teleport hover regressions and frame interpolation drift.
-- [ ] FG Baseline: FG physics traces show gravity-consistent fall behavior after airborne teleports and terrain transitions.
-- [ ] BG Target: BG physics traces mirror FG vertical velocity/position curves and clear hover artifacts after teleports.
-- [ ] Implementation Targets: `Tests/Navigation.Physics.Tests/**/*.cs`, `Exports/Navigation/PhysicsEngine.cpp`, `Exports/WoWSharpClient/Movement/MovementController.cs`.
-- [ ] Simple Command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: physics suite fails on hover/no-fall drift and passes only when FG/BG interpolation metrics stay within tolerance.
-- [ ] If Fails: add `Research:PhysicsInterpolationGap::<scenario>` and `Implement:PhysicsInterpolationFix::<scenario>` tasks with trace deltas.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last updated: 2026-02-25
+- Active task: `NPT-MISS-001`
+- Last delta: added explicit one-by-one continuation rules (`run prior Next command first`, `set next queue-file command after delta`) to prevent rediscovery loops after compaction.
+- Pass result: delta shipped
+- Last command run: `rg --line-number "TODO: Call actual physics|SimulatePhysics|StepPhysicsV2" Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`
+- Validation result: `NPT-MISS-001` still open (placeholder path remains at `FrameByFramePhysicsTests.cs:380-381`).
+- Files changed: `Tests/Navigation.Physics.Tests/TASKS.md`
+- Blockers: `WWOW_DATA_DIR` not set in this shell session (required for full physics-data environment validation).
+- Next task: `NPT-MISS-001`
+- Next command: `Get-Content -Path 'Tests/PathfindingService.Tests/TASKS.md' -TotalCount 360`.

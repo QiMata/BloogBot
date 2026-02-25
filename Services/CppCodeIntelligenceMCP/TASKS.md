@@ -1,76 +1,97 @@
 # CppCodeIntelligenceMCP Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
-
 ## Scope
-Directory: .\Services\CppCodeIntelligenceMCP
+- Local ownership: `Services/CppCodeIntelligenceMCP/*`.
+- Master reference: `docs/TASKS.md` (`MASTER-SUB-014`).
+- Master tracker: `MASTER-SUB-014`.
+- Goal: remove placeholder analysis paths, reconcile runtime transport/documentation, and add deterministic validation gates for MCP C++ analysis workflows.
 
-Projects:
-- CppCodeIntelligenceMCP.csproj
+## Execution Rules
+1. Execute task IDs in order and keep scans limited to files listed in this document.
+2. Keep commands one-line and run narrow validation commands before broad runs.
+3. Never blanket-kill `dotnet`; if cleanup is required, use repo-scoped process matching with PID evidence.
+4. Do not switch to another local `TASKS.md` until this file has concrete IDs, acceptance criteria, and a complete handoff block.
+5. If two consecutive passes produce no delta, log blocker + exact next command, then hand off.
+6. Archive completed tasks to `Services/CppCodeIntelligenceMCP/TASKS_ARCHIVE.md` in the same session.
+7. Every pass must end with one-line `Pass result` and exactly one executable `Next command` in `Session Handoff`.
 
-## Instructions
-- Execute tasks directly without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Keep this file focused on active, unresolved work only.
-- Add new tasks immediately when new gaps are discovered.
-- Archive completed tasks to TASKS_ARCHIVE.md.
+## Evidence Snapshot (2026-02-25)
+- `dotnet build Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj --configuration Release` fails with `NU1605` (`System.Text.Json` downgrade `9.0.5 -> 8.0.5`) from `Microsoft.Extensions.Logging.Console 9.0.5`.
+- `Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj` pins `<PackageReference Include="System.Text.Json" Version="8.0.5" />` while other `Microsoft.Extensions.*` packages are `9.0.5`.
+- `Services/CppCodeIntelligenceMCP/src/mcp_server.cpp` has `processFileAnalysis` returning static placeholder text: `"File analysis not implemented yet"`.
+- `Services/CppCodeIntelligenceMCP/Services/CppAnalysisService.cs` sets `IncludeInfo.IsUsed = true // TODO: Implement usage analysis` in `AnalyzeIncludesAsync`.
+- `Services/CppCodeIntelligenceMCP/Program.cs` wires HTTP MCP transport via `.WithHttpTransport()` and `app.MapMcp()`.
+- `Services/CppCodeIntelligenceMCP/README.md` describes stdio transport and names `CppCodeIntelligenceMCPService` as the main protocol handler.
+- `Services/CppCodeIntelligenceMCP/Program.cs` has no `CppCodeIntelligenceMCPService` registration/reference.
+- `Services/CppCodeIntelligenceMCP/mcp.json` currently contains only blank lines and no runnable configuration payload.
+- `Services/CppCodeIntelligenceMCP/Tools/CppAnalysisTools.cs` is active, while 10 sibling tool files in `Services/CppCodeIntelligenceMCP/Tools/` are zero-byte placeholders.
+- `Tests/CppCodeIntelligenceMCP.Tests/CppCodeIntelligenceMCP.Tests.csproj` does not exist yet.
 
-## Active Priorities
-1. Validate this project behavior against current FG/BG parity goals.
-2. Remove stale assumptions and redundant code paths.
-3. Add or adjust tests as needed to keep behavior deterministic.
+## P0 Active Tasks (Ordered)
+1. [ ] `CPPMCP-BLD-001` Resolve package downgrade blocking build.
+- Problem: restore/build is blocked by `NU1605`, preventing any implementation/test loop for this service.
+- Target files: `Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj`.
+- Required change: align `System.Text.Json` to the `9.0.5` graph (or remove explicit pin) so package resolution is deterministic and consistent.
+- Validation command: `dotnet build Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj --configuration Release`.
+- Acceptance criteria: build completes without downgrade errors.
+
+2. [ ] `CPPMCP-MISS-001` Implement native file-analysis response path in C++ server.
+- Problem: `processFileAnalysis` currently emits placeholder output only and does not expose AST-backed analysis.
+- Target files: `Services/CppCodeIntelligenceMCP/src/mcp_server.cpp`, `Services/CppCodeIntelligenceMCP/include/code_intelligence.h`, `Services/CppCodeIntelligenceMCP/src/ast_analyzer.cpp`.
+- Required change: parse target file with the existing analyzer pipeline and return structured JSON (file metadata, symbol counts, symbol entries by type).
+- Validation command: `rg -n "File analysis not implemented yet" Services/CppCodeIntelligenceMCP/src/mcp_server.cpp`.
+- Acceptance criteria: placeholder string is removed and response payload includes real analysis fields.
+
+3. [ ] `CPPMCP-MISS-002` Replace hardcoded include usage flags with deterministic usage analysis.
+- Problem: include usage always reports true, so `UnusedIncludes` cannot be trusted.
+- Target files: `Services/CppCodeIntelligenceMCP/Services/CppAnalysisService.cs`, `Services/CppCodeIntelligenceMCP/Models/CppModels.cs`.
+- Required change: compute include usage from symbols/usages in file content and populate `IsUsed` plus `UnusedIncludes` deterministically.
+- Validation command: `rg -n "IsUsed = true // TODO: Implement usage analysis" Services/CppCodeIntelligenceMCP/Services/CppAnalysisService.cs`.
+- Acceptance criteria: include analysis differentiates used vs unused includes consistently across repeated runs.
+
+4. [ ] `CPPMCP-ARCH-001` Reconcile transport architecture (HTTP MCP vs stdio MCP) across code and docs.
+- Problem: runtime path and docs disagree, causing ambiguous startup behavior and broken handoff assumptions.
+- Target files: `Services/CppCodeIntelligenceMCP/Program.cs`, `Services/CppCodeIntelligenceMCP/Services/CppCodeIntelligenceMCPService.cs`, `Services/CppCodeIntelligenceMCP/README.md`, `Services/CppCodeIntelligenceMCP/mcp.json`.
+- Required change: pick a single canonical transport for this service, wire only that path, and update/remove stale alternative docs/classes/config.
+- Validation command: `rg -n "stdio|WithHttpTransport|MapMcp|CppCodeIntelligenceMCPService" Services/CppCodeIntelligenceMCP/README.md Services/CppCodeIntelligenceMCP/Program.cs`.
+- Acceptance criteria: code and README describe one transport model and startup instructions run as written.
+
+5. [ ] `CPPMCP-ARCH-002` Remove or implement zero-byte tool placeholders.
+- Problem: zero-byte source files imply missing implementation and increase scan noise for agents.
+- Target files: `Services/CppCodeIntelligenceMCP/Tools/*.cs`.
+- Required change: delete placeholder files or implement intentional wrappers, then keep tool registration surface explicit.
+- Validation command: `Get-ChildItem Services/CppCodeIntelligenceMCP/Tools | Select-Object Name,Length`.
+- Acceptance criteria: no unexplained zero-byte `.cs` files remain in `Tools/`.
+
+6. [ ] `CPPMCP-TST-001` Add focused test coverage for file-analysis and include-analysis behavior.
+- Problem: no local test project currently protects this service from regressions.
+- Target files: `Tests/CppCodeIntelligenceMCP.Tests/*` (new), `Services/CppCodeIntelligenceMCP/Services/CppAnalysisService.cs`.
+- Required change: create deterministic tests for `AnalyzeFileAsync`, `AnalyzeIncludesAsync`, and include usage outcomes using stable fixture inputs.
+- Validation command: `dotnet test Tests/CppCodeIntelligenceMCP.Tests/CppCodeIntelligenceMCP.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
+- Acceptance criteria: tests fail on placeholder/hardcoded behavior and pass once implementations are complete.
+
+7. [ ] `CPPMCP-DOC-001` Refresh local docs for low-context handoff and deterministic commands.
+- Problem: README currently conflicts with runtime wiring and does not provide a reliable, minimal operator runbook.
+- Target files: `Services/CppCodeIntelligenceMCP/README.md`, `Services/CppCodeIntelligenceMCP/TASKS.md`.
+- Required change: document final transport, startup command, required config, and exact validation commands used by these task IDs.
+- Validation command: `rg -n "Transport|Running the Server|MCP Configuration|Architecture" Services/CppCodeIntelligenceMCP/README.md`.
+- Acceptance criteria: operator can follow README without transport ambiguity and reproduce validation commands exactly.
+
+## Simple Command Set
+1. Build:
+- `dotnet build Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj --configuration Release`
+
+2. Verify placeholder/TODO removal:
+- `rg -n "File analysis not implemented yet|IsUsed = true // TODO" Services/CppCodeIntelligenceMCP`
+
+3. Run project-local MCP tests (after `CPPMCP-TST-001` creates them):
+- `dotnet test Tests/CppCodeIntelligenceMCP.Tests/CppCodeIntelligenceMCP.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
+
+4. Repo-scoped cleanup:
+- `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last task completed:
-- Validation/tests run:
-- Files changed:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to TASKS_ARCHIVE.md and keep this file short.
-
-
-
-
-## Behavior Cards
-1. CppCodeIntelligenceSymbolParitySupport
-- [ ] Behavior: code-intelligence symbol lookups resolve corpse, combat, gathering, physics, and movement implementation targets without stale references.
-- [ ] FG Baseline: FG parity work can quickly locate owned source symbols and patch points from deterministic MCP responses.
-- [ ] BG Target: BG parity work receives the same symbol-resolution fidelity so movement and packet fixes land in the correct files on first pass.
-- [ ] Implementation Targets: `Services/CppCodeIntelligenceMCP/**/*.cs`, `Services/CppCodeIntelligenceMCP/*.csproj`, `docs/TASKS.md`.
-- [ ] Simple Command: `dotnet build Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj --configuration Release`.
-- [ ] Acceptance: symbol lookup/build path succeeds and parity tasks can reference concrete file/line owners for movement/corpse/combat gaps.
-- [ ] If Fails: add `Research:CppMcpSymbolResolutionGap::<component>` and `Implement:CppMcpIndexFix::<component>` tasks with failing symbol examples.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+- Last delta: expanded `MASTER-SUB-014` into source-backed execution cards with explicit problem/targets/validation/acceptance and loop-proof handoff fields.
+- Pass result: `delta shipped`
+- Next command: `Get-Content -Path 'Services/DecisionEngineService/TASKS.md' -TotalCount 320`
+- Current blocker: none.

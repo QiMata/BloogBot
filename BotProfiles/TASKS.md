@@ -1,70 +1,105 @@
-﻿# BotProfiles Tasks
+# BotProfiles Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+## Scope
+- Project: `BotProfiles`
+- Owns spec profile factories and per-spec task implementations consumed by `Exports/BotRunner`.
+- This file tracks direct file/symbol tasks only.
+- Master tracker: `MASTER-SUB-001`.
 
-## Purpose
-Track profile and rotation behavior tasks for all classes/specs.
+## Execution Rules
+1. Work this file only until the current top unchecked task is completed or explicitly blocked.
+2. Use source-only scans scoped to `BotProfiles` (exclude `bin/`, `obj/`, and `tmp/`).
+3. Keep commands one-line and deterministic.
+4. For behavior validation, run FG and BG in the same scenario cycle.
+5. Never blanket-kill `dotnet`; capture repo-scoped teardown evidence on timeout/failure.
+6. Move completed items to `BotProfiles/TASKS_ARCHIVE.md` in the same session.
+7. `Session Handoff` must include `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
+8. Resume-first guard: start each pass by running the prior `Session Handoff -> Next command` verbatim before new scans.
+9. After shipping one local delta, set `Session Handoff -> Next command` to the next queue-file read command and execute it in the same pass.
+10. If no additional delta is possible in two consecutive passes, mark `blocked` with blocker + replacement command and advance the master queue pointer.
 
-## Rules
-- Work continuously until all tasks in this file are complete.
-- Implement continuously without approval prompts.
-- Prioritize correctness and parity with shared BotRunner task semantics.
+## Environment Checklist
+- [x] `BotProfiles/BotProfiles.csproj` builds in `Release` (`0 warnings`, `0 errors`).
+- [x] `Tests/BotRunner.Tests` targeted `CombatLoopTests` filter runs with `--blame-hang-timeout 10m` and completes (`Passed: 1`).
+- [x] Repo-scoped cleanup command is available: `run-tests.ps1` exists and includes `-CleanupRepoScopedOnly` switch and handler.
+- [x] Dedicated profile factory binding regression test does not exist yet (`Tests/BotRunner.Tests/Profiles/BotProfileFactoryBindingsTests.cs` missing; filter returns `No test matches`).
 
-## Active Priorities
-1. Audit profile task usage against updated BotRunner task contracts.
-2. Remove duplicate/legacy behavior paths as shared tasks stabilize.
+## Evidence Snapshot (2026-02-25)
+- Restore/build status:
+  - `dotnet restore BotProfiles/BotProfiles.csproj` succeeded.
+  - `dotnet build BotProfiles/BotProfiles.csproj --configuration Release --no-restore` succeeded.
+- PvP factory miswire inventory:
+  - `rg -n -U -P "CreatePvPRotationTask\(IBotContext botContext\)\s*=>\s*\n\s*new\s+PvERotationTask" BotProfiles -g "*.cs"` reports `MISWIRED_PROFILE_COUNT=16` (matching the `BP-MISS-001` file list).
+- Targeted runtime gate:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` passed (`1` test).
+- Missing regression gate:
+  - `dotnet test ... --filter "FullyQualifiedName~BotProfileFactoryBindingsTests"` reports no matching tests.
+- Tooling note:
+  - Test build logs still print `dumpbin` missing from vcpkg `applocal.ps1`, but commands exit successfully.
 
-## Handoff Fields
-- Last profile/spec touched: `ProfilePullRotationRestParity` (shared combat loop harness).
-- Validation tests run: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` (Passed, 2026-02-24, evidence: `tmp/row1_combatloop_20260224_031204.txt`, `tmp/row1_pretest_processes_20260224_031204.txt`, `tmp/row1_postcleanup_processes_20260224_031204.txt`).
-- Next profile task: run a combined FG/BG live validation cycle (`DeathCorpseRunTests|CombatLoopTests|GatheringProfessionTests`) and add profile-specific mismatch tasks if parity drifts.
+## P0 Active Tasks (Ordered)
 
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
+### BP-MISS-001 Fix miswired PvP factories that currently return PvE rotation tasks
+- [ ] Problem: multiple profiles map `CreatePvPRotationTask(...)` to `new PvERotationTask(...)`, bypassing dedicated PvP classes.
+- [ ] Evidence: miswired files are:
+  - `BotProfiles/DruidFeralCombat/DruidFeral.cs`
+  - `BotProfiles/DruidRestoration/DruidRestoration.cs`
+  - `BotProfiles/HunterBeastMastery/HunterBeastMastery.cs`
+  - `BotProfiles/HunterMarksmanship/HunterMarksmanship.cs`
+  - `BotProfiles/HunterSurvival/HunterSurvival.cs`
+  - `BotProfiles/MageArcane/MageArcane.cs`
+  - `BotProfiles/MageFrost/MageFrost.cs`
+  - `BotProfiles/PriestDiscipline/PriestDiscipline.cs`
+  - `BotProfiles/PriestHoly/PriestHoly.cs`
+  - `BotProfiles/PriestShadow/PriestShadow.cs`
+  - `BotProfiles/RogueAssassin/RogueAssassin.cs`
+  - `BotProfiles/RogueCombat/RogueCombat.cs`
+  - `BotProfiles/RogueSubtlety/RogueSubtlety.cs`
+  - `BotProfiles/ShamanElemental/ShamanElemental.cs`
+  - `BotProfiles/ShamanEnhancement/ShamanEnhancement.cs`
+  - `BotProfiles/ShamanRestoration/ShamanRestoration.cs`
+- [ ] Target symbols: every `CreatePvPRotationTask(IBotContext botContext)` method above.
+- [ ] Required change: return `new PvPRotationTask(botContext)` in each affected profile unless an exception is documented in this file.
+- [ ] Validation command: `dotnet build BotProfiles/BotProfiles.csproj --configuration Release --no-restore`.
+- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: no affected profile returns `PvERotationTask` from `CreatePvPRotationTask`; build and targeted combat tests pass.
 
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
+### BP-MISS-002 Add regression test that guards profile factory wiring
+- [ ] Problem: no test fails when profile factories wire PvP to the wrong task type.
+- [ ] Target files: `Tests/BotRunner.Tests/BotRunner.Tests.csproj`, `Tests/BotRunner.Tests/Profiles/BotProfileFactoryBindingsTests.cs` (new).
+- [ ] Required change: add reflection-based assertions for all `BotBase` subclasses so `CreatePvPRotationTask` returns `PvPRotationTask` (or a documented exception list).
+- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~BotProfileFactoryBindingsTests" --logger "console;verbosity=minimal"`.
+- [ ] Acceptance: test fails before BP-MISS-001 fix, passes after, and blocks regressions.
 
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
+### BP-MISS-003 Resolve druid feral identity inconsistency
+- [ ] Problem: feral profile identity is inconsistent (`DruidFeralCombat/DruidFeral.cs`, namespace `DruidFeral`, `FileName => "DruidFeral.dll"`).
+- [ ] Evidence file: `BotProfiles/DruidFeralCombat/DruidFeral.cs`.
+- [ ] Required change: choose one canonical identity and align folder/class/namespace/`FileName` usage, then update dependent tests/docs.
+- [ ] Validation command: `dotnet build BotProfiles/BotProfiles.csproj --configuration Release --no-restore`.
+- [ ] Acceptance: one canonical feral profile identity is used across source and documentation.
 
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
+### BP-MISS-004 Add profile capability map for low-context handoff
+- [ ] Problem: profile coverage requires repeated source rediscovery.
+- [ ] Target doc: `BotProfiles/PROFILE_TASK_MAP.md` (new), linked from `docs/TASKS.md`.
+- [ ] Required content: per-spec map of factory methods -> concrete task files -> parity status -> owning task IDs.
+- [ ] Acceptance: another agent can select one spec and continue work without re-scanning the directory tree.
 
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `BotProfiles/TASKS_ARCHIVE.md`.
+## Simple Command Set
+1. `dotnet build BotProfiles/BotProfiles.csproj --configuration Release --no-restore`
+2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~BotProfileFactoryBindingsTests" --logger "console;verbosity=minimal"`
+4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
-
-
-
-
-## Behavior Cards
-1. ProfilePullRotationRestParity
-- [ ] Behavior: FG and BG complete the same pull -> rotation -> loot -> rest loop without unnecessary pauses or redundant actions.
-- [ ] FG Baseline: capture a successful FG combat loop cycle that uses profile `PullTargetTask`, `PvERotationTask`, and `RestTask` in expected order.
-- [ ] BG Target: BG mirrors FG ordering, movement cadence, spell cadence, and downtime so behavior is indistinguishable over repeated pulls.
-- [ ] Implementation Targets: `BotProfiles/*/Tasks/PullTargetTask.cs`, `BotProfiles/*/Tasks/PvERotationTask.cs`, `BotProfiles/*/Tasks/RestTask.cs`.
-- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: FG and BG both finish combat loops with no stall/retry spirals; action ordering and idle windows are comparable; timeout path includes repo-scoped PID teardown evidence.
-- [ ] If Fails: add `Research:ProfileLoopMismatch::<spec>` and `Implement:ProfileLoopParityFix::<spec>` tasks with evidence links in this file.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+## Session Handoff
+- Last updated: 2026-02-25
+- Active task: `MASTER-SUB-001` (`BotProfiles/TASKS.md`)
+- Last delta: executed prior handoff `rg` command first, confirmed 16 PvP factory miswires remain, and added explicit resume-first/next-file continuity guards to prevent looped rediscovery.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `rg -n -U -P "CreatePvPRotationTask\(IBotContext botContext\)\s*=>\s*\n\s*new\s+PvERotationTask" BotProfiles -g "*.cs"`
+- Files changed:
+  - `BotProfiles/TASKS.md`
+- Blockers:
+  - none
+- Next task: `BP-MISS-001` replace `CreatePvPRotationTask` miswires to `new PvPRotationTask(botContext)` across the 16 listed profile files.
+- Next command: `Get-Content -Path 'Exports/TASKS.md' -TotalCount 360`

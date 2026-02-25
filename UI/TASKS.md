@@ -1,75 +1,71 @@
 # UI Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+## Scope
+- Directory: `UI`
+- Master tracker: `MASTER-SUB-035`
+- This file is an umbrella router only; implementation details live in child `TASKS.md` files.
+- Child task files:
+- `UI/Systems/Systems.AppHost/TASKS.md` (`MASTER-SUB-036`)
+- `UI/Systems/Systems.ServiceDefaults/TASKS.md` (`MASTER-SUB-037`)
+- `UI/WoWStateManagerUI/TASKS.md` (`MASTER-SUB-038`)
 
-## Purpose
-Track UI/system-host parity and operational tooling tasks.
+## Execution Rules
+1. Keep this file as routing-only; do not duplicate child implementation backlog here.
+2. Execute child files one-by-one in the order listed under `P0 Active Tasks`.
+3. Keep commands simple and one-line.
+4. Never blanket-kill `dotnet`; process cleanup must stay repo-scoped and evidenced.
+5. Move completed umbrella items to `UI/TASKS_ARCHIVE.md` in the same session.
+6. Every pass must update `Session Handoff` with `Pass result` (`delta shipped` or `blocked`) and one executable `Next command`.
+7. Start each pass by running the prior `Session Handoff -> Next command` verbatim before any broader scan/search.
+8. After shipping one local delta, set `Session Handoff -> Next command` to the next queue-file read command and execute it in the same session.
 
-## Rules
-- Work continuously until all tasks in this file are complete.
-- Execute without approval prompts.
-- Keep UI task scope focused on operational visibility and control of bot systems.
+## Environment Checklist
+- [x] `UI/Systems/Systems.AppHost/TASKS.md` is expanded with direct IDs `SAH-MISS-001..006`.
+- [x] `UI/Systems/Systems.ServiceDefaults/TASKS.md` is expanded with direct IDs `SSD-MISS-001..006`.
+- [x] `UI/WoWStateManagerUI/TASKS.md` is expanded with direct IDs `UI-MISS-001..004`.
+- [x] `docs/TASKS.md` maps these child files under `MASTER-SUB-035..038` and currently points queue progression into this UI section.
 
-## Subproject Task Files
-- `UI/WoWStateManagerUI/TASKS.md`
-- `UI/Systems/Systems.AppHost/TASKS.md`
-- `UI/Systems/Systems.ServiceDefaults/TASKS.md`
+## Evidence Snapshot (2026-02-25)
+- Child queue files are concrete and session-ready:
+- `UI/Systems/Systems.AppHost/TASKS.md` defines `SAH-MISS-001..006` and has a `Session Handoff`.
+- `UI/Systems/Systems.ServiceDefaults/TASKS.md` defines `SSD-MISS-001..006` and has a `Session Handoff`.
+- `UI/WoWStateManagerUI/TASKS.md` defines `UI-MISS-001..004` and has a `Session Handoff`.
+- `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release` succeeded (`0 warnings`, `0 errors`) and confirms `MASTER-SUB-036` baseline compile health.
+- `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release` succeeded (`0 warnings`, `0 errors`) and confirms `MASTER-SUB-037` baseline compile health.
+- `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release` succeeded (`0 warnings`, `0 errors`) and confirms `MASTER-SUB-038` baseline compile health.
+- Master tracking is aligned:
+- `docs/TASKS.md` includes `MASTER-SUB-035..038` entries and queue pointers now target `MASTER-SUB-035` then `MASTER-SUB-036`.
 
-## Active Priorities
-1. Ensure UI reflects real service/bot state from StateManager.
-2. Keep UI integration aligned with service contracts.
+## P0 Active Tasks (Ordered)
+1. [ ] `UI-UMB-001` Expand and execute `MASTER-SUB-036` (`UI/Systems/Systems.AppHost/TASKS.md`) with concrete IDs.
+- Child target: create direct IDs in AppHost local file, then execute top-down.
+- Validation command: `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release`.
 
-## Handoff Fields
-- Last changed UI subproject:
-- Validation run:
-- Next UI task:
+2. [ ] `UI-UMB-002` Expand and execute `MASTER-SUB-037` (`UI/Systems/Systems.ServiceDefaults/TASKS.md`) with concrete IDs.
+- Child target: create direct IDs in ServiceDefaults local file, then execute top-down.
+- Validation command: `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release`.
 
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
+3. [ ] `UI-UMB-003` Execute `MASTER-SUB-038` (`UI/WoWStateManagerUI/TASKS.md`) IDs in order: `UI-MISS-001`, then `UI-MISS-002`.
+- Child target: remove converter unimplemented path risk and keep UI binding behavior explicit.
+- Validation command: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
 
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
+4. [ ] `UI-UMB-004` Keep parent/child status sync between `UI/TASKS.md` and `docs/TASKS.md` after each child-file delta.
+- Child target: each completed child pass must update master queue status and handoff pointers.
+- Validation command: `rg -n "MASTER-SUB-03[6-8]|Current queue file|Next queue file" docs/TASKS.md`.
 
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
+## Simple Command Set
+- `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release`
+- `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release`
+- `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`
+- `rg -n "MASTER-SUB-03[6-8]|Current queue file|Next queue file" docs/TASKS.md`
 
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `UI/TASKS_ARCHIVE.md`.
-
-
-
-
-
-## Behavior Cards
-1. UiOperationalParityDashboard
-- [ ] Behavior: UI layer exposes live FG/BG parity state for corpse-run, combat, gathering, and cleanup outcomes.
-- [ ] FG Baseline: FG operational panels display lifecycle, scenario, and teardown statuses with actionable timing details.
-- [ ] BG Target: BG operational panels display equivalent state and timing so divergences are immediately visible.
-- [ ] Implementation Targets: `UI/WoWStateManagerUI/**/*.razor`, `UI/WoWStateManagerUI/**/*.cs`, `UI/Systems/**/*.cs`.
-- [ ] Simple Command: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
-- [ ] Acceptance: UI build succeeds and parity dashboard tasks enumerate required views for FG/BG scenario and teardown evidence.
-- [ ] If Fails: add `Research:UiParityVisibilityGap::<view>` and `Implement:UiParityVisibilityFix::<view>` tasks with missing state examples.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+## Session Handoff
+- Last updated: 2026-02-25
+- Active task: `UI-UMB-004` (keep parent/child status sync in `UI/TASKS.md` and `docs/TASKS.md`).
+- Last delta: Added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction resumes on the next local `TASKS.md`.
+- Pass result: `delta shipped`
+- Validation/tests run: `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release` -> succeeded (`0 warnings`, `0 errors`); `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release` -> succeeded (`0 warnings`, `0 errors`); `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release` -> succeeded (`0 warnings`, `0 errors`).
+- Files changed: `UI/TASKS.md`, `UI/Systems/Systems.AppHost/TASKS.md`, `UI/Systems/Systems.ServiceDefaults/TASKS.md`, `UI/WoWStateManagerUI/TASKS.md`.
+- Blockers: None.
+- Next task: `UI-UMB-004`.
+- Next command: `Get-Content -Path 'UI/Systems/Systems.AppHost/TASKS.md' -TotalCount 360`.

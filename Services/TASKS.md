@@ -1,81 +1,126 @@
-﻿# Services Tasks
+# Services Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+## Scope
+- Project umbrella: `Services`
+- Master tracker: `MASTER-SUB-012`
+- Purpose: route work to service child `TASKS.md` files and enforce cross-service constraints.
+- This file should not duplicate deep implementation details that belong in child files.
 
-## Purpose
-Track orchestration and runner service work required for full bot implementation.
+## Execution Rules
+1. Execute one child `TASKS.md` at a time in `Child Queue` order; do not skip ahead.
+2. Per pass, read only this file and the active child file first; load only directly referenced files needed to define/execute concrete task IDs.
+3. Keep commands simple and one-line where possible.
+4. Preserve canonical corpse-run flow in all relevant children: `.tele name {NAME} Orgrimmar` -> kill -> release -> runback -> reclaim-ready -> resurrect.
+5. Enforce `--blame-hang --blame-hang-timeout 10m` for corpse-run-style validations and repo-scoped cleanup evidence.
+6. Never blanket-kill `dotnet`; cleanup must be repo-scoped and evidenced.
+7. If two consecutive passes produce no file delta, record `blocker` + exact `Next command`, then move to the next child.
+8. Archive completed umbrella tasks in `Services/TASKS_ARCHIVE.md` in the same session.
+9. Every pass must update `Session Handoff` with `Last delta`, one-line `Pass result` (`delta shipped` or `blocked`), and exactly one executable `Next command`.
 
-## Rules
-- Execute continuously without approval prompts.
-- Work continuously until all tasks in this file are complete.
-- Keep service behavior deterministic and observable.
-- Record every service-side parity blocker in the appropriate subproject task file.
+## Evidence Snapshot (2026-02-25)
+- Master queue currently routes from this file to service children:
+  - `MASTER-SUB-013` and `MASTER-SUB-014` entries exist in [docs/TASKS.md](/E:/repos/Westworld of Warcraft/docs/TASKS.md:133) and [docs/TASKS.md](/E:/repos/Westworld of Warcraft/docs/TASKS.md:134).
+  - Current master pointer `Next queue file: MASTER-SUB-013 -> Services/BackgroundBotRunner/TASKS.md` is set in [docs/TASKS.md](/E:/repos/Westworld of Warcraft/docs/TASKS.md:168).
+- All queued service child task files exist on disk:
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `Services/CppCodeIntelligenceMCP/TASKS.md`
+  - `Services/DecisionEngineService/TASKS.md`
+  - `Services/ForegroundBotRunner/TASKS.md`
+  - `Services/LoggingMCPServer/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Services/PromptHandlingService/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+- Corpse-run and timeout guidance is already present in active child files and must remain consistent:
+  - Canonical Orgrimmar flow in [BackgroundBotRunner/TASKS.md](/E:/repos/Westworld of Warcraft/Services/BackgroundBotRunner/TASKS.md:7).
+  - 10-minute corpse-run timeout command in [BackgroundBotRunner/TASKS.md](/E:/repos/Westworld of Warcraft/Services/BackgroundBotRunner/TASKS.md:51).
+  - Orgrimmar pathing focus and timeout command in [PathfindingService/TASKS.md](/E:/repos/Westworld of Warcraft/Services/PathfindingService/TASKS.md:6) and [PathfindingService/TASKS.md](/E:/repos/Westworld of Warcraft/Services/PathfindingService/TASKS.md:21).
+  - Timeout plus repo cleanup expectations in [WoWStateManager/TASKS.md](/E:/repos/Westworld of Warcraft/Services/WoWStateManager/TASKS.md:21) and [WoWStateManager/TASKS.md](/E:/repos/Westworld of Warcraft/Services/WoWStateManager/TASKS.md:22).
+  - FG/BG parity requirement present in [ForegroundBotRunner/TASKS.md](/E:/repos/Westworld of Warcraft/Services/ForegroundBotRunner/TASKS.md:11).
 
-## Subproject Task Files
-- `Services/WoWStateManager/TASKS.md`
-- `Services/ForegroundBotRunner/TASKS.md`
-- `Services/BackgroundBotRunner/TASKS.md`
-- `Services/PathfindingService/TASKS.md`
-- `Services/DecisionEngineService/TASKS.md`
-- `Services/PromptHandlingService/TASKS.md`
-- `Services/CppCodeIntelligenceMCP/TASKS.md`
-- `Services/LoggingMCPServer/TASKS.md`
+## Child Queue
+1. `Services/BackgroundBotRunner/TASKS.md` (`MASTER-SUB-013`)
+2. `Services/CppCodeIntelligenceMCP/TASKS.md` (`MASTER-SUB-014`)
+3. `Services/DecisionEngineService/TASKS.md` (`MASTER-SUB-015`)
+4. `Services/ForegroundBotRunner/TASKS.md` (`MASTER-SUB-016`)
+5. `Services/LoggingMCPServer/TASKS.md` (`MASTER-SUB-017`)
+6. `Services/PathfindingService/TASKS.md` (`MASTER-SUB-018`)
+7. `Services/PromptHandlingService/TASKS.md` (`MASTER-SUB-019`)
+8. `Services/WoWStateManager/TASKS.md` (`MASTER-SUB-020`)
 
-## Active Priorities
-1. StateManager action forwarding and snapshot consistency.
-2. FG/BG runner lifecycle and behavior parity.
-3. Pathfinding and movement service reliability under live tests.
+## P0 Active Tasks (Ordered)
 
-## Handoff Fields
-- Last changed subproject:
-- Service logs/evidence:
-- Next subproject task:
+### SRV-UMB-001 Keep service child routing aligned with master queue
+- Problem: umbrella routing can drift from the master queue and silently break one-by-one execution.
+- Target files:
+  - `Services/TASKS.md`
+  - `docs/TASKS.md`
+- Required change:
+  - Keep `Child Queue` order aligned with `MASTER-SUB-013..020`.
+  - Keep master queue pointers (`Current queue file`, `Next queue file`) synchronized whenever switching child files.
+  - Verify each queued child path exists before advancing.
+- Validation command:
+  - `Get-ChildItem -Path Services -Directory | ForEach-Object { $task = Join-Path $_.FullName 'TASKS.md'; \"{0}: {1}\" -f $_.Name, (Test-Path $task) }`
+- Acceptance criteria:
+  - No queued service child is missing from either this file or master queue routing.
 
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
+### SRV-UMB-002 Enforce canonical corpse-run and timeout policy across services
+- Problem: inconsistent corpse-run flow/timeout text causes drift in test behavior and teardown expectations.
+- Target files:
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Services/TASKS.md`
+- Required change:
+  - Preserve canonical flow `.tele name {NAME} Orgrimmar` -> kill -> release -> runback -> reclaim-ready -> resurrect.
+  - Ensure relevant commands include 10-minute hang timeout and repo-scoped cleanup.
+  - Remove conflicting location/timeouts if found.
+- Validation command:
+  - `rg -n \"Orgrimmar|blame-hang-timeout 10m|CleanupRepoScopedOnly\" Services/BackgroundBotRunner/TASKS.md Services/PathfindingService/TASKS.md Services/WoWStateManager/TASKS.md`
+- Acceptance criteria:
+  - No conflicting corpse-run location or timeout guidance remains across service child task files.
 
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
+### SRV-UMB-003 Enforce FG/BG parity plus physics calibration discipline
+- Problem: parity claims are not reliable unless FG/BG checks and physics calibration are enforced in the same cycle.
+- Target files:
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Required change:
+  - Ensure parity requirements explicitly call out FG and BG comparison in the same scenario run.
+  - Ensure movement-drift/hover issues point to PhysicsEngine calibration gates before signoff.
+  - Ensure diagnostics request actionable parity output (movement cadence/spells/packets).
+- Validation command:
+  - `rg -n \"FG|BG|parity|Physics|calibration\" Services/BackgroundBotRunner/TASKS.md Services/PathfindingService/TASKS.md Services/WoWStateManager/TASKS.md Services/ForegroundBotRunner/TASKS.md`
+- Acceptance criteria:
+  - Parity and physics-calibration requirements are explicit and testable in the referenced child files.
 
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
+### SRV-UMB-004 Convert pending service child files to direct task-ID format
+- Problem: broad behavior buckets create ambiguity and repeated rediscovery across sessions.
+- Target files:
+  - `Services/BackgroundBotRunner/TASKS.md`
+  - `Services/DecisionEngineService/TASKS.md`
+  - `Services/LoggingMCPServer/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+- Required change:
+  - Convert each child backlog to ordered task IDs with clear scope and acceptance.
+  - Keep commands short and executable.
+  - Require `Session Handoff` fields: `Last delta`, `Pass result`, and exactly one `Next command`.
+- Validation command:
+  - `rg -n \"Pass result|Next command|### .*MISS|Acceptance\" Services/BackgroundBotRunner/TASKS.md Services/DecisionEngineService/TASKS.md Services/LoggingMCPServer/TASKS.md Services/WoWStateManager/TASKS.md`
+- Acceptance criteria:
+  - Each listed child contains direct task IDs, explicit acceptance criteria, and loop-proof handoff fields.
 
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
+## Canonical Commands
+1. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+2. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
+3. `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"`
+4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `Services/TASKS_ARCHIVE.md`.
-
-
-
-
-## Behavior Cards
-1. ServiceOrchestrationParityLoop
-- [ ] Behavior: service orchestration keeps FG/BG lifecycle, action routing, and scenario coordination aligned through corpse/combat/gathering cycles.
-- [ ] FG Baseline: FG service pipeline completes the full validation cycle without dropped actions, stale state, or unmanaged lingering processes.
-- [ ] BG Target: BG service pipeline mirrors FG orchestration timing and action completion semantics in the same run cycle.
-- [ ] Implementation Targets: `Services/WoWStateManager/TASKS.md`, `Services/ForegroundBotRunner/TASKS.md`, `Services/BackgroundBotRunner/TASKS.md`, `Services/PathfindingService/TASKS.md`, `Services/DecisionEngineService/TASKS.md`, `Services/PromptHandlingService/TASKS.md`, `Services/CppCodeIntelligenceMCP/TASKS.md`, `Services/LoggingMCPServer/TASKS.md`.
-- [ ] Simple Command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~CombatLoopTests|FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: services support all three scenario families in one cycle with deterministic teardown evidence and no cross-service starvation.
-- [ ] If Fails: add `Research:ServiceOrchestrationGap::<service>` and `Implement:ServiceOrchestrationFix::<service>` tasks and link to owning subproject TASKS file.
-
-## Continuation Instructions
-1. Start with the highest-priority unchecked item in this file.
-2. Execute one simple validation command for the selected behavior.
-3. Log evidence and repo-scoped teardown results in Session Handoff.
-4. Move completed items to the local TASKS_ARCHIVE.md in the same session.
-5. Update docs/BEHAVIOR_MATRIX.md status for this behavior before handing off.
+## Session Handoff
+- Last updated: 2026-02-25
+- Current child: `Services/BackgroundBotRunner/TASKS.md`
+- Next child: `Services/CppCodeIntelligenceMCP/TASKS.md`
+- Last delta: added `MASTER-SUB-012` tracker, service-evidence snapshot, and explicit umbrella acceptance gates tied to queue/alignment/timeout/parity checks.
+- Pass result: `delta shipped`
+- Next command: `Get-Content -Path 'Services/BackgroundBotRunner/TASKS.md' -TotalCount 320`
