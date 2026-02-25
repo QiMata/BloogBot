@@ -146,9 +146,10 @@ struct PhysicsInput
     uint32_t frameCounter;
 
     // Behaviour flags (bitfield)
-    // PHYSICS_FLAG_TRUST_INPUT_VELOCITY (0x1): Use input vx/vy as-is for airborne
-    //   horizontal movement instead of recalculating from moveFlags + orientation.
-    //   Useful for replay testing with recording-derived velocity.
+    // PHYSICS_FLAG_TRUST_INPUT_VELOCITY (0x1): Use input vx/vy as authoritative
+    //   horizontal velocity (airborne replay paths) instead of
+    //   recalculating from moveFlags + orientation.
+    //   Useful for recording replay calibration with frame-derived velocity.
     uint32_t physicsFlags;
 };
 

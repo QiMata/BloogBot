@@ -4,6 +4,8 @@
 namespace Navigation.Physics.Tests;
 
 using static NavigationInterop;
+using System.Globalization;
+using Xunit.Abstractions;
 
 /// <summary>
 /// Frame-by-frame physics tests using real WoW world coordinates.
@@ -17,10 +19,12 @@ using static NavigationInterop;
 public class FrameByFramePhysicsTests : IClassFixture<PhysicsEngineFixture>
 {
     private readonly PhysicsEngineFixture _fixture;
+    private readonly ITestOutputHelper _output;
 
-    public FrameByFramePhysicsTests(PhysicsEngineFixture fixture)
+    public FrameByFramePhysicsTests(PhysicsEngineFixture fixture, ITestOutputHelper output)
     {
         _fixture = fixture;
+        _output = output;
     }
 
     // ==========================================================================
@@ -53,31 +57,27 @@ public class FrameByFramePhysicsTests : IClassFixture<PhysicsEngineFixture>
         const float dt = 1.0f / 60.0f;
         const int framesToSimulate = 60;  // 1 second of movement
 
-        // Act: Simulate multiple frames
-        var positions = new List<Vector3>();
-        var currentInput = input;
-
-        for (int frame = 0; frame < framesToSimulate; frame++)
-        {
-            // This would call the actual physics step
-            // var output = StepPhysicsV2(in currentInput, dt);
-            
-            // For now, document expected behavior
-            float expectedY = start.Y + (frame + 1) * dt * input.RunSpeed;
-            positions.Add(new Vector3(start.X, expectedY, start.Z));
-        }
+        // Act: Simulate with native physics and compare against simple kinematic expectation.
+        var frames = SimulatePhysics(input, framesToSimulate, dt);
+        WriteFrameComparisonTrace(nameof(NorthshireAbbey_WalkForward_MaintainsGroundContact), frames, frame =>
+            new Vector3(
+                start.X,
+                start.Y + (frame.FrameNumber + 1) * dt * input.RunSpeed,
+                start.Z));
 
         // Assert: All positions should be at ground level
-        foreach (var pos in positions)
+        foreach (var frame in frames)
         {
+            var pos = frame.Position;
+
             // Z should stay constant on flat ground
             Assert.True(MathF.Abs(pos.Z - start.Z) < 0.5f,
-                $"Character should stay at ground level, got Z={pos.Z}");
+                $"Frame {frame.FrameNumber}: character should stay at ground level, got Z={pos.Z}");
         }
 
         // Assert: Should have moved forward
         float expectedDistance = framesToSimulate * dt * input.RunSpeed;
-        float actualDistance = positions[^1].Y - start.Y;
+        float actualDistance = frames[^1].Position.Y - start.Y;
         Assert.True(MathF.Abs(actualDistance - expectedDistance) < 0.5f,
             $"Expected to move {expectedDistance} yards, moved {actualDistance}");
     }
@@ -372,39 +372,119 @@ public class FrameByFramePhysicsTests : IClassFixture<PhysicsEngineFixture>
     /// </summary>
     private List<PhysicsFrame> SimulatePhysics(PhysicsInput initialInput, int frameCount, float dt = 1.0f / 60.0f)
     {
-        var frames = new List<PhysicsFrame>();
+        Assert.True(frameCount > 0, "frameCount must be positive");
+        Assert.True(float.IsFinite(dt) && dt > 0f, "dt must be finite and > 0");
+
+        var frames = new List<PhysicsFrame>(frameCount);
         var input = initialInput;
+        var intentFlags = (MoveFlags)initialInput.MoveFlags & IntentMoveMask;
+        uint startFallTime = initialInput.FallTime;
 
         for (int i = 0; i < frameCount; i++)
         {
-            // TODO: Call actual physics
-            // var output = StepPhysicsV2(in input, dt);
+            input.DeltaTime = dt;
+            input.FrameCounter = (uint)i;
+
+            var output = StepPhysicsV2(ref input);
+            AssertFinite(output, i);
 
             frames.Add(new PhysicsFrame
             {
                 FrameNumber = i,
-                Time = i * dt,
+                Time = (i + 1) * dt,
                 Input = input,
-                // Output = output
+                Output = output
             });
 
-            // Update input for next frame
-            // input.X = output.X;
-            // input.Y = output.Y;
-            // input.Z = output.Z;
-            // input.Vx = output.Vx;
-            // input.Vy = output.Vy;
-            // input.Vz = output.Vz;
+            // Preserve movement intent while carrying native state forward to the next frame.
+            var stateFlags = (MoveFlags)output.MoveFlags & RuntimeStateMask;
+
+            input.X = output.X;
+            input.Y = output.Y;
+            input.Z = output.Z;
+            input.Orientation = output.Orientation;
+            input.Pitch = output.Pitch;
+            input.Vx = output.Vx;
+            input.Vy = output.Vy;
+            input.Vz = output.Vz;
+            input.MoveFlags = (uint)(intentFlags | stateFlags);
+            input.FallTime = startFallTime + (uint)MathF.Max(0f, output.FallTime * 1000f);
+            input.PrevGroundZ = output.GroundZ;
+            input.PrevGroundNx = output.GroundNx;
+            input.PrevGroundNy = output.GroundNy;
+            input.PrevGroundNz = output.GroundNz;
+            input.PendingDepenX = output.PendingDepenX;
+            input.PendingDepenY = output.PendingDepenY;
+            input.PendingDepenZ = output.PendingDepenZ;
+            input.StandingOnInstanceId = output.StandingOnInstanceId;
+            input.StandingOnLocalX = output.StandingOnLocalX;
+            input.StandingOnLocalY = output.StandingOnLocalY;
+            input.StandingOnLocalZ = output.StandingOnLocalZ;
         }
 
         return frames;
     }
 
-    private class PhysicsFrame
+    private void WriteFrameComparisonTrace(
+        string scenario,
+        IReadOnlyList<PhysicsFrame> frames,
+        Func<PhysicsFrame, Vector3> expectedPositionSelector)
+    {
+        _output.WriteLine($"=== {scenario}: {frames.Count} frame-by-frame comparison ===");
+        foreach (var frame in frames)
+        {
+            var expected = expectedPositionSelector(frame);
+            var actual = frame.Position;
+            var dx = actual.X - expected.X;
+            var dy = actual.Y - expected.Y;
+            var dz = actual.Z - expected.Z;
+
+            _output.WriteLine(
+                $"  f={frame.FrameNumber,3} t={frame.Time,6:F3}s " +
+                $"actual=({actual.X:F3},{actual.Y:F3},{actual.Z:F3}) " +
+                $"expected=({expected.X:F3},{expected.Y:F3},{expected.Z:F3}) " +
+                $"d=({dx.ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture)}," +
+                $"{dy.ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture)}," +
+                $"{dz.ToString("+0.000;-0.000;0.000", CultureInfo.InvariantCulture)})");
+        }
+    }
+
+    private static void AssertFinite(PhysicsOutput output, int frame)
+    {
+        Assert.True(float.IsFinite(output.X), $"Frame {frame}: output.X is not finite ({output.X})");
+        Assert.True(float.IsFinite(output.Y), $"Frame {frame}: output.Y is not finite ({output.Y})");
+        Assert.True(float.IsFinite(output.Z), $"Frame {frame}: output.Z is not finite ({output.Z})");
+        Assert.True(float.IsFinite(output.Vx), $"Frame {frame}: output.Vx is not finite ({output.Vx})");
+        Assert.True(float.IsFinite(output.Vy), $"Frame {frame}: output.Vy is not finite ({output.Vy})");
+        Assert.True(float.IsFinite(output.Vz), $"Frame {frame}: output.Vz is not finite ({output.Vz})");
+        Assert.True(float.IsFinite(output.GroundZ), $"Frame {frame}: output.GroundZ is not finite ({output.GroundZ})");
+    }
+
+    private static readonly MoveFlags IntentMoveMask =
+        MoveFlags.Forward |
+        MoveFlags.Backward |
+        MoveFlags.StrafeLeft |
+        MoveFlags.StrafeRight |
+        MoveFlags.TurnLeft |
+        MoveFlags.TurnRight |
+        MoveFlags.PitchUp |
+        MoveFlags.PitchDown |
+        MoveFlags.Walking |
+        MoveFlags.Jumping;
+
+    private static readonly MoveFlags RuntimeStateMask =
+        MoveFlags.Falling |
+        MoveFlags.FallingFar |
+        MoveFlags.Swimming |
+        MoveFlags.Flying |
+        MoveFlags.OnTransport;
+
+    private sealed class PhysicsFrame
     {
         public int FrameNumber { get; init; }
         public float Time { get; init; }
         public PhysicsInput Input { get; init; }
-        // public PhysicsOutput Output { get; init; }
+        public PhysicsOutput Output { get; init; }
+        public Vector3 Position => new(Output.X, Output.Y, Output.Z);
     }
 }

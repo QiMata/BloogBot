@@ -813,11 +813,18 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
     if (chosen && chosen->hit) {
         st.z = chosen->snapZ;
 
-        // Refine Z with direct height query at exact XY (eliminates capsule lateral offset bias)
+        // Refine Z with direct height query at exact XY (eliminates capsule lateral offset bias).
+        // In grounded replay-trust mode we allow a larger upward correction to avoid one-frame
+        // lag when stepping onto slightly higher support.
+        const bool trustGroundedReplayInput =
+            ((input.physicsFlags & PHYSICS_FLAG_TRUST_INPUT_VELOCITY) != 0) &&
+            ((input.moveFlags & (MOVEFLAG_SWIMMING | MOVEFLAG_FLYING | MOVEFLAG_LEVITATING | MOVEFLAG_HOVER |
+                                 MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) == 0);
+        const float preciseRiseTolerance = trustGroundedReplayInput ? 0.2f : 0.05f;
         float preciseZ = SceneQuery::GetGroundZ(input.mapId, st.x, st.y, st.z,
             PhysicsConstants::STEP_DOWN_HEIGHT);
         if (VMAP::IsValidHeight(preciseZ) &&
-            preciseZ <= st.z + 0.05f &&
+            preciseZ <= st.z + preciseRiseTolerance &&
             preciseZ >= st.z - 0.5f) {
             st.z = preciseZ;
         }
@@ -1527,6 +1534,8 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	const bool inputSwimmingFlag = (input.moveFlags & MOVEFLAG_SWIMMING) != 0;
 	const bool inputAirborneFlag = (input.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) != 0;
 	const bool inputFlyingFlag = (input.moveFlags & (MOVEFLAG_FLYING | MOVEFLAG_LEVITATING | MOVEFLAG_HOVER)) != 0;
+	const bool trustInputVel = (input.physicsFlags & PHYSICS_FLAG_TRUST_INPUT_VELOCITY) != 0;
+	const bool trustGroundedReplayInput = trustInputVel && !inputSwimmingFlag && !inputFlyingFlag && !inputAirborneFlag;
 	// NOTE (stateless MMO): input flags represent the caller's last-frame state.
 	// We preserve these unless StepV2 simulation detects a real state transition.
 	// We still use queries to *inform* grounding, but we avoid immediately overriding
@@ -1554,13 +1563,18 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		// controller pipeline (e.g., Controller::move applies mOverlapRecover to the frame
 		// displacement). We keep a small deferred depenetration vector in the MMO layer and
 		// apply it at the start of the tick for stability across frames/network updates.
-		G3D::Vector3 pending(input.pendingDepenX, input.pendingDepenY, input.pendingDepenZ);
-		if (pending.magnitude() > 1e-6f) {
-			st.x += pending.x;
-			st.y += pending.y;
-			st.z += pending.z;
-			PHYS_INFO(PHYS_MOVE, std::string("[OverlapRecover] applied pending depen (")
-				<< pending.x << "," << pending.y << "," << pending.z << ")");
+		//
+		// Replay calibration mode (trusted grounded velocity) should derive displacement from
+		// captured frame deltas only, so skip carry-over depen application in that path.
+		if (!trustGroundedReplayInput) {
+			G3D::Vector3 pending(input.pendingDepenX, input.pendingDepenY, input.pendingDepenZ);
+			if (pending.magnitude() > 1e-6f) {
+				st.x += pending.x;
+				st.y += pending.y;
+				st.z += pending.z;
+				PHYS_INFO(PHYS_MOVE, std::string("[OverlapRecover] applied pending depen (")
+					<< pending.x << "," << pending.y << "," << pending.z << ")");
+			}
 		}
 	}
 
@@ -1631,7 +1645,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// bounded iterations before doing any movement sweeps.
 	// ---------------------------------------------------------------------
 	G3D::Vector3 deferredDepen(0, 0, 0);
-	if (!isSwimming && !isFlying) {
+	if (!isSwimming && !isFlying && !trustGroundedReplayInput) {
 		// NOTE (PhysX alignment): PhysX can run overlap recovery inside doSweepTest when
 		// mUserParams.mOverlapRecovery is enabled (computeMTD path). We do a simplified,
 		// bounded depenetration pre-pass here because our MMO controller is not based on
@@ -1768,21 +1782,41 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			PHYS_INFO(PHYS_MOVE, oss.str());
 		}
 	}
-    float moveSpeed = plan.speed;
-    G3D::Vector3 moveDir = plan.dir;
-    float intendedDist = plan.dist;
-    bool planHasInput = plan.hasInput;
+	float moveSpeed = plan.speed;
+	G3D::Vector3 moveDir = plan.dir;
+	float intendedDist = plan.dist;
+	bool planHasInput = plan.hasInput;
+	const bool trustGroundedReplay = trustInputVel && !isFlying && !isSwimming && st.isGrounded && !intent.jumpRequested;
 
-    if (isFlying) {
-        moveSpeed = input.flightSpeed;
-        intendedDist = moveSpeed * dt;
-    }
-    if (isRooted) {
-        moveSpeed = 0.0f;
-        intendedDist = 0.0f;
-        moveDir = G3D::Vector3(0, 0, 0);
-        planHasInput = false;
-    }
+	if (isFlying) {
+		moveSpeed = input.flightSpeed;
+		intendedDist = moveSpeed * dt;
+	}
+	if (isRooted) {
+		moveSpeed = 0.0f;
+		intendedDist = 0.0f;
+		moveDir = G3D::Vector3(0, 0, 0);
+		planHasInput = false;
+	}
+
+	// Replay calibration mode: when caller trusts captured velocity while grounded,
+	// derive the frame displacement directly from input.vx/vy but still run through
+	// normal grounded collision/step logic.
+	if (trustGroundedReplay) {
+		const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
+		if (speedSq > 1e-8f) {
+			moveSpeed = std::sqrt(speedSq);
+			intendedDist = moveSpeed * dt;
+			moveDir = G3D::Vector3(input.vx / moveSpeed, input.vy / moveSpeed, 0.0f);
+			planHasInput = intendedDist > MIN_MOVE_DISTANCE;
+		}
+		else {
+			moveSpeed = 0.0f;
+			intendedDist = 0.0f;
+			moveDir = G3D::Vector3(0, 0, 0);
+			planHasInput = false;
+		}
+	}
 
     // Removed SceneQuery::ComputeCapsuleSweep diagnostics and manifold usage
 
@@ -1824,7 +1858,6 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		}
 		// Horizontal velocity: recalculate from movement intent (air control) unless
 		// the caller explicitly provided velocity via TRUST_INPUT_VELOCITY flag.
-		const bool trustInputVel = (input.physicsFlags & PHYSICS_FLAG_TRUST_INPUT_VELOCITY) != 0;
 		if (!trustInputVel && planHasInput && moveSpeed > 0.0f) {
 			st.vx = moveDir.x * moveSpeed;
 			st.vy = moveDir.y * moveSpeed;
@@ -1844,7 +1877,46 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		// Ground movement.
 		// NOTE: GroundMoveElevatedSweep uses a PhysX-style UP→SIDE→DOWN pipeline and already
 		// handles vertical placement/falling as part of the DOWN pass.
-		if (intendedDist > 0.0f) {
+		if (trustGroundedReplay && intendedDist > 0.0f) {
+			// Replay calibration path: run full ground sweep for step/slope Z behavior,
+			// then re-lock X/Y to the trusted capture displacement.
+			const float trustedX = st.x + (input.vx * dt);
+			const float trustedY = st.y + (input.vy * dt);
+			st.vx = input.vx;
+			st.vy = input.vy;
+			st.vz = 0.0f;
+
+			GroundMoveElevatedSweep(input, intent, st, r, h, moveDir, intendedDist, dt, moveSpeed);
+
+			// Keep replay X/Y exact while preserving sweep-derived Z.
+			st.x = trustedX;
+			st.y = trustedY;
+
+			// Always re-evaluate support at trusted XY. GroundMoveElevatedSweep can transiently
+			// report airborne on rising ramps/steps, and later replay fallbacks can pin Z to
+			// input.z (one-frame lag). Refine here first so trusted XY drives final support Z.
+			const bool wasGroundedAfterSweep = st.isGrounded;
+			const bool snapped = TryDownwardStepSnap(input, st, r, h);
+			const float refineBaseZ = std::max(st.z, input.z);
+			const float maxRise = 0.30f;
+			const float maxDrop =
+				(snapped || wasGroundedAfterSweep) ? 0.03f : PhysicsConstants::STEP_DOWN_HEIGHT;
+			float preciseZ = SceneQuery::GetGroundZ(
+				input.mapId, st.x, st.y, refineBaseZ + 0.25f, PhysicsConstants::STEP_DOWN_HEIGHT);
+			if (VMAP::IsValidHeight(preciseZ) &&
+				preciseZ <= refineBaseZ + maxRise &&
+				preciseZ >= refineBaseZ - maxDrop) {
+				st.z = preciseZ;
+				st.isGrounded = true;
+				st.vz = 0.0f;
+				st.fallTime = 0.0f;
+			}
+
+			// Preserve trusted horizontal velocity for replay output.
+			st.vx = input.vx;
+			st.vy = input.vy;
+		}
+		else if (intendedDist > 0.0f) {
 			// First pass: regular ground move (UP→SIDE→DOWN)
 			MovementState preMove = st;
 			GroundMoveElevatedSweep(input, intent, st, r, h, moveDir, intendedDist, dt, moveSpeed);
@@ -1932,6 +2004,120 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
         }
     }
 
+	// Rescue occasional false-airborne outcomes: if input was not airborne and
+	// we are very close to a support surface, clamp back to grounded.
+	// This keeps single-frame state flips from introducing large replay deltas.
+	if (!st.isGrounded && !isSwimming && !inputAirborneFlag) {
+		const float probeR = std::max(0.05f, r);
+		const float diagR = probeR * 0.707f;
+		const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
+		const bool hasMoveDir = speedSq > 1e-6f;
+		const float invSpeed = hasMoveDir ? (1.0f / std::sqrt(speedSq)) : 0.0f;
+		const float dirX = hasMoveDir ? (input.vx * invSpeed) : 0.0f;
+		const float dirY = hasMoveDir ? (input.vy * invSpeed) : 0.0f;
+		const float rescueReferenceZ = trustGroundedReplayInput ? std::max(st.z, input.z) : st.z;
+		// GetGroundZ selects the candidate closest to query Z; in replay-trust mode
+		// probing too high can bias toward overhead surfaces and miss nearby walk support.
+		const float queryHeights[4] = {
+			rescueReferenceZ + (trustGroundedReplayInput ? 0.05f : 0.20f),
+			rescueReferenceZ + (trustGroundedReplayInput ? 0.30f : 0.35f),
+			rescueReferenceZ + (trustGroundedReplayInput ? 0.65f : 0.55f),
+			rescueReferenceZ + (trustGroundedReplayInput ? 0.95f : 0.75f)
+		};
+		const float minRescueDz = trustGroundedReplayInput ? -0.35f : -0.15f;
+		const float maxRescueDz = trustGroundedReplayInput ? 0.55f : 0.25f;
+		const float offsets[9][2] = {
+			{0, 0},
+			{probeR, 0}, {-probeR, 0}, {0, probeR}, {0, -probeR},
+			{diagR, diagR}, {diagR, -diagR}, {-diagR, diagR}, {-diagR, -diagR}
+		};
+
+		float bestZ = PhysicsConstants::INVALID_HEIGHT;
+		auto considerProbe = [&](float ox, float oy) {
+			float probeBestZ = PhysicsConstants::INVALID_HEIGHT;
+			for (float queryZ : queryHeights) {
+				float pz = SceneQuery::GetGroundZ(
+					input.mapId,
+					st.x + ox,
+					st.y + oy,
+					queryZ,
+					PhysicsConstants::STEP_DOWN_HEIGHT);
+				if (!VMAP::IsValidHeight(pz))
+					continue;
+
+				const float dz = pz - rescueReferenceZ;
+				if (dz < minRescueDz || dz > maxRescueDz)
+					continue;
+
+				if (probeBestZ <= PhysicsConstants::INVALID_HEIGHT || pz > probeBestZ)
+					probeBestZ = pz;
+			}
+
+			if (probeBestZ > PhysicsConstants::INVALID_HEIGHT &&
+				(bestZ <= PhysicsConstants::INVALID_HEIGHT || probeBestZ > bestZ)) {
+				bestZ = probeBestZ;
+			}
+		};
+
+		for (int i = 0; i < 9; ++i) {
+			considerProbe(offsets[i][0], offsets[i][1]);
+		}
+
+		// In trust-input replay mode, probe support slightly farther forward to
+		// recover from one-frame false-airborne transitions on rising terrain.
+		if (trustGroundedReplayInput && hasMoveDir) {
+			const float forwardR2 = probeR * 2.0f;
+			const float forwardR3 = probeR * 3.0f;
+			const float forwardR4 = probeR * 4.0f;
+			const float forwardR5 = probeR * 5.0f;
+			const float sideR = probeR;
+			const float perpX = -dirY;
+			const float perpY = dirX;
+
+			considerProbe(dirX * probeR, dirY * probeR);
+			considerProbe(dirX * forwardR2, dirY * forwardR2);
+			considerProbe(dirX * forwardR3, dirY * forwardR3);
+			considerProbe(dirX * forwardR4, dirY * forwardR4);
+			considerProbe(dirX * forwardR5, dirY * forwardR5);
+			considerProbe((dirX * forwardR2) + (perpX * sideR), (dirY * forwardR2) + (perpY * sideR));
+			considerProbe((dirX * forwardR2) - (perpX * sideR), (dirY * forwardR2) - (perpY * sideR));
+			considerProbe((dirX * forwardR3) + (perpX * sideR), (dirY * forwardR3) + (perpY * sideR));
+			considerProbe((dirX * forwardR3) - (perpX * sideR), (dirY * forwardR3) - (perpY * sideR));
+		}
+
+		// Trust-replay fallback: if nearby support probing fails but the simulated Z is
+		// still close to the caller's non-airborne frame, keep the character grounded.
+		// This prevents persistent one-frame false-airborne flips from accumulating drift.
+		if (bestZ <= PhysicsConstants::INVALID_HEIGHT && trustGroundedReplayInput) {
+			const float inputDz = input.z - st.z;
+			const float maxInputFallbackDz = 0.20f;
+			if (std::fabs(inputDz) <= maxInputFallbackDz) {
+				bestZ = input.z;
+			}
+		}
+
+		if (bestZ > PhysicsConstants::INVALID_HEIGHT) {
+			st.z = bestZ;
+			st.isGrounded = true;
+			st.vz = 0.0f;
+			st.fallTime = 0.0f;
+		}
+	}
+
+	// Replay trust recovery: keep explicitly non-airborne replay frames grounded when
+	// simulation drift is still close to input. This lets the grounded Z refinement path
+	// resolve local floor support instead of carrying false-airborne state.
+	if (!st.isGrounded && trustGroundedReplayInput && !isSwimming && !inputAirborneFlag) {
+		const float replayGroundRecoveryDz = 0.20f;
+		const float dzFromInput = st.z - input.z;
+		if (std::fabs(dzFromInput) <= replayGroundRecoveryDz) {
+			st.z = std::max(st.z, input.z);
+			st.isGrounded = true;
+			st.vz = 0.0f;
+			st.fallTime = 0.0f;
+		}
+	}
+
 	SceneQuery::LiquidInfo finalLiq = SceneQuery::EvaluateLiquidAt(input.mapId, st.x, st.y, st.z);
 	if (finalLiq.isSwimming && !isSwimming) {
 		if (finalLiq.hasLevel) {
@@ -1977,41 +2163,423 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// via GetGroundZ at exact character XY. This multi-ray probe catches cases where the
 	// capsule sweep completely missed thin WMO floor meshes (e.g. in Orgrimmar).
 	if (st.isGrounded && !isSwimming) {
-		float queryZ = st.z + 0.3f;
-		float bestZ = PhysicsConstants::INVALID_HEIGHT;
-		float bestErr = std::numeric_limits<float>::max();
-		const float probeR1 = r;          // inner ring at capsule radius
-		const float probeR2 = r * 2.0f;   // outer ring at 2x capsule radius
-		const float diagR1 = probeR1 * 0.707f;
-		const float diagR2 = probeR2 * 0.707f;
-		const float offsets[17][2] = {
-			{0, 0},
-			// Inner ring (capsule radius)
-			{probeR1, 0}, {-probeR1, 0}, {0, probeR1}, {0, -probeR1},
-			{diagR1, diagR1}, {diagR1, -diagR1}, {-diagR1, diagR1}, {-diagR1, -diagR1},
-			// Outer ring (2x capsule radius)
-			{probeR2, 0}, {-probeR2, 0}, {0, probeR2}, {0, -probeR2},
-			{diagR2, diagR2}, {diagR2, -diagR2}, {-diagR2, diagR2}, {-diagR2, -diagR2}
-		};
-		for (int i = 0; i < 17; i++) {
-			float pz = SceneQuery::GetGroundZ(input.mapId,
-				st.x + offsets[i][0], st.y + offsets[i][1], queryZ,
-				PhysicsConstants::STEP_DOWN_HEIGHT);
-			if (VMAP::IsValidHeight(pz) &&
-				pz <= st.z + 0.1f &&
-				pz >= st.z - 0.5f) {
-				float err = std::fabs(pz - input.z);
-				if (err < bestErr) {
-					bestErr = err;
+		const float preRefineZ = st.z;
+		const float refineReferenceZ = input.z;
+		const float maxRise = trustGroundedReplayInput ? 0.3f : 0.2f;
+		const float maxDrop = 0.5f;
+		float queryZ = preRefineZ + 0.3f;
+
+		// Replay trust path: evaluate center and directional probes together.
+		// Center-only sampling lags on ramps/stairs when support is at capsule leading edge.
+		if (trustGroundedReplayInput) {
+			float centerZ = PhysicsConstants::INVALID_HEIGHT;
+			bool centerValid = false;
+			float bestZ = PhysicsConstants::INVALID_HEIGHT;
+			float bestForwardZ = PhysicsConstants::INVALID_HEIGHT;
+			float bestForwardDot = -2.0f;
+			const float probeR1 = r;          // inner ring at capsule radius
+			const float probeR2 = r * 2.0f;   // outer ring at 2x capsule radius
+			const float diagR1 = probeR1 * 0.707f;
+			const float diagR2 = probeR2 * 0.707f;
+			const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
+			const bool hasMoveDir = speedSq > 1e-6f;
+			const float invSpeed = hasMoveDir ? (1.0f / std::sqrt(speedSq)) : 0.0f;
+			const float dirX = hasMoveDir ? (input.vx * invSpeed) : 0.0f;
+			const float dirY = hasMoveDir ? (input.vy * invSpeed) : 0.0f;
+			const float minForwardDot = 0.25f; // use directional support, not rear/lateral probes
+			const float offsets[17][2] = {
+				{0, 0},
+				// Inner ring (capsule radius)
+				{probeR1, 0}, {-probeR1, 0}, {0, probeR1}, {0, -probeR1},
+				{diagR1, diagR1}, {diagR1, -diagR1}, {-diagR1, diagR1}, {-diagR1, -diagR1},
+				// Outer ring (2x capsule radius)
+				{probeR2, 0}, {-probeR2, 0}, {0, probeR2}, {0, -probeR2},
+				{diagR2, diagR2}, {diagR2, -diagR2}, {-diagR2, diagR2}, {-diagR2, -diagR2}
+			};
+			const float queryHeights[3] = {
+				queryZ,
+				queryZ + 0.45f,
+				queryZ + 0.90f
+			};
+
+			auto sampleProbeZ = [&](float sampleX, float sampleY) {
+				float probeZ = PhysicsConstants::INVALID_HEIGHT;
+				for (float queryHeight : queryHeights) {
+					const float candidateZ = SceneQuery::GetGroundZ(
+						input.mapId,
+						sampleX,
+						sampleY,
+						queryHeight,
+						PhysicsConstants::STEP_DOWN_HEIGHT);
+					if (!VMAP::IsValidHeight(candidateZ) ||
+						candidateZ > preRefineZ + maxRise ||
+						candidateZ < preRefineZ - maxDrop) {
+						continue;
+					}
+
+					if (probeZ <= PhysicsConstants::INVALID_HEIGHT || candidateZ > probeZ) {
+						probeZ = candidateZ;
+					}
+				}
+
+				return probeZ;
+			};
+
+			auto considerProbe = [&](float ox, float oy) {
+				const float pz = sampleProbeZ(st.x + ox, st.y + oy);
+				if (pz <= PhysicsConstants::INVALID_HEIGHT) {
+					return;
+				}
+
+				if (bestZ <= PhysicsConstants::INVALID_HEIGHT || pz > bestZ) {
 					bestZ = pz;
+				}
+
+				if (!hasMoveDir) {
+					return;
+				}
+
+				const float offLenSq = (ox * ox) + (oy * oy);
+				if (offLenSq <= 1e-6f) {
+					return;
+				}
+
+				const float invOffLen = 1.0f / std::sqrt(offLenSq);
+				const float dot = ((ox * invOffLen) * dirX) + ((oy * invOffLen) * dirY);
+				if (dot < minForwardDot) {
+					return;
+				}
+
+				const float forwardZTieEpsilon = 0.002f;
+				if (bestForwardZ <= PhysicsConstants::INVALID_HEIGHT || pz > bestForwardZ + forwardZTieEpsilon) {
+					bestForwardZ = pz;
+					bestForwardDot = dot;
+				}
+				else if (std::fabs(pz - bestForwardZ) <= forwardZTieEpsilon && dot > bestForwardDot) {
+					bestForwardDot = dot;
+					bestForwardZ = pz;
+				}
+			};
+
+			centerZ = sampleProbeZ(st.x, st.y);
+			if (centerZ > PhysicsConstants::INVALID_HEIGHT) {
+				centerValid = true;
+			}
+
+			// Skip index 0 since center probe already sampled above.
+			for (int i = 1; i < 17; i++) {
+				considerProbe(offsets[i][0], offsets[i][1]);
+			}
+
+			// Add movement-aligned look-ahead probes for slope/step transitions.
+			if (hasMoveDir) {
+				const float frameMoveDist = std::sqrt(speedSq) * dt;
+				const float nearForwardProbe = std::max(0.02f, std::min(frameMoveDist, probeR1));
+				const float midForwardProbe = std::max(nearForwardProbe, std::min(frameMoveDist * 2.0f, probeR2));
+				const float forwardR3 = r * 3.0f;
+				const float forwardR4 = r * 4.0f;
+				const float forwardR5 = r * 5.0f;
+				const float sideR = r * 0.5f;
+				const float perpX = -dirY;
+				const float perpY = dirX;
+
+				considerProbe(dirX * nearForwardProbe, dirY * nearForwardProbe);
+				considerProbe(dirX * midForwardProbe, dirY * midForwardProbe);
+				considerProbe(dirX * probeR1, dirY * probeR1);
+				considerProbe(dirX * probeR2, dirY * probeR2);
+				considerProbe(dirX * forwardR3, dirY * forwardR3);
+				considerProbe(dirX * forwardR4, dirY * forwardR4);
+				considerProbe(dirX * forwardR5, dirY * forwardR5);
+				considerProbe((dirX * probeR2) + (perpX * sideR), (dirY * probeR2) + (perpY * sideR));
+				considerProbe((dirX * probeR2) - (perpX * sideR), (dirY * probeR2) - (perpY * sideR));
+				considerProbe((dirX * forwardR3) + (perpX * sideR), (dirY * forwardR3) + (perpY * sideR));
+				considerProbe((dirX * forwardR3) - (perpX * sideR), (dirY * forwardR3) - (perpY * sideR));
+			}
+
+			float chosenZ = PhysicsConstants::INVALID_HEIGHT;
+			if (centerValid) {
+				chosenZ = centerZ;
+				const bool allowCenterLagCompensation = input.prevGroundNz >= 0.97f;
+				if (allowCenterLagCompensation &&
+					bestZ > PhysicsConstants::INVALID_HEIGHT &&
+					bestZ > centerZ) {
+					// In replay trust mode, allow modest uplift to nearby support to avoid
+					// one-frame center-probe lag on ramps/stairs.
+					// Use a capped blend instead of all-or-nothing so large probe gaps can
+					// still contribute a bounded correction.
+					const float maxCenterLagCompensation = 0.22f;
+					const float dz = bestZ - centerZ;
+					chosenZ = centerZ + std::min(dz, maxCenterLagCompensation);
+				}
+			}
+			else if (bestZ > PhysicsConstants::INVALID_HEIGHT) {
+				chosenZ = bestZ;
+			}
+
+			if (bestForwardZ > PhysicsConstants::INVALID_HEIGHT) {
+				if (chosenZ > PhysicsConstants::INVALID_HEIGHT) {
+					const float maxDirectionalRise = 0.20f;
+					const float maxDirectionalDrop = 0.03f;
+					const float dz = bestForwardZ - chosenZ;
+					if (dz > maxDirectionalRise) {
+						chosenZ += maxDirectionalRise;
+					}
+					else if (dz < -maxDirectionalDrop) {
+						chosenZ -= maxDirectionalDrop;
+					}
+					else {
+						chosenZ = bestForwardZ;
+					}
+				}
+				else {
+					chosenZ = bestForwardZ;
+				}
+			}
+
+			if (chosenZ > PhysicsConstants::INVALID_HEIGHT) {
+				// Replay calibration guardrail: keep grounded trust-refine Z near the
+				// captured frame to avoid latching to nearby higher surfaces.
+				float maxReplayInputRise = 0.03f;
+				const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
+				const bool movingReplay = speedSq > 1e-6f;
+				const bool nearFlatPrevSupport = input.prevGroundNz >= 0.97f;
+				const bool steepOrInvertedPrevSupport = input.prevGroundNz <= -0.70f;
+				if (!movingReplay && steepOrInvertedPrevSupport) {
+					// Avoid one-frame upward snaps when replay is grounded on
+					// inverted/steep support and has no XY intent.
+					maxReplayInputRise = 0.0f;
+				}
+				else if (movingReplay && steepOrInvertedPrevSupport) {
+					maxReplayInputRise = 0.02f;
+				}
+				else if (movingReplay && nearFlatPrevSupport) {
+					maxReplayInputRise = 0.14f;
+				}
+
+				if (movingReplay && nearFlatPrevSupport && chosenZ <= input.z + 0.005f) {
+					// Compensate one-frame grounded replay lag when probe selection stays
+					// near input.z on ramps by leading with prior ground trend.
+					const float previousGroundDz = input.z - input.prevGroundZ;
+					const float trendLeadMax = 0.08f;
+					const float trendLead = std::max(-trendLeadMax, std::min(previousGroundDz, trendLeadMax));
+					chosenZ += trendLead;
+				}
+
+				const float maxReplayInputDrop = 0.20f;
+				const float minAllowedZ = input.z - maxReplayInputDrop;
+				const float maxAllowedZ = input.z + maxReplayInputRise;
+				chosenZ = std::max(minAllowedZ, std::min(chosenZ, maxAllowedZ));
+				st.z = chosenZ;
+			}
+		}
+		else {
+			float bestZ = PhysicsConstants::INVALID_HEIGHT;
+			float bestErr = std::numeric_limits<float>::max();
+			const float probeR1 = r;          // inner ring at capsule radius
+			const float probeR2 = r * 2.0f;   // outer ring at 2x capsule radius
+			const float diagR1 = probeR1 * 0.707f;
+			const float diagR2 = probeR2 * 0.707f;
+			const float offsets[17][2] = {
+				{0, 0},
+				// Inner ring (capsule radius)
+				{probeR1, 0}, {-probeR1, 0}, {0, probeR1}, {0, -probeR1},
+				{diagR1, diagR1}, {diagR1, -diagR1}, {-diagR1, diagR1}, {-diagR1, -diagR1},
+				// Outer ring (2x capsule radius)
+				{probeR2, 0}, {-probeR2, 0}, {0, probeR2}, {0, -probeR2},
+				{diagR2, diagR2}, {diagR2, -diagR2}, {-diagR2, diagR2}, {-diagR2, -diagR2}
+			};
+			for (int i = 0; i < 17; i++) {
+				float pz = SceneQuery::GetGroundZ(input.mapId,
+					st.x + offsets[i][0], st.y + offsets[i][1], queryZ,
+					PhysicsConstants::STEP_DOWN_HEIGHT);
+				if (VMAP::IsValidHeight(pz) &&
+					pz <= preRefineZ + maxRise &&
+					pz >= preRefineZ - maxDrop) {
+					float err = std::fabs(pz - refineReferenceZ);
+					if (err < bestErr) {
+						bestErr = err;
+						bestZ = pz;
+					}
+				}
+			}
+			if (bestZ > PhysicsConstants::INVALID_HEIGHT) {
+				st.z = bestZ;
+			}
+		}
+	}
+
+	// Trust-replay fallback: when input is explicitly non-airborne but simulation ended
+	// airborne, run one last nearby support probe and re-ground if the candidate is close.
+	if (!st.isGrounded && trustGroundedReplayInput && !isSwimming && !inputAirborneFlag) {
+		const float probeR = std::max(0.05f, r);
+		const float diagR = probeR * 0.707f;
+		const float referenceZ = std::max(st.z, input.z);
+		const float minInputDz = -0.35f;
+		const float maxInputDz = 0.35f;
+		// Sample with both low and high query origins. GetGroundZ picks the candidate
+		// closest to query Z, so a high probe helps catch uphill support that a low
+		// probe can miss on multi-level geometry.
+		const float queryHeights[3] = {
+			input.z + 0.30f,
+			input.z + 0.90f,
+			referenceZ + 0.30f
+		};
+		const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
+		const bool hasMoveDir = speedSq > 1e-6f;
+		const bool stationaryReplay = !hasMoveDir;
+		const float invSpeed = hasMoveDir ? (1.0f / std::sqrt(speedSq)) : 0.0f;
+		const float dirX = hasMoveDir ? (input.vx * invSpeed) : 0.0f;
+		const float dirY = hasMoveDir ? (input.vy * invSpeed) : 0.0f;
+		const float offsets[13][2] = {
+			{0, 0},
+			{probeR, 0}, {-probeR, 0}, {0, probeR}, {0, -probeR},
+			{diagR, diagR}, {diagR, -diagR}, {-diagR, diagR}, {-diagR, -diagR},
+			{dirX * probeR, dirY * probeR},
+			{dirX * probeR * 2.0f, dirY * probeR * 2.0f},
+			{dirX * probeR * 3.0f, dirY * probeR * 3.0f},
+			{dirX * probeR * 4.0f, dirY * probeR * 4.0f}
+		};
+
+		float bestZ = PhysicsConstants::INVALID_HEIGHT;
+		float bestInputDzAbs = std::numeric_limits<float>::max();
+		auto considerCandidate = [&](float pz) {
+			const float inputDz = pz - input.z;
+			if (inputDz < minInputDz || inputDz > maxInputDz) {
+				return;
+			}
+
+			if (!stationaryReplay) {
+				if (bestZ <= PhysicsConstants::INVALID_HEIGHT || pz > bestZ) {
+					bestZ = pz;
+				}
+				return;
+			}
+
+			const float absInputDz = std::fabs(inputDz);
+			const float tieEpsilon = 0.002f;
+			if (bestZ <= PhysicsConstants::INVALID_HEIGHT ||
+				absInputDz + tieEpsilon < bestInputDzAbs ||
+				(std::fabs(absInputDz - bestInputDzAbs) <= tieEpsilon && pz < bestZ)) {
+				bestZ = pz;
+				bestInputDzAbs = absInputDz;
+			}
+		};
+		auto considerProbe = [&](float sampleX, float sampleY) {
+			for (float queryZ : queryHeights) {
+				float pz = SceneQuery::GetGroundZ(
+					input.mapId,
+					sampleX,
+					sampleY,
+					queryZ,
+					PhysicsConstants::STEP_DOWN_HEIGHT);
+				if (!VMAP::IsValidHeight(pz))
+					continue;
+
+				considerCandidate(pz);
+			}
+		};
+
+		for (const auto& o : offsets) {
+			considerProbe(st.x + o[0], st.y + o[1]);
+		}
+
+		// Last resort: if neighborhood probes miss, check exact trusted XY with a
+		// slightly larger downward window to preserve small descending transitions.
+		if (bestZ <= PhysicsConstants::INVALID_HEIGHT) {
+			for (float queryZ : queryHeights) {
+				float inputSupportZ = SceneQuery::GetGroundZ(
+					input.mapId,
+					st.x,
+					st.y,
+					queryZ,
+					PhysicsConstants::STEP_DOWN_HEIGHT);
+				if (!VMAP::IsValidHeight(inputSupportZ))
+					continue;
+
+				const float inputSupportDz = inputSupportZ - input.z;
+				if (inputSupportDz >= -0.45f && inputSupportDz <= maxInputDz) {
+					considerCandidate(inputSupportZ);
 				}
 			}
 		}
+
 		if (bestZ > PhysicsConstants::INVALID_HEIGHT) {
-			float sweepError = std::fabs(st.z - input.z);
-			if (bestErr < sweepError) {
-				st.z = bestZ;
+			if (stationaryReplay) {
+				const float stationaryMaxRise = 0.02f;
+				bestZ = std::min(bestZ, input.z + stationaryMaxRise);
 			}
+			st.z = bestZ;
+			st.isGrounded = true;
+			st.vz = 0.0f;
+			st.fallTime = 0.0f;
+			actualV.z = 0.0f;
+		}
+	}
+
+	// Replay trust guardrail: when we remain grounded on non-walkable support,
+	// keep Z tightly bounded to the captured frame to avoid persistent over-lift.
+	if (trustGroundedReplayInput && st.isGrounded && !isSwimming && !inputAirborneFlag) {
+		const bool nonWalkableSupport =
+			st.groundNormal.z < PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
+		if (nonWalkableSupport) {
+			const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
+			const bool movingReplay = speedSq > 1e-6f;
+			float maxReplayRise = 0.0f;
+			if (movingReplay) {
+				maxReplayRise = 0.02f;
+
+				// Estimate support trend using the sampled support delta between the
+				// replay input XY and the trusted next XY. This captures uphill
+				// transitions more reliably than prevGroundZ when replay trust is active.
+				bool resolvedTrend = false;
+				float supportTrendDz = 0.0f;
+				const float queryBaseZ = std::max(input.z, st.z) + 0.35f;
+				const float currentSupportZ = SceneQuery::GetGroundZ(
+					input.mapId, input.x, input.y, queryBaseZ, PhysicsConstants::STEP_DOWN_HEIGHT);
+				const float nextSupportZ = SceneQuery::GetGroundZ(
+					input.mapId, st.x, st.y, queryBaseZ, PhysicsConstants::STEP_DOWN_HEIGHT);
+				if (VMAP::IsValidHeight(currentSupportZ) && VMAP::IsValidHeight(nextSupportZ)) {
+					const float currentInputDz = currentSupportZ - input.z;
+					const float nextInputDz = nextSupportZ - input.z;
+					if (currentInputDz >= -0.20f && currentInputDz <= 0.20f &&
+						nextInputDz >= -0.45f && nextInputDz <= 0.35f) {
+						supportTrendDz = nextSupportZ - currentSupportZ;
+						resolvedTrend = true;
+					}
+				}
+
+				if (!resolvedTrend) {
+					const float frameDx = input.vx * dt;
+					const float frameDy = input.vy * dt;
+					G3D::Vector3 supportN = st.groundNormal;
+					if (supportN.z < 0.0f) {
+						supportN.x = -supportN.x;
+						supportN.y = -supportN.y;
+						supportN.z = -supportN.z;
+					}
+
+					if (std::fabs(supportN.z) > 1e-4f) {
+						supportTrendDz =
+							-((supportN.x * frameDx) + (supportN.y * frameDy)) / supportN.z;
+						resolvedTrend = true;
+					}
+				}
+
+				if (resolvedTrend) {
+					if (supportTrendDz <= -0.01f) {
+						maxReplayRise = 0.0f;
+					}
+					else if (supportTrendDz >= 0.03f) {
+						maxReplayRise = 0.05f;
+					}
+				}
+			}
+			const float maxReplayDrop = 0.25f;
+			const float minAllowedZ = input.z - maxReplayDrop;
+			const float maxAllowedZ = input.z + maxReplayRise;
+			st.z = std::max(minAllowedZ, std::min(st.z, maxAllowedZ));
+			st.vz = 0.0f;
+			actualV.z = 0.0f;
 		}
 	}
 	// Output

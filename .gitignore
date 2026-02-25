@@ -281,3 +281,7 @@ Exports/Loader/cmake_build_x86/
 Exports/Navigation/cmake_build_x64/
 Exports/Navigation/cmake_build_x86/
 
+
+# Local physics calibration outputs
+logs/
+Exports/Navigation/cmake_ninja_x64/
