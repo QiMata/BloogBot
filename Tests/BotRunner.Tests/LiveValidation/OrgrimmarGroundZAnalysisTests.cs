@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -9,9 +10,9 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Dual-client analysis of ground Z precision at known worst-error positions in Orgrimmar.
-/// Teleports both FG (injected) and BG (headless) clients to each position, reads their
-/// reported Z from snapshots, and compares with the physics engine's computed ground Z.
+/// Dual-client verification of ground Z precision at known worst-error positions in Orgrimmar.
+/// Teleports both FG (injected) and BG (headless) clients to each position, waits for
+/// the post-teleport ground snap, and asserts BG Z matches the physics engine ground.
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~OrgrimmarGroundZAnalysisTests" --configuration Release
 /// </summary>
@@ -23,6 +24,16 @@ public class OrgrimmarGroundZAnalysisTests
     private readonly ITestOutputHelper _output;
 
     private const int MapId = 1; // Kalimdor
+
+    // After teleport, BG Z must be within this tolerance of the physics engine's ground Z (SimZ).
+    // The 0.4-0.5y gap between RecZ (real client) and SimZ (engine) is a known geometry issue
+    // (missing WMO doodad collision); this test validates that the BG client actually falls
+    // to the engine's ground rather than floating at the teleport height.
+    private const float BG_TO_SIM_TOLERANCE = 1.5f;
+
+    // BG must NOT remain at the teleport height. If BG_Z is within this distance of teleZ,
+    // the ground snap failed.
+    private const float TELEPORT_HEIGHT_DEAD_ZONE = 0.5f;
 
     /// <summary>
     /// Worst ground-Z-error positions from physics replay calibration.
@@ -45,7 +56,7 @@ public class OrgrimmarGroundZAnalysisTests
     }
 
     [Fact]
-    public async Task DualClient_OrgrimmarGroundZ_PositionAnalysis()
+    public async Task DualClient_OrgrimmarGroundZ_PostTeleportSnap()
     {
         if (!_bot.IsReady)
         {
@@ -56,17 +67,19 @@ public class OrgrimmarGroundZAnalysisTests
         var bgAccount = _bot.BgAccountName;
         var fgAccount = _bot.FgAccountName;
 
-        _output.WriteLine("=== Orgrimmar Ground Z Dual-Client Analysis ===");
+        _output.WriteLine("=== Orgrimmar Ground Z Post-Teleport Snap Verification ===");
         _output.WriteLine($"BG character: {_bot.BgCharacterName} (account: {bgAccount})");
         _output.WriteLine($"FG character: {_bot.FgCharacterName} (account: {fgAccount})");
         _output.WriteLine("");
 
         bool hasFg = fgAccount != null;
         if (!hasFg)
-            _output.WriteLine("WARNING: No FG client available — running BG-only analysis\n");
+            _output.WriteLine("WARNING: No FG client available — running BG-only verification\n");
 
-        _output.WriteLine($"{"Label",-22} {"ProbeX",10} {"ProbeY",12} {"RecZ",8} {"SimZ",8} {"Gap",6} {"BG_Z",10} {"BG_Err",8} {"FG_Z",10} {"FG_Err",8}");
-        _output.WriteLine(new string('-', 120));
+        _output.WriteLine($"{"Label",-22} {"TeleZ",8} {"SimZ",8} {"BG_Z",10} {"BG-Sim",8} {"FG_Z",10} {"FG-BG",8} {"Result",8}");
+        _output.WriteLine(new string('-', 100));
+
+        var failures = new List<string>();
 
         foreach (var (label, px, py, recZ, simZ) in ProbePositions)
         {
@@ -83,56 +96,62 @@ public class OrgrimmarGroundZAnalysisTests
 
             // Read BG position from snapshot
             float bgZ = float.NaN;
-            float bgX = float.NaN, bgY = float.NaN;
             var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
             var bgPos = bgSnap?.Player?.Unit?.GameObject?.Base?.Position;
             if (bgPos != null)
-            {
-                bgX = bgPos.X;
-                bgY = bgPos.Y;
                 bgZ = bgPos.Z;
-            }
 
             // Read FG position from snapshot
             float fgZ = float.NaN;
-            float fgX = float.NaN, fgY = float.NaN;
             if (hasFg)
             {
                 var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
                 var fgPos = fgSnap?.Player?.Unit?.GameObject?.Base?.Position;
                 if (fgPos != null)
-                {
-                    fgX = fgPos.X;
-                    fgY = fgPos.Y;
                     fgZ = fgPos.Z;
-                }
             }
 
-            float gap = MathF.Abs(recZ - simZ);
-            float bgErr = float.IsNaN(bgZ) ? float.NaN : bgZ - recZ;
-            float fgErr = float.IsNaN(fgZ) ? float.NaN : fgZ - recZ;
+            float bgSimDelta = float.IsNaN(bgZ) ? float.NaN : bgZ - simZ;
+            float fgBgDelta = (!float.IsNaN(bgZ) && !float.IsNaN(fgZ)) ? fgZ - bgZ : float.NaN;
 
-            _output.WriteLine($"{label,-22} {px,10:F3} {py,12:F3} {recZ,8:F3} {simZ,8:F3} {gap,6:F3} {bgZ,10:F3} {bgErr,8:F3} {fgZ,10:F3} {fgErr,8:F3}");
+            // Check assertions
+            bool passed = true;
+            string reason = "OK";
 
-            // Detailed per-position dump
-            _output.WriteLine($"  BG full pos: ({bgX:F3}, {bgY:F3}, {bgZ:F3})");
-            if (hasFg)
-                _output.WriteLine($"  FG full pos: ({fgX:F3}, {fgY:F3}, {fgZ:F3})");
-            if (!float.IsNaN(bgZ) && !float.IsNaN(fgZ))
-                _output.WriteLine($"  FG-BG delta: Z={fgZ - bgZ:F4}");
-            _output.WriteLine("");
+            if (float.IsNaN(bgZ))
+            {
+                passed = false;
+                reason = "NO_BG_POS";
+            }
+            else if (MathF.Abs(bgZ - teleZ) < TELEPORT_HEIGHT_DEAD_ZONE)
+            {
+                passed = false;
+                reason = "NO_SNAP";
+                failures.Add($"{label}: BG stayed at teleport height ({bgZ:F3} ~= teleZ {teleZ:F3}) — ground snap did not fire");
+            }
+            else if (MathF.Abs(bgSimDelta) > BG_TO_SIM_TOLERANCE)
+            {
+                passed = false;
+                reason = "Z_DRIFT";
+                failures.Add($"{label}: BG_Z={bgZ:F3} too far from SimZ={simZ:F3} (delta={bgSimDelta:F3}, tolerance={BG_TO_SIM_TOLERANCE})");
+            }
+
+            _output.WriteLine($"{label,-22} {teleZ,8:F3} {simZ,8:F3} {bgZ,10:F3} {bgSimDelta,8:F3} {fgZ,10:F3} {fgBgDelta,8:F3} {(passed ? "PASS" : reason),8}");
         }
 
-        _output.WriteLine("=== Summary ===");
-        _output.WriteLine("RecZ = Z from original FG recording (gold standard client position)");
-        _output.WriteLine("SimZ = Z from physics engine ground query (0.4-0.5y below RecZ)");
-        _output.WriteLine("BG_Z = Z reported by headless client right now");
-        _output.WriteLine("FG_Z = Z reported by injected client right now");
-        _output.WriteLine("BG_Err / FG_Err = client Z minus RecZ (positive = above, negative = below)");
         _output.WriteLine("");
-        _output.WriteLine("If BG_Z ~= FG_Z ~= RecZ: server position is authoritative and correct.");
-        _output.WriteLine("If BG_Z ~= SimZ (below RecZ): BG client is using our physics engine ground Z.");
-        _output.WriteLine("If FG_Z ~= RecZ (above SimZ): real WoW client has geometry our engine lacks.");
+        if (failures.Count > 0)
+        {
+            _output.WriteLine($"=== FAILURES ({failures.Count}) ===");
+            foreach (var f in failures)
+                _output.WriteLine($"  - {f}");
+        }
+        else
+        {
+            _output.WriteLine("=== ALL POSITIONS PASSED ===");
+        }
+
+        Assert.Empty(failures);
     }
 
     [Fact]

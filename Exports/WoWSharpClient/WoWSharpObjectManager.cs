@@ -573,6 +573,11 @@ namespace WoWSharpClient
             Player.Position.Y = e.PositionY;
             Player.Position.Z = e.PositionZ;
 
+            // Reset movement controller for zone/map change — clears stale continuity
+            // state (prevGroundZ, standingOn, etc.) from the old map and sets
+            // _needsGroundSnap so physics runs at least once to find the ground.
+            _movementController?.Reset();
+
             _worldTimeTracker = new WorldTimeTracker();
             _lastPositionUpdate = _worldTimeTracker.NowMS;
             StartGameLoop();

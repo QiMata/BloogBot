@@ -38,6 +38,11 @@ namespace WoWSharpClient.Movement
         private const float TARGET_WAYPOINT_REFRESH_DIST_2D = 0.35f;
         private const float TARGET_WAYPOINT_REFRESH_Z = 1.0f;
 
+        // Post-teleport ground snap: when true, forces at least one physics step
+        // even when the character is idle (MOVEFLAG_NONE), so gravity applies and
+        // the character snaps to the real ground height after teleport/zone change.
+        private bool _needsGroundSnap = false;
+
         // Network timing
         private uint _lastPacketTime;
         private MovementFlags _lastSentFlags = player.MovementFlags;
@@ -76,7 +81,8 @@ namespace WoWSharpClient.Movement
             }
 
             if (_lastSentFlags == MovementFlags.MOVEFLAG_NONE
-                && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE)
+                && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE
+                && !_needsGroundSnap)
             {
                 return;
             }
@@ -119,6 +125,24 @@ namespace WoWSharpClient.Movement
             ObserveStaleForwardAndRecover(frameDelta, gameTimeMs);
             _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
 
+            // Post-teleport ground snap: physics has run at least once, character is now
+            // falling (MOVEFLAG_FALLINGFAR set) or already on the ground. Clear the flag
+            // and force a heartbeat so the server gets our corrected position.
+            if (_needsGroundSnap)
+            {
+                _needsGroundSnap = false;
+                Log.Information("[MovementController] Post-teleport ground snap: Z={Z:F3} groundZ={GroundZ:F3} flags=0x{Flags:X}",
+                    _player.Position.Z, _prevGroundZ, (uint)_player.MovementFlags);
+
+                // Force a stop packet with the corrected position so the server knows
+                // where we actually landed. If physics set MOVEFLAG_FALLINGFAR, the normal
+                // packet logic below will handle ongoing fall updates.
+                if (_player.MovementFlags == MovementFlags.MOVEFLAG_NONE)
+                {
+                    SendStopPacket(gameTimeMs);
+                }
+            }
+
             // 2. Send network packet if needed
             if (ShouldSendPacket(gameTimeMs))
             {
@@ -159,6 +183,13 @@ namespace WoWSharpClient.Movement
                 Gender = (uint)_player.Gender,
 
                 FrameCounter = (uint)_frameCounter,
+
+                // Transport (boats, zeppelins, elevators)
+                TransportGuid = _player.TransportGuid,
+                TransportOffsetX = _player.TransportOffset.X,
+                TransportOffsetY = _player.TransportOffset.Y,
+                TransportOffsetZ = _player.TransportOffset.Z,
+                TransportOrientation = _player.TransportOrientation,
 
                 // StepV2 continuity inputs
                 PrevGroundZ = _prevGroundZ,
@@ -616,6 +647,10 @@ namespace WoWSharpClient.Movement
             _pendingDepen = Vector3.Zero;
             _standingOnInstanceId = 0;
             _standingOnLocal = Vector3.Zero;
+
+            // After teleport/zone change, force at least one physics step even while idle
+            // so gravity applies and the character snaps to the real ground height.
+            _needsGroundSnap = true;
 
             _currentPath = null;
             _currentWaypointIndex = 0;

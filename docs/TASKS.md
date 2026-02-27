@@ -37,13 +37,18 @@
 29. Mandatory next-file step: after shipping a local `TASKS.md` delta, execute that file's `Next command`; if it targets the next queue file, update that next file in the same session before compaction.
 30. Queue-rotation guard: when queue-tail work is documentation-complete for the pass, reset `Current queue file` to the earliest unresolved queue item and continue one-by-one from there.
 
-## P0 Priority Queue (2026-02-25)
-1. [ ] Complete direct missing-implementation backlog from code scan (section below).
-2. [ ] Keep corpse-run test flow as `.tele name {NAME} Orgrimmar` -> kill -> release -> runback -> reclaim-ready -> resurrect.
-3. [ ] Enforce 10-minute max runtime for corpse-run scenarios with repo-scoped process teardown evidence.
-4. [ ] Replace broad "per-behavior" backlog items with file-level tasks in local `TASKS.md` files.
-5. [ ] Make docs/markdown navigation agent-friendly so Codex and Claude Code can scan structure fast with low context usage.
-6. [ ] Track every sub-`TASKS.md` as an explicit master task and execute one file at a time.
+## P0 Priority Queue (2026-02-27)
+1. [x] `PHYS-MOVE-001` **MovementController teleport/transport/zone awareness.** **DONE 2026-02-27.**
+   - [x] `PHYS-MOVE-001a` Added `_needsGroundSnap` flag to MovementController — bypasses idle-skip after teleport so physics runs at least once to snap to ground. Sends corrected position to server.
+   - [x] `PHYS-MOVE-001b` Added `_movementController?.Reset()` to `EventEmitter_OnLoginVerifyWorld` — clears stale continuity state after zone/map change.
+   - [x] `PHYS-MOVE-001c` Piped transport data (TransportGuid, TransportOffset, TransportOrientation) from WoWUnit into PhysicsInput in RunPhysics().
+   - [x] `PHYS-MOVE-001d` Converted OrgrimmarGroundZAnalysisTests to assertion-based — asserts BG character falls to engine ground (not stuck at teleport height), Z within 1.5y of SimZ.
+2. [ ] Complete direct missing-implementation backlog from code scan (section below).
+3. [ ] Keep corpse-run test flow as `.tele name {NAME} Orgrimmar` -> kill -> release -> runback -> reclaim-ready -> resurrect.
+4. [ ] Enforce 10-minute max runtime for corpse-run scenarios with repo-scoped process teardown evidence.
+5. [ ] Replace broad "per-behavior" backlog items with file-level tasks in local `TASKS.md` files.
+6. [ ] Make docs/markdown navigation agent-friendly so Codex and Claude Code can scan structure fast with low context usage.
+7. [ ] Track every sub-`TASKS.md` as an explicit master task and execute one file at a time.
 
 ## Direct Missing-Implementation Inventory (Code Scan: 2026-02-25)
 
@@ -158,21 +163,16 @@ Status key: `Pending` = needs direct inventory conversion/update, `Synced` = dir
 - [ ] `MASTER-SUB-041` `WWoWBot.AI/TASKS.md` (`Expanded`) - completed: `AI-CORE-001`, `AI-CORE-002`, `AI-CORE-003`, `AI-SEM-001`, `AI-SEM-002`, `AI-TST-001`, `AI-SEC-001`; execute open parity IDs: `AI-PARITY-001`, then `AI-PARITY-CORPSE-001`, then `AI-PARITY-COMBAT-001`, then `AI-PARITY-GATHER-001`.
 
 ## Session Handoff
-- Last updated: 2026-02-27 (WMO doodad collision pipeline session)
+- Last updated: 2026-02-27c (PHYS-MOVE-001 implementation session)
 - Sub-`TASKS.md` coverage check: `41/41` local sub-task files are explicitly tracked in this master file.
-- Current top priority: Doodad pipeline complete. Queue continues to `MASTER-SUB-024`.
+- Current top priority: WMO doodad collision pipeline (plan at `.claude/plans/federated-wandering-brooks.md`).
 - Current queue file: `MASTER-SUB-024` -> `Tests/PathfindingService.Tests/TASKS.md`.
-- Next queue file: `MASTER-SUB-025` -> `Tests/PromptHandlingService.Tests/TASKS.md`.
-- Last delta (2026-02-27): WMO doodad (M2) collision pipeline — full 9-step plan executed:
-  1. WmoDoodadFormat.h: .doodads file format with reader/writer
-  2. StormLib dynamic loading (LoadLibrary/GetProcAddress) for MPQ archive access
-  3. ExtractWmoDoodads export: reads WMO root files from MPQ, extracts MODD/MODN/MODS chunks
-  4. Key fix: WMO chunk FourCC is byte-reversed ("MODS" stored as "SDOM" in file)
-  5. 359 .doodads files extracted (Orgrimmar: 2010 spawns, Ironforge: 3308, Stormwind: 6026)
-  6. SceneCache integration: doodad M2 mesh loading with full transform chain (UnfixCoordSystem -> scale -> quat rotate -> position -> FixCoords -> WMO instance transform -> InternalToWorld)
-  7. FILE_VERSION bumped to 2 (forces scene cache regeneration)
-  8. Finding: Orgrimmar 0.4-0.9y ground Z gap is inherent to WMO geometry, not missing doodads
-  Files: PhysicsTestExports.cpp, SceneCache.cpp, SceneCache.h, VMapManager2.h, WmoDoodadFormat.h (new), NavigationInterop.cs, PhysicsReplayTests.cs
-  Test results: 79 passed, 0 failed, 0 skipped (Debug)
+- Next queue file: `MASTER-SUB-001` -> `BotProfiles/TASKS.md`.
+- Last delta (2026-02-27c): Completed PHYS-MOVE-001 (all 4 sub-tasks):
+  1. `001a`: Added `_needsGroundSnap` flag — bypasses idle-skip in Update() after teleport, runs physics to snap to ground, sends corrected position packet
+  2. `001b`: Added `_movementController?.Reset()` to `EventEmitter_OnLoginVerifyWorld` for zone/map changes
+  3. `001c`: Piped transport data (TransportGuid, TransportOffset XYZ, TransportOrientation) into PhysicsInput in RunPhysics()
+  4. `001d`: Converted OrgrimmarGroundZAnalysisTests to assertion-based (asserts BG falls to engine ground, not stuck at teleport height)
+  Build: 0 errors. Tests: BotRunner.Tests 1106 passed, Nav.Physics 77 passed (2 pre-existing doodad extraction failures).
 - Pass result: `delta shipped`
-- Next command: `cat Tests/PathfindingService.Tests/TASKS.md`
+- Next command: Run the live Orgrimmar dual-client test to verify BG client now snaps to ground after teleport: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~OrgrimmarGroundZAnalysisTests" --logger "console;verbosity=detailed"`
