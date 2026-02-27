@@ -272,6 +272,24 @@ public static partial class NavigationInterop
     [DllImport(NavigationDll, EntryPoint = "GetGroundZ", CallingConvention = CallingConvention.Cdecl)]
     public static extern float GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist);
 
+    /// <summary>
+    /// Diagnostic: bypass scene cache and query VMAP ray + ADT + BIH directly.
+    /// Forces VMAP initialization if not already loaded.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetGroundZBypassCache", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float GetGroundZBypassCache(
+        uint mapId, float x, float y, float z, float maxSearchDist,
+        out float vmapZ, out float adtZ, out float bihZ, out float sceneCacheZ);
+
+    /// <summary>
+    /// Diagnostic: enumerate ALL surfaces (triangles) at (x,y) from scene cache.
+    /// No Z acceptance window filtering — returns all surfaces at any height.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "EnumerateAllSurfacesAt", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int EnumerateAllSurfacesAt(
+        uint mapId, float x, float y,
+        [Out] float[] zValues, [Out] uint[] instanceIds, int maxResults);
+
     // ==========================================================================
     // GEOMETRY QUERY FUNCTIONS (for testing)
     // ==========================================================================

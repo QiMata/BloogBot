@@ -243,6 +243,10 @@ class SceneQuery
         static void SetScenesDir(const std::string& dir) { m_scenesDir = dir; }
         static const std::string& GetScenesDir() { return m_scenesDir; }
 
+        // BIH-based ground Z query: uses AABB overlap against the BIH tree to find
+        // walkable triangles when getHeight's downward ray misses (e.g. WMO interiors).
+        static float GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float y, float z, float maxSearchDist);
+
     private:
         inline static VMAP::VMapManager2* m_vmapManager = nullptr;
         inline static MapLoader* m_mapLoader = nullptr;
@@ -252,7 +256,7 @@ class SceneQuery
         // Per-map scene caches (pre-processed collision geometry)
         inline static std::unordered_map<uint32_t, SceneCache*> m_sceneCaches;
 
-        // BIH-based ground Z query: uses AABB overlap against the BIH tree to find
-        // walkable triangles when getHeight's downward ray misses (e.g. WMO interiors).
-        static float GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float y, float z, float maxSearchDist);
+        // Dynamic object ground Z: vertical ray against DynamicObjectRegistry triangles
+        // (elevators, doors, etc.) that aren't in the pre-cached SceneCache or VMAP data.
+        static float GetDynamicGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist);
 };

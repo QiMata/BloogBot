@@ -20,9 +20,31 @@ namespace PathfindingService.Tests
 
         public PhysicsFixture()
         {
-            // Preflight checks similar to NavigationFixture
+            EnsureDataDir();
             VerifyNavigationDll();
             Physics = new Physics();
+        }
+
+        private static void EnsureDataDir()
+        {
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
+                return;
+
+            var candidates = new[]
+            {
+                AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Debug", "net8.0")),
+                Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Release", "net8.0")),
+            };
+
+            foreach (var dir in candidates)
+            {
+                if (Directory.Exists(Path.Combine(dir, "mmaps")))
+                {
+                    Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dir);
+                    return;
+                }
+            }
         }
 
         private static void VerifyNavigationDll()
@@ -247,6 +269,7 @@ namespace PathfindingService.Tests
         {
             var candidates = new[]
             {
+                Path.Combine(AppContext.BaseDirectory, "Recordings"),
                 Environment.GetEnvironmentVariable("WWOW_RECORDINGS_DIR"),
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BloogBot", "MovementRecordings")
             };

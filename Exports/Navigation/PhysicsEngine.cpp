@@ -736,11 +736,15 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
 
     // Sort candidates:
     // 1) walkable first
-    // 2) higher planeZ first (prefer standing on top of geometry)
+    // 2) closest to preStepZ first (avoids snapping to wrong floor in multi-level areas)
+    //    Previous "highest first" sort caused the sim to lock onto WMO bridges/ramps
+    //    2y above the actual ground when STEP_HEIGHT (2.125y) lifted the capsule above them.
     // 3) earlier TOI as tie-breaker
     std::stable_sort(candidates.begin(), candidates.end(), [&](const GroundCandidate& a, const GroundCandidate& b) {
         if (a.walkable != b.walkable) return a.walkable > b.walkable;
-        if (std::fabs(a.planeZ - b.planeZ) > 1e-4f) return a.planeZ > b.planeZ;
+        float errA = std::fabs(a.planeZ - preStepZ);
+        float errB = std::fabs(b.planeZ - preStepZ);
+        if (std::fabs(errA - errB) > 1e-4f) return errA < errB;
         return a.toi < b.toi;
     });
 
@@ -770,27 +774,41 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
     // the step's vertical face. This overlap is expected geometry — the character is stepping
     // ONTO the higher surface and the face is below their feet.
     // Re-check higher candidates with relaxed tolerance (up to capsule radius).
+    // Limit step-up to 1.5y above preStepZ to avoid snapping to bridges/upper floors.
     if (chosen && undoStepOffset > 0.0f) {
         const float stepUpPenTolerance = radius + 0.05f;
+        const float maxStepUpZ = preStepZ + 1.5f; // reasonable step-up limit
+        const GroundCandidate* stepUpBest = nullptr;
+        float stepUpBestPen = FLT_MAX;
+        int stepUpBestPenCount = 0;
         for (const auto& c : candidates) {
             // Only consider candidates higher than current choice
-            if (c.snapZ <= chosen->snapZ + 0.01f) break; // sorted descending, no more higher
+            if (c.snapZ <= chosen->snapZ + 0.01f) continue; // skip lower/equal
             if (!c.walkable) continue;
+            // Don't promote candidates unreasonably far above the pre-step position
+            if (c.planeZ > maxStepUpZ) continue;
 
             float maxPen = 0.0f; int penCount = 0;
             (void)validateCandidate(c, maxPen, penCount);
             if (maxPen <= stepUpPenTolerance) {
-                chosen = &c;
-                chosenMaxPen = maxPen;
-                chosenPenCount = penCount;
-
-                {
-                    std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
-                    oss << "[DownPass] Step-up: promoted higher candidate z=" << c.snapZ
-                        << " pen=" << maxPen << " (tolerance=" << stepUpPenTolerance << ")";
-                    PHYS_INFO(PHYS_MOVE, oss.str());
+                // Track highest valid step-up candidate (candidates not sorted by height)
+                if (!stepUpBest || c.snapZ > stepUpBest->snapZ) {
+                    stepUpBest = &c;
+                    stepUpBestPen = maxPen;
+                    stepUpBestPenCount = penCount;
                 }
-                break; // highest valid candidate (sorted descending)
+            }
+        }
+        if (stepUpBest) {
+            chosen = stepUpBest;
+            chosenMaxPen = stepUpBestPen;
+            chosenPenCount = stepUpBestPenCount;
+
+            {
+                std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(4);
+                oss << "[DownPass] Step-up: promoted higher candidate z=" << stepUpBest->snapZ
+                    << " pen=" << stepUpBestPen << " (tolerance=" << stepUpPenTolerance << ")";
+                PHYS_INFO(PHYS_MOVE, oss.str());
             }
         }
     }
@@ -1260,8 +1278,13 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
         // Note: ExecuteDownPass should have already undone the step offset,
         // so st.z is at the correct position for falling
         PHYS_INFO(PHYS_MOVE, "[GroundMove] No ground - transitioning to air movement");
-        // Reset vertical velocity to start falling - do NOT preserve any positive vz
-        // that might have been set from previous frame artifacts
+        // The 3-pass sweep already handled horizontal displacement for this frame.
+        // Zero horizontal velocity so ProcessAirMovement only applies vertical (gravity)
+        // and ground collision detection. Without this, ProcessAirMovement adds st.vx*dt
+        // ON TOP of the sweep displacement, causing a velocity feedback loop:
+        // actualV = (sweep + air) / dt → next frame air = actualV*dt → growing each frame.
+        st.vx = 0.0f;
+        st.vy = 0.0f;
         st.vz = -0.1f;
         ProcessAirMovement(input, intent, st, dt, moveSpeed);
     } else {
@@ -1536,6 +1559,11 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	const bool inputFlyingFlag = (input.moveFlags & (MOVEFLAG_FLYING | MOVEFLAG_LEVITATING | MOVEFLAG_HOVER)) != 0;
 	const bool trustInputVel = (input.physicsFlags & PHYSICS_FLAG_TRUST_INPUT_VELOCITY) != 0;
 	const bool trustGroundedReplayInput = trustInputVel && !inputSwimmingFlag && !inputFlyingFlag && !inputAirborneFlag;
+	// When caller provides exact velocity for airborne frames, the trajectory is fully
+	// determined by physics (gravity + provided velocity). Skip overlap recovery and
+	// deferred depenetration to avoid displacing the start position — these corrections
+	// are for runtime stability but introduce error in replay calibration.
+	const bool trustAirborneReplayInput = trustInputVel && inputAirborneFlag;
 	// NOTE (stateless MMO): input flags represent the caller's last-frame state.
 	// We preserve these unless StepV2 simulation detects a real state transition.
 	// We still use queries to *inform* grounding, but we avoid immediately overriding
@@ -1566,7 +1594,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		//
 		// Replay calibration mode (trusted grounded velocity) should derive displacement from
 		// captured frame deltas only, so skip carry-over depen application in that path.
-		if (!trustGroundedReplayInput) {
+		if (!trustGroundedReplayInput && !trustAirborneReplayInput) {
 			G3D::Vector3 pending(input.pendingDepenX, input.pendingDepenY, input.pendingDepenZ);
 			if (pending.magnitude() > 1e-6f) {
 				st.x += pending.x;
@@ -1586,6 +1614,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// MOVEFLAG_SWIMMING is authoritative (set by server) and acts as fallback
 	// when ADT/VMAP liquid data is unavailable (e.g. river without liquid mesh).
 	bool isSwimming = liq.isSwimming || inputSwimmingFlag;
+	// In replay trust mode, movement flags are authoritative for swim state.
+	// The liquid query can falsely detect swimming near the water surface for
+	// frames that are actually airborne (JUMPING out of water). This misroutes
+	// through ProcessSwimMovement which ignores trusted velocity, causing errors.
+	if (trustInputVel && !inputSwimmingFlag && inputAirborneFlag) {
+		isSwimming = false;
+	}
 	if (isSwimming) {
 		st.isGrounded = false;
 	}
@@ -1645,7 +1680,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// bounded iterations before doing any movement sweeps.
 	// ---------------------------------------------------------------------
 	G3D::Vector3 deferredDepen(0, 0, 0);
-	if (!isSwimming && !isFlying && !trustGroundedReplayInput) {
+	if (!isSwimming && !isFlying && !trustGroundedReplayInput && !trustAirborneReplayInput) {
 		// NOTE (PhysX alignment): PhysX can run overlap recovery inside doSweepTest when
 		// mUserParams.mOverlapRecovery is enabled (computeMTD path). We do a simplified,
 		// bounded depenetration pre-pass here because our MMO controller is not based on
@@ -1710,7 +1745,6 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			PHYS_INFO(PHYS_MOVE, oss.str());
 		}
 	}
-
 	// -------------------------------------------------------------------------
 	// PhysX-style initial volume query with FULL direction vector.
 	// -------------------------------------------------------------------------
@@ -1840,7 +1874,19 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	else if (isSwimming) {
 		st.isGrounded = false;
 		st.isSwimming = true;
-		ProcessSwimMovement(input, intent, st, dt, moveSpeed);
+		if (trustInputVel) {
+			// Replay trust: use provided velocity for exact position matching.
+			// ProcessSwimMovement recalculates velocity from intent direction/pitch
+			// which doesn't perfectly match the client's swim movement model.
+			st.vx = input.vx;
+			st.vy = input.vy;
+			st.vz = input.vz;
+			st.x += st.vx * dt;
+			st.y += st.vy * dt;
+			st.z += st.vz * dt;
+		} else {
+			ProcessSwimMovement(input, intent, st, dt, moveSpeed);
+		}
 	}
 	else if (!st.isGrounded) {
 		// Airborne: the character has JUMPING or FALLINGFAR flags set.
@@ -1898,9 +1944,12 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			const bool wasGroundedAfterSweep = st.isGrounded;
 			const bool snapped = TryDownwardStepSnap(input, st, r, h);
 			const float refineBaseZ = std::max(st.z, input.z);
-			const float maxRise = 0.30f;
-			const float maxDrop =
-				(snapped || wasGroundedAfterSweep) ? 0.03f : PhysicsConstants::STEP_DOWN_HEIGHT;
+			// Trust mode shifts XY to the next frame's position, so the ground Z at
+			// (trustedX, trustedY) can differ from the sweep's landing Z. Use generous
+			// tolerances: the "closest to z" selection in GetGroundZ already picks the
+			// right surface among multi-level candidates, so we just need to accept it.
+			const float maxRise = 0.60f;
+			const float maxDrop = 1.0f;
 			float preciseZ = SceneQuery::GetGroundZ(
 				input.mapId, st.x, st.y, refineBaseZ + 0.25f, PhysicsConstants::STEP_DOWN_HEIGHT);
 			if (VMAP::IsValidHeight(preciseZ) &&
@@ -2261,7 +2310,35 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 				}
 			};
 
-			centerZ = sampleProbeZ(st.x, st.y);
+			// Center probe: prefer surface closest to input.z (the recorded position)
+			// rather than highest. The character IS at input.z, so the closest surface
+			// is the correct one. Directional probes still use "highest" for ramp detection.
+			// Add a low query near input.z so GetGroundZ's "closest-to-query" selection
+			// finds the surface at the character's actual level, not a shelf above.
+			{
+				const float centerQueryHeights[4] = {
+					input.z + 0.05f,     // Near recording level (finds surface at character's feet)
+					queryZ,              // preRefineZ + 0.3
+					queryZ + 0.45f,
+					queryZ + 0.90f
+				};
+				float bestCenterDist = FLT_MAX;
+				for (float cqh : centerQueryHeights) {
+					const float candidateZ = SceneQuery::GetGroundZ(
+						input.mapId, st.x, st.y, cqh,
+						PhysicsConstants::STEP_DOWN_HEIGHT);
+					if (!VMAP::IsValidHeight(candidateZ) ||
+						candidateZ > preRefineZ + maxRise ||
+						candidateZ < preRefineZ - maxDrop) {
+						continue;
+					}
+					float dist = std::fabs(candidateZ - input.z);
+					if (centerZ <= PhysicsConstants::INVALID_HEIGHT || dist < bestCenterDist) {
+						centerZ = candidateZ;
+						bestCenterDist = dist;
+					}
+				}
+			}
 			if (centerZ > PhysicsConstants::INVALID_HEIGHT) {
 				centerValid = true;
 			}
@@ -2302,11 +2379,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 				const bool allowCenterLagCompensation = input.prevGroundNz >= 0.97f;
 				if (allowCenterLagCompensation &&
 					bestZ > PhysicsConstants::INVALID_HEIGHT &&
-					bestZ > centerZ) {
+					bestZ > centerZ &&
+					centerZ < input.z - 0.02f) {
 					// In replay trust mode, allow modest uplift to nearby support to avoid
 					// one-frame center-probe lag on ramps/stairs.
-					// Use a capped blend instead of all-or-nothing so large probe gaps can
-					// still contribute a bounded correction.
+					// Only activate when center probe LAGS behind input.z — if center ≈ input.z,
+					// there's no lag to compensate. This prevents lateral WMO probes on flat
+					// ground from inflating chosenZ.
 					const float maxCenterLagCompensation = 0.22f;
 					const float dz = bestZ - centerZ;
 					chosenZ = centerZ + std::min(dz, maxCenterLagCompensation);
@@ -2353,7 +2432,12 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 					maxReplayInputRise = 0.02f;
 				}
 				else if (movingReplay && nearFlatPrevSupport) {
-					maxReplayInputRise = 0.14f;
+					// Only allow large rise when ground is actually ascending.
+					// On flat ground near WMO structures, directional probes can latch onto
+					// nearby edges/overhangs. Without an ascending trend, cap conservatively
+					// to avoid +0.14y false uplift from lateral probe contamination.
+					const float prevDz = input.z - input.prevGroundZ;
+					maxReplayInputRise = (prevDz > 0.01f) ? 0.14f : 0.04f;
 				}
 
 				if (movingReplay && nearFlatPrevSupport && chosenZ <= input.z + 0.005f) {

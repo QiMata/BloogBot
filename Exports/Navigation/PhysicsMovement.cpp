@@ -73,6 +73,15 @@ void ProcessAirMovement(
     if (trustVel)
         return;
 
+    // Skip ground collision detection during the ascending phase of a jump.
+    // When vz0 > 0, the character is moving upward and the capsule naturally
+    // overlaps ground geometry for the first several frames. Snapping to ground
+    // during ascent would kill the jump velocity (vz → 0) immediately.
+    // Ground collision only matters during descent (vz0 <= 0) when the character
+    // is approaching a landing surface.
+    if (vz0 > 1e-4f)
+        return;
+
     // Continuous ground collision detection.
     // Sweep downward with a generous margin to detect nearby walkable ground.
     // However, only snap to ground when the character's predicted position (endPos)
@@ -138,23 +147,33 @@ void ProcessAirMovement(
             }
         }
     } else if (!downHits.empty()) {
-        // Fallback for penetrating walkable contacts (character starts inside geometry)
+        // Fallback for penetrating walkable contacts (character starts inside geometry).
+        // SceneCache overlap normals are oriented by OrientNormalForOverlap: FROM capsule
+        // center TOWARD triangle contact. For ground below the capsule center, the normal
+        // points DOWNWARD (nz < 0). Use fabs(nz) for the walkable check — same as
+        // ApplyVerticalDepenetration — to accept both ground and overhead contacts.
+        // Then pick the contact closest to the character's feet (startPos.z).
         const SceneHit* bestPen = nullptr;
         float bestPenZ = -FLT_MAX;
+        float bestPenErr = FLT_MAX;
         for (const auto& hhit : downHits) {
             if (!hhit.startPenetrating) continue;
-            if (hhit.normal.z < walkableCosMin) continue;
+            if (std::fabs(hhit.normal.z) < walkableCosMin) continue;
             if (hhit.distance > sweepDist + 1e-4f) continue;
 
             bool better = false;
+            float hitErr = std::fabs(hhit.point.z - startPos.z);
             if (!bestPen) better = true;
             else {
+                // Prefer terrain (instanceId==0) over WMO instances
                 if ((hhit.instanceId == 0) && (bestPen->instanceId != 0)) better = true;
-                else if (hhit.point.z > bestPenZ) better = true;
+                else if ((hhit.instanceId != 0) && (bestPen->instanceId == 0)) { /* keep terrain */ }
+                else if (hitErr < bestPenErr) better = true;
             }
             if (better) {
                 bestPen = &hhit;
                 bestPenZ = hhit.point.z;
+                bestPenErr = hitErr;
             }
         }
         if (bestPen) {
@@ -164,10 +183,20 @@ void ProcessAirMovement(
             if (std::fabs(nz) > 1e-6f) {
                 snapZ = pz - ((nx * (st.x - px) + ny * (st.y - py)) / nz);
             }
-            st.z = snapZ;
-            st.vz = 0.0f;
-            st.isGrounded = true;
-            st.groundNormal = bestPen->normal.directionOrZero();
+            // Reject overhead geometry: don't snap to a surface significantly ABOVE the
+            // character's starting position. For a falling character, legitimate ground
+            // is AT or BELOW their feet. WMO walkways/ramps that the capsule's top
+            // hemisphere overlaps can have walkable normals but are 1-2y above feet.
+            // Allow a small tolerance (LANDING_TOLERANCE) for slope precision.
+            if (snapZ <= startPos.z + LANDING_TOLERANCE) {
+                st.z = snapZ;
+                st.vz = 0.0f;
+                st.isGrounded = true;
+                // Store ground normal with consistent upward orientation
+                G3D::Vector3 gn = bestPen->normal.directionOrZero();
+                if (gn.z < 0.0f) { gn.x = -gn.x; gn.y = -gn.y; gn.z = -gn.z; }
+                st.groundNormal = gn;
+            }
         }
     }
 }

@@ -15,6 +15,7 @@ public class NavigationFixture : IDisposable
 
     public NavigationFixture()
     {
+        EnsureDataDir();
         VerifyNavigationDll();
         VerifyNavDataExists();
 
@@ -84,6 +85,32 @@ public class NavigationFixture : IDisposable
                 $"No .mmtile files found in: {mmapsPath}\n" +
                 "The mmaps directory exists but appears to be empty.\n" +
                 "Run setup.ps1 to provision navigation data.");
+        }
+    }
+
+    /// <summary>
+    /// Auto-discovers WWOW_DATA_DIR from the Bot build output directory
+    /// (same logic as Navigation.Physics.Tests.PhysicsEngineFixture).
+    /// </summary>
+    private static void EnsureDataDir()
+    {
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
+            return;
+
+        var candidates = new[]
+        {
+            AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Debug", "net8.0")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Release", "net8.0")),
+        };
+
+        foreach (var dir in candidates)
+        {
+            if (Directory.Exists(Path.Combine(dir, "mmaps")))
+            {
+                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dir);
+                return;
+            }
         }
     }
 

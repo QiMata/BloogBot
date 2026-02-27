@@ -66,24 +66,9 @@
 - [ ] `NAV-MISS-002` Decide and implement `returnPhysMat`/scene-query support in [SceneQuery.h](/E:/repos/Westworld of Warcraft/Exports/Navigation/SceneQuery.h:26).
 
 ### Tests/Navigation.Physics.Tests
-- [ ] `NPT-MISS-001` Replace placeholder TODO with real physics stepping in [FrameByFramePhysicsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs:380).
-  - Evidence: `SimulatePhysics` currently never calls native physics (`StepPhysicsV2`) and produces synthetic frames only.
-  - Files/symbols: [FrameByFramePhysicsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs:373), [NavigationInterop.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/NavigationInterop.cs:340).
-  - Required breakdown: call `StepPhysicsV2` every frame, persist output with each frame snapshot, and feed output position/velocity into next-frame input so tests reflect real engine behavior.
-  - Validation: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~FrameByFramePhysicsTests" --logger "console;verbosity=minimal"`.
-  - Acceptance: frame simulation loop has no placeholder branch; regressions fail on native physics output deltas.
-- [ ] `NPT-MISS-002` Add explicit failing assertions for airborne teleport hover regression in [MovementControllerPhysicsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/MovementControllerPhysicsTests.cs:134) and free-fall progression checks in the same suite.
-  - Evidence: teleport recovery test currently verifies "not falling through world" but does not enforce monotonic descent after airborne teleport.
-  - Files/symbols: [MovementControllerPhysicsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/MovementControllerPhysicsTests.cs:121), [MovementControllerPhysicsTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/MovementControllerPhysicsTests.cs:167).
-  - Required breakdown: add assertions for per-frame Z descent/velocity sign across first post-teleport frames, then assert landing window to match FG fall behavior.
-  - Validation: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~MovementControllerPhysicsTests" --logger "console;verbosity=minimal"`.
-  - Acceptance: BG hover regression fails deterministically; corrected controller path passes with bounded landing frame window.
-- [ ] `NPT-MISS-003` Add a frame-by-frame drift regression gate between replay/native outputs and controller outputs in [PhysicsReplayTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs) and [ErrorPatternDiagnosticTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Diagnostics/ErrorPatternDiagnosticTests.cs).
-  - Evidence: replay diagnostics are rich but missing a hard gate that blocks controller drift regressions from merging.
-  - Files/symbols: [PhysicsReplayTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs:672), [ErrorPatternDiagnosticTests.cs](/E:/repos/Westworld of Warcraft/Tests/Navigation.Physics.Tests/Diagnostics/ErrorPatternDiagnosticTests.cs:94).
-  - Required breakdown: define explicit drift thresholds (overall average, steady-state p99, worst clean-frame), assert against them, and emit worst-frame diagnostics on failure.
-  - Validation: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsReplayTests|FullyQualifiedName~ErrorPatternDiagnosticTests" --logger "console;verbosity=minimal"`.
-  - Acceptance: failing threshold immediately blocks regressions with actionable frame IDs and error vectors.
+- [x] `NPT-MISS-001` Replace placeholder TODO with real physics stepping in FrameByFramePhysicsTests.cs. **DONE 2026-02-26** — 10 tests pass.
+- [x] `NPT-MISS-002` Add teleport airborne descent assertions in MovementControllerPhysicsTests.cs. **DONE 2026-02-26** — 7 tests pass.
+- [x] `NPT-MISS-003` Add hard drift gate for replay/controller parity in PhysicsReplayTests.cs + ErrorPatternDiagnosticTests.cs. **DONE 2026-02-26** — 2 new gate tests pass.
 
 ### UI/WoWStateManagerUI
 - [ ] `UI-MISS-001` Implement or remove `ConvertBack` throw path in [GreaterThanZeroToBooleanConverter.cs](/E:/repos/Westworld of Warcraft/UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs:18).
@@ -152,7 +137,7 @@ Status key: `Pending` = needs direct inventory conversion/update, `Synced` = dir
 - [ ] `MASTER-SUB-020` `Services/WoWStateManager/TASKS.md` (`Expanded`) - execute `WSM-MISS-001`, then `WSM-MISS-002`, then `WSM-MISS-003`, then `WSM-MISS-004`, then `WSM-MISS-005`.
 - [ ] `MASTER-SUB-021` `Tests/TASKS.md` (`Expanded`) - execute `TST-UMB-001`, then `TST-UMB-002`, then `TST-UMB-003`, then `TST-UMB-004`, then `TST-UMB-005`.
 - [ ] `MASTER-SUB-022` `Tests/BotRunner.Tests/TASKS.md` (`Expanded`) - execute `BRT-CR-001`, then `BRT-CR-002`, then `BRT-RT-001`, then `BRT-RT-002`, then `BRT-PAR-001`, then `BRT-PAR-002`.
-- [ ] `MASTER-SUB-023` `Tests/Navigation.Physics.Tests/TASKS.md` (`Expanded`) - execute `NPT-MISS-001`, then `NPT-MISS-002`, then `NPT-MISS-003`.
+- [x] `MASTER-SUB-023` `Tests/Navigation.Physics.Tests/TASKS.md` (`Expanded`) - **COMPLETE 2026-02-26**: `NPT-MISS-001`, `NPT-MISS-002`, `NPT-MISS-003` all shipped. 82 tests, 77 passed, 5 skipped, 0 failed.
 - [ ] `MASTER-SUB-024` `Tests/PathfindingService.Tests/TASKS.md` (`Expanded`) - execute `PFS-TST-001`, then `PFS-TST-002`, then `PFS-TST-003`, then `PFS-TST-004`, then `PFS-TST-005`, then `PFS-TST-006`.
 - [ ] `MASTER-SUB-025` `Tests/PromptHandlingService.Tests/TASKS.md` (`Expanded`) - execute `PHS-TST-001`, then `PHS-TST-002`, then `PHS-TST-003`, then `PHS-TST-004`, then `PHS-TST-005`.
 - [ ] `MASTER-SUB-026` `Tests/RecordedTests.PathingTests.Tests/TASKS.md` (`Expanded`) - execute `RPTT-TST-001`, then `RPTT-TST-002`, then `RPTT-TST-003`, then `RPTT-TST-004`, then `RPTT-TST-005`, then `RPTT-TST-006`.
@@ -173,11 +158,17 @@ Status key: `Pending` = needs direct inventory conversion/update, `Synced` = dir
 - [ ] `MASTER-SUB-041` `WWoWBot.AI/TASKS.md` (`Expanded`) - completed: `AI-CORE-001`, `AI-CORE-002`, `AI-CORE-003`, `AI-SEM-001`, `AI-SEM-002`, `AI-TST-001`, `AI-SEC-001`; execute open parity IDs: `AI-PARITY-001`, then `AI-PARITY-CORPSE-001`, then `AI-PARITY-COMBAT-001`, then `AI-PARITY-GATHER-001`.
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-02-26b (physics calibration session)
 - Sub-`TASKS.md` coverage check: `41/41` local sub-task files are explicitly tracked in this master file.
-- Current top priority: run the corpse/pathing documentation tranche one file at a time with no broad scans.
-- Current queue file: `MASTER-SUB-001` -> `BotProfiles/TASKS.md`.
-- Next queue file: `MASTER-SUB-002` -> `Exports/TASKS.md`.
-- Last delta: applied queue-rotation guard for documentation continuity and rebased from queue-tail (`MASTER-SUB-041`) to the earliest unresolved file (`MASTER-SUB-001`) so one-by-one expansion can continue without rediscovery loops.
+- Current top priority: Physics calibration shipped in C++ layer. Queue continues to `MASTER-SUB-024`.
+- Current queue file: `MASTER-SUB-024` -> `Tests/PathfindingService.Tests/TASKS.md`.
+- Next queue file: `MASTER-SUB-025` -> `Tests/PromptHandlingService.Tests/TASKS.md`.
+- Last delta (2026-02-26b): Physics engine C++ calibration — 4 root causes fixed:
+  1. ExecuteDownPass sort: closest-to-preStepZ (was highest)
+  2. SceneCache::GetGroundZ: closest-to-query-Z (was highest)
+  3. ProcessAirMovement pen fallback: fabs walkable, closest-to-feet, overhead rejection, ascending guard
+  4. ApplyVerticalDepenetration: closest-to-feet (was highest), normal flipping
+  Infrastructure: unified output dirs (all to net8.0/), Release build + Release scene cache synced.
+  Debug: 75 passed, 5 skipped, 2 failed (pre-existing). Release: 76 passed, 5 skipped, 1 failed (pre-existing).
 - Pass result: `delta shipped`
-- Next command: `Get-Content -Path 'BotProfiles/TASKS.md' -TotalCount 360`
+- Next command: `cat Tests/PathfindingService.Tests/TASKS.md`

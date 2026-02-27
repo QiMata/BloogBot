@@ -482,7 +482,29 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
 
     // Scene cache fast path: pre-processed triangles with spatial index
     if (auto* cache = GetSceneCache(mapId))
-        return cache->GetGroundZ(x, y, z, maxSearchDist);
+    {
+        float sceneZ = cache->GetGroundZ(x, y, z, maxSearchDist);
+
+        // Also check dynamic objects (elevators, doors) — their meshes
+        // aren't in the pre-cached scene file.
+        float dynZ = GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
+
+        // If only one source has a valid result, return it
+        if (dynZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+            return sceneZ;
+        if (sceneZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+            return dynZ;
+
+        // Both valid — pick closest to query Z within acceptance window
+        float zMax = z + 0.5f;
+        float zMin = z - maxSearchDist;
+        bool sceneOk = (sceneZ >= zMin && sceneZ <= zMax);
+        bool dynOk   = (dynZ >= zMin && dynZ <= zMax);
+        if (sceneOk && dynOk)
+            return (std::fabs(sceneZ - z) <= std::fabs(dynZ - z)) ? sceneZ : dynZ;
+        if (dynOk) return dynZ;
+        return sceneZ;
+    }
 
     // Collect candidate ground heights from all sources, then pick the one
     // closest to z. "Closest to z" correctly handles:
@@ -533,6 +555,10 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
     consider(vmapZ);
     consider(adtZ);
     consider(bihZ);
+
+    // 4. Dynamic objects (elevators, doors) — not in static VMAP/ADT data
+    float dynZ = GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
+    consider(dynZ);
 
     return bestZ;
 }
@@ -667,6 +693,58 @@ float SceneQuery::GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float
         }
     }
 
+    return bestZ;
+}
+
+float SceneQuery::GetDynamicGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist)
+{
+    auto* dynReg = DynamicObjectRegistry::Instance();
+    if (!dynReg) return PhysicsConstants::INVALID_HEIGHT;
+
+    // Build a thin vertical column AABB at (x,y) for broad-phase filtering
+    float zMin = z - maxSearchDist;
+    float zMax = z + 0.5f;
+    const float xyPad = 0.01f;
+    G3D::AABox column(
+        G3D::Vector3(x - xyPad, y - xyPad, zMin),
+        G3D::Vector3(x + xyPad, y + xyPad, zMax));
+
+    std::vector<CapsuleCollision::Triangle> dynTris;
+    dynReg->QueryTriangles(mapId, column, dynTris);
+    if (dynTris.empty()) return PhysicsConstants::INVALID_HEIGHT;
+
+    // Vertical ray: find best (highest) Z at (x,y) using barycentric interpolation
+    // Same math as SceneCache::GetGroundZ
+    float bestZ = PhysicsConstants::INVALID_HEIGHT;
+    for (const auto& tri : dynTris)
+    {
+        // Quick XY AABB reject
+        float txMin = std::min({tri.a.x, tri.b.x, tri.c.x});
+        float txMax = std::max({tri.a.x, tri.b.x, tri.c.x});
+        float tyMin = std::min({tri.a.y, tri.b.y, tri.c.y});
+        float tyMax = std::max({tri.a.y, tri.b.y, tri.c.y});
+        if (x < txMin || x > txMax || y < tyMin || y > tyMax) continue;
+
+        // Barycentric test: is (x,y) inside triangle XY projection?
+        float v0x = tri.c.x - tri.a.x, v0y = tri.c.y - tri.a.y;
+        float v1x = tri.b.x - tri.a.x, v1y = tri.b.y - tri.a.y;
+        float v2x = x - tri.a.x,       v2y = y - tri.a.y;
+        float d00 = v0x * v0x + v0y * v0y;
+        float d01 = v0x * v1x + v0y * v1y;
+        float d02 = v0x * v2x + v0y * v2y;
+        float d11 = v1x * v1x + v1y * v1y;
+        float d12 = v1x * v2x + v1y * v2y;
+        float denom = d00 * d11 - d01 * d01;
+        if (std::fabs(denom) < 1e-12f) continue;
+        float invDenom = 1.0f / denom;
+        float u = (d11 * d02 - d01 * d12) * invDenom;
+        float v = (d00 * d12 - d01 * d02) * invDenom;
+        if (u < -1e-6f || v < -1e-6f || (u + v) > 1.0f + 1e-6f) continue;
+
+        float triZ = tri.a.z + u * (tri.c.z - tri.a.z) + v * (tri.b.z - tri.a.z);
+        if (triZ >= zMin && triZ <= zMax && triZ > bestZ)
+            bestZ = triZ;
+    }
     return bestZ;
 }
 

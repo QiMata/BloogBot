@@ -27,10 +27,11 @@ public class MovementControllerPhysicsTests
     private readonly PhysicsEngineFixture _fixture;
     private readonly ITestOutputHelper _output;
 
-    // Valley of Trials spawn point (Kalimdor, map 1)
-    private const float SpawnX = -618.518f;
-    private const float SpawnY = -4251.67f;
-    private const float SpawnZ = 38.718f;
+    // Orgrimmar - Valley of Strength (Kalimdor, map 1)
+    // Confirmed working with scene cache data in PhysicsEngineTests.StepPhysics_IdleExpectations
+    private const float SpawnX = 1629.36f;
+    private const float SpawnY = -4373.38f;
+    private const float SpawnZ = 31.26f;
     private const uint MapId = 1; // Kalimdor
 
     public MovementControllerPhysicsTests(PhysicsEngineFixture fixture, ITestOutputHelper output)
@@ -95,7 +96,18 @@ public class MovementControllerPhysicsTests
         {
             if (forceFlagsEachFrame.HasValue)
             {
-                player.MovementFlags = forceFlagsEachFrame.Value;
+                // Preserve physics state flags (JUMPING, FALLINGFAR, SWIMMING, etc.)
+                // while forcing intent flags (FORWARD, BACKWARD, STRAFE, etc.).
+                // This matches production behavior where bot logic uses |= for intent
+                // and MovementController merges physics state via ApplyPhysicsResult.
+                const MovementFlags physicsState =
+                    MovementFlags.MOVEFLAG_JUMPING |
+                    MovementFlags.MOVEFLAG_SWIMMING |
+                    MovementFlags.MOVEFLAG_FLYING |
+                    MovementFlags.MOVEFLAG_LEVITATING |
+                    MovementFlags.MOVEFLAG_FALLINGFAR;
+                var existingPhysics = player.MovementFlags & physicsState;
+                player.MovementFlags = forceFlagsEachFrame.Value | existingPhysics;
             }
 
             float prevZ = player.Position.Z;
@@ -199,7 +211,7 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-        // Start 5 units above ground at Valley of Trials spawn
+        // Start 5 units above ground at Orgrimmar spawn
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ + 5.0f);
         float startZ = player.Position.Z;
 
@@ -224,21 +236,37 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-        // Start at Valley of Trials facing east (facing = 0)
+        // Start at Orgrimmar facing east (facing = 0)
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
         var startPos = player.Position;
 
         // Move forward for 3 seconds (60 frames x 50ms)
-        var _ = RunFramesWithTrace(
+        var trace = RunFramesWithTrace(
             controller,
             player,
             frameCount: 60,
             forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(Forward_TraversesSlope), trace);
 
         // Should have moved ~21 yards forward (7.0 RunSpeed x 3s)
         float horizontalDist = MathF.Sqrt(
             MathF.Pow(player.Position.X - startPos.X, 2) +
             MathF.Pow(player.Position.Y - startPos.Y, 2));
+
+        _output.WriteLine($"Forward: startPos=({startPos.X:F3},{startPos.Y:F3},{startPos.Z:F3}) endPos=({player.Position.X:F3},{player.Position.Y:F3},{player.Position.Z:F3}) horizDist={horizontalDist:F3}");
+        // Per-frame horizontal displacement
+        float prevX = startPos.X, prevY = startPos.Y;
+        for (int i = 0; i < trace.Count; i++)
+        {
+            float fdx = trace[i].X - prevX;
+            float fdy = trace[i].Y - prevY;
+            float fd = MathF.Sqrt(fdx * fdx + fdy * fdy);
+            if (i < 5 || i >= trace.Count - 3 || fd > 1.0f)
+                _output.WriteLine($"  f={i} dXY={fd:F4} cumX={trace[i].X - startPos.X:F3} flags=0x{(uint)trace[i].Flags:X8}");
+            prevX = trace[i].X;
+            prevY = trace[i].Y;
+        }
+
         Assert.InRange(horizontalDist, 10f, 30f);
 
         // Z should be on valid terrain (not falling through world).
@@ -304,7 +332,7 @@ public class MovementControllerPhysicsTests
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
 
-        // Start at Valley of Trials facing north (facing = 0)
+        // Start at Orgrimmar facing north (facing = 0)
         var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ, facing: 0f);
         var startPos = player.Position;
 
@@ -371,5 +399,83 @@ public class MovementControllerPhysicsTests
             $"Expected at least 3y descent from {startZ:F3}, actual drop={drop:F3}. {Summarize(trace)}");
         Assert.True(minGap <= 1.75f,
             $"Expected to settle near local ground (gap <= 1.75y), min gap was {minGap:F3}. {Summarize(trace)}");
+    }
+
+    /// <summary>
+    /// NPT-MISS-002: Validates that a character placed above terrain after a teleport
+    /// actually descends frame-by-frame (catches "hover" regression where Z stays constant).
+    /// Asserts per-frame descent trend during initial frames and eventual ground contact.
+    /// </summary>
+    [Fact]
+    public void TeleportAirborne_DescentTrend_ZDecreasesPerFrame()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Start at valid ground, run a few frames to establish baseline state.
+        var (controller, player, _) = CreateController(SpawnX, SpawnY, SpawnZ);
+        _ = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 5,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+
+        // Teleport: place character 20y above known ground (triggers teleport detection).
+        float teleX = SpawnX + 150f;
+        float teleY = SpawnY;
+        float groundZ = ProbeGroundZ(MapId, teleX, teleY, SpawnZ + 40f);
+        if (float.IsNaN(groundZ))
+        {
+            groundZ = SpawnZ;
+        }
+        float teleZ = groundZ + 20f;
+
+        player.Position = new Position(teleX, teleY, teleZ);
+        _output.WriteLine($"Teleport: ({teleX:F1}, {teleY:F1}, {teleZ:F1}), ground={groundZ:F3}");
+
+        // Run 60 frames (3s) — enough for gravity to pull 20y fall.
+        var trace = RunFramesWithTrace(
+            controller,
+            player,
+            frameCount: 60,
+            startTimeMs: 2000,
+            forceFlagsEachFrame: MovementFlags.MOVEFLAG_FORWARD);
+        WriteFrameTrace(nameof(TeleportAirborne_DescentTrend_ZDecreasesPerFrame), trace);
+
+        // --- Assertion 1: Per-frame descent trend in first 10 frames ---
+        // Z should decrease (or stay same due to ground snap) on most early frames.
+        // A "hover" regression would show Z constant or increasing.
+        int descentFrames = 0;
+        const int checkWindow = 10;
+        int windowEnd = Math.Min(checkWindow, trace.Count - 1);
+
+        for (int i = 1; i <= windowEnd; i++)
+        {
+            float dz = trace[i].Z - trace[i - 1].Z;
+            _output.WriteLine($"  descent check f={i}: dZ={dz:+0.000;-0.000;0.000}");
+            if (dz < -0.01f)
+            {
+                descentFrames++;
+            }
+        }
+
+        Assert.True(descentFrames >= windowEnd / 2,
+            $"Expected at least {windowEnd / 2} descending frames in first {windowEnd}, " +
+            $"got {descentFrames}. Possible hover regression. {Summarize(trace)}");
+
+        // --- Assertion 2: Total descent is significant ---
+        float totalDrop = trace[0].Z - trace[windowEnd].Z;
+        Assert.True(totalDrop > 1.0f,
+            $"Expected > 1y total descent in first {windowEnd} frames, got {totalDrop:F3}y. " +
+            $"Hover regression? {Summarize(trace)}");
+
+        // --- Assertion 3: Character eventually reaches ground ---
+        float minGap = MinAbsGroundGap(trace);
+        Assert.True(minGap <= 2.5f,
+            $"Expected landing (gap <= 2.5y) within 60 frames, " +
+            $"best gap was {minGap:F3}y. {Summarize(trace)}");
+
+        // --- Assertion 4: No through-world failure ---
+        Assert.True(player.Position.Z > -50f,
+            $"Player fell through world: Z={player.Position.Z:F1}");
     }
 }

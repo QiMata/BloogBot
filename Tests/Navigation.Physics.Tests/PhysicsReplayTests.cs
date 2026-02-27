@@ -135,6 +135,72 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
     }
 
     // ==========================================================================
+    // AGGREGATE DRIFT GATES (NPT-MISS-003)
+    // ==========================================================================
+
+    /// <summary>
+    /// NPT-MISS-003: Hard regression gate across ALL recordings.
+    /// Computes aggregate clean-frame metrics and fails if any threshold is exceeded.
+    /// Excludes recording artifacts and SPLINE_ELEVATION transitions.
+    /// Reports top offenders with recording name, frame index, and XYZ error vector.
+    /// </summary>
+    [Fact]
+    public void AggregateDriftGate_AllRecordings_CleanFramesWithinThresholds()
+    {
+        var allResults = _fixture.ReplayCache.GetOrReplayAll(_output, _fixture.IsInitialized);
+        if (allResults.Count == 0) { _output.WriteLine("SKIP: No recordings found or engine not initialized"); return; }
+
+        // Collect clean frames from all recordings (exclude artifacts + SPLINE_ELEVATION)
+        var allClean = new List<CalibrationResult.FrameDetail>();
+        foreach (var (name, _, result) in allResults)
+        {
+            var clean = result.CleanFrames;
+            _output.WriteLine($"  {name}: {clean.Count} clean / {result.FrameCount} total " +
+                $"(artifacts={result.ArtifactCount}, splineElev={result.SplineElevationCount})");
+            allClean.AddRange(clean);
+        }
+
+        Assert.True(allClean.Count > 0, "No clean frames across all recordings — check data availability");
+
+        // Compute aggregate metrics
+        var sorted = allClean.Select(f => f.PosError).OrderBy(e => e).ToList();
+        float avgError = allClean.Average(f => f.PosError);
+        int p99Idx = Math.Clamp((int)(sorted.Count * 99 / 100.0), 0, sorted.Count - 1);
+        float p99Error = sorted[p99Idx];
+        float worstError = sorted[^1];
+
+        _output.WriteLine($"\n=== AGGREGATE CLEAN METRICS (n={allClean.Count}) ===");
+        _output.WriteLine($"  avg={avgError:F4}y  p99={p99Error:F4}y  worst={worstError:F4}y");
+        _output.WriteLine($"  Thresholds: avg<{Tolerances.AggregateCleanAvg}  p99<{Tolerances.AggregateCleanP99}  worst<{Tolerances.WorstCleanFrame}");
+
+        // Report top 10 worst clean frames for triage
+        var top10 = allClean.OrderByDescending(f => f.PosError).Take(10).ToList();
+        _output.WriteLine($"\n  Top 10 worst clean frames:");
+        foreach (var f in top10)
+        {
+            _output.WriteLine(
+                $"    [{f.RecordingName}] frame={f.Frame,5} err={f.PosError:F3}y " +
+                $"dX={f.ErrorX:+0.000;-0.000} dY={f.ErrorY:+0.000;-0.000} dZ={f.ErrorZ:+0.000;-0.000} " +
+                $"mode={f.MovementMode,-10} flags=0x{f.MoveFlags:X8}");
+        }
+
+        // Hard assertions — fail the build on drift regression
+        Assert.True(avgError < Tolerances.AggregateCleanAvg,
+            $"Aggregate clean-frame avg error {avgError:F4}y exceeds {Tolerances.AggregateCleanAvg}y threshold. " +
+            $"Worst: [{top10[0].RecordingName}] frame {top10[0].Frame} err={top10[0].PosError:F3}y");
+
+        Assert.True(p99Error < Tolerances.AggregateCleanP99,
+            $"Aggregate clean-frame P99 error {p99Error:F4}y exceeds {Tolerances.AggregateCleanP99}y threshold. " +
+            $"Worst: [{top10[0].RecordingName}] frame {top10[0].Frame} err={top10[0].PosError:F3}y");
+
+        Assert.True(worstError < Tolerances.WorstCleanFrame,
+            $"Worst clean frame error {worstError:F4}y exceeds {Tolerances.WorstCleanFrame}y threshold. " +
+            $"Frame: [{top10[0].RecordingName}] frame {top10[0].Frame} " +
+            $"sim=({top10[0].SimX:F3},{top10[0].SimY:F3},{top10[0].SimZ:F3}) " +
+            $"rec=({top10[0].RecX:F3},{top10[0].RecY:F3},{top10[0].RecZ:F3})");
+    }
+
+    // ==========================================================================
     // TRANSITION ANALYSIS
     // ==========================================================================
 
@@ -245,6 +311,22 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
             _output.WriteLine($"    raw=0x{f.RawMoveFlags:X8}→0x{f.RawNextMoveFlags:X8}  dt={f.Dt:F4}  groundZ={f.EngineGroundZ:F3}");
             _output.WriteLine($"    sim=({f.SimX:F3},{f.SimY:F3},{f.SimZ:F3}) rec=({f.RecX:F3},{f.RecY:F3},{f.RecZ:F3}) " +
                 $"dX={f.ErrorX:F3} dY={f.ErrorY:F3} dZ={f.ErrorZ:F3}");
+        }
+
+        // Top 10 worst per mode (non-transport)
+        foreach (var mode in new[] { "ground", "air", "swim", "transition" })
+        {
+            var modeFrames = cleanFrames.Where(f => f.MovementMode == mode).OrderByDescending(f => f.PosError).Take(10).ToList();
+            if (modeFrames.Count == 0) continue;
+            _output.WriteLine($"\n  === TOP 10 WORST CLEAN {mode.ToUpper()} FRAMES ===");
+            foreach (var f in modeFrames)
+            {
+                _output.WriteLine($"  [{f.RecordingName}] frame={f.Frame,5} err={f.PosError:F3}y hErr={f.HorizError:F3}y vErr={f.VertError:F3}y " +
+                    $"trans={f.Transition,-16}");
+                _output.WriteLine($"    raw=0x{f.RawMoveFlags:X8}→0x{f.RawNextMoveFlags:X8}  dt={f.Dt:F4}  groundZ={f.EngineGroundZ:F3}");
+                _output.WriteLine($"    sim=({f.SimX:F3},{f.SimY:F3},{f.SimZ:F3}) rec=({f.RecX:F3},{f.RecY:F3},{f.RecZ:F3}) " +
+                    $"dX={f.ErrorX:F3} dY={f.ErrorY:F3} dZ={f.ErrorZ:F3}");
+            }
         }
 
         // Verify landing frames are within tolerance
@@ -638,15 +720,16 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         if (!_fixture.IsInitialized) { _output.WriteLine("SKIP: Not initialized"); return; }
         TryPreloadMap(1, _output); // Kalimdor
 
-        // Worst SS ground frames from RunningJumps recording (all map 1)
+        // Worst ground frames from TransitionAnalysis — engine groundZ is 0.3-0.52y BELOW recording
+        // All Orgrimmar (map 1), all pure vertical error, all negative dZ (sim below rec)
         var probePositions = new (int frame, float recX, float recY, float recZ, float simZ)[]
         {
-            (1124, 1647.234f, -4359.724f, 21.845f, 23.005f),  // sim 1.16 ABOVE
-            (2143, 1669.694f, -4361.419f, 29.903f, 28.902f),  // sim 1.0 BELOW
-            (1396, 1651.655f, -4370.454f, 22.791f, 21.882f),  // sim 0.91 BELOW
-            (432,  1632.217f, -4371.956f, 30.447f, 29.550f),  // sim 0.90 BELOW
-            (886,  1629.926f, -4376.795f, 30.379f, 29.494f),  // sim 0.88 BELOW
-            (2196, 1670.547f, -4358.827f, 29.964f, 29.105f),  // sim 0.86 BELOW
+            (1727, 1637.264f, -4374.140f, 29.369f, 28.850f),  // sim 0.52 BELOW (worst)
+            (1785, 1637.267f, -4373.962f, 29.359f, 28.851f),  // sim 0.51 BELOW
+            (2227, 1671.257f, -4356.295f, 29.856f, 29.443f),  // sim 0.41 BELOW
+            (998,  1651.753f, -4374.463f, 24.705f, 24.299f),  // sim 0.41 BELOW
+            (1425, 1660.734f, -4332.938f, 61.669f, 61.266f),  // sim 0.40 BELOW
+            (839,  1625.772f, -4380.119f, 29.320f, 28.921f),  // sim 0.40 BELOW
         };
 
         foreach (var (frame, recX, recY, recZ, simZ) in probePositions)
@@ -662,6 +745,49 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
             // ADT terrain
             float adtZ = NavigationInterop.GetTerrainHeight(1, recX, recY);
             _output.WriteLine($"  ADT terrain = {adtZ:F4}");
+        }
+    }
+
+    [Fact]
+    public void GroundZ_SceneCacheVsVmap_Diagnostic()
+    {
+        if (!_fixture.IsInitialized) { _output.WriteLine("SKIP: Not initialized"); return; }
+        TryPreloadMap(1, _output); // Kalimdor
+
+        // Worst ground frames from replay — engine groundZ is 0.4-0.9y BELOW recording
+        var probePositions = new (int frame, float recX, float recY, float recZ, float simZ)[]
+        {
+            (1727, 1637.264f, -4374.140f, 29.369f, 28.850f),
+            (2227, 1671.257f, -4356.295f, 29.856f, 29.443f),
+            (998,  1651.753f, -4374.463f, 24.705f, 24.299f),
+            (1425, 1660.734f, -4332.938f, 61.669f, 61.266f),
+            (839,  1625.772f, -4380.119f, 29.320f, 28.921f),
+        };
+
+        _output.WriteLine("Comparing scene cache vs raw VMAP getHeight at worst-error positions:");
+        _output.WriteLine("(VMAP init may take 30-60s on first call)\n");
+
+        foreach (var (frame, recX, recY, recZ, simZ) in probePositions)
+        {
+            // Query from recorded Z and recorded Z + 2 (MaNGOS style)
+            foreach (float qz in new[] { recZ, recZ + 2.0f })
+            {
+                float bestZ = NavigationInterop.GetGroundZBypassCache(
+                    1, recX, recY, qz, 10.0f,
+                    out float vmapZ, out float adtZ, out float bihZ, out float sceneCacheZ);
+
+                _output.WriteLine($"Frame {frame} (qz={qz:F2}): scene={sceneCacheZ:F3} vmap={vmapZ:F3} adt={adtZ:F3} bih={bihZ:F3} best={bestZ:F3} rec={recZ:F3} gap={MathF.Abs(bestZ - recZ):F3}");
+            }
+
+            // Enumerate ALL surfaces at this position (no Z filter)
+            var zValues = new float[32];
+            var instanceIds = new uint[32];
+            int surfaceCount = NavigationInterop.EnumerateAllSurfacesAt(1, recX, recY, zValues, instanceIds, 32);
+            _output.WriteLine($"  ALL surfaces at ({recX:F3},{recY:F3}): {surfaceCount} found");
+            for (int i = 0; i < surfaceCount; i++)
+                _output.WriteLine($"    surface[{i}]: Z={zValues[i]:F4} instanceId={instanceIds[i]} err_to_rec={MathF.Abs(zValues[i] - recZ):F4}");
+
+            _output.WriteLine("");
         }
     }
 

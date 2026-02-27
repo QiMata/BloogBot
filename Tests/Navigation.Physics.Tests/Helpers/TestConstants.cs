@@ -105,4 +105,11 @@ public static class Tolerances
 
     // Recording-level measurement tolerance (client-side variation, not engine precision)
     public const float RelaxedPosition = 0.15f;
+
+    // --- Aggregate drift gates (NPT-MISS-003) ---
+    // Cross-recording thresholds for blocking regressions.
+    // Clean frames = all frames excluding recording artifacts and SPLINE_ELEVATION transitions.
+    public const float AggregateCleanAvg = 0.15f;       // yards - overall clean-frame avg
+    public const float AggregateCleanP99 = 2.0f;        // yards - overall clean-frame P99
+    public const float WorstCleanFrame = 5.0f;           // yards - single worst clean frame
 }

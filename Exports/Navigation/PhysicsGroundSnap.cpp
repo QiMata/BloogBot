@@ -310,12 +310,18 @@ float ApplyVerticalDepenetration(
     SceneQuery::SweepCapsule(mapId, capHere, G3D::Vector3(0,0,0), 0.0f, overlaps, playerFwd);
     
     const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-    const SceneHit* bestUp = nullptr; 
-    float bestZ = -FLT_MAX;
+    // SceneCache overlap normals are oriented by OrientNormalForOverlap: FROM capsule
+    // center TOWARD triangle contact. For ground below the capsule center, the normal
+    // points DOWNWARD (nz < 0). Use fabs(nz) for the walkable check and pick the
+    // contact closest to feet (st.z) instead of "highest" — avoids snapping to overhead
+    // WMO geometry when the capsule's top hemisphere overlaps walkways/ramps above.
+    const SceneHit* bestUp = nullptr;
+    float bestErr = FLT_MAX;
     for (const auto& oh : overlaps) {
         if (!oh.startPenetrating) continue;
         if (std::fabs(oh.normal.z) < walkableCosMin) continue;
-        if (oh.point.z > bestZ) { bestZ = oh.point.z; bestUp = &oh; }
+        float err = std::fabs(oh.point.z - st.z);
+        if (err < bestErr) { bestErr = err; bestUp = &oh; }
     }
     if (bestUp) {
         float nx = bestUp->normal.x, ny = bestUp->normal.y, nz = bestUp->normal.z;
@@ -337,7 +343,10 @@ float ApplyVerticalDepenetration(
                 st.z = preciseZ;
             st.isGrounded = true;
             st.vz = 0.0f;
-            st.groundNormal = bestUp->normal.directionOrZero();
+            // Store ground normal with consistent upward orientation
+            G3D::Vector3 gn = bestUp->normal.directionOrZero();
+            if (gn.z < 0.0f) { gn.x = -gn.x; gn.y = -gn.y; gn.z = -gn.z; }
+            st.groundNormal = gn;
             return dz;
         }
     }

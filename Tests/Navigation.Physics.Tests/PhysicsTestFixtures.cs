@@ -98,20 +98,14 @@ public class PhysicsEngineFixture : IDisposable
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
             return;
 
-        var candidates = new[]
+        // Everything outputs to AppContext.BaseDirectory (Bot/$(Config)/net8.0/).
+        // Data directories (maps, vmaps, mmaps, scenes) live here too.
+        var baseDir = AppContext.BaseDirectory.TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (Directory.Exists(Path.Combine(baseDir, "mmaps")))
         {
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Debug", "net8.0")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Release", "net8.0")),
-            @"E:\repos\BloogBot\Bot\Debug\net8.0",
-        };
-
-        foreach (var dir in candidates)
-        {
-            if (Directory.Exists(Path.Combine(dir, "mmaps")))
-            {
-                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dir);
-                return;
-            }
+            Environment.SetEnvironmentVariable("WWOW_DATA_DIR", baseDir);
+            return;
         }
     }
 

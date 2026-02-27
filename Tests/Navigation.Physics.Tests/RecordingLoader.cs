@@ -32,6 +32,7 @@ public static class RecordingLoader
     {
         var candidates = new[]
         {
+            Path.Combine(AppContext.BaseDirectory, "Recordings"),
             Environment.GetEnvironmentVariable("WWOW_RECORDINGS_DIR"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BloogBot", "MovementRecordings"),
         };

@@ -140,6 +140,84 @@ extern "C"
         return SceneQuery::GetGroundZ(mapId, x, y, z, maxSearchDist);
     }
 
+    /// Diagnostic: bypass scene cache and query VMAP ray + ADT + BIH directly.
+    /// Forces VMAP initialization if not already loaded. Returns ground Z from raw VMAP data.
+    /// outVmapZ/outAdtZ/outBihZ receive per-source results (-200000 = not found).
+    __declspec(dllexport) float GetGroundZBypassCache(
+        uint32_t mapId, float x, float y, float z, float maxSearchDist,
+        float* outVmapZ, float* outAdtZ, float* outBihZ, float* outSceneCacheZ)
+    {
+        auto* vmapMgr = static_cast<VMAP::VMapManager2*>(VMAP::VMapFactory::createOrGetVMapManager());
+
+        // Scene cache result (current behavior)
+        float sceneZ = PhysicsConstants::INVALID_HEIGHT;
+        auto* cache = SceneQuery::GetSceneCache(mapId);
+        if (cache)
+            sceneZ = cache->GetGroundZ(x, y, z, maxSearchDist);
+        if (outSceneCacheZ) *outSceneCacheZ = sceneZ;
+
+        // Force VMAP initialization (may take 30-60s on first call)
+        if (vmapMgr && !vmapMgr->isMapInitialized(mapId))
+            vmapMgr->initializeMap(mapId);
+
+        // 1. VMAP ray (model geometry — WMO/M2)
+        float vmapZ = PhysicsConstants::INVALID_HEIGHT;
+        if (vmapMgr && vmapMgr->isMapInitialized(mapId))
+        {
+            vmapZ = vmapMgr->getHeight(mapId, x, y, z, maxSearchDist);
+            if (!std::isfinite(vmapZ)) vmapZ = PhysicsConstants::INVALID_HEIGHT;
+        }
+        if (outVmapZ) *outVmapZ = vmapZ;
+
+        // Also try z+2 like MaNGOS does (GetHeightStatic uses z+2 as ray origin)
+        float vmapZ2 = PhysicsConstants::INVALID_HEIGHT;
+        if (vmapMgr && vmapMgr->isMapInitialized(mapId))
+        {
+            vmapZ2 = vmapMgr->getHeight(mapId, x, y, z + 2.0f, maxSearchDist);
+            if (!std::isfinite(vmapZ2)) vmapZ2 = PhysicsConstants::INVALID_HEIGHT;
+        }
+
+        // 2. ADT terrain
+        float adtZ = PhysicsConstants::INVALID_HEIGHT;
+        if (g_testMapLoader && g_testMapLoader->IsInitialized())
+        {
+            float h = g_testMapLoader->GetTriangleZ(mapId, x, y);
+            if (h > MapFormat::INVALID_HEIGHT + 1.0f) adtZ = h;
+        }
+        if (outAdtZ) *outAdtZ = adtZ;
+
+        // 3. BIH overlap (for WMO interiors where ray misses)
+        float bihZ = PhysicsConstants::INVALID_HEIGHT;
+        if (vmapMgr && vmapMgr->isMapInitialized(mapId))
+        {
+            const VMAP::StaticMapTree* mapTree = vmapMgr->GetStaticMapTree(mapId);
+            if (mapTree && mapTree->GetInstancesPtr() && mapTree->GetInstanceCount() > 0)
+                bihZ = SceneQuery::GetGroundZByBIH(mapTree, x, y, z, maxSearchDist);
+        }
+        if (outBihZ) *outBihZ = bihZ;
+
+        // Log all results for diagnostics
+        fprintf(stderr, "[GroundZDiag] pos=(%.3f, %.3f, %.3f) scene=%.3f vmap=%.3f vmap(z+2)=%.3f adt=%.3f bih=%.3f\n",
+                x, y, z, sceneZ, vmapZ, vmapZ2, adtZ, bihZ);
+        fflush(stderr);
+
+        // Return best of non-cached sources (closest to z)
+        float bestZ = PhysicsConstants::INVALID_HEIGHT;
+        float bestErr = std::numeric_limits<float>::max();
+        auto consider = [&](float candidate) {
+            if (candidate <= PhysicsConstants::INVALID_HEIGHT + 1.0f) return;
+            if (candidate > z + maxSearchDist) return;
+            if (candidate < z - maxSearchDist) return;
+            float err = std::fabs(candidate - z);
+            if (err < bestErr) { bestErr = err; bestZ = candidate; }
+        };
+        consider(vmapZ);
+        consider(vmapZ2);
+        consider(adtZ);
+        consider(bihZ);
+        return bestZ;
+    }
+
     /// Diagnostic: returns info about VMAP state for a map.
     /// Returns: instanceCount in the StaticMapTree, or negative error codes.
     /// Also tries EnsureMapLoaded if not loaded, and logs basePath.
@@ -167,6 +245,54 @@ extern "C"
         if (!mapTree)
             return -3;
         return (int)mapTree->GetInstanceCount();
+    }
+
+    /// Diagnostic: enumerate ALL triangles from the scene cache at (x,y), returning their
+    /// interpolated Z values. No acceptance-window filtering — shows ALL surfaces.
+    /// Returns number of Z values written to outZValues (up to maxResults).
+    /// Also writes instanceId to outInstanceIds if non-null.
+    __declspec(dllexport) int EnumerateAllSurfacesAt(
+        uint32_t mapId, float x, float y,
+        float* outZValues, uint32_t* outInstanceIds, int maxResults)
+    {
+        auto* cache = SceneQuery::GetSceneCache(mapId);
+        if (!cache || maxResults <= 0 || !outZValues) return 0;
+
+        // Access the scene cache internals directly
+        // We need the raw triangle data — use QueryTrianglesInAABB with a tiny box
+        float pad = 0.01f; // tiny XY padding
+        std::vector<CapsuleCollision::Triangle> tris;
+        std::vector<uint32_t> instanceIds;
+        cache->QueryTrianglesInAABB(x - pad, y - pad, x + pad, y + pad, tris, &instanceIds);
+
+        int count = 0;
+        for (size_t i = 0; i < tris.size() && count < maxResults; ++i)
+        {
+            const auto& t = tris[i];
+            // Barycentric test: is (x,y) inside this triangle's XY projection?
+            float v0x = t.c.x - t.a.x, v0y = t.c.y - t.a.y;
+            float v1x = t.b.x - t.a.x, v1y = t.b.y - t.a.y;
+            float v2x = x - t.a.x, v2y = y - t.a.y;
+            float d00 = v0x * v0x + v0y * v0y;
+            float d01 = v0x * v1x + v0y * v1y;
+            float d02 = v0x * v2x + v0y * v2y;
+            float d11 = v1x * v1x + v1y * v1y;
+            float d12 = v1x * v2x + v1y * v2y;
+            float denom = d00 * d11 - d01 * d01;
+            if (std::fabs(denom) < 1e-12f) continue;
+            float invDenom = 1.0f / denom;
+            float u = (d11 * d02 - d01 * d12) * invDenom;
+            float v = (d00 * d12 - d01 * d02) * invDenom;
+            if (u < -1e-6f || v < -1e-6f || (u + v) > 1.0f + 1e-6f) continue;
+
+            // Interpolate Z
+            float triZ = t.a.z + u * (t.c.z - t.a.z) + v * (t.b.z - t.a.z);
+            outZValues[count] = triZ;
+            if (outInstanceIds) outInstanceIds[count] = (i < instanceIds.size()) ? instanceIds[i] : 0;
+            count++;
+        }
+
+        return count;
     }
 
     // ==========================================================================

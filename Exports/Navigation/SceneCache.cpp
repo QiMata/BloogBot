@@ -13,6 +13,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <unordered_set>
 
 // ============================================================================
@@ -477,6 +478,7 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
     uint32_t count = m_cellCount[ci];
 
     float bestZ = -200000.0f;
+    float bestErr = std::numeric_limits<float>::max();
     float zMax = z + 0.5f;         // accept slightly above
     float zMin = z - maxSearchDist; // search below
 
@@ -516,8 +518,15 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
         // Interpolate Z
         float triZ = st.az + u * (st.cz - st.az) + v * (st.bz - st.az);
 
-        if (triZ >= zMin && triZ <= zMax && triZ > bestZ)
-            bestZ = triZ;
+        // Pick the surface closest to query Z (consistent with non-cached
+        // SceneQuery::GetGroundZ which uses "closest to z" for multi-level).
+        if (triZ >= zMin && triZ <= zMax) {
+            float err = std::fabs(triZ - z);
+            if (bestZ <= -200000.0f + 1.0f || err < bestErr) {
+                bestZ = triZ;
+                bestErr = err;
+            }
+        }
     }
 
     return bestZ;
