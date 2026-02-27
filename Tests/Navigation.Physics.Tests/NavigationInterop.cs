@@ -464,4 +464,16 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "SetScenesDir", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern void SetScenesDir(string dir);
+
+    // ==========================================================================
+    // WMO DOODAD EXTRACTION
+    // ==========================================================================
+
+    /// <summary>
+    /// Extract WMO doodad placement data from MPQ archives.
+    /// Reads raw .wmo files from MPQ, writes .doodads files to vmaps directory.
+    /// Returns number of .doodads files written, or -1 on error.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "ExtractWmoDoodads", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    public static extern int ExtractWmoDoodads(string mpqDataDir, string vmapsDir);
 }

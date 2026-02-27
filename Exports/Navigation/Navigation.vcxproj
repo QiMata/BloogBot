@@ -267,6 +267,7 @@
     <ClInclude Include="VMapFactory.h" />
     <ClInclude Include="VMapLog.h" />
     <ClInclude Include="VMapManager2.h" />
+    <ClInclude Include="WmoDoodadFormat.h" />
     <ClInclude Include="WorldModel.h" />
   </ItemGroup>
   <ItemGroup>

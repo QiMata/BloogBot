@@ -111,5 +111,5 @@ private:
 
     // File format magic and version
     static constexpr uint32_t FILE_MAGIC = 0x454E4353;   // "SCNE"
-    static constexpr uint32_t FILE_VERSION = 1;
+    static constexpr uint32_t FILE_VERSION = 2;  // v2: added doodad collision triangles
 };

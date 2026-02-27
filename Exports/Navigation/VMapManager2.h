@@ -76,6 +76,8 @@ namespace VMAP
 
         // Capsule sweep via VMapManager is not supported; use `SceneQuery::SweepCapsule` directly with a `StaticMapTree`.
 
+        const std::string& getBasePath() const { return iBasePath; }
+
         // Accessor for internal map tree for direct queries
         StaticMapTree* GetStaticMapTree(uint32_t mapId) const {
             auto it = iInstanceMapTrees.find(mapId);

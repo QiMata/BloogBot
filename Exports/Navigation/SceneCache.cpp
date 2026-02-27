@@ -9,12 +9,15 @@
 #include "MapLoader.h"
 #include "CoordinateTransforms.h"
 #include "SceneQuery.h"
+#include "WmoDoodadFormat.h"
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <unordered_set>
+#include <unordered_map>
+#include <filesystem>
 
 // ============================================================================
 // FILE I/O
@@ -144,6 +147,41 @@ SceneCache* SceneCache::LoadFromFile(const char* path)
 }
 
 // ============================================================================
+// DOODAD HELPERS (quaternion rotation, coordinate conversions)
+// ============================================================================
+
+// Rotate a vector by a quaternion (x, y, z, w)
+static G3D::Vector3 QuatRotate(float qx, float qy, float qz, float qw, const G3D::Vector3& v)
+{
+    // q * v * q^(-1) using the optimized formula:
+    // t = 2 * cross(q.xyz, v)
+    // result = v + w * t + cross(q.xyz, t)
+    float tx = 2.0f * (qy * v.z - qz * v.y);
+    float ty = 2.0f * (qz * v.x - qx * v.z);
+    float tz = 2.0f * (qx * v.y - qy * v.x);
+    return G3D::Vector3(
+        v.x + qw * tx + (qy * tz - qz * ty),
+        v.y + qw * ty + (qz * tx - qx * tz),
+        v.z + qw * tz + (qx * ty - qy * tx)
+    );
+}
+
+// Inverse of fixCoordSystem: VMAP internal M2 space → WoW M2 space
+// fixCoordSystem: (x,y,z) → (x,z,-y)
+// inverse:        (x,y,z) → (x,-z,y)
+static G3D::Vector3 UnfixCoordSystem(const G3D::Vector3& v)
+{
+    return G3D::Vector3(v.x, -v.z, v.y);
+}
+
+// fixCoords: WoW space → VMAP internal space (for positions)
+// (x,y,z) → (z,x,y)
+static G3D::Vector3 FixCoords(const G3D::Vector3& v)
+{
+    return G3D::Vector3(v.z, v.x, v.y);
+}
+
+// ============================================================================
 // EXTRACTION FROM LIVE VMAP + ADT DATA
 // ============================================================================
 
@@ -246,6 +284,197 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
                     actualMaxY = std::max(actualMaxY, std::max({a.y, b.y, c.y}));
                 }
             }
+        }
+    }
+
+    // 1.5) Extract doodad (M2) collision from WMO instances
+    if (vmapMgr)
+    {
+        std::string vmapsPath = vmapMgr->getBasePath();
+        if (!vmapsPath.empty() && vmapsPath.back() != '/' && vmapsPath.back() != '\\')
+            vmapsPath += '/';
+
+        // Build case-insensitive file lookup for vmaps
+        std::unordered_map<std::string, std::string> vmapsFileLookup;
+        if (std::filesystem::exists(vmapsPath))
+        {
+            for (const auto& entry : std::filesystem::directory_iterator(vmapsPath))
+            {
+                if (!entry.is_regular_file()) continue;
+                std::string fn = entry.path().filename().string();
+                std::string fnLower = fn;
+                std::transform(fnLower.begin(), fnLower.end(), fnLower.begin(), ::tolower);
+                vmapsFileLookup[fnLower] = fn;
+            }
+        }
+
+        // M2 model cache: filename → (vertices, indices)
+        struct CachedM2 {
+            std::vector<G3D::Vector3> verts;
+            std::vector<uint32_t> indices;
+            bool valid;
+        };
+        std::unordered_map<std::string, CachedM2> m2Cache;
+
+        const VMAP::StaticMapTree* mapTree = vmapMgr->GetStaticMapTree(mapId);
+        if (mapTree)
+        {
+            const VMAP::ModelInstance* instances = mapTree->GetInstancesPtr();
+            uint32_t instanceCount = mapTree->GetInstanceCount();
+            int doodadTrisAdded = 0;
+
+            for (uint32_t i = 0; i < instanceCount; ++i)
+            {
+                const VMAP::ModelInstance& mi = instances[i];
+                if (!mi.iModel) continue;
+
+                // Only process WMO instances (not M2)
+                if (mi.flags & VMAP::MOD_M2) continue;
+
+                // Check for .doodads file
+                std::string doodadsFile = vmapsPath + mi.name + ".doodads";
+                if (!std::filesystem::exists(doodadsFile))
+                {
+                    // Try case-insensitive lookup
+                    std::string nameLower = mi.name + ".doodads";
+                    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+                    auto dit = vmapsFileLookup.find(nameLower);
+                    if (dit != vmapsFileLookup.end())
+                        doodadsFile = vmapsPath + dit->second;
+                    else
+                        continue;
+                }
+
+                WmoDoodad::DoodadFile doodadData;
+                if (!WmoDoodad::DoodadFile::Read(doodadsFile, doodadData))
+                    continue;
+                if (doodadData.sets.empty() || doodadData.spawns.empty())
+                    continue;
+
+                // Use doodad set 0 (default set)
+                const auto& defaultSet = doodadData.sets[0];
+                uint32_t startIdx = defaultSet.startIndex;
+                uint32_t count = defaultSet.count;
+                if (startIdx + count > doodadData.spawns.size())
+                    count = static_cast<uint32_t>(doodadData.spawns.size()) - startIdx;
+
+                for (uint32_t si = startIdx; si < startIdx + count; ++si)
+                {
+                    const auto& spawn = doodadData.spawns[si];
+                    if (spawn.nameOffset == 0xFFFFFFFF)
+                        continue;
+                    if (spawn.nameOffset >= doodadData.nameTable.size())
+                        continue;
+
+                    const char* m2Name = &doodadData.nameTable[spawn.nameOffset];
+                    std::string m2Key(m2Name);
+
+                    // Load M2 model (with caching)
+                    auto cacheIt = m2Cache.find(m2Key);
+                    if (cacheIt == m2Cache.end())
+                    {
+                        CachedM2 cm2;
+                        cm2.valid = false;
+                        std::string vmoPath = vmapsPath + m2Key + ".vmo";
+                        if (!std::filesystem::exists(vmoPath))
+                        {
+                            // Case-insensitive search
+                            std::string keyLower = m2Key + ".vmo";
+                            std::transform(keyLower.begin(), keyLower.end(), keyLower.begin(), ::tolower);
+                            auto vit = vmapsFileLookup.find(keyLower);
+                            if (vit != vmapsFileLookup.end())
+                                vmoPath = vmapsPath + vit->second;
+                        }
+
+                        if (std::filesystem::exists(vmoPath))
+                        {
+                            VMAP::WorldModel wm;
+                            if (wm.readFile(vmoPath))
+                            {
+                                if (wm.GetAllMeshData(cm2.verts, cm2.indices))
+                                    cm2.valid = !cm2.verts.empty() && cm2.indices.size() >= 3;
+                            }
+                        }
+                        m2Cache[m2Key] = std::move(cm2);
+                        cacheIt = m2Cache.find(m2Key);
+                    }
+
+                    if (!cacheIt->second.valid)
+                        continue;
+
+                    const auto& m2Verts = cacheIt->second.verts;
+                    const auto& m2Indices = cacheIt->second.indices;
+
+                    // Transform M2 vertices:
+                    // 1. Undo fixCoordSystem (VMAP internal → WoW M2 space)
+                    // 2. Apply doodad scale + quaternion rotation + position (→ WMO-local WoW space)
+                    // 3. Apply fixCoords (→ WMO-local VMAP internal space)
+                    // 4. Apply WMO instance transform (→ map internal space)
+                    // 5. InternalToWorld (→ game world space)
+                    std::vector<G3D::Vector3> worldVerts(m2Verts.size());
+                    for (size_t v = 0; v < m2Verts.size(); ++v)
+                    {
+                        // Step 1: Undo fixCoordSystem: (x,y,z) → (x,-z,y)
+                        G3D::Vector3 wow = UnfixCoordSystem(m2Verts[v]);
+
+                        // Step 2a: Scale
+                        wow = wow * spawn.scale;
+
+                        // Step 2b: Rotate by doodad quaternion
+                        wow = QuatRotate(spawn.rotX, spawn.rotY, spawn.rotZ, spawn.rotW, wow);
+
+                        // Step 2c: Add doodad position (WMO-local WoW space)
+                        wow.x += spawn.posX;
+                        wow.y += spawn.posY;
+                        wow.z += spawn.posZ;
+
+                        // Step 3: fixCoords: (x,y,z) → (z,x,y) to WMO-local VMAP internal
+                        G3D::Vector3 wmoLocal = FixCoords(wow);
+
+                        // Step 4: WMO instance transform → map internal
+                        G3D::Vector3 internal = mi.iRot * (wmoLocal * mi.iScale) + mi.iPos;
+
+                        // Step 5: Internal → world
+                        worldVerts[v] = NavCoord::InternalToWorld(internal);
+                    }
+
+                    // Emit triangles
+                    for (size_t t = 0; t + 2 < m2Indices.size(); t += 3)
+                    {
+                        const G3D::Vector3& a = worldVerts[m2Indices[t]];
+                        const G3D::Vector3& b = worldVerts[m2Indices[t + 1]];
+                        const G3D::Vector3& c = worldVerts[m2Indices[t + 2]];
+
+                        if (hasBounds)
+                        {
+                            float txMin = std::min({a.x, b.x, c.x});
+                            float txMax = std::max({a.x, b.x, c.x});
+                            float tyMin = std::min({a.y, b.y, c.y});
+                            float tyMax = std::max({a.y, b.y, c.y});
+                            if (txMax < bMinX || txMin > bMaxX ||
+                                tyMax < bMinY || tyMin > bMaxY)
+                                continue;
+                        }
+
+                        SceneTri st;
+                        st.ax = a.x; st.ay = a.y; st.az = a.z;
+                        st.bx = b.x; st.by = b.y; st.bz = b.z;
+                        st.cx = c.x; st.cy = c.y; st.cz = c.z;
+                        st.sourceType = 2; // Doodad (M2 inside WMO)
+                        st.instanceId = mi.ID;
+                        cache->m_triangles.push_back(st);
+                        doodadTrisAdded++;
+
+                        actualMinX = std::min(actualMinX, std::min({a.x, b.x, c.x}));
+                        actualMinY = std::min(actualMinY, std::min({a.y, b.y, c.y}));
+                        actualMaxX = std::max(actualMaxX, std::max({a.x, b.x, c.x}));
+                        actualMaxY = std::max(actualMaxY, std::max({a.y, b.y, c.y}));
+                    }
+                }
+            }
+
+            if (doodadTrisAdded > 0)
+                fprintf(stderr, "[SceneCache] Added %d doodad triangles for map %u\n", doodadTrisAdded, mapId);
         }
     }
 

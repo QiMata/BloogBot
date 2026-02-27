@@ -805,4 +805,58 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
             $"Steady-state P99 position error {result.SteadyStateP99:F4}y exceeds {p99Tolerance}y tolerance " +
             $"(overall P99={result.P99:F4}y, max={result.MaxPositionError:F4}y)");
     }
+
+    // ==========================================================================
+    // WMO DOODAD EXTRACTION
+    // ==========================================================================
+
+    [Fact]
+    public void ExtractWmoDoodads_FromMpq()
+    {
+        if (!_fixture.IsInitialized) { _output.WriteLine("SKIP: Not initialized"); return; }
+
+        // Locate WoW client Data directory
+        string[] possiblePaths = [
+            @"D:\World of Warcraft\Data",
+            @"C:\World of Warcraft\Data",
+            @"E:\World of Warcraft\Data",
+        ];
+        string? mpqDataDir = possiblePaths.FirstOrDefault(System.IO.Directory.Exists);
+        if (mpqDataDir == null)
+        {
+            _output.WriteLine("SKIP: WoW client Data directory not found");
+            return;
+        }
+
+        // Find vmaps directory
+        string baseDir = AppContext.BaseDirectory;
+        string vmapsDir = System.IO.Path.Combine(baseDir, "vmaps");
+        if (!System.IO.Directory.Exists(vmapsDir))
+        {
+            _output.WriteLine($"SKIP: vmaps directory not found at {vmapsDir}");
+            return;
+        }
+
+        _output.WriteLine($"MPQ Data: {mpqDataDir}");
+        _output.WriteLine($"vmaps:    {vmapsDir}");
+
+        int result = NavigationInterop.ExtractWmoDoodads(mpqDataDir, vmapsDir);
+        _output.WriteLine($"Result: {result} .doodads files written");
+        Assert.True(result >= 0, $"ExtractWmoDoodads failed with result {result}");
+        Assert.True(result > 0, "No .doodads files were extracted");
+
+        // Verify some key files exist
+        string[] expectedWmos = ["Orgrimmar.wmo.doodads", "Stormwind.wmo.doodads"];
+        foreach (var name in expectedWmos)
+        {
+            // Case-insensitive search
+            var match = System.IO.Directory.GetFiles(vmapsDir, "*.doodads")
+                .FirstOrDefault(f => System.IO.Path.GetFileName(f)
+                    .Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+                _output.WriteLine($"  Found: {System.IO.Path.GetFileName(match)}");
+            else
+                _output.WriteLine($"  Missing: {name} (may not match vmaps naming)");
+        }
+    }
 }

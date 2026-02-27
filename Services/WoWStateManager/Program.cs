@@ -167,13 +167,21 @@ namespace WoWStateManager
         {
             try
             {
-                // PathfindingService is x64 — lives in Bot/{Config}/x64/, not Bot/{Config}/net8.0/
-                var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
-                var dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
+                // Try same directory first (unified net8.0 output), fall back to ../x64/
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var x64Dir = Path.GetFullPath(Path.Combine(baseDir, "..", "x64"));
+                var dllPath = Path.Combine(baseDir, "PathfindingService.dll");
+                var serviceDir = baseDir;
 
                 if (!File.Exists(dllPath))
                 {
-                    Console.WriteLine($"PathfindingService.dll not found at: {dllPath}");
+                    dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
+                    serviceDir = x64Dir;
+                }
+
+                if (!File.Exists(dllPath))
+                {
+                    Console.WriteLine($"PathfindingService.dll not found at: {Path.Combine(baseDir, "PathfindingService.dll")} or {Path.Combine(x64Dir, "PathfindingService.dll")}");
                     Console.WriteLine("Build the solution first: dotnet build WestworldOfWarcraft.sln");
                     return null;
                 }
@@ -184,7 +192,7 @@ namespace WoWStateManager
                     Arguments = $"\"{dllPath}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    WorkingDirectory = x64Dir
+                    WorkingDirectory = serviceDir
                 };
 
                 var process = Process.Start(processInfo);
@@ -355,10 +363,20 @@ namespace WoWStateManager
         {
             try
             {
-                // PathfindingService is x64 — lives in Bot/{Config}/x64/
-                var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
-                var exePath = Path.Combine(x64Dir, "PathfindingService.exe");
-                var dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
+                // Try same directory first (unified net8.0 output), fall back to ../x64/
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var x64Dir = Path.GetFullPath(Path.Combine(baseDir, "..", "x64"));
+
+                string serviceDir = baseDir;
+                var exePath = Path.Combine(baseDir, "PathfindingService.exe");
+                var dllPath = Path.Combine(baseDir, "PathfindingService.dll");
+
+                if (!File.Exists(exePath) && !File.Exists(dllPath))
+                {
+                    exePath = Path.Combine(x64Dir, "PathfindingService.exe");
+                    dllPath = Path.Combine(x64Dir, "PathfindingService.dll");
+                    serviceDir = x64Dir;
+                }
 
                 ProcessStartInfo psi;
                 if (File.Exists(exePath))
@@ -366,7 +384,7 @@ namespace WoWStateManager
                     psi = new ProcessStartInfo
                     {
                         FileName = exePath,
-                        WorkingDirectory = x64Dir,
+                        WorkingDirectory = serviceDir,
                         UseShellExecute = true,
                         CreateNoWindow = false
                     };
@@ -377,20 +395,20 @@ namespace WoWStateManager
                     {
                         FileName = "dotnet",
                         Arguments = $"\"{dllPath}\"",
-                        WorkingDirectory = x64Dir,
+                        WorkingDirectory = serviceDir,
                         UseShellExecute = true,
                         CreateNoWindow = false
                     };
                 }
                 else
                 {
-                    Console.WriteLine($"PathfindingService not found at: {exePath} or {dllPath}");
+                    Console.WriteLine($"PathfindingService not found in: {baseDir} or {x64Dir}");
                     Console.WriteLine("Build the solution first: dotnet build WestworldOfWarcraft.sln");
                     return;
                 }
 
                 Process.Start(psi);
-                Console.WriteLine($"PathfindingService process started from {x64Dir}.");
+                Console.WriteLine($"PathfindingService process started from {serviceDir}.");
             }
             catch (Exception ex)
             {

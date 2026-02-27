@@ -284,4 +284,8 @@ Exports/Navigation/cmake_build_x86/
 
 # Local physics calibration outputs
 logs/
+tmp_physics*.log
+temp-physics*.log
+physics_replay*.log
+diag_output.txt
 Exports/Navigation/cmake_ninja_x64/

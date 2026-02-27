@@ -158,17 +158,21 @@ Status key: `Pending` = needs direct inventory conversion/update, `Synced` = dir
 - [ ] `MASTER-SUB-041` `WWoWBot.AI/TASKS.md` (`Expanded`) - completed: `AI-CORE-001`, `AI-CORE-002`, `AI-CORE-003`, `AI-SEM-001`, `AI-SEM-002`, `AI-TST-001`, `AI-SEC-001`; execute open parity IDs: `AI-PARITY-001`, then `AI-PARITY-CORPSE-001`, then `AI-PARITY-COMBAT-001`, then `AI-PARITY-GATHER-001`.
 
 ## Session Handoff
-- Last updated: 2026-02-26b (physics calibration session)
+- Last updated: 2026-02-27 (WMO doodad collision pipeline session)
 - Sub-`TASKS.md` coverage check: `41/41` local sub-task files are explicitly tracked in this master file.
-- Current top priority: Physics calibration shipped in C++ layer. Queue continues to `MASTER-SUB-024`.
+- Current top priority: Doodad pipeline complete. Queue continues to `MASTER-SUB-024`.
 - Current queue file: `MASTER-SUB-024` -> `Tests/PathfindingService.Tests/TASKS.md`.
 - Next queue file: `MASTER-SUB-025` -> `Tests/PromptHandlingService.Tests/TASKS.md`.
-- Last delta (2026-02-26b): Physics engine C++ calibration — 4 root causes fixed:
-  1. ExecuteDownPass sort: closest-to-preStepZ (was highest)
-  2. SceneCache::GetGroundZ: closest-to-query-Z (was highest)
-  3. ProcessAirMovement pen fallback: fabs walkable, closest-to-feet, overhead rejection, ascending guard
-  4. ApplyVerticalDepenetration: closest-to-feet (was highest), normal flipping
-  Infrastructure: unified output dirs (all to net8.0/), Release build + Release scene cache synced.
-  Debug: 75 passed, 5 skipped, 2 failed (pre-existing). Release: 76 passed, 5 skipped, 1 failed (pre-existing).
+- Last delta (2026-02-27): WMO doodad (M2) collision pipeline — full 9-step plan executed:
+  1. WmoDoodadFormat.h: .doodads file format with reader/writer
+  2. StormLib dynamic loading (LoadLibrary/GetProcAddress) for MPQ archive access
+  3. ExtractWmoDoodads export: reads WMO root files from MPQ, extracts MODD/MODN/MODS chunks
+  4. Key fix: WMO chunk FourCC is byte-reversed ("MODS" stored as "SDOM" in file)
+  5. 359 .doodads files extracted (Orgrimmar: 2010 spawns, Ironforge: 3308, Stormwind: 6026)
+  6. SceneCache integration: doodad M2 mesh loading with full transform chain (UnfixCoordSystem -> scale -> quat rotate -> position -> FixCoords -> WMO instance transform -> InternalToWorld)
+  7. FILE_VERSION bumped to 2 (forces scene cache regeneration)
+  8. Finding: Orgrimmar 0.4-0.9y ground Z gap is inherent to WMO geometry, not missing doodads
+  Files: PhysicsTestExports.cpp, SceneCache.cpp, SceneCache.h, VMapManager2.h, WmoDoodadFormat.h (new), NavigationInterop.cs, PhysicsReplayTests.cs
+  Test results: 79 passed, 0 failed, 0 skipped (Debug)
 - Pass result: `delta shipped`
 - Next command: `cat Tests/PathfindingService.Tests/TASKS.md`
