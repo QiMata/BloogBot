@@ -163,16 +163,16 @@ Status key: `Pending` = needs direct inventory conversion/update, `Synced` = dir
 - [ ] `MASTER-SUB-041` `WWoWBot.AI/TASKS.md` (`Expanded`) - completed: `AI-CORE-001`, `AI-CORE-002`, `AI-CORE-003`, `AI-SEM-001`, `AI-SEM-002`, `AI-TST-001`, `AI-SEC-001`; execute open parity IDs: `AI-PARITY-001`, then `AI-PARITY-CORPSE-001`, then `AI-PARITY-COMBAT-001`, then `AI-PARITY-GATHER-001`.
 
 ## Session Handoff
-- Last updated: 2026-02-27c (PHYS-MOVE-001 implementation session)
+- Last updated: 2026-02-27d (PHYS-MOVE-001 verified session)
 - Sub-`TASKS.md` coverage check: `41/41` local sub-task files are explicitly tracked in this master file.
 - Current top priority: WMO doodad collision pipeline (plan at `.claude/plans/federated-wandering-brooks.md`).
 - Current queue file: `MASTER-SUB-024` -> `Tests/PathfindingService.Tests/TASKS.md`.
 - Next queue file: `MASTER-SUB-001` -> `BotProfiles/TASKS.md`.
-- Last delta (2026-02-27c): Completed PHYS-MOVE-001 (all 4 sub-tasks):
-  1. `001a`: Added `_needsGroundSnap` flag — bypasses idle-skip in Update() after teleport, runs physics to snap to ground, sends corrected position packet
-  2. `001b`: Added `_movementController?.Reset()` to `EventEmitter_OnLoginVerifyWorld` for zone/map changes
-  3. `001c`: Piped transport data (TransportGuid, TransportOffset XYZ, TransportOrientation) into PhysicsInput in RunPhysics()
-  4. `001d`: Converted OrgrimmarGroundZAnalysisTests to assertion-based (asserts BG falls to engine ground, not stuck at teleport height)
-  Build: 0 errors. Tests: BotRunner.Tests 1106 passed, Nav.Physics 77 passed (2 pre-existing doodad extraction failures).
-- Pass result: `delta shipped`
-- Next command: Run the live Orgrimmar dual-client test to verify BG client now snaps to ground after teleport: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~OrgrimmarGroundZAnalysisTests" --logger "console;verbosity=detailed"`
+- Last delta (2026-02-27d): PHYS-MOVE-001 verified with live dual-client tests:
+  **Orgrimmar ground Z test**: 5/5 positions PASS. BG Z now falls to engine ground (e.g., 28.38) instead of staying at teleport height (32.37). FG-BG delta ~0.03y (expected — orc male vs female capsule height difference).
+  **StandAndWalk test**: BG Z stable at 28.380, FG Z at 28.410, consistent 0.03y delta across 10 samples.
+  **Full LiveValidation suite**: 16 passed, 3 failed (pre-existing: FirstAid crafting, corpse run ghost movement, fishing bobber detection).
+  Key passes: `Physics_PlayerNotFallingThroughWorld`, `Teleport_PlayerMovesToNewPosition`, `LoginAndEnterWorld_BothBotsPresent`.
+  Commit: 980edbe pushed to cpp_physics_system.
+- Pass result: `delta shipped + verified`
+- Next command: Continue with WMO doodad collision pipeline or address corpse run ghost movement (corpse run stalled with travel=0.0y, moveFlags=0x0).
