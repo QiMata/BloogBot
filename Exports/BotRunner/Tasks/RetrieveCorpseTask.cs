@@ -48,10 +48,13 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private Position? _lastDrivenWaypoint;
     private DateTime _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
 
-    // Vanilla corpse reclaim interaction radius is roughly 39 yards (server uses 3D distance).
-    // Use 25y so the bot walks well inside the server radius before stopping to reclaim.
-    // Too tight (5y) causes ghost stalls when graveyard drop is already within reclaim range.
-    private const float RetrieveRange = 25f;
+    // MaNGOS CORPSE_RECLAIM_RADIUS = 39y (3D distance). We compute a dynamic 2D
+    // approach distance from the current Z delta so the bot walks close enough in
+    // 3D even in multi-level areas like Orgrimmar where the graveyard is 20+ yards
+    // above/below the corpse.
+    private const float ServerReclaimRadius3D = 39f;
+    private const float ReclaimSafetyMargin = 5f; // stay 5y inside the 39y sphere
+    private const float MinRetrieveRange2D = 5f;   // never stop further than this minimum
     private static readonly TimeSpan TaskTimeout = TimeSpan.FromMinutes(12);
     private static readonly TimeSpan NoPathTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ReclaimRetryInterval = TimeSpan.FromSeconds(2);
@@ -287,7 +290,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         }
 
         if (hasRunbackCommandIntent
-            && corpseHorizontalDistance > RetrieveRange + 2f
+            && corpseHorizontalDistance > ServerReclaimRadius3D + 2f
             && _lastRunbackProgressUtc != DateTime.MinValue
             && now - _lastRunbackProgressUtc >= RunbackProgressTimeout)
         {
@@ -353,7 +356,16 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         var corpseDeltaZ = MathF.Abs(player.Position.Z - corpsePosition.Z);
         var corpseNavTarget = BuildCorpseNavigationTarget(player.Position, corpsePosition);
 
-        if (corpseHorizontalDistance > RetrieveRange)
+        // Dynamic 2D approach range: solve for max 2D dist such that 3D dist < (39 - 5) = 34y.
+        // In flat terrain (zDelta≈0) this yields ~34y. In Orgrimmar (zDelta≈22y) → ~25y.
+        // If zDelta alone exceeds the safe radius, walk as close as physically possible.
+        var effectiveRadius = ServerReclaimRadius3D - ReclaimSafetyMargin;
+        var maxDist2DSquared = effectiveRadius * effectiveRadius - corpseDeltaZ * corpseDeltaZ;
+        var retrieveRange = maxDist2DSquared > 0
+            ? MathF.Max(MathF.Sqrt(maxDist2DSquared), MinRetrieveRange2D)
+            : MinRetrieveRange2D;
+
+        if (corpseHorizontalDistance > retrieveRange)
         {
             if (!_loggedPathfindingMode)
             {
@@ -487,7 +499,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
         _lastReclaimAttempt = DateTime.UtcNow;
         ObjectManager.RetrieveCorpse();
-        Log.Information("[RETRIEVE_CORPSE] Sent reclaim request at ({X:F0}, {Y:F0}, {Z:F0}) distance2D={Distance2D:F1} zDelta={ZDelta:F1}",
-            corpsePosition.X, corpsePosition.Y, corpsePosition.Z, corpseHorizontalDistance, corpseDeltaZ);
+        var dist3D = MathF.Sqrt(corpseHorizontalDistance * corpseHorizontalDistance + corpseDeltaZ * corpseDeltaZ);
+        Log.Information("[RETRIEVE_CORPSE] Sent reclaim request dist2D={Distance2D:F1} zDelta={ZDelta:F1} dist3D={Dist3D:F1} retrieveRange={Range:F1}",
+            corpseHorizontalDistance, corpseDeltaZ, dist3D, retrieveRange);
     }
 }

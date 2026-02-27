@@ -288,20 +288,18 @@ public class DeathCorpseRunTests
         if (!IsStrictAlive(setupState))
             return await FailAsync("unable to establish strict-alive setup state before death test");
 
-        // Step 2: force deterministic setup in Razor Hill before kill.
-        // Use Razor Hill (flat terrain) instead of Orgrimmar (elevated interior)
-        // so the ghost path and corpse are at the same ground level — MaNGOS uses
-        // 3D distance for CORPSE_RECLAIM_RADIUS (~39y) and large Z deltas cause
-        // reclaim failures even when 2D distance is within range.
-        _output.WriteLine($"  [{label}] Step 2: Teleport to RazorHill setup before kill");
-        var teleportResult = await _bot.TeleportToNamedAsync(characterName, "RazorHill");
+        // Step 2: force deterministic setup in Orgrimmar before kill.
+        // Orgrimmar has multi-level terrain (Z delta 20+y between graveyard and corpse)
+        // which stress-tests the dynamic 2D approach range in RetrieveCorpseTask.
+        _output.WriteLine($"  [{label}] Step 2: Teleport to Orgrimmar setup before kill");
+        var teleportResult = await _bot.TeleportToNamedAsync(characterName, "Orgrimmar");
         _output.WriteLine($"  [{label}] Teleport result: {teleportResult}");
         if (string.IsNullOrWhiteSpace(teleportResult)
             || teleportResult.StartsWith("FAULT", StringComparison.OrdinalIgnoreCase)
             || teleportResult.Contains("not found", StringComparison.OrdinalIgnoreCase)
             || teleportResult.Contains("syntax", StringComparison.OrdinalIgnoreCase))
         {
-            return await FailAsync("unable to execute RazorHill named teleport setup");
+            return await FailAsync("unable to execute Orgrimmar named teleport setup");
         }
 
         await Task.Delay(2000);
@@ -309,7 +307,7 @@ public class DeathCorpseRunTests
         setupState = GetLifeState(snap);
         var setupPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         if (!IsStrictAlive(setupState) || setupPos == null)
-            return await FailAsync("invalid setup after RazorHill teleport");
+            return await FailAsync("invalid setup after Orgrimmar teleport");
 
         _output.WriteLine($"  [{label}] Setup position: ({setupPos.X:F1}, {setupPos.Y:F1}, {setupPos.Z:F1})");
         _output.WriteLine($"  [{label}] Setup life-state: HP={setupState.Health}, Ghost={setupState.Ghost}, StandDead={setupState.StandDead}");

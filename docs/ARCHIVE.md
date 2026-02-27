@@ -1499,3 +1499,27 @@ All files in `Exports/BotRunner/`. Build verified: 0 errors across BotRunner, Fo
 - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`: Teleport Orgrimmar→RazorHill (flat terrain). Added `AssertScenarioFG` for soft FG assertions. Reduced parity checks to early phases only.
 
 **Tests:** DeathCorpseRunTests passes (BG bot navigates 460y, reclaims corpse, resurrects; FG early phases validated).
+
+---
+
+### NPT-MISS-001, NPT-MISS-002, NPT-MISS-003 — Physics Test Implementation (2026-02-26)
+
+**Completed:** All three Navigation.Physics.Tests tasks shipped. 82 tests, 77 passed, 5 skipped, 0 failed.
+- `NPT-MISS-001`: Real physics stepping in FrameByFramePhysicsTests (10 tests pass)
+- `NPT-MISS-002`: Teleport airborne descent assertions in MovementControllerPhysicsTests (7 tests pass)
+- `NPT-MISS-003`: Hard drift gate for replay/controller parity (2 new gate tests pass)
+
+---
+
+### DOCS-NAV-004, DOCS-NAV-005, DOCS-NAV-006 — Documentation Navigation Rules (2026-02-26)
+
+**Completed:** Added to TASKS.md master rules section.
+- `DOCS-NAV-004`: One sub-TASKS.md at a time execution rule
+- `DOCS-NAV-005`: Summarize-vs-scan heuristic
+- `DOCS-NAV-006`: Loop-break and continuity protocol
+
+---
+
+### TASKS.md Cleanup (2026-02-27)
+
+Reorganized `docs/TASKS.md`: trimmed 30 process rules to 7 essentials, converted P0 to a table, consolidated sub-TASKS queue into a compact table, moved completed items here. Reduced file from ~180 lines of process bloat to ~100 lines focused on actionable work.
