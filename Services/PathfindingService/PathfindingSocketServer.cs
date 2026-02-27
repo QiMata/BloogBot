@@ -171,6 +171,7 @@ namespace PathfindingService
             }
         }
 
+        private int _pathLogCounter = 0;
         private PathfindingResponse HandlePath(CalculatePathRequest req)
         {
             if (!CheckPosition(req.MapId, req.Start, req.End, out var err))
@@ -190,6 +191,15 @@ namespace PathfindingService
                     path.Length - sanitizedPath.Length,
                     req.MapId,
                     req.Straight);
+            }
+
+            // Log path requests that return few/no corners for diagnostics
+            if (sanitizedPath.Length <= 1 || ++_pathLogCounter % 50 == 1)
+            {
+                var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
+                logger.LogInformation(
+                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smooth={Smooth} corners={Corners}",
+                    req.MapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, dist2D, req.Straight, sanitizedPath.Length);
             }
 
             var resp = new CalculatePathResponse();

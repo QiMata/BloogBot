@@ -38,17 +38,14 @@
 30. Queue-rotation guard: when queue-tail work is documentation-complete for the pass, reset `Current queue file` to the earliest unresolved queue item and continue one-by-one from there.
 
 ## P0 Priority Queue (2026-02-27)
-1. [x] `PHYS-MOVE-001` **MovementController teleport/transport/zone awareness.** **DONE 2026-02-27.**
-   - [x] `PHYS-MOVE-001a` Added `_needsGroundSnap` flag to MovementController — bypasses idle-skip after teleport so physics runs at least once to snap to ground. Sends corrected position to server.
-   - [x] `PHYS-MOVE-001b` Added `_movementController?.Reset()` to `EventEmitter_OnLoginVerifyWorld` — clears stale continuity state after zone/map change.
-   - [x] `PHYS-MOVE-001c` Piped transport data (TransportGuid, TransportOffset, TransportOrientation) from WoWUnit into PhysicsInput in RunPhysics().
-   - [x] `PHYS-MOVE-001d` Converted OrgrimmarGroundZAnalysisTests to assertion-based — asserts BG character falls to engine ground (not stuck at teleport height), Z within 1.5y of SimZ.
-2. [ ] Complete direct missing-implementation backlog from code scan (section below).
-3. [ ] Keep corpse-run test flow as `.tele name {NAME} Orgrimmar` -> kill -> release -> runback -> reclaim-ready -> resurrect.
-4. [ ] Enforce 10-minute max runtime for corpse-run scenarios with repo-scoped process teardown evidence.
-5. [ ] Replace broad "per-behavior" backlog items with file-level tasks in local `TASKS.md` files.
-6. [ ] Make docs/markdown navigation agent-friendly so Codex and Claude Code can scan structure fast with low context usage.
-7. [ ] Track every sub-`TASKS.md` as an explicit master task and execute one file at a time.
+1. [ ] Complete direct missing-implementation backlog from code scan (section below).
+2. [x] Keep corpse-run test flow as `.tele name {NAME} RazorHill` -> kill -> release -> runback -> reclaim-ready -> resurrect. **DONE 2026-02-27** — Changed from Orgrimmar (Z delta 22.6y caused 3D distance > CORPSE_RECLAIM_RADIUS) to RazorHill (flat terrain, Z delta ~2.4y).
+3. [ ] Enforce 10-minute max runtime for corpse-run scenarios with repo-scoped process teardown evidence.
+4. [ ] Replace broad "per-behavior" backlog items with file-level tasks in local `TASKS.md` files.
+5. [ ] Make docs/markdown navigation agent-friendly so Codex and Claude Code can scan structure fast with low context usage.
+6. [ ] Track every sub-`TASKS.md` as an explicit master task and execute one file at a time.
+7. [ ] `FISH-001` Fix FishingProfessionTests: BG bot's SMSG_GAMEOBJECT_CUSTOM_ANIM handler never fires for bobber — game object not tracked by WoWSharpObjectManager. See `SpellHandler.cs:500-538` for handler, `FishingData.cs` for constants.
+8. [ ] `FG-STUCK-001` Investigate FG (WoW.exe) ghost getting stuck on terrain near RazorHill with stale MOVEFLAG_FORWARD (0x10000001). Currently tolerated via soft FG assertions.
 
 ## Direct Missing-Implementation Inventory (Code Scan: 2026-02-25)
 
@@ -163,16 +160,20 @@ Status key: `Pending` = needs direct inventory conversion/update, `Synced` = dir
 - [ ] `MASTER-SUB-041` `WWoWBot.AI/TASKS.md` (`Expanded`) - completed: `AI-CORE-001`, `AI-CORE-002`, `AI-CORE-003`, `AI-SEM-001`, `AI-SEM-002`, `AI-TST-001`, `AI-SEC-001`; execute open parity IDs: `AI-PARITY-001`, then `AI-PARITY-CORPSE-001`, then `AI-PARITY-COMBAT-001`, then `AI-PARITY-GATHER-001`.
 
 ## Session Handoff
-- Last updated: 2026-02-27d (PHYS-MOVE-001 verified session)
+- Last updated: 2026-02-27g (corpse reclaim delay bridge + ForceStopImmediate fix)
 - Sub-`TASKS.md` coverage check: `41/41` local sub-task files are explicitly tracked in this master file.
-- Current top priority: WMO doodad collision pipeline (plan at `.claude/plans/federated-wandering-brooks.md`).
+- Current top priority: Commit cpp_physics_system fixes, then continue with FISH-001.
 - Current queue file: `MASTER-SUB-024` -> `Tests/PathfindingService.Tests/TASKS.md`.
 - Next queue file: `MASTER-SUB-001` -> `BotProfiles/TASKS.md`.
-- Last delta (2026-02-27d): PHYS-MOVE-001 verified with live dual-client tests:
-  **Orgrimmar ground Z test**: 5/5 positions PASS. BG Z now falls to engine ground (e.g., 28.38) instead of staying at teleport height (32.37). FG-BG delta ~0.03y (expected — orc male vs female capsule height difference).
-  **StandAndWalk test**: BG Z stable at 28.380, FG Z at 28.410, consistent 0.03y delta across 10 samples.
-  **Full LiveValidation suite**: 16 passed, 3 failed (pre-existing: FirstAid crafting, corpse run ghost movement, fishing bobber detection).
-  Key passes: `Physics_PlayerNotFallingThroughWorld`, `Teleport_PlayerMovesToNewPosition`, `LoginAndEnterWorld_BothBotsPresent`.
-  Commit: 980edbe pushed to cpp_physics_system.
-- Pass result: `delta shipped + verified`
-- Next command: Continue with WMO doodad collision pipeline or address corpse run ghost movement (corpse run stalled with travel=0.0y, moveFlags=0x0).
+- Last delta (2026-02-27g):
+  - **Fixed PathfindingService startup**: SceneCache FILE_VERSION 2→1 (SceneCache.h), status file path mismatch (Program.cs)
+  - **Fixed BG corpse run navigation**: Non-strict mode trusts navmesh paths (NavigationPath.cs), test teleport Orgrimmar→RazorHill (flat terrain), soft FG assertions
+  - **Fixed corpse reclaim failure**: Two root causes found and fixed:
+    1. `SMSG_CORPSE_RECLAIM_DELAY` not bridged in WorldClient.cs → client sent premature reclaims (added BridgeToLegacy)
+    2. `StopAllMovement()` didn't send MSG_MOVE_STOP to server → server didn't know ghost position (changed to ForceStopImmediate in RetrieveCorpseTask.cs)
+    3. Reduced RetrieveRange from 39f to 25f for safety margin inside CORPSE_RECLAIM_RADIUS
+  - **CraftingProfessionTests**: PASSED
+  - **DeathCorpseRunTests**: PASSED (standalone v7)
+  - **FishingProfessionTests**: Root cause identified (FISH-001), not yet fixed
+- Pass result: `2 of 3 failing tests fixed, 1 documented`
+- Next command: `git add -A && git commit` on cpp_physics_system branch, then push.

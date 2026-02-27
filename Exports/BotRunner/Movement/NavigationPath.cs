@@ -271,8 +271,11 @@ public class NavigationPath(
         if (isInLineOfSight)
             return true;
 
-        if (!_strictPathValidation
-            && currentPosition.DistanceTo(waypoint) <= CORNER_COMMIT_DISTANCE
+        // Non-strict: trust the navmesh waypoint even when LOS is blocked.
+        if (!_strictPathValidation)
+            return true;
+
+        if (currentPosition.DistanceTo(waypoint) <= CORNER_COMMIT_DISTANCE
             && TryPromoteReachableWaypoint(currentPosition, mapId, out waypoint))
             return true;
 
@@ -291,8 +294,12 @@ public class NavigationPath(
         if (isInLineOfSight)
             return true;
 
-        return !_strictPathValidation
-            && currentPosition.DistanceTo(waypoint) <= CORNER_COMMIT_DISTANCE
+        // Non-strict: trust the navmesh waypoint even when LOS is blocked.
+        // Long paths (corpse runs) often have initial corners behind terrain.
+        if (!_strictPathValidation)
+            return true;
+
+        return currentPosition.DistanceTo(waypoint) <= CORNER_COMMIT_DISTANCE
             && TryPromoteReachableWaypoint(currentPosition, mapId, out waypoint);
     }
 
@@ -506,9 +513,17 @@ public class NavigationPath(
         if (_strictPathValidation && !HasDestinationClosure(end, path))
             return false;
 
-        return HasSaneSegments(path)
-            && HasDestinationProgress(start, end, path)
-            && HasTraversableSegments(mapId, start, path);
+        if (!HasSaneSegments(path) || !HasDestinationProgress(start, end, path))
+            return false;
+
+        // In non-strict mode, trust the navmesh path without collision-based LOS
+        // validation between consecutive corners. Long outdoor paths (460y+ corpse
+        // runs with 140+ corners) have many corner pairs where terrain/buildings
+        // block LOS even though the navmesh route is valid and walkable.
+        if (!_strictPathValidation)
+            return true;
+
+        return HasTraversableSegments(mapId, start, path);
     }
 
     private Position[] GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
@@ -521,7 +536,14 @@ public class NavigationPath(
         var prunedPath = _enableProbeHeuristics
             ? PruneProbeWaypoints(start, sanitizedPath)
             : sanitizedPath;
-        return IsPathUsable(mapId, start, end, prunedPath) ? prunedPath : [];
+        var usable = IsPathUsable(mapId, start, end, prunedPath);
+        if (!usable && prunedPath.Length > 0)
+        {
+            Serilog.Log.Warning("[NavigationPath] Path rejected by IsPathUsable: raw={RawCount} sanitized={SanitizedCount} pruned={PrunedCount} smooth={Smooth} strict={Strict} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
+                rawPath.Length, sanitizedPath.Length, prunedPath.Length, smoothPath, _strictPathValidation,
+                start.X, start.Y, start.Z, end.X, end.Y, end.Z);
+        }
+        return usable ? prunedPath : [];
     }
 
     public void CalculatePath(Position start, Position end, uint mapId, bool force = false)

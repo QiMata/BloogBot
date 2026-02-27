@@ -17,13 +17,15 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private const uint StandStateMask = 0xFF;
     private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
-    // Corpse runback must follow the full service path exactly.
+    // Corpse runback follows the navmesh path faithfully.
     // Disable probe heuristics/pruning so corners are not skipped into walls.
+    // strictPathValidation is OFF because long outdoor corpse runs (460y+) have
+    // segments where collision-based LOS rejects valid navmesh paths.
     private readonly NavigationPath _navPath = new(
         botContext.Container.PathfindingClient,
         enableProbeHeuristics: false,
         enableDynamicProbeSkipping: false,
-        strictPathValidation: true);
+        strictPathValidation: false);
     private DateTime _startTime = DateTime.UtcNow;
     private DateTime _lastReclaimAttempt = DateTime.MinValue;
     private DateTime _lastCooldownLog = DateTime.MinValue;
@@ -46,9 +48,10 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private Position? _lastDrivenWaypoint;
     private DateTime _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
 
-    // Vanilla corpse reclaim interaction radius is roughly 39 yards.
-    // Staying at 5y causes long ghost stalls when the graveyard drop is already within reclaim range.
-    private const float RetrieveRange = 39f;
+    // Vanilla corpse reclaim interaction radius is roughly 39 yards (server uses 3D distance).
+    // Use 25y so the bot walks well inside the server radius before stopping to reclaim.
+    // Too tight (5y) causes ghost stalls when graveyard drop is already within reclaim range.
+    private const float RetrieveRange = 25f;
     private static readonly TimeSpan TaskTimeout = TimeSpan.FromMinutes(12);
     private static readonly TimeSpan NoPathTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ReclaimRetryInterval = TimeSpan.FromSeconds(2);
@@ -443,7 +446,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         ResetWaypointProgressTracking();
         ResetRunbackStallTracking(player.Position);
         _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
-        ObjectManager.StopAllMovement();
+        ObjectManager.ForceStopImmediate();
 
         if (IsStrictAlive(player))
         {

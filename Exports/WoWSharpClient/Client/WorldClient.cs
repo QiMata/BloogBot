@@ -253,6 +253,9 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.SMSG_ATTACKSTOP, Handlers.SpellHandler.HandleAttackStop);
             BridgeToLegacy(Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM, Handlers.SpellHandler.HandleGameObjectCustomAnim);
 
+            // Death / corpse
+            BridgeToLegacy(Opcode.SMSG_CORPSE_RECLAIM_DELAY, Handlers.DeathHandler.HandleCorpseReclaimDelay);
+
             // Stand state / world state
             BridgeToLegacy(Opcode.SMSG_STANDSTATE_UPDATE, Handlers.StandStateHandler.HandleStandStateUpdate);
             BridgeToLegacy(Opcode.SMSG_INIT_WORLD_STATES, Handlers.WorldStateHandler.HandleInitWorldStates);

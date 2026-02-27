@@ -50,11 +50,20 @@ namespace WoWStateManager
 
         /// <summary>
         /// Gets the path to the status file (in the PathfindingService directory).
+        /// Checks base directory first (unified net8.0 output), then ../x64/ fallback.
         /// </summary>
         public static string GetStatusFilePath()
         {
-            var x64Dir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "x64"));
-            return Path.Combine(x64Dir, "pathfinding_status.json");
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var basePath = Path.Combine(baseDir, "pathfinding_status.json");
+            if (File.Exists(basePath)) return basePath;
+
+            var x64Dir = Path.GetFullPath(Path.Combine(baseDir, "..", "x64"));
+            var x64Path = Path.Combine(x64Dir, "pathfinding_status.json");
+            if (File.Exists(x64Path)) return x64Path;
+
+            // Default to base dir (where PathfindingService will write it)
+            return basePath;
         }
 
         /// <summary>
@@ -196,7 +205,7 @@ namespace WoWStateManager
                 };
 
                 var process = Process.Start(processInfo);
-                Console.WriteLine($"PathfindingService launched from {x64Dir} (PID: {process?.Id}).");
+                Console.WriteLine($"PathfindingService launched from {serviceDir} (PID: {process?.Id}).");
                 return process;
             }
             catch (Exception ex)
