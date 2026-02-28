@@ -150,6 +150,7 @@ public static partial class NavigationInterop
         public ulong TransportGuid;
         public float TransportX, TransportY, TransportZ, TransportO;
         public uint FallTime;
+        public float FallStartZ;
         public float Height;
         public float Radius;
         [MarshalAs(UnmanagedType.I1)]
@@ -193,6 +194,7 @@ public static partial class NavigationInterop
         public uint StandingOnInstanceId;
         public float StandingOnLocalX, StandingOnLocalY, StandingOnLocalZ;
         public float FallDistance;
+        public float FallStartZ;
         public float FallTime;
         public int CurrentSplineIndex;
         public float SplineProgress;

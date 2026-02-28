@@ -161,6 +161,7 @@ namespace PathfindingService
                     PathfindingRequest.PayloadOneofCase.Path => HandlePath(request.Path),
                     PathfindingRequest.PayloadOneofCase.Los => HandleLineOfSight(request.Los),
                     PathfindingRequest.PayloadOneofCase.Step => HandlePhysics(request.Step),
+                    PathfindingRequest.PayloadOneofCase.GroundZ => HandleGroundZ(request.GroundZ),
                     _ => ErrorResponse("Unknown or unset request type.")
                 };
             }
@@ -212,7 +213,40 @@ namespace PathfindingService
         private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
         {
             var physicsInput = step.ToPhysicsInput();
-            var physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
+
+            // Marshal nearby dynamic objects (if any) from proto to pinned native array
+            Repository.DynamicObjectInfo[]? nativeObjects = null;
+            System.Runtime.InteropServices.GCHandle pinHandle = default;
+            if (step.NearbyObjects.Count > 0)
+            {
+                nativeObjects = new Repository.DynamicObjectInfo[step.NearbyObjects.Count];
+                for (int i = 0; i < step.NearbyObjects.Count; i++)
+                {
+                    var obj = step.NearbyObjects[i];
+                    nativeObjects[i] = new Repository.DynamicObjectInfo
+                    {
+                        guid = obj.Guid,
+                        displayId = obj.DisplayId,
+                        x = obj.X, y = obj.Y, z = obj.Z,
+                        orientation = obj.Orientation,
+                        scale = obj.Scale > 0 ? obj.Scale : 1.0f,
+                        goState = obj.GoState
+                    };
+                }
+                pinHandle = System.Runtime.InteropServices.GCHandle.Alloc(nativeObjects, System.Runtime.InteropServices.GCHandleType.Pinned);
+                physicsInput.nearbyObjects = pinHandle.AddrOfPinnedObject();
+                physicsInput.nearbyObjectCount = nativeObjects.Length;
+            }
+
+            Repository.PhysicsOutput physicsOutput;
+            try
+            {
+                physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
+            }
+            finally
+            {
+                if (pinHandle.IsAllocated) pinHandle.Free();
+            }
 
             // Log every 100th physics step to diagnose ground snapping
             if (++_physicsLogCounter % 100 == 1)
@@ -243,6 +277,20 @@ namespace PathfindingService
             return new PathfindingResponse
             {
                 Los = new LineOfSightResponse { InLos = hasLOS }
+            };
+        }
+
+        private PathfindingResponse HandleGroundZ(GetGroundZRequest req)
+        {
+            if (req.Position == null || !IsFinitePosition(req.Position))
+                return ErrorResponse("Missing or non-finite position for GetGroundZ.");
+
+            float maxDist = req.MaxSearchDist > 0 ? req.MaxSearchDist : 10.0f;
+            var (groundZ, found) = _physics.GetGroundZ(req.MapId, req.Position.X, req.Position.Y, req.Position.Z, maxDist);
+
+            return new PathfindingResponse
+            {
+                GroundZ = new GetGroundZResponse { GroundZ = groundZ, Found = found }
             };
         }
 
@@ -310,6 +358,7 @@ namespace PathfindingService
                 // State
                 moveFlags = proto.MovementFlags,
                 fallTime = (uint)proto.FallTime,
+                fallStartZ = proto.FallStartZ != 0 ? proto.FallStartZ : -200000f,
                 mapId = proto.MapId,
 
                 // Transport
@@ -394,7 +443,10 @@ namespace PathfindingService
 				StandingOnInstanceId = nav.standingOnInstanceId,
 				StandingOnLocalX = nav.standingOnLocalX,
 				StandingOnLocalY = nav.standingOnLocalY,
-				StandingOnLocalZ = nav.standingOnLocalZ
+				StandingOnLocalZ = nav.standingOnLocalZ,
+
+				FallDistance = nav.fallDistance,
+				FallStartZ = nav.fallStartZ
             };
         }
     }

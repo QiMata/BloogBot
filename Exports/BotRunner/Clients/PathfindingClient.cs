@@ -50,6 +50,24 @@ namespace BotRunner.Clients
                 distance += path[i].DistanceTo(path[i + 1]);
             return distance;
         }
+        public virtual (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
+        {
+            var request = new PathfindingRequest
+            {
+                GroundZ = new GetGroundZRequest
+                {
+                    MapId = mapId,
+                    Position = ToProto(position),
+                    MaxSearchDist = maxSearchDist
+                }
+            };
+            var response = SendMessage(request);
+            _consecutiveFailures = 0;
+            if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
+                throw new Exception(response.Error.Message);
+            return (response.GroundZ.GroundZ, response.GroundZ.Found);
+        }
+
         public virtual bool IsInLineOfSight(uint mapId, Position from, Position to)
         {
             var request = new PathfindingRequest

@@ -1553,6 +1553,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	st.orientation = simO; st.pitch = input.pitch;
 	st.vx = input.vx; st.vy = input.vy; st.vz = input.vz;
 	st.fallTime = input.fallTime / 1000.0f;  // Convert ms (from client) → seconds for internal physics
+	st.fallStartZ = input.fallStartZ;
 	st.groundNormal = { 0,0,1 };
 	const bool inputSwimmingFlag = (input.moveFlags & MOVEFLAG_SWIMMING) != 0;
 	const bool inputAirborneFlag = (input.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) != 0;
@@ -1582,6 +1583,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 
 	// Track previous position for actual velocity computation
 	G3D::Vector3 prevPos(st.x, st.y, st.z);
+	const bool wasGroundedAtStart = st.isGrounded;
 
 	// ---------------------------------------------------------------------
 	// Apply deferred depenetration from previous tick (R1 intent).
@@ -2691,6 +2693,20 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 
 	out.groundZ = st.z;
 	out.fallTime = st.fallTime * 1000.0f;  // Convert seconds (internal) → ms for output
+
+	// Fall distance tracking: detect grounded↔airborne transitions
+	if (wasGroundedAtStart && !st.isGrounded) {
+		// Grounded → airborne: record the Z where the fall began
+		st.fallStartZ = prevPos.z;
+		out.fallDistance = 0.0f;
+	} else if (!wasGroundedAtStart && st.isGrounded && st.fallStartZ > -100000.0f) {
+		// Airborne → grounded: compute total fall distance (positive = downward)
+		out.fallDistance = st.fallStartZ - st.z;
+		st.fallStartZ = -200000.0f;  // reset sentinel
+	} else {
+		out.fallDistance = 0.0f;
+	}
+	out.fallStartZ = st.fallStartZ;
 	out.liquidZ = finalLiq.level;
 	out.liquidType = finalLiq.type;
 	out.groundNx = st.groundNormal.x;

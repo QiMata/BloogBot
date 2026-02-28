@@ -100,6 +100,7 @@ struct PhysicsInput
 
     // Falling
     uint32_t fallTime;         // Time spent falling (ms)
+    float fallStartZ;          // Z when fall began (fed back from output; -200000 = not falling)
 
     // Unit properties
     float height;              // Unit height (for collision)
@@ -190,8 +191,9 @@ struct PhysicsOutput
 	float standingOnLocalY;
 	float standingOnLocalZ;
 
-    // Fall damage info
-    float fallDistance;
+    // Fall tracking
+    float fallDistance;         // Total Z drop on landing (positive = downward); 0 while airborne
+    float fallStartZ;          // Z when current fall began; -200000 if grounded
     float fallTime;
 
     // Spline progress

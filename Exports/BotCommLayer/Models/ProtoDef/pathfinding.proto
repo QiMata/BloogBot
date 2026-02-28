@@ -12,6 +12,7 @@ message PathfindingRequest {
         LineOfSightRequest los = 2;
         PhysicsInput step = 3;
         ReadyCheckRequest ready_check = 4;
+        GetGroundZRequest ground_z = 5;
     }
 }
 
@@ -22,6 +23,7 @@ message PathfindingResponse {
         LineOfSightResponse los = 2;
         PhysicsOutput step = 3;
         ReadyCheckResponse ready_status = 4;
+        GetGroundZResponse ground_z = 5;
         Error error = 99;
     }
 }
@@ -65,6 +67,30 @@ message LineOfSightResponse {
     bool in_los = 1;
 }
 
+// Ground Z query
+message GetGroundZRequest {
+    uint32 map_id = 1;
+    game.Position position = 2;
+    float max_search_dist = 3;
+}
+
+message GetGroundZResponse {
+    float ground_z = 1;
+    bool found = 2;
+}
+
+// Dynamic object for physics collision (elevators, doors, trophy pillars)
+message DynamicObjectProto {
+    uint64 guid = 1;
+    uint32 display_id = 2;
+    float x = 3;
+    float y = 4;
+    float z = 5;
+    float orientation = 6;
+    float scale = 7;
+    uint32 go_state = 8;
+}
+
 // Physics input
 message PhysicsInput {
     // Movement state
@@ -88,6 +114,7 @@ message PhysicsInput {
     
     // Falling/jumping
     float fall_time = 12;
+    float fall_start_z = 39;  // Z when fall began (fed back from output)
     
     // Spline
     float spline_elevation = 13;
@@ -134,6 +161,9 @@ message PhysicsInput {
 	// Behaviour flags (bitfield)
 	// PHYSICS_FLAG_TRUST_INPUT_VELOCITY (0x1): Use input vx/vy as-is for airborne
 	uint32 physics_flags = 38;
+
+	// Nearby dynamic objects for collision (elevators, doors, trophy pillars)
+	repeated DynamicObjectProto nearby_objects = 40;
 }
 
 // Physics output
@@ -181,4 +211,8 @@ message PhysicsOutput {
 	float standing_on_local_x = 26;
 	float standing_on_local_y = 27;
 	float standing_on_local_z = 28;
+
+	// Fall tracking
+	float fall_distance = 29;   // Total Z drop on landing (positive = downward)
+	float fall_start_z = 30;    // Z when current fall began
 }

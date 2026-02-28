@@ -123,6 +123,9 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
         private static extern bool NativeLineOfSight(uint mapId, XYZ from, XYZ to);
 
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetGroundZ")]
+        private static extern float NativeGetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist);
+
         // ===============================
         // PUBLIC METHODS
         // ===============================
@@ -138,6 +141,13 @@ namespace PathfindingService.Repository
         public bool LineOfSight(uint mapId, XYZ from, XYZ to)
         {
             return NativeLineOfSight(mapId, from, to);
+        }
+
+        public (float groundZ, bool found) GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist = 10.0f)
+        {
+            float result = NativeGetGroundZ(mapId, x, y, z, maxSearchDist);
+            bool found = !float.IsNaN(result) && result > -200000f;
+            return (result, found);
         }
 
         // ===============================
@@ -170,6 +180,17 @@ namespace PathfindingService.Repository
     // ===============================
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct DynamicObjectInfo
+    {
+        public ulong guid;
+        public uint displayId;
+        public float x, y, z;
+        public float orientation;
+        public float scale;
+        public uint goState;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct PhysicsInput
     {
         public uint moveFlags;
@@ -187,6 +208,7 @@ namespace PathfindingService.Repository
         public ulong transportGuid;
         public float transportX, transportY, transportZ, transportO;
         public uint fallTime;
+        public float fallStartZ;
         public float height;
         public float radius;
         [MarshalAs(UnmanagedType.I1)]
@@ -250,6 +272,7 @@ namespace PathfindingService.Repository
 		public float standingOnLocalZ;
 
         public float fallDistance;
+        public float fallStartZ;
         public float fallTime;
         public int currentSplineIndex;
         public float splineProgress;

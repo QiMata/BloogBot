@@ -118,6 +118,7 @@ private:
         bool isGrounded;
         bool isSwimming;
         float fallTime;
+        float fallStartZ = -200000.0f;  // Z when bot left the ground (-200000 = not falling)
         G3D::Vector3 groundNormal;
         // Support ramp plane (for smoothing step transitions)
         bool rampActive = false;
