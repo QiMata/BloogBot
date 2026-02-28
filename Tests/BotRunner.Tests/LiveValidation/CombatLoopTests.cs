@@ -369,17 +369,6 @@ public class CombatLoopTests
         return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
-    private static bool ContainsCommandRejection(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        return text.Contains("no such command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("no such subcommand", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("unknown command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static bool ContainsCombatCommandFailure(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -397,7 +386,7 @@ public class CombatLoopTests
     {
         Assert.Equal(ResponseResult.Success, trace.DispatchResult);
 
-        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(ContainsCommandRejection);
+        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
         Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
 }

@@ -99,6 +99,7 @@
 ### BotProfiles
 - [x] `BP-MISS-001` 16 miswired PvP factories fixed → `new PvPRotationTask(botContext)`
 - [x] `BP-MISS-002` Regression test for profile factory wiring — reflection-based test guards PvP↔PvE cross-wiring
+- [x] `BP-MISS-003` Druid feral identity aligned — folder `DruidFeralCombat` → `DruidFeral` to match class/namespace/FileName
 
 ### Storage (S3/Azure stubs — deferred, pending NuGet dependencies)
 - [ ] `RTS-MISS-001` S3 ops — requires AWSSDK.S3 NuGet package

@@ -39,7 +39,7 @@
     <Compile Include="PriestShadow\**\*.cs" />
     <!-- Druids -->
     <Compile Include="DruidBalance\**\*.cs" />
-    <Compile Include="DruidFeralCombat\**\*.cs" />
+    <Compile Include="DruidFeral\**\*.cs" />
     <Compile Include="DruidRestoration\**\*.cs" />
     <!-- Warlocks -->
     <Compile Include="WarlockAffliction\**\*.cs" />

@@ -43,7 +43,7 @@
 - [x] **Done (batch 1).** All 16 miswired PvP factories fixed to return `new PvPRotationTask(botContext)`.
 - [x] Problem: multiple profiles map `CreatePvPRotationTask(...)` to `new PvERotationTask(...)`, bypassing dedicated PvP classes.
 - [ ] Evidence: miswired files are:
-  - `BotProfiles/DruidFeralCombat/DruidFeral.cs`
+  - `BotProfiles/DruidFeral/DruidFeral.cs`
   - `BotProfiles/DruidRestoration/DruidRestoration.cs`
   - `BotProfiles/HunterBeastMastery/HunterBeastMastery.cs`
   - `BotProfiles/HunterMarksmanship/HunterMarksmanship.cs`
@@ -74,11 +74,8 @@
 - [ ] Acceptance: test fails before BP-MISS-001 fix, passes after, and blocks regressions.
 
 ### BP-MISS-003 Resolve druid feral identity inconsistency
-- [ ] Problem: feral profile identity is inconsistent (`DruidFeralCombat/DruidFeral.cs`, namespace `DruidFeral`, `FileName => "DruidFeral.dll"`).
-- [ ] Evidence file: `BotProfiles/DruidFeralCombat/DruidFeral.cs`.
-- [ ] Required change: choose one canonical identity and align folder/class/namespace/`FileName` usage, then update dependent tests/docs.
-- [ ] Validation command: `dotnet build BotProfiles/BotProfiles.csproj --configuration Release --no-restore`.
-- [ ] Acceptance: one canonical feral profile identity is used across source and documentation.
+- [x] **Done (batch 8).** Renamed folder `DruidFeralCombat` → `DruidFeral` to match class/namespace/FileName. Updated csproj and CLAUDE.md.
+- [x] Acceptance: one canonical feral profile identity (`DruidFeral`) is used across folder, class, namespace, FileName, and documentation.
 
 ### BP-MISS-004 Add profile capability map for low-context handoff
 - [ ] Problem: profile coverage requires repeated source rediscovery.

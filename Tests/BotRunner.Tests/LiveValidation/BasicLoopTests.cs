@@ -217,7 +217,7 @@ public class BasicLoopTests
         {
             var command = $".character level {baseline?.CharacterName} 10";
             var trace = await _bot.SendGmChatCommandTrackedAsync(bgAccount, command, captureResponse: true, delayMs: 1200);
-            var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(ContainsCommandRejection);
+            var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
             if (trace.DispatchResult != ResponseResult.Success || rejected)
             {
                 _output.WriteLine("BG chat level command rejected; falling back to SOAP level setup.");
@@ -390,14 +390,4 @@ public class BasicLoopTests
         return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
-    private static bool ContainsCommandRejection(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        return text.Contains("no such command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("no such subcommand", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("unknown command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
-    }
 }

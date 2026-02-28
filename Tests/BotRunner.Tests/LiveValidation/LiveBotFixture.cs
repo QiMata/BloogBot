@@ -1033,7 +1033,7 @@ public class LiveBotFixture : IAsyncLifetime
         return new GmChatCommandTrace(attemptCount, dispatchResult, chats, errors);
     }
 
-    private static bool ContainsCommandRejection(string? text)
+    internal static bool ContainsCommandRejection(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return false;

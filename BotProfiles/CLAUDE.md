@@ -9,7 +9,7 @@ BotProfiles/
 ├── Common/                  # Shared base classes and utilities
 ├── ProgressionProfiles/     # Leveling progression configs
 ├── DruidBalance/           ├── HunterBeastMastery/
-├── DruidFeralCombat/       ├── HunterMarksmanship/
+├── DruidFeral/             ├── HunterMarksmanship/
 ├── DruidRestoration/       ├── HunterSurvival/
 ├── MageArcane/             ├── PaladinHoly/
 ├── MageFire/               ├── PaladinProtection/
