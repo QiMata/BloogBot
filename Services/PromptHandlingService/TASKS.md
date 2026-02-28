@@ -37,19 +37,22 @@ Master tracker: `MASTER-SUB-019`
 1. [x] `PHS-MISS-001` Replace `NotImplementedException` in `TransferHistory` with explicit unsupported-target validation.
 - **Done (prior session).** `NotImplementedException` → `ArgumentException` in `PromptFunctionBase.cs`.
 
-2. [ ] `PHS-MISS-002` Add direct transfer-contract tests for `PromptFunctionBase`.
-- Problem: no tests currently reference `TransferHistory`, `TransferChatHistory`, or `TransferPromptRunner`.
-- Target files: `Tests/PromptHandlingService.Tests` (new focused test file recommended), `Services/PromptHandlingService/PromptFunctionBase.cs` (if internals exposure needed).
-- Required change: cover supported-transfer behavior plus unsupported-target behavior with explicit assertions.
-- Validation command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Transfer|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"`
-- Acceptance criteria: targeted transfer tests are discovered and pass; regressions fail deterministically.
+2. [x] `PHS-MISS-002` Add direct transfer-contract tests for `PromptFunctionBase`.
+- **Done (batch 14).** Added `PromptFunctionBaseTransferTests.cs` with 14 tests covering TransferHistory, TransferChatHistory, TransferPromptRunner.
+  - TransferHistory: non-PromptFunctionBase rejection, System message filtering, target clear, message order preservation.
+  - TransferPromptRunner: runner reference copy verified.
+- Validation: 14/14 pass (`dotnet test --filter "FullyQualifiedName~PromptFunctionBaseTransferTests"`).
+- [x] Acceptance: targeted transfer tests are discovered and pass; regressions fail deterministically.
 
-3. [ ] `PHS-MISS-003` Add regression tests for system prompt preservation and initialization semantics.
-- Problem: current suite does not gate that `TransferChatHistory` re-inserts target system prompt and calls `InitializeChat()` exactly once.
-- Target files: `Tests/PromptHandlingService.Tests` (new transfer semantics tests), `Services/PromptHandlingService/PromptFunctionBase.cs`.
-- Required change: assert target system prompt is first entry post-transfer, source system prompt is not copied, and init-call count is stable.
-- Validation command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~TransferChatHistory|FullyQualifiedName~InitializeChat" --logger "console;verbosity=minimal"`
-- Acceptance criteria: tests fail on prompt-order/init-call regressions.
+3. [x] `PHS-MISS-003` Add regression tests for system prompt preservation and initialization semantics.
+- **Done (batch 14).** Same `PromptFunctionBaseTransferTests.cs` covers:
+  - TransferChatHistory inserts target SystemPrompt as first entry (not source prompt).
+  - Source System messages removed; exactly one System entry in target.
+  - InitializeChat called exactly once.
+  - ResetChat clears history, inserts SystemPrompt, calls InitializeChat.
+  - Multiple ResetChat calls don't accumulate System entries.
+- Validation: all transfer/reset tests pass.
+- [x] Acceptance: tests fail on prompt-order/init-call regressions.
 
 4. [x] `PHS-MISS-004` Restore test discovery for existing PromptHandling test methods.
 - **Already addressed.** All test methods already have `[Fact(Skip = "Integration: requires local Ollama")]` attributes. Test discovery is correct — 2 non-skipped tests run, 12 integration tests are properly skipped.
@@ -61,9 +64,14 @@ Master tracker: `MASTER-SUB-019`
 4. Transfer-focused tests: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Transfer|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-02-28
+- Active task: all PromptHandlingService tasks complete (PHS-MISS-001..004)
+- Last delta: PHS-MISS-002/003 (14 transfer-contract + initialization tests in PromptFunctionBaseTransferTests.cs)
 - Pass result: `delta shipped`
-- Last delta: converted to execution-card format with refreshed build/test evidence, added xUnit discovery-gap tasking, and pinned deterministic validation commands.
-- Next task: `PHS-MISS-001`
-- Next command: `Get-Content -Path 'Services/WoWStateManager/TASKS.md' -TotalCount 320`
+- Validation/tests run:
+  - `dotnet test Tests/PromptHandlingService.Tests -c Debug --filter PromptFunctionBaseTransferTests` — 14/14 pass
+- Files changed:
+  - `Tests/PromptHandlingService.Tests/PromptFunctionBaseTransferTests.cs` — new (14 tests)
+  - `Services/PromptHandlingService/TASKS.md`
+- Next command: continue with next queue file
 - Blockers: none

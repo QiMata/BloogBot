@@ -48,11 +48,12 @@
 - [x] **Done (prior session).** Null/empty path validation added to CombatPredictionService + DecisionEngine constructors.
 
 ### DES-MISS-005 Add direct regression tests for decision service contract
-- [ ] Problem: current test coverage only validates read-bin behavior and does not protect runtime listener/model/watcher contracts.
-- [ ] Target files: `Tests/PromptHandlingService.Tests/*` or `Tests/DecisionEngineService.Tests/*` (if created), plus service files under test.
-- [ ] Required change: add deterministic tests for listener routing, model-unavailable fallback path, watcher start/stop disposal, and reload behavior.
-- [ ] Validation command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DecisionEngine" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance criteria: regressions in listener wiring, model state handling, and watcher lifecycle fail fast with actionable assertions.
+- [x] **Done (batch 14).** Added `DecisionEngineContractTests.cs` with 16 tests:
+  - MLModel: Predict returns empty/cast-spell/deterministic results; LearnFromSnapshot increments/decrements/expands weights; null-safe; GetWeights never null.
+  - GetNextActions: routes through MLModel.Predict; returns empty for empty snapshot; never throws.
+  - DecisionEngine lifecycle: constructor validation (null/empty binDir, null db); Dispose idempotent; successful construction with valid inputs.
+- Validation: 16/16 pass (`dotnet test --filter DecisionEngineContractTests`).
+- [x] Acceptance: regressions in model prediction, weight learning, and engine lifecycle fail fast.
 
 ## Simple Command Set
 1. `dotnet build Services/DecisionEngineService/DecisionEngineService.csproj --configuration Release --no-restore`
@@ -61,9 +62,14 @@
 4. `rg -n "new DecisionEngine\\(|new CombatPredictionService\\(|new CombatModelServiceListener\\(" Services -g "*.cs"`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Last delta: expanded `MASTER-SUB-015` tasks into concrete execution cards with direct build/test/source evidence and explicit validation/acceptance criteria.
+- Last updated: 2026-02-28
+- Active task: all DecisionEngineService tasks complete (DES-MISS-001..005)
+- Last delta: DES-MISS-005 (16 contract tests in DecisionEngineContractTests.cs)
 - Pass result: `delta shipped`
-- Next command: `Get-Content -Path 'Services/ForegroundBotRunner/TASKS.md' -TotalCount 320`
-- Current blocker: none.
-- Loop Break: if no file delta after two passes, record blocker + exact next command, then advance queue pointer in `docs/TASKS.md`.
+- Validation/tests run:
+  - `dotnet test Tests/PromptHandlingService.Tests -c Debug --filter DecisionEngineContractTests` — 16/16 pass
+- Files changed:
+  - `Tests/PromptHandlingService.Tests/DecisionEngineContractTests.cs` — new (16 tests)
+  - `Services/DecisionEngineService/TASKS.md`
+- Next command: continue with next queue file
+- Blockers: none

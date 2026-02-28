@@ -39,12 +39,14 @@ Master tracker: `MASTER-SUB-016`
 - **Done (batch 1).** All `NotImplementedException` replaced with safe defaults (~35 properties).
 - Acceptance criteria: command returns no matches.
 
-4. [ ] `FG-MISS-004` Add regression gate for FG materialization throws.
-- Problem: throw regressions can re-enter without a dedicated test guard.
-- Target files: `Tests/BotRunner.Tests` (corpse/combat/gathering slices) and supporting FG test utilities.
-- Required change: add tests asserting that exercised FG object-member reads do not throw `NotImplementedException`.
-- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~Combat|FullyQualifiedName~Gather" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-- Acceptance criteria: guard fails when a throw is reintroduced and passes on current implementation.
+4. [x] `FG-MISS-004` Add regression gate for FG materialization throws.
+- **Done (batch 14).** Added `ForegroundObjectRegressionTests.cs` with 4 source-scanning tests:
+  - `WoWObject_NoNotImplementedException` — scans WoWObject.cs for `throw new NotImplementedException`
+  - `WoWUnit_NoNotImplementedException` — scans WoWUnit.cs
+  - `WoWPlayer_NoNotImplementedException` — scans WoWPlayer.cs
+  - `AllObjectModelFiles_NoNotImplementedException` — aggregate scan with line-level violation reports
+- Validation: 4/4 pass (`dotnet test --filter ForegroundObjectRegressionTests`).
+- [x] Acceptance: guard fails when a throw is reintroduced and passes on current implementation.
 
 5. [x] `FG-MISS-005` Triage remaining FG memory/warden TODOs.
 - **Done (batch 7).** All Mem/ TODOs triaged: WardenDisabler.cs TODOs replaced with FG-WARDEN-001/FG-WARDEN-002 IDs (prior session). MemoryAddresses.cs had no remaining TODOs. Last WoWUnit.cs TODO replaced with defer rationale.
@@ -57,9 +59,14 @@ Master tracker: `MASTER-SUB-016`
 4. Repo-scoped cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-02-28
+- Active task: all ForegroundBotRunner tasks complete (FG-MISS-001..005)
+- Last delta: FG-MISS-004 (4 source-scanning regression tests in ForegroundObjectRegressionTests.cs)
 - Pass result: `delta shipped`
-- Last delta: converted to execution-card format with refreshed evidence and explicit per-task problem/target/validation/acceptance structure.
-- Next task: `FG-MISS-001`
-- Next command: `rg --line-number "throw new NotImplementedException\\(\\)" Services/ForegroundBotRunner/Objects/WoWObject.cs`
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests -c Debug --filter ForegroundObjectRegressionTests` — 4/4 pass
+- Files changed:
+  - `Tests/BotRunner.Tests/ForegroundObjectRegressionTests.cs` — new (4 tests)
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Next command: continue with next queue file
 - Blockers: none

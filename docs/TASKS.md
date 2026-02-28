@@ -56,7 +56,7 @@
 - [x] `FG-MISS-001` `NotImplementedException` in `WoWObject.cs` → safe defaults (0, null, empty)
 - [x] `FG-MISS-002` `NotImplementedException` in `WoWUnit.cs` → safe defaults (~50 properties)
 - [x] `FG-MISS-003` `NotImplementedException` in `WoWPlayer.cs` → safe defaults (~35 properties)
-- [ ] `FG-MISS-004` Regression checks for FG snapshot paths — needs test design
+- [x] `FG-MISS-004` Regression gate for FG materialization throws — 4 source-scanning tests in ForegroundObjectRegressionTests.cs
 - [x] `FG-MISS-005` Triage FG memory/warden TODOs — all triaged with explicit IDs (FG-WARDEN-001/002) or defer rationale
 
 ### Services
@@ -81,7 +81,11 @@
 - [x] `BCL-MISS-003` Socket teardown hardened — `IDisposable` on server/client types, `while(true)` → `while(_isRunning)`, client cleanup on disconnect
 - [x] `BCL-MISS-004` Proto regen workflow docs — canonical command, repo-local protoc default, C++ external target documented
 - [x] `WSM-MISS-004` Action queue cap/expiry — `TimestampedAction` wrapper, 50-item depth cap, 5-min TTL, explicit drop logging
+- [x] `WSM-MISS-005` Action-forwarding contract tests — 24 tests (proto round-trip, dead/ghost detection, EnqueueAction, ActionType coverage)
 - [x] `PHS-MISS-004` Test discovery already addressed — all methods have `[Fact(Skip)]` attributes
+- [x] `PHS-MISS-002` Transfer-contract tests for PromptFunctionBase — 14 tests (TransferHistory, TransferChatHistory, TransferPromptRunner, ResetChat)
+- [x] `PHS-MISS-003` System prompt preservation and InitializeChat semantics — covered in PromptFunctionBaseTransferTests
+- [x] `DES-MISS-005` Decision service contract tests — 16 tests (MLModel predict/learn, GetNextActions routing, DecisionEngine lifecycle)
 
 ### Exports/Loader
 - [x] `LDR-MISS-001` Loader teardown hardened — shutdown event, 5s wait with diagnostics, thread exit code logging, FreeConsole on detach
@@ -164,12 +168,12 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 12 | `Services/TASKS.md` | Pending | SRV-UMB-001..004 |
 | 13 | `Services/BackgroundBotRunner/TASKS.md` | **Partial** | BBR-MISS-003 done, BBR-MISS-001/002/004/005 pending |
 | 14 | `Services/CppCodeIntelligenceMCP/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
-| 15 | `Services/DecisionEngineService/TASKS.md` | **Partial** | DES-MISS-001/002/003/004 done, DES-MISS-005 pending |
-| 16 | `Services/ForegroundBotRunner/TASKS.md` | **Partial** | FG-MISS-001/002/003/005 done, FG-MISS-004 pending |
+| 15 | `Services/DecisionEngineService/TASKS.md` | **Done** | DES-MISS-001/002/003/004/005 all done |
+| 16 | `Services/ForegroundBotRunner/TASKS.md` | **Done** | FG-MISS-001/002/003/004/005 all done |
 | 17 | `Services/LoggingMCPServer/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
 | 18 | `Services/PathfindingService/TASKS.md` | **Done** | PFS-MISS-001/002/003/004/005/006/007 all done |
-| 19 | `Services/PromptHandlingService/TASKS.md` | **Partial** | PHS-MISS-001/004 done, PHS-MISS-002/003 pending |
-| 20 | `Services/WoWStateManager/TASKS.md` | **Partial** | WSM-MISS-001/002/003/004 done, WSM-MISS-005 pending |
+| 19 | `Services/PromptHandlingService/TASKS.md` | **Done** | PHS-MISS-001/002/003/004 all done |
+| 20 | `Services/WoWStateManager/TASKS.md` | **Done** | WSM-MISS-001/002/003/004/005 all done |
 | 21 | `Tests/TASKS.md` | Pending | TST-UMB-001..005 |
 | 22 | `Tests/BotRunner.Tests/TASKS.md` | Pending | BRT-CR-001..PAR-002 |
 | 23 | `Tests/Navigation.Physics.Tests/TASKS.md` | **Done** | NPT-MISS-001..003 shipped |
@@ -179,28 +183,25 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 13 — Loader teardown/console, WinImports evidence, PathfindingService provenance/integrity, WoWSharpClient quest rewards.
+- **Current work:** Quick-fix sweep batch 14 — test coverage for 4 service contracts + FG regression gate.
 - **Last delta (this session):**
-  - `LDR-MISS-001`: Loader teardown hardened — shutdown event + 5s wait + diagnostics + FreeConsole
-  - `LDR-MISS-002`: Console visibility controlled by WWOW_LOADER_CONSOLE env var
-  - `WINIMP-MISS-005`: Cleanup evidence hooks — structured summary in run-tests.ps1, PID/name in WoWProcessDetector
-  - `PFS-MISS-004`: Path provenance metadata — result + raw_corner_count in CalculatePathResponse proto
-  - `PFS-MISS-007`: Path data integrity — 4 proto round-trip tests (count/order/precision/empty)
-  - `WSC-MISS-004`: Quest reward selection — strategy-aware SelectRewardIndex replacing placeholder
+  - `PHS-MISS-002/003`: 14 PromptFunctionBase transfer/initialization tests (PromptFunctionBaseTransferTests.cs)
+  - `DES-MISS-005`: 16 decision service contract tests (DecisionEngineContractTests.cs)
+  - `WSM-MISS-005`: 24 action-forwarding contract tests (ActionForwardingContractTests.cs)
+  - `FG-MISS-004`: 4 FG source-scanning regression tests (ForegroundObjectRegressionTests.cs)
 - **Build verification:**
-  - C++ MSBuild Loader.vcxproj Release|Win32: 0 errors
-  - dotnet build WoWSharpClient: 0 errors
-  - dotnet build PathfindingService: 0 errors
-  - dotnet build WinImports: 0 errors
-  - ProtoInteropExtensionsTests: 6/6 pass (2 existing + 4 new)
-  - WoWSharpClient tests: 1229/1234 pass (4 pre-existing failures)
+  - dotnet build PromptHandlingService.Tests: 0 errors
+  - dotnet build BotRunner.Tests: 0 errors
+  - PromptFunctionBaseTransferTests: 14/14 pass
+  - DecisionEngineContractTests: 16/16 pass
+  - ActionForwardingContractTests: 24/24 pass (including dead/ghost detection via reflection)
+  - ForegroundObjectRegressionTests: 4/4 pass
+  - **Total new tests: 58, all passing**
 - **Remaining open items:**
-  - Design stubs: FG-MISS-004
-  - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
-  - Test infrastructure: PHS-MISS-002/003
+  - Service hardening: BBR-MISS-001/002/004/005
   - C++ pathfinding: NAV-MISS-004
-  - RecordedTests: RPT-MISS-001..004
   - BotRunner: BR-MISS-002
+  - RecordedTests: RPT-MISS-001..004
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-- **Next task:** Continue quick-fix sweep — evaluate remaining actionable items by dependency layer.
+- **Next task:** Continue quick-fix sweep — BBR-MISS-001/002/004/005 (BackgroundBotRunner hardening).

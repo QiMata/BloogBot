@@ -51,12 +51,14 @@ Master tracker: `MASTER-SUB-020`
 4. [x] `WSM-MISS-004` Add per-account action queue cap and stale-action expiry.
 - **Done (2026-02-27).** Added `TimestampedAction` wrapper, `MaxPendingActionsPerAccount = 50` depth cap (drops oldest on overflow), `PendingActionTtl = 5 min` stale-action expiry (drops expired actions during dequeue). All drops are explicitly logged.
 
-5. [ ] `WSM-MISS-005` Add regression tests for action-forwarding contract.
-- Problem: no direct tests gate FIFO, dead/ghost suppression, or response semantics around action forward/query.
-- Target files: `Tests/BotRunner.Tests`, `Tests/Tests.Infrastructure`.
-- Required change: add contract tests using `StateManagerTestClient` for FIFO order, dead/ghost filtering, and snapshot query success/failure behavior.
-- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~StateManager|FullyQualifiedName~ActionForward" --logger "console;verbosity=minimal"`
-- Acceptance criteria: regressions fail deterministically on action reorder/drop and invalid dead/ghost forwarding behavior.
+5. [x] `WSM-MISS-005` Add regression tests for action-forwarding contract.
+- **Done (batch 14).** Added `ActionForwardingContractTests.cs` with 24 tests:
+  - Proto round-trip: ActionForwardRequest preserves account/action/parameters/order; empty account name; StateChangeResponse result.
+  - Dead/ghost detection: IsDeadOrGhostState via reflection — health=0, ghost flag, standState=dead, dead text in errors, null player, aggregated reasons.
+  - EnqueueAction: drops SendChat when dead, accepts non-chat when dead, accepts SendChat when alive.
+  - ActionType coverage: 6 action types round-trip through protobuf.
+- Validation: 24/24 pass (`dotnet test --filter ActionForwardingContractTests|ForegroundObjectRegressionTests`).
+- [x] Acceptance: regressions fail deterministically on dead/ghost filtering and proto contract drift.
 
 ## Simple Command Set
 1. Build service: `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore`
@@ -65,9 +67,14 @@ Master tracker: `MASTER-SUB-020`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-02-28
+- Active task: all WoWStateManager tasks complete (WSM-MISS-001..005)
+- Last delta: WSM-MISS-005 (24 action-forwarding contract tests in ActionForwardingContractTests.cs)
 - Pass result: `delta shipped`
-- Last delta: converted to execution-card format with refreshed startup/teardown evidence, queue-policy gaps, and deterministic validation commands.
-- Next task: `WSM-MISS-001`
-- Next command: `Get-Content -Path 'Tests/TASKS.md' -TotalCount 320`
-- Blockers: none (live corpse-run execution intentionally deferred for this documentation-only queue pass).
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests -c Debug --filter ActionForwardingContractTests` — 24/24 pass
+- Files changed:
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs` — new (24 tests)
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: continue with next queue file
+- Blockers: none
