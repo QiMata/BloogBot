@@ -1703,3 +1703,14 @@ Verified that `BuildLosFallbackPath` is already gated behind `WWOW_ENABLE_LOS_FA
 
 ### PFS-MISS-002 — Elevated LOS Probes Already Diagnostics-Only (Verified 2026-02-27)
 Verified that `TryHasLosForFallback` is only invoked within the opt-in `BuildLosFallbackPath` path (lines 139, 235, 248, 325). Default production routing never uses elevated LOS probes. No code change needed.
+
+## Quick-Fix Sweep Batch 4 (2026-02-27)
+
+### WSM-MISS-004 — Action Queue Cap and Stale-Action Expiry (Done 2026-02-27)
+Added bounded queue policy to `CharacterStateSocketListener._pendingActions`: `TimestampedAction` wrapper records enqueue timestamp, `MaxPendingActionsPerAccount = 50` depth cap drops oldest actions on overflow, `PendingActionTtl = 5 min` drops stale actions during dequeue. All drops are explicitly logged with action type and age.
+
+### PHS-MISS-004 — Test Discovery Already Addressed (Verified 2026-02-27)
+All PromptHandlingService test methods already have `[Fact(Skip = "Integration: requires local Ollama")]` attributes. Test discovery is correct (2 non-skipped + 12 skipped integration tests). No code change needed.
+
+### Local TASKS.md Sync (2026-02-27)
+Synced 4 local TASKS.md files with master completion status: `Services/DecisionEngineService/TASKS.md` (DES-MISS-001/002/003/004), `Services/WoWStateManager/TASKS.md` (WSM-MISS-001/002/003/004), `Services/BackgroundBotRunner/TASKS.md` (BBR-MISS-003), `Services/PromptHandlingService/TASKS.md` (PHS-MISS-001/004).

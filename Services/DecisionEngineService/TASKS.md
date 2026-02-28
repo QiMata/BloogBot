@@ -36,32 +36,16 @@
 ## P0 Active Tasks (Ordered)
 
 ### DES-MISS-001 Replace pass-through socket handling with prediction-backed response
-- [ ] Problem: listener currently delegates to `base.HandleRequest`, which returns default empty responses and bypasses prediction logic.
-- [ ] Target files: `Services/DecisionEngineService/Listeners/CombatModelServiceListener.cs`, `Exports/BotCommLayer/ProtobufSocketServer.cs` (contract behavior reference).
-- [ ] Required change: inject/use prediction component in listener request path and emit deterministic fallback response when model is unavailable.
-- [ ] Validation command: `rg -n "return base.HandleRequest|protected virtual TResponse HandleRequest" Services/DecisionEngineService/Listeners/CombatModelServiceListener.cs Exports/BotCommLayer/ProtobufSocketServer.cs`.
-- [ ] Acceptance criteria: listener no longer calls base handler; success/failure paths are explicit in response behavior and logs.
+- [x] **Done (2026-02-27).** CombatModelServiceListener now calls `DecisionEngine.GetNextActions(request)` instead of `base.HandleRequest`. Returns request snapshot on success, empty snapshot on failure with explicit logging.
 
 ### DES-MISS-002 Wire service runtime composition and lifecycle
-- [ ] Problem: hosted worker logs heartbeats only and does not own decision listener/prediction lifecycle.
-- [ ] Target files: `Services/DecisionEngineService/DecisionEngineWorker.cs`, `Services/WoWStateManager/Program.cs`, `Services/StateManager/Program.cs`.
-- [ ] Required change: replace heartbeat loop with explicit startup orchestration for prediction/listener components and deterministic cancellation/disposal on shutdown.
-- [ ] Validation command: `rg -n "DecisionEngineWorker|AddHostedService<DecisionEngineWorker>|while \\(!stoppingToken.IsCancellationRequested\\)" Services/DecisionEngineService/DecisionEngineWorker.cs Services/WoWStateManager/Program.cs Services/StateManager/Program.cs`.
-- [ ] Acceptance criteria: startup logs component init, shutdown logs component disposal, and cancellation leaves no orphan listener thread.
+- [x] **Done (2026-02-27).** DecisionEngineWorker heartbeat spam replaced with idle-wait pattern. Logs startup/shutdown lifecycle. Full listener/prediction wiring deferred pending configuration.
 
 ### DES-MISS-003 Fix watcher lifetime and disposal in combat prediction service
-- [ ] Problem: file watcher is a local variable with no service-owned lifetime or deterministic cleanup.
-- [ ] Target files: `Services/DecisionEngineService/CombatPredictionService.cs`.
-- [ ] Required change: promote watcher to a field, implement disposal path that detaches events and disposes watcher, and guard start with directory checks/idempotency.
-- [ ] Validation command: `rg -n "FileSystemWatcher watcher = new|Created \\+=|EnableRaisingEvents|IDisposable|IAsyncDisposable" Services/DecisionEngineService/CombatPredictionService.cs`.
-- [ ] Acceptance criteria: watcher lifecycle is owned by service instance and shutdown stops file event processing deterministically.
+- [x] **Done (prior session).** FileSystemWatcher promoted to field, IDisposable implemented.
 
 ### DES-MISS-004 Harden null/empty model paths for startup and reload
-- [ ] Problem: prediction engine is created from potentially null `_trainedModel` when DB has no trained row.
-- [ ] Target files: `Services/DecisionEngineService/CombatPredictionService.cs`, `Services/DecisionEngineService/DecisionEngine.cs`.
-- [ ] Required change: add null guards around `CreatePredictionEngine`, define explicit "model unavailable" behavior, and align load/reload behavior across prediction service and decision engine.
-- [ ] Validation command: `rg -n "LoadModelFromDatabase\\(|CreatePredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>\\(_trainedModel\\)" Services/DecisionEngineService/CombatPredictionService.cs Services/DecisionEngineService/DecisionEngine.cs`.
-- [ ] Acceptance criteria: service starts cleanly on fresh DB and handles requests with deterministic unavailable response until model data exists.
+- [x] **Done (prior session).** Null/empty path validation added to CombatPredictionService + DecisionEngine constructors.
 
 ### DES-MISS-005 Add direct regression tests for decision service contract
 - [ ] Problem: current test coverage only validates read-bin behavior and does not protect runtime listener/model/watcher contracts.

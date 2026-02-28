@@ -19,10 +19,20 @@ namespace WoWStateManager.Listeners
         public ConcurrentDictionary<string, WoWActivitySnapshot> CurrentActivityMemberList { get; } = new();
 
         /// <summary>
+        /// Maximum number of pending actions per account. Prevents unbounded growth if a bot stops polling.
+        /// </summary>
+        private const int MaxPendingActionsPerAccount = 50;
+
+        /// <summary>
+        /// Maximum age for a pending action before it's considered stale and dropped.
+        /// </summary>
+        private static readonly TimeSpan PendingActionTtl = TimeSpan.FromMinutes(5);
+
+        /// <summary>
         /// Pending actions queued by external callers (e.g. test fixtures via port 8088).
         /// Stored per-account and consumed in FIFO order on subsequent bot polls.
         /// </summary>
-        private readonly ConcurrentDictionary<string, ConcurrentQueue<ActionMessage>> _pendingActions = new();
+        private readonly ConcurrentDictionary<string, ConcurrentQueue<TimestampedAction>> _pendingActions = new();
 
         /// <summary>
         /// After delivering a forwarded action, suppress CombatCoordinator for that account
@@ -112,8 +122,17 @@ namespace WoWStateManager.Listeners
             // Use FIFO so rapid multi-step setup actions (target -> chat command, etc.) are not dropped.
             if (_pendingActions.TryGetValue(accountName, out var pendingQueue))
             {
-                while (pendingQueue.TryDequeue(out var pendingAction))
+                while (pendingQueue.TryDequeue(out var timestampedAction))
                 {
+                    // Drop stale actions that have exceeded TTL
+                    if (DateTime.UtcNow - timestampedAction.EnqueuedAt > PendingActionTtl)
+                    {
+                        _logger.LogWarning($"DROPPING STALE ACTION for '{accountName}': {timestampedAction.Action.ActionType} (age={DateTime.UtcNow - timestampedAction.EnqueuedAt:mm\\:ss})");
+                        continue;
+                    }
+
+                    var pendingAction = timestampedAction.Action;
+
                     // Drop stale chat actions if the sender is dead/ghost.
                     // Action forwarding can be delayed by coordinator suppression; by delivery time the bot may have died.
                     if (pendingAction.ActionType == ActionType.SendChat && IsDeadOrGhostState(response, out var deadReason))
@@ -157,8 +176,15 @@ namespace WoWStateManager.Listeners
                 return;
             }
 
-            var queue = _pendingActions.GetOrAdd(accountName, _ => new ConcurrentQueue<ActionMessage>());
-            queue.Enqueue(action);
+            var queue = _pendingActions.GetOrAdd(accountName, _ => new ConcurrentQueue<TimestampedAction>());
+
+            // Enforce depth cap — drop oldest if at capacity
+            while (queue.Count >= MaxPendingActionsPerAccount && queue.TryDequeue(out var dropped))
+            {
+                _logger.LogWarning($"DROPPING OLDEST ACTION for '{accountName}': {dropped.Action.ActionType} (queue at capacity {MaxPendingActionsPerAccount})");
+            }
+
+            queue.Enqueue(new TimestampedAction(action));
             _logger.LogInformation($"QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
         }
 
@@ -204,6 +230,14 @@ namespace WoWStateManager.Listeners
 
             reason = string.Join(", ", reasons);
             return true;
+        }
+
+        /// <summary>
+        /// Wraps an ActionMessage with an enqueue timestamp for TTL expiry.
+        /// </summary>
+        private sealed record TimestampedAction(ActionMessage Action)
+        {
+            public DateTime EnqueuedAt { get; } = DateTime.UtcNow;
         }
 
         private void InjectCoordinatedActions(string accountName, WoWActivitySnapshot response)

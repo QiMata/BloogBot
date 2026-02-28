@@ -68,19 +68,7 @@
   - Corpse-run/follow scenarios do not exhibit repeated forward-run-in-place loops.
 
 ### BBR-MISS-003 Enforce deterministic lifecycle teardown on timeout/failure
-- Problem: service lifecycle currently emphasizes connection reset but does not explicitly stop bot runner on host shutdown path in this worker.
-- Target files:
-  - `Services/BackgroundBotRunner/BackgroundBotWorker.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
-  - `run-tests.ps1`
-- Required change:
-  - Add deterministic stop/dispose path for `_botRunner` and owned subscriptions on cancellation/failure.
-  - Ensure teardown logs include process name, PID, and stop result for owned processes only.
-  - Verify timeout failure path always executes repo-scoped cleanup command.
-- Validation command:
-  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
-- Acceptance criteria:
-  - No repo-owned lingering BG client/state-manager process remains after timeout/failure scenarios.
+- [x] **Done (2026-02-27).** Added `StopAsync` override to `BackgroundBotWorker.cs` that calls `_botRunner.Stop()` and `ResetAgentFactory()` on host shutdown. Added `OperationCanceledException` handler for clean cancellation.
 
 ### BBR-MISS-004 Validate path consumption for corpse runback
 - Problem: runback path quality must be proven from service output through waypoint consumption, not inferred from high-level success/failure.

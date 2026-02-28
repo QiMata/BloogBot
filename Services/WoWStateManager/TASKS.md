@@ -39,33 +39,17 @@ Master tracker: `MASTER-SUB-020`
   - environment note: `dumpbin` still missing on PATH in vcpkg app-local script stage output.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `WSM-MISS-001` Remove startup continuation when pathfinding service is unavailable.
-- Problem: startup currently proceeds with direct-movement fallback after pathfinding timeout/process-exit conditions.
-- Target files: `Services/WoWStateManager/Program.cs`, `Services/WoWStateManager/StateManagerWorker.cs`.
-- Required change: fail-fast or explicit not-ready mode that blocks bot launch until pathfinding is healthy.
-- Validation command: `rg -n "Proceeding without pathfinding|proceeding anyway but navigation may fail" Services/WoWStateManager/Program.cs Services/WoWStateManager/StateManagerWorker.cs`
-- Acceptance criteria: startup path cannot transition to active bot workers when pathfinding readiness fails.
+1. [x] `WSM-MISS-001` Remove startup continuation when pathfinding service is unavailable.
+- **Done (prior session).** PathfindingService readiness gate — fail-fast on unavailability.
 
-2. [ ] `WSM-MISS-002` Consolidate to one canonical pathfinding bootstrap flow.
-- Problem: `EnsurePathfindingServiceIsAvailable`, `LaunchPathfindingServiceExecutable`, and `WaitForPathfindingServiceToStart` are defined but not used by runtime startup.
-- Target files: `Services/WoWStateManager/Program.cs`.
-- Required change: either wire one canonical bootstrap/readiness flow or remove dead helper paths with explicit ownership semantics.
-- Validation command: `rg -n "EnsurePathfindingServiceIsAvailable\\(|LaunchPathfindingServiceExecutable\\(|WaitForPathfindingServiceToStart\\(" Services/WoWStateManager/Program.cs`
-- Acceptance criteria: only one startup/bootstrap pathway remains and is directly used by `Main`.
+2. [x] `WSM-MISS-002` Consolidate to one canonical pathfinding bootstrap flow.
+- **Done (2026-02-27).** Dead helpers removed (~95 LOC).
 
-3. [ ] `WSM-MISS-003` Make `StopManagedService` teardown deterministic and awaited.
-- Problem: fire-and-forget `Service.StopAsync` can leave lingering workers/processes during test timeout paths.
-- Target files: `Services/WoWStateManager/StateManagerWorker.cs`.
-- Required change: enforce bounded awaited order (`cancel -> StopAsync -> kill process -> await monitor task`) matching `StopAllManagedServices` semantics.
-- Validation command: `rg -n "Task\\.Run\\(async \\(\\) => await Service\\.StopAsync|StopManagedService\\(|StopAllManagedServices\\(" Services/WoWStateManager/StateManagerWorker.cs`
-- Acceptance criteria: no fire-and-forget stop call remains in managed-service shutdown logic.
+3. [x] `WSM-MISS-003` Make `StopManagedService` teardown deterministic and awaited.
+- **Done (prior session).** `StopManagedService` → `StopManagedServiceAsync` with awaited stop + timeout.
 
-4. [ ] `WSM-MISS-004` Add per-account action queue cap and stale-action expiry.
-- Problem: `_pendingActions` can grow unbounded and replay stale commands long after relevance.
-- Target files: `Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs`.
-- Required change: introduce bounded depth + TTL/expiry policy with explicit logging on drop/expiry.
-- Validation command: `rg -n "_pendingActions|ConcurrentQueue<ActionMessage>|EnqueueAction|pending=" Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs`
-- Acceptance criteria: queue policy is deterministic and observable in logs/tests when cap/expiry rules trigger.
+4. [x] `WSM-MISS-004` Add per-account action queue cap and stale-action expiry.
+- **Done (2026-02-27).** Added `TimestampedAction` wrapper, `MaxPendingActionsPerAccount = 50` depth cap (drops oldest on overflow), `PendingActionTtl = 5 min` stale-action expiry (drops expired actions during dequeue). All drops are explicitly logged.
 
 5. [ ] `WSM-MISS-005` Add regression tests for action-forwarding contract.
 - Problem: no direct tests gate FIFO, dead/ghost suppression, or response semantics around action forward/query.

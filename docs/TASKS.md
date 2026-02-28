@@ -73,6 +73,8 @@
 
 ### Exports/BotCommLayer
 - [x] `BCL-MISS-003` Socket teardown hardened — `IDisposable` on server/client types, `while(true)` → `while(_isRunning)`, client cleanup on disconnect
+- [x] `WSM-MISS-004` Action queue cap/expiry — `TimestampedAction` wrapper, 50-item depth cap, 5-min TTL, explicit drop logging
+- [x] `PHS-MISS-004` Test discovery already addressed — all methods have `[Fact(Skip)]` attributes
 
 ### Services/CppCodeIntelligenceMCP (Deferred — unused service)
 - [x] `CPPMCP-BLD-001` System.Text.Json package downgrade fixed (8.0.5 → 9.0.5)
@@ -143,8 +145,8 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 16 | `Services/ForegroundBotRunner/TASKS.md` | **Partial** | FG-MISS-001/002/003 done, FG-MISS-004/005 pending |
 | 17 | `Services/LoggingMCPServer/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
 | 18 | `Services/PathfindingService/TASKS.md` | **Partial** | PFS-MISS-001/002/003/005 done, PFS-MISS-004/006/007 pending |
-| 19 | `Services/PromptHandlingService/TASKS.md` | **Partial** | PHS-MISS-001 done, PHS-MISS-002..003 pending |
-| 20 | `Services/WoWStateManager/TASKS.md` | **Partial** | WSM-MISS-001/002/003 done, WSM-MISS-004/005 pending |
+| 19 | `Services/PromptHandlingService/TASKS.md` | **Partial** | PHS-MISS-001/004 done, PHS-MISS-002/003 pending |
+| 20 | `Services/WoWStateManager/TASKS.md` | **Partial** | WSM-MISS-001/002/003/004 done, WSM-MISS-005 pending |
 | 21 | `Tests/TASKS.md` | Pending | TST-UMB-001..005 |
 | 22 | `Tests/BotRunner.Tests/TASKS.md` | Pending | BRT-CR-001..PAR-002 |
 | 23 | `Tests/Navigation.Physics.Tests/TASKS.md` | **Done** | NPT-MISS-001..003 shipped |
@@ -154,16 +156,18 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-27
-- **Current work:** Quick-fix sweep batch 3.
+- **Current work:** Quick-fix sweep batch 4.
 - **Last delta (this session):**
-  - `BCL-MISS-003`: Socket teardown hardened — IDisposable on ProtobufSocketServer/AsyncServer/Client, while(true)→while(_isRunning), client cleanup on disconnect
-  - `PFS-MISS-001`: Verified LOS fallback already gated behind `WWOW_ENABLE_LOS_FALLBACK` env var (disabled by default) — no code change needed
-  - `PFS-MISS-002`: Verified elevated LOS probes already diagnostics-only — `TryHasLosForFallback` only called within opt-in fallback path
+  - `BCL-MISS-003`: Socket teardown hardened — IDisposable on all 3 socket types, while(true)→while(_isRunning), client cleanup
+  - `PFS-MISS-001/002`: Verified already gated/diagnostics-only — no code changes needed
+  - `WSM-MISS-004`: Action queue cap/expiry — TimestampedAction wrapper, 50-item cap, 5-min TTL, explicit drop logging
+  - `PHS-MISS-004`: Verified already addressed — all test methods have [Fact(Skip)] attributes
+  - Synced 4 local TASKS.md files with master completions (DecisionEngine, WoWStateManager, BackgroundBotRunner, PromptHandling)
 - **Remaining open items:**
   - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004/005
-  - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-004/005, DES-MISS-005
+  - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
   - BotCommLayer: BCL-MISS-001/002/004
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-  - Sub-TASKS queue: ~70 remaining items across local TASKS.md files
-- **Next task:** Continue quick-fix sweep through remaining local TASKS.md files.
+  - Sub-TASKS queue: ~65 remaining items across local TASKS.md files (mostly test creation and design tasks)
+- **Next task:** Continue quick-fix sweep — remaining actionable code-fix items are shrinking. Most remaining work is test creation or design decisions.

@@ -34,12 +34,8 @@ Master tracker: `MASTER-SUB-019`
   - Multiple additional test methods exist but are not attributed, so they are not executed by xUnit.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `PHS-MISS-001` Replace `NotImplementedException` in `TransferHistory` with explicit unsupported-target validation.
-- Problem: unsupported targets currently throw `NotImplementedException`, which is non-contractual and non-deterministic for callers.
-- Target files: `Services/PromptHandlingService/PromptFunctionBase.cs`.
-- Required change: replace throw-only guard with explicit argument/validation exception contract (for example `ArgumentException`/`InvalidCastException` with stable message).
-- Validation command: `rg -n "throw new NotImplementedException\\(" Services/PromptHandlingService/PromptFunctionBase.cs`
-- Acceptance criteria: no `NotImplementedException` remains in transfer paths.
+1. [x] `PHS-MISS-001` Replace `NotImplementedException` in `TransferHistory` with explicit unsupported-target validation.
+- **Done (prior session).** `NotImplementedException` → `ArgumentException` in `PromptFunctionBase.cs`.
 
 2. [ ] `PHS-MISS-002` Add direct transfer-contract tests for `PromptFunctionBase`.
 - Problem: no tests currently reference `TransferHistory`, `TransferChatHistory`, or `TransferPromptRunner`.
@@ -55,12 +51,8 @@ Master tracker: `MASTER-SUB-019`
 - Validation command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~TransferChatHistory|FullyQualifiedName~InitializeChat" --logger "console;verbosity=minimal"`
 - Acceptance criteria: tests fail on prompt-order/init-call regressions.
 
-4. [ ] `PHS-MISS-004` Restore test discovery for existing PromptHandling test methods.
-- Problem: many methods in `Tests/PromptHandlingService.Tests` are not discovered because they are missing `[Fact]`/`[Theory]`.
-- Target files: `Tests/PromptHandlingService.Tests/*.cs` (non-generated files only).
-- Required change: convert intended unit tests to discovered xUnit tests or move integration-only methods behind explicit categories/skip attributes with rationale.
-- Validation command: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
-- Acceptance criteria: discovered test count increases beyond baseline `Total: 2` with deterministic pass/fail behavior.
+4. [x] `PHS-MISS-004` Restore test discovery for existing PromptHandling test methods.
+- **Already addressed.** All test methods already have `[Fact(Skip = "Integration: requires local Ollama")]` attributes. Test discovery is correct — 2 non-skipped tests run, 12 integration tests are properly skipped.
 
 ## Simple Command Set
 1. Build service: `dotnet build Services/PromptHandlingService/PromptHandlingService.csproj --configuration Release --no-restore`
