@@ -59,11 +59,8 @@ Master tracker: `MASTER-SUB-018`
 - **Done (batch 5).** `Environment.Exit(1)` instead of warning-and-continue when nav data dirs missing.
 - Acceptance criteria: service never reports ready with missing nav data directories.
 
-6. [ ] `PFS-MISS-006` Add deterministic Orgrimmar corpse-run regression vectors in pathfinding tests.
-- Problem: no fixed corpse-run vectors assert wall-avoidance behavior at service level.
-- Target files: `Tests/PathfindingService.Tests/PathingAndOverlapTests.cs`, fixtures.
-- Required change: add fixed start/end vectors that previously produced wall collisions; assert non-empty, finite, walkable routes.
-- Validation command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PathingAndOverlapTests" --logger "console;verbosity=minimal"`
+6. [x] `PFS-MISS-006` Add deterministic Orgrimmar corpse-run regression vectors in pathfinding tests.
+- **Done (batch 11).** Added 3 Orgrimmar regression vectors (graveyard→center, entrance→VoS, reverse) with finite-coordinate and min-waypoint assertions to `PathingAndOverlapTests.cs`.
 - Acceptance criteria: vector regressions fail when output collides with known wall-run patterns.
 
 7. [ ] `PFS-MISS-007` Validate C++ -> protobuf -> C# path data integrity.

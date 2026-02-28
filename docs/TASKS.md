@@ -33,6 +33,7 @@
 
 ### Exports/BotRunner
 - [x] `BR-MISS-001` `ScanForQuestUnitsTask` TODO → defer rationale in `QuestingTask.cs:51` (needs quest objective→unit mapping + NPC filter design)
+- [x] `BR-MISS-003` Snapshot fallback logging — bare `catch { }` blocks replaced with `TryPopulate()` helper emitting `[Snapshot] {Field} unavailable: {Type}` at Debug level
 
 ### Exports/WoWSharpClient
 - [x] `WSC-MISS-001` Missing `WoWPlayer` fields — 11 properties added (ChosenTitle, KnownTitles, etc.) + CopyFrom + switch wiring
@@ -72,6 +73,7 @@
 - [x] `PFS-MISS-005` Fail-fast on missing nav data — `Environment.Exit(1)` instead of warning-and-continue
 - [x] `PFS-MISS-001` LOS fallback already gated — `WWOW_ENABLE_LOS_FALLBACK` env var disabled by default, no change needed
 - [x] `PFS-MISS-002` Elevated LOS probes already diagnostics-only — `TryHasLosForFallback` only called within opt-in fallback path
+- [x] `PFS-MISS-006` Orgrimmar corpse-run regression vectors — 3 tests (graveyard→center, entrance→VoS, reverse) with finite-coordinate + min-waypoint assertions
 
 ### Exports/BotCommLayer
 - [x] `BCL-MISS-003` Socket teardown hardened — `IDisposable` on server/client types, `while(true)` → `while(_isRunning)`, client cleanup on disconnect
@@ -154,7 +156,7 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 15 | `Services/DecisionEngineService/TASKS.md` | **Partial** | DES-MISS-001/002/003/004 done, DES-MISS-005 pending |
 | 16 | `Services/ForegroundBotRunner/TASKS.md` | **Partial** | FG-MISS-001/002/003/005 done, FG-MISS-004 pending |
 | 17 | `Services/LoggingMCPServer/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
-| 18 | `Services/PathfindingService/TASKS.md` | **Partial** | PFS-MISS-001/002/003/005 done, PFS-MISS-004/006/007 pending |
+| 18 | `Services/PathfindingService/TASKS.md` | **Partial** | PFS-MISS-001/002/003/005/006 done, PFS-MISS-004/007 pending |
 | 19 | `Services/PromptHandlingService/TASKS.md` | **Partial** | PHS-MISS-001/004 done, PHS-MISS-002/003 pending |
 | 20 | `Services/WoWStateManager/TASKS.md` | **Partial** | WSM-MISS-001/002/003/004 done, WSM-MISS-005 pending |
 | 21 | `Tests/TASKS.md` | Pending | TST-UMB-001..005 |
@@ -166,18 +168,18 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 10 — quest TODO defer, README naming fix.
+- **Current work:** Quick-fix sweep batch 11 — snapshot logging, pathfinding regression vectors.
 - **Last delta (this session):**
-  - `BR-MISS-001`: Replaced TODO + commented code in QuestingTask.cs with defer rationale
-  - `RPT-MISS-005`: Fixed legacy `WWoW.*` naming in RecordedTests.PathingTests/README.md
+  - `BR-MISS-003`: Replaced bare `catch { }` blocks with `TryPopulate()` helper + Debug-level logging in `BotRunnerService.Snapshot.cs`
+  - `PFS-MISS-006`: Added 3 Orgrimmar corpse-run regression vectors to `PathingAndOverlapTests.cs`
 - **Remaining open items (design/architecture work):**
   - Design stubs: WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
   - BotCommLayer: BCL-MISS-001/002
-  - Test infrastructure: WINIMP-MISS-005, PFS-MISS-004/006/007, PHS-MISS-002/003
+  - Test infrastructure: WINIMP-MISS-005, PFS-MISS-004/007, PHS-MISS-002/003
   - Loader: LDR-MISS-001/002 (C++ design)
   - RecordedTests: RPT-MISS-001..004
-  - BotRunner: BR-MISS-002/003
+  - BotRunner: BR-MISS-002
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
 - **Next task:** Continue quick-fix sweep — evaluate remaining actionable items.

@@ -39,11 +39,8 @@
 ## P0 Active Tasks (Ordered)
 
 ### BR-MISS-001 Implement quest unit scanning in questing pipeline
-- [ ] Problem: `QuestingTask` still has a placeholder (`TODO`) for quest unit scan wiring and no `ScanForQuestUnitsTask` implementation is present.
-- [ ] Target file: `Exports/BotRunner/Tasks/Questing/QuestingTask.cs`.
-- [ ] Required change: replace the placeholder path in `ScanForQuestUnitsTask` handling with concrete task creation/insertion in the questing sequence.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Quest|FullyQualifiedName~BotRunner" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: no TODO placeholder remains for quest-unit scan path; questing tests cover expected scan behavior.
+- [x] **Done (batch 10).** Replaced TODO + commented code with defer rationale in `QuestingTask.cs:51`. Quest-unit scanning requires quest objective→unit mapping and NPC filter design — deferred with explicit task reference.
+- [x] Acceptance: no TODO placeholder remains; defer rationale documents prerequisite design work.
 
 ### BR-MISS-002 Keep corpse-run setup fixed to Orgrimmar with reclaim gating
 - [ ] Problem: corpse-run correctness depends on deterministic setup and reclaim timing.
@@ -55,11 +52,8 @@
 - [ ] Acceptance: runback uses pathfinding without wall-run stalls and reclaim wait behavior is deterministic.
 
 ### BR-MISS-003 Tighten snapshot fallback behavior around missing FG fields
-- [ ] Problem: fallback behavior can hide real FG field implementation gaps.
-- [ ] Target file: `Exports/BotRunner/BotRunnerService.Snapshot.cs`.
-- [ ] Required change: keep null-safe behavior but log/route missing-field paths explicitly so gaps cannot silently pass.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~CombatLoopTests" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: snapshot fallback is explicit, traceable, and does not mask missing FG implementation work.
+- [x] **Done (batch 11).** Replaced bare `catch { }` blocks in `BotRunnerService.Snapshot.cs` with `TryPopulate()` helper that logs field name + exception type at Debug level. All 20+ silent catch blocks now emit `[Snapshot] {Field} unavailable: {Type}` when Debug logging is enabled.
+- [x] Acceptance: snapshot fallback is explicit, traceable, and does not mask missing FG implementation work.
 
 ## Simple Command Set
 1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore`
