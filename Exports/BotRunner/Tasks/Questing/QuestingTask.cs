@@ -48,9 +48,7 @@ public class QuestingTask(IBotContext botContext) : BotTask(botContext), IBotTas
             }
         }
 
-        // Scan for quest units/objects nearby
-        // TODO: Implement ScanForQuestUnitsTask
-        // BotTasks.Push(new ScanForQuestUnitsTask(BotContext));
+        // Quest-unit scanning deferred — requires quest objective→unit mapping and NPC filter design (BR-MISS-001)
 
         // Get remaining quest objectives
         var questObjectives = GetRemainingQuestObjectives().ToList();

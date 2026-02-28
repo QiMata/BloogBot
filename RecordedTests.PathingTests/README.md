@@ -1,10 +1,10 @@
-# WWoW.RecordedTests.PathingTests
+# RecordedTests.PathingTests
 
 Automated pathing test suite for Westworld of Warcraft bot. This project validates bot navigation capabilities across various scenarios including point-to-point travel, transport usage (boats/zeppelins), cave navigation, and complex terrain handling.
 
 ## Overview
 
-This test suite uses the orchestration framework from `WWoW.RecordedTests.Shared` to execute automated pathing tests with screen recording and artifact storage. Each test validates that the bot can successfully navigate from point A to point B under different conditions.
+This test suite uses the orchestration framework from `RecordedTests.Shared` to execute automated pathing tests with screen recording and artifact storage. Each test validates that the bot can successfully navigate from point A to point B under different conditions.
 
 ## Features
 
@@ -30,10 +30,10 @@ This test suite uses the orchestration framework from `WWoW.RecordedTests.Shared
 
 ```bash
 # Basic execution (uses environment variables for configuration)
-dotnet run --project WWoW.RecordedTests.PathingTests
+dotnet run --project RecordedTests.PathingTests
 
 # With CLI arguments
-dotnet run --project WWoW.RecordedTests.PathingTests \
+dotnet run --project RecordedTests.PathingTests \
   --truenas-api https://truenas.example.com/api/v2.0 \
   --truenas-api-key YOUR_API_KEY \
   --servers "wow-classic|10.0.0.15|3724|Alliance" \
@@ -112,16 +112,16 @@ See [PATHING_TEST_LIST.md](PATHING_TEST_LIST.md) for detailed test definitions.
 ### Project Structure
 
 ```
-WWoW.RecordedTests.PathingTests/
+RecordedTests.PathingTests/
 ├── Program.cs                    # Orchestration entry point
 ├── PATHING_TEST_LIST.md          # Detailed test definitions
 ├── README.md                     # This file
-└── WWoW.RecordedTests.PathingTests.csproj
+└── RecordedTests.PathingTests.csproj
 ```
 
 ### Dependencies
 
-- **WWoW.RecordedTests.Shared** - Core orchestration framework
+- **RecordedTests.Shared** - Core orchestration framework
 - **ForegroundBotRunner** (implicit) - GM-capable bot for setup/teardown
 - **BackgroundBotRunner** (implicit) - Test execution bot
 
@@ -282,7 +282,7 @@ jobs:
           TRUENAS_API: ${{ secrets.TRUENAS_API }}
           TRUENAS_API_KEY: ${{ secrets.TRUENAS_API_KEY }}
           SERVER_DEFINITIONS: ${{ secrets.SERVER_DEFINITIONS }}
-        run: dotnet run --project WWoW.RecordedTests.PathingTests
+        run: dotnet run --project RecordedTests.PathingTests
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:

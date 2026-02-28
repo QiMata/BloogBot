@@ -85,13 +85,8 @@
 - [ ] Acceptance: corpse runback follows returned route corners and no repeated wall-running pattern appears in replay traces.
 
 ### RPT-MISS-005 Keep test commands simple and consistent
-- [ ] Problem: project docs still reference legacy `WWoW.*` project naming and stale run commands.
-- [ ] Target files:
-  - `RecordedTests.PathingTests/README.md`
-  - `RecordedTests.PathingTests/TASKS.md`
-- [ ] Required change: align to current project names and one-line command patterns for build/run/test/cleanup.
-- [ ] Validation command: `rg -n "WWoW\\.RecordedTests\\.PathingTests|dotnet run --project WWoW\\.RecordedTests\\.PathingTests" RecordedTests.PathingTests/README.md`.
-- [ ] Acceptance: one canonical command path exists for build/run/test/cleanup without legacy naming drift.
+- [x] **Done (batch 10).** Replaced all `WWoW.RecordedTests.PathingTests` → `RecordedTests.PathingTests` and `WWoW.RecordedTests.Shared` → `RecordedTests.Shared` in README.md. Verified `rg "WWoW\\." RecordedTests.PathingTests/README.md` returns no hits.
+- [x] Acceptance: one canonical command path exists for build/run/test/cleanup without legacy naming drift.
 
 ## Simple Command Set
 1. `dotnet test Tests/RecordedTests.PathingTests.Tests/RecordedTests.PathingTests.Tests.csproj --configuration Release --no-restore --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`

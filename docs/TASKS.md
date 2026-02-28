@@ -32,7 +32,7 @@
 ## P1 — Missing Implementation Inventory
 
 ### Exports/BotRunner
-- [ ] `BR-MISS-001` `ScanForQuestUnitsTask` TODO in `QuestingTask.cs:52` — needs quest system design
+- [x] `BR-MISS-001` `ScanForQuestUnitsTask` TODO → defer rationale in `QuestingTask.cs:51` (needs quest objective→unit mapping + NPC filter design)
 
 ### Exports/WoWSharpClient
 - [x] `WSC-MISS-001` Missing `WoWPlayer` fields — 11 properties added (ChosenTitle, KnownTitles, etc.) + CopyFrom + switch wiring
@@ -140,13 +140,13 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 1 | `BotProfiles/TASKS.md` | **Done** | BP-MISS-001/002/003/004 all done |
 | 2 | `Exports/TASKS.md` | Pending | EXP-UMB-001..004 (documentation) |
 | 3 | `Exports/BotCommLayer/TASKS.md` | **Partial** | BCL-MISS-003/004 done, BCL-MISS-001/002 pending |
-| 4 | `Exports/BotRunner/TASKS.md` | Pending | BR-MISS-001..003 |
+| 4 | `Exports/BotRunner/TASKS.md` | **Partial** | BR-MISS-001 done, BR-MISS-002/003 pending |
 | 5 | `Exports/GameData.Core/TASKS.md` | **Done** | GDC-MISS-001/002/003 all done |
 | 6 | `Exports/Loader/TASKS.md` | **Partial** | LDR-MISS-003 done, LDR-MISS-001/002 pending |
 | 7 | `Exports/Navigation/TASKS.md` | **Partial** | NAV-MISS-003 done, NAV-MISS-001/002/004 pending |
 | 8 | `Exports/WinImports/TASKS.md` | **Partial** | WINIMP-MISS-001/002/003/004 done, 005 pending |
 | 9 | `Exports/WoWSharpClient/TASKS.md` | **Partial** | WSC-MISS-001/002/003 done, WSC-MISS-004 pending |
-| 10 | `RecordedTests.PathingTests/TASKS.md` | Pending | RPT-MISS-001..005 |
+| 10 | `RecordedTests.PathingTests/TASKS.md` | **Partial** | RPT-MISS-005 done, RPT-MISS-001..004 pending |
 | 11 | `RecordedTests.Shared/TASKS.md` | Pending | RTS-MISS-001..004 |
 | 12 | `Services/TASKS.md` | Pending | SRV-UMB-001..004 |
 | 13 | `Services/BackgroundBotRunner/TASKS.md` | **Partial** | BBR-MISS-003 done, BBR-MISS-001/002/004/005 pending |
@@ -166,20 +166,18 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 9 — documentation, interface contracts, cleanup.
+- **Current work:** Quick-fix sweep batch 10 — quest TODO defer, README naming fix.
 - **Last delta (this session):**
-  - `BCL-MISS-004`: Proto regen docs — canonical command in README, `protocsharp.bat` default to repo-local `tools/protoc/bin/protoc.exe`, C++ external target documented
-  - `BP-MISS-004`: Created `BotProfiles/PROFILE_TASK_MAP.md` — 27-spec factory/task map with extra tasks, shared code, parity notes
-  - `GDC-MISS-002`: XML docs on `IWoWLocalPlayer` + `IWoWCorpse` reclaim-critical fields with corpse lifecycle contract summary
-  - `GDC-MISS-003`: `IWoWActivitySnapshot : IActivitySnapshot` inheritance, removed duplicated Timestamp/AccountName, documented hierarchy
-  - `LDR-MISS-003`: VS-generated TODO boilerplate removed from `stdafx.h`/`stdafx.cpp` (UTF-16 files)
-  - `ContainsCommandRejection` consolidation was done in batch 8 (already complete)
+  - `BR-MISS-001`: Replaced TODO + commented code in QuestingTask.cs with defer rationale
+  - `RPT-MISS-005`: Fixed legacy `WWoW.*` naming in RecordedTests.PathingTests/README.md
 - **Remaining open items (design/architecture work):**
-  - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004
+  - Design stubs: WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
   - BotCommLayer: BCL-MISS-001/002
   - Test infrastructure: WINIMP-MISS-005, PFS-MISS-004/006/007, PHS-MISS-002/003
   - Loader: LDR-MISS-001/002 (C++ design)
+  - RecordedTests: RPT-MISS-001..004
+  - BotRunner: BR-MISS-002/003
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-- **Next task:** Design-level work or live-server-dependent tasks.
+- **Next task:** Continue quick-fix sweep — evaluate remaining actionable items.
