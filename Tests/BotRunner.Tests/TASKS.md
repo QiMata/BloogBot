@@ -112,9 +112,10 @@ Master tracker: `MASTER-SUB-022`
 7. Pathfinding validity slice: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-02-28
+- Active task: BRT-CR-001 done, BRT-RT-001 code-complete. BRT-CR-002/003, BRT-RT-002, BRT-PAR-001/002 require live server.
+- Last delta: BRT-CR-001 verified done (Orgrimmar setup in place), status updates for remaining items
 - Pass result: `delta shipped`
-- Last delta: expanded corpse-run backlog with explicit path-contract task (`BRT-CR-003`), strengthened `BRT-CR-002` for waypoint-consumption assertions, and added one-by-one next-file execution rule.
-- Next task: `BRT-CR-002`
-- Next command: `Get-Content -Path 'Tests/Navigation.Physics.Tests/TASKS.md' -TotalCount 360`
-- Blockers: none
+- Files changed: `Tests/BotRunner.Tests/TASKS.md`
+- Blockers: BRT-CR-002/003 and BRT-PAR-001/002 require live MaNGOS server
+- Next command: continue with next queue file

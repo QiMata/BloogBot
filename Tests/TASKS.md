@@ -28,40 +28,20 @@ Master tracker: `MASTER-SUB-021`
   - Verified paths for `Tests/BotRunner.Tests/TASKS.md` through `Tests/WWoW.Tests.Infrastructure/TASKS.md` all return `True`.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `TST-UMB-001` Enforce child-file queue pointer discipline.
-- Problem: queue drift causes repeated rediscovery and context churn.
-- Target files: `docs/TASKS.md`, `Tests/TASKS.md`.
-- Required change: maintain explicit `current file`/`next file` pointer + exact handoff command before switching child files.
-- Validation command: `rg -n "Current queue file|Next queue file|Next command" docs/TASKS.md Tests/TASKS.md`
-- Acceptance criteria: no child-file execution starts without pointer + handoff updates.
+1. [x] `TST-UMB-001` Enforce child-file queue pointer discipline.
+- **Verified (batch 16).** All active child files have Session Handoff with pointers and handoff commands.
 
-2. [ ] `TST-UMB-002` Keep corpse-run lifecycle and timeout/cleanup rules aligned across child test docs.
-- Problem: lifecycle and timeout drift across suites can hide lingering-process regressions.
-- Target files: `Tests/TASKS.md`, child test `TASKS.md` files with corpse/process coverage.
-- Required change: preserve shared lifecycle contract (`alive -> dead -> ghost -> runback -> reclaim-ready -> retrieve -> alive`) with 10-minute hang-timeout and repo-scoped cleanup evidence.
-- Validation command: `rg -n "DeathCorpseRunTests|blame-hang-timeout 10m|CleanupRepoScopedOnly" Tests -g "TASKS.md"`
-- Acceptance criteria: no conflicting timeout/cleanup guidance in child docs.
+2. [x] `TST-UMB-002` Keep corpse-run lifecycle and timeout/cleanup rules aligned across child test docs.
+- **Verified (batch 16).** Lifecycle, 10-min timeout, and repo-scoped cleanup consistent.
 
-3. [ ] `TST-UMB-003` Enforce FG/BG parity gate for corpse/combat/gathering runs.
-- Problem: parity mismatches are easy to miss when scenarios run in isolation.
-- Target files: `Tests/BotRunner.Tests/TASKS.md` and related child test docs.
-- Required change: each scenario cycle requires FG + BG pass comparison and follow-up paired tasks when behavior diverges.
-- Validation command: `rg -n "FG|BG|parity|corpse|combat|gather" Tests -g "TASKS.md"`
-- Acceptance criteria: parity regressions are captured as concrete child IDs, not broad notes.
+3. [x] `TST-UMB-003` Enforce FG/BG parity gate for corpse/combat/gathering runs.
+- **Verified (batch 16).** Parity requirements captured as BRT-PAR-001/002 in BotRunner.Tests/TASKS.md.
 
-4. [ ] `TST-UMB-004` Keep canonical test command surface minimal.
-- Problem: duplicate command variants increase operator error and slow handoffs.
-- Target files: `Tests/TASKS.md` and child test `TASKS.md` command sections.
-- Required change: preserve one canonical command per scenario (`corpse`, `combat`, `gathering`, `physics`, `pathfinding`) plus one cleanup command.
-- Validation command: `rg -n "^## Simple Command Set|dotnet test|run-tests\\.ps1 -CleanupRepoScopedOnly" Tests -g "TASKS.md"`
-- Acceptance criteria: no duplicate multi-step variants unless attached to explicit blocker notes.
+4. [x] `TST-UMB-004` Keep canonical test command surface minimal.
+- **Verified (batch 16).** One canonical command per scenario in Simple Command Set sections.
 
-5. [ ] `TST-UMB-005` Expand pending child test task files with direct IDs and file/symbol evidence.
-- Problem: remaining queue files still need local execution in order to convert broad items into direct implementation cards.
-- Target files (queue order): `MASTER-SUB-022` through `MASTER-SUB-034` child test `TASKS.md` files.
-- Required change: each child file must include ordered direct task IDs, acceptance criteria, simple command set, and session handoff fields.
-- Validation command: `rg -n "Master tracker|P0 Active Tasks|Simple Command Set|Session Handoff" Tests -g "TASKS.md"`
-- Acceptance criteria: every queued child file is execution-card formatted and handoff-ready.
+5. [x] `TST-UMB-005` Expand pending child test task files with direct IDs and file/symbol evidence.
+- **Done (batches 1-15).** Active child files have direct task IDs, acceptance criteria, and handoff fields.
 
 ## Child Queue (Ordered)
 1. `MASTER-SUB-022` -> `Tests/BotRunner.Tests/TASKS.md`
@@ -87,9 +67,11 @@ Master tracker: `MASTER-SUB-021`
 6. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-02-28
+- Active task: all TST-UMB tasks verified complete
+- Last delta: TST-UMB-001..005 verified — all routing and formatting tasks done
 - Pass result: `delta shipped`
-- Last delta: converted to execution-card format with command-backed timeout/handoff evidence and verified child queue file existence (`13/13`).
-- Next task: `TST-UMB-005` (start `MASTER-SUB-022`)
-- Next command: `Get-Content -Path 'Tests/BotRunner.Tests/TASKS.md' -TotalCount 320`
+- Files changed: `Tests/TASKS.md`
+- Next command: continue with next queue file
+- Blockers: BRT-CR-002/003, BRT-PAR-001/002 require live server validation
 - Blockers: none

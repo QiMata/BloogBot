@@ -168,7 +168,7 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | # | Local file | Status | Next IDs |
 |---|-----------|--------|----------|
 | 1 | `BotProfiles/TASKS.md` | **Done** | BP-MISS-001/002/003/004 all done |
-| 2 | `Exports/TASKS.md` | Pending | EXP-UMB-001..004 (documentation) |
+| 2 | `Exports/TASKS.md` | **Done** | EXP-UMB-001..004 verified complete |
 | 3 | `Exports/BotCommLayer/TASKS.md` | **Done** | BCL-MISS-001/002/003/004 all done |
 | 4 | `Exports/BotRunner/TASKS.md` | **Done** | BR-MISS-001/002/003 all done |
 | 5 | `Exports/GameData.Core/TASKS.md` | **Done** | GDC-MISS-001/002/003 all done |
@@ -178,7 +178,7 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 9 | `Exports/WoWSharpClient/TASKS.md` | **Done** | WSC-MISS-001/002/003/004 all done |
 | 10 | `RecordedTests.PathingTests/TASKS.md` | **Done** | RPT-MISS-001/002/003/004/005 all done |
 | 11 | `RecordedTests.Shared/TASKS.md` | Pending | RTS-MISS-001..004 |
-| 12 | `Services/TASKS.md` | Pending | SRV-UMB-001..004 |
+| 12 | `Services/TASKS.md` | **Done** | SRV-UMB-001..004 verified complete |
 | 13 | `Services/BackgroundBotRunner/TASKS.md` | **Done** | BBR-MISS-001/002/003/004/005 all done |
 | 14 | `Services/CppCodeIntelligenceMCP/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
 | 15 | `Services/DecisionEngineService/TASKS.md` | **Done** | DES-MISS-001/002/003/004/005 all done |
@@ -187,31 +187,24 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 18 | `Services/PathfindingService/TASKS.md` | **Done** | PFS-MISS-001/002/003/004/005/006/007 all done |
 | 19 | `Services/PromptHandlingService/TASKS.md` | **Done** | PHS-MISS-001/002/003/004 all done |
 | 20 | `Services/WoWStateManager/TASKS.md` | **Done** | WSM-MISS-001/002/003/004/005 all done |
-| 21 | `Tests/TASKS.md` | Pending | TST-UMB-001..005 |
-| 22 | `Tests/BotRunner.Tests/TASKS.md` | Pending | BRT-CR-001..PAR-002 |
+| 21 | `Tests/TASKS.md` | **Done** | TST-UMB-001..005 verified complete |
+| 22 | `Tests/BotRunner.Tests/TASKS.md` | **Partial** | BRT-CR-001 done; BRT-CR-002/003, BRT-PAR-001/002 need live server |
 | 23 | `Tests/Navigation.Physics.Tests/TASKS.md` | **Done** | NPT-MISS-001..003 shipped |
 | 24 | `Tests/PathfindingService.Tests/TASKS.md` | Pending | PFS-TST-001..006 |
-| 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | Pending | PHS-TST-001..005 |
+| 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | **Partial** | PHS-TST-001/003 done; PHS-TST-002/004/005 low priority |
 | 26-41 | Remaining test/UI/AI projects | Pending | See local files |
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 15 — action correlation, RPT cancellation/cleanup, live-validation triage.
+- **Current work:** Quick-fix sweep batch 16 — umbrella verification and test task triage.
 - **Last delta (this session):**
-  - `BBR-MISS-001`: Action dispatch correlation token `[act-N]` in BotRunnerService.cs (receive/dispatch/completion)
-  - `BBR-MISS-002/004/005`: Marked code-complete — stall detection, path config, parity infra already exist (live validation deferred)
-  - `BR-MISS-002`: Marked code-complete — Orgrimmar setup + reclaim gating already in place (live validation deferred)
-  - `NAV-MISS-004`: Marked code-complete — path consumption config correct (live validation deferred)
-  - `RPT-MISS-001`: CancellationToken threaded through orchestration (Program.cs, runner DisposeAsync)
-  - `RPT-MISS-002`: PID-scoped process cleanup in Program.cs (CleanupRepoScopedProcesses)
-  - `RPT-MISS-003/004`: Marked code-complete (live validation deferred)
-- **Build verification:**
-  - dotnet build BotRunner.csproj Release: 0 errors
-  - dotnet build RecordedTests.PathingTests.csproj Release: 0 errors
-  - BotRunner.Tests: 67/67 pass (NavigationPathTests + ActionForwardingContractTests + ForegroundObjectRegressionTests)
+  - Batch 15 committed (`5f85105`) and pushed — action correlation, RPT cancellation/cleanup, live-validation triage.
+  - Batch 16: Umbrella files verified complete (Exports, Services, Tests). PHS-TST-001/003 marked done.
+  - Execution queue: 6 rows updated (Exports → Done, Services → Done, Tests → Done, BotRunner.Tests → Partial, PromptHandlingService.Tests → Partial, RecordedTests.Shared → Pending/NuGet-blocked).
 - **Remaining open items:**
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-  - Pending local files: Exports/TASKS.md, RecordedTests.Shared/TASKS.md, Services/TASKS.md, Tests/TASKS.md, Tests/BotRunner.Tests/TASKS.md, Tests/PathfindingService.Tests/TASKS.md, Tests/PromptHandlingService.Tests/TASKS.md
-  - Live validation: BBR-MISS-002/004/005, BR-MISS-002, NAV-MISS-004, RPT-MISS-003/004
-- **Next task:** Commit batch 15, then continue with remaining pending local TASKS.md files.
+  - Pending local files: RecordedTests.Shared/TASKS.md (NuGet-blocked), Tests/PathfindingService.Tests/TASKS.md (PFS-TST-001..006)
+  - Partially done: Tests/BotRunner.Tests/TASKS.md (live server needed), Tests/PromptHandlingService.Tests/TASKS.md (PHS-TST-002/004/005 low priority)
+  - Live validation: BBR-MISS-002/004/005, BR-MISS-002, NAV-MISS-004, RPT-MISS-003/004, BRT-CR-002/003, BRT-PAR-001/002
+- **Next task:** Commit batch 16, then continue with PFS-TST and PHS-TST actionable items.

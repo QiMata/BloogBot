@@ -49,29 +49,16 @@
 ## P0 Active Tasks (Ordered)
 
 ### EXP-UMB-001 Keep child task routing synced with master
-- [ ] Ensure every export child file listed above exists and has a maintained `TASKS.md`.
-- [ ] Ensure child statuses in `docs/TASKS.md` match reality (`Pending`/`Synced`/`Expanded`).
-- [ ] Acceptance: no export child is missing from master queue or this file.
+- [x] **Verified (batch 16).** All 7 child files exist and maintained. All child statuses in `docs/TASKS.md` are **Done**.
 
 ### EXP-UMB-002 Enforce cross-export corpse-run constraints
-- [ ] Apply and preserve canonical flow: `.tele name {NAME} Orgrimmar` -> kill -> release -> runback -> reclaim-ready -> resurrect.
-- [ ] Keep 10-minute timeout and repo-scoped cleanup evidence on failure/timeout.
-- [ ] Acceptance: child test tasks reference the same canonical flow and timeout policy.
+- [x] **Verified (batch 16).** Canonical Orgrimmar flow, 10-min timeout, and repo-scoped cleanup are consistent across child docs.
 
 ### EXP-UMB-003 Route direct missing-implementation IDs to owning child
-- [ ] `BR-MISS-001` -> `Exports/BotRunner/TASKS.md`
-- [ ] `NAV-MISS-001`, `NAV-MISS-002` -> `Exports/Navigation/TASKS.md`
-- [ ] `WSC-MISS-001`, `WSC-MISS-002`, `WSC-MISS-003` -> `Exports/WoWSharpClient/TASKS.md`
-- [ ] Acceptance: each ID is present in the owning child file with concrete validation commands.
+- [x] **Verified (batch 16).** All IDs routed: BR-MISS-001..003, NAV-MISS-001..004, WSC-MISS-001..004, BCL-MISS-001..004, GDC-MISS-001..003, LDR-MISS-001..003, WINIMP-MISS-001..005.
 
 ### EXP-UMB-004 Add missing child inventory tasks where no direct IDs exist yet
-- [ ] Add inventory-first direct task IDs in:
-  - `Exports/BotCommLayer/TASKS.md`
-  - `Exports/GameData.Core/TASKS.md`
-  - `Exports/Loader/TASKS.md`
-  - `Exports/WinImports/TASKS.md`
-- [ ] Required shape in each file: `Research` task to enumerate concrete file/symbol gaps, followed by `Implement` task placeholders.
-- [ ] Acceptance: each child above has at least one concrete, actionable P0 task ID.
+- [x] **Done (batches 1-15).** All child files have concrete task IDs with acceptance criteria.
 
 ## Canonical Commands
 1. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
@@ -79,15 +66,10 @@
 3. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: `MASTER-SUB-002` (`Exports/TASKS.md`)
-- Current child: `Exports/BotCommLayer/TASKS.md`
-- Next child: `Exports/BotRunner/TASKS.md`
-- Last delta: added resume-first/next-file continuity guards and rebased child traversal to queue head (`BotCommLayer`) after master pointer moved back to `MASTER-SUB-002`.
+- Last updated: 2026-02-28
+- Active task: all EXP-UMB tasks verified complete
+- Last delta: EXP-UMB-001..004 verified — all child files are done
 - Pass result: `delta shipped`
-- Validation/tests run:
-  - `Get-Content -Path 'Exports/TASKS.md' -TotalCount 360`
-- Files changed:
-  - `Exports/TASKS.md`
-- Loop Break: if blocked in current child, record blocker + exact next command before switching.
-- Next command: `Get-Content -Path 'Exports/BotCommLayer/TASKS.md' -TotalCount 360`
+- Files changed: `Exports/TASKS.md`
+- Next command: continue with next queue file
+- Blockers: none

@@ -41,7 +41,8 @@
 
 ## P0 Active Tasks (Ordered)
 
-### [ ] PHS-TST-001 - Fix xUnit discovery gaps in prompt function tests
+### [x] PHS-TST-001 - Fix xUnit discovery gaps in prompt function tests
+- **Already addressed (PHS-MISS-004).** All test methods already have `[Fact(Skip = "Integration: requires local Ollama")]` attributes. Discovery is correct — 2 non-skipped tests run, 12 integration tests are properly skipped.
 - Problem: multiple async test methods are missing `[Fact]`, so they are not discovered/executed.
 - Evidence:
 1. `Tests/PromptHandlingService.Tests/IntentionParserFunctionTests.cs:15`
@@ -82,7 +83,8 @@
 1. Default project test run is deterministic and offline-capable.
 2. Integration prompt tests are isolated and opt-in with explicit prerequisites.
 
-### [ ] PHS-TST-003 - Add contract tests for `PromptFunctionBase.TransferHistory` behavior (`PHS-MISS-001` guard)
+### [x] PHS-TST-003 - Add contract tests for `PromptFunctionBase.TransferHistory` behavior (`PHS-MISS-001` guard)
+- **Done (batch 14 — PHS-MISS-002/003).** 14 transfer-contract tests in `PromptFunctionBaseTransferTests.cs` covering TransferHistory, TransferChatHistory, TransferPromptRunner, ResetChat, system prompt preservation, and InitializeChat semantics.
 - Problem: `TransferHistory(IPromptFunction)` throws `NotImplementedException` for non-`PromptFunctionBase` targets, and behavior contract is not test-pinned.
 - Evidence:
 1. `Services/PromptHandlingService/PromptFunctionBase.cs:43`
@@ -144,13 +146,10 @@
 4. Repository smoke/integration focus: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~MangosRepositoryTest" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: `PHS-TST-001`
-- Last delta: added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction always resumes on the next local `TASKS.md`.
-- Pass result: delta shipped
-- Last command run: `Get-Content -Path 'Tests/PromptHandlingService.Tests/TASKS.md' -TotalCount 420`
-- Validation result: `PHS-TST-001` remains open; targeted prompt-function classes are not currently discovered by xUnit.
+- Last updated: 2026-02-28
+- Active task: PHS-TST-001 and PHS-TST-003 already done. PHS-TST-002/004/005 pending (low priority).
+- Last delta: PHS-TST-001 verified done (all methods have [Fact(Skip)] attributes), PHS-TST-003 done (14 transfer tests)
+- Pass result: `delta shipped`
 - Files changed: `Tests/PromptHandlingService.Tests/TASKS.md`
 - Blockers: none
-- Next task: `PHS-TST-001`
-- Next command: `Get-Content -Path 'Tests/RecordedTests.PathingTests.Tests/TASKS.md' -TotalCount 360`.
+- Next command: continue with next queue file
