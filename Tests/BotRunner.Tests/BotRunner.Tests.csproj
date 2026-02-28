@@ -37,6 +37,7 @@
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
     <ProjectReference Include="..\..\Exports\WinImports\WinProcessImports.csproj" />
     <ProjectReference Include="..\..\Services\DecisionEngineService\DecisionEngineService.csproj" />
+    <ProjectReference Include="..\..\BotProfiles\BotProfiles.csproj" />
     <!-- Build-order only: PathfindingService is x64 and runs as a separate process.
          We need it built but don't load its assembly in the x86 test host. -->
     <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj"

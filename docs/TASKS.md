@@ -57,20 +57,29 @@
 - [ ] `FG-MISS-004` Regression checks for FG snapshot paths — needs test design
 
 ### Services
-- [ ] `CPPMCP-MISS-001` File analysis response in `mcp_server.cpp:94` — needs ASTAnalyzer integration design
-- [x] `CPPMCP-MISS-002` Symbol usage analysis `IsUsed` flag — documented as deferred (needs AST-level resolution)
-- [x] `CPPMCP-BLD-001` System.Text.Json package downgrade fixed (8.0.5 → 9.0.5)
-- [x] `CPPMCP-ARCH-002` 10 zero-byte tool placeholder files deleted
 - [x] `PHS-MISS-001` `NotImplementedException` → `ArgumentException` in `PromptFunctionBase.cs:47`
 - [x] `WSM-MISS-001` PathfindingService readiness gate — fail-fast on unavailability instead of proceeding
 - [x] `WSM-MISS-003` `StopManagedService` → `StopManagedServiceAsync` with awaited stop + timeout (no more fire-and-forget)
 - [x] `DES-MISS-003` FileSystemWatcher lifetime fixed — stored as field, IDisposable implemented
 - [x] `DES-MISS-004` Null/empty path validation added to CombatPredictionService + DecisionEngine constructors
-- [x] `LMCP-MISS-001` Dead code files deleted (SimpleProgram.cs, LoggingMCPServiceNew.cs, LoggingMCPServiceSimple.cs, SimpleTest.cs)
-- [x] `LMCP-MISS-002` Duplicate class definitions removed from LoggingTools.cs — canonical versions in Services/
-- [x] `LMCP-MISS-003` GetRecentLogs fixed — non-destructive snapshot with LINQ instead of destructive dequeue/re-enqueue
+- [x] `WSM-MISS-002` Dead pathfinding bootstrap helpers removed from Program.cs (EnsurePathfindingServiceIsAvailable, LaunchPathfindingServiceExecutable, WaitForPathfindingServiceToStart)
+- [x] `DES-MISS-001` CombatModelServiceListener pass-through replaced with prediction-backed handler
+- [x] `DES-MISS-002` DecisionEngineWorker heartbeat spam replaced with idle-wait + lifecycle logging (full wiring deferred — needs config)
+- [x] `BBR-MISS-003` BackgroundBotWorker StopAsync override added — deterministic teardown of bot runner + agent factory on shutdown
 - [x] `PFS-MISS-003` Protobuf→native path mode mapping clarified — `req.Straight` → local `smoothPath` variable + log labels fixed
 - [x] `PFS-MISS-005` Fail-fast on missing nav data — `Environment.Exit(1)` instead of warning-and-continue
+
+### Services/CppCodeIntelligenceMCP (Deferred — unused service)
+- [x] `CPPMCP-BLD-001` System.Text.Json package downgrade fixed (8.0.5 → 9.0.5)
+- [x] `CPPMCP-ARCH-002` 10 zero-byte tool placeholder files deleted
+- [x] `CPPMCP-MISS-002` Symbol usage analysis `IsUsed` flag — documented as deferred (needs AST-level resolution)
+- [ ] ~~`CPPMCP-MISS-001` File analysis response — deprioritized (service unused)~~
+
+### Services/LoggingMCPServer (Deferred — unused service)
+- [x] `LMCP-MISS-001` Dead code files deleted
+- [x] `LMCP-MISS-002` Duplicate class definitions removed
+- [x] `LMCP-MISS-003` GetRecentLogs fixed — non-destructive snapshot
+- [ ] ~~`LMCP-MISS-004..006` — deprioritized (service unused)~~
 
 ### UI
 - [x] `UI-MISS-001` `ConvertBack` → `Binding.DoNothing` in `GreaterThanZeroToBooleanConverter.cs`
@@ -80,6 +89,7 @@
 
 ### BotProfiles
 - [x] `BP-MISS-001` 16 miswired PvP factories fixed → `new PvPRotationTask(botContext)`
+- [x] `BP-MISS-002` Regression test for profile factory wiring — reflection-based test guards PvP↔PvE cross-wiring
 
 ### Storage (S3/Azure stubs — deferred, pending NuGet dependencies)
 - [ ] `RTS-MISS-001` S3 ops — requires AWSSDK.S3 NuGet package
@@ -110,7 +120,7 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 | # | Local file | Status | Next IDs |
 |---|-----------|--------|----------|
-| 1 | `BotProfiles/TASKS.md` | **Partial** | BP-MISS-001 done, BP-MISS-002..004 pending |
+| 1 | `BotProfiles/TASKS.md` | **Partial** | BP-MISS-001/002 done, BP-MISS-003/004 pending |
 | 2 | `Exports/TASKS.md` | Pending | EXP-UMB-001..004 (documentation) |
 | 3 | `Exports/BotCommLayer/TASKS.md` | Pending | BCL-MISS-001..004 |
 | 4 | `Exports/BotRunner/TASKS.md` | Pending | BR-MISS-001..003 |
@@ -122,14 +132,14 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 10 | `RecordedTests.PathingTests/TASKS.md` | Pending | RPT-MISS-001..005 |
 | 11 | `RecordedTests.Shared/TASKS.md` | Pending | RTS-MISS-001..004 |
 | 12 | `Services/TASKS.md` | Pending | SRV-UMB-001..004 |
-| 13 | `Services/BackgroundBotRunner/TASKS.md` | Pending | BBR-MISS-001..005 |
-| 14 | `Services/CppCodeIntelligenceMCP/TASKS.md` | **Partial** | CPPMCP-BLD-001/ARCH-002 done, MISS-001/ARCH-001/TST-001 pending |
-| 15 | `Services/DecisionEngineService/TASKS.md` | **Partial** | DES-MISS-003/004 done, DES-MISS-001/002/005 pending |
+| 13 | `Services/BackgroundBotRunner/TASKS.md` | **Partial** | BBR-MISS-003 done, BBR-MISS-001/002/004/005 pending |
+| 14 | `Services/CppCodeIntelligenceMCP/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
+| 15 | `Services/DecisionEngineService/TASKS.md` | **Partial** | DES-MISS-001/002/003/004 done, DES-MISS-005 pending |
 | 16 | `Services/ForegroundBotRunner/TASKS.md` | **Partial** | FG-MISS-001/002/003 done, FG-MISS-004/005 pending |
-| 17 | `Services/LoggingMCPServer/TASKS.md` | **Partial** | LMCP-MISS-001/002/003 done, LMCP-MISS-004/005/006 pending |
+| 17 | `Services/LoggingMCPServer/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
 | 18 | `Services/PathfindingService/TASKS.md` | **Partial** | PFS-MISS-003/005 done, PFS-MISS-001/002/004/006/007 pending |
 | 19 | `Services/PromptHandlingService/TASKS.md` | **Partial** | PHS-MISS-001 done, PHS-MISS-002..003 pending |
-| 20 | `Services/WoWStateManager/TASKS.md` | **Partial** | WSM-MISS-001/003 done, WSM-MISS-002/004/005 pending |
+| 20 | `Services/WoWStateManager/TASKS.md` | **Partial** | WSM-MISS-001/002/003 done, WSM-MISS-004/005 pending |
 | 21 | `Tests/TASKS.md` | Pending | TST-UMB-001..005 |
 | 22 | `Tests/BotRunner.Tests/TASKS.md` | Pending | BRT-CR-001..PAR-002 |
 | 23 | `Tests/Navigation.Physics.Tests/TASKS.md` | **Done** | NPT-MISS-001..003 shipped |
@@ -138,25 +148,19 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 26-41 | Remaining test/UI/AI projects | Pending | See local files |
 
 ## Session Handoff
-- **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep across services — 14 additional items completed this session.
+- **Last updated:** 2026-02-27
+- **Current work:** Quick-fix sweep batch 2 — 5 additional items completed. LoggingMCPServer + CppCodeIntelligenceMCP deprioritized per user.
 - **Last delta (this session):**
-  - `WINIMP-MISS-002`: Duplicate P/Invoke declarations normalized — raw-uint set removed, typed-enum set kept
-  - `WINIMP-MISS-003`: CancellationToken added to WoWProcessDetector.WaitForProcessReadyAsync
-  - `WSM-MISS-001`: PathfindingService readiness gate — fail-fast with error log instead of proceeding
-  - `WSM-MISS-003`: StopManagedService → StopManagedServiceAsync with awaited stop + 10s timeout
-  - `DES-MISS-003`: FileSystemWatcher lifetime fixed — stored as field, IDisposable implemented
-  - `DES-MISS-004`: Null/empty path validation added to CombatPredictionService + DecisionEngine
-  - `LMCP-MISS-001`: 4 dead code files deleted (SimpleProgram.cs, LoggingMCPServiceNew/Simple.cs, SimpleTest.cs)
-  - `LMCP-MISS-002`: 3 duplicate class defs removed from LoggingTools.cs, GetSystemMetrics added to Services TelemetryCollector
-  - `LMCP-MISS-003`: GetRecentLogs → non-destructive LINQ snapshot (was destructive TryDequeue)
-  - `CPPMCP-BLD-001`: System.Text.Json 8.0.5→9.0.5 (NU1605 fix — build was previously broken)
-  - `CPPMCP-ARCH-002`: 10 zero-byte tool placeholder files deleted
-  - `PFS-MISS-003`: smoothPath mapping clarified with local variable + log label fix
-  - `PFS-MISS-005`: Fail-fast on missing nav data (Environment.Exit(1))
-  - `DB-CLEAN-001`: Added as low-priority task (user request)
+  - `BP-MISS-002`: Reflection-based regression test for profile factory wiring (4 tests, all pass)
+  - `BBR-MISS-003`: BackgroundBotWorker StopAsync override — deterministic teardown of bot runner + agent factory
+  - `DES-MISS-001`: CombatModelServiceListener now calls DecisionEngine.GetNextActions instead of base pass-through
+  - `DES-MISS-002`: DecisionEngineWorker heartbeat spam removed, replaced with idle-wait + lifecycle logging
+  - `WSM-MISS-002`: 3 dead pathfinding bootstrap helpers removed (~95 LOC: EnsurePathfindingServiceIsAvailable, LaunchPathfindingServiceExecutable, WaitForPathfindingServiceToStart)
+  - LoggingMCPServer and CppCodeIntelligenceMCP tasks marked as deferred (unused services)
 - **Remaining open items:**
-  - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, CPPMCP-MISS-001, FG-MISS-004
+  - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004/005
+  - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-004/005, DES-MISS-005
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
-  - Sub-TASKS queue: ~45 remaining items across 25 local TASKS.md files
-- **Next task:** Continue working remaining sub-TASKS items. Next targets: BBR-MISS-002/003, BCL-MISS-003/004, GDC-MISS-002/003.
+  - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
+  - Sub-TASKS queue: ~75 remaining items across local TASKS.md files
+- **Next task:** Continue quick-fix sweep. Next targets: PFS-MISS-001/002, BotCommLayer (BCL-MISS-002/003), Loader (LDR-MISS-002/003).

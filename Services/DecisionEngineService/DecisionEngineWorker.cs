@@ -6,33 +6,29 @@ using System.Threading.Tasks;
 
 namespace DecisionEngineService
 {
+    /// <summary>
+    /// Hosted worker for the decision engine. Currently logs lifecycle events.
+    /// Full listener/prediction wiring requires configuration (port, SQLite path,
+    /// training data directory) — see DES-MISS-002 in TASKS.md.
+    /// </summary>
     public class DecisionEngineWorker(ILogger<DecisionEngineWorker> logger) : BackgroundService
     {
         private readonly ILogger<DecisionEngineWorker> _logger = logger;
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("DecisionEngineWorker is running.");
+            _logger.LogInformation("DecisionEngineWorker started. Prediction service is not yet wired (DES-MISS-002).");
 
-            stoppingToken.Register(() =>
-                _logger.LogInformation("DecisionEngineWorker is stopping."));
-
-            while (!stoppingToken.IsCancellationRequested)
+            try
             {
-                try
-                {
-                    if (_logger.IsEnabled(LogLevel.Information))
-                        _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-
-                    await Task.Delay(1000, stoppingToken);
-                }
-                catch (Exception ex) when (!(ex is OperationCanceledException && stoppingToken.IsCancellationRequested))
-                {
-                    _logger.LogError(ex, "Error occurred in DecisionEngineWorker loop.");
-                }
+                await Task.Delay(Timeout.Infinite, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // Normal shutdown
             }
 
-            _logger.LogInformation("DecisionEngineWorker has stopped.");
+            _logger.LogInformation("DecisionEngineWorker stopped.");
         }
     }
 }

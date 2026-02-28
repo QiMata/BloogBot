@@ -1673,3 +1673,22 @@ Clarified confusing `req.Straight`→`smoothPath` mapping in PathfindingSocketSe
 
 ### PFS-MISS-005 — Nav Data Fail-Fast (Done 2026-02-28)
 Changed PathfindingService Program.cs from warning-and-continue to `Environment.Exit(1)` when nav data directories (mmaps/maps/vmaps) cannot be found. Service now fails fast at startup instead of accepting requests it can't serve.
+
+---
+
+## Quick-Fix Sweep Batch 2 (2026-02-27)
+
+### BP-MISS-002 — Profile Factory Wiring Regression Test (Done 2026-02-27)
+Added reflection-based regression test (`BotProfileFactoryBindingsTests.cs`) that discovers all 27 BotBase subclasses and asserts: (1) CreatePvPRotationTask never returns a PvE task, (2) CreatePvERotationTask never returns a PvP task, (3) all profiles have valid Name/FileName, (4) expected profile count. Added BotProfiles project reference to test csproj.
+
+### BBR-MISS-003 — BackgroundBotWorker Deterministic Teardown (Done 2026-02-27)
+Added `StopAsync` override to `BackgroundBotWorker.cs` that explicitly calls `_botRunner.Stop()` and `ResetAgentFactory()` on host shutdown. Previously, shutdown only canceled the stoppingToken without cleaning up bot runner state or agent factory subscriptions.
+
+### DES-MISS-001 — CombatModelServiceListener Prediction Handler (Done 2026-02-27)
+Replaced pass-through `base.HandleRequest()` in `CombatModelServiceListener.cs` with actual call to `DecisionEngine.GetNextActions(request)`. Logs prediction count and handles failures with explicit error logging instead of silent empty response.
+
+### DES-MISS-002 — DecisionEngineWorker Lifecycle (Done 2026-02-27)
+Replaced heartbeat-only worker loop (logged every 1s) with idle-wait pattern using `Task.Delay(Timeout.Infinite)`. Logs startup/shutdown lifecycle events. Full listener/prediction wiring deferred pending configuration (port, SQLite path, training data directory).
+
+### WSM-MISS-002 — Dead Pathfinding Bootstrap Helpers Removed (Done 2026-02-27)
+Removed 3 unused methods (~95 LOC) from `WoWStateManager/Program.cs`: `EnsurePathfindingServiceIsAvailable`, `LaunchPathfindingServiceExecutable`, `WaitForPathfindingServiceToStart`. These were superseded by the inline `LaunchPathfindingService` + `WaitForPathfindingService` flow used in `Main()`.

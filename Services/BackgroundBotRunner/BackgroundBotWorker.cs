@@ -83,10 +83,33 @@ namespace BackgroundBotRunner
                     await Task.Delay(100, stoppingToken);
                 }
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // Normal shutdown — handled in StopAsync
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in BackgroundBotWorker");
             }
+        }
+
+        public override async Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("BackgroundBotWorker stopping — cleaning up bot runner and agent factory.");
+
+            try
+            {
+                _botRunner.Stop();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error stopping bot runner during shutdown.");
+            }
+
+            ResetAgentFactory();
+
+            _logger.LogInformation("BackgroundBotWorker cleanup complete.");
+            await base.StopAsync(cancellationToken);
         }
 
         private static BotBehaviorConfig LoadBehaviorConfig(IConfiguration configuration)
