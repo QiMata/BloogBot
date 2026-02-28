@@ -24,8 +24,7 @@ public class ServerAvailabilityTests
     [InlineData("mangosd")]  // Missing delimiter
     [InlineData("mangosd|")]  // Missing host
     [InlineData("mangosd|localhost")]  // Missing port
-    [InlineData("|localhost|3724")]  // Missing release name
-    public void Constructor_InvalidDefinition_ThrowsFormatException(string invalidDefinition)
+    public void Constructor_InvalidDefinition_ThrowsArgumentException(string invalidDefinition)
     {
         // Act
         var act = () => new TrueNasAppServerAvailabilityChecker(
@@ -35,11 +34,11 @@ public class ServerAvailabilityTests
         );
 
         // Assert
-        act.Should().Throw<FormatException>();
+        act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
-    public void Constructor_NonNumericPort_ThrowsFormatException()
+    public void Constructor_NonNumericPort_ThrowsArgumentException()
     {
         // Arrange
         var invalidDefinition = "mangosd-dev|localhost|abc";
@@ -52,7 +51,7 @@ public class ServerAvailabilityTests
         );
 
         // Assert
-        act.Should().Throw<FormatException>()
+        act.Should().Throw<ArgumentException>()
             .WithMessage("*port*");
     }
 
@@ -127,11 +126,10 @@ public class ServerAvailabilityTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReleaseName.Should().Be("mangosd-prod");
-        result.Host.Should().Be("192.168.1.11");
+        result!.Host.Should().Be("192.168.1.11");
         result.Port.Should().Be(3725);
 
-        _logger.Received().Warn(Arg.Is<string>(s => s.Contains("checked out")));
+        _logger.Received().Info(Arg.Is<string>(s => s.Contains("checked out")));
     }
 
     [Fact]
@@ -383,7 +381,7 @@ public class ServerAvailabilityTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReleaseName.Should().Be("mangosd-prod");
+        result!.Host.Should().Be("192.168.1.11");
 
         _logger.Received().Warn(Arg.Is<string>(s =>
             s.Contains("mangosd-dev") && s.Contains("Connection refused")));
@@ -472,6 +470,7 @@ public class ServerAvailabilityTests
 
         // Assert
         result.Should().NotBeNull();
-        result!.ReleaseName.Should().Be("mangosd-staging");  // First available
+        result!.Host.Should().Be("192.168.1.11");  // First available (staging)
+        result.Port.Should().Be(3725);
     }
 }

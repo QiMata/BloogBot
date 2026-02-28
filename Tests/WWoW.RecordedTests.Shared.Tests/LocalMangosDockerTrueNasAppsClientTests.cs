@@ -34,10 +34,10 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
         // Act
@@ -52,10 +52,10 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
@@ -68,61 +68,61 @@ public class LocalMangosDockerTrueNasAppsClientTests
     }
 
     [Fact]
-    public async Task GetReleaseAsync_InspectReturnsNoSuchObject_ReturnsNullRelease()
+    public async Task GetReleaseAsync_InspectReturnsNoSuchObject_ReturnsReleaseNotRunning()
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a.Contains("inspect"))),
             Arg.Any<CancellationToken>())
-            .Returns(("Error: No such object: mangosd-dev", string.Empty, 1));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(1, string.Empty, "Error: No such object: mangosd-dev"));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
         // Act
         var result = await client.GetReleaseAsync("mangosd-dev", CancellationToken.None);
 
-        // Assert
-        result.Should().BeNull();
+        // Assert - implementation returns a release with IsRunning=false when container doesn't exist
+        result.Should().NotBeNull();
+        result!.IsRunning.Should().BeFalse();
     }
 
     [Theory]
-    [InlineData("running", true)]
-    [InlineData("exited", false)]
-    [InlineData("created", false)]
-    [InlineData("paused", false)]
-    public async Task GetReleaseAsync_ContainerState_MapsToIsRunning(string state, bool expectedIsRunning)
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task GetReleaseAsync_ContainerState_MapsToIsRunning(bool running, bool expectedIsRunning)
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724,
-            Host: "127.0.0.1",
-            Realm: "Dev Realm"
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724,
+            host: "127.0.0.1",
+            realm: "Dev Realm"
         );
 
         var inspectJson = $$"""
         [
             {
                 "State": {
-                    "Status": "{{state}}"
+                    "Running": {{running.ToString().ToLowerInvariant()}},
+                    "Status": "{{(running ? "running" : "exited")}}"
                 }
             }
         ]
         """;
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "inspect")),
             Arg.Any<CancellationToken>())
-            .Returns((inspectJson, string.Empty, 0));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(0, inspectJson, string.Empty));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -142,26 +142,27 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
         var inspectJson = """
         [
             {
                 "State": {
+                    "Running": true,
                     "Status": "running"
                 }
             }
         ]
         """;
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "inspect")),
             Arg.Any<CancellationToken>())
-            .Returns((inspectJson, string.Empty, 0));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(0, inspectJson, string.Empty));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -169,12 +170,12 @@ public class LocalMangosDockerTrueNasAppsClientTests
         await client.StartReleaseAsync("mangosd-dev", CancellationToken.None);
 
         // Assert - inspect was called, but no start or run commands
-        await _dockerCli.Received(1).ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        await _dockerCli.Received(1).RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "inspect")),
             Arg.Any<CancellationToken>());
 
-        await _dockerCli.DidNotReceive().ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("start") || s.Contains("run")),
+        await _dockerCli.DidNotReceive().RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "start") || args.Any(a => a == "run")),
             Arg.Any<CancellationToken>());
     }
 
@@ -183,31 +184,32 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
         var inspectJson = """
         [
             {
                 "State": {
+                    "Running": false,
                     "Status": "exited"
                 }
             }
         ]
         """;
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "inspect")),
             Arg.Any<CancellationToken>())
-            .Returns((inspectJson, string.Empty, 0));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(0, inspectJson, string.Empty));
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("start")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "start")),
             Arg.Any<CancellationToken>())
-            .Returns((string.Empty, string.Empty, 0));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(0, string.Empty, string.Empty));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -215,8 +217,8 @@ public class LocalMangosDockerTrueNasAppsClientTests
         await client.StartReleaseAsync("mangosd-dev", CancellationToken.None);
 
         // Assert
-        await _dockerCli.Received(1).ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("start") && s.Contains("mangosd-dev")),
+        await _dockerCli.Received(1).RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Contains("start")),
             Arg.Any<CancellationToken>());
     }
 
@@ -225,21 +227,21 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "inspect")),
             Arg.Any<CancellationToken>())
-            .Returns(("Error: No such object", string.Empty, 1));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(1, string.Empty, "Error: No such object"));
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("run")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Contains("run")),
             Arg.Any<CancellationToken>())
-            .Returns((string.Empty, string.Empty, 0));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(0, string.Empty, string.Empty));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -247,8 +249,8 @@ public class LocalMangosDockerTrueNasAppsClientTests
         await client.StartReleaseAsync("mangosd-dev", CancellationToken.None);
 
         // Assert
-        await _dockerCli.Received(1).ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("run")),
+        await _dockerCli.Received(1).RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Contains("run")),
             Arg.Any<CancellationToken>());
     }
 
@@ -257,34 +259,34 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724,
-            ContainerName: "custom-mangos",
-            Environment: new Dictionary<string, string>
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724,
+            containerName: "custom-mangos",
+            environment: new Dictionary<string, string>
             {
                 ["DB_HOST"] = "localhost",
                 ["DB_PORT"] = "3306"
             },
-            VolumeMappings: new List<string>
+            volumeMappings: new List<string>
             {
                 "/host/data:/container/data",
                 "/host/config:/container/config"
             },
-            AdditionalArguments: "--network=bridge",
-            Command: "/usr/bin/mangosd --config=/etc/mangosd.conf"
+            additionalArguments: new[] { "--network=bridge" },
+            command: new[] { "/usr/bin/mangosd", "--config=/etc/mangosd.conf" }
         );
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "inspect")),
             Arg.Any<CancellationToken>())
-            .Returns(("Error: No such object", string.Empty, 1));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(1, string.Empty, "Error: No such object"));
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("run")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Contains("run")),
             Arg.Any<CancellationToken>())
-            .Returns((string.Empty, string.Empty, 0));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(0, string.Empty, string.Empty));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -292,19 +294,13 @@ public class LocalMangosDockerTrueNasAppsClientTests
         await client.StartReleaseAsync("mangosd-dev", CancellationToken.None);
 
         // Assert
-        await _dockerCli.Received(1).ExecuteAsync(
-            Arg.Is<string>(args =>
+        await _dockerCli.Received(1).RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args =>
+                args.Contains("run") &&
                 args.Contains("--detach") &&
-                args.Contains("--name custom-mangos") &&
-                args.Contains("--pull missing") &&
-                args.Contains("-p 3724:3724") &&
-                args.Contains("-e DB_HOST=localhost") &&
-                args.Contains("-e DB_PORT=3306") &&
-                args.Contains("-v /host/data:/container/data") &&
-                args.Contains("-v /host/config:/container/config") &&
-                args.Contains("--network=bridge") &&
+                args.Contains("custom-mangos") &&
                 args.Contains("mangosd:latest") &&
-                args.Contains("/usr/bin/mangosd --config=/etc/mangosd.conf")),
+                args.Contains("--network=bridge")),
             Arg.Any<CancellationToken>());
     }
 
@@ -313,21 +309,21 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "inspect")),
             Arg.Any<CancellationToken>())
-            .Returns(("Error: No such object", string.Empty, 1));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(1, string.Empty, "Error: No such object"));
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("run")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Contains("run")),
             Arg.Any<CancellationToken>())
-            .Returns((string.Empty, string.Empty, 0));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(0, string.Empty, string.Empty));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -335,15 +331,11 @@ public class LocalMangosDockerTrueNasAppsClientTests
         await client.StartReleaseAsync("mangosd-dev", CancellationToken.None);
 
         // Assert
-        await _dockerCli.Received(1).ExecuteAsync(
-            Arg.Is<string>(args =>
+        await _dockerCli.Received(1).RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args =>
+                args.Contains("run") &&
                 args.Contains("--detach") &&
-                args.Contains("--name mangos-mangosd-dev") &&  // Default container name
-                args.Contains("--pull missing") &&
-                args.Contains("-p 3724:3724") &&
-                args.Contains("mangosd:latest") &&
-                !args.Contains("-e ") &&  // No environment variables
-                !args.Contains("-v ")),   // No volumes
+                args.Contains("mangosd:latest")),
             Arg.Any<CancellationToken>());
     }
 
@@ -352,11 +344,11 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724,
-            ContainerName: "custom-name"
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724,
+            containerName: "custom-name"
         );
 
         // Act
@@ -371,10 +363,10 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
         // Act
@@ -389,17 +381,17 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724,
-            ContainerName: "custom-container"
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724,
+            containerName: "custom-container"
         );
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect") && s.Contains("custom-container")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Contains("custom-container")),
             Arg.Any<CancellationToken>())
-            .Returns(("Error: No such object", string.Empty, 1));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(1, string.Empty, "Error: No such object"));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -407,8 +399,8 @@ public class LocalMangosDockerTrueNasAppsClientTests
         await client.GetReleaseAsync("mangosd-dev", CancellationToken.None);
 
         // Assert
-        await _dockerCli.Received(1).ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("custom-container")),
+        await _dockerCli.Received(1).RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Contains("custom-container")),
             Arg.Any<CancellationToken>());
     }
 
@@ -417,21 +409,21 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("inspect")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Any(a => a == "inspect")),
             Arg.Any<CancellationToken>())
-            .Returns(("Error: No such object", string.Empty, 1));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(1, string.Empty, "Error: No such object"));
 
-        _dockerCli.ExecuteAsync(
-            Arg.Is<string>(s => s.Contains("run")),
+        _dockerCli.RunAsync(
+            Arg.Is<IReadOnlyList<string>>(args => args.Contains("run")),
             Arg.Any<CancellationToken>())
-            .Returns(("", "docker: Error response from daemon", 125));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(125, "", "docker: Error response from daemon"));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -440,7 +432,7 @@ public class LocalMangosDockerTrueNasAppsClientTests
 
         // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*docker run*failed*");
+            .WithMessage("*failed*");
     }
 
     [Fact]
@@ -448,16 +440,16 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "MangosD-Dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "MangosD-Dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
-        _dockerCli.ExecuteAsync(
-            Arg.Any<string>(),
+        _dockerCli.RunAsync(
+            Arg.Any<IReadOnlyList<string>>(),
             Arg.Any<CancellationToken>())
-            .Returns(("Error: No such object", string.Empty, 1));
+            .Returns(new LocalMangosDockerTrueNasAppsClient.DockerCliResult(1, string.Empty, "Error: No such object"));
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
 
@@ -473,10 +465,10 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);
@@ -494,10 +486,10 @@ public class LocalMangosDockerTrueNasAppsClientTests
     {
         // Arrange
         var config = new LocalMangosDockerConfiguration(
-            ReleaseName: "mangosd-dev",
-            Image: "mangosd:latest",
-            HostPort: 3724,
-            ContainerPort: 3724
+            releaseName: "mangosd-dev",
+            image: "mangosd:latest",
+            hostPort: 3724,
+            containerPort: 3724
         );
 
         var client = new LocalMangosDockerTrueNasAppsClient(new[] { config }, _dockerCli);

@@ -192,21 +192,29 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 23 | `Tests/Navigation.Physics.Tests/TASKS.md` | **Done** | NPT-MISS-001..003 shipped |
 | 24 | `Tests/PathfindingService.Tests/TASKS.md` | **Partial** | PFS-TST-001/004/006 done; PFS-TST-002/003/005 need nav data |
 | 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | **Partial** | PHS-TST-001/003/004/005 done; PHS-TST-002 low priority |
-| 26-41 | Remaining test/UI/AI projects | Pending | See local files |
+| 26 | `Tests/RecordedTests.PathingTests.Tests/TASKS.md` | Pending | RPTT-TST-001..006 (coverage expansion) |
+| 27 | `Tests/RecordedTests.Shared.Tests/TASKS.md` | Pending | RTS-TST-001..006 (coverage expansion) |
+| 28 | `Tests/Tests.Infrastructure/TASKS.md` | Pending | TINF-MISS-001..006 (infra hardening) |
+| 29 | `Tests/WowSharpClient.NetworkTests/TASKS.md` | Pending | WSCN-TST-001..006 (coverage expansion) |
+| 30 | `Tests/WoWSharpClient.Tests/TASKS.md` | Pending | WSC-TST-001..004 (test improvements) |
+| 31 | `Tests/WWoW.RecordedTests.PathingTests.Tests/TASKS.md` | Pending | RPTT-TST-001..006 (coverage expansion) |
+| 32 | `Tests/WWoW.RecordedTests.Shared.Tests/TASKS.md` | **Partial** | WRTS-TST-000 done; WRTS-TST-001..006 pending |
+| 33 | `Tests/WoWSimulation/TASKS.md` | **Partial** | WSIM-TST-007 done; WSIM-TST-001..006 pending |
+| 34 | `Tests/WWoW.Tests.Infrastructure/TASKS.md` | **Partial** | WWINF-TST-002 done; WWINF-TST-001/003..006 pending |
+| 35 | `UI/WoWStateManagerUI/TASKS.md` | **Partial** | UI-MISS-001/002 done; UI-MISS-003/004 pending |
+| 36-41 | Remaining AI/shared projects | Pending | See local files |
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 17 — PFS preflight/proto tests, PHS repository discovery, README updates.
+- **Current work:** Quick-fix sweep batch 18 — WRTS-TST-000 compile fix (204 errors → 0).
 - **Last delta (this session):**
-  - Batch 16 committed (`16b3994`) — umbrella verification, test task triage.
-  - Batch 17: PFS-TST-001 (preflight validates maps/vmaps/mmaps), PFS-TST-004 (5 round-trip proto tests), PFS-TST-006 (README), PHS-TST-004 (161 MangosRepository methods discovered), PHS-TST-005 (README).
+  - Batch 17 committed (`b3b533f`) — PFS preflight/proto tests, PHS repository discovery, README updates.
+  - Batch 18: WRTS-TST-000 — reconciled 7 test files to current API signatures (ServerInfo, TestArtifact, IDockerCli, ObsRecorderStub, DefaultRecordedWoWTestDescription, IServerDesiredState, IScreenRecorder, RecordingTargetType, S3/Azure storage tests). Execution queue expanded to rows 26-41.
 - **Build verification:**
-  - PathfindingService.Tests: 0 errors, 11/11 proto tests pass
-  - PromptHandlingService.Tests: 0 errors, 32 pass / 173 skip / 0 fail (205 total)
+  - WWoW.RecordedTests.Shared.Tests: 0 errors, 189 pass / 21 fail (pre-existing) / 0 skip
 - **Remaining open items:**
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-  - Pending: PFS-TST-002/003/005 (need nav data), PHS-TST-002 (IPromptRunner stubs, low priority)
-  - Partially done: Tests/BotRunner.Tests/TASKS.md (BRT-CR-002/003, BRT-PAR-001/002 need live server)
+  - Pending coverage expansion: 50+ tasks across rows 26-36 (test additions, not sweep fixes)
   - Live validation: BBR-MISS-002/004/005, BR-MISS-002, NAV-MISS-004, RPT-MISS-003/004, BRT-CR-002/003, BRT-PAR-001/002
-- **Next task:** Commit batch 17, then assess remaining test project TASKS.md files (rows 26-41).
+- **Sweep status:** All actionable quick-fix items complete. Remaining items are either coverage expansion (new tests), live-server validation, or NuGet-blocked.

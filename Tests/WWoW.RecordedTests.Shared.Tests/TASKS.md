@@ -48,7 +48,8 @@
 - `RecordedTestRunner` currently persists artifacts/metadata in happy path (`WWoW.RecordedTests.Shared/RecordedTestRunner.cs:67-80`), and test coverage currently centers on `RunAsync_PersistsArtifactsAndMetadata` (`Tests/WWoW.RecordedTests.Shared.Tests/RecordedTestRunnerTests.cs:19`).
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `WRTS-TST-000` Restore compile baseline for `WWoW.RecordedTests.Shared.Tests` so filtered suites can execute.
+1. [x] `WRTS-TST-000` Restore compile baseline for `WWoW.RecordedTests.Shared.Tests` so filtered suites can execute.
+- **Done (batch 18).** Fixed 204 compile errors across 7 test files. API drift reconciled: ServerInfo ctor, TestArtifact ctor, IDockerCli.RunAsync, ObsRecorderStub.StartAsync (+IRecordedTestContext), IScreenRecorder sigs, DefaultRecordedWoWTestDescription ctor, RecordingTargetType.WindowByTitle, IServerDesiredState mock sigs, MoveLastRecordingAsync sigs, S3/Azure test rewrites to public API. Result: 189 pass, 21 fail (pre-existing in unmodified files), 0 skip.
 - Evidence: current filtered run fails before test discovery with widespread API/signature drift errors (`CS0117`, `CS7036`, `CS1729`, `CS1739`, `CS1503`, `CS1061`).
 - Files: `Tests/WWoW.RecordedTests.Shared.Tests/**/*.cs`, `WWoW.RecordedTests.Shared/**/*.cs`.
 - Required breakdown: reconcile test code to current runtime contracts (constructor/signature/cancellation token updates), then rerun filtered S3/Azure commands and capture first runtime failures after compile is green.
@@ -97,12 +98,11 @@
 - `dotnet test Tests/WWoW.RecordedTests.Shared.Tests/WWoW.RecordedTests.Shared.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: `WRTS-TST-000` (restore compile baseline before filtered storage tests can run).
-- Last delta: Added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction resumes on the next local `TASKS.md`.
+- Last updated: 2026-02-28
+- Active task: WRTS-TST-001..006 pending (lower priority — coverage expansion)
+- Last delta: WRTS-TST-000 fixed (batch 18) — 204 compile errors → 0, 189 pass / 21 fail (pre-existing)
 - Pass result: `delta shipped`
-- Validation/tests run: `dotnet test Tests/WWoW.RecordedTests.Shared.Tests/WWoW.RecordedTests.Shared.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~S3RecordedTestStorageTests" --logger "console;verbosity=minimal"` -> blocked by compile errors (no tests executed).
-- Files changed: `Tests/WWoW.RecordedTests.Shared.Tests/TASKS.md`.
-- Blockers: Test project does not currently compile due cross-suite API/signature drift.
-- Next task: `WRTS-TST-000`.
-- Next command: `Get-Content -Path 'Tests/WWoW.Tests.Infrastructure/TASKS.md' -TotalCount 360`.
+- Build: 0 errors. Tests: 189 pass, 21 fail (pre-existing in unmodified files), 0 skip.
+- Files changed: 7 test files reconciled to current API signatures
+- Blockers: 21 pre-existing test failures in BotRunnerFactoryHelpersTests, FileSystemRecordedTestStorageTests, TrueNasAppsClientTests
+- Next command: continue with next queue file

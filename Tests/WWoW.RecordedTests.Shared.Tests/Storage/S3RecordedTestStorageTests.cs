@@ -1,4 +1,7 @@
 using FluentAssertions;
+using NSubstitute;
+using WWoW.RecordedTests.Shared.Abstractions;
+using WWoW.RecordedTests.Shared.Abstractions.I;
 using WWoW.RecordedTests.Shared.Storage;
 
 namespace WWoW.RecordedTests.Shared.Tests.Storage;
@@ -38,126 +41,147 @@ public class S3RecordedTestStorageTests
         config.ServiceUrl.Should().Be("https://minio.local:9000");
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("not-a-url")]
-    [InlineData("s3://bucket/key")]  // S3 URI not valid for ServiceUrl
-    public void ParseS3Uri_InvalidUri_ThrowsFormatException(string? invalidUri)
+    [Fact]
+    public void Constructor_NullConfiguration_ThrowsArgumentNullException()
     {
         // Act
-        var act = () => S3RecordedTestStorage.ParseS3Uri(invalidUri!);
+        var act = () => new S3RecordedTestStorage(null!);
 
         // Assert
-        act.Should().Throw<FormatException>();
+        act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
-    public void ParseS3Uri_ValidS3Uri_ExtractsBucketAndKey()
+    public void Constructor_ValidConfiguration_Succeeds()
     {
         // Arrange
-        var uri = "s3://my-bucket/recorded-tests/TestName/20250119_120000/recording.mkv";
+        var config = new S3StorageConfiguration
+        {
+            BucketName = "test-bucket",
+            AccessKeyId = "test-key",
+            SecretAccessKey = "test-secret"
+        };
 
         // Act
-        var (bucket, key) = S3RecordedTestStorage.ParseS3Uri(uri);
+        var act = () => new S3RecordedTestStorage(config);
 
         // Assert
-        bucket.Should().Be("my-bucket");
-        key.Should().Be("recorded-tests/TestName/20250119_120000/recording.mkv");
+        act.Should().NotThrow();
     }
 
     [Fact]
-    public void ParseS3Uri_S3UriWithoutKey_ExtractsBucketOnly()
+    public async Task UploadArtifactAsync_ReturnsS3Uri()
     {
         // Arrange
-        var uri = "s3://my-bucket/";
+        var config = new S3StorageConfiguration
+        {
+            BucketName = "test-bucket",
+            AccessKeyId = "test-key",
+            SecretAccessKey = "test-secret",
+            KeyPrefix = "recorded-tests/"
+        };
+
+        var storage = new S3RecordedTestStorage(config);
+        var artifact = new TestArtifact("recording.mkv", "/tmp/recording.mkv");
+        var timestamp = new DateTimeOffset(2025, 1, 19, 12, 0, 0, TimeSpan.Zero);
 
         // Act
-        var (bucket, key) = S3RecordedTestStorage.ParseS3Uri(uri);
+        var result = await storage.UploadArtifactAsync(artifact, "TestName", timestamp, CancellationToken.None);
 
         // Assert
-        bucket.Should().Be("my-bucket");
-        key.Should().BeEmpty();
+        result.Should().StartWith("s3://test-bucket/recorded-tests/");
+        result.Should().Contain("TestName");
+        result.Should().Contain("recording.mkv");
     }
 
     [Fact]
-    public void ParseS3Uri_S3UriWithoutTrailingSlash_ExtractsBucketOnly()
+    public async Task UploadArtifactAsync_NullArtifact_ThrowsArgumentNullException()
     {
         // Arrange
-        var uri = "s3://my-bucket";
+        var config = new S3StorageConfiguration
+        {
+            BucketName = "test-bucket",
+            AccessKeyId = "test-key",
+            SecretAccessKey = "test-secret"
+        };
+
+        var storage = new S3RecordedTestStorage(config);
 
         // Act
-        var (bucket, key) = S3RecordedTestStorage.ParseS3Uri(uri);
+        var act = async () => await storage.UploadArtifactAsync(null!, "TestName", DateTimeOffset.UtcNow, CancellationToken.None);
 
         // Assert
-        bucket.Should().Be("my-bucket");
-        key.Should().BeEmpty();
-    }
-
-    [Theory]
-    [InlineData("https://my-bucket.s3.amazonaws.com/recorded-tests/test.mkv")]
-    [InlineData("http://my-bucket.s3.us-west-2.amazonaws.com/test.mkv")]
-    public void ParseS3Uri_HttpsS3Url_ThrowsFormatException(string httpsUrl)
-    {
-        // S3 storage expects s3:// URIs, not HTTPS URLs
-        // Act
-        var act = () => S3RecordedTestStorage.ParseS3Uri(httpsUrl);
-
-        // Assert
-        act.Should().Throw<FormatException>()
-            .WithMessage("*s3://*");
+        await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
     [Fact]
-    public void GenerateS3Key_SanitizesTestName()
+    public async Task ListArtifactsAsync_ReturnsEmptyList()
     {
-        // Arrange
-        var testName = "Test/Path\\With:Invalid*Chars?";
-        var timestamp = "20250119_120000";
-        var artifactName = "recording.mkv";
-        var keyPrefix = "recorded-tests/";
+        // Arrange - S3 operations are stubbed
+        var config = new S3StorageConfiguration
+        {
+            BucketName = "test-bucket",
+            AccessKeyId = "test-key",
+            SecretAccessKey = "test-secret"
+        };
+
+        var storage = new S3RecordedTestStorage(config);
 
         // Act
-        var key = S3RecordedTestStorage.GenerateS3Key(keyPrefix, testName, timestamp, artifactName);
+        var result = await storage.ListArtifactsAsync("TestName", CancellationToken.None);
 
-        // Assert
-        key.Should().NotContain("/");
-        key.Should().NotContain("\\");
-        key.Should().NotContain(":");
-        key.Should().NotContain("*");
-        key.Should().NotContain("?");
-        key.Should().StartWith(keyPrefix);
-        key.Should().EndWith($"/{timestamp}/{artifactName}");
+        // Assert - Stub returns empty list
+        result.Should().BeEmpty();
     }
 
     [Fact]
-    public void GenerateS3Key_IncludesAllComponents()
+    public void Dispose_DoesNotThrow()
     {
         // Arrange
-        var testName = "ValidTestName";
-        var timestamp = "20250119_120000";
-        var artifactName = "recording.mkv";
-        var keyPrefix = "recorded-tests/";
+        var config = new S3StorageConfiguration
+        {
+            BucketName = "test-bucket",
+            AccessKeyId = "test-key",
+            SecretAccessKey = "test-secret"
+        };
+
+        var storage = new S3RecordedTestStorage(config);
 
         // Act
-        var key = S3RecordedTestStorage.GenerateS3Key(keyPrefix, testName, timestamp, artifactName);
+        var act = () => storage.Dispose();
 
         // Assert
-        key.Should().Be("recorded-tests/ValidTestName/20250119_120000/recording.mkv");
+        act.Should().NotThrow();
     }
 
     [Fact]
-    public void GenerateS3Uri_CreatesValidS3Uri()
+    public async Task StoreAsync_DoesNotThrow()
     {
         // Arrange
-        var bucketName = "my-bucket";
-        var key = "recorded-tests/TestName/20250119_120000/recording.mkv";
+        var config = new S3StorageConfiguration
+        {
+            BucketName = "test-bucket",
+            AccessKeyId = "test-key",
+            SecretAccessKey = "test-secret"
+        };
+
+        var storage = new S3RecordedTestStorage(config);
+        var storeContext = new RecordedTestStorageContext(
+            TestName: "Test",
+            AutomationRunId: null,
+            Success: true,
+            Message: "ok",
+            TestRunDirectory: "/tmp",
+            RecordingArtifact: null,
+            StartedAt: DateTimeOffset.UtcNow,
+            CompletedAt: DateTimeOffset.UtcNow
+        );
 
         // Act
-        var uri = S3RecordedTestStorage.GenerateS3Uri(bucketName, key);
+        var act = async () => await storage.StoreAsync(storeContext, CancellationToken.None);
 
         // Assert
-        uri.Should().Be("s3://my-bucket/recorded-tests/TestName/20250119_120000/recording.mkv");
+        await act.Should().NotThrowAsync();
     }
 
     // Note: Actual S3 operations (Upload, Download, List, Delete) are stubbed

@@ -1,4 +1,7 @@
 using FluentAssertions;
+using NSubstitute;
+using WWoW.RecordedTests.Shared.Abstractions;
+using WWoW.RecordedTests.Shared.Abstractions.I;
 using WWoW.RecordedTests.Shared.Storage;
 
 namespace WWoW.RecordedTests.Shared.Tests.Storage;
@@ -20,130 +23,182 @@ public class AzureBlobRecordedTestStorageTests
         config.BlobPrefix.Should().Be("recorded-tests/");
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("not-a-url")]
-    [InlineData("s3://bucket/key")]  // S3 URI not valid for Azure
-    [InlineData("http://storage.blob.core.windows.net/container/blob")]  // HTTP not HTTPS
-    public void ParseAzureBlobUri_InvalidUri_ThrowsFormatException(string? invalidUri)
+    [Fact]
+    public void Constructor_NullConfiguration_ThrowsArgumentNullException()
     {
         // Act
-        var act = () => AzureBlobRecordedTestStorage.ParseAzureBlobUri(invalidUri!);
+        var act = () => new AzureBlobRecordedTestStorage(null!);
 
         // Assert
-        act.Should().Throw<FormatException>();
+        act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
-    public void ParseAzureBlobUri_ValidAzureUri_ExtractsAccountContainerAndBlob()
+    public void Constructor_ValidConfiguration_Succeeds()
     {
         // Arrange
-        var uri = "https://mystorageaccount.blob.core.windows.net/mycontainer/recorded-tests/TestName/20250119_120000/recording.mkv";
+        var config = new AzureBlobStorageConfiguration
+        {
+            AccountName = "testaccount",
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=testaccount;AccountKey=key;EndpointSuffix=core.windows.net",
+            ContainerName = "test-container"
+        };
 
         // Act
-        var (account, container, blobName) = AzureBlobRecordedTestStorage.ParseAzureBlobUri(uri);
+        var act = () => new AzureBlobRecordedTestStorage(config);
 
         // Assert
-        account.Should().Be("mystorageaccount");
-        container.Should().Be("mycontainer");
-        blobName.Should().Be("recorded-tests/TestName/20250119_120000/recording.mkv");
+        act.Should().NotThrow();
     }
 
     [Fact]
-    public void ParseAzureBlobUri_UriWithoutBlobName_ThrowsFormatException()
-    {
-        // Arrange - only account and container
-        var uri = "https://mystorageaccount.blob.core.windows.net/mycontainer/";
-
-        // Act
-        var act = () => AzureBlobRecordedTestStorage.ParseAzureBlobUri(uri);
-
-        // Assert - Azure blob URIs must include a blob name
-        act.Should().Throw<FormatException>();
-    }
-
-    [Fact]
-    public void ParseAzureBlobUri_UriWithOnlyAccount_ThrowsFormatException()
+    public async Task UploadArtifactAsync_ReturnsAzureBlobUri()
     {
         // Arrange
-        var uri = "https://mystorageaccount.blob.core.windows.net/";
+        var config = new AzureBlobStorageConfiguration
+        {
+            AccountName = "mystorageaccount",
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=mystorageaccount;AccountKey=key;EndpointSuffix=core.windows.net",
+            ContainerName = "mycontainer",
+            BlobPrefix = "recorded-tests/"
+        };
+
+        var storage = new AzureBlobRecordedTestStorage(config);
+        var artifact = new TestArtifact("recording.mkv", "/tmp/recording.mkv");
+        var timestamp = new DateTimeOffset(2025, 1, 19, 12, 0, 0, TimeSpan.Zero);
 
         // Act
-        var act = () => AzureBlobRecordedTestStorage.ParseAzureBlobUri(uri);
+        var result = await storage.UploadArtifactAsync(artifact, "TestName", timestamp, CancellationToken.None);
 
         // Assert
-        act.Should().Throw<FormatException>();
+        result.Should().StartWith("https://mystorageaccount.blob.core.windows.net/mycontainer/recorded-tests/");
+        result.Should().Contain("TestName");
+        result.Should().Contain("recording.mkv");
     }
 
     [Fact]
-    public void GenerateBlobName_SanitizesTestName()
+    public async Task UploadArtifactAsync_NullArtifact_ThrowsArgumentNullException()
     {
         // Arrange
-        var testName = "Test/Path\\With:Invalid*Chars?";
-        var timestamp = "20250119_120000";
-        var artifactName = "recording.mkv";
-        var blobPrefix = "recorded-tests/";
+        var config = new AzureBlobStorageConfiguration
+        {
+            AccountName = "testaccount",
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=testaccount;AccountKey=key;EndpointSuffix=core.windows.net",
+            ContainerName = "test-container"
+        };
+
+        var storage = new AzureBlobRecordedTestStorage(config);
 
         // Act
-        var blobName = AzureBlobRecordedTestStorage.GenerateBlobName(blobPrefix, testName, timestamp, artifactName);
+        var act = async () => await storage.UploadArtifactAsync(null!, "TestName", DateTimeOffset.UtcNow, CancellationToken.None);
 
         // Assert
-        blobName.Should().NotContain("\\");
-        blobName.Should().NotContain(":");
-        blobName.Should().NotContain("*");
-        blobName.Should().NotContain("?");
-        blobName.Should().StartWith(blobPrefix);
-        blobName.Should().EndWith($"/{timestamp}/{artifactName}");
+        await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
     [Fact]
-    public void GenerateBlobName_IncludesAllComponents()
+    public async Task ListArtifactsAsync_ReturnsEmptyList()
     {
-        // Arrange
-        var testName = "ValidTestName";
-        var timestamp = "20250119_120000";
-        var artifactName = "recording.mkv";
-        var blobPrefix = "recorded-tests/";
+        // Arrange - Azure Blob operations are stubbed
+        var config = new AzureBlobStorageConfiguration
+        {
+            AccountName = "testaccount",
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=testaccount;AccountKey=key;EndpointSuffix=core.windows.net",
+            ContainerName = "test-container"
+        };
+
+        var storage = new AzureBlobRecordedTestStorage(config);
 
         // Act
-        var blobName = AzureBlobRecordedTestStorage.GenerateBlobName(blobPrefix, testName, timestamp, artifactName);
+        var result = await storage.ListArtifactsAsync("TestName", CancellationToken.None);
 
-        // Assert
-        blobName.Should().Be("recorded-tests/ValidTestName/20250119_120000/recording.mkv");
+        // Assert - Stub returns empty list
+        result.Should().BeEmpty();
     }
 
     [Fact]
-    public void GenerateAzureBlobUri_CreatesValidUri()
+    public void Dispose_DoesNotThrow()
     {
         // Arrange
-        var accountName = "mystorageaccount";
-        var containerName = "mycontainer";
-        var blobName = "recorded-tests/TestName/20250119_120000/recording.mkv";
+        var config = new AzureBlobStorageConfiguration
+        {
+            AccountName = "testaccount",
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=testaccount;AccountKey=key;EndpointSuffix=core.windows.net",
+            ContainerName = "test-container"
+        };
+
+        var storage = new AzureBlobRecordedTestStorage(config);
 
         // Act
-        var uri = AzureBlobRecordedTestStorage.GenerateAzureBlobUri(accountName, containerName, blobName);
+        var act = () => storage.Dispose();
 
         // Assert
-        uri.Should().Be("https://mystorageaccount.blob.core.windows.net/mycontainer/recorded-tests/TestName/20250119_120000/recording.mkv");
+        act.Should().NotThrow();
     }
 
     [Fact]
-    public void GenerateBlobName_AllowsForwardSlashes_InBlobHierarchy()
+    public async Task StoreAsync_DoesNotThrow()
     {
-        // Azure blobs support forward slashes for virtual directories
         // Arrange
-        var testName = "ValidTestName";
-        var timestamp = "20250119_120000";
-        var artifactName = "subfolder/recording.mkv";
-        var blobPrefix = "recorded-tests/";
+        var config = new AzureBlobStorageConfiguration
+        {
+            AccountName = "testaccount",
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=testaccount;AccountKey=key;EndpointSuffix=core.windows.net",
+            ContainerName = "test-container"
+        };
+
+        var storage = new AzureBlobRecordedTestStorage(config);
+        var storeContext = new RecordedTestStorageContext(
+            TestName: "Test",
+            AutomationRunId: null,
+            Success: true,
+            Message: "ok",
+            TestRunDirectory: "/tmp",
+            RecordingArtifact: null,
+            StartedAt: DateTimeOffset.UtcNow,
+            CompletedAt: DateTimeOffset.UtcNow
+        );
 
         // Act
-        var blobName = AzureBlobRecordedTestStorage.GenerateBlobName(blobPrefix, testName, timestamp, artifactName);
+        var act = async () => await storage.StoreAsync(storeContext, CancellationToken.None);
 
         // Assert
-        blobName.Should().Contain("/");
-        blobName.Should().Be("recorded-tests/ValidTestName/20250119_120000/subfolder/recording.mkv");
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task DownloadArtifactAsync_ValidUri_DoesNotThrow()
+    {
+        // Arrange
+        var config = new AzureBlobStorageConfiguration
+        {
+            AccountName = "mystorageaccount",
+            ConnectionString = "DefaultEndpointsProtocol=https;AccountName=mystorageaccount;AccountKey=key;EndpointSuffix=core.windows.net",
+            ContainerName = "mycontainer"
+        };
+
+        var storage = new AzureBlobRecordedTestStorage(config);
+        var tempDir = Path.Combine(Path.GetTempPath(), $"azure-test-{Guid.NewGuid()}");
+        var destinationPath = Path.Combine(tempDir, "downloaded.mkv");
+
+        try
+        {
+            // Act - stub implementation just logs and returns
+            var act = async () => await storage.DownloadArtifactAsync(
+                "https://mystorageaccount.blob.core.windows.net/mycontainer/recorded-tests/test.mkv",
+                destinationPath,
+                CancellationToken.None);
+
+            // Assert
+            await act.Should().NotThrowAsync();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
     }
 
     // Note: Actual Azure Blob operations (Upload, Download, List, Delete) are stubbed

@@ -1,7 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using WWoW.RecordedTests.Shared.Abstractions.I;
-using WWoW.RecordedTests.Shared.DesiredState;
+using DelegateState = WWoW.RecordedTests.Shared.DesiredState.DelegateServerDesiredState;
 
 namespace WWoW.RecordedTests.Shared.Tests.DesiredState;
 
@@ -15,7 +15,7 @@ public class DelegateServerDesiredStateTests
         var mockContext = Substitute.For<IRecordedTestContext>();
         var applyCalled = false;
 
-        var desiredState = new DelegateServerDesiredState(
+        var desiredState = new DelegateState(
             name: "TestState",
             applyAsync: (runner, context, ct) =>
             {
@@ -38,7 +38,7 @@ public class DelegateServerDesiredStateTests
         var mockContext = Substitute.For<IRecordedTestContext>();
         var revertCalled = false;
 
-        var desiredState = new DelegateServerDesiredState(
+        var desiredState = new DelegateState(
             name: "TestState",
             revertAsync: (runner, context, ct) =>
             {
@@ -60,7 +60,7 @@ public class DelegateServerDesiredStateTests
         var mockRunner = Substitute.For<IBotRunner>();
         var mockContext = Substitute.For<IRecordedTestContext>();
 
-        var desiredState = new DelegateServerDesiredState(name: "TestState", applyAsync: null);
+        var desiredState = new DelegateState(name: "TestState", applyAsync: null);
 
         // Act & Assert
         await desiredState.ApplyAsync(mockRunner, mockContext, CancellationToken.None);
@@ -73,7 +73,7 @@ public class DelegateServerDesiredStateTests
         var mockRunner = Substitute.For<IBotRunner>();
         var mockContext = Substitute.For<IRecordedTestContext>();
 
-        var desiredState = new DelegateServerDesiredState(name: "TestState", revertAsync: null);
+        var desiredState = new DelegateState(name: "TestState", revertAsync: null);
 
         // Act & Assert
         await desiredState.RevertAsync(mockRunner, mockContext, CancellationToken.None);
@@ -91,7 +91,7 @@ public class DelegateServerDesiredStateTests
         IRecordedTestContext? capturedContext = null;
         CancellationToken capturedToken = default;
 
-        var desiredState = new DelegateServerDesiredState(
+        var desiredState = new DelegateState(
             name: "TestState",
             applyAsync: (runner, context, ct) =>
             {
@@ -122,7 +122,7 @@ public class DelegateServerDesiredStateTests
         IRecordedTestContext? capturedContext = null;
         CancellationToken capturedToken = default;
 
-        var desiredState = new DelegateServerDesiredState(
+        var desiredState = new DelegateState(
             name: "TestState",
             revertAsync: (runner, context, ct) =>
             {
@@ -150,7 +150,7 @@ public class DelegateServerDesiredStateTests
         var applyCallCount = 0;
         var revertCallCount = 0;
 
-        var desiredState = new DelegateServerDesiredState(
+        var desiredState = new DelegateState(
             name: "TestState",
             applyAsync: (runner, context, ct) =>
             {
@@ -180,7 +180,7 @@ public class DelegateServerDesiredStateTests
         var mockContext = Substitute.For<IRecordedTestContext>();
         var completed = false;
 
-        var desiredState = new DelegateServerDesiredState(
+        var desiredState = new DelegateState(
             name: "TestState",
             applyAsync: async (runner, context, ct) =>
             {
@@ -204,7 +204,7 @@ public class DelegateServerDesiredStateTests
         var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var desiredState = new DelegateServerDesiredState(
+        var desiredState = new DelegateState(
             name: "TestState",
             applyAsync: async (runner, context, ct) =>
             {
