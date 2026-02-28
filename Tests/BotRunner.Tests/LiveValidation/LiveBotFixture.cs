@@ -690,6 +690,15 @@ public class LiveBotFixture : IAsyncLifetime
             if (!string.IsNullOrEmpty(faultString))
             {
                 _logger.LogWarning("[GM] SOAP fault for '{Command}': {Fault}", command, faultString);
+
+                // "There is no such command." means the command doesn't exist in MaNGOS command table — always a bug.
+                if (faultString.Contains("no such command", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"[GM] Command not found in MaNGOS command table: '{command}'. " +
+                        $"SOAP fault: {faultString}. Fix the command or remove it.");
+                }
+
                 return $"FAULT: {faultString}";
             }
 

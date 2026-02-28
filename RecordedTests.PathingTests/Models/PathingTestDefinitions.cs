@@ -29,7 +29,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 1",
-                ".teleport name Northshire Valley",
+                ".tele Northshire Valley",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -46,7 +46,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 10",
-                ".teleport name Goldshire",
+                ".tele Goldshire",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -63,7 +63,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 20",
-                ".teleport name Menethil Harbor",
+                ".tele Menethil Harbor",
                 ".modify money 1000000",
                 ".modify speed all 1.5"
             },
@@ -85,7 +85,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 15",
-                ".teleport name Menethil Harbor",
+                ".tele Menethil Harbor",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -103,7 +103,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 20",
-                ".teleport name Ratchet",
+                ".tele Ratchet",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -121,7 +121,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 10",
-                ".teleport name Orgrimmar",
+                ".tele Orgrimmar",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -139,7 +139,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 15",
-                ".teleport name Undercity",
+                ".tele Undercity",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -161,7 +161,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 5",
-                ".teleport xyz -9832 -1365 41 0",
+                ".go xyz -9832 -1365 41 0",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -178,7 +178,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 20",
-                ".teleport xyz -16.4 -383.07 61.78 36",
+                ".go xyz -16.4 -383.07 61.78 36",
                 ".modify hp 50000",
                 ".modify mana 50000",
                 ".gm visible off"
@@ -201,7 +201,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 18",
-                ".teleport xyz -163.49 132.9 -73.66 43",
+                ".go xyz -163.49 132.9 -73.66 43",
                 ".modify hp 50000",
                 ".modify speed all 1.5"
             },
@@ -223,7 +223,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 40",
-                ".teleport xyz -5375 -2509 -58 1",
+                ".go xyz -5375 -2509 -58 1",
                 ".modify money 1000000",
                 ".modify speed all 1.2"
             },
@@ -241,7 +241,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 30",
-                ".teleport name Stranglethorn Vale",
+                ".tele Stranglethorn Vale",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -258,7 +258,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 15",
-                ".teleport name Redridge Mountains",
+                ".tele Redridge Mountains",
                 ".modify money 1000000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -279,7 +279,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 40",
-                ".teleport name Stormwind City",
+                ".tele Stormwind City",
                 ".modify money 5000000",
                 ".modify speed all 2.0"
             },
@@ -299,7 +299,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 40",
-                ".teleport name Orgrimmar",
+                ".tele Orgrimmar",
                 ".modify money 5000000",
                 ".modify speed all 2.0"
             },
@@ -319,7 +319,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 50",
-                ".teleport name Teldrassil",
+                ".tele Teldrassil",
                 ".modify money 5000000",
                 ".modify speed all 1.5"
             },
@@ -343,7 +343,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 45",
-                ".teleport xyz 1744 -1723 60 0",
+                ".go xyz 1744 -1723 60 0",
                 ".modify speed all 0.5"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -360,7 +360,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 25",
-                ".teleport name Stranglethorn Vale",
+                ".tele Stranglethorn Vale",
                 ".modify hp 10000"
             },
             TeardownCommands: new[] { ".character delete" },
@@ -377,7 +377,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 20",
-                ".teleport name Duskwood",
+                ".tele Duskwood",
                 ".wchange 0 night"
             },
             TeardownCommands: new[]
@@ -398,7 +398,7 @@ public static class PathingTestDefinitions
             SetupCommands: new[]
             {
                 ".character level 15",
-                ".teleport name The Barrens",
+                ".tele The Barrens",
                 ".modify speed all 1.8"
             },
             TeardownCommands: new[] { ".character delete" },

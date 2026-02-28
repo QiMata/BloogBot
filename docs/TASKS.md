@@ -26,7 +26,8 @@
 | 6 | `FISH-001` | Fix FishingProfessionTests: BG bobber not tracked. Diagnostic logging added to `WoWSharpObjectManager` (GO CREATE) and `SpellHandler.HandleGameObjectCustomAnim`. Needs live test run to capture output. | In Progress |
 | 7 | `FG-STUCK-001` | FG ghost stuck on terrain — WoW.exe native limitation, not a code bug. Recovery logic exists (`RecoverRunbackStall()`). Soft FG assertions are correct. | Won't Fix |
 | 8 | — | Complete missing-implementation backlog (section below) | Open |
-| 9 | `DB-CLEAN-001` | Clean up game object spawns with 0% spawn chance from MaNGOS DB (read-only audit + SOAP cleanup) | Low Priority |
+| 9 | `SOAP-CMD-001` | Harden SOAP `ExecuteGMCommandAsync` — throw on "no such command" FAULT, fix `.teleport` → `.tele`/`.go xyz` in all PathingTestDefinitions, consolidate duplicated `ContainsCommandRejection` | Done (partial — throw + command fixes done; ContainsCommandRejection consolidation deferred) |
+| 10 | `DB-CLEAN-001` | Clean up game object spawns with 0% spawn chance from MaNGOS DB (read-only audit + SOAP cleanup) | Low Priority |
 
 ## P1 — Missing Implementation Inventory
 
@@ -156,18 +157,16 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 5.
+- **Current work:** Quick-fix sweep batch 6 — SOAP command hardening.
 - **Last delta (this session):**
-  - `WSIM-TST-007`: Converted blocking `.Result`/`.Wait()` to `async Task` + `await` in MockMangosServerTests.cs
-  - `UI-MISS-002`: Fixed converter logic `>= 0` → `> 0` to match "GreaterThanZero" class name
-  - `WWINF-TST-002`: Replaced `int.Parse()` with `int.TryParse()` + defaults in both IntegrationTestConfig copies
-  - `WWRPT-RUN-001`: Added `StopGameLoop()` call in BackgroundRecordedTestRunner.DisconnectAsync (both copies)
-  - `WWRPT-CFG-001`: Fixed config provider precedence: JSON → env → CLI (both copies)
-  - `WWRPT-PATH-001`: Added finite coordinate validation on path output (both copies)
-  - `WRTS-CONTRACT-001`: Made `ParseS3Uri` public static, added `GenerateS3Key`/`GenerateS3Uri` helpers
-  - `WRTS-CONTRACT-002`: Extracted `ParseAzureBlobUri` to public static, added `GenerateBlobName`/`GenerateAzureBlobUri` helpers
-  - Synced 5 local TASKS.md files (WoWSimulation, WoWStateManagerUI, WWoW.Tests.Infrastructure, WWoW.RecordedTests.PathingTests, WWoW.RecordedTests.Shared)
+  - `SOAP-CMD-001`: Fixed `.teleport name` → `.tele` and `.teleport xyz` → `.go xyz` in both PathingTestDefinitions copies (20 commands each)
+  - `SOAP-CMD-001`: Fixed `.teleport name Stormwind` → `.tele Stormwind` in both GmCommandServerDesiredStateTests copies
+  - `SOAP-CMD-001`: Hardened `ExecuteGMCommandAsync` in LiveBotFixture.cs to throw `InvalidOperationException` on "no such command" SOAP faults
+  - `SOAP-CMD-001`: Hardened `ExecuteGMCommandAsync` in MangosSOAPClient.cs (WoWStateManager) with same throw-on-invalid-command behavior
+  - Added regression testing log review rules to MEMORY.md
+- **Build verification:** All modified projects compile with 0 errors. 10/10 GmCommandServerDesiredState tests pass. 7/7 MockMangosServer tests pass. Only `Systems.AppHost` has DLL lock errors (`.NET Host` process).
 - **Remaining open items:**
+  - ContainsCommandRejection consolidation (5 copies across test files — defer to dedicated refactor)
   - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004/005
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
   - BotCommLayer: BCL-MISS-001/002/004
@@ -175,5 +174,4 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
   - Sub-TASKS queue: ~55 remaining items across local TASKS.md files (mostly test creation and design tasks)
-  - **NEW:** Investigate "There is no such command." errors in test/server logs — may indicate GM command failures affecting test state
-- **Next task:** Investigate "There is no such command." server errors, then continue quick-fix sweep.
+- **Next task:** Continue quick-fix sweep on remaining actionable items.
