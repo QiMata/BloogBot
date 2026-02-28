@@ -44,40 +44,41 @@ public class NavigationFixture : IDisposable
     private static void VerifyNavDataExists()
     {
         var dataRoot = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
-        string mmapsPath;
+        string resolvedRoot;
 
         if (!string.IsNullOrEmpty(dataRoot))
         {
-            mmapsPath = Path.Combine(dataRoot, "mmaps");
-            if (!Directory.Exists(mmapsPath))
-            {
-                throw new DirectoryNotFoundException(
-                    $"WWOW_DATA_DIR is set to '{dataRoot}' but mmaps/ subdirectory not found.\n" +
-                    $"Please ensure nav data exists at: {mmapsPath}\n" +
-                    "Run setup.ps1 to provision data, or unset WWOW_DATA_DIR to use DLL-relative path.");
-            }
+            resolvedRoot = dataRoot;
         }
         else
         {
             var assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            var testOutputDir = Path.GetDirectoryName(assemblyLocation);
-
-            if (testOutputDir == null)
-                throw new InvalidOperationException("Cannot determine test output directory");
-
-            mmapsPath = Path.Combine(testOutputDir, "mmaps");
-
-            if (!Directory.Exists(mmapsPath))
-            {
-                throw new DirectoryNotFoundException(
-                    $"Navigation data not found. Expected mmaps/ at: {mmapsPath}\n" +
-                    "Please either:\n" +
-                    "  1. Set WWOW_DATA_DIR environment variable to point to your nav data root, or\n" +
-                    "  2. Run setup.ps1 to copy nav data to the test output directory, or\n" +
-                    $"  3. Manually copy maps/, mmaps/, and vmaps/ to: {testOutputDir}");
-            }
+            resolvedRoot = Path.GetDirectoryName(assemblyLocation)
+                ?? throw new InvalidOperationException("Cannot determine test output directory");
         }
 
+        // Validate all three required nav data subdirectories
+        var requiredDirs = new[] { "maps", "vmaps", "mmaps" };
+        var missing = new System.Collections.Generic.List<string>();
+
+        foreach (var dir in requiredDirs)
+        {
+            if (!Directory.Exists(Path.Combine(resolvedRoot, dir)))
+                missing.Add(dir);
+        }
+
+        if (missing.Count > 0)
+        {
+            throw new DirectoryNotFoundException(
+                $"Navigation data incomplete at: {resolvedRoot}\n" +
+                $"Missing directories: {string.Join(", ", missing)}\n" +
+                "Please either:\n" +
+                "  1. Set WWOW_DATA_DIR environment variable to point to your nav data root, or\n" +
+                "  2. Run setup.ps1 to copy nav data to the test output directory, or\n" +
+                $"  3. Manually copy maps/, vmaps/, and mmaps/ to: {resolvedRoot}");
+        }
+
+        var mmapsPath = Path.Combine(resolvedRoot, "mmaps");
         var mmtileFiles = Directory.GetFiles(mmapsPath, "*.mmtile");
         if (mmtileFiles.Length == 0)
         {

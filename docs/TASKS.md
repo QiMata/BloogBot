@@ -190,21 +190,23 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 21 | `Tests/TASKS.md` | **Done** | TST-UMB-001..005 verified complete |
 | 22 | `Tests/BotRunner.Tests/TASKS.md` | **Partial** | BRT-CR-001 done; BRT-CR-002/003, BRT-PAR-001/002 need live server |
 | 23 | `Tests/Navigation.Physics.Tests/TASKS.md` | **Done** | NPT-MISS-001..003 shipped |
-| 24 | `Tests/PathfindingService.Tests/TASKS.md` | Pending | PFS-TST-001..006 |
-| 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | **Partial** | PHS-TST-001/003 done; PHS-TST-002/004/005 low priority |
+| 24 | `Tests/PathfindingService.Tests/TASKS.md` | **Partial** | PFS-TST-001/004/006 done; PFS-TST-002/003/005 need nav data |
+| 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | **Partial** | PHS-TST-001/003/004/005 done; PHS-TST-002 low priority |
 | 26-41 | Remaining test/UI/AI projects | Pending | See local files |
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 16 — umbrella verification and test task triage.
+- **Current work:** Quick-fix sweep batch 17 — PFS preflight/proto tests, PHS repository discovery, README updates.
 - **Last delta (this session):**
-  - Batch 15 committed (`5f85105`) and pushed — action correlation, RPT cancellation/cleanup, live-validation triage.
-  - Batch 16: Umbrella files verified complete (Exports, Services, Tests). PHS-TST-001/003 marked done.
-  - Execution queue: 6 rows updated (Exports → Done, Services → Done, Tests → Done, BotRunner.Tests → Partial, PromptHandlingService.Tests → Partial, RecordedTests.Shared → Pending/NuGet-blocked).
+  - Batch 16 committed (`16b3994`) — umbrella verification, test task triage.
+  - Batch 17: PFS-TST-001 (preflight validates maps/vmaps/mmaps), PFS-TST-004 (5 round-trip proto tests), PFS-TST-006 (README), PHS-TST-004 (161 MangosRepository methods discovered), PHS-TST-005 (README).
+- **Build verification:**
+  - PathfindingService.Tests: 0 errors, 11/11 proto tests pass
+  - PromptHandlingService.Tests: 0 errors, 32 pass / 173 skip / 0 fail (205 total)
 - **Remaining open items:**
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-  - Pending local files: RecordedTests.Shared/TASKS.md (NuGet-blocked), Tests/PathfindingService.Tests/TASKS.md (PFS-TST-001..006)
-  - Partially done: Tests/BotRunner.Tests/TASKS.md (live server needed), Tests/PromptHandlingService.Tests/TASKS.md (PHS-TST-002/004/005 low priority)
+  - Pending: PFS-TST-002/003/005 (need nav data), PHS-TST-002 (IPromptRunner stubs, low priority)
+  - Partially done: Tests/BotRunner.Tests/TASKS.md (BRT-CR-002/003, BRT-PAR-001/002 need live server)
   - Live validation: BBR-MISS-002/004/005, BR-MISS-002, NAV-MISS-004, RPT-MISS-003/004, BRT-CR-002/003, BRT-PAR-001/002
-- **Next task:** Commit batch 16, then continue with PFS-TST and PHS-TST actionable items.
+- **Next task:** Commit batch 17, then assess remaining test project TASKS.md files (rows 26-41).

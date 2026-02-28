@@ -40,7 +40,8 @@
 
 ## P0 Active Tasks (Ordered)
 
-### [ ] PFS-TST-001 - Strengthen nav data preflight to validate full data root
+### [x] PFS-TST-001 - Strengthen nav data preflight to validate full data root
+- **Done (batch 17).** `VerifyNavDataExists()` now validates `maps/`, `vmaps/`, and `mmaps/` in one pass with aggregated missing-dir listing. Single resolved root path shared across env-var and fallback paths.
 - Problem: preflight currently guarantees `mmaps/` and `.mmtile` files but does not explicitly verify `maps/` and `vmaps/`.
 - Evidence:
 1. `Tests/PathfindingService.Tests/NavigationFixture.cs:43`
@@ -100,7 +101,8 @@
 1. Wall-impact regressions fail before bot-level corpse tests are run.
 2. Passing output demonstrates valid detour route generation.
 
-### [ ] PFS-TST-004 - Expand proto/native contract tests with round-trip invariants
+### [x] PFS-TST-004 - Expand proto/native contract tests with round-trip invariants
+- **Done (batch 17).** 5 new tests: transport field round-trip, standing-on field round-trip, fall/liquid output preservation, zero-transport edge case, zero-standing-on edge case. Total: 11 proto tests pass.
 - Problem: one-way mappings are covered, but round-trip invariants and edge values are not explicitly gated.
 - Evidence:
 1. `Tests/PathfindingService.Tests/ProtoInteropExtensionsTests.cs:12`
@@ -134,7 +136,8 @@
 1. Pathfinding regressions for corpse runback are caught before end-to-end bot tests.
 2. New test is stable across repeated runs.
 
-### [ ] PFS-TST-006 - Simplify and enforce command surface with timeout-aware defaults
+### [x] PFS-TST-006 - Simplify and enforce command surface with timeout-aware defaults
+- **Done (batch 17).** README.md updated: 4 canonical commands with `--configuration Release --no-restore --settings --logger`, fixed stale filter (`PathCalculationTests` → `PathfindingTests`), added timeout explanation.
 - Problem: project README commands do not consistently include runsettings and timeout-safe defaults.
 - Evidence:
 1. `Tests/PathfindingService.Tests/README.md:90`
@@ -158,13 +161,11 @@
 4. Proto contract focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: `PFS-TST-001`
-- Last delta: added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction always resumes on the next local `TASKS.md`.
-- Pass result: delta shipped
-- Last command run: `Get-Content -Path 'Tests/PathfindingService.Tests/TASKS.md' -TotalCount 460`
-- Validation result: `PFS-TST-001` remains open; preflight filter currently matches zero discovered tests and fixture still hard-checks `mmaps`/`.mmtile` only.
-- Files changed: `Tests/PathfindingService.Tests/TASKS.md`
-- Blockers: `WWOW_DATA_DIR` unset and `Navigation.dll` absent from this project's `bin/Release/net8.0` output in current shell session.
-- Next task: `PFS-TST-001`
-- Next command: `Get-Content -Path 'Tests/PromptHandlingService.Tests/TASKS.md' -TotalCount 360`.
+- Last updated: 2026-02-28
+- Active task: PFS-TST-002/003/005 (require nav data for validation)
+- Last delta: PFS-TST-001 (preflight), PFS-TST-004 (5 round-trip tests), PFS-TST-006 (README) — all done in batch 17
+- Pass result: `delta shipped`
+- Build: 0 errors. Proto tests: 11/11 pass.
+- Files changed: NavigationFixture.cs, ProtoInteropExtensionsTests.cs, README.md, TASKS.md
+- Blockers: PFS-TST-002/003/005 require Navigation.dll and nav data for live path validation
+- Next command: continue with next queue file

@@ -83,22 +83,27 @@ public class PhysicsTests
 
 ## Running Tests
 
+All commands enforce a 10-minute session timeout via `test.runsettings` to prevent test host hangs.
+
 ### Command Line
 
 ```bash
-# Run all tests
-dotnet test Tests/PathfindingService.Tests
+# Full project (all tests with timeout enforcement)
+dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"
 
-# Run with coverage
-dotnet test Tests/PathfindingService.Tests --collect:"XPlat Code Coverage"
+# Route validity focus (PathfindingTests + BotTaskTests)
+dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"
 
-# Run specific test class
-dotnet test Tests/PathfindingService.Tests --filter "FullyQualifiedName~PathCalculationTests"
+# Physics/LOS focus
+dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsEngineTests" --logger "console;verbosity=minimal"
+
+# Proto contract focus (no nav data needed)
+dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"
 ```
 
 ### Visual Studio
 
-1. Open Test Explorer (Test ? Test Explorer)
+1. Open Test Explorer (Test > Test Explorer)
 2. Click "Run All" or right-click specific tests
 
 ## Dependencies

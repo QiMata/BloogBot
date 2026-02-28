@@ -164,6 +164,117 @@ public class ProtoInteropExtensionsTests
     }
 
     [Fact]
+    public void PhysicsInput_RoundTrip_ProtoToNativeToProto_PreservesTransportFields()
+    {
+        var proto = new Pathfinding.PhysicsInput
+        {
+            TransportGuid = 12345678901234UL,
+            TransportOffsetX = 11.5f,
+            TransportOffsetY = -22.75f,
+            TransportOffsetZ = 33.125f,
+            TransportOrientation = 3.14f,
+            PosX = 0f, PosY = 0f, PosZ = 0f,
+            Race = (uint)Race.Orc, Gender = (uint)Gender.Male,
+        };
+
+        var native = proto.ToPhysicsInput();
+
+        Assert.Equal(proto.TransportGuid, native.transportGuid);
+        Assert.Equal(proto.TransportOffsetX, native.transportX);
+        Assert.Equal(proto.TransportOffsetY, native.transportY);
+        Assert.Equal(proto.TransportOffsetZ, native.transportZ);
+        Assert.Equal(proto.TransportOrientation, native.transportO);
+    }
+
+    [Fact]
+    public void PhysicsInput_RoundTrip_ProtoToNativeToProto_PreservesStandingOnFields()
+    {
+        var proto = new Pathfinding.PhysicsInput
+        {
+            StandingOnInstanceId = 999u,
+            StandingOnLocalX = 5.5f,
+            StandingOnLocalY = -6.25f,
+            StandingOnLocalZ = 7.75f,
+            PosX = 0f, PosY = 0f, PosZ = 0f,
+            Race = (uint)Race.Orc, Gender = (uint)Gender.Male,
+        };
+
+        var native = proto.ToPhysicsInput();
+
+        Assert.Equal(proto.StandingOnInstanceId, native.standingOnInstanceId);
+        Assert.Equal(proto.StandingOnLocalX, native.standingOnLocalX);
+        Assert.Equal(proto.StandingOnLocalY, native.standingOnLocalY);
+        Assert.Equal(proto.StandingOnLocalZ, native.standingOnLocalZ);
+    }
+
+    [Fact]
+    public void PhysicsOutput_RoundTrip_NativeToProto_PreservesFallAndLiquidFields()
+    {
+        var native = new PathfindingService.Repository.PhysicsOutput
+        {
+            x = 100f, y = 200f, z = 300f,
+            fallTime = 555.5f,
+            fallDistance = 12.3f,
+            fallStartZ = 312.3f,
+            liquidZ = 295.0f,
+            liquidType = 2u,
+            groundZ = 298.5f,
+            groundNx = 0.0f, groundNy = 0.0f, groundNz = 1.0f,
+        };
+
+        var proto = native.ToPhysicsOutput();
+
+        Assert.Equal(native.fallTime, proto.FallTime);
+        Assert.Equal(native.fallDistance, proto.FallDistance);
+        Assert.Equal(native.fallStartZ, proto.FallStartZ);
+        Assert.Equal(native.liquidZ, proto.LiquidZ);
+        Assert.Equal(native.liquidType, proto.LiquidType);
+    }
+
+    [Fact]
+    public void PhysicsInput_ZeroTransportGuid_MapsCleanly()
+    {
+        var proto = new Pathfinding.PhysicsInput
+        {
+            TransportGuid = 0UL,
+            TransportOffsetX = 0f,
+            TransportOffsetY = 0f,
+            TransportOffsetZ = 0f,
+            TransportOrientation = 0f,
+            PosX = 10f, PosY = 20f, PosZ = 30f,
+            Race = (uint)Race.Orc, Gender = (uint)Gender.Male,
+        };
+
+        var native = proto.ToPhysicsInput();
+
+        Assert.Equal(0UL, native.transportGuid);
+        Assert.Equal(0f, native.transportX);
+        Assert.Equal(0f, native.transportY);
+        Assert.Equal(0f, native.transportZ);
+        Assert.Equal(0f, native.transportO);
+    }
+
+    [Fact]
+    public void PhysicsOutput_ZeroStandingOn_MapsCleanly()
+    {
+        var native = new PathfindingService.Repository.PhysicsOutput
+        {
+            standingOnInstanceId = 0u,
+            standingOnLocalX = 0f,
+            standingOnLocalY = 0f,
+            standingOnLocalZ = 0f,
+            x = 1f, y = 2f, z = 3f,
+        };
+
+        var proto = native.ToPhysicsOutput();
+
+        Assert.Equal(0u, proto.StandingOnInstanceId);
+        Assert.Equal(0f, proto.StandingOnLocalX);
+        Assert.Equal(0f, proto.StandingOnLocalY);
+        Assert.Equal(0f, proto.StandingOnLocalZ);
+    }
+
+    [Fact]
     public void PathCorners_RoundTripThroughProto_PreservesCountOrderAndPrecision()
     {
         // Simulate a native path result: 5 corners with varied coordinates

@@ -102,7 +102,8 @@
 1. Transfer behavior is covered by unit tests and no longer relies on an unpinned exception path.
 2. `PHS-MISS-001` has a direct test gate in this project.
 
-### [ ] PHS-TST-004 - Convert legacy repository tests into discoverable and bounded execution slices
+### [x] PHS-TST-004 - Convert legacy repository tests into discoverable and bounded execution slices
+- **Done (batch 17).** 161 static methods → `[Fact(Skip = "Integration: requires MaNGOS database")]` instance methods. All 161 now discovered by xUnit (skipped with preflight reason). Total: 205 tests (32 pass, 173 skip).
 - Problem: `MangosRepositoryTest` contains many static `Test*` methods with no xUnit attributes and no bounded run strategy.
 - Evidence:
 1. `Tests/PromptHandlingService.Tests/MangosRepositoryTest.cs:9`
@@ -120,7 +121,8 @@
 1. At least one discovered repository smoke test executes in default path (or is clearly skipped with preflight reason).
 2. Exhaustive DB coverage is explicit integration scope, not silent non-execution.
 
-### [ ] PHS-TST-005 - Simplify command surface and align README with timeout-safe defaults
+### [x] PHS-TST-005 - Simplify command surface and align README with timeout-safe defaults
+- **Done (batch 17).** README.md updated: 4 canonical commands with `--configuration Release --no-restore --settings --logger`, separated deterministic/integration/repo scopes.
 - Problem: README command examples are broad and do not consistently show runsettings/timeout-safe defaults.
 - Evidence:
 1. `Tests/PromptHandlingService.Tests/README.md:96`
@@ -147,9 +149,10 @@
 
 ## Session Handoff
 - Last updated: 2026-02-28
-- Active task: PHS-TST-001 and PHS-TST-003 already done. PHS-TST-002/004/005 pending (low priority).
-- Last delta: PHS-TST-001 verified done (all methods have [Fact(Skip)] attributes), PHS-TST-003 done (14 transfer tests)
+- Active task: PHS-TST-002 (deterministic stubs) is remaining — low priority
+- Last delta: PHS-TST-004 (161 methods discovered), PHS-TST-005 (README updated) — batch 17
 - Pass result: `delta shipped`
-- Files changed: `Tests/PromptHandlingService.Tests/TASKS.md`
-- Blockers: none
+- Build: 0 errors. Tests: 32 pass, 173 skip, 0 fail (205 total).
+- Files changed: MangosRepositoryTest.cs, README.md, TASKS.md
+- Blockers: PHS-TST-002 requires IPromptRunner stub design (low priority)
 - Next command: continue with next queue file
