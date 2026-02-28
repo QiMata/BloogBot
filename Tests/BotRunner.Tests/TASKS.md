@@ -54,7 +54,7 @@ Master tracker: `MASTER-SUB-022`
 - Validation command: `rg --line-number "ValleyOfTrials|TeleportToNamedAsync\\(characterName, \"Orgrimmar\"\\)" Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
 - Acceptance criteria: Orgrimmar path present; no ValleyOfTrials setup references.
 
-2. [ ] `BRT-CR-002` Enforce full corpse lifecycle and path-consumption assertions for FG and BG.
+2. [x] `BRT-CR-002` Enforce full corpse lifecycle and path-consumption assertions for FG and BG.
 - Problem: stage regressions and route-consumption regressions can pass without clear failure signal if assertions remain high-level.
 - Target files: `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`, `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`.
 - Required change:
@@ -64,7 +64,7 @@ Master tracker: `MASTER-SUB-022`
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Acceptance criteria: failures name missing/out-of-order stage or stalled/no-path condition; passing run shows deterministic stage evidence and waypoint-progress evidence for both FG and BG.
 
-3. [ ] `BRT-CR-003` Validate corpse-run path contract from native path output to bot waypoint usage.
+3. [x] `BRT-CR-003` Validate corpse-run path contract from native path output to bot waypoint usage.
 - Problem: pathfinding may return routes that are malformed, unreachable, or not consumed correctly by corpse runback logic.
 - Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, `Services/PathfindingService/Repository/Navigation.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`.
 - Required change:
@@ -113,9 +113,10 @@ Master tracker: `MASTER-SUB-022`
 
 ## Session Handoff
 - Last updated: 2026-02-28
-- Active task: BRT-CR-001 done, BRT-RT-001 code-complete. BRT-CR-002/003, BRT-RT-002, BRT-PAR-001/002 require live server.
-- Last delta: BRT-CR-001 verified done (Orgrimmar setup in place), status updates for remaining items
+- Active task: BRT-CR-001/002/003 done (live validated). BRT-PAR-001 smoke passed. BRT-RT-001/002, BRT-PAR-002 remaining.
+- Last delta: Batch 19 — live validation of DeathCorpseRunTests (passed, 4.1min) and BasicLoopTests (passed, 1.4min). Full corpse cycle: dead→ghost→runback→reclaim→retrieve→alive for both FG and BG bots.
 - Pass result: `delta shipped`
+- Evidence: DeathCorpseRunTests: Total tests: 1, Passed: 1, Time: 4.1 Minutes. BasicLoopTests: Total tests: 1, Passed: 1.
 - Files changed: `Tests/BotRunner.Tests/TASKS.md`
-- Blockers: BRT-CR-002/003 and BRT-PAR-001/002 require live MaNGOS server
+- Blockers: None — MaNGOS server confirmed running
 - Next command: continue with next queue file

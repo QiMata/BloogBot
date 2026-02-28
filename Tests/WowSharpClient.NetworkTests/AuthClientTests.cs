@@ -4,7 +4,9 @@ using GameData.Core.Enums;
 using System.Threading.Tasks;
 using System.Threading;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -200,6 +202,179 @@ namespace WowSharpClient.NetworkTests
             Assert.False(authClient.IsConnected);
         }
 
+        // --- WSCN-TST-005: Unknown-opcode resync and fragmented realm list tests ---
+
+        [Fact]
+        public async Task UnknownOpcode_DiscardedAndParserResyncs()
+        {
+            // Arrange - The auth parser discards one byte on unknown opcode and retries.
+            // Feed an unknown opcode byte (0xFF) followed by a valid failed challenge response.
+            using var connection = new InMemoryConnection();
+            using var framer = new LengthPrefixedFramer(4, false);
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
+
+            await authClient.ConnectAsync("127.0.0.1", 3724);
+
+            // Start login so the TCS is set up
+            var loginTask = authClient.LoginAsync("testuser", "testpass");
+            await Task.Delay(100);
+
+            // Act - Inject unknown opcode byte (0xFF) followed by a valid failed challenge response
+            var unknownByte = new byte[] { 0xFF };
+            var failedChallenge = CreateFailedChallengeResponse();
+            var combined = new byte[unknownByte.Length + failedChallenge.Length];
+            Array.Copy(unknownByte, 0, combined, 0, unknownByte.Length);
+            Array.Copy(failedChallenge, 0, combined, unknownByte.Length, failedChallenge.Length);
+
+            connection.InjectIncomingData(combined);
+            await Task.Delay(300);
+
+            // Assert - Parser should have discarded 0xFF and processed the challenge response
+            // LoginAsync should throw because the challenge was a failure response
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await loginTask);
+        }
+
+        [Fact]
+        public async Task MultipleUnknownOpcodes_AllDiscarded_ThenValidPacketProcessed()
+        {
+            // Arrange - Feed multiple unknown opcode bytes before a valid failed challenge
+            using var connection = new InMemoryConnection();
+            using var framer = new LengthPrefixedFramer(4, false);
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
+
+            await authClient.ConnectAsync("127.0.0.1", 3724);
+
+            var loginTask = authClient.LoginAsync("testuser", "testpass");
+            await Task.Delay(100);
+
+            // Act - 3 unknown bytes + valid failed challenge
+            var junk = new byte[] { 0xFE, 0xFD, 0xFC };
+            var failedChallenge = CreateFailedChallengeResponse();
+            var combined = new byte[junk.Length + failedChallenge.Length];
+            Array.Copy(junk, 0, combined, 0, junk.Length);
+            Array.Copy(failedChallenge, 0, combined, junk.Length, failedChallenge.Length);
+
+            connection.InjectIncomingData(combined);
+            await Task.Delay(300);
+
+            // Assert - Parser should discard all junk bytes one-by-one and process the challenge
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await loginTask);
+        }
+
+        [Fact]
+        public async Task FragmentedRealmList_CompletesAfterAllChunksArrive()
+        {
+            // Arrange - Build a realm list response and send it in two chunks
+            using var connection = new InMemoryConnection();
+            using var framer = new LengthPrefixedFramer(4, false);
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
+
+            await authClient.ConnectAsync("127.0.0.1", 3724);
+
+            // Build a complete realm list response
+            var realmListData = CreateMockRealmListResponse();
+
+            // Start the realm list request
+            var realmListTask = authClient.GetRealmListAsync();
+            await Task.Delay(100); // Let the request be sent
+
+            // Act - Send first half of the realm list response
+            var splitPoint = realmListData.Length / 2;
+            var chunk1 = realmListData.Take(splitPoint).ToArray();
+            var chunk2 = realmListData.Skip(splitPoint).ToArray();
+
+            connection.InjectIncomingData(chunk1);
+            await Task.Delay(100); // Parser should buffer and wait for more data
+
+            // Send the rest
+            connection.InjectIncomingData(chunk2);
+
+            // Wait for the realm list task to complete
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var realms = await realmListTask.WaitAsync(timeoutCts.Token);
+
+            // Assert - Should have parsed the realm list successfully
+            Assert.NotNull(realms);
+            Assert.Single(realms);
+            Assert.Equal("Test Realm", realms[0].RealmName);
+            Assert.Equal(8085, realms[0].AddressPort);
+        }
+
+        [Fact]
+        public async Task RealmListOneByte_ThenRest_WaitsForSize()
+        {
+            // Arrange - Send only the opcode byte of the realm list, then the rest
+            using var connection = new InMemoryConnection();
+            using var framer = new LengthPrefixedFramer(4, false);
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
+
+            await authClient.ConnectAsync("127.0.0.1", 3724);
+
+            var realmListData = CreateMockRealmListResponse();
+            var realmListTask = authClient.GetRealmListAsync();
+            await Task.Delay(100);
+
+            // Act - Send just the opcode byte (0x10)
+            connection.InjectIncomingData(new byte[] { realmListData[0] });
+            await Task.Delay(100); // Parser sees 0x10 but needs 3+ bytes for size
+
+            // Send the rest
+            connection.InjectIncomingData(realmListData.Skip(1).ToArray());
+
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var realms = await realmListTask.WaitAsync(timeoutCts.Token);
+
+            // Assert
+            Assert.NotNull(realms);
+            Assert.Single(realms);
+        }
+
+        [Fact]
+        public async Task FailedChallengeResponse_FragmentedAcrossTwoChunks()
+        {
+            // Arrange - Send a failed challenge response split across two TCP segments
+            using var connection = new InMemoryConnection();
+            using var framer = new LengthPrefixedFramer(4, false);
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var authClient = new AuthClient(connection, framer, encryptor, codec, router);
+
+            await authClient.ConnectAsync("127.0.0.1", 3724);
+
+            var loginTask = authClient.LoginAsync("testuser", "testpass");
+            await Task.Delay(100);
+
+            var failedChallenge = CreateFailedChallengeResponse(); // 3 bytes: 0x00, 0x00, 0x04
+
+            // Act - Send first 2 bytes, then the last byte
+            connection.InjectIncomingData(failedChallenge.Take(2).ToArray());
+            await Task.Delay(100); // Parser needs 3 bytes minimum
+
+            connection.InjectIncomingData(failedChallenge.Skip(2).ToArray());
+            await Task.Delay(200);
+
+            // Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await loginTask);
+        }
+
         /// <summary>
         /// Creates a 3-byte failed AUTH_LOGON_CHALLENGE response: opcode(0x00) + unk(0x00) + error(0x04).
         /// This immediately completes the LoginAsync TCS without SRP.
@@ -272,37 +447,37 @@ namespace WowSharpClient.NetworkTests
             using var ms = new MemoryStream();
             using var writer = new BinaryWriter(ms);
 
-            // CMD_REALM_LIST header - this needs to be framed properly
+            // CMD_REALM_LIST response: opcode(1) + size(2 LE) + padding(4) + numRealms(1) + realm data
             writer.Write((byte)0x10); // CMD_REALM_LIST opcode
             writer.Write((ushort)0); // Size placeholder (will be filled later)
-            writer.Write((uint)0); // Unknown field
-            writer.Write((ushort)1); // Number of realms
+            writer.Write((uint)0); // Padding (4 bytes)
+            writer.Write((byte)1); // Number of realms (1 byte, vanilla 1.12.1)
 
             // Realm data
             writer.Write((uint)1); // Realm type
             writer.Write((byte)0); // Flags
-            
+
             // Write realm name as null-terminated string
             var realmNameBytes = System.Text.Encoding.UTF8.GetBytes("Test Realm");
             writer.Write(realmNameBytes);
             writer.Write((byte)0); // null terminator
-            
-            // Write address:port as null-terminated string  
+
+            // Write address:port as null-terminated string
             var addressBytes = System.Text.Encoding.UTF8.GetBytes("127.0.0.1:8085");
             writer.Write(addressBytes);
             writer.Write((byte)0); // null terminator
-            
+
             writer.Write(1.0f); // Population
             writer.Write((byte)0); // Number of characters
             writer.Write((byte)1); // Realm category
             writer.Write((byte)1); // Realm ID
 
             var data = ms.ToArray();
-            
-            // Update size field (excluding opcode byte)
-            var size = (ushort)(data.Length - 1);
-            data[1] = (byte)(size & 0xFF);
-            data[2] = (byte)((size >> 8) & 0xFF);
+
+            // Update size field: body size = total - opcode(1) - size(2)
+            var bodySize = (ushort)(data.Length - 3);
+            data[1] = (byte)(bodySize & 0xFF);
+            data[2] = (byte)((bodySize >> 8) & 0xFF);
 
             return data;
         }

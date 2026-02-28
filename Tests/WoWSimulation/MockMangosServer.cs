@@ -13,11 +13,13 @@ public class MockMangosServer
     private readonly List<MockGameObject> _gameObjects = new();
     private readonly List<MockPlayer> _players = new();
     private readonly List<SimulationEvent> _eventQueue = new();
+    private readonly int _commandLatencyMs;
 
     public event EventHandler<SimulationEvent>? EventOccurred;
 
-    public MockMangosServer()
+    public MockMangosServer(int commandLatencyMs = 10)
     {
+        _commandLatencyMs = commandLatencyMs;
         InitializeGameWorld();
     }
 
@@ -51,7 +53,8 @@ public class MockMangosServer
 
     public async Task<T> SendCommand<T>(string command, object? parameters = null)
     {
-        await Task.Delay(10); // Simulate network latency
+        if (_commandLatencyMs > 0)
+            await Task.Delay(_commandLatencyMs); // Simulate network latency
 
         return command switch
         {
@@ -61,6 +64,8 @@ public class MockMangosServer
             "InteractWithObject" => (T)(object)InteractWithObject((int)(parameters ?? 0)),
             "GetPlayerHealth" => (T)(object)GetPlayerHealth(),
             "CastSpell" => (T)(object)CastSpell((string)(parameters ?? "")),
+            "KillPlayer" => (T)(object)KillPlayer(),
+            "ResurrectPlayer" => (T)(object)ResurrectPlayer(),
             _ => throw new NotSupportedException($"Command {command} not supported")
         };
     }
@@ -152,6 +157,46 @@ public class MockMangosServer
 
         _eventQueue.Add(spellEvent);
         EventOccurred?.Invoke(this, spellEvent);
+
+        return true;
+    }
+
+    private bool KillPlayer()
+    {
+        var player = GetCurrentPlayer();
+        if (player == null) return false;
+        if (player.Health <= 0) return false; // Already dead
+
+        player.Health = 0;
+
+        var deathEvent = new SimulationEvent
+        {
+            Type = EventType.Death,
+            Data = new { PlayerId = player.Id, Position = player.Position }
+        };
+
+        _eventQueue.Add(deathEvent);
+        EventOccurred?.Invoke(this, deathEvent);
+
+        return true;
+    }
+
+    private bool ResurrectPlayer()
+    {
+        var player = GetCurrentPlayer();
+        if (player == null) return false;
+        if (player.Health > 0) return false; // Not dead
+
+        player.Health = player.MaxHealth;
+
+        var resEvent = new SimulationEvent
+        {
+            Type = EventType.Resurrection,
+            Data = new { PlayerId = player.Id, RestoredHealth = player.MaxHealth }
+        };
+
+        _eventQueue.Add(resEvent);
+        EventOccurred?.Invoke(this, resEvent);
 
         return true;
     }

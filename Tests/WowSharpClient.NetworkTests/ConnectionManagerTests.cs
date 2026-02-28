@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.Implementation;
 
@@ -49,24 +50,25 @@ namespace WowSharpClient.NetworkTests
             using var connectionManager = new ConnectionManager(connection, policy, "127.0.0.1", 8085);
 
             var connectionEvents = 0;
-            var permanentDisconnectCalled = false;
+            var permanentDisconnectTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             connectionManager.Connected += () => connectionEvents++;
-            connectionManager.Disconnected += (ex) => permanentDisconnectCalled = true;
+            connectionManager.Disconnected += (ex) => permanentDisconnectTcs.TrySetResult();
 
             // Act
             await connectionManager.ConnectAsync();
             Assert.Equal(1, connectionEvents);
-            
+
             // Simulate connection error that will persist for reconnection attempts
             var error = new InvalidOperationException("Connection failed");
             connection.SimulateConnectionError(error, shouldFailReconnections: true);
 
-            // Wait for policy to exhaust retries
-            await Task.Delay(500);
+            // Wait deterministically for permanent disconnect event (with timeout)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await permanentDisconnectTcs.Task.WaitAsync(cts.Token);
 
-            // Assert - Should eventually stop reconnecting and fire permanent disconnect
-            Assert.True(permanentDisconnectCalled);
+            // Assert - Should have fired permanent disconnect
+            Assert.True(permanentDisconnectTcs.Task.IsCompleted);
         }
 
         [Fact]
@@ -82,24 +84,25 @@ namespace WowSharpClient.NetworkTests
             using var connectionManager = new ConnectionManager(connection, policy, "127.0.0.1", 8085);
 
             var connectionEvents = 0;
-            var finalDisconnectCalled = false;
+            var finalDisconnectTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             connectionManager.Connected += () => connectionEvents++;
-            connectionManager.Disconnected += (ex) => finalDisconnectCalled = true;
+            connectionManager.Disconnected += (ex) => finalDisconnectTcs.TrySetResult();
 
             // Act
             await connectionManager.ConnectAsync();
             Assert.Equal(1, connectionEvents);
-            
+
             // Simulate connection failure that will persist for reconnection attempts
             var error = new InvalidOperationException("Connection failed");
             connection.SimulateConnectionError(error, shouldFailReconnections: true);
-            
-            // Wait for all reconnection attempts to complete
-            await Task.Delay(500);
+
+            // Wait deterministically for final disconnect (with timeout)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await finalDisconnectTcs.Task.WaitAsync(cts.Token);
 
             // Assert - After max attempts, should fire final disconnect event
-            Assert.True(finalDisconnectCalled);
+            Assert.True(finalDisconnectTcs.Task.IsCompleted);
         }
 
         [Fact]
@@ -246,25 +249,145 @@ namespace WowSharpClient.NetworkTests
             using var connectionManager = new ConnectionManager(connection, policy, "127.0.0.1", 8085);
 
             var connectedCalled = false;
-            var disconnectedCalled = false;
+            var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
             connectionManager.Connected += () => connectedCalled = true;
-            connectionManager.Disconnected += (ex) => disconnectedCalled = true;
+            connectionManager.Disconnected += (ex) => disconnectedTcs.TrySetResult();
 
             // Act
             await connectionManager.ConnectAsync();
             Assert.True(connectedCalled);
-            
+
             // Simulate error that will eventually lead to permanent disconnect
             // due to policy max attempts being reached
             var testException = new InvalidOperationException("Test error");
             connection.SimulateConnectionError(testException, shouldFailReconnections: true);
 
-            await Task.Delay(500); // Wait for disconnect processing
+            // Wait deterministically for disconnect (with timeout)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await disconnectedTcs.Task.WaitAsync(cts.Token);
 
             // Assert
             Assert.True(connectedCalled);
-            Assert.True(disconnectedCalled); // Should eventually get permanent disconnect
+            Assert.True(disconnectedTcs.Task.IsCompleted);
+        }
+
+        // --- WSCN-TST-003: Deterministic reconnect cancellation/dispose tests ---
+
+        [Fact]
+        public async Task DisconnectAsync_CancelsActiveReconnectLoop()
+        {
+            // Arrange - Use a long backoff so the reconnect loop is in the delay
+            using var connection = new InMemoryConnection();
+            var policy = new FixedDelayPolicy(TimeSpan.FromSeconds(30), maxAttempts: 10);
+
+            using var connectionManager = new ConnectionManager(connection, policy, "127.0.0.1", 8085);
+
+            var connectedCount = 0;
+            connectionManager.Connected += () => Interlocked.Increment(ref connectedCount);
+
+            await connectionManager.ConnectAsync();
+            Assert.Equal(1, connectedCount);
+
+            // Trigger reconnect loop (30-second delay per attempt)
+            connection.SimulateConnectionError(new InvalidOperationException("error"), shouldFailReconnections: false);
+
+            // Act - Immediately cancel via graceful disconnect
+            await connectionManager.DisconnectAsync();
+
+            // Wait briefly - if cancel didn't work, we'd see another Connected event
+            await Task.Delay(200);
+
+            // Assert - No additional connections happened (reconnect was cancelled)
+            Assert.Equal(1, connectedCount);
+        }
+
+        [Fact]
+        public async Task Dispose_DuringBackoffDelay_StopsImmediately()
+        {
+            // Arrange - Long backoff delay to ensure we're mid-backoff when disposing
+            var connection = new InMemoryConnection();
+            var policy = new FixedDelayPolicy(TimeSpan.FromSeconds(30), maxAttempts: 100);
+
+            var connectionManager = new ConnectionManager(connection, policy, "127.0.0.1", 8085);
+
+            var connectedCount = 0;
+            connectionManager.Connected += () => Interlocked.Increment(ref connectedCount);
+
+            await connectionManager.ConnectAsync();
+            Assert.Equal(1, connectedCount);
+
+            // Start reconnect loop
+            connection.SimulateConnectionError(new InvalidOperationException("error"));
+
+            // Act - Dispose while in the 30-second backoff
+            connectionManager.Dispose();
+
+            // Wait to verify no reconnection happens
+            await Task.Delay(200);
+
+            // Assert
+            Assert.Equal(1, connectedCount);
+            Assert.False(connectionManager.IsConnected);
+        }
+
+        [Fact]
+        public async Task GracefulDisconnect_FiresDisconnectedWithNull()
+        {
+            // Arrange
+            using var connection = new InMemoryConnection();
+            var policy = new FixedDelayPolicy(TimeSpan.FromMilliseconds(50), maxAttempts: 3);
+
+            using var connectionManager = new ConnectionManager(connection, policy, "127.0.0.1", 8085);
+
+            Exception? receivedEx = new InvalidOperationException("sentinel");
+            var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            connectionManager.Disconnected += (ex) =>
+            {
+                receivedEx = ex;
+                disconnectedTcs.TrySetResult();
+            };
+
+            await connectionManager.ConnectAsync();
+
+            // Act - Graceful disconnect (null exception)
+            await connectionManager.DisconnectAsync();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await disconnectedTcs.Task.WaitAsync(cts.Token);
+
+            // Assert - Graceful disconnect passes null, no reconnect attempts
+            Assert.Null(receivedEx);
+        }
+
+        [Fact]
+        public async Task ErrorDisconnect_ExhaustsPolicy_ThenFiresDisconnectedWithException()
+        {
+            // Arrange
+            using var connection = new InMemoryConnection();
+            var policy = new FixedDelayPolicy(TimeSpan.FromMilliseconds(10), maxAttempts: 2);
+
+            using var connectionManager = new ConnectionManager(connection, policy, "127.0.0.1", 8085);
+
+            Exception? receivedEx = null;
+            var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            connectionManager.Disconnected += (ex) =>
+            {
+                receivedEx = ex;
+                disconnectedTcs.TrySetResult();
+            };
+
+            await connectionManager.ConnectAsync();
+
+            // Act - Error that persists across all reconnect attempts
+            var testError = new InvalidOperationException("persistent failure");
+            connection.SimulateConnectionError(testError, shouldFailReconnections: true);
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await disconnectedTcs.Task.WaitAsync(cts.Token);
+
+            // Assert - Permanent disconnect fires with the last exception
+            Assert.NotNull(receivedEx);
         }
     }
 }

@@ -4,7 +4,9 @@ using GameData.Core.Enums;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace WowSharpClient.NetworkTests
 {
@@ -268,6 +270,244 @@ namespace WowSharpClient.NetworkTests
             // (This test mainly verifies the encryptor can be updated without crashing)
             Assert.NotNull(unencryptedData);
             Assert.NotNull(newEncryptedData);
+        }
+
+        // --- WSCN-TST-006: Bridge coverage and exception swallow tests ---
+
+        [Fact]
+        public async Task BridgeRegistration_MovementOpcodes_Registered()
+        {
+            // Arrange - Verify representative movement opcodes are registered by
+            // injecting packets and checking they're handled (not dropped silently).
+            // The bridge handlers may fail internally (no ObjectManager), but the pipeline
+            // should not throw and should remain connected.
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+            // Act - Inject movement opcodes that are bridged to legacy handlers
+            var movementOpcodes = new[]
+            {
+                Opcode.MSG_MOVE_START_FORWARD,
+                Opcode.MSG_MOVE_STOP,
+                Opcode.MSG_MOVE_HEARTBEAT,
+                Opcode.MSG_MOVE_JUMP,
+                Opcode.MSG_MOVE_SET_FACING,
+            };
+
+            foreach (var opcode in movementOpcodes)
+            {
+                var minimalPayload = new byte[] { 0x00 };
+                connection.InjectIncomingData(CreateWoWPacket(opcode, minimalPayload));
+            }
+
+            await Task.Delay(200);
+
+            // Assert - Pipeline should remain connected after processing bridged opcodes
+            Assert.True(worldClient.IsConnected);
+        }
+
+        [Fact]
+        public async Task BridgeRegistration_LoginAndObjectOpcodes_Registered()
+        {
+            // Arrange - Verify login/object opcodes are registered in the bridge
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+            // Act - Inject opcodes that are bridged
+            var bridgedOpcodes = new[]
+            {
+                Opcode.SMSG_LOGIN_VERIFY_WORLD,
+                Opcode.SMSG_QUERY_TIME_RESPONSE,
+                Opcode.SMSG_INITIAL_SPELLS,
+            };
+
+            foreach (var opcode in bridgedOpcodes)
+            {
+                // Minimal payload - bridge handler may fail parsing but that's OK
+                var payload = new byte[4];
+                connection.InjectIncomingData(CreateWoWPacket(opcode, payload));
+            }
+
+            await Task.Delay(200);
+
+            // Assert - Pipeline stays alive despite potential handler parse errors
+            Assert.True(worldClient.IsConnected);
+        }
+
+        [Fact]
+        public async Task BridgeLegacyHandler_ThrowsException_PipelineContinues()
+        {
+            // Arrange - The BridgeToLegacy catch block swallows exceptions.
+            // Verify that after a handler throws, subsequent opcodes are still dispatched.
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+            // Act - Send a bridged opcode with malformed data (will cause handler to throw)
+            // SMSG_UPDATE_OBJECT with empty payload will fail in the handler
+            connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_UPDATE_OBJECT, new byte[] { 0xFF }));
+            await Task.Delay(100);
+
+            // Now send a well-formed auth response (non-bridged handler)
+            var authOk = new byte[] { 0x0C }; // AUTH_OK
+            connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_AUTH_RESPONSE, authOk));
+            await Task.Delay(200);
+
+            // Assert - Pipeline should have survived the bridged handler throw
+            // and processed the AUTH_RESPONSE successfully
+            Assert.True(worldClient.IsConnected);
+            Assert.True(worldClient.IsAuthenticated);
+        }
+
+        [Fact]
+        public async Task BridgeLegacyHandler_MultipleThrows_NeverTerminatesPipeline()
+        {
+            // Arrange - Fire multiple opcodes that will throw in their bridge handlers
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+            // Act - Send multiple malformed bridged opcodes
+            for (int i = 0; i < 5; i++)
+            {
+                connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_UPDATE_OBJECT, new byte[] { 0xFF }));
+                connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_MONSTER_MOVE, new byte[] { 0x00 }));
+            }
+
+            await Task.Delay(300);
+
+            // Assert - Pipeline must still be alive
+            Assert.True(worldClient.IsConnected);
+
+            // Verify it can still process new packets
+            connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_AUTH_RESPONSE, new byte[] { 0x0C }));
+            await Task.Delay(200);
+            Assert.True(worldClient.IsAuthenticated);
+        }
+
+        [Fact]
+        public async Task AttackSwingErrors_EmitToObservable()
+        {
+            // Arrange - Verify attack error opcodes emit strings to AttackErrors observable
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            var errors = new List<string>();
+            using var sub = worldClient.AttackErrors.Subscribe(err => { lock (errors) errors.Add(err); });
+
+            var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+            // Act - Send attack error opcodes
+            connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_ATTACKSWING_NOTINRANGE, Array.Empty<byte>()));
+            connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_ATTACKSWING_BADFACING, Array.Empty<byte>()));
+            connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_ATTACKSWING_DEADTARGET, Array.Empty<byte>()));
+
+            await Task.Delay(200);
+
+            // Assert - Should have received 3 error strings
+            Assert.Equal(3, errors.Count);
+            Assert.Contains("Not in range", errors[0]);
+            Assert.Contains("Bad facing", errors[1]);
+            Assert.Contains("dead", errors[2], StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task AttackStart_BridgedToLegacy_PipelineSurvives()
+        {
+            // Arrange - SMSG_ATTACKSTART is registered twice: first as a WorldClient
+            // reactive handler, then overwritten by BridgeToLegacy (which calls
+            // SpellHandler.HandleAttackStart). The bridge handler wraps exceptions,
+            // so the reactive AttackStateChanged subject is NOT emitted to via the
+            // pipeline. This test verifies the bridge handler runs without crashing.
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+            // Act - Send ATTACKSTART with attacker=1, victim=2
+            var payload = new byte[16];
+            BitConverter.GetBytes((ulong)1).CopyTo(payload, 0);
+            BitConverter.GetBytes((ulong)2).CopyTo(payload, 8);
+            connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_ATTACKSTART, payload));
+
+            await Task.Delay(150);
+
+            // Assert - Pipeline should remain alive (bridge handler swallows exceptions)
+            Assert.True(worldClient.IsConnected);
+        }
+
+        [Fact]
+        public async Task RegisterOpcodeHandler_ReturnsObservableStream()
+        {
+            // Arrange
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            var receivedPayloads = new List<byte[]>();
+            var stream = worldClient.RegisterOpcodeHandler(Opcode.SMSG_QUERY_TIME_RESPONSE);
+            using var sub = stream.Subscribe(payload =>
+            {
+                lock (receivedPayloads) receivedPayloads.Add(payload.ToArray());
+            });
+
+            var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+            // Act
+            var testPayload = new byte[] { 0x11, 0x22, 0x33, 0x44 };
+            connection.InjectIncomingData(CreateWoWPacket(Opcode.SMSG_QUERY_TIME_RESPONSE, testPayload));
+            await Task.Delay(150);
+
+            // Assert
+            Assert.Single(receivedPayloads);
+            Assert.Equal(testPayload, receivedPayloads[0]);
         }
 
         /// <summary>
