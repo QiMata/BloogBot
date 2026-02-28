@@ -73,6 +73,10 @@ namespace BotRunner
         private DateTime _spellCastLockoutUntil = DateTime.MinValue;
         private const double SpellCastLockoutSeconds = 20.0;
 
+        // Action dispatch correlation: stable token linking receive → dispatch → completion logs.
+        private string _currentActionCorrelationId = "";
+        private long _actionSequenceNumber;
+
         private readonly Stack<IBotTask> _botTasks = new();
         private bool _tasksInitialized;
         private DateTime _lastDeathRecoveryPush = DateTime.MinValue;
@@ -160,7 +164,14 @@ namespace BotRunner
 
                     if (_behaviorTree != null)
                     {
+                        var prevStatus = _behaviorTreeStatus;
                         _behaviorTreeStatus = _behaviorTree.Tick(new TimeData(0.1f));
+
+                        if (prevStatus == BehaviourTreeStatus.Running && _behaviorTreeStatus != BehaviourTreeStatus.Running
+                            && !string.IsNullOrEmpty(_currentActionCorrelationId))
+                        {
+                            Log.Information($"[BOT RUNNER] Behavior tree completed with {_behaviorTreeStatus} [{_currentActionCorrelationId}]");
+                        }
                     }
 
                     // Death recovery must continue even if a behavior tree is currently running.
@@ -207,7 +218,8 @@ namespace BotRunner
                     return;
                 }
 
-                Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ActionType} ({(int)action.ActionType})");
+                _currentActionCorrelationId = $"act-{Interlocked.Increment(ref _actionSequenceNumber)}";
+                Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ActionType} ({(int)action.ActionType}) [{_currentActionCorrelationId}]");
                 var actionList = ConvertActionMessageToCharacterActions(action);
                 if (actionList.Count > 0)
                 {
@@ -218,7 +230,7 @@ namespace BotRunner
                         _spellCastLockoutUntil = DateTime.UtcNow.AddSeconds(SpellCastLockoutSeconds);
                     }
 
-                    Log.Information($"[BOT RUNNER] Building behavior tree for: {actionList[0].Item1}");
+                    Log.Information($"[BOT RUNNER] Building behavior tree for: {actionList[0].Item1} [{_currentActionCorrelationId}]");
                     _behaviorTree = BuildBehaviorTreeFromActions(actionList);
                     _behaviorTreeStatus = BehaviourTreeStatus.Running;
                     _activitySnapshot.PreviousAction = action;

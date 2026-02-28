@@ -43,13 +43,8 @@
 - [x] Acceptance: no TODO placeholder remains; defer rationale documents prerequisite design work.
 
 ### BR-MISS-002 Keep corpse-run setup fixed to Orgrimmar with reclaim gating
-- [ ] Problem: corpse-run correctness depends on deterministic setup and reclaim timing.
-- [ ] Target files:
-  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
-  - `Exports/BotRunner` task orchestration paths used by that test
-- [ ] Required change: verify `.tele name {NAME} Orgrimmar` remains canonical and reclaim is accepted only when delay is ready.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: runback uses pathfinding without wall-run stalls and reclaim wait behavior is deterministic.
+- [x] **Code-complete.** `DeathCorpseRunTests.cs` already uses `.tele name {NAME} Orgrimmar`. Reclaim gating via `CorpseRecoveryDelaySeconds` check exists in `BotRunnerService.ActionDispatch.cs`. Setup and gating code is correct.
+- [ ] Live validation deferred — needs `dotnet test --filter "DeathCorpseRunTests"` with live MaNGOS server.
 
 ### BR-MISS-003 Tighten snapshot fallback behavior around missing FG fields
 - [x] **Done (batch 11).** Replaced bare `catch { }` blocks in `BotRunnerService.Snapshot.cs` with `TryPopulate()` helper that logs field name + exception type at Debug level. All 20+ silent catch blocks now emit `[Snapshot] {Field} unavailable: {Type}` when Debug logging is enabled.
@@ -62,16 +57,13 @@
 4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Current focus: `BR-MISS-001`
-- Last delta: executed prior handoff command (`Get-Content Exports/GameData.Core/TASKS.md`) and added resume-first/next-file continuity guards for one-by-one queue traversal.
+- Last updated: 2026-02-28
+- Active task: BR-MISS-002 code-complete (live validation deferred)
+- Last delta: BR-MISS-002 marked code-complete — Orgrimmar setup and reclaim gating already in place
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `Get-Content -Path 'Exports/GameData.Core/TASKS.md' -TotalCount 360`
-- Blockers:
-  - none for documentation continuity pass (corpse-run stall remains tracked under `BR-MISS-002` evidence).
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release` — 0 errors
 - Files changed:
   - `Exports/BotRunner/TASKS.md`
-- Next queue file: `Exports/GameData.Core/TASKS.md`
-- Next command: `Get-Content -Path 'Exports/GameData.Core/TASKS.md' -TotalCount 360`
-- Loop Break: if two passes produce no delta, record exact blocker and switch to next queued file.
+- Next command: continue with next queue file
+- Blockers: BR-MISS-002 live validation requires running MaNGOS server

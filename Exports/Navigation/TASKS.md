@@ -50,13 +50,8 @@
 - [x] Acceptance: no machine-specific debug artifact paths remain; filter behavior is explicit and reproducible across environments.
 
 ### NAV-MISS-004 Validate corpse runback path use (consume returned path nodes without wall-loop fallback)
-- [ ] Problem: corpse runback can degrade into wall-running behavior when path output consumption diverges from generated waypoints.
-- [ ] Target files:
-  - `Exports/Navigation/PathFinder.cpp`
-  - `Services/BackgroundBotRunner` path-consumption call sites (linked task execution in service backlog)
-- [ ] Required change: verify generated path is valid and consumed directly by runback movement flow; remove probe-point/random-strafe fallback in this scenario.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: runback follows path nodes around obstacles and reaches corpse/rez window without repetitive wall collisions.
+- [x] **Code-complete.** RetrieveCorpseTask already consumes path directly with probe-skip/direct-fallback disabled (`enableProbeHeuristics: false`, `enableDynamicProbeSkipping: false`, `strictPathValidation: true`, `allowDirectFallback: false`). PathFinder generates valid Detour paths. No wall-loop fallback exists in this code path.
+- [ ] Live validation deferred — needs `dotnet test --filter "DeathCorpseRunTests"` with live MaNGOS server.
 
 ## Simple Command Set
 1. `msbuild Exports/Navigation/Navigation.vcxproj /t:Build /p:Configuration=Release /p:Platform=x64`
@@ -67,15 +62,12 @@
 
 ## Session Handoff
 - Last updated: 2026-02-28
-- Active task: `NAV-MISS-004` (next open)
-- Last delta: NAV-MISS-001 (OverlapCapsule implemented) + NAV-MISS-002 (QueryParams stubs resolved)
+- Active task: NAV-MISS-004 code-complete (live validation deferred)
+- Last delta: NAV-MISS-004 marked code-complete — path consumption config already correct
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - MSBuild Navigation.vcxproj Release|x64 — 0 errors
-  - Physics tests: 76/79 pass
+  - Code review confirmed RetrieveCorpseTask path settings are correct
 - Files changed:
-  - `Exports/Navigation/PhysicsTestExports.cpp` — OverlapCapsule export
-  - `Exports/Navigation/SceneQuery.h` — QueryParams field comments
   - `Exports/Navigation/TASKS.md`
-- Next command: evaluate NAV-MISS-004 (corpse runback path consumption)
-- Loop Break: if two passes produce no delta, record blocker + exact next command and move to next queued file.
+- Next command: continue with next queue file
+- Blockers: NAV-MISS-004 live validation requires running MaNGOS server

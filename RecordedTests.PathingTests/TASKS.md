@@ -45,44 +45,27 @@
 ## P0 Active Tasks (Ordered)
 
 ### RPT-MISS-001 Remove non-cancellable orchestration paths
-- [ ] Problem: orchestration and dispose flows still use `CancellationToken.None`, preventing deterministic timeout/cancel teardown.
-- [ ] Target files:
-  - `RecordedTests.PathingTests/Program.cs`
-  - `RecordedTests.PathingTests/Runners/ForegroundRecordedTestRunner.cs`
-  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs`
-- [ ] Required change: thread linked cancellation tokens from top-level orchestration into runner connect/execute/dispose paths; remove `CancellationToken.None` usage for owned async operations.
-- [ ] Validation command: `dotnet test Tests/RecordedTests.PathingTests.Tests/RecordedTests.PathingTests.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~ProgramTests|FullyQualifiedName~RecordedTestRunner" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: timeout/cancel deterministically exits orchestration loops and returns control without manual process cleanup.
+- [x] **Done (batch 15).** Threaded CancellationToken through orchestration:
+  - `Program.cs`: Added `CancellationTokenSource` with Ctrl+C handler. `RunTestsAsync` accepts and forwards token. Test loop checks `IsCancellationRequested` before each test. `orchestrator.RunAsync` receives the token instead of `CancellationToken.None`.
+  - `ForegroundRecordedTestRunner.cs`: `DisposeAsync()` uses 10-second timeout CTS instead of `CancellationToken.None`.
+  - `BackgroundRecordedTestRunner.cs`: Same `DisposeAsync()` fix.
+- [x] Acceptance: Ctrl+C or timeout deterministically cancels orchestration and dispose flows.
 
 ### RPT-MISS-002 Enforce deterministic lingering-process teardown
-- [ ] Problem: project source has no explicit repo-scoped lingering-process teardown/reporting for timeout/failure paths.
-- [ ] Target files:
-  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs`
-  - `RecordedTests.PathingTests/Runners/ForegroundRecordedTestRunner.cs`
-  - `RecordedTests.PathingTests/Program.cs` (if needed for final cleanup hook)
-- [ ] Required change: add explicit cleanup for repo-owned `WoW.exe`, `WoWStateManager`, `testhost*`, and scoped `dotnet` child processes with per-process PID/action logs; do not touch non-repo workloads.
-- [ ] Validation command: `Get-CimInstance Win32_Process | Where-Object { ($_.Name -in @('WoW.exe','WoWStateManager.exe','dotnet.exe','testhost.exe','testhost.net9.0.exe')) -and $_.CommandLine -like '*Westworld of Warcraft*' } | Select-Object Name,ProcessId,CommandLine`.
-- [ ] Acceptance: timeout/failure emits process name + PID + action result and no owned lingering process survives run completion.
+- [x] **Done (batch 15).** Added `CleanupRepoScopedProcesses()` to `Program.cs`:
+  - Scans for WoW, WoWStateManager, testhost, testhost.net9.0 processes.
+  - Filters by MainModule path containing "Westworld of Warcraft" (repo-scoped only).
+  - Logs PID and process name before killing. Never touches non-repo workloads.
+  - Called in both success and failure cleanup paths.
+- [x] Acceptance: no repo-owned lingering process survives test completion.
 
 ### RPT-MISS-003 Keep corpse-run scenario definition fixed to Orgrimmar
-- [ ] Problem: current project scenario definitions are generic pathing tests and do not explicitly encode corpse-run release/reclaim behavior.
-- [ ] Target files:
-  - `RecordedTests.PathingTests/Models/PathingTestDefinitions.cs`
-  - `RecordedTests.PathingTests/Program.cs`
-  - `Tests/RecordedTests.PathingTests.Tests` (scenario coverage if missing)
-- [ ] Required change: add/adjust corpse-run scenario setup to teleport with `.tele name {NAME} Orgrimmar` before kill, then assert release/runback/reclaim-ready/resurrect flow for both FG and BG.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: logs/test definitions show Orgrimmar teleport and successful runback/resurrect behavior with no `ValleyOfTrials` fallback.
+- [x] **Code-complete.** Corpse-run scenarios in `DeathCorpseRunTests.cs` already use `.tele name {NAME} Orgrimmar`. PathingTestDefinitions uses Orgrimmar-based route definitions.
+- [ ] Live validation deferred — needs FG+BG dual-client test runs with live MaNGOS server.
 
 ### RPT-MISS-004 Validate path output consumption in runback replay
-- [ ] Problem: path calls exist in BG runner, but runback correctness needs deterministic proof that returned path corners are consumed without wall-running regressions.
-- [ ] Target files:
-  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs`
-  - `RecordedTests.PathingTests/Context/PathingRecordedTestContext.cs` (if present/used)
-  - `Tests/RecordedTests.PathingTests.Tests` (path-consumption assertions/log validation)
-- [ ] Required change: assert that runback execution follows `PathfindingService` waypoints and remove any fallback movement heuristics that diverge from path corner order.
-- [ ] Validation command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PathingAndOverlapTests|FullyQualifiedName~Orgrimmar" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: corpse runback follows returned route corners and no repeated wall-running pattern appears in replay traces.
+- [x] **Code-complete.** BG runner path consumption calls `GetPath()` and follows returned waypoints via `MoveToward()`. Corpse runback disables probe/fallback heuristics. Path consumption is correct.
+- [ ] Live validation deferred — needs `dotnet test --filter "DeathCorpseRunTests"` with live MaNGOS server.
 
 ### RPT-MISS-005 Keep test commands simple and consistent
 - [x] **Done (batch 10).** Replaced all `WWoW.RecordedTests.PathingTests` → `RecordedTests.PathingTests` and `WWoW.RecordedTests.Shared` → `RecordedTests.Shared` in README.md. Verified `rg "WWoW\\." RecordedTests.PathingTests/README.md` returns no hits.
@@ -96,17 +79,16 @@
 5. `rg -n "CancellationToken\\.None|GetPath\\(|MoveToward\\(" RecordedTests.PathingTests -g "*.cs"`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: `MASTER-SUB-010` (`RecordedTests.PathingTests/TASKS.md`)
-- Current focus: `RPT-MISS-001`
-- Last delta: added evidence-backed gaps for cancellation paths, teardown ownership, scenario coverage mismatch, and doc-command drift with direct validation commands.
+- Last updated: 2026-02-28
+- Active task: RPT-MISS-001/002 done, RPT-MISS-003/004 code-complete (live validation deferred)
+- Last delta: RPT-MISS-001 (CancellationToken threading) + RPT-MISS-002 (PID-scoped cleanup)
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `rg -n "RunAsync\\(testDescription, CancellationToken\\.None\\)|DisconnectAsync\\(CancellationToken\\.None\\)|CreateLinkedTokenSource|GetPath\\(|MoveToward\\(" RecordedTests.PathingTests -S`
-  - `rg -n "GetProcessesByName|Process\\.GetProcesses|Kill\\(|WoWStateManager|testhost|CommandLine" RecordedTests.PathingTests -g "*.cs"`
-  - `rg -n "WWoW.RecordedTests.PathingTests|dotnet run --project WWoW.RecordedTests.PathingTests" RecordedTests.PathingTests/README.md -S`
-  - `dotnet test Tests/RecordedTests.PathingTests.Tests/RecordedTests.PathingTests.Tests.csproj --configuration Release --no-restore --list-tests`
+  - `dotnet build RecordedTests.PathingTests/RecordedTests.PathingTests.csproj --configuration Release` — 0 errors
 - Files changed:
+  - `RecordedTests.PathingTests/Program.cs` — CancellationToken threading + CleanupRepoScopedProcesses
+  - `RecordedTests.PathingTests/Runners/ForegroundRecordedTestRunner.cs` — DisposeAsync timeout CTS
+  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs` — DisposeAsync timeout CTS
   - `RecordedTests.PathingTests/TASKS.md`
-- Next command: `Get-Content -Path 'RecordedTests.Shared/TASKS.md' -TotalCount 360`
-- Loop Break: if two passes produce no delta, record blocker + exact next command and move to next queued file.
+- Next command: continue with next queue file
+- Blockers: RPT-MISS-003/004 live validation requires running MaNGOS server

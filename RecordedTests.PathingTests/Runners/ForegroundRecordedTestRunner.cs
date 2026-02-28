@@ -201,6 +201,7 @@ public class ForegroundRecordedTestRunner(
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        await DisconnectAsync(CancellationToken.None);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await DisconnectAsync(cts.Token);
     }
 }

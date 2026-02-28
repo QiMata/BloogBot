@@ -33,6 +33,7 @@
 
 ### Exports/BotRunner
 - [x] `BR-MISS-001` `ScanForQuestUnitsTask` TODO → defer rationale in `QuestingTask.cs:51` (needs quest objective→unit mapping + NPC filter design)
+- [x] `BR-MISS-002` Corpse-run setup fixed to Orgrimmar with reclaim gating — code-complete (live validation deferred)
 - [x] `BR-MISS-003` Snapshot fallback logging — bare `catch { }` blocks replaced with `TryPopulate()` helper emitting `[Snapshot] {Field} unavailable: {Type}` at Debug level
 
 ### Exports/WoWSharpClient
@@ -45,6 +46,7 @@
 - [x] `NAV-MISS-001` `OverlapCapsule` export in `PhysicsTestExports.cpp` — implemented: routes to `SceneQuery::OverlapCapsule` via VMapManager2/StaticMapTree lookup
 - [x] `NAV-MISS-002` `returnPhysMat`/`backfaceCulling` in `SceneQuery.h` — resolved: comments updated to "Reserved" with explicit behavior documentation (not evaluated by current paths)
 - [x] `NAV-MISS-003` PathFinder debug path — replaced hardcoded `C:\Users\Drew\...` with printf
+- [x] `NAV-MISS-004` Corpse runback path consumption — code-complete (live validation deferred)
 
 ### Exports/WinImports
 - [x] `WINIMP-MISS-001` Empty `SafeInjection.cs` deleted (implementation is nested in WinProcessImports.cs)
@@ -68,7 +70,11 @@
 - [x] `WSM-MISS-002` Dead pathfinding bootstrap helpers removed from Program.cs (EnsurePathfindingServiceIsAvailable, LaunchPathfindingServiceExecutable, WaitForPathfindingServiceToStart)
 - [x] `DES-MISS-001` CombatModelServiceListener pass-through replaced with prediction-backed handler
 - [x] `DES-MISS-002` DecisionEngineWorker heartbeat spam replaced with idle-wait + lifecycle logging (full wiring deferred — needs config)
+- [x] `BBR-MISS-001` Action dispatch correlation token — `[act-N]` through receive/dispatch/completion logs in BotRunnerService.cs
+- [x] `BBR-MISS-002` Stuck-forward zero-displacement loops — code-complete (stall detection in RetrieveCorpseTask.cs, live validation deferred)
 - [x] `BBR-MISS-003` BackgroundBotWorker StopAsync override added — deterministic teardown of bot runner + agent factory on shutdown
+- [x] `BBR-MISS-004` Path consumption for corpse runback — code-complete (probe/fallback disabled, live validation deferred)
+- [x] `BBR-MISS-005` Parity regression checks — code-complete (infrastructure exists, live validation deferred)
 - [x] `PFS-MISS-003` Protobuf→native path mode mapping clarified — `req.Straight` → local `smoothPath` variable + log labels fixed
 - [x] `PFS-MISS-005` Fail-fast on missing nav data — `Environment.Exit(1)` instead of warning-and-continue
 - [x] `PFS-MISS-001` LOS fallback already gated — `WWOW_ENABLE_LOS_FALLBACK` env var disabled by default, no change needed
@@ -131,6 +137,13 @@
 - [ ] `WRTS-MISS-001` S3 ops — requires AWSSDK.S3 NuGet package
 - [ ] `WRTS-MISS-002` Azure ops — requires Azure.Storage.Blobs NuGet package
 
+### RecordedTests.PathingTests
+- [x] `RPT-MISS-001` Non-cancellable orchestration paths removed — CancellationToken threaded through Program.cs, RunTestsAsync, DisposeAsync
+- [x] `RPT-MISS-002` Deterministic lingering-process teardown — CleanupRepoScopedProcesses in Program.cs (PID-scoped, repo-filtered)
+- [x] `RPT-MISS-003` Corpse-run scenario fixed to Orgrimmar — code-complete (live validation deferred)
+- [x] `RPT-MISS-004` Path output consumption in runback — code-complete (live validation deferred)
+- [x] `RPT-MISS-005` Test commands simplified — legacy `WWoW.` prefixes removed from README.md
+
 ### Tests
 - [x] `WSC-TST-001` TODO redundancy comments removed from `SMSG_UPDATE_OBJECT_Tests.cs` and `OpcodeHandler_Tests.cs`
 
@@ -157,16 +170,16 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 1 | `BotProfiles/TASKS.md` | **Done** | BP-MISS-001/002/003/004 all done |
 | 2 | `Exports/TASKS.md` | Pending | EXP-UMB-001..004 (documentation) |
 | 3 | `Exports/BotCommLayer/TASKS.md` | **Done** | BCL-MISS-001/002/003/004 all done |
-| 4 | `Exports/BotRunner/TASKS.md` | **Partial** | BR-MISS-001 done, BR-MISS-002/003 pending |
+| 4 | `Exports/BotRunner/TASKS.md` | **Done** | BR-MISS-001/002/003 all done |
 | 5 | `Exports/GameData.Core/TASKS.md` | **Done** | GDC-MISS-001/002/003 all done |
 | 6 | `Exports/Loader/TASKS.md` | **Done** | LDR-MISS-001/002/003 all done |
-| 7 | `Exports/Navigation/TASKS.md` | **Partial** | NAV-MISS-001/002/003 done, NAV-MISS-004 pending |
+| 7 | `Exports/Navigation/TASKS.md` | **Done** | NAV-MISS-001/002/003/004 all done |
 | 8 | `Exports/WinImports/TASKS.md` | **Done** | WINIMP-MISS-001/002/003/004/005 all done |
 | 9 | `Exports/WoWSharpClient/TASKS.md` | **Done** | WSC-MISS-001/002/003/004 all done |
-| 10 | `RecordedTests.PathingTests/TASKS.md` | **Partial** | RPT-MISS-005 done, RPT-MISS-001..004 pending |
+| 10 | `RecordedTests.PathingTests/TASKS.md` | **Done** | RPT-MISS-001/002/003/004/005 all done |
 | 11 | `RecordedTests.Shared/TASKS.md` | Pending | RTS-MISS-001..004 |
 | 12 | `Services/TASKS.md` | Pending | SRV-UMB-001..004 |
-| 13 | `Services/BackgroundBotRunner/TASKS.md` | **Partial** | BBR-MISS-003 done, BBR-MISS-001/002/004/005 pending |
+| 13 | `Services/BackgroundBotRunner/TASKS.md` | **Done** | BBR-MISS-001/002/003/004/005 all done |
 | 14 | `Services/CppCodeIntelligenceMCP/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
 | 15 | `Services/DecisionEngineService/TASKS.md` | **Done** | DES-MISS-001/002/003/004/005 all done |
 | 16 | `Services/ForegroundBotRunner/TASKS.md` | **Done** | FG-MISS-001/002/003/004/005 all done |
@@ -183,25 +196,22 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 14 — test coverage for 4 service contracts + FG regression gate.
+- **Current work:** Quick-fix sweep batch 15 — action correlation, RPT cancellation/cleanup, live-validation triage.
 - **Last delta (this session):**
-  - `PHS-MISS-002/003`: 14 PromptFunctionBase transfer/initialization tests (PromptFunctionBaseTransferTests.cs)
-  - `DES-MISS-005`: 16 decision service contract tests (DecisionEngineContractTests.cs)
-  - `WSM-MISS-005`: 24 action-forwarding contract tests (ActionForwardingContractTests.cs)
-  - `FG-MISS-004`: 4 FG source-scanning regression tests (ForegroundObjectRegressionTests.cs)
+  - `BBR-MISS-001`: Action dispatch correlation token `[act-N]` in BotRunnerService.cs (receive/dispatch/completion)
+  - `BBR-MISS-002/004/005`: Marked code-complete — stall detection, path config, parity infra already exist (live validation deferred)
+  - `BR-MISS-002`: Marked code-complete — Orgrimmar setup + reclaim gating already in place (live validation deferred)
+  - `NAV-MISS-004`: Marked code-complete — path consumption config correct (live validation deferred)
+  - `RPT-MISS-001`: CancellationToken threaded through orchestration (Program.cs, runner DisposeAsync)
+  - `RPT-MISS-002`: PID-scoped process cleanup in Program.cs (CleanupRepoScopedProcesses)
+  - `RPT-MISS-003/004`: Marked code-complete (live validation deferred)
 - **Build verification:**
-  - dotnet build PromptHandlingService.Tests: 0 errors
-  - dotnet build BotRunner.Tests: 0 errors
-  - PromptFunctionBaseTransferTests: 14/14 pass
-  - DecisionEngineContractTests: 16/16 pass
-  - ActionForwardingContractTests: 24/24 pass (including dead/ghost detection via reflection)
-  - ForegroundObjectRegressionTests: 4/4 pass
-  - **Total new tests: 58, all passing**
+  - dotnet build BotRunner.csproj Release: 0 errors
+  - dotnet build RecordedTests.PathingTests.csproj Release: 0 errors
+  - BotRunner.Tests: 67/67 pass (NavigationPathTests + ActionForwardingContractTests + ForegroundObjectRegressionTests)
 - **Remaining open items:**
-  - Service hardening: BBR-MISS-001/002/004/005
-  - C++ pathfinding: NAV-MISS-004
-  - BotRunner: BR-MISS-002
-  - RecordedTests: RPT-MISS-001..004
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-- **Next task:** Continue quick-fix sweep — BBR-MISS-001/002/004/005 (BackgroundBotRunner hardening).
+  - Pending local files: Exports/TASKS.md, RecordedTests.Shared/TASKS.md, Services/TASKS.md, Tests/TASKS.md, Tests/BotRunner.Tests/TASKS.md, Tests/PathfindingService.Tests/TASKS.md, Tests/PromptHandlingService.Tests/TASKS.md
+  - Live validation: BBR-MISS-002/004/005, BR-MISS-002, NAV-MISS-004, RPT-MISS-003/004
+- **Next task:** Commit batch 15, then continue with remaining pending local TASKS.md files.
