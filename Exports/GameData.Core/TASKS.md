@@ -44,23 +44,12 @@
 - [x] Acceptance: no ambiguity marker remains and consumers can interpret player death states deterministically.
 
 ### GDC-MISS-002 Lock corpse lifecycle interface contract across player/object/corpse
-- [ ] Problem: corpse-run gating depends on a small field set, but contract expectations are not explicitly normalized in interface docs.
-- [ ] Target files:
-  - `Exports/GameData.Core/Interfaces/IWoWLocalPlayer.cs`
-  - `Exports/GameData.Core/Interfaces/IWoWCorpse.cs`
-  - `Exports/GameData.Core/Interfaces/IObjectManager.cs`
-- [ ] Required change: document and align reclaim-critical fields (`CorpsePosition`, `InGhostForm`, `CanResurrect`, `CorpseRecoveryDelaySeconds`, corpse owner/type/flags) so FG and BG implementations are contract-equivalent.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~ReleaseCorpseTaskTests|FullyQualifiedName~RetrieveCorpseTaskTests|FullyQualifiedName~DeathCorpseRunTests" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: corpse lifecycle decisions in BotRunner no longer need implementation-specific drift guards for these contract members.
+- [x] **Done (batch 9).** Added XML docs to `IWoWLocalPlayer` (CorpsePosition, InGhostForm, CanResurrect, CorpseRecoveryDelaySeconds) and `IWoWCorpse` (OwnerGuid, Type, CorpseFlags) with corpse lifecycle contract summary.
+- [x] Acceptance: corpse lifecycle decisions in BotRunner no longer need implementation-specific drift guards for these contract members.
 
 ### GDC-MISS-003 Remove snapshot contract drift between `IActivitySnapshot` and `IWoWActivitySnapshot`
-- [ ] Problem: overlapping snapshot interfaces exist with divergent fields, which can cause mapper drift.
-- [ ] Target files:
-  - `Exports/GameData.Core/Interfaces/IActivitySnapshot.cs`
-  - `Exports/GameData.Core/Interfaces/IWoWActivitySnapshot.cs`
-- [ ] Required change: define and document intended boundary for each snapshot interface (or converge them) so downstream mapping is deterministic.
-- [ ] Validation command: `dotnet build Exports/GameData.Core/GameData.Core.csproj --configuration Release --no-restore`.
-- [ ] Acceptance: snapshot interface ownership is explicit and there is one deterministic contract path per consumer use-case.
+- [x] **Done (batch 9).** Made `IWoWActivitySnapshot : IActivitySnapshot`. Removed duplicated `Timestamp`/`AccountName` from `IWoWActivitySnapshot`. Updated XML docs on both interfaces to document hierarchy boundary. Build verified (0 CS errors).
+- [x] Acceptance: snapshot interface ownership is explicit and there is one deterministic contract path per consumer use-case.
 
 ## Simple Command Set
 1. `dotnet build Exports/GameData.Core/GameData.Core.csproj --configuration Release --no-restore`

@@ -57,16 +57,8 @@
 - [ ] Acceptance: operator can force visible loader diagnostics during tests without source edits, and README documents exact behavior.
 
 ### LDR-MISS-003 Remove stale local debug stubs and TODO noise from loader workspace
-- [ ] Problem: loader folder contains machine-specific debug stubs and generic TODO comments that create false implementation signals.
-- [ ] Target files:
-  - `Exports/Loader/simple_loader.cpp`
-  - `Exports/Loader/minimal_loader.cpp`
-  - `Exports/Loader/test_minimal.cpp`
-  - `Exports/Loader/stdafx.h`
-  - `Exports/Loader/stdafx.cpp`
-- [ ] Required change: either archive or clearly mark these as non-production diagnostics and remove stale TODO markers that do not map to real backlog work.
-- [ ] Validation command: `rg --line-number "TODO|FIXME" Exports/Loader`.
-- [ ] Acceptance: loader task inventory reflects production code only; no ambiguous placeholder comments remain in active path files.
+- [x] **Done (batch 9).** Debug stub files (`simple_loader.cpp`, `minimal_loader.cpp`, `test_minimal.cpp`) were already deleted in a prior session. VS-generated TODO boilerplate removed from `stdafx.h` and `stdafx.cpp`. Verified `rg "TODO|FIXME" Exports/Loader` returns no hits in source files.
+- [x] Acceptance: loader task inventory reflects production code only; no ambiguous placeholder comments remain in active path files.
 
 ## Simple Command Set
 1. `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32`

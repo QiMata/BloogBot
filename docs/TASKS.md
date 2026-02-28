@@ -75,8 +75,12 @@
 
 ### Exports/BotCommLayer
 - [x] `BCL-MISS-003` Socket teardown hardened — `IDisposable` on server/client types, `while(true)` → `while(_isRunning)`, client cleanup on disconnect
+- [x] `BCL-MISS-004` Proto regen workflow docs — canonical command, repo-local protoc default, C++ external target documented
 - [x] `WSM-MISS-004` Action queue cap/expiry — `TimestampedAction` wrapper, 50-item depth cap, 5-min TTL, explicit drop logging
 - [x] `PHS-MISS-004` Test discovery already addressed — all methods have `[Fact(Skip)]` attributes
+
+### Exports/Loader
+- [x] `LDR-MISS-003` VS-generated TODO boilerplate removed from stdafx.h/stdafx.cpp; debug stub files already deleted
 
 ### Services/CppCodeIntelligenceMCP (Deferred — unused service)
 - [x] `CPPMCP-BLD-001` System.Text.Json package downgrade fixed (8.0.5 → 9.0.5)
@@ -95,11 +99,14 @@
 
 ### GameData.Core
 - [x] `GDC-MISS-001` `DeathState.cs` FIXME → clear XML docs with player vs creature semantics
+- [x] `GDC-MISS-002` Corpse lifecycle interface contract documented — XML docs on IWoWLocalPlayer + IWoWCorpse reclaim-critical fields
+- [x] `GDC-MISS-003` Snapshot interface drift fixed — `IWoWActivitySnapshot : IActivitySnapshot`, removed duplicated fields, documented hierarchy
 
 ### BotProfiles
 - [x] `BP-MISS-001` 16 miswired PvP factories fixed → `new PvPRotationTask(botContext)`
 - [x] `BP-MISS-002` Regression test for profile factory wiring — reflection-based test guards PvP↔PvE cross-wiring
 - [x] `BP-MISS-003` Druid feral identity aligned — folder `DruidFeralCombat` → `DruidFeral` to match class/namespace/FileName
+- [x] `BP-MISS-004` Profile capability map — `PROFILE_TASK_MAP.md` with 27-spec factory/task file map
 
 ### Storage (S3/Azure stubs — deferred, pending NuGet dependencies)
 - [ ] `RTS-MISS-001` S3 ops — requires AWSSDK.S3 NuGet package
@@ -130,12 +137,12 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 | # | Local file | Status | Next IDs |
 |---|-----------|--------|----------|
-| 1 | `BotProfiles/TASKS.md` | **Partial** | BP-MISS-001/002 done, BP-MISS-003/004 pending |
+| 1 | `BotProfiles/TASKS.md` | **Done** | BP-MISS-001/002/003/004 all done |
 | 2 | `Exports/TASKS.md` | Pending | EXP-UMB-001..004 (documentation) |
-| 3 | `Exports/BotCommLayer/TASKS.md` | **Partial** | BCL-MISS-003 done, BCL-MISS-001/002/004 pending |
+| 3 | `Exports/BotCommLayer/TASKS.md` | **Partial** | BCL-MISS-003/004 done, BCL-MISS-001/002 pending |
 | 4 | `Exports/BotRunner/TASKS.md` | Pending | BR-MISS-001..003 |
-| 5 | `Exports/GameData.Core/TASKS.md` | **Partial** | GDC-MISS-001 done, GDC-MISS-002..003 pending |
-| 6 | `Exports/Loader/TASKS.md` | Pending | LDR-MISS-001..003 |
+| 5 | `Exports/GameData.Core/TASKS.md` | **Done** | GDC-MISS-001/002/003 all done |
+| 6 | `Exports/Loader/TASKS.md` | **Partial** | LDR-MISS-003 done, LDR-MISS-001/002 pending |
 | 7 | `Exports/Navigation/TASKS.md` | **Partial** | NAV-MISS-003 done, NAV-MISS-001/002/004 pending |
 | 8 | `Exports/WinImports/TASKS.md` | **Partial** | WINIMP-MISS-001/002/003/004 done, 005 pending |
 | 9 | `Exports/WoWSharpClient/TASKS.md` | **Partial** | WSC-MISS-001/002/003 done, WSC-MISS-004 pending |
@@ -145,7 +152,7 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 13 | `Services/BackgroundBotRunner/TASKS.md` | **Partial** | BBR-MISS-003 done, BBR-MISS-001/002/004/005 pending |
 | 14 | `Services/CppCodeIntelligenceMCP/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
 | 15 | `Services/DecisionEngineService/TASKS.md` | **Partial** | DES-MISS-001/002/003/004 done, DES-MISS-005 pending |
-| 16 | `Services/ForegroundBotRunner/TASKS.md` | **Partial** | FG-MISS-001/002/003 done, FG-MISS-004/005 pending |
+| 16 | `Services/ForegroundBotRunner/TASKS.md` | **Partial** | FG-MISS-001/002/003/005 done, FG-MISS-004 pending |
 | 17 | `Services/LoggingMCPServer/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
 | 18 | `Services/PathfindingService/TASKS.md` | **Partial** | PFS-MISS-001/002/003/005 done, PFS-MISS-004/006/007 pending |
 | 19 | `Services/PromptHandlingService/TASKS.md` | **Partial** | PHS-MISS-001/004 done, PHS-MISS-002/003 pending |
@@ -159,19 +166,20 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 7 — local TASKS.md sync + FG-MISS-005 triage.
+- **Current work:** Quick-fix sweep batch 9 — documentation, interface contracts, cleanup.
 - **Last delta (this session):**
-  - Synced 10 local TASKS.md files with master completions (BotProfiles, GameData.Core, Navigation, WinImports, WoWSharpClient, CppCodeIntelligenceMCP, ForegroundBotRunner, LoggingMCPServer, PathfindingService, docs/TASKS.md)
-  - `FG-MISS-005`: Triaged all FG memory/warden TODOs — WardenDisabler had FG-WARDEN-001/002 IDs from prior session, WoWUnit.cs TODO replaced with defer rationale
-  - Full codebase scan confirmed no remaining quick-fix items — all open tasks require design work or new test infrastructure
-- **Quick-fix sweep complete.** All actionable quick-fix items across 7 batches have been shipped.
-- **Remaining open items (all require design/architecture work):**
+  - `BCL-MISS-004`: Proto regen docs — canonical command in README, `protocsharp.bat` default to repo-local `tools/protoc/bin/protoc.exe`, C++ external target documented
+  - `BP-MISS-004`: Created `BotProfiles/PROFILE_TASK_MAP.md` — 27-spec factory/task map with extra tasks, shared code, parity notes
+  - `GDC-MISS-002`: XML docs on `IWoWLocalPlayer` + `IWoWCorpse` reclaim-critical fields with corpse lifecycle contract summary
+  - `GDC-MISS-003`: `IWoWActivitySnapshot : IActivitySnapshot` inheritance, removed duplicated Timestamp/AccountName, documented hierarchy
+  - `LDR-MISS-003`: VS-generated TODO boilerplate removed from `stdafx.h`/`stdafx.cpp` (UTF-16 files)
+  - `ContainsCommandRejection` consolidation was done in batch 8 (already complete)
+- **Remaining open items (design/architecture work):**
   - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
-  - BotCommLayer: BCL-MISS-001/002/004
+  - BotCommLayer: BCL-MISS-001/002
   - Test infrastructure: WINIMP-MISS-005, PFS-MISS-004/006/007, PHS-MISS-002/003
-  - Documentation: BCL-MISS-004, GDC-MISS-002/003, BP-MISS-003/004
-  - ContainsCommandRejection consolidation (5 copies — refactor task)
+  - Loader: LDR-MISS-001/002 (C++ design)
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-- **Next task:** Design-level work — pick highest-priority design task or path smoothing plan continuation.
+- **Next task:** Design-level work or live-server-dependent tasks.

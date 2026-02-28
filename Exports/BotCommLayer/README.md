@@ -248,35 +248,45 @@ Game database access including area triggers, creature spawns, NPC AI data, batt
 
 ### Prerequisites
 
-Install the Protobuf compiler (`protoc`):
-
-- **Windows**: Download from [GitHub Releases](https://github.com/protocolbuffers/protobuf/releases) and add to PATH
-- **Chocolatey**: `choco install protoc`
-- **Scoop**: `scoop install protobuf`
+A bundled `protoc.exe` is included in the repo at `tools/protoc/bin/protoc.exe`. No system installation is required.
 
 ### Regenerating C# Files
 
-When you modify any `.proto` file in `Models/ProtoDef/`, regenerate the C# code using the provided batch script.
+When you modify any `.proto` file in `Models/ProtoDef/`, regenerate the C# code.
 
-From the repository root directory:
+**Canonical command (from repo root):**
+
+```bash
+"tools/protoc/bin/protoc.exe" --csharp_out="Exports/BotCommLayer/Models" -I"Exports/BotCommLayer/Models/ProtoDef" Exports/BotCommLayer/Models/ProtoDef/communication.proto Exports/BotCommLayer/Models/ProtoDef/database.proto Exports/BotCommLayer/Models/ProtoDef/game.proto Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto
+```
+
+**Batch script alternative:**
+
+```powershell
+.\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat
+```
+
+The batch script auto-resolves protoc from `tools/protoc/bin/protoc.exe`. Override with explicit arguments if needed:
 
 ```powershell
 .\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat .\ .\.. "C:\path\to\protoc.exe"
 ```
 
-Example with VS Code's protoc:
-
-```powershell
-.\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat .\ .\.. "C:\Microsoft VS Code\bin\protoc.exe"
-```
-
-### Batch Script Parameters
-
 | Parameter | Purpose | Default |
 |-----------|---------|---------|
 | `%1` | Path to `.proto` files (relative to script location) | `.` (current directory) |
 | `%2` | Output directory for generated C# files | `..` (parent directory) |
-| `%3` | Path to `protoc.exe` | `C:\protoc\bin\protoc.exe` |
+| `%3` | Path to `protoc.exe` | `tools/protoc/bin/protoc.exe` (repo-local) |
+
+**Never manually edit** `Communication.cs`, `Game.cs`, `Database.cs`, or `Pathfinding.cs` — always regenerate with protoc.
+
+### C++ Generation (External)
+
+`protocpp.bat` generates C++ protobuf files for an external `ActivityManager` project. It is **not used within this repo**. If the `ActivityManager` project is available:
+
+```powershell
+.\Exports\BotCommLayer\Models\ProtoDef\protocpp.bat .\ "..\..\..\..\ActivityManager" "..\..\..\..\ActivityManager\vcpkg_installed\x64-windows\tools\protobuf\protoc"
+```
 
 ### Manual Generation (Alternative)
 

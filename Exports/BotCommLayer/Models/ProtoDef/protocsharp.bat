@@ -18,7 +18,7 @@ if "%~2"=="" (
 
 if "%~3"=="" (
     echo No protoc path provided. Using default
-    set "PROTOC_PATH=C:\protoc\bin\protoc.exe"
+    set "PROTOC_PATH=%~dp0..\..\..\..\tools\protoc\bin\protoc.exe"
 ) else (
     set "PROTOC_PATH=%~3"
 )

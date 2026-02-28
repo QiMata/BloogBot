@@ -1,20 +1,15 @@
 namespace GameData.Core.Interfaces
 {
     /// <summary>
-    /// Interface for activity snapshots used to communicate bot state.
-    /// This interface allows GameData.Core to remain independent of BotCommLayer
-    /// while still supporting snapshot functionality.
+    /// Base activity snapshot contract. Game-agnostic fields shared by all snapshot types.
+    /// Extended by <see cref="IWoWActivitySnapshot"/> for WoW-specific identity and screen state.
     /// </summary>
     public interface IActivitySnapshot
     {
-        /// <summary>
-        /// Gets or sets the timestamp of the snapshot.
-        /// </summary>
+        /// <summary>Unix timestamp (seconds) when the snapshot was captured.</summary>
         uint Timestamp { get; set; }
 
-        /// <summary>
-        /// Gets or sets the account name associated with this snapshot.
-        /// </summary>
+        /// <summary>Account name (e.g. "ORWR1") that owns this snapshot.</summary>
         string AccountName { get; set; }
     }
 }

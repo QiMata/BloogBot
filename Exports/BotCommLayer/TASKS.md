@@ -88,14 +88,16 @@
 - [x] Acceptance: timeout/cancel paths do not leave active listeners/clients for this repo scope.
 
 ### BCL-MISS-004 Keep proto regeneration workflow explicit and low-friction
-- [ ] Problem: schema edits can drift from generated C# when regeneration workflow is unclear.
-- [ ] Target files:
+- [x] Problem: schema edits can drift from generated C# when regeneration workflow is unclear.
+- [x] Target files:
   - `Exports/BotCommLayer/README.md`
   - `Exports/BotCommLayer/Models/ProtoDef/protocsharp.bat`
   - `Exports/BotCommLayer/Models/ProtoDef/protocpp.bat`
-- [ ] Required change: document exact C# and C++ regeneration command order and output paths; ensure commands still match current repo layout.
-- [ ] Evidence gap: README currently gives direct C# regeneration examples but does not define a single canonical C++ regeneration call sequence.
-- [ ] Acceptance: another agent can regenerate models without scanning unrelated directories.
+- [x] Changes applied (2026-02-28):
+  - README updated: canonical single-command for C# regen from repo root, batch script auto-resolves `tools/protoc/bin/protoc.exe`, C++ section documents external `ActivityManager` target, "never manually edit" warning.
+  - `protocsharp.bat`: default protoc path changed from `C:\protoc\bin\protoc.exe` to repo-local `tools/protoc/bin/protoc.exe` via `%~dp0` relative path.
+  - `protocpp.bat`: unchanged (external target, no repo-local consumers).
+- [x] Acceptance: another agent can regenerate models without scanning unrelated directories.
 
 ## Simple Command Set
 1. `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore`

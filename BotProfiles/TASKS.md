@@ -78,10 +78,8 @@
 - [x] Acceptance: one canonical feral profile identity (`DruidFeral`) is used across folder, class, namespace, FileName, and documentation.
 
 ### BP-MISS-004 Add profile capability map for low-context handoff
-- [ ] Problem: profile coverage requires repeated source rediscovery.
-- [ ] Target doc: `BotProfiles/PROFILE_TASK_MAP.md` (new), linked from `docs/TASKS.md`.
-- [ ] Required content: per-spec map of factory methods -> concrete task files -> parity status -> owning task IDs.
-- [ ] Acceptance: another agent can select one spec and continue work without re-scanning the directory tree.
+- [x] **Done (batch 9).** Created `BotProfiles/PROFILE_TASK_MAP.md` with complete 27-spec task map.
+- [x] Acceptance: another agent can select one spec and continue work without re-scanning the directory tree.
 
 ## Simple Command Set
 1. `dotnet build BotProfiles/BotProfiles.csproj --configuration Release --no-restore`
