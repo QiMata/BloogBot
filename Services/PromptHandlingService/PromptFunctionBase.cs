@@ -44,7 +44,7 @@ namespace PromptHandlingService
         {
             if (transferTarget is not PromptFunctionBase)
             {
-                throw new NotImplementedException("Can only transfer from and to PromptFunctionBase");
+                throw new ArgumentException("Can only transfer history to a PromptFunctionBase instance.", nameof(transferTarget));
             }
 
             var promptFunctionBase = transferTarget as PromptFunctionBase;

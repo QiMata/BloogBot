@@ -162,7 +162,7 @@ public class CppAnalysisService
                             IncludePath = includePath,
                             IsSystemInclude = isSystemInclude,
                             LineNumber = i + 1,
-                            IsUsed = true // TODO: Implement usage analysis
+                            IsUsed = true // Usage analysis deferred — requires AST-level symbol resolution
                         };
 
                         // Try to resolve the path

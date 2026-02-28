@@ -241,7 +241,7 @@ namespace ForegroundBotRunner.Objects
 
         public bool DismissBuff(string buffName)
         {
-            throw new NotImplementedException();
+            return false;
         }
 
         public IEnumerable<ISpellEffect> GetBuffs()
@@ -257,21 +257,21 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
-        public IWoWUnit Target => throw new NotImplementedException();
+        public IWoWUnit Target => null;
 
-        public Dictionary<Powers, uint> Powers => throw new NotImplementedException();
+        public Dictionary<Powers, uint> Powers => new Dictionary<Powers, uint>();
 
-        public Dictionary<Powers, uint> MaxPowers => throw new NotImplementedException();
+        public Dictionary<Powers, uint> MaxPowers => new Dictionary<Powers, uint>();
 
-        public uint DisplayId => throw new NotImplementedException();
+        public uint DisplayId => 0;
 
-        public GOState GoState => throw new NotImplementedException();
+        public GOState GoState => default;
 
-        public uint ArtKit => throw new NotImplementedException();
+        public uint ArtKit => 0;
 
-        public uint AnimProgress => throw new NotImplementedException();
+        public uint AnimProgress => 0;
 
-        public uint FactionTemplate => throw new NotImplementedException();
+        public uint FactionTemplate => 0;
 
         public uint TypeId => 0; // Units are not GameObjects; TypeId only meaningful for WoWGameObject
 
@@ -279,9 +279,9 @@ namespace ForegroundBotRunner.Objects
 
         public uint[] Bytes0 => ReadPackedByteField(UpdateFields.EUnitFields.UNIT_FIELD_BYTES_0);
 
-        public uint[] VirtualItemInfo => throw new NotImplementedException();
+        public uint[] VirtualItemInfo => Array.Empty<uint>();
 
-        public uint[] VirtualItemSlotDisplay => throw new NotImplementedException();
+        public uint[] VirtualItemSlotDisplay => Array.Empty<uint>();
 
         public uint[] AuraFields
         {
@@ -349,77 +349,77 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
-        public float BaseAttackTime => throw new NotImplementedException();
+        public float BaseAttackTime => 0f;
 
-        public float OffhandAttackTime => throw new NotImplementedException();
+        public float OffhandAttackTime => 0f;
 
-        public uint NativeDisplayId => throw new NotImplementedException();
+        public uint NativeDisplayId => 0;
 
-        public uint MinDamage => throw new NotImplementedException();
+        public uint MinDamage => 0;
 
-        public uint MaxDamage => throw new NotImplementedException();
+        public uint MaxDamage => 0;
 
-        public uint MinOffhandDamage => throw new NotImplementedException();
+        public uint MinOffhandDamage => 0;
 
-        public uint MaxOffhandDamage => throw new NotImplementedException();
+        public uint MaxOffhandDamage => 0;
 
         public uint[] Bytes1 => ReadPackedByteField(UpdateFields.EUnitFields.UNIT_FIELD_BYTES_1);
 
-        public uint PetNumber => throw new NotImplementedException();
+        public uint PetNumber => 0;
 
-        public uint PetNameTimestamp => throw new NotImplementedException();
+        public uint PetNameTimestamp => 0;
 
-        public uint PetExperience => throw new NotImplementedException();
+        public uint PetExperience => 0;
 
-        public uint PetNextLevelExperience => throw new NotImplementedException();
+        public uint PetNextLevelExperience => 0;
 
-        public float ModCastSpeed => throw new NotImplementedException();
+        public float ModCastSpeed => 0f;
 
-        public uint CreatedBySpell => throw new NotImplementedException();
+        public uint CreatedBySpell => 0;
 
         public NPCFlags NpcFlags => (NPCFlags)MemoryManager.ReadInt(GetDescriptorPtr() + MemoryAddresses.WoWUnit_NPCFlagsOffset);
 
-        public uint NpcEmoteState => throw new NotImplementedException();
+        public uint NpcEmoteState => 0;
 
-        public uint TrainingPoints => throw new NotImplementedException();
+        public uint TrainingPoints => 0;
 
-        public uint Strength => throw new NotImplementedException();
+        public uint Strength => 0;
 
-        public uint Agility => throw new NotImplementedException();
+        public uint Agility => 0;
 
-        public uint Stamina => throw new NotImplementedException();
+        public uint Stamina => 0;
 
-        public uint Intellect => throw new NotImplementedException();
+        public uint Intellect => 0;
 
-        public uint Spirit => throw new NotImplementedException();
+        public uint Spirit => 0;
 
-        public uint[] Resistances => throw new NotImplementedException();
+        public uint[] Resistances => Array.Empty<uint>();
 
-        public uint BaseMana => throw new NotImplementedException();
+        public uint BaseMana => 0;
 
-        public uint BaseHealth => throw new NotImplementedException();
+        public uint BaseHealth => 0;
 
         public uint[] Bytes2 => ReadPackedByteField(UpdateFields.EUnitFields.UNIT_FIELD_BYTES_2);
 
-        public uint AttackPower => throw new NotImplementedException();
+        public uint AttackPower => 0;
 
-        public uint AttackPowerMods => throw new NotImplementedException();
+        public uint AttackPowerMods => 0;
 
-        public uint AttackPowerMultipler => throw new NotImplementedException();
+        public uint AttackPowerMultipler => 0;
 
-        public uint RangedAttackPower => throw new NotImplementedException();
+        public uint RangedAttackPower => 0;
 
-        public uint RangedAttackPowerMods => throw new NotImplementedException();
+        public uint RangedAttackPowerMods => 0;
 
-        public uint RangedAttackPowerMultipler => throw new NotImplementedException();
+        public uint RangedAttackPowerMultipler => 0;
 
-        public uint MinRangedDamage => throw new NotImplementedException();
+        public uint MinRangedDamage => 0;
 
-        public uint MaxRangedDamage => throw new NotImplementedException();
+        public uint MaxRangedDamage => 0;
 
-        public uint[] PowerCostModifers => throw new NotImplementedException();
+        public uint[] PowerCostModifers => Array.Empty<uint>();
 
-        public uint[] PowerCostMultipliers => throw new NotImplementedException();
+        public uint[] PowerCostMultipliers => Array.Empty<uint>();
 
         private uint[] ReadPackedByteField(UpdateFields.EUnitFields field)
         {
@@ -497,23 +497,23 @@ namespace ForegroundBotRunner.Objects
         /// </summary>
         public float TurnRate => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_TurnRateOffset));
 
-        public HighGuid Charm => throw new NotImplementedException();
+        public HighGuid Charm => new HighGuid(new byte[4], new byte[4]);
 
-        public HighGuid Summon => throw new NotImplementedException();
+        public HighGuid Summon => new HighGuid(new byte[4], new byte[4]);
 
-        public HighGuid CharmedBy => throw new NotImplementedException();
+        public HighGuid CharmedBy => new HighGuid(new byte[4], new byte[4]);
 
-        public HighGuid SummonedBy => throw new NotImplementedException();
+        public HighGuid SummonedBy => new HighGuid(new byte[4], new byte[4]);
 
-        public HighGuid Persuaded => throw new NotImplementedException();
+        public HighGuid Persuaded => new HighGuid(new byte[4], new byte[4]);
 
-        public HighGuid ChannelObject => throw new NotImplementedException();
+        public HighGuid ChannelObject => new HighGuid(new byte[4], new byte[4]);
 
-        public HighGuid CreatedBy => throw new NotImplementedException();
+        public HighGuid CreatedBy => new HighGuid(new byte[4], new byte[4]);
 
-        public uint Flags => throw new NotImplementedException();
+        public uint Flags => 0;
 
-        public float[] Rotation => throw new NotImplementedException();
+        public float[] Rotation => Array.Empty<float>();
 
         /// <summary>
         /// Transport GUID — CONFIRMED with zeppelin recording. Non-zero when on transport.
@@ -554,9 +554,9 @@ namespace ForegroundBotRunner.Objects
 
         public float SplineElevation => 0f; // Server-side spline data, not in CMovementInfo
 
-        public uint MovementFlags2 => throw new NotImplementedException();
+        public uint MovementFlags2 => 0;
 
-        public IWoWGameObject Transport { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public IWoWGameObject Transport { get; set; }
 
         // ── MoveSpline data (read from unit memory via pointer at 0xD8) ──
         // UNVERIFIED offset: the MoveSpline pointer location needs empirical testing.

@@ -211,7 +211,7 @@ namespace ForegroundBotRunner.Mem.AntiWarden
             // so instead, we scan 5 bytes of memory 1 byte at a time until we find the function signature. and we start at 6000 and go down because occasionally
             // I've seen the same 5 bytes in memory more in more than one place, but through experimentation, it seems we always want the higher one.
 
-            // TODO [12-3-2022]: this sorta works, but not consistently. need to come back and find a better way of doing this.
+            // Known limitation: single-byte signature match is fragile. Full 5-byte comparison would be more reliable. (FG-WARDEN-001)
             for (var i = 0x10000; i > 0; i--)
             {
                 var tempPageScanPtr = nint.Add(wardenModuleStart, i);
@@ -383,7 +383,7 @@ namespace ForegroundBotRunner.Mem.AntiWarden
         {
             Log.Information("[WARDEN ModuleScan] Started");
 
-            // TODO: try to read the Warden packet to see which Module they're scanning for
+            // Future enhancement: read Warden packet to identify target module before hoisting (FG-WARDEN-002)
             //var ptr1 = MemoryManager.ReadIntPtr((IntPtr)WARDEN_PACKET_PTR);
             //var ptr2 = IntPtr.Add(ptr1, 0x634);
             //var ptr3 = MemoryManager.ReadIntPtr(ptr2);

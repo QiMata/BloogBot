@@ -80,6 +80,17 @@ namespace WoWSharpClient.Models
         public byte[] PlayerBytes2 { get; internal set; }
         public byte[] PlayerBytes3 { get; internal set; }
         public byte[] FieldBytes2 { get; internal set; }
+        public uint ChosenTitle { get; set; }
+        public ulong KnownTitles { get; set; }
+        public uint ModHealingDonePos { get; set; }
+        public uint ModTargetResistance { get; set; }
+        public byte[] FieldBytes { get; set; } = new byte[4];
+        public float OffhandCritPercentage { get; set; }
+        public float[] SpellCritPercentage { get; } = new float[7];
+        public float ModManaRegen { get; set; }
+        public float ModManaRegenInterrupt { get; set; }
+        public uint MaxLevel { get; set; }
+        public uint[] DailyQuests { get; } = new uint[10];
 
         public void OfferTrade()
         {
@@ -133,8 +144,19 @@ namespace WoWSharpClient.Models
             LifetimeHonorableKills = source.LifetimeHonorableKills;
             LifetimeDishonorableKills = source.LifetimeDishonorableKills;
             WatchedFactionIndex = source.WatchedFactionIndex;
+            ChosenTitle = source.ChosenTitle;
+            KnownTitles = source.KnownTitles;
+            ModHealingDonePos = source.ModHealingDonePos;
+            ModTargetResistance = source.ModTargetResistance;
+            OffhandCritPercentage = source.OffhandCritPercentage;
+            ModManaRegen = source.ModManaRegen;
+            ModManaRegenInterrupt = source.ModManaRegenInterrupt;
+            MaxLevel = source.MaxLevel;
 
             Array.Copy(source.Bytes, Bytes, Bytes.Length);
+            Array.Copy(source.FieldBytes, FieldBytes, FieldBytes.Length);
+            Array.Copy(source.SpellCritPercentage, SpellCritPercentage, SpellCritPercentage.Length);
+            Array.Copy(source.DailyQuests, DailyQuests, DailyQuests.Length);
             Array.Copy(source.Bytes3, Bytes3, Bytes3.Length);
             Array.Copy(source.Inventory, Inventory, Inventory.Length);
             Array.Copy(source.PackSlots, PackSlots, PackSlots.Length);

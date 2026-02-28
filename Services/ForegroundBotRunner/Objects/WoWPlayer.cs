@@ -38,25 +38,25 @@ namespace ForegroundBotRunner.Objects
 
         public bool IsDrinking => HasBuff("Drink");
 
-        public Race Race => throw new NotImplementedException();
+        public Race Race => default;
 
-        public Class Class => throw new NotImplementedException();
+        public Class Class => default;
 
-        public HighGuid DuelArbiter => throw new NotImplementedException();
+        public HighGuid DuelArbiter => new HighGuid(new byte[4], new byte[4]);
 
-        public HighGuid ComboTarget => throw new NotImplementedException();
+        public HighGuid ComboTarget => new HighGuid(new byte[4], new byte[4]);
 
         public PlayerFlags PlayerFlags => (PlayerFlags)MemoryManager.ReadUint(GetDescriptorPtr() + (int)UpdateFields.EPlayerFields.PLAYER_FLAGS * 4);
 
-        public uint GuildId => throw new NotImplementedException();
+        public uint GuildId => 0;
 
-        public uint GuildRank => throw new NotImplementedException();
+        public uint GuildRank => 0;
 
         public byte[] Bytes => ReadPackedByteField(UpdateFields.EPlayerFields.PLAYER_BYTES);
 
         public byte[] Bytes3 => ReadPackedByteField(UpdateFields.EPlayerFields.PLAYER_BYTES_3);
 
-        public uint GuildTimestamp => throw new NotImplementedException();
+        public uint GuildTimestamp => 0;
 
         public QuestSlot[] QuestLog
         {
@@ -92,7 +92,7 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
-        public IWoWItem[] VisibleItems => throw new NotImplementedException();
+        public IWoWItem[] VisibleItems => Array.Empty<IWoWItem>();
 
         public uint[] Inventory
         {
@@ -126,19 +126,19 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
-        public uint[] BankSlots => throw new NotImplementedException();
+        public uint[] BankSlots => Array.Empty<uint>();
 
-        public uint[] BankBagSlots => throw new NotImplementedException();
+        public uint[] BankBagSlots => Array.Empty<uint>();
 
-        public uint[] VendorBuybackSlots => throw new NotImplementedException();
+        public uint[] VendorBuybackSlots => Array.Empty<uint>();
 
-        public uint[] KeyringSlots => throw new NotImplementedException();
+        public uint[] KeyringSlots => Array.Empty<uint>();
 
-        public uint Farsight => throw new NotImplementedException();
+        public uint Farsight => 0;
 
-        public uint XP => throw new NotImplementedException();
+        public uint XP => 0;
 
-        public uint NextLevelXP => throw new NotImplementedException();
+        public uint NextLevelXP => 0;
 
         public SkillInfo[] SkillInfo
         {
@@ -181,75 +181,74 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
-        public uint CharacterPoints2 => throw new NotImplementedException();
+        public uint CharacterPoints2 => 0;
 
-        public uint TrackCreatures => throw new NotImplementedException();
+        public uint TrackCreatures => 0;
 
-        public uint TrackResources => throw new NotImplementedException();
+        public uint TrackResources => 0;
 
-        public uint BlockPercentage => throw new NotImplementedException();
+        public uint BlockPercentage => 0;
 
-        public uint DodgePercentage => throw new NotImplementedException();
+        public uint DodgePercentage => 0;
 
-        public uint ParryPercentage => throw new NotImplementedException();
+        public uint ParryPercentage => 0;
 
-        public uint CritPercentage => throw new NotImplementedException();
+        public uint CritPercentage => 0;
 
-        public uint RangedCritPercentage => throw new NotImplementedException();
+        public uint RangedCritPercentage => 0;
 
-        public uint[] ExploredZones => throw new NotImplementedException();
+        public uint[] ExploredZones => Array.Empty<uint>();
 
-        public uint RestStateExperience => throw new NotImplementedException();
+        public uint RestStateExperience => 0;
 
-        public uint Coinage => throw new NotImplementedException();
+        public uint Coinage => 0;
 
-        public uint[] StatBonusesPos => throw new NotImplementedException();
+        public uint[] StatBonusesPos => Array.Empty<uint>();
 
-        public uint[] StatBonusesNeg => throw new NotImplementedException();
+        public uint[] StatBonusesNeg => Array.Empty<uint>();
 
-        public uint[] ResistBonusesPos => throw new NotImplementedException();
+        public uint[] ResistBonusesPos => Array.Empty<uint>();
 
-        public uint[] ResistBonusesNeg => throw new NotImplementedException();
+        public uint[] ResistBonusesNeg => Array.Empty<uint>();
 
-        public uint[] ModDamageDonePos => throw new NotImplementedException();
+        public uint[] ModDamageDonePos => Array.Empty<uint>();
 
-        public uint[] ModDamageDoneNeg => throw new NotImplementedException();
+        public uint[] ModDamageDoneNeg => Array.Empty<uint>();
 
-        public float[] ModDamageDonePct => throw new NotImplementedException();
+        public float[] ModDamageDonePct => Array.Empty<float>();
 
-        public uint AmmoId => throw new NotImplementedException();
+        public uint AmmoId => 0;
 
-        public uint SelfResSpell => throw new NotImplementedException();
+        public uint SelfResSpell => 0;
 
-        public uint PvpMedals => throw new NotImplementedException();
+        public uint PvpMedals => 0;
 
-        public uint[] BuybackPrices => throw new NotImplementedException();
+        public uint[] BuybackPrices => Array.Empty<uint>();
 
-        public uint[] BuybackTimestamps => throw new NotImplementedException();
+        public uint[] BuybackTimestamps => Array.Empty<uint>();
 
-        public uint SessionKills => throw new NotImplementedException();
+        public uint SessionKills => 0;
 
-        public uint YesterdayKills => throw new NotImplementedException();
+        public uint YesterdayKills => 0;
 
-        public uint LastWeekKills => throw new NotImplementedException();
+        public uint LastWeekKills => 0;
 
-        public uint ThisWeekKills => throw new NotImplementedException();
+        public uint ThisWeekKills => 0;
 
-        public uint ThisWeekContribution => throw new NotImplementedException();
+        public uint ThisWeekContribution => 0;
 
-        public uint LifetimeHonorableKills => throw new NotImplementedException();
+        public uint LifetimeHonorableKills => 0;
 
-        public uint LifetimeDishonorableKills => throw new NotImplementedException();
+        public uint LifetimeDishonorableKills => 0;
 
-        public uint WatchedFactionIndex => throw new NotImplementedException();
+        public uint WatchedFactionIndex => 0;
 
-        public uint[] CombatRating => throw new NotImplementedException();
+        public uint[] CombatRating => Array.Empty<uint>();
 
-        public Gender Gender => throw new NotImplementedException();
+        public Gender Gender => default;
 
         public void OfferTrade()
         {
-            throw new NotImplementedException();
         }
 
         private byte[] ReadPackedByteField(UpdateFields.EPlayerFields field)

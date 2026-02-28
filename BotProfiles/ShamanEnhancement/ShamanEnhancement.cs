@@ -23,6 +23,6 @@ namespace ShamanEnhancement
             new PvERotationTask(botContext);
 
         public override IBotTask CreatePvPRotationTask(IBotContext botContext) =>
-            new PvERotationTask(botContext);
+            new PvPRotationTask(botContext);
     }
 }

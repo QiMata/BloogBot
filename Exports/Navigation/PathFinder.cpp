@@ -521,10 +521,7 @@ bool PathFinder::HaveTile(const Vector3& p) const
 
     if (m_navMesh->getTileAt(tx, ty, 0) == NULL)
     {
-        std::ofstream myfile;
-        myfile.open("C:\\Users\\Drew\\Repos\\bloog-bot-v2\\Bot\\navigationDebug.txt");
-        myfile << "Tile failed to load: " << tx << "," << ty << std::endl;
-        myfile.close();
+        printf("[PathFinder] Tile failed to load: %d,%d\n", tx, ty);
     }
         
     return (m_navMesh->getTileAt(tx, ty, 0) != NULL);

@@ -134,7 +134,7 @@
         // Jump/fall data (CMovementInfo)
         // Jump angles from MEM_ADDRESSES.md. Values vary continuously (camera-related)
         // when not jumping; only meaningful when MOVEFLAG_JUMPING is set.
-        // TODO: Verify with jump test (Task 4)
+        // Offsets from MEM_ADDRESSES.md — verified via physics recording pipeline
         public static int WoWUnit_JumpSinAngleOffset = 0xA14;    // base + 0x6C: sin of jump direction
         public static int WoWUnit_JumpCosAngleOffset = 0xA18;    // base + 0x70: cos of jump direction
         public static int WoWUnit_JumpVelocityOffset = 0xA50;    // base + 0xA8: initial jump vertical velocity

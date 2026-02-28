@@ -267,8 +267,10 @@ namespace WoWSharpClient.Models
         public bool HasDebuff(string name) => Debuffs.Any(a => a.Name == name);
         public bool DismissBuff(string buffName)
         {
-            // TODO: Send CMSG_CANCEL_AURA when WoWUnit has client access
-            return false;
+            var buff = Buffs.FirstOrDefault(b => b.Name == buffName);
+            if (buff == null) return false;
+            WoWSharpObjectManager.Instance.CancelAura(buff.Id);
+            return true;
         }
 
         public IEnumerable<ISpellEffect> GetDebuffs() =>

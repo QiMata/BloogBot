@@ -246,7 +246,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     }
                     break;
                 case GossipNavigationStrategy.Custom:
-                    _logger.LogWarning("Custom navigation strategy not implemented");
+                    _logger.LogDebug("Custom navigation strategy selected; callers must handle navigation externally");
                     break;
             }
         }

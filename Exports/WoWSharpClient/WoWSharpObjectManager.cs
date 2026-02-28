@@ -754,6 +754,10 @@ namespace WoWSharpClient
                                         Log.Information("[ProcessUpdates] ITEM CREATED: Guid={Guid:X} ItemId={ItemId} Fields={FieldCount}",
                                             update.Guid, item.ItemId, update.UpdatedFields.Count);
 
+                                    if (newObject is WoWGameObject go)
+                                        Log.Information("[ProcessUpdates] GAMEOBJ CREATED: Guid=0x{Guid:X} DisplayId={DisplayId} TypeId={TypeId} CreatedBy=0x{CreatedBy:X} Pos=({X:F1},{Y:F1},{Z:F1})",
+                                            update.Guid, go.DisplayId, go.TypeId, go.CreatedBy.FullGuid, go.Position.X, go.Position.Y, go.Position.Z);
+
                                     if (update.MovementData != null && newObject is WoWUnit)
                                     {
                                         ApplyMovementData((WoWUnit)newObject, update.MovementData);
@@ -2002,46 +2006,46 @@ namespace WoWSharpClient
                         (uint)value;
                     break;
                 case EPlayerFields.PLAYER_CHOSEN_TITLE:
-                    // Note: ChosenTitle property not implemented in WoWPlayer yet
+                    player.ChosenTitle = (uint)value;
                     break;
                 case EPlayerFields.PLAYER__FIELD_KNOWN_TITLES:
-                    // Note: KnownTitles property not implemented in WoWPlayer yet
+                    player.KnownTitles = (player.KnownTitles & 0xFFFFFFFF00000000UL) | (uint)value;
                     break;
                 case EPlayerFields.PLAYER__FIELD_KNOWN_TITLES + 1:
-                    // Note: KnownTitles property not implemented in WoWPlayer yet
+                    player.KnownTitles = (player.KnownTitles & 0x00000000FFFFFFFFUL) | ((ulong)(uint)value << 32);
                     break;
                 case EPlayerFields.PLAYER_FIELD_MOD_HEALING_DONE_POS:
-                    // Note: ModHealingDonePos property not implemented in WoWPlayer yet
+                    player.ModHealingDonePos = (uint)value;
                     break;
                 case EPlayerFields.PLAYER_FIELD_MOD_TARGET_RESISTANCE:
-                    // Note: ModTargetResistance property not implemented in WoWPlayer yet
+                    player.ModTargetResistance = (uint)value;
                     break;
                 case EPlayerFields.PLAYER_FIELD_BYTES:
-                    // Note: FieldBytes property not implemented in WoWPlayer yet
+                    player.FieldBytes = (byte[])value;
                     break;
                 case EPlayerFields.PLAYER_OFFHAND_CRIT_PERCENTAGE:
-                    // Note: OffhandCritPercentage property not implemented in WoWPlayer yet
+                    player.OffhandCritPercentage = ToSingle(value);
                     break;
                 case >= EPlayerFields.PLAYER_SPELL_CRIT_PERCENTAGE1
                 and <= EPlayerFields.PLAYER_SPELL_CRIT_PERCENTAGE1 + 6:
-                    // Note: SpellCritPercentage array not implemented in WoWPlayer yet
+                    player.SpellCritPercentage[field - EPlayerFields.PLAYER_SPELL_CRIT_PERCENTAGE1] = ToSingle(value);
                     break;
                 case >= EPlayerFields.PLAYER_FIELD_ARENA_TEAM_INFO_1_1
                 and <= EPlayerFields.PLAYER_FIELD_ARENA_TEAM_INFO_1_1 + 17:
-                    // Note: TBC-only — ArenaTeamInfo, HonorCurrency, ArenaCurrency
+                    // TBC-only — ArenaTeamInfo, HonorCurrency, ArenaCurrency (no property needed for vanilla)
                     break;
                 case EPlayerFields.PLAYER_FIELD_MOD_MANA_REGEN:
-                    // Note: ModManaRegen property not implemented in WoWPlayer yet
+                    player.ModManaRegen = ToSingle(value);
                     break;
                 case EPlayerFields.PLAYER_FIELD_MOD_MANA_REGEN_INTERRUPT:
-                    // Note: ModManaRegenInterrupt property not implemented in WoWPlayer yet
+                    player.ModManaRegenInterrupt = ToSingle(value);
                     break;
                 case EPlayerFields.PLAYER_FIELD_MAX_LEVEL:
-                    // Note: MaxLevel property not implemented in WoWPlayer yet
+                    player.MaxLevel = (uint)value;
                     break;
                 case >= EPlayerFields.PLAYER_FIELD_DAILY_QUESTS_1
                 and <= EPlayerFields.PLAYER_FIELD_DAILY_QUESTS_1 + 9:
-                    // Note: DailyQuests array not implemented in WoWPlayer yet
+                    player.DailyQuests[field - EPlayerFields.PLAYER_FIELD_DAILY_QUESTS_1] = (uint)value;
                     break;
                 case EPlayerFields.PLAYER_FIELD_PADDING:
                     // Padding field, usually ignored
@@ -2754,6 +2758,12 @@ namespace WoWSharpClient
         {
             if (_woWClient == null) return;
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_LOOT_RELEASE, BitConverter.GetBytes(lootGuid));
+        }
+
+        public void CancelAura(uint spellId)
+        {
+            if (_woWClient == null) return;
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CANCEL_AURA, BitConverter.GetBytes(spellId));
         }
 
         public async Task LootTargetAsync(ulong targetGuid, CancellationToken ct = default)

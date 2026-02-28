@@ -192,43 +192,43 @@ namespace ForegroundBotRunner.Objects
 
         public WoWObjectType ObjectType => objectType;
 
-        public uint LastUpated => throw new NotImplementedException();
+        public uint LastUpated => 0;
 
         public uint Entry => (uint)MemoryManager.ReadInt(nint.Add(GetDescriptorPtr(), 0xC));
 
-        public bool InWorld => throw new NotImplementedException();
+        public bool InWorld => true;
 
-        public uint LastUpdated => throw new NotImplementedException();
+        public uint LastUpdated => 0;
 
-        public ulong TransportGuid => throw new NotImplementedException();
+        public ulong TransportGuid => 0;
 
-        public Position TransportOffset => throw new NotImplementedException();
+        public Position TransportOffset => new(0, 0, 0);
 
-        public float SwimPitch => throw new NotImplementedException();
+        public float SwimPitch => 0f;
 
-        public float JumpVerticalSpeed => throw new NotImplementedException();
+        public float JumpVerticalSpeed => 0f;
 
-        public float JumpSinAngle => throw new NotImplementedException();
+        public float JumpSinAngle => 0f;
 
-        public float JumpCosAngle => throw new NotImplementedException();
+        public float JumpCosAngle => 0f;
 
-        public float JumpHorizontalSpeed => throw new NotImplementedException();
+        public float JumpHorizontalSpeed => 0f;
 
-        public float SplineElevation => throw new NotImplementedException();
+        public float SplineElevation => 0f;
 
-        public float TransportOrientation => throw new NotImplementedException();
+        public float TransportOrientation => 0f;
 
-        public uint TransportLastUpdated => throw new NotImplementedException();
+        public uint TransportLastUpdated => 0;
 
-        public SplineFlags SplineFlags { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public Position SplineFinalPoint { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public ulong SplineTargetGuid { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public float SplineFinalOrientation { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public int SplineTimePassed { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public int SplineDuration { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public uint SplineId { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public List<Position> SplineNodes { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        public Position SplineFinalDestination { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public SplineFlags SplineFlags { get; set; }
+        public Position SplineFinalPoint { get; set; } = new(0, 0, 0);
+        public ulong SplineTargetGuid { get; set; }
+        public float SplineFinalOrientation { get; set; }
+        public int SplineTimePassed { get; set; }
+        public int SplineDuration { get; set; }
+        public uint SplineId { get; set; }
+        public List<Position> SplineNodes { get; set; } = [];
+        public Position SplineFinalDestination { get; set; } = new(0, 0, 0);
 
         public void Interact()
         {

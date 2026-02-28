@@ -514,9 +514,24 @@ namespace WoWSharpClient.Handlers
 
                 var om = WoWSharpObjectManager.Instance;
                 var obj = om.GetObjectByGuid(guid);
-                if (obj is not Models.WoWGameObject go) return;
+
+                Log.Information("[CustomAnim] Guid=0x{Guid:X} Anim={Anim} ObjFound={Found} ObjType={Type}",
+                    guid, anim, obj != null, obj?.GetType().Name ?? "null");
+
+                if (obj is not Models.WoWGameObject go)
+                {
+                    // Dump tracked game objects for diagnosis
+                    var gameObjs = om.Objects.OfType<Models.WoWGameObject>().ToArray();
+                    Log.Warning("[CustomAnim] Guid=0x{Guid:X} not found as WoWGameObject. Tracked GOs: {Count}", guid, gameObjs.Length);
+                    foreach (var tracked in gameObjs.Take(10))
+                        Log.Warning("[CustomAnim]   GO 0x{Guid:X} DisplayId={DisplayId} TypeId={TypeId}", tracked.Guid, tracked.DisplayId, tracked.TypeId);
+                    return;
+                }
 
                 // Fish bite: anim 0 on a bobber created by our player
+                Log.Information("[CustomAnim] GO match: DisplayId={DisplayId} CreatedBy=0x{CreatedBy:X} PlayerGuid=0x{PlayerGuid:X}",
+                    go.DisplayId, go.CreatedBy.FullGuid, om.PlayerGuid.FullGuid);
+
                 if (anim == 0 && go.CreatedBy.FullGuid == om.PlayerGuid.FullGuid)
                 {
                     Log.Information("[FishBite] Bobber 0x{Guid:X} — auto-interacting", guid);

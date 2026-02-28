@@ -41,7 +41,6 @@ namespace WoWSharpClient.Tests.Handlers
             [Opcode.SMSG_WEATHER, "dispatcher"]
         ];
 
-        //TODO: Test might be useless or redundant
         [Theory]
         [MemberData(nameof(OpcodeTestData))]
         public void ShouldHandleOpcodePackets(Opcode opcode, string handlerType)

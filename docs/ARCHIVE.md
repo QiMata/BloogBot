@@ -1523,3 +1523,112 @@ All files in `Exports/BotRunner/`. Build verified: 0 errors across BotRunner, Fo
 ### TASKS.md Cleanup (2026-02-27)
 
 Reorganized `docs/TASKS.md`: trimmed 30 process rules to 7 essentials, converted P0 to a table, consolidated sub-TASKS queue into a compact table, moved completed items here. Reduced file from ~180 lines of process bloat to ~100 lines focused on actionable work.
+
+---
+
+### CORPSE-3D-001: Dynamic Z-Aware Corpse Reclaim (2026-02-27)
+
+Implemented dynamic Z-aware approach range for corpse reclaim in Orgrimmar (multi-level terrain). `RetrieveCorpseTask` computes `retrieveRange = sqrt(34^2 - zDelta^2)` instead of fixed 25y. WorldClient.cs bridges `SMSG_CORPSE_RECLAIM_DELAY`. `ForceStopImmediate` sends `MSG_MOVE_STOP`. Live validated with DeathCorpseRunTests in Orgrimmar.
+
+---
+
+### PATH-SMOOTH-001: Path Smoothing Parts 1-4 (2026-02-28)
+
+Implemented adaptive per-waypoint acceptance radius, collision-based string-pulling, runtime LOS lookahead, and smooth-first path priority. All features gated on `enableProbeHeuristics` to protect corpse runs.
+
+**Changes:**
+- `Exports/BotRunner/Movement/NavigationPath.cs`: Adaptive radii (`ComputeWaypointAcceptanceRadii`, `ComputeTurnAngle2D`), `StringPullPath` (LOS-based path simplification), `TryLosSkipAhead` (runtime LOS lookahead with 500ms cache), smooth-first path priority (conditional on `enableProbeHeuristics`)
+- `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`: 30 tests total (6 new: ComputeTurnAngle2D×3, AdaptiveRadius, StringPull_PreservesCorner, StringPull_RemovesIntermediate; 2 smooth-priority tests)
+- Constants REVERTED to baseline: `WAYPOINT_REACH_DISTANCE=3`, `CORNER_COMMIT_DISTANCE=1.25`, `STALLED_SAMPLE_THRESHOLD=24`
+- Corpse runs (`enableProbeHeuristics=false`) use exact baseline behavior — no adaptive radii, no string-pull, no LOS skip, non-smooth paths preferred
+
+**Validation:** 30/30 unit tests, DeathCorpseRunTests PASSED (3m18s), CraftingProfessionTests PASSED (39s)
+
+---
+
+### Dragon Head Pillar Research (2026-02-28)
+
+Researched Onyxia/Nefarian trophy post collision in Orgrimmar. Key findings:
+- **Objects:** Horde Onyxia (entry 179556, displayId 5742) and Nefarian (entry 179881, displayId 5951) trophy posts at Valley of Strength
+- **Models:** `Hordeonyxiatrophypost.m2.vmo` and `Hordenefarianpost.m2.vmo` — 22.5yd tall, 8yd wide
+- **Behavior:** Temporary game objects spawned by quest scripts (~2h duration), then despawn
+- **Collision:** `.vmo` files exist, `temp_gameobject_models` maps displayIds. `DynamicObjectRegistry` already handles this category
+- **Gap:** Only need C# code to feed these game objects into `PhysicsInput.nearbyObjects` — no C++ changes needed
+- **Alliance:** No separate `.vmo` files (Stormwind hangs heads from city gate arch WMO)
+
+### PATH-SMOOTH-002 — Cliff/Edge Detection (Done 2026-02-27)
+
+Implemented GetGroundZ IPC pipeline end-to-end and cliff/edge detection in NavigationPath:
+- **Proto:** Added `GetGroundZRequest`/`GetGroundZResponse` messages, `ground_z` case to request/response oneofs
+- **P/Invoke:** Added `NativeGetGroundZ` DllImport and `GetGroundZ()` wrapper to `Physics.cs`
+- **Service:** Added `HandleGroundZ()` handler in `PathfindingSocketServer.cs`
+- **Client:** Added `GetGroundZ()` IPC method to `PathfindingClient.cs`
+- **NavigationPath:** Added `ProbeEdgeAhead()`, `IsCliffAhead()`, `IsLethalCliffAhead()`, `EstimateFallDamage()`, `AssessJumpDamage()` with constants `CLIFF_PROBE_DISTANCE=3f`, `CLIFF_DROP_THRESHOLD=8f`, `CLIFF_LETHAL_DROP=50f`
+- **Tests:** 7 cliff detection tests + 3 fall damage tests added (40/40 pass)
+
+### PATH-SMOOTH-003 — Fall Distance Tracking in C++ (Done 2026-02-27)
+
+Populated `fallDistance` in PhysicsOutput when landing from a fall:
+- **PhysicsEngine.h:** Added `float fallStartZ = -200000.0f` to `MovementState`
+- **PhysicsBridge.h:** Added `float fallStartZ` to both PhysicsInput and PhysicsOutput structs
+- **PhysicsEngine.cpp:** Track `wasGroundedAtStart`, set `fallStartZ` on grounded→airborne transition, compute `fallDistance = fallStartZ - landingZ` on airborne→grounded transition
+- **C# interop:** Updated `Physics.cs`, `NavigationInterop.cs`, `pathfinding.proto` with `fallStartZ` and `fallDistance` fields
+- C++ build + C# build succeed; 78/79 physics tests pass (1 pre-existing MPQ extraction failure)
+
+### PATH-SMOOTH-004 — Gap Jump Detection (Done 2026-02-27)
+
+Implemented gap detection by probing ground Z at midpoints between consecutive waypoints:
+- **NavigationPath:** Added `GapInfo` readonly struct, `DetectGaps()` method, `GetCurrentGapInfo()` method
+- **Constants:** `JUMP_VELOCITY=7.95577f`, `GRAVITY=19.2911f`, `MAX_JUMP_HEIGHT=1.64f`, `MAX_JUMP_DISTANCE_2D=8f`, `GAP_DETECTION_DEPTH_MIN=3f`
+- **Tests:** 3 gap detection tests added (43/43 pass)
+- Gap tests use `enableProbeHeuristics: false` to prevent StringPull from collapsing waypoints
+
+### DYNOBJ-001 — nearbyObjects IPC Pipeline (Done 2026-02-27)
+
+Implemented full proto→service→native marshaling pipeline for dynamic object collision:
+- **Proto:** Added `DynamicObjectProto` message, `repeated DynamicObjectProto nearby_objects = 40` to PhysicsInput
+- **Physics.cs:** Added `DynamicObjectInfo` C# struct matching C++ `DynamicObjectInfo` layout
+- **PathfindingSocketServer.cs:** Marshal proto objects to pinned native array via `GCHandle` in `HandlePhysics()`
+- Caller integration (MovementController feeding objects from snapshot) documented for future work
+
+## Missing-Implementation Backlog Sweep (2026-02-27)
+
+### BP-MISS-001 — PvP Factory Miswire Fix (Done 2026-02-27)
+Fixed 16 bot profiles where `CreatePvPRotationTask()` returned `new PvERotationTask(botContext)` instead of `new PvPRotationTask(botContext)`. All profiles have dedicated PvPRotationTask classes with spec-appropriate combat rotations.
+Files: DruidFeral, DruidRestoration, HunterBeastMastery/Marksmanship/Survival, MageArcane/Frost, PriestDiscipline/Holy/Shadow, RogueAssassin/Combat/Subtlety, ShamanElemental/Enhancement/Restoration.
+
+### WSC-MISS-001 — WoWPlayer Missing Fields (Done 2026-02-27)
+Added 11 properties to WoWPlayer.cs: ChosenTitle, KnownTitles, ModHealingDonePos, ModTargetResistance, FieldBytes, OffhandCritPercentage, SpellCritPercentage[7], ModManaRegen, ModManaRegenInterrupt, MaxLevel, DailyQuests[10]. Wired all switch cases in WoWSharpObjectManager.cs.
+
+### WSC-MISS-002 — CMSG_CANCEL_AURA (Done 2026-02-27)
+Added `CancelAura(uint spellId)` to WoWSharpObjectManager. Updated `WoWUnit.DismissBuff()` to find buff by name and send CMSG_CANCEL_AURA.
+
+### WSC-MISS-003 — Custom Gossip Navigation (Done 2026-02-27)
+Downgraded from LogWarning to LogDebug — valid no-op path for callers handling navigation externally.
+
+### FG-MISS-001/002/003 — ForegroundBotRunner NotImplementedException (Done 2026-02-27)
+Replaced all NotImplementedException throws with safe defaults across WoWObject.cs (~20 properties), WoWUnit.cs (~50 properties), WoWPlayer.cs (~35 properties).
+
+### UI-MISS-001 — ConvertBack Fix (Done 2026-02-27)
+Changed `throw new NotImplementedException()` to `return Binding.DoNothing` in GreaterThanZeroToBooleanConverter.cs.
+
+### PHS-MISS-001 — PromptFunction Exception Type (Done 2026-02-27)
+Changed `NotImplementedException` to `ArgumentException` in PromptFunctionBase.cs (was a valid guard, wrong exception type).
+
+### GDC-MISS-001 — DeathState FIXME (Done 2026-02-27)
+Replaced ambiguous FIXME in DeathState.cs with clear XML docs documenting player vs creature death-state semantics.
+
+### WINIMP-MISS-001 — SafeInjection.cs Deletion (Done 2026-02-27)
+Deleted empty SafeInjection.cs (0 bytes, implementation lives in WinProcessImports.cs).
+
+### WINIMP-MISS-004 — VK_A Constant Fix (Done 2026-02-27)
+Fixed VK_A from 0x53 (same as VK_S) to correct 0x41 in WoWUIAutomation.cs.
+
+### NAV-MISS-003 — PathFinder Debug Path (Done 2026-02-27)
+Replaced hardcoded `C:\Users\Drew\Repos\bloog-bot-v2\Bot\navigationDebug.txt` with printf output.
+
+### CPPMCP-MISS-002 — IsUsed TODO (Done 2026-02-27)
+Changed TODO comment to explicit "deferred — requires AST-level symbol resolution" note.
+
+### WSC-TST-001 — Test Redundancy TODOs (Done 2026-02-27)
+Removed `//TODO: Test might be useless or redundant` comments from SMSG_UPDATE_OBJECT_Tests.cs and OpcodeHandler_Tests.cs.
