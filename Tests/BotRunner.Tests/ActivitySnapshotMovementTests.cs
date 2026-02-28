@@ -334,6 +334,155 @@ namespace BotRunner.Tests
         }
 
         [Fact]
+        public void DeathState_GhostForm_ShouldRoundTrip()
+        {
+            // Player is dead (health=0), stand state DEAD (bytes1 & 0xFF == 7),
+            // ghost flag set (playerFlags & 0x10), with corpse reclaim delay active.
+            var snapshot = new WoWActivitySnapshot
+            {
+                AccountName = "TESTACCOUNT",
+                CharacterName = "TestChar",
+                ScreenState = "InWorld",
+                Player = new WoWPlayer
+                {
+                    Unit = new WoWUnit
+                    {
+                        Health = 0,
+                        MaxHealth = 1200,
+                        Bytes1 = 0x07, // Stand state DEAD
+                        MovementFlags = 0x1000, // MOVEFLAG_FORWARD (ghost running)
+                    },
+                    PlayerFlags = 0x10, // PLAYER_FLAGS_GHOST
+                    CorpseRecoveryDelaySeconds = 30,
+                },
+                MovementData = new MovementData
+                {
+                    MovementFlags = 0x1000,
+                    WalkSpeed = 2.5f,
+                    RunSpeed = 7.0f,
+                    Position = new Game.Position { X = 1543f, Y = -4959f, Z = 9f },
+                    Facing = 0.5f,
+                }
+            };
+
+            var bytes = snapshot.ToByteArray();
+            var deserialized = WoWActivitySnapshot.Parser.ParseFrom(bytes);
+
+            // Death state fields
+            Assert.NotNull(deserialized.Player);
+            Assert.NotNull(deserialized.Player.Unit);
+            Assert.Equal(0u, deserialized.Player.Unit.Health);
+            Assert.Equal(1200u, deserialized.Player.Unit.MaxHealth);
+            Assert.Equal(0x07u, deserialized.Player.Unit.Bytes1);
+            Assert.Equal(0x10u, deserialized.Player.PlayerFlags);
+            Assert.Equal(30u, deserialized.Player.CorpseRecoveryDelaySeconds);
+
+            // Movement during ghost form
+            Assert.Equal(0x1000u, deserialized.Player.Unit.MovementFlags);
+            Assert.Equal(0x1000u, deserialized.MovementData.MovementFlags);
+        }
+
+        [Fact]
+        public void DeathState_AliveAfterResurrect_ShouldClearDeathFields()
+        {
+            // Player just resurrected: health > 0, no ghost flag, stand state normal, no reclaim delay.
+            var snapshot = new WoWActivitySnapshot
+            {
+                AccountName = "TESTACCOUNT",
+                CharacterName = "TestChar",
+                ScreenState = "InWorld",
+                Player = new WoWPlayer
+                {
+                    Unit = new WoWUnit
+                    {
+                        Health = 600,
+                        MaxHealth = 1200,
+                        Bytes1 = 0x00, // Stand state NORMAL
+                        MovementFlags = 0,
+                    },
+                    PlayerFlags = 0, // No ghost flag
+                    CorpseRecoveryDelaySeconds = 0,
+                },
+            };
+
+            var bytes = snapshot.ToByteArray();
+            var deserialized = WoWActivitySnapshot.Parser.ParseFrom(bytes);
+
+            Assert.Equal(600u, deserialized.Player.Unit.Health);
+            Assert.Equal(0x00u, deserialized.Player.Unit.Bytes1);
+            Assert.Equal(0u, deserialized.Player.PlayerFlags);
+            Assert.Equal(0u, deserialized.Player.CorpseRecoveryDelaySeconds);
+
+            // Verify life state extraction matches DeathCorpseRunTests pattern
+            var standState = deserialized.Player.Unit.Bytes1 & 0xFF;
+            var hasGhostFlag = (deserialized.Player.PlayerFlags & 0x10) != 0;
+            Assert.Equal(0, (int)standState);
+            Assert.False(hasGhostFlag);
+            Assert.True(deserialized.Player.Unit.Health > 0);
+        }
+
+        [Fact]
+        public void DeathState_CorpseRunMovement_ShouldPreserveRunbackFields()
+        {
+            // Ghost running back to corpse: forward movement flag + ghost flag + zero health.
+            // Both unit.movementFlags and movementData.movementFlags should round-trip.
+            var snapshot = new WoWActivitySnapshot
+            {
+                AccountName = "TESTACCOUNT",
+                CharacterName = "TestChar",
+                ScreenState = "InWorld",
+                Player = new WoWPlayer
+                {
+                    Unit = new WoWUnit
+                    {
+                        Health = 0,
+                        MaxHealth = 1200,
+                        Bytes1 = 0x07,
+                        MovementFlags = 0x1000, // Unit-level movement flags
+                    },
+                    PlayerFlags = 0x10,
+                    CorpseRecoveryDelaySeconds = 15,
+                },
+                MovementData = new MovementData
+                {
+                    MovementFlags = 0x1000, // MovementData-level movement flags
+                    WalkSpeed = 2.5f,
+                    RunSpeed = 7.0f,
+                    RunBackSpeed = 4.5f,
+                    SwimSpeed = 4.722222f,
+                    SwimBackSpeed = 2.5f,
+                    TurnRate = (float)Math.PI,
+                    Position = new Game.Position { X = 1543f, Y = -4959f, Z = 9f },
+                    Facing = 1.2f,
+                }
+            };
+
+            // Wrap in StateChangeResponse (same as live IPC path)
+            var response = new StateChangeResponse();
+            response.Snapshots.Add(snapshot);
+
+            var bytes = response.ToByteArray();
+            var deserialized = StateChangeResponse.Parser.ParseFrom(bytes);
+
+            var snap = deserialized.Snapshots[0];
+
+            // Death state
+            Assert.Equal(0u, snap.Player.Unit.Health);
+            Assert.Equal(0x07u, snap.Player.Unit.Bytes1);
+            Assert.Equal(0x10u, snap.Player.PlayerFlags);
+            Assert.Equal(15u, snap.Player.CorpseRecoveryDelaySeconds);
+
+            // Movement data at both levels (used by different consumers)
+            Assert.Equal(0x1000u, snap.Player.Unit.MovementFlags);
+            Assert.Equal(0x1000u, snap.MovementData.MovementFlags);
+
+            // Speed data preserved for ghost form movement
+            Assert.Equal(7.0f, snap.MovementData.RunSpeed);
+            Assert.Equal(1543f, snap.MovementData.Position.X, 0);
+            Assert.Equal(-4959f, snap.MovementData.Position.Y, 0);
+        }
+
+        [Fact]
         public void InventoryMap_ShouldSurviveMergeFromDeserialization()
         {
             // Test using MergeFrom (how ProtobufSocketClient deserializes) instead of ParseFrom

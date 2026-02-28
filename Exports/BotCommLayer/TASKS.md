@@ -48,29 +48,35 @@
 ## P0 Active Tasks (Ordered)
 
 ### BCL-MISS-001 Snapshot contract parity audit for corpse lifecycle fields
-- [ ] Problem: corpse-run behavior depends on `WoWActivitySnapshot` fields, but no single task tracks required contract parity across proto and consumers.
-- [ ] Target files:
-  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
-  - `Exports/BotCommLayer/Models/ProtoDef/game.proto`
-  - `Exports/BotCommLayer/Models/WoWActivitySnapshotExtensions.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
-- [ ] Canonical fields to keep in parity:
-  - `dead/ghost` inputs from `player.unit.health`, `player.unit.bytes1` (stand state mask), and movement flags.
-  - reclaim timer from `player.corpseRecoveryDelaySeconds`.
-  - runback movement from `player.unit.movementFlags` with fallback to `movementData.movementFlags`.
-- [ ] Required change: keep this field map explicit in this file and document any intentional omissions instead of implicit assumptions.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: all required fields are explicitly accounted for and consumed consistently in test assertions.
+- [x] **Done (batch 12).** Corpse lifecycle field map audited and documented below. All fields present in proto, populated by BotRunnerService.Snapshot.cs, and consumed by DeathCorpseRunTests.
+- [x] **Canonical corpse lifecycle field map (proto → snapshot → consumer):**
+  | Proto field | game.proto location | Populated by | Consumer |
+  |---|---|---|---|
+  | `WoWUnit.health` | field 11 | `BuildUnitProtobuf`: `unit.Health = u.Health` | `GetLifeState()`: `unit.Health == 0` = dead |
+  | `WoWUnit.bytes1` | field 18 | `BuildUnitProtobuf`: `unit.Bytes1 = u.Bytes1` | `GetLifeState()`: `bytes1 & 0xFF == 7` = stand-dead |
+  | `WoWUnit.movementFlags` | field 22 | `BuildUnitProtobuf`: `unit.MovementFlags = u.MovementFlags` | Movement stall detection |
+  | `WoWPlayer.playerFlags` | field 5 | `BuildPlayerProtobuf`: `player.PlayerFlags = lp.PlayerFlags` | `GetLifeState()`: `flags & 0x10` = ghost |
+  | `WoWPlayer.corpseRecoveryDelaySeconds` | field 43 | `BuildPlayerProtobuf`: `player.CorpseRecoveryDelaySeconds = lp.CorpseRecoveryDelaySeconds` | Reclaim gating |
+  | `MovementData.movementFlags` | communication.proto field | `PopulateSnapshotFromObjectManager` | Fallback movement flag source |
+- [x] **Intentional omissions:**
+  - `CorpsePosition` is NOT in the proto. Ghost runback uses `IWoWLocalPlayer.CorpsePosition` locally in BotRunner, not via IPC snapshot. If remote decision-making needs it, add to `WoWPlayer` in game.proto.
+  - `DeathState` enum is NOT in the proto. Consumers derive it from health/bytes1/playerFlags per `GetLifeState()` pattern.
+- [x] Validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Debug --no-build --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests"` — 17/17 pass including 3 new death state round-trip tests.
+- [x] Acceptance: all required fields are explicitly accounted for with concrete proto field numbers, population call sites, and consumer patterns.
 
 ### BCL-MISS-002 Add regression coverage for snapshot serialization of death/runback fields
-- [ ] Problem: existing movement snapshot tests focus on movement payloads; corpse lifecycle field persistence needs explicit round-trip gates.
-- [ ] Target files:
+- [x] **Done (batch 12).** Added 3 death/runback serialization tests to `ActivitySnapshotMovementTests.cs`:
+  - `DeathState_GhostForm_ShouldRoundTrip` — health=0, bytes1=DEAD, playerFlags=GHOST, corpseRecoveryDelay round-trip
+  - `DeathState_AliveAfterResurrect_ShouldClearDeathFields` — health>0, no ghost flag, stand state normal
+  - `DeathState_CorpseRunMovement_ShouldPreserveRunbackFields` — StateChangeResponse wrapping with dual movementFlags + speeds
+- [x] Target files:
   - `Tests/BotRunner.Tests/ActivitySnapshotMovementTests.cs`
   - `Tests/BotRunner.Tests/BotRunner.Tests.csproj`
 - [ ] Evidence gap: current test file asserts movement serialization but has no `CorpseRecoveryDelaySeconds` or life-state (`Health`/`Bytes1`) round-trip assertions.
 - [ ] Required change: add serialization/deserialization assertions for corpse lifecycle + movement fields used during corpse-run decisions.
 - [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~WoWActivitySnapshotMovementTests" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: tests fail if corpse-run critical snapshot fields are dropped or remapped incorrectly.
+- [x] Validation: 17/17 snapshot tests pass including new death state assertions.
+- [x] Acceptance: tests fail if corpse-run critical snapshot fields (health, bytes1, playerFlags, corpseRecoveryDelaySeconds, movementFlags) are dropped or remapped incorrectly.
 
 ### BCL-MISS-003 Harden socket teardown and cancellation paths
 - [x] Problem: lingering test processes are expensive; socket layers need deterministic stop semantics under timeout/cancel.

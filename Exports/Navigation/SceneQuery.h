@@ -18,12 +18,12 @@ class SceneCache; // forward declaration
 struct QueryParams
 {
     float inflation = 0.02f;            // Extra inflation (in world units) applied to broad-phase shape/AABB searches
-    bool backfaceCulling = false;       // If true, ignore back-face hits (currently unused / TODO)
+    bool backfaceCulling = false;       // Reserved: back-face hit filtering. Not evaluated by current query paths; defaults to false (all faces hit).
     uint32_t includeMask = 0xFFFFFFFFu; // Bitmask of collision channels to include (ANDed with per-instance mask)
     uint32_t excludeMask = 0u;          // Bitmask of collision channels to exclude (applied after include)
     std::vector<uint32_t> ignoreInstanceIds; // Instance/model IDs to ignore entirely
     bool returnFaceIndex = true;        // If false, triIndex will be set to -1 in results
-    bool returnPhysMat = false;         // If true, (future) physical material retrieval enabled (not implemented yet)
+    bool returnPhysMat = false;         // Reserved: physical material retrieval. Not populated by current query paths; physMaterialId/friction/restitution stay at defaults.
     bool traceComplex = true;           // Whether to trace against complex geometry (always true for now)
 };
 

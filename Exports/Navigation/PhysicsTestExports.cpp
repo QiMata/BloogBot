@@ -357,9 +357,29 @@ extern "C"
         if (!capsule || !overlaps || maxOverlaps <= 0)
             return 0;
 
-        // Need to get the static map tree for overlap test
-        // This requires the VMAP manager to be initialized via SceneQuery
-        return 0;  // TODO: Implement when needed
+        auto* vmapMgr = static_cast<VMAP::VMapManager2*>(
+            VMAP::VMapFactory::createOrGetVMapManager());
+        if (!vmapMgr)
+            return 0;
+
+        if (!vmapMgr->isMapInitialized(mapId))
+            SceneQuery::EnsureMapLoaded(mapId);
+
+        if (!vmapMgr->isMapInitialized(mapId))
+            return 0;
+
+        const VMAP::StaticMapTree* mapTree = vmapMgr->GetStaticMapTree(mapId);
+        if (!mapTree)
+            return 0;
+
+        std::vector<SceneHit> hitResults;
+        int count = SceneQuery::OverlapCapsule(*mapTree, *capsule, hitResults);
+
+        int copyCount = (count < maxOverlaps) ? count : maxOverlaps;
+        for (int i = 0; i < copyCount; ++i)
+            overlaps[i] = hitResults[i];
+
+        return copyCount;
     }
 
     // ==========================================================================

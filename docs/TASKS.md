@@ -42,8 +42,8 @@
 - [ ] `WSC-MISS-004` Placeholder quest reward selection strategy — needs design
 
 ### Exports/Navigation
-- [ ] `NAV-MISS-001` `OverlapCapsule` stub in `PhysicsTestExports.cpp` — needs C++ MSBuild + scene query integration
-- [ ] `NAV-MISS-002` `returnPhysMat`/`backfaceCulling` in `SceneQuery.h` — design stubs for future physics material queries
+- [x] `NAV-MISS-001` `OverlapCapsule` export in `PhysicsTestExports.cpp` — implemented: routes to `SceneQuery::OverlapCapsule` via VMapManager2/StaticMapTree lookup
+- [x] `NAV-MISS-002` `returnPhysMat`/`backfaceCulling` in `SceneQuery.h` — resolved: comments updated to "Reserved" with explicit behavior documentation (not evaluated by current paths)
 - [x] `NAV-MISS-003` PathFinder debug path — replaced hardcoded `C:\Users\Drew\...` with printf
 
 ### Exports/WinImports
@@ -76,6 +76,8 @@
 - [x] `PFS-MISS-006` Orgrimmar corpse-run regression vectors — 3 tests (graveyard→center, entrance→VoS, reverse) with finite-coordinate + min-waypoint assertions
 
 ### Exports/BotCommLayer
+- [x] `BCL-MISS-001` Snapshot contract parity audit — corpse lifecycle field map documented with proto field numbers, population sites, consumer patterns
+- [x] `BCL-MISS-002` Death/runback serialization tests — 3 round-trip tests for ghost form, resurrection, and corpse-run movement via StateChangeResponse
 - [x] `BCL-MISS-003` Socket teardown hardened — `IDisposable` on server/client types, `while(true)` → `while(_isRunning)`, client cleanup on disconnect
 - [x] `BCL-MISS-004` Proto regen workflow docs — canonical command, repo-local protoc default, C++ external target documented
 - [x] `WSM-MISS-004` Action queue cap/expiry — `TimestampedAction` wrapper, 50-item depth cap, 5-min TTL, explicit drop logging
@@ -141,11 +143,11 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 |---|-----------|--------|----------|
 | 1 | `BotProfiles/TASKS.md` | **Done** | BP-MISS-001/002/003/004 all done |
 | 2 | `Exports/TASKS.md` | Pending | EXP-UMB-001..004 (documentation) |
-| 3 | `Exports/BotCommLayer/TASKS.md` | **Partial** | BCL-MISS-003/004 done, BCL-MISS-001/002 pending |
+| 3 | `Exports/BotCommLayer/TASKS.md` | **Done** | BCL-MISS-001/002/003/004 all done |
 | 4 | `Exports/BotRunner/TASKS.md` | **Partial** | BR-MISS-001 done, BR-MISS-002/003 pending |
 | 5 | `Exports/GameData.Core/TASKS.md` | **Done** | GDC-MISS-001/002/003 all done |
 | 6 | `Exports/Loader/TASKS.md` | **Partial** | LDR-MISS-003 done, LDR-MISS-001/002 pending |
-| 7 | `Exports/Navigation/TASKS.md` | **Partial** | NAV-MISS-003 done, NAV-MISS-001/002/004 pending |
+| 7 | `Exports/Navigation/TASKS.md` | **Partial** | NAV-MISS-001/002/003 done, NAV-MISS-004 pending |
 | 8 | `Exports/WinImports/TASKS.md` | **Partial** | WINIMP-MISS-001/002/003/004 done, 005 pending |
 | 9 | `Exports/WoWSharpClient/TASKS.md` | **Partial** | WSC-MISS-001/002/003 done, WSC-MISS-004 pending |
 | 10 | `RecordedTests.PathingTests/TASKS.md` | **Partial** | RPT-MISS-005 done, RPT-MISS-001..004 pending |
@@ -168,18 +170,24 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 11 — snapshot logging, pathfinding regression vectors.
+- **Current work:** Quick-fix sweep batch 12 — C++ OverlapCapsule, SceneQuery stubs, death/runback snapshot tests.
 - **Last delta (this session):**
-  - `BR-MISS-003`: Replaced bare `catch { }` blocks with `TryPopulate()` helper + Debug-level logging in `BotRunnerService.Snapshot.cs`
-  - `PFS-MISS-006`: Added 3 Orgrimmar corpse-run regression vectors to `PathingAndOverlapTests.cs`
-- **Remaining open items (design/architecture work):**
-  - Design stubs: WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004
+  - `NAV-MISS-001`: Implemented OverlapCapsule export in PhysicsTestExports.cpp — routes to SceneQuery::OverlapCapsule via VMapManager2
+  - `NAV-MISS-002`: Resolved returnPhysMat/backfaceCulling stubs in SceneQuery.h — "Reserved" with explicit behavior docs
+  - `BCL-MISS-001`: Corpse lifecycle field parity audit — concrete field map with proto field numbers, population sites, consumer patterns
+  - `BCL-MISS-002`: Added 3 death/runback serialization tests — ghost form, resurrection, corpse-run movement round-trip
+- **Build verification:**
+  - C++ MSBuild Navigation.vcxproj: 0 errors, Navigation.dll produced
+  - Physics tests: 76/79 pass (3 pre-existing calibration failures)
+  - Snapshot tests: 17/17 pass (14 existing + 3 new)
+- **Remaining open items:**
+  - Design stubs: WSC-MISS-004, FG-MISS-004
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
-  - BotCommLayer: BCL-MISS-001/002
   - Test infrastructure: WINIMP-MISS-005, PFS-MISS-004/007, PHS-MISS-002/003
   - Loader: LDR-MISS-001/002 (C++ design)
+  - C++ pathfinding: NAV-MISS-004
   - RecordedTests: RPT-MISS-001..004
   - BotRunner: BR-MISS-002
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-- **Next task:** Continue quick-fix sweep — evaluate remaining actionable items.
+- **Next task:** Continue quick-fix sweep — evaluate remaining actionable items by dependency layer.
