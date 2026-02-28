@@ -40,7 +40,8 @@
 ## P0 Active Tasks (Ordered)
 
 ### BP-MISS-001 Fix miswired PvP factories that currently return PvE rotation tasks
-- [ ] Problem: multiple profiles map `CreatePvPRotationTask(...)` to `new PvERotationTask(...)`, bypassing dedicated PvP classes.
+- [x] **Done (batch 1).** All 16 miswired PvP factories fixed to return `new PvPRotationTask(botContext)`.
+- [x] Problem: multiple profiles map `CreatePvPRotationTask(...)` to `new PvERotationTask(...)`, bypassing dedicated PvP classes.
 - [ ] Evidence: miswired files are:
   - `BotProfiles/DruidFeralCombat/DruidFeral.cs`
   - `BotProfiles/DruidRestoration/DruidRestoration.cs`
@@ -65,7 +66,8 @@
 - [ ] Acceptance: no affected profile returns `PvERotationTask` from `CreatePvPRotationTask`; build and targeted combat tests pass.
 
 ### BP-MISS-002 Add regression test that guards profile factory wiring
-- [ ] Problem: no test fails when profile factories wire PvP to the wrong task type.
+- [x] **Done (batch 1).** Reflection-based test added in `BotProfileFactoryBindingsTests.cs`.
+- [x] Problem: no test fails when profile factories wire PvP to the wrong task type.
 - [ ] Target files: `Tests/BotRunner.Tests/BotRunner.Tests.csproj`, `Tests/BotRunner.Tests/Profiles/BotProfileFactoryBindingsTests.cs` (new).
 - [ ] Required change: add reflection-based assertions for all `BotBase` subclasses so `CreatePvPRotationTask` returns `PvPRotationTask` (or a documented exception list).
 - [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~BotProfileFactoryBindingsTests" --logger "console;verbosity=minimal"`.

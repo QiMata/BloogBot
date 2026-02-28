@@ -56,6 +56,7 @@
 - [x] `FG-MISS-002` `NotImplementedException` in `WoWUnit.cs` → safe defaults (~50 properties)
 - [x] `FG-MISS-003` `NotImplementedException` in `WoWPlayer.cs` → safe defaults (~35 properties)
 - [ ] `FG-MISS-004` Regression checks for FG snapshot paths — needs test design
+- [x] `FG-MISS-005` Triage FG memory/warden TODOs — all triaged with explicit IDs (FG-WARDEN-001/002) or defer rationale
 
 ### Services
 - [x] `PHS-MISS-001` `NotImplementedException` → `ArgumentException` in `PromptFunctionBase.cs:47`
@@ -157,21 +158,19 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 6 — SOAP command hardening.
+- **Current work:** Quick-fix sweep batch 7 — local TASKS.md sync + FG-MISS-005 triage.
 - **Last delta (this session):**
-  - `SOAP-CMD-001`: Fixed `.teleport name` → `.tele` and `.teleport xyz` → `.go xyz` in both PathingTestDefinitions copies (20 commands each)
-  - `SOAP-CMD-001`: Fixed `.teleport name Stormwind` → `.tele Stormwind` in both GmCommandServerDesiredStateTests copies
-  - `SOAP-CMD-001`: Hardened `ExecuteGMCommandAsync` in LiveBotFixture.cs to throw `InvalidOperationException` on "no such command" SOAP faults
-  - `SOAP-CMD-001`: Hardened `ExecuteGMCommandAsync` in MangosSOAPClient.cs (WoWStateManager) with same throw-on-invalid-command behavior
-  - Added regression testing log review rules to MEMORY.md
-- **Build verification:** All modified projects compile with 0 errors. 10/10 GmCommandServerDesiredState tests pass. 7/7 MockMangosServer tests pass. Only `Systems.AppHost` has DLL lock errors (`.NET Host` process).
-- **Remaining open items:**
-  - ContainsCommandRejection consolidation (5 copies across test files — defer to dedicated refactor)
-  - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004/005
+  - Synced 10 local TASKS.md files with master completions (BotProfiles, GameData.Core, Navigation, WinImports, WoWSharpClient, CppCodeIntelligenceMCP, ForegroundBotRunner, LoggingMCPServer, PathfindingService, docs/TASKS.md)
+  - `FG-MISS-005`: Triaged all FG memory/warden TODOs — WardenDisabler had FG-WARDEN-001/002 IDs from prior session, WoWUnit.cs TODO replaced with defer rationale
+  - Full codebase scan confirmed no remaining quick-fix items — all open tasks require design work or new test infrastructure
+- **Quick-fix sweep complete.** All actionable quick-fix items across 7 batches have been shipped.
+- **Remaining open items (all require design/architecture work):**
+  - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
   - BotCommLayer: BCL-MISS-001/002/004
-  - Test infrastructure: TINF-MISS-001..004, WINIMP-MISS-005
+  - Test infrastructure: WINIMP-MISS-005, PFS-MISS-004/006/007, PHS-MISS-002/003
+  - Documentation: BCL-MISS-004, GDC-MISS-002/003, BP-MISS-003/004
+  - ContainsCommandRejection consolidation (5 copies — refactor task)
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-  - Sub-TASKS queue: ~55 remaining items across local TASKS.md files (mostly test creation and design tasks)
-- **Next task:** Continue quick-fix sweep on remaining actionable items.
+- **Next task:** Design-level work — pick highest-priority design task or path smoothing plan continuation.

@@ -33,26 +33,14 @@ Master tracker: `MASTER-SUB-017`
 - `LoggingMCPService` (stdio background-service host) exists but has no instantiation/wiring from `Program.cs` (`Services/LoggingMCPService.cs:8`).
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `LMCP-MISS-001` Consolidate MCP host entrypoints and remove dead/alternate host paths.
-- Problem: project contains HTTP host wiring plus orphan/placeholder host files and a non-wired stdio background host.
-- Target files: `Program.cs`, `LoggingMCPServer.csproj`, `SimpleProgram.cs`, `Services/LoggingMCPService.cs`, `Services/LoggingMCPServiceNew.cs`, `Services/LoggingMCPServiceSimple.cs`, `Services/SimpleTest.cs`.
-- Required change: keep one canonical host path, remove/archive unused host variants, and ensure csproj reflects only active host sources.
-- Validation command: `Get-ChildItem Services/LoggingMCPServer -Filter *.cs -Recurse | Where-Object { $_.Length -eq 0 }`
-- Acceptance criteria: no zero-byte `.cs` files remain; canonical host path is explicit in code and docs.
+1. [x] `LMCP-MISS-001` Consolidate MCP host entrypoints and remove dead/alternate host paths.
+- **Done (batch 4).** Dead code files deleted (SimpleProgram.cs, LoggingMCPServiceNew.cs, LoggingMCPServiceSimple.cs, SimpleTest.cs).
 
-2. [ ] `LMCP-MISS-002` Remove duplicate in-tool model/service implementations and use DI-backed shared services.
-- Problem: `Tools/LoggingTools.cs` defines duplicate `LogEvent`, `LogEventProcessor`, and `TelemetryCollector` classes.
-- Target files: `Tools/LoggingTools.cs`, `Services/LogEvent.cs`, `Services/LogEventProcessor.cs`, `Services/TelemetryCollector.cs`, `Program.cs`.
-- Required change: tools consume shared service-layer types only; delete duplicate implementations from tool file.
-- Validation command: `rg -n "^public class (LogEvent|LogEventProcessor|TelemetryCollector)" Services/LoggingMCPServer/Tools/LoggingTools.cs Services/LoggingMCPServer/Services/LogEvent.cs Services/LoggingMCPServer/Services/LogEventProcessor.cs Services/LoggingMCPServer/Services/TelemetryCollector.cs`
-- Acceptance criteria: each class exists in one authoritative location only.
+2. [x] `LMCP-MISS-002` Remove duplicate in-tool model/service implementations and use DI-backed shared services.
+- **Done (batch 4).** Duplicate class definitions removed from LoggingTools.cs.
 
-3. [ ] `LMCP-MISS-003` Fix `GetRecentLogs` to be non-destructive and deterministic.
-- Problem: current read path dequeues and rewrites queue state, changing retention/results as a side effect of querying.
-- Target files: `Services/LogEventProcessor.cs`.
-- Required change: implement non-destructive snapshot retrieval with explicit retention policy and stable ordering.
-- Validation command: `dotnet test Services/LoggingMCPServer/LoggingMCPServer.csproj --configuration Release --no-build --logger "console;verbosity=minimal"`
-- Acceptance criteria: repeated reads over unchanged source data return stable ordering and do not drop records outside configured retention.
+3. [x] `LMCP-MISS-003` Fix `GetRecentLogs` to be non-destructive and deterministic.
+- **Done (batch 4).** Non-destructive snapshot retrieval implemented.
 
 4. [ ] `LMCP-MISS-004` Unify MCP API contract and route ownership.
 - Problem: overlapping MCP endpoints (`MapMcp`, `McpBaseController`, `McpController`) create drift risk.

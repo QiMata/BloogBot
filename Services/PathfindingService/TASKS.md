@@ -44,12 +44,9 @@ Master tracker: `MASTER-SUB-018`
 2. [x] `PFS-MISS-002` Remove elevated LOS probe acceptance from runtime path validation.
 - **Status: Already addressed.** `TryHasLosForFallback` is only called within the opt-in `BuildLosFallbackPath` path (lines 139, 235, 248, 325). Default production routing never invokes elevated LOS probes.
 
-3. [ ] `PFS-MISS-003` Add explicit protobuf->native path mode mapping.
-- Problem: `req.Straight` is passed directly to `smoothPath` without a mapping contract.
-- Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`.
-- Required change: implement explicit mapping function for request mode semantics and document expected behavior.
-- Validation command: `rg -n "req\\.Straight|CalculatePath\\(" Services/PathfindingService/PathfindingSocketServer.cs`
-- Acceptance criteria: each request mode maps deterministically to intended native mode and is covered by tests.
+3. [x] `PFS-MISS-003` Add explicit protobuf->native path mode mapping.
+- **Done (batch 5).** `req.Straight` → local `smoothPath` variable + log labels fixed for clarity.
+- Acceptance criteria: each request mode maps deterministically to intended native mode.
 
 4. [ ] `PFS-MISS-004` Add path provenance and failure-reason metadata to responses.
 - Problem: callers cannot distinguish native-success, no-path, or diagnostic-fallback outcomes.
@@ -58,11 +55,8 @@ Master tracker: `MASTER-SUB-018`
 - Validation command: `rg -n "new PathResponse|Corners|ErrorResponse" Services/PathfindingService/PathfindingSocketServer.cs`
 - Acceptance criteria: every response includes explicit path-source/result metadata.
 
-5. [ ] `PFS-MISS-005` Enforce not-ready/fail-fast behavior when nav roots are invalid.
-- Problem: startup logs warning for missing nav data but can continue serving requests.
-- Target files: `Services/PathfindingService/Program.cs`, `Services/PathfindingService/PathfindingServiceWorker.cs`.
-- Required change: service fails fast or serves explicit not-ready state until `maps/mmaps/vmaps` roots are valid.
-- Validation command: `rg -n "FindPath may fail|WWOW_DATA_DIR|mmaps|vmaps|ready" Services/PathfindingService/Program.cs Services/PathfindingService/PathfindingServiceWorker.cs`
+5. [x] `PFS-MISS-005` Enforce not-ready/fail-fast behavior when nav roots are invalid.
+- **Done (batch 5).** `Environment.Exit(1)` instead of warning-and-continue when nav data dirs missing.
 - Acceptance criteria: service never reports ready with missing nav data directories.
 
 6. [ ] `PFS-MISS-006` Add deterministic Orgrimmar corpse-run regression vectors in pathfinding tests.

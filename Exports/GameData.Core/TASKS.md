@@ -20,7 +20,7 @@
 ## Environment Checklist
 - [x] `Exports/GameData.Core/GameData.Core.csproj` builds in `Release`.
 - [x] Corpse lifecycle consumer checks are discoverable from `Tests/BotRunner.Tests`.
-- [ ] No stale `FIXME`/ambiguous death-state comments remain in contract files.
+- [x] No stale `FIXME`/ambiguous death-state comments remain in contract files (GDC-MISS-001 done).
 
 ## Evidence Snapshot (2026-02-25)
 - `dotnet build Exports/GameData.Core/GameData.Core.csproj --configuration Release --no-restore` passes.
@@ -40,11 +40,8 @@
 ## P0 Active Tasks (Ordered)
 
 ### GDC-MISS-001 Resolve ambiguous player death-state contract in `DeathState`
-- [ ] Problem: `DeathState.DEAD` still carries an inline `FIXME` with unclear player `CORPSE` vs `DEAD` semantics.
-- [ ] Target file: `Exports/GameData.Core/Enums/DeathState.cs`.
-- [ ] Required change: replace ambiguous comment contract with explicit player semantics tied to reclaim-delay/ghost handling and remove the raw `FIXME` marker.
-- [ ] Validation command: `dotnet build Exports/GameData.Core/GameData.Core.csproj --configuration Release --no-restore`.
-- [ ] Acceptance: no ambiguity marker remains and consumers can interpret player death states deterministically.
+- [x] **Done (batch 1).** FIXME replaced with clear XML docs covering player vs creature semantics.
+- [x] Acceptance: no ambiguity marker remains and consumers can interpret player death states deterministically.
 
 ### GDC-MISS-002 Lock corpse lifecycle interface contract across player/object/corpse
 - [ ] Problem: corpse-run gating depends on a small field set, but contract expectations are not explicitly normalized in interface docs.

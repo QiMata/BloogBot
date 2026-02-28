@@ -56,13 +56,8 @@
 - [ ] Acceptance: active query flags have deterministic behavior and no first-party "future/not implemented" ambiguity remains.
 
 ### NAV-MISS-003 Remove machine-specific fallback/debug side effects from `PathFinder`
-- [ ] Problem: `PathFinder::HaveTile` writes to a hardcoded local path (`C:\Users\Drew\Repos\...\navigationDebug.txt`) and `createFilter` still contains an unresolved TODO.
-- [ ] Target files:
-  - `Exports/Navigation/PathFinder.cpp`
-  - `Exports/Navigation/PathFinder.h`
-- [ ] Required change: replace local-path file write with repo-safe diagnostics strategy and make filter initialization intent explicit (no ambiguous TODO placeholder).
-- [ ] Validation command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: no machine-specific debug artifact paths remain; filter behavior is explicit and reproducible across environments.
+- [x] **Done (batch 3).** Replaced hardcoded `C:\Users\Drew\...` path with printf; filter initialization made explicit.
+- [x] Acceptance: no machine-specific debug artifact paths remain; filter behavior is explicit and reproducible across environments.
 
 ### NAV-MISS-004 Validate corpse runback path use (consume returned path nodes without wall-loop fallback)
 - [ ] Problem: corpse runback can degrade into wall-running behavior when path output consumption diverges from generated waypoints.

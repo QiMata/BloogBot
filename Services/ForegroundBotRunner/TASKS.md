@@ -27,25 +27,16 @@ Master tracker: `MASTER-SUB-016`
   - `Services/ForegroundBotRunner/Mem/AntiWarden/WardenDisabler.cs:386`
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `FG-MISS-001` Remove throw paths in `WoWObject.cs`.
-- Problem: movement/spline/transport accessors can still throw during snapshot/materialization.
-- Target files: `Services/ForegroundBotRunner/Objects/WoWObject.cs`.
-- Required change: replace all `NotImplementedException` members with descriptor-backed values or safe defaults that preserve current call contracts.
-- Validation command: `rg --line-number "throw new NotImplementedException\\(\\)" Services/ForegroundBotRunner/Objects/WoWObject.cs`
+1. [x] `FG-MISS-001` Remove throw paths in `WoWObject.cs`.
+- **Done (batch 1).** All `NotImplementedException` replaced with safe defaults (0, null, empty).
 - Acceptance criteria: command returns no matches.
 
-2. [ ] `FG-MISS-002` Remove throw paths in `WoWUnit.cs`.
-- Problem: target/power/combat stat and movement relation fields can still throw.
-- Target files: `Services/ForegroundBotRunner/Objects/WoWUnit.cs`.
-- Required change: implement all currently-thrown members with stable value reads/defaults so corpse/combat/gathering flows do not fail.
-- Validation command: `rg --line-number "throw new NotImplementedException\\(\\)" Services/ForegroundBotRunner/Objects/WoWUnit.cs`
+2. [x] `FG-MISS-002` Remove throw paths in `WoWUnit.cs`.
+- **Done (batch 1).** All `NotImplementedException` replaced with safe defaults (~50 properties).
 - Acceptance criteria: command returns no matches.
 
-3. [ ] `FG-MISS-003` Remove throw paths in `WoWPlayer.cs`.
-- Problem: race/class/guild/inventory/xp/combat-rating members can still throw.
-- Target files: `Services/ForegroundBotRunner/Objects/WoWPlayer.cs`.
-- Required change: implement all currently-thrown members with safe, deterministic value reads/defaults used by active bot logic.
-- Validation command: `rg --line-number "throw new NotImplementedException\\(\\)" Services/ForegroundBotRunner/Objects/WoWPlayer.cs`
+3. [x] `FG-MISS-003` Remove throw paths in `WoWPlayer.cs`.
+- **Done (batch 1).** All `NotImplementedException` replaced with safe defaults (~35 properties).
 - Acceptance criteria: command returns no matches.
 
 4. [ ] `FG-MISS-004` Add regression gate for FG materialization throws.
@@ -55,12 +46,9 @@ Master tracker: `MASTER-SUB-016`
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~Combat|FullyQualifiedName~Gather" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Acceptance criteria: guard fails when a throw is reintroduced and passes on current implementation.
 
-5. [ ] `FG-MISS-005` Triage remaining FG memory/warden TODOs.
-- Problem: non-object TODO markers are untracked implementation risk.
-- Target files: `Services/ForegroundBotRunner/Mem/MemoryAddresses.cs`, `Services/ForegroundBotRunner/Mem/AntiWarden/WardenDisabler.cs`.
-- Required change: create explicit task IDs or explicit defer rationale for each TODO marker.
-- Validation command: `rg -n "TODO" Services/ForegroundBotRunner/Mem/MemoryAddresses.cs Services/ForegroundBotRunner/Mem/AntiWarden/WardenDisabler.cs`
-- Acceptance criteria: each TODO has a linked task ID or documented defer decision in this file.
+5. [x] `FG-MISS-005` Triage remaining FG memory/warden TODOs.
+- **Done (batch 7).** All Mem/ TODOs triaged: WardenDisabler.cs TODOs replaced with FG-WARDEN-001/FG-WARDEN-002 IDs (prior session). MemoryAddresses.cs had no remaining TODOs. Last WoWUnit.cs TODO replaced with defer rationale.
+- Acceptance criteria: `rg -n "TODO" Services/ForegroundBotRunner/Mem/` returns no matches.
 
 ## Simple Command Set
 1. Build: `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore`

@@ -544,7 +544,7 @@ namespace ForegroundBotRunner.Objects
 
         public float JumpCosAngle => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWUnit_JumpCosAngleOffset));
 
-        public float JumpHorizontalSpeed => 0f; // TODO: Verify offset - not stored directly in vanilla?
+        public float JumpHorizontalSpeed => 0f; // Vanilla 1.12.1 does not store horizontal jump speed in CMovementInfo — computed from facing + speed at jump start
 
         /// <summary>
         /// Current vertical fall velocity from static address 0x0087D894.

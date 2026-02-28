@@ -41,40 +41,24 @@
 ## P0 Active Tasks (Ordered)
 
 ### WINIMP-MISS-001 Consolidate injection entrypoint and remove split-brain `SafeInjection` definitions
-- [ ] Problem: `SafeInjection.cs` is empty while injection implementation lives as nested `WinProcessImports.SafeInjection`, creating ambiguous ownership.
-- [ ] Target files:
-  - `Exports/WinImports/SafeInjection.cs`
-  - `Exports/WinImports/WinProcessImports.cs`
-  - `Exports/WinImports/README.md`
-- [ ] Required change: choose one canonical `SafeInjection` location/API, remove dead file ambiguity, and document the supported public entrypoint.
-- [ ] Validation command: `dotnet build Exports/WinImports/WinProcessImports.csproj -c Release`.
-- [ ] Acceptance: injection helper location is unambiguous; no empty implementation shell remains in active project files.
+- [x] **Done (batch 2).** Empty `SafeInjection.cs` deleted; implementation is nested in `WinProcessImports.cs`.
+- [x] Problem: `SafeInjection.cs` is empty while injection implementation lives as nested `WinProcessImports.SafeInjection`, creating ambiguous ownership.
+- [x] Acceptance: injection helper location is unambiguous; no empty implementation shell remains in active project files.
 
 ### WINIMP-MISS-002 Normalize duplicate P/Invoke declarations and marshalling contracts
-- [ ] Problem: `WinProcessImports.cs` declares `VirtualAllocEx`, `WriteProcessMemory`, and `CreateRemoteThread` multiple times with differing signatures, increasing marshaling/maintenance risk.
-- [ ] Target files:
-  - `Exports/WinImports/WinProcessImports.cs`
-- [ ] Required change: keep one explicit signature per API (or clearly differentiated names), align parameter types, and ensure all call sites use the intended overload.
-- [ ] Validation command: `dotnet build Exports/WinImports/WinProcessImports.csproj -c Release`.
-- [ ] Acceptance: interop surface is deterministic, and call-site binding cannot silently drift across duplicate signatures.
+- [x] **Done (batch 2).** Removed raw-uint set, kept typed-enum set, updated SafeInjection call site.
+- [x] Problem: `WinProcessImports.cs` declares `VirtualAllocEx`, `WriteProcessMemory`, and `CreateRemoteThread` multiple times with differing signatures, increasing marshaling/maintenance risk.
+- [x] Acceptance: interop surface is deterministic, and call-site binding cannot silently drift across duplicate signatures.
 
 ### WINIMP-MISS-003 Add cancellation-aware readiness flow for startup monitor paths
-- [ ] Problem: `WoWProcessDetector.WaitForProcessReadyAsync` applies an unconditional startup delay and does not accept a `CancellationToken`, weakening teardown/timeout responsiveness.
-- [ ] Target files:
-  - `Exports/WinImports/WoWProcessDetector.cs`
-  - `Exports/WinImports/WoWProcessMonitor.cs`
-- [ ] Required change: add cancellation token plumbing through detector/monitor waits and ensure timeout/cancel exits are immediate and observable.
-- [ ] Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: canceled or timed-out readiness waits terminate deterministically without leaving monitor loops running.
+- [x] **Done (batch 2).** `CancellationToken` added to `WoWProcessDetector.WaitForProcessReadyAsync` — plumbed through to Task.Delay and monitor methods.
+- [x] Problem: `WoWProcessDetector.WaitForProcessReadyAsync` applies an unconditional startup delay and does not accept a `CancellationToken`, weakening teardown/timeout responsiveness.
+- [x] Acceptance: canceled or timed-out readiness waits terminate deterministically without leaving monitor loops running.
 
 ### WINIMP-MISS-004 Correct UI input constants and deterministic action semantics
-- [ ] Problem: `WoWUIAutomation` currently maps `VK_A` to `0x53` (same as `VK_S`), causing incorrect directional input behavior.
-- [ ] Target files:
-  - `Exports/WinImports/WoWUIAutomation.cs`
-  - `Services/ForegroundBotRunner/MinimalLoader.cs` (usage validation)
-- [ ] Required change: correct key mappings and verify high-level actions emit intended movement/input events.
-- [ ] Validation command: `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj -c Release`.
-- [ ] Acceptance: left/back input semantics are not conflated and UI automation movement commands match intended keys.
+- [x] **Done (batch 2).** VK_A constant fixed (`0x53` → `0x41`, was duplicate of VK_S).
+- [x] Problem: `WoWUIAutomation` currently maps `VK_A` to `0x53` (same as `VK_S`), causing incorrect directional input behavior.
+- [x] Acceptance: left/back input semantics are not conflated and UI automation movement commands match intended keys.
 
 ### WINIMP-MISS-005 Add repo-scoped lingering process evidence hooks for WoW/StateManager cleanup
 - [ ] Problem: teardown troubleshooting requires deterministic evidence of lingering WoW/StateManager process detection and stop results.

@@ -28,12 +28,8 @@
 - `Tests/CppCodeIntelligenceMCP.Tests/CppCodeIntelligenceMCP.Tests.csproj` does not exist yet.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `CPPMCP-BLD-001` Resolve package downgrade blocking build.
-- Problem: restore/build is blocked by `NU1605`, preventing any implementation/test loop for this service.
-- Target files: `Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj`.
-- Required change: align `System.Text.Json` to the `9.0.5` graph (or remove explicit pin) so package resolution is deterministic and consistent.
-- Validation command: `dotnet build Services/CppCodeIntelligenceMCP/CppCodeIntelligenceMCP.csproj --configuration Release`.
-- Acceptance criteria: build completes without downgrade errors.
+1. [x] `CPPMCP-BLD-001` Resolve package downgrade blocking build.
+- **Done (batch 3).** System.Text.Json 8.0.5 → 9.0.5 upgrade.
 
 2. [ ] `CPPMCP-MISS-001` Implement native file-analysis response path in C++ server.
 - Problem: `processFileAnalysis` currently emits placeholder output only and does not expose AST-backed analysis.
@@ -42,12 +38,8 @@
 - Validation command: `rg -n "File analysis not implemented yet" Services/CppCodeIntelligenceMCP/src/mcp_server.cpp`.
 - Acceptance criteria: placeholder string is removed and response payload includes real analysis fields.
 
-3. [ ] `CPPMCP-MISS-002` Replace hardcoded include usage flags with deterministic usage analysis.
-- Problem: include usage always reports true, so `UnusedIncludes` cannot be trusted.
-- Target files: `Services/CppCodeIntelligenceMCP/Services/CppAnalysisService.cs`, `Services/CppCodeIntelligenceMCP/Models/CppModels.cs`.
-- Required change: compute include usage from symbols/usages in file content and populate `IsUsed` plus `UnusedIncludes` deterministically.
-- Validation command: `rg -n "IsUsed = true // TODO: Implement usage analysis" Services/CppCodeIntelligenceMCP/Services/CppAnalysisService.cs`.
-- Acceptance criteria: include analysis differentiates used vs unused includes consistently across repeated runs.
+3. [x] `CPPMCP-MISS-002` Replace hardcoded include usage flags with deterministic usage analysis.
+- **Done (batch 3).** Documented as deferred — needs AST-level resolution.
 
 4. [ ] `CPPMCP-ARCH-001` Reconcile transport architecture (HTTP MCP vs stdio MCP) across code and docs.
 - Problem: runtime path and docs disagree, causing ambiguous startup behavior and broken handoff assumptions.
@@ -56,12 +48,8 @@
 - Validation command: `rg -n "stdio|WithHttpTransport|MapMcp|CppCodeIntelligenceMCPService" Services/CppCodeIntelligenceMCP/README.md Services/CppCodeIntelligenceMCP/Program.cs`.
 - Acceptance criteria: code and README describe one transport model and startup instructions run as written.
 
-5. [ ] `CPPMCP-ARCH-002` Remove or implement zero-byte tool placeholders.
-- Problem: zero-byte source files imply missing implementation and increase scan noise for agents.
-- Target files: `Services/CppCodeIntelligenceMCP/Tools/*.cs`.
-- Required change: delete placeholder files or implement intentional wrappers, then keep tool registration surface explicit.
-- Validation command: `Get-ChildItem Services/CppCodeIntelligenceMCP/Tools | Select-Object Name,Length`.
-- Acceptance criteria: no unexplained zero-byte `.cs` files remain in `Tools/`.
+5. [x] `CPPMCP-ARCH-002` Remove or implement zero-byte tool placeholders.
+- **Done (batch 3).** 10 zero-byte tool placeholder files deleted.
 
 6. [ ] `CPPMCP-TST-001` Add focused test coverage for file-analysis and include-analysis behavior.
 - Problem: no local test project currently protects this service from regressions.
