@@ -185,13 +185,16 @@ namespace PathfindingService
                 .Where(IsFinitePoint)
                 .ToArray();
 
+            // Proto field "straight" is actually smoothPath (see pathfinding.proto comment and PathfindingClient.cs)
+            var smoothPath = req.Straight;
+
             if (sanitizedPath.Length != path.Length)
             {
                 logger.LogWarning(
-                    "[PathfindingSocketServer] Filtered {DroppedCount} non-finite path corners (map={MapId}, smooth={Smooth})",
+                    "[PathfindingSocketServer] Filtered {DroppedCount} non-finite path corners (map={MapId}, smoothPath={SmoothPath})",
                     path.Length - sanitizedPath.Length,
                     req.MapId,
-                    req.Straight);
+                    smoothPath);
             }
 
             // Log path requests that return few/no corners for diagnostics
@@ -199,8 +202,8 @@ namespace PathfindingService
             {
                 var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
                 logger.LogInformation(
-                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smooth={Smooth} corners={Corners}",
-                    req.MapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, dist2D, req.Straight, sanitizedPath.Length);
+                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} corners={Corners}",
+                    req.MapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, dist2D, smoothPath, sanitizedPath.Length);
             }
 
             var resp = new CalculatePathResponse();

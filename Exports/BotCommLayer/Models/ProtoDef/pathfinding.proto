@@ -49,7 +49,7 @@ message CalculatePathRequest {
     uint32 map_id = 1;
     game.Position start = 2;
     game.Position end = 3;
-    bool straight = 4;  // smooth path
+    bool straight = 4;  // semantics: smoothPath flag (true = Detour smooth path, false = straight line)
 }
 
 message CalculatePathResponse {

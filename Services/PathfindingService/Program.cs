@@ -49,9 +49,12 @@ namespace PathfindingService
             }
             else
             {
-                Console.WriteLine("[PathfindingService] WARNING: Could not find nav data root containing mmaps/maps/vmaps. FindPath may fail.");
+                Console.Error.WriteLine("[PathfindingService] FATAL: Could not find nav data root containing mmaps/maps/vmaps.");
                 if (!string.IsNullOrWhiteSpace(previousDataDir))
-                    Console.WriteLine($"[PathfindingService] Existing WWOW_DATA_DIR was invalid: {previousDataDir}");
+                    Console.Error.WriteLine($"[PathfindingService] Existing WWOW_DATA_DIR was invalid: {previousDataDir}");
+                Console.Error.WriteLine("[PathfindingService] Set WWOW_DATA_DIR to a directory containing mmaps/, maps/, and vmaps/ subdirectories.");
+                Environment.Exit(1);
+                return;
             }
 
             CreateHostBuilder(args)

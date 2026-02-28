@@ -75,6 +75,28 @@ public class TelemetryCollector
     {
         return _metrics.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
     }
+
+    public Dictionary<string, double> GetSystemMetrics()
+    {
+        var metrics = new Dictionary<string, double>();
+        foreach (var kvp in _metrics)
+        {
+            if (kvp.Value is double d)
+                metrics[kvp.Key] = d;
+            else if (kvp.Value is int i)
+                metrics[kvp.Key] = i;
+            else if (kvp.Value is long l)
+                metrics[kvp.Key] = l;
+            else if (kvp.Value is float f)
+                metrics[kvp.Key] = f;
+        }
+
+        metrics["uptime_seconds"] = (DateTime.UtcNow - _startTime).TotalSeconds;
+        metrics["memory_mb"] = Environment.WorkingSet / 1024.0 / 1024.0;
+        metrics["total_events"] = _events.Count;
+
+        return metrics;
+    }
 }
 
 public class TelemetryEvent

@@ -1632,3 +1632,44 @@ Changed TODO comment to explicit "deferred — requires AST-level symbol resolut
 
 ### WSC-TST-001 — Test Redundancy TODOs (Done 2026-02-27)
 Removed `//TODO: Test might be useless or redundant` comments from SMSG_UPDATE_OBJECT_Tests.cs and OpcodeHandler_Tests.cs.
+
+## Service Quick-Fix Sweep (2026-02-28)
+
+### WINIMP-MISS-002 — P/Invoke Normalization (Done 2026-02-28)
+Removed duplicate raw-uint P/Invoke declarations for VirtualAllocEx, WriteProcessMemory, CreateRemoteThread. Kept typed-enum set. Updated SafeInjection call site to use enum-typed overloads.
+
+### WINIMP-MISS-003 — CancellationToken for WoWProcessDetector (Done 2026-02-28)
+Added `CancellationToken cancellationToken = default` parameter to `WaitForProcessReadyAsync`. Plumbed through to `Task.Delay()` and `WoWProcessMonitor.WaitFor*Async()` methods.
+
+### WSM-MISS-001 — PathfindingService Readiness Gate (Done 2026-02-28)
+Changed from "log warning and proceed" to "log error and return false" when PathfindingService is unavailable after 30s timeout. Fail-fast prevents bots from starting without navigation.
+
+### WSM-MISS-003 — Deterministic StopManagedService (Done 2026-02-28)
+Renamed to `StopManagedServiceAsync`. Replaced fire-and-forget `_ = Task.Run(...)` with properly awaited `Service.StopAsync()` + 10s timeout. Added 5s timeout on monitoring task completion. Matches pattern already used in `StopAllManagedServices()`.
+
+### DES-MISS-003 — FileSystemWatcher Lifetime Fix (Done 2026-02-28)
+CombatPredictionService: stored FileSystemWatcher as `_fileWatcher` field (was local variable, immediately GC'd). Implemented `IDisposable` with proper cleanup. Added directory existence check before creating watcher.
+
+### DES-MISS-004 — Null/Empty Path Validation (Done 2026-02-28)
+Added `ArgumentException.ThrowIfNullOrWhiteSpace()` guards to CombatPredictionService constructor (connectionString, dataDirectory, processedDirectory) and DecisionEngine constructor (binFileDirectory). Added null model handling in CombatPredictionService.
+
+### LMCP-MISS-001 — Dead Code Deletion (Done 2026-02-28)
+Deleted 4 empty dead code files: SimpleProgram.cs, LoggingMCPServiceNew.cs, LoggingMCPServiceSimple.cs, SimpleTest.cs.
+
+### LMCP-MISS-002 — Duplicate Class Removal (Done 2026-02-28)
+Removed 3 duplicate class definitions (LogEvent, LogEventProcessor, TelemetryCollector + TelemetryEvent) from LoggingTools.cs. Added `using LoggingMCPServer.Services;` to reference canonical versions. Added `GetSystemMetrics()` to Services/TelemetryCollector.cs.
+
+### LMCP-MISS-003 — Non-Destructive GetRecentLogs (Done 2026-02-28)
+Replaced destructive TryDequeue/re-enqueue pattern with non-destructive `_logEvents.OrderByDescending(...).Take(count).ToList()`. Eliminates race conditions, data loss risk, and non-deterministic ordering.
+
+### CPPMCP-BLD-001 — System.Text.Json Downgrade Fix (Done 2026-02-28)
+Bumped System.Text.Json from 8.0.5 to 9.0.5 in CppCodeIntelligenceMCP.csproj, resolving NU1605 package downgrade error that blocked the entire project build.
+
+### CPPMCP-ARCH-002 — Zero-Byte Tool Placeholders (Done 2026-02-28)
+Deleted 10 empty tool files: AnalyzeCppFileTool.cs, AnalyzeIncludesTool.cs, ExplainCppCodeTool.cs, FindSymbolReferencesTool.cs, GetClassHierarchyTool.cs, GetCompilationErrorsTool.cs, GetFileDependenciesTool.cs, GetFunctionSignatureTool.cs, GetProjectStructureTool.cs, SearchCppSymbolsTool.cs.
+
+### PFS-MISS-003 — Protobuf Path Mode Mapping (Done 2026-02-28)
+Clarified confusing `req.Straight`→`smoothPath` mapping in PathfindingSocketServer.cs. Added local `var smoothPath = req.Straight` with comment. Fixed all log labels from "smooth" to "smoothPath". Updated pathfinding.proto comment.
+
+### PFS-MISS-005 — Nav Data Fail-Fast (Done 2026-02-28)
+Changed PathfindingService Program.cs from warning-and-continue to `Environment.Exit(1)` when nav data directories (mmaps/maps/vmaps) cannot be found. Service now fails fast at startup instead of accepting requests it can't serve.

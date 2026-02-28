@@ -36,30 +36,15 @@ public class LogEventProcessor
         await Task.CompletedTask;
     }
 
-    public async Task<IEnumerable<LogEvent>> GetRecentLogs(int count = 100)
+    public Task<IEnumerable<LogEvent>> GetRecentLogs(int count = 100)
     {
-        var logs = new List<LogEvent>();
-        var tempQueue = new Queue<LogEvent>();
+        // Non-destructive snapshot: iterate without removing items
+        var logs = _logEvents
+            .OrderByDescending(log => log.Timestamp)
+            .Take(count)
+            .ToList();
 
-        // Dequeue all events, keep only the last 'count' items
-        while (_logEvents.TryDequeue(out var logEvent))
-        {
-            tempQueue.Enqueue(logEvent);
-            if (tempQueue.Count > count)
-            {
-                tempQueue.Dequeue();
-            }
-        }
-
-        // Put them back and return
-        while (tempQueue.Count > 0)
-        {
-            var logEvent = tempQueue.Dequeue();
-            logs.Add(logEvent);
-            _logEvents.Enqueue(logEvent);
-        }
-
-        return await Task.FromResult(logs);
+        return Task.FromResult<IEnumerable<LogEvent>>(logs);
     }
 
     public async Task<IEnumerable<LogEvent>> QueryLogs(string query, string? level = null, DateTime? since = null)

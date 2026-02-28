@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace WinImports;
@@ -17,12 +18,14 @@ public static class WoWProcessDetector
     /// <param name="timeout">Maximum time to wait for readiness</param>
     /// <param name="waitForLoginScreen">If true, waits until the login screen is detected. If false, just waits for client initialization.</param>
     /// <param name="logger">Optional logging callback</param>
+    /// <param name="cancellationToken">Cancellation token for responsive teardown</param>
     /// <returns>True if the process is ready, false if it timed out or exited</returns>
     public static async Task<bool> WaitForProcessReadyAsync(
         Process process,
         TimeSpan timeout,
         bool waitForLoginScreen = true,
-        Action<string>? logger = null)
+        Action<string>? logger = null,
+        CancellationToken cancellationToken = default)
     {
         if (process == null)
             throw new ArgumentNullException(nameof(process));
@@ -33,7 +36,7 @@ public static class WoWProcessDetector
         // This gives the EXE time to load its modules and begin initialization
         var initialWait = TimeSpan.FromSeconds(2);
         logger?.Invoke($"Waiting {initialWait.TotalSeconds}s for initial process startup...");
-        await Task.Delay(initialWait);
+        await Task.Delay(initialWait, cancellationToken);
 
         // Check if process exited during initial wait
         if (process.HasExited)
@@ -60,11 +63,13 @@ public static class WoWProcessDetector
             ? await monitor.WaitForLoginScreenAsync(
                 remainingTimeout,
                 pollInterval: TimeSpan.FromMilliseconds(500),
-                progress: p => logger?.Invoke($"[{p.Elapsed.TotalSeconds:F1}s] {p.Message}"))
+                progress: p => logger?.Invoke($"[{p.Elapsed.TotalSeconds:F1}s] {p.Message}"),
+                cancellationToken: cancellationToken)
             : await monitor.WaitForClientReadyAsync(
                 remainingTimeout,
                 pollInterval: TimeSpan.FromMilliseconds(500),
-                progress: p => logger?.Invoke($"[{p.Elapsed.TotalSeconds:F1}s] {p.Message}"));
+                progress: p => logger?.Invoke($"[{p.Elapsed.TotalSeconds:F1}s] {p.Message}"),
+                cancellationToken: cancellationToken);
 
         logger?.Invoke($"Detection result: {result.Message} (Success: {result.Success})");
 

@@ -7,11 +7,13 @@ using System;
 
 namespace DecisionEngineService
 {
-    public class CombatPredictionService
+    public class CombatPredictionService : IDisposable
     {
         private readonly MLContext _mlContext;
         private PredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot> _predictionEngine;
         private ITransformer _trainedModel;
+        private FileSystemWatcher? _fileWatcher;
+        private bool _disposed;
         private readonly string _connectionString;
         private readonly string _dataDirectory;
         private readonly string _processedDirectory;
@@ -19,6 +21,10 @@ namespace DecisionEngineService
 
         public CombatPredictionService(string connectionString, string dataDirectory, string processedDirectory, ILogger<CombatPredictionService> logger)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+            ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
+            ArgumentException.ThrowIfNullOrWhiteSpace(processedDirectory);
+
             _mlContext = new MLContext();
             _connectionString = connectionString;
             _dataDirectory = dataDirectory;
@@ -30,8 +36,14 @@ namespace DecisionEngineService
             // Load the initial trained model from the SQLite database
             _trainedModel = LoadModelFromDatabase();
 
-            // Create a prediction engine based on the loaded model
-            _predictionEngine = _mlContext.Model.CreatePredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>(_trainedModel);
+            if (_trainedModel != null)
+            {
+                _predictionEngine = _mlContext.Model.CreatePredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>(_trainedModel);
+            }
+            else
+            {
+                _logger.LogWarning("No trained model found in database — prediction engine not available until first training run");
+            }
 
             // Start monitoring for new `.bin` files
             MonitorForNewData();
@@ -91,15 +103,29 @@ namespace DecisionEngineService
         // Method to monitor the data directory for new `.bin` files
         private void MonitorForNewData()
         {
-            FileSystemWatcher watcher = new()
+            if (!Directory.Exists(_dataDirectory))
+            {
+                _logger.LogWarning("Data directory does not exist: {DataDirectory} — file monitoring disabled", _dataDirectory);
+                return;
+            }
+
+            _fileWatcher = new FileSystemWatcher
             {
                 Path = _dataDirectory,
                 Filter = "*.bin",
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
             };
 
-            watcher.Created += OnNewDataFile;
-            watcher.EnableRaisingEvents = true;
+            _fileWatcher.Created += OnNewDataFile;
+            _fileWatcher.EnableRaisingEvents = true;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _fileWatcher?.Dispose();
+            _disposed = true;
+            GC.SuppressFinalize(this);
         }
 
         // Event handler for when a new `.bin` file is detected

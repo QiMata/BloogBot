@@ -471,8 +471,8 @@ namespace WoWStateManager
 
             if (!pathfindingReady)
             {
-                _logger.LogWarning("PathfindingService is not ready - proceeding anyway but navigation may fail");
-                // Note: We proceed anyway since the service might come online later, but we log the warning
+                _logger.LogError("PathfindingService is not ready after {Timeout}s — aborting bot startup. Navigation requires PathfindingService on port 5001.", serviceTimeout.TotalSeconds);
+                return false;
             }
 
             // 62d: Deduplicate CharacterSettings by AccountName to prevent double-launch races
@@ -1234,7 +1234,7 @@ namespace WoWStateManager
             }
         }
 
-        public void StopManagedService(string accountName)
+        public async Task StopManagedServiceAsync(string accountName)
         {
             (IHostedService? Service, CancellationTokenSource TokenSource, Task asyncTask, uint? ProcessId) serviceTuple;
             bool found;
@@ -1253,14 +1253,35 @@ namespace WoWStateManager
                 // Cancel the token to signal shutdown
                 TokenSource.Cancel();
 
-                // If it's a background service, stop it properly
+                // Await service stop with a timeout to ensure deterministic teardown
                 if (Service != null)
                 {
-                    _ = System.Threading.Tasks.Task.Run(async () => await Service.StopAsync(CancellationToken.None));
+                    try
+                    {
+                        await Service.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+                    }
+                    catch (TimeoutException)
+                    {
+                        _logger.LogWarning($"Timeout waiting for service stop for account {accountName}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, $"Error stopping service for account {accountName}");
+                    }
                 }
 
                 // Kill the managed process (WoW.exe for FG, dotnet BackgroundBotRunner for BG)
                 KillManagedProcess(accountName, ProcessId);
+
+                // Wait for monitoring task to complete (with timeout)
+                try
+                {
+                    await Task.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (TimeoutException)
+                {
+                    _logger.LogWarning($"Timeout waiting for monitoring task to complete for account {accountName}");
+                }
 
                 _logger.LogInformation($"Stopped managed service for account {accountName}");
             }

@@ -1,5 +1,5 @@
 using ModelContextProtocol.Server;
-using LoggingMCPServer.Tools;
+using LoggingMCPServer.Services;
 using Serilog;
 
 // Configure Serilog
