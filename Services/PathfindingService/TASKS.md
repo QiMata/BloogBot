@@ -48,12 +48,12 @@ Master tracker: `MASTER-SUB-018`
 - **Done (batch 5).** `req.Straight` → local `smoothPath` variable + log labels fixed for clarity.
 - Acceptance criteria: each request mode maps deterministically to intended native mode.
 
-4. [ ] `PFS-MISS-004` Add path provenance and failure-reason metadata to responses.
-- Problem: callers cannot distinguish native-success, no-path, or diagnostic-fallback outcomes.
-- Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, proto definitions in `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`.
-- Required change: add source/reason fields (for example: `native_path`, `no_path_native`, `diagnostic_fallback`) and emit consistently.
-- Validation command: `rg -n "new PathResponse|Corners|ErrorResponse" Services/PathfindingService/PathfindingSocketServer.cs`
-- Acceptance criteria: every response includes explicit path-source/result metadata.
+4. [x] `PFS-MISS-004` Add path provenance and failure-reason metadata to responses.
+- **Done (batch 13).** Added `result` (string) and `raw_corner_count` (uint32) fields to `CalculatePathResponse` in `pathfinding.proto`.
+  - `PathfindingSocketServer.cs` populates: `result = "native_path"` when corners > 0, `"no_path"` when empty. `raw_corner_count` = pre-sanitization count.
+  - Protoc regenerated `Pathfinding.cs`.
+- Validation: `dotnet build Services/PathfindingService/PathfindingService.csproj -c Debug` — 0 errors.
+- Acceptance: every path response includes explicit source/result metadata.
 
 5. [x] `PFS-MISS-005` Enforce not-ready/fail-fast behavior when nav roots are invalid.
 - **Done (batch 5).** `Environment.Exit(1)` instead of warning-and-continue when nav data dirs missing.
@@ -63,12 +63,14 @@ Master tracker: `MASTER-SUB-018`
 - **Done (batch 11).** Added 3 Orgrimmar regression vectors (graveyard→center, entrance→VoS, reverse) with finite-coordinate and min-waypoint assertions to `PathingAndOverlapTests.cs`.
 - Acceptance criteria: vector regressions fail when output collides with known wall-run patterns.
 
-7. [ ] `PFS-MISS-007` Validate C++ -> protobuf -> C# path data integrity.
-- Problem: no hard gate proves corner count/order/coordinates survive interop unchanged.
-- Target files: `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/PathfindingSocketServer.cs`, `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`, related tests.
-- Required change: add interop assertions for coordinate precision, order preservation, and truncation resistance.
-- Validation command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`
-- Acceptance criteria: tests fail on coordinate drift, dropped nodes, or order mismatch.
+7. [x] `PFS-MISS-007` Validate C++ -> protobuf -> C# path data integrity.
+- **Done (batch 13).** Added 4 proto round-trip tests to `ProtoInteropExtensionsTests.cs`:
+  - `PathCorners_RoundTripThroughProto_PreservesCountOrderAndPrecision` — 5-corner path with provenance metadata
+  - `PathCorners_EmptyPath_PreservesNoPathResult` — empty path + "no_path" result
+  - `PathCorners_OrderPreserved_NotSortedOrShuffled` — non-sorted corner order preserved
+  - `PathCorners_ExtremePrecision_NoTruncation` — float edge values survive serialization
+- Validation: 6/6 ProtoInteropExtensionsTests pass (2 existing + 4 new).
+- Acceptance: tests fail on coordinate drift, dropped nodes, order mismatch, or precision truncation.
 
 ## Simple Command Set
 1. Build service: `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore`
@@ -77,9 +79,17 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-02-28
+- Active task: all PathfindingService tasks complete (PFS-MISS-001..007)
+- Last delta: PFS-MISS-004 (provenance metadata) + PFS-MISS-007 (4 proto round-trip integrity tests)
 - Pass result: `delta shipped`
-- Last delta: converted to execution-card format with refreshed build/test baselines and explicit interop/task validation gates.
-- Next task: `PFS-MISS-001`
-- Next command: `Get-Content -Path 'Services/PromptHandlingService/TASKS.md' -TotalCount 320`
+- Validation/tests run:
+  - `dotnet build Services/PathfindingService/PathfindingService.csproj -c Debug` — 0 errors
+  - `dotnet test Tests/PathfindingService.Tests -c Debug --filter ProtoInteropExtensionsTests` — 6/6 pass
+- Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto` — result + raw_corner_count fields
+  - `Exports/BotCommLayer/Models/Pathfinding.cs` — regenerated
+  - `Services/PathfindingService/PathfindingSocketServer.cs` — populate provenance fields
+  - `Tests/PathfindingService.Tests/ProtoInteropExtensionsTests.cs` — 4 new integrity tests
+- Next command: continue with next queue file
 - Blockers: local test environment missing nav data under `Bot\\Release\\x64\\mmaps`; `dumpbin` missing on PATH in vcpkg app-local script.

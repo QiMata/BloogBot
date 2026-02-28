@@ -208,6 +208,8 @@ namespace PathfindingService
 
             var resp = new CalculatePathResponse();
             resp.Corners.AddRange(sanitizedPath.Select(p => new Game.Position { X = p.X, Y = p.Y, Z = p.Z }));
+            resp.RawCornerCount = (uint)path.Length;
+            resp.Result = sanitizedPath.Length > 0 ? "native_path" : "no_path";
 
             return new PathfindingResponse { Path = resp };
         }

@@ -54,6 +54,8 @@ message CalculatePathRequest {
 
 message CalculatePathResponse {
     repeated game.Position corners = 1;
+    string result = 2;        // Path outcome: "native_path", "no_path", "validation_error", "error"
+    uint32 raw_corner_count = 3;  // Corner count before sanitization (non-finite filtering)
 }
 
 // Line of sight check

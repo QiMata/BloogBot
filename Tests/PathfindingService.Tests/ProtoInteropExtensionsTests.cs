@@ -1,6 +1,7 @@
 using System;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
+using Google.Protobuf;
 using PathfindingService;
 using PathfindingService.Repository;
 
@@ -160,5 +161,97 @@ public class ProtoInteropExtensionsTests
         Assert.Equal(native.standingOnLocalX, proto.StandingOnLocalX);
         Assert.Equal(native.standingOnLocalY, proto.StandingOnLocalY);
         Assert.Equal(native.standingOnLocalZ, proto.StandingOnLocalZ);
+    }
+
+    [Fact]
+    public void PathCorners_RoundTripThroughProto_PreservesCountOrderAndPrecision()
+    {
+        // Simulate a native path result: 5 corners with varied coordinates
+        var corners = new[]
+        {
+            new Game.Position { X = 1629.123f, Y = -4373.456f, Z = 9.789f },
+            new Game.Position { X = 1640.001f, Y = -4380.999f, Z = 12.345f },
+            new Game.Position { X = 1655.555f, Y = -4390.111f, Z = 15.678f },
+            new Game.Position { X = 1670.0f,   Y = -4400.0f,   Z = 18.0f },
+            new Game.Position { X = 1685.999f, Y = -4410.001f, Z = 20.123f },
+        };
+
+        var resp = new Pathfinding.CalculatePathResponse();
+        resp.Corners.AddRange(corners);
+        resp.Result = "native_path";
+        resp.RawCornerCount = (uint)corners.Length;
+
+        // Serialize and deserialize through protobuf
+        var bytes = resp.ToByteArray();
+        var deserialized = Pathfinding.CalculatePathResponse.Parser.ParseFrom(bytes);
+
+        // Corner count preserved
+        Assert.Equal(corners.Length, deserialized.Corners.Count);
+
+        // Provenance metadata preserved
+        Assert.Equal("native_path", deserialized.Result);
+        Assert.Equal((uint)corners.Length, deserialized.RawCornerCount);
+
+        // Each corner's coordinates preserved exactly (float precision)
+        for (int i = 0; i < corners.Length; i++)
+        {
+            Assert.Equal(corners[i].X, deserialized.Corners[i].X);
+            Assert.Equal(corners[i].Y, deserialized.Corners[i].Y);
+            Assert.Equal(corners[i].Z, deserialized.Corners[i].Z);
+        }
+    }
+
+    [Fact]
+    public void PathCorners_EmptyPath_PreservesNoPathResult()
+    {
+        var resp = new Pathfinding.CalculatePathResponse();
+        resp.Result = "no_path";
+        resp.RawCornerCount = 0;
+
+        var bytes = resp.ToByteArray();
+        var deserialized = Pathfinding.CalculatePathResponse.Parser.ParseFrom(bytes);
+
+        Assert.Empty(deserialized.Corners);
+        Assert.Equal("no_path", deserialized.Result);
+        Assert.Equal(0u, deserialized.RawCornerCount);
+    }
+
+    [Fact]
+    public void PathCorners_OrderPreserved_NotSortedOrShuffled()
+    {
+        // Create corners in a specific order (not sorted by any axis)
+        var resp = new Pathfinding.CalculatePathResponse();
+        resp.Corners.Add(new Game.Position { X = 100f, Y = 200f, Z = 10f });
+        resp.Corners.Add(new Game.Position { X = 50f,  Y = 300f, Z = 5f });
+        resp.Corners.Add(new Game.Position { X = 200f, Y = 100f, Z = 20f });
+        resp.Corners.Add(new Game.Position { X = 75f,  Y = 250f, Z = 15f });
+
+        var bytes = resp.ToByteArray();
+        var deserialized = Pathfinding.CalculatePathResponse.Parser.ParseFrom(bytes);
+
+        // Verify exact order: X values must be 100, 50, 200, 75 (not sorted)
+        Assert.Equal(100f, deserialized.Corners[0].X);
+        Assert.Equal(50f,  deserialized.Corners[1].X);
+        Assert.Equal(200f, deserialized.Corners[2].X);
+        Assert.Equal(75f,  deserialized.Corners[3].X);
+    }
+
+    [Fact]
+    public void PathCorners_ExtremePrecision_NoTruncation()
+    {
+        // Use values that would fail if truncated to lower precision
+        var resp = new Pathfinding.CalculatePathResponse();
+        resp.Corners.Add(new Game.Position { X = 1234.5678f, Y = -9876.5432f, Z = 0.001f });
+        resp.Corners.Add(new Game.Position { X = float.MaxValue / 2f, Y = float.MinValue / 2f, Z = float.Epsilon });
+
+        var bytes = resp.ToByteArray();
+        var deserialized = Pathfinding.CalculatePathResponse.Parser.ParseFrom(bytes);
+
+        Assert.Equal(1234.5678f, deserialized.Corners[0].X);
+        Assert.Equal(-9876.5432f, deserialized.Corners[0].Y);
+        Assert.Equal(0.001f, deserialized.Corners[0].Z);
+        Assert.Equal(float.MaxValue / 2f, deserialized.Corners[1].X);
+        Assert.Equal(float.MinValue / 2f, deserialized.Corners[1].Y);
+        Assert.Equal(float.Epsilon, deserialized.Corners[1].Z);
     }
 }

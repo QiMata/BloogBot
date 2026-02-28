@@ -30,7 +30,7 @@ public static class WoWProcessDetector
         if (process == null)
             throw new ArgumentNullException(nameof(process));
 
-        logger?.Invoke($"Starting process readiness detection for PID {process.Id}");
+        logger?.Invoke($"Starting process readiness detection for PID {process.Id} ({process.ProcessName})");
 
         // First, wait a moment for the process to start up
         // This gives the EXE time to load its modules and begin initialization
@@ -71,7 +71,7 @@ public static class WoWProcessDetector
                 progress: p => logger?.Invoke($"[{p.Elapsed.TotalSeconds:F1}s] {p.Message}"),
                 cancellationToken: cancellationToken);
 
-        logger?.Invoke($"Detection result: {result.Message} (Success: {result.Success})");
+        logger?.Invoke($"Detection result: PID={process.Id} name={process.ProcessName} success={result.Success} message={result.Message}");
 
         return result.Success;
     }

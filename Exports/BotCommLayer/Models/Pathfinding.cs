@@ -44,54 +44,55 @@ namespace Pathfinding {
             "cnJvchIPCgdtZXNzYWdlGAEgASgJInQKFENhbGN1bGF0ZVBhdGhSZXF1ZXN0",
             "Eg4KBm1hcF9pZBgBIAEoDRIdCgVzdGFydBgCIAEoCzIOLmdhbWUuUG9zaXRp",
             "b24SGwoDZW5kGAMgASgLMg4uZ2FtZS5Qb3NpdGlvbhIQCghzdHJhaWdodBgE",
-            "IAEoCCI4ChVDYWxjdWxhdGVQYXRoUmVzcG9uc2USHwoHY29ybmVycxgBIAMo",
-            "CzIOLmdhbWUuUG9zaXRpb24iXgoSTGluZU9mU2lnaHRSZXF1ZXN0Eg4KBm1h",
-            "cF9pZBgBIAEoDRIcCgRmcm9tGAIgASgLMg4uZ2FtZS5Qb3NpdGlvbhIaCgJ0",
-            "bxgDIAEoCzIOLmdhbWUuUG9zaXRpb24iJQoTTGluZU9mU2lnaHRSZXNwb25z",
-            "ZRIOCgZpbl9sb3MYASABKAgiXgoRR2V0R3JvdW5kWlJlcXVlc3QSDgoGbWFw",
-            "X2lkGAEgASgNEiAKCHBvc2l0aW9uGAIgASgLMg4uZ2FtZS5Qb3NpdGlvbhIX",
-            "Cg9tYXhfc2VhcmNoX2Rpc3QYAyABKAIiNQoSR2V0R3JvdW5kWlJlc3BvbnNl",
-            "EhAKCGdyb3VuZF96GAEgASgCEg0KBWZvdW5kGAIgASgIIo0BChJEeW5hbWlj",
-            "T2JqZWN0UHJvdG8SDAoEZ3VpZBgBIAEoBBISCgpkaXNwbGF5X2lkGAIgASgN",
-            "EgkKAXgYAyABKAISCQoBeRgEIAEoAhIJCgF6GAUgASgCEhMKC29yaWVudGF0",
-            "aW9uGAYgASgCEg0KBXNjYWxlGAcgASgCEhAKCGdvX3N0YXRlGAggASgNIqkH",
-            "CgxQaHlzaWNzSW5wdXQSFgoObW92ZW1lbnRfZmxhZ3MYASABKA0SDQoFcG9z",
-            "X3gYAiABKAISDQoFcG9zX3kYAyABKAISDQoFcG9zX3oYBCABKAISDgoGZmFj",
-            "aW5nGAUgASgCEhYKDnRyYW5zcG9ydF9ndWlkGAYgASgEEhoKEnRyYW5zcG9y",
-            "dF9vZmZzZXRfeBgHIAEoAhIaChJ0cmFuc3BvcnRfb2Zmc2V0X3kYCCABKAIS",
-            "GgoSdHJhbnNwb3J0X29mZnNldF96GAkgASgCEh0KFXRyYW5zcG9ydF9vcmll",
-            "bnRhdGlvbhgKIAEoAhISCgpzd2ltX3BpdGNoGAsgASgCEhEKCWZhbGxfdGlt",
-            "ZRgMIAEoAhIUCgxmYWxsX3N0YXJ0X3oYJyABKAISGAoQc3BsaW5lX2VsZXZh",
-            "dGlvbhgNIAEoAhINCgV2ZWxfeBgOIAEoAhINCgV2ZWxfeRgPIAEoAhINCgV2",
-            "ZWxfehgQIAEoAhISCgp3YWxrX3NwZWVkGBEgASgCEhEKCXJ1bl9zcGVlZBgS",
-            "IAEoAhIWCg5ydW5fYmFja19zcGVlZBgTIAEoAhISCgpzd2ltX3NwZWVkGBQg",
-            "ASgCEhcKD3N3aW1fYmFja19zcGVlZBgVIAEoAhIMCgRyYWNlGBYgASgNEg4K",
-            "BmdlbmRlchgXIAEoDRIOCgZtYXBfaWQYGCABKA0SEgoKZGVsdGFfdGltZRgZ",
-            "IAEoAhIVCg1mcmFtZV9jb3VudGVyGBogASgNEhUKDXByZXZfZ3JvdW5kX3oY",
-            "GyABKAISFgoOcHJldl9ncm91bmRfbngYHCABKAISFgoOcHJldl9ncm91bmRf",
-            "bnkYHSABKAISFgoOcHJldl9ncm91bmRfbnoYHiABKAISFwoPcGVuZGluZ19k",
-            "ZXBlbl94GB8gASgCEhcKD3BlbmRpbmdfZGVwZW5feRggIAEoAhIXCg9wZW5k",
-            "aW5nX2RlcGVuX3oYISABKAISHwoXc3RhbmRpbmdfb25faW5zdGFuY2VfaWQY",
-            "IiABKA0SGwoTc3RhbmRpbmdfb25fbG9jYWxfeBgjIAEoAhIbChNzdGFuZGlu",
-            "Z19vbl9sb2NhbF95GCQgASgCEhsKE3N0YW5kaW5nX29uX2xvY2FsX3oYJSAB",
-            "KAISFQoNcGh5c2ljc19mbGFncxgmIAEoDRI3Cg5uZWFyYnlfb2JqZWN0cxgo",
-            "IAMoCzIfLnBhdGhmaW5kaW5nLkR5bmFtaWNPYmplY3RQcm90byKmBQoNUGh5",
-            "c2ljc091dHB1dBIRCgluZXdfcG9zX3gYASABKAISEQoJbmV3X3Bvc195GAIg",
-            "ASgCEhEKCW5ld19wb3NfehgDIAEoAhIRCgluZXdfdmVsX3gYBCABKAISEQoJ",
-            "bmV3X3ZlbF95GAUgASgCEhEKCW5ld192ZWxfehgGIAEoAhIWCg5tb3ZlbWVu",
-            "dF9mbGFncxgHIAEoDRITCgtvcmllbnRhdGlvbhgIIAEoAhINCgVwaXRjaBgJ",
-            "IAEoAhITCgtpc19ncm91bmRlZBgKIAEoCBITCgtpc19zd2ltbWluZxgLIAEo",
-            "CBIRCglpc19mbHlpbmcYDCABKAgSEQoJZmFsbF90aW1lGA0gASgCEhwKFGN1",
-            "cnJlbnRfc3BsaW5lX2luZGV4GA4gASgFEhcKD3NwbGluZV9wcm9ncmVzcxgP",
-            "IAEoAhIQCghncm91bmRfehgQIAEoAhIRCglncm91bmRfbngYESABKAISEQoJ",
-            "Z3JvdW5kX255GBIgASgCEhEKCWdyb3VuZF9uehgTIAEoAhIQCghsaXF1aWRf",
-            "ehgUIAEoAhITCgtsaXF1aWRfdHlwZRgVIAEoDRIXCg9wZW5kaW5nX2RlcGVu",
-            "X3gYFiABKAISFwoPcGVuZGluZ19kZXBlbl95GBcgASgCEhcKD3BlbmRpbmdf",
-            "ZGVwZW5fehgYIAEoAhIfChdzdGFuZGluZ19vbl9pbnN0YW5jZV9pZBgZIAEo",
-            "DRIbChNzdGFuZGluZ19vbl9sb2NhbF94GBogASgCEhsKE3N0YW5kaW5nX29u",
-            "X2xvY2FsX3kYGyABKAISGwoTc3RhbmRpbmdfb25fbG9jYWxfehgcIAEoAhIV",
-            "Cg1mYWxsX2Rpc3RhbmNlGB0gASgCEhQKDGZhbGxfc3RhcnRfehgeIAEoAkIO",
-            "qgILUGF0aGZpbmRpbmdiBnByb3RvMw=="));
+            "IAEoCCJiChVDYWxjdWxhdGVQYXRoUmVzcG9uc2USHwoHY29ybmVycxgBIAMo",
+            "CzIOLmdhbWUuUG9zaXRpb24SDgoGcmVzdWx0GAIgASgJEhgKEHJhd19jb3Ju",
+            "ZXJfY291bnQYAyABKA0iXgoSTGluZU9mU2lnaHRSZXF1ZXN0Eg4KBm1hcF9p",
+            "ZBgBIAEoDRIcCgRmcm9tGAIgASgLMg4uZ2FtZS5Qb3NpdGlvbhIaCgJ0bxgD",
+            "IAEoCzIOLmdhbWUuUG9zaXRpb24iJQoTTGluZU9mU2lnaHRSZXNwb25zZRIO",
+            "CgZpbl9sb3MYASABKAgiXgoRR2V0R3JvdW5kWlJlcXVlc3QSDgoGbWFwX2lk",
+            "GAEgASgNEiAKCHBvc2l0aW9uGAIgASgLMg4uZ2FtZS5Qb3NpdGlvbhIXCg9t",
+            "YXhfc2VhcmNoX2Rpc3QYAyABKAIiNQoSR2V0R3JvdW5kWlJlc3BvbnNlEhAK",
+            "CGdyb3VuZF96GAEgASgCEg0KBWZvdW5kGAIgASgIIo0BChJEeW5hbWljT2Jq",
+            "ZWN0UHJvdG8SDAoEZ3VpZBgBIAEoBBISCgpkaXNwbGF5X2lkGAIgASgNEgkK",
+            "AXgYAyABKAISCQoBeRgEIAEoAhIJCgF6GAUgASgCEhMKC29yaWVudGF0aW9u",
+            "GAYgASgCEg0KBXNjYWxlGAcgASgCEhAKCGdvX3N0YXRlGAggASgNIqkHCgxQ",
+            "aHlzaWNzSW5wdXQSFgoObW92ZW1lbnRfZmxhZ3MYASABKA0SDQoFcG9zX3gY",
+            "AiABKAISDQoFcG9zX3kYAyABKAISDQoFcG9zX3oYBCABKAISDgoGZmFjaW5n",
+            "GAUgASgCEhYKDnRyYW5zcG9ydF9ndWlkGAYgASgEEhoKEnRyYW5zcG9ydF9v",
+            "ZmZzZXRfeBgHIAEoAhIaChJ0cmFuc3BvcnRfb2Zmc2V0X3kYCCABKAISGgoS",
+            "dHJhbnNwb3J0X29mZnNldF96GAkgASgCEh0KFXRyYW5zcG9ydF9vcmllbnRh",
+            "dGlvbhgKIAEoAhISCgpzd2ltX3BpdGNoGAsgASgCEhEKCWZhbGxfdGltZRgM",
+            "IAEoAhIUCgxmYWxsX3N0YXJ0X3oYJyABKAISGAoQc3BsaW5lX2VsZXZhdGlv",
+            "bhgNIAEoAhINCgV2ZWxfeBgOIAEoAhINCgV2ZWxfeRgPIAEoAhINCgV2ZWxf",
+            "ehgQIAEoAhISCgp3YWxrX3NwZWVkGBEgASgCEhEKCXJ1bl9zcGVlZBgSIAEo",
+            "AhIWCg5ydW5fYmFja19zcGVlZBgTIAEoAhISCgpzd2ltX3NwZWVkGBQgASgC",
+            "EhcKD3N3aW1fYmFja19zcGVlZBgVIAEoAhIMCgRyYWNlGBYgASgNEg4KBmdl",
+            "bmRlchgXIAEoDRIOCgZtYXBfaWQYGCABKA0SEgoKZGVsdGFfdGltZRgZIAEo",
+            "AhIVCg1mcmFtZV9jb3VudGVyGBogASgNEhUKDXByZXZfZ3JvdW5kX3oYGyAB",
+            "KAISFgoOcHJldl9ncm91bmRfbngYHCABKAISFgoOcHJldl9ncm91bmRfbnkY",
+            "HSABKAISFgoOcHJldl9ncm91bmRfbnoYHiABKAISFwoPcGVuZGluZ19kZXBl",
+            "bl94GB8gASgCEhcKD3BlbmRpbmdfZGVwZW5feRggIAEoAhIXCg9wZW5kaW5n",
+            "X2RlcGVuX3oYISABKAISHwoXc3RhbmRpbmdfb25faW5zdGFuY2VfaWQYIiAB",
+            "KA0SGwoTc3RhbmRpbmdfb25fbG9jYWxfeBgjIAEoAhIbChNzdGFuZGluZ19v",
+            "bl9sb2NhbF95GCQgASgCEhsKE3N0YW5kaW5nX29uX2xvY2FsX3oYJSABKAIS",
+            "FQoNcGh5c2ljc19mbGFncxgmIAEoDRI3Cg5uZWFyYnlfb2JqZWN0cxgoIAMo",
+            "CzIfLnBhdGhmaW5kaW5nLkR5bmFtaWNPYmplY3RQcm90byKmBQoNUGh5c2lj",
+            "c091dHB1dBIRCgluZXdfcG9zX3gYASABKAISEQoJbmV3X3Bvc195GAIgASgC",
+            "EhEKCW5ld19wb3NfehgDIAEoAhIRCgluZXdfdmVsX3gYBCABKAISEQoJbmV3",
+            "X3ZlbF95GAUgASgCEhEKCW5ld192ZWxfehgGIAEoAhIWCg5tb3ZlbWVudF9m",
+            "bGFncxgHIAEoDRITCgtvcmllbnRhdGlvbhgIIAEoAhINCgVwaXRjaBgJIAEo",
+            "AhITCgtpc19ncm91bmRlZBgKIAEoCBITCgtpc19zd2ltbWluZxgLIAEoCBIR",
+            "Cglpc19mbHlpbmcYDCABKAgSEQoJZmFsbF90aW1lGA0gASgCEhwKFGN1cnJl",
+            "bnRfc3BsaW5lX2luZGV4GA4gASgFEhcKD3NwbGluZV9wcm9ncmVzcxgPIAEo",
+            "AhIQCghncm91bmRfehgQIAEoAhIRCglncm91bmRfbngYESABKAISEQoJZ3Jv",
+            "dW5kX255GBIgASgCEhEKCWdyb3VuZF9uehgTIAEoAhIQCghsaXF1aWRfehgU",
+            "IAEoAhITCgtsaXF1aWRfdHlwZRgVIAEoDRIXCg9wZW5kaW5nX2RlcGVuX3gY",
+            "FiABKAISFwoPcGVuZGluZ19kZXBlbl95GBcgASgCEhcKD3BlbmRpbmdfZGVw",
+            "ZW5fehgYIAEoAhIfChdzdGFuZGluZ19vbl9pbnN0YW5jZV9pZBgZIAEoDRIb",
+            "ChNzdGFuZGluZ19vbl9sb2NhbF94GBogASgCEhsKE3N0YW5kaW5nX29uX2xv",
+            "Y2FsX3kYGyABKAISGwoTc3RhbmRpbmdfb25fbG9jYWxfehgcIAEoAhIVCg1m",
+            "YWxsX2Rpc3RhbmNlGB0gASgCEhQKDGZhbGxfc3RhcnRfehgeIAEoAkIOqgIL",
+            "UGF0aGZpbmRpbmdiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
@@ -101,7 +102,7 @@ namespace Pathfinding {
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.ReadyCheckResponse), global::Pathfinding.ReadyCheckResponse.Parser, new[]{ "IsReady", "StatusMessage", "LoadedMaps" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.Error), global::Pathfinding.Error.Parser, new[]{ "Message" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathRequest), global::Pathfinding.CalculatePathRequest.Parser, new[]{ "MapId", "Start", "End", "Straight" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathResponse), global::Pathfinding.CalculatePathResponse.Parser, new[]{ "Corners" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathResponse), global::Pathfinding.CalculatePathResponse.Parser, new[]{ "Corners", "Result", "RawCornerCount" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.LineOfSightRequest), global::Pathfinding.LineOfSightRequest.Parser, new[]{ "MapId", "From", "To" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.LineOfSightResponse), global::Pathfinding.LineOfSightResponse.Parser, new[]{ "InLos" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.GetGroundZRequest), global::Pathfinding.GetGroundZRequest.Parser, new[]{ "MapId", "Position", "MaxSearchDist" }, null, null, null, null),
@@ -1808,7 +1809,7 @@ namespace Pathfinding {
     public const int StraightFieldNumber = 4;
     private bool straight_;
     /// <summary>
-    /// smooth path
+    /// semantics: smoothPath flag (true = Detour smooth path, false = straight line)
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -2086,6 +2087,8 @@ namespace Pathfinding {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public CalculatePathResponse(CalculatePathResponse other) : this() {
       corners_ = other.corners_.Clone();
+      result_ = other.result_;
+      rawCornerCount_ = other.rawCornerCount_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -2106,6 +2109,36 @@ namespace Pathfinding {
       get { return corners_; }
     }
 
+    /// <summary>Field number for the "result" field.</summary>
+    public const int ResultFieldNumber = 2;
+    private string result_ = "";
+    /// <summary>
+    /// Path outcome: "native_path", "no_path", "validation_error", "error"
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string Result {
+      get { return result_; }
+      set {
+        result_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "raw_corner_count" field.</summary>
+    public const int RawCornerCountFieldNumber = 3;
+    private uint rawCornerCount_;
+    /// <summary>
+    /// Corner count before sanitization (non-finite filtering)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint RawCornerCount {
+      get { return rawCornerCount_; }
+      set {
+        rawCornerCount_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -2122,6 +2155,8 @@ namespace Pathfinding {
         return true;
       }
       if(!corners_.Equals(other.corners_)) return false;
+      if (Result != other.Result) return false;
+      if (RawCornerCount != other.RawCornerCount) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -2130,6 +2165,8 @@ namespace Pathfinding {
     public override int GetHashCode() {
       int hash = 1;
       hash ^= corners_.GetHashCode();
+      if (Result.Length != 0) hash ^= Result.GetHashCode();
+      if (RawCornerCount != 0) hash ^= RawCornerCount.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -2149,6 +2186,14 @@ namespace Pathfinding {
       output.WriteRawMessage(this);
     #else
       corners_.WriteTo(output, _repeated_corners_codec);
+      if (Result.Length != 0) {
+        output.WriteRawTag(18);
+        output.WriteString(Result);
+      }
+      if (RawCornerCount != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(RawCornerCount);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -2160,6 +2205,14 @@ namespace Pathfinding {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
       corners_.WriteTo(ref output, _repeated_corners_codec);
+      if (Result.Length != 0) {
+        output.WriteRawTag(18);
+        output.WriteString(Result);
+      }
+      if (RawCornerCount != 0) {
+        output.WriteRawTag(24);
+        output.WriteUInt32(RawCornerCount);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -2171,6 +2224,12 @@ namespace Pathfinding {
     public int CalculateSize() {
       int size = 0;
       size += corners_.CalculateSize(_repeated_corners_codec);
+      if (Result.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(Result);
+      }
+      if (RawCornerCount != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(RawCornerCount);
+      }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -2184,6 +2243,12 @@ namespace Pathfinding {
         return;
       }
       corners_.Add(other.corners_);
+      if (other.Result.Length != 0) {
+        Result = other.Result;
+      }
+      if (other.RawCornerCount != 0) {
+        RawCornerCount = other.RawCornerCount;
+      }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -2207,6 +2272,14 @@ namespace Pathfinding {
             corners_.AddEntriesFrom(input, _repeated_corners_codec);
             break;
           }
+          case 18: {
+            Result = input.ReadString();
+            break;
+          }
+          case 24: {
+            RawCornerCount = input.ReadUInt32();
+            break;
+          }
         }
       }
     #endif
@@ -2228,6 +2301,14 @@ namespace Pathfinding {
             break;
           case 10: {
             corners_.AddEntriesFrom(ref input, _repeated_corners_codec);
+            break;
+          }
+          case 18: {
+            Result = input.ReadString();
+            break;
+          }
+          case 24: {
+            RawCornerCount = input.ReadUInt32();
             break;
           }
         }

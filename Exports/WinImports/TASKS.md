@@ -61,14 +61,11 @@
 - [x] Acceptance: left/back input semantics are not conflated and UI automation movement commands match intended keys.
 
 ### WINIMP-MISS-005 Add repo-scoped lingering process evidence hooks for WoW/StateManager cleanup
-- [ ] Problem: teardown troubleshooting requires deterministic evidence of lingering WoW/StateManager process detection and stop results.
-- [ ] Target files:
-  - `Exports/WinImports/WoWProcessDetector.cs`
-  - `Exports/WinImports/WoWProcessMonitor.cs`
-  - `run-tests.ps1`
-- [ ] Required change: emit process name/PID/outcome evidence for repo-scoped cleanup paths and keep cleanup rules aligned with no blanket `dotnet` kill policy.
-- [ ] Validation command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`.
-- [ ] Acceptance: timeout/failure cleanup logs include deterministic process evidence and preserve unrelated machine processes.
+- [x] **Done (batch 13).** Added process evidence to cleanup and detection paths:
+  - `run-tests.ps1`: `Stop-RepoScopedTestProcesses` now emits structured evidence summary table (pass/pid/name/outcome) with color-coded output after each cleanup.
+  - `WoWProcessDetector.cs`: readiness detection start/result logs now include process name and PID for traceability.
+- [x] Validation: `dotnet build Exports/WinImports/WinProcessImports.csproj -c Release` — 0 errors.
+- [x] Acceptance: cleanup logs include per-process evidence and preserve unrelated machine processes (repo-scoped only).
 
 ## Simple Command Set
 1. `dotnet build Exports/WinImports/WinProcessImports.csproj -c Release`
@@ -78,18 +75,15 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|throw new" Exports/WinImports`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: `MASTER-SUB-008` (`Exports/WinImports/TASKS.md`)
-- Current focus: `WINIMP-MISS-001`
-- Last delta: added evidence-backed symbol inventory for injection split-brain, duplicate interop declarations, startup cancellation gap, and UI input constant drift.
+- Last updated: 2026-02-28
+- Active task: all WinImports tasks complete (WINIMP-MISS-001..005)
+- Last delta: WINIMP-MISS-005 (cleanup evidence hooks in run-tests.ps1 + detection PID logging in WoWProcessDetector.cs)
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `rg --line-number "class SafeInjection|SafeInjection|VirtualAllocEx|WriteProcessMemory|CreateRemoteThread" Exports/WinImports/SafeInjection.cs Exports/WinImports/WinProcessImports.cs`
-  - `rg --line-number "WaitForProcessReadyAsync|CancellationToken|Task.Delay|WoWProcessMonitor" Exports/WinImports/WoWProcessDetector.cs Exports/WinImports/WoWProcessMonitor.cs`
-  - `rg --line-number "VK_A|VK_S|0x53|0x41" Exports/WinImports/WoWUIAutomation.cs Services/ForegroundBotRunner/MinimalLoader.cs`
-  - `dotnet build Exports/WinImports/WinProcessImports.csproj -c Release`
-  - `rg --line-number "CleanupRepoScopedOnly|ListRepoScopedProcesses|StateManager|WoW.exe|WoW" run-tests.ps1 Exports/WinImports/WoWProcessDetector.cs Exports/WinImports/WoWProcessMonitor.cs`
+  - `dotnet build Exports/WinImports/WinProcessImports.csproj -c Release` — 0 errors
 - Files changed:
+  - `Exports/WinImports/WoWProcessDetector.cs` — process name/PID in detection logs
+  - `run-tests.ps1` — cleanup evidence summary table
   - `Exports/WinImports/TASKS.md`
-- Next command: `Get-Content -Path 'Exports/WoWSharpClient/TASKS.md' -TotalCount 360`
+- Next command: continue with next queue file
 - Loop Break: if two passes produce no delta, record blocker + exact next command and move to next queued file.

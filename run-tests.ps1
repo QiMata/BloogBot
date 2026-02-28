@@ -227,6 +227,17 @@ function Stop-RepoScopedTestProcesses {
         }
     }
 
+    # Emit structured evidence summary
+    if ($results.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Cleanup evidence ($Label):" -ForegroundColor Yellow
+        foreach ($r in $results) {
+            $color = if ($r.Outcome -eq "stopped") { "Green" } else { "Red" }
+            Write-Host "    pass=$($r.Pass) pid=$($r.Id) name=$($r.Name) outcome=$($r.Outcome)" -ForegroundColor $color
+        }
+        Write-Host "  Total: $($results.Count) process(es) targeted" -ForegroundColor Yellow
+    }
+
     return $results
 }
 

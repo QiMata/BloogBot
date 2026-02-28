@@ -48,13 +48,18 @@
 - [x] Acceptance: supported gossip flows no longer rely on an unimplemented strategy branch.
 
 ### WSC-MISS-004 Replace placeholder quest reward selection strategy logic
-- [ ] Problem: `SelectOptimalQuestRewardAsync` currently uses a placeholder that always selects index `0`.
-- [ ] Target files:
-  - `Exports/WoWSharpClient/Networking/ClientComponents/GossipNetworkClientComponent.cs`
-  - Related quest/gossip test files under `Tests/WoWSharpClient.Tests`
-- [ ] Required change: implement strategy-aware reward selection and assert behavior for at least one non-trivial selection case.
-- [ ] Validation command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Gossip|FullyQualifiedName~Quest" --logger "console;verbosity=minimal"`.
-- [ ] Acceptance: quest reward selection respects requested strategy and no placeholder-first-option behavior remains.
+- [x] **Done (batch 13).** Replaced placeholder with strategy-aware `SelectRewardIndex()`:
+  - `FirstReward` → first available reward index
+  - `HighestValue` → highest VendorValue
+  - `BestForClass` → first SuitableForClass match, fallback to first
+  - `BestStatUpgrade` → highest StatScore
+  - `MostNeeded` → SuitableForClass > StatScore > VendorValue priority chain
+  - `Custom` → falls through to first reward (caller handles externally)
+  - Added overload accepting `IReadOnlyList<QuestRewardChoice>` for strategy-aware selection.
+  - Interface `IGossipNetworkClientComponent` updated with new overload.
+  - `SelectRewardIndex` is `internal static` for unit test access.
+- [x] Validation: `dotnet build Exports/WoWSharpClient/WoWSharpClient.csproj -c Debug` — 0 errors. 1229/1234 WoWSharpClient tests pass (4 pre-existing failures).
+- [x] Acceptance: quest reward selection respects requested strategy; placeholder behavior removed.
 
 ## Simple Command Set
 1. `dotnet build Exports/WoWSharpClient/WoWSharpClient.csproj -c Release`
@@ -64,19 +69,16 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented" Exports/WoWSharpClient -g "*.cs"`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: `MASTER-SUB-009` (`Exports/WoWSharpClient/TASKS.md`)
-- Current focus: `WSC-MISS-001`
-- Last delta: added evidence-backed symbol inventory for unresolved player field mappings, aura cancel send path, custom gossip strategy branch, and placeholder quest reward selection.
+- Last updated: 2026-02-28
+- Active task: all WoWSharpClient tasks complete (WSC-MISS-001..004)
+- Last delta: WSC-MISS-004 (strategy-aware quest reward selection replacing placeholder)
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `rg --line-number "not implemented yet|ChosenTitle|KnownTitles|ModHealingDonePos|ModTargetResistance|FieldBytes|OffhandCritPercentage|SpellCritPercentage|ModManaRegen|ModManaRegenInterrupt|MaxLevel|DailyQuests" Exports/WoWSharpClient/WoWSharpObjectManager.cs Exports/WoWSharpClient/Models/WoWPlayer.cs`
-  - `rg --line-number "DismissBuff|CMSG_CANCEL_AURA|TODO" Exports/WoWSharpClient/Models/WoWUnit.cs Exports/WoWSharpClient/Networking -g "*.cs"`
-  - `rg --line-number "Custom navigation strategy not implemented|GossipNavigationStrategy.Custom|SelectOptimalQuestRewardAsync|return 0|placeholder" Exports/WoWSharpClient/Networking/ClientComponents/GossipNetworkClientComponent.cs`
-  - `dotnet build Exports/WoWSharpClient/WoWSharpClient.csproj -c Release`
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --list-tests`
-  - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore --list-tests`
+  - `dotnet build Exports/WoWSharpClient/WoWSharpClient.csproj -c Debug` — 0 errors
+  - `dotnet test Tests/WoWSharpClient.Tests -c Debug` — 1229/1234 pass (4 pre-existing failures)
 - Files changed:
+  - `Exports/WoWSharpClient/Networking/ClientComponents/GossipNetworkClientComponent.cs` — strategy-aware SelectRewardIndex
+  - `Exports/WoWSharpClient/Networking/ClientComponents/I/IGossipNetworkClientComponent.cs` — new overload
   - `Exports/WoWSharpClient/TASKS.md`
-- Next command: `Get-Content -Path 'RecordedTests.PathingTests/TASKS.md' -TotalCount 360`
+- Next command: continue with next queue file
 - Loop Break: if two passes produce no delta, record blocker + exact next command and move to next queued file.

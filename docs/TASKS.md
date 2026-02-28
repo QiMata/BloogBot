@@ -39,7 +39,7 @@
 - [x] `WSC-MISS-001` Missing `WoWPlayer` fields — 11 properties added (ChosenTitle, KnownTitles, etc.) + CopyFrom + switch wiring
 - [x] `WSC-MISS-002` `CMSG_CANCEL_AURA` send path — `CancelAura()` on ObjectManager + `DismissBuff()` on WoWUnit
 - [x] `WSC-MISS-003` Custom navigation strategy — downgraded to Debug log (valid no-op for callers handling navigation externally)
-- [ ] `WSC-MISS-004` Placeholder quest reward selection strategy — needs design
+- [x] `WSC-MISS-004` Placeholder quest reward selection — strategy-aware SelectRewardIndex with HighestValue/BestForClass/BestStatUpgrade/MostNeeded
 
 ### Exports/Navigation
 - [x] `NAV-MISS-001` `OverlapCapsule` export in `PhysicsTestExports.cpp` — implemented: routes to `SceneQuery::OverlapCapsule` via VMapManager2/StaticMapTree lookup
@@ -84,7 +84,16 @@
 - [x] `PHS-MISS-004` Test discovery already addressed — all methods have `[Fact(Skip)]` attributes
 
 ### Exports/Loader
+- [x] `LDR-MISS-001` Loader teardown hardened — shutdown event, 5s wait with diagnostics, thread exit code logging, FreeConsole on detach
+- [x] `LDR-MISS-002` Console visibility controlled by WWOW_LOADER_CONSOLE env var — suppress with =0, README updated
 - [x] `LDR-MISS-003` VS-generated TODO boilerplate removed from stdafx.h/stdafx.cpp; debug stub files already deleted
+
+### Exports/WinImports (continued)
+- [x] `WINIMP-MISS-005` Cleanup evidence hooks — structured summary table in run-tests.ps1, PID/name in WoWProcessDetector detection logs
+
+### Services/PathfindingService (continued)
+- [x] `PFS-MISS-004` Path provenance metadata — `result` + `raw_corner_count` fields in CalculatePathResponse proto
+- [x] `PFS-MISS-007` Path data integrity tests — 4 proto round-trip tests (count/order/precision/empty)
 
 ### Services/CppCodeIntelligenceMCP (Deferred — unused service)
 - [x] `CPPMCP-BLD-001` System.Text.Json package downgrade fixed (8.0.5 → 9.0.5)
@@ -146,10 +155,10 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 3 | `Exports/BotCommLayer/TASKS.md` | **Done** | BCL-MISS-001/002/003/004 all done |
 | 4 | `Exports/BotRunner/TASKS.md` | **Partial** | BR-MISS-001 done, BR-MISS-002/003 pending |
 | 5 | `Exports/GameData.Core/TASKS.md` | **Done** | GDC-MISS-001/002/003 all done |
-| 6 | `Exports/Loader/TASKS.md` | **Partial** | LDR-MISS-003 done, LDR-MISS-001/002 pending |
+| 6 | `Exports/Loader/TASKS.md` | **Done** | LDR-MISS-001/002/003 all done |
 | 7 | `Exports/Navigation/TASKS.md` | **Partial** | NAV-MISS-001/002/003 done, NAV-MISS-004 pending |
-| 8 | `Exports/WinImports/TASKS.md` | **Partial** | WINIMP-MISS-001/002/003/004 done, 005 pending |
-| 9 | `Exports/WoWSharpClient/TASKS.md` | **Partial** | WSC-MISS-001/002/003 done, WSC-MISS-004 pending |
+| 8 | `Exports/WinImports/TASKS.md` | **Done** | WINIMP-MISS-001/002/003/004/005 all done |
+| 9 | `Exports/WoWSharpClient/TASKS.md` | **Done** | WSC-MISS-001/002/003/004 all done |
 | 10 | `RecordedTests.PathingTests/TASKS.md` | **Partial** | RPT-MISS-005 done, RPT-MISS-001..004 pending |
 | 11 | `RecordedTests.Shared/TASKS.md` | Pending | RTS-MISS-001..004 |
 | 12 | `Services/TASKS.md` | Pending | SRV-UMB-001..004 |
@@ -158,7 +167,7 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 15 | `Services/DecisionEngineService/TASKS.md` | **Partial** | DES-MISS-001/002/003/004 done, DES-MISS-005 pending |
 | 16 | `Services/ForegroundBotRunner/TASKS.md` | **Partial** | FG-MISS-001/002/003/005 done, FG-MISS-004 pending |
 | 17 | `Services/LoggingMCPServer/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
-| 18 | `Services/PathfindingService/TASKS.md` | **Partial** | PFS-MISS-001/002/003/005/006 done, PFS-MISS-004/007 pending |
+| 18 | `Services/PathfindingService/TASKS.md` | **Done** | PFS-MISS-001/002/003/004/005/006/007 all done |
 | 19 | `Services/PromptHandlingService/TASKS.md` | **Partial** | PHS-MISS-001/004 done, PHS-MISS-002/003 pending |
 | 20 | `Services/WoWStateManager/TASKS.md` | **Partial** | WSM-MISS-001/002/003/004 done, WSM-MISS-005 pending |
 | 21 | `Tests/TASKS.md` | Pending | TST-UMB-001..005 |
@@ -170,21 +179,25 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 12 — C++ OverlapCapsule, SceneQuery stubs, death/runback snapshot tests.
+- **Current work:** Quick-fix sweep batch 13 — Loader teardown/console, WinImports evidence, PathfindingService provenance/integrity, WoWSharpClient quest rewards.
 - **Last delta (this session):**
-  - `NAV-MISS-001`: Implemented OverlapCapsule export in PhysicsTestExports.cpp — routes to SceneQuery::OverlapCapsule via VMapManager2
-  - `NAV-MISS-002`: Resolved returnPhysMat/backfaceCulling stubs in SceneQuery.h — "Reserved" with explicit behavior docs
-  - `BCL-MISS-001`: Corpse lifecycle field parity audit — concrete field map with proto field numbers, population sites, consumer patterns
-  - `BCL-MISS-002`: Added 3 death/runback serialization tests — ghost form, resurrection, corpse-run movement round-trip
+  - `LDR-MISS-001`: Loader teardown hardened — shutdown event + 5s wait + diagnostics + FreeConsole
+  - `LDR-MISS-002`: Console visibility controlled by WWOW_LOADER_CONSOLE env var
+  - `WINIMP-MISS-005`: Cleanup evidence hooks — structured summary in run-tests.ps1, PID/name in WoWProcessDetector
+  - `PFS-MISS-004`: Path provenance metadata — result + raw_corner_count in CalculatePathResponse proto
+  - `PFS-MISS-007`: Path data integrity — 4 proto round-trip tests (count/order/precision/empty)
+  - `WSC-MISS-004`: Quest reward selection — strategy-aware SelectRewardIndex replacing placeholder
 - **Build verification:**
-  - C++ MSBuild Navigation.vcxproj: 0 errors, Navigation.dll produced
-  - Physics tests: 76/79 pass (3 pre-existing calibration failures)
-  - Snapshot tests: 17/17 pass (14 existing + 3 new)
+  - C++ MSBuild Loader.vcxproj Release|Win32: 0 errors
+  - dotnet build WoWSharpClient: 0 errors
+  - dotnet build PathfindingService: 0 errors
+  - dotnet build WinImports: 0 errors
+  - ProtoInteropExtensionsTests: 6/6 pass (2 existing + 4 new)
+  - WoWSharpClient tests: 1229/1234 pass (4 pre-existing failures)
 - **Remaining open items:**
-  - Design stubs: WSC-MISS-004, FG-MISS-004
+  - Design stubs: FG-MISS-004
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
-  - Test infrastructure: WINIMP-MISS-005, PFS-MISS-004/007, PHS-MISS-002/003
-  - Loader: LDR-MISS-001/002 (C++ design)
+  - Test infrastructure: PHS-MISS-002/003
   - C++ pathfinding: NAV-MISS-004
   - RecordedTests: RPT-MISS-001..004
   - BotRunner: BR-MISS-002

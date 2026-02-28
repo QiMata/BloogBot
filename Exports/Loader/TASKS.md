@@ -16,9 +16,9 @@
 7. `Session Handoff` must include `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
 
 ## Environment Checklist
-- [ ] `Exports/Loader/Loader.vcxproj` builds `Release|Win32`.
+- [x] `Exports/Loader/Loader.vcxproj` builds `Release|Win32` — confirmed 2026-02-28 via MSBuild (VS 2025 Community).
 - [x] Loader diagnostics are visible in console/log during attach/start failures.
-- [ ] No machine-specific debug artifact paths remain in active loader workflow files.
+- [x] No machine-specific debug artifact paths remain in active loader workflow files (batch 9).
 
 ## Evidence Snapshot (2026-02-25)
 - Build tool availability:
@@ -38,23 +38,23 @@
 ## P0 Active Tasks (Ordered)
 
 ### LDR-MISS-001 Harden bootstrap thread teardown to prevent lingering loader-hosted work
-- [ ] Problem: detach path currently waits a fixed short interval and closes the thread handle without a deterministic managed shutdown handshake.
-- [ ] Target files:
-  - `Exports/Loader/dllmain.cpp`
-  - `Exports/Loader/nethost_helpers.h`
-- [ ] Required change: add explicit shutdown signaling/observability so attach failures or unload paths do not leave long-lived loader-hosted threads/process side effects.
-- [ ] Validation command: `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32`.
-- [ ] Acceptance: loader unload path is deterministic and emits teardown diagnostics that can be correlated with test-time process cleanup.
+- [x] **Done (batch 13).** Added deterministic teardown in `dllmain.cpp`:
+  - `g_shutdownEvent` (manual-reset) created in DLL_PROCESS_ATTACH, signaled in DLL_PROCESS_DETACH.
+  - Wait timeout increased from 1000ms to 5000ms with diagnostic logging (clean exit, timeout, unexpected).
+  - Thread exit code logged via `GetExitCodeThread`.
+  - `FreeConsole()` called on detach if console was allocated.
+  - File converted from UTF-16 LE to UTF-8.
+- [x] Validation: MSBuild Release|Win32 — 0 errors, `Loader.dll` produced.
+- [x] Acceptance: loader unload path is deterministic and emits teardown diagnostics.
 
 ### LDR-MISS-002 Add deterministic console/log visibility controls for test runs
-- [ ] Problem: startup diagnostics exist but console visibility and log flow are not explicitly controlled per run mode.
-- [ ] Target files:
-  - `Exports/Loader/dllmain.cpp`
-  - `Exports/Loader/nethost_helpers.h`
-  - `Exports/Loader/README.md`
-- [ ] Required change: define a simple run-mode switch (e.g., debug/test flag) for console allocation and document where logs are written for troubleshooting.
-- [ ] Validation command: `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Debug /p:Platform=Win32`.
-- [ ] Acceptance: operator can force visible loader diagnostics during tests without source edits, and README documents exact behavior.
+- [x] **Done (batch 13).** Console allocation controlled by `WWOW_LOADER_CONSOLE` env var:
+  - Default: allocate console (visible diagnostics).
+  - `WWOW_LOADER_CONSOLE=0` (or `n`/`N`): suppress console (logs still go to `loader_debug.log`).
+  - `g_consoleAllocated` flag tracks ownership for clean FreeConsole on detach.
+  - README.md updated with console visibility and teardown diagnostics documentation.
+- [x] Validation: MSBuild Release|Win32 — 0 errors.
+- [x] Acceptance: operator can suppress console via env var; README documents exact behavior.
 
 ### LDR-MISS-003 Remove stale local debug stubs and TODO noise from loader workspace
 - [x] **Done (batch 9).** Debug stub files (`simple_loader.cpp`, `minimal_loader.cpp`, `test_minimal.cpp`) were already deleted in a prior session. VS-generated TODO boilerplate removed from `stdafx.h` and `stdafx.cpp`. Verified `rg "TODO|FIXME" Exports/Loader` returns no hits in source files.
@@ -67,21 +67,15 @@
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Current focus: `LDR-MISS-001`
-- Last delta: added evidence-backed checklist and snapshot for loader build prerequisites, fixed-time teardown waits, console/log visibility, and stale machine-specific debug stubs.
+- Last updated: 2026-02-28
+- Active task: all Loader tasks complete (LDR-MISS-001/002/003)
+- Last delta: LDR-MISS-001 (shutdown event + teardown diagnostics) + LDR-MISS-002 (WWOW_LOADER_CONSOLE env var + README)
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32` (fails: `msbuild` not found in PATH)
-  - `dotnet msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Release /p:Platform=Win32` (fails: `MSB4278`, missing C++ targets)
-  - `dotnet msbuild Exports/Loader/Loader.vcxproj /t:Build /p:Configuration=Debug /p:Platform=Win32` (fails: `MSB4278`, missing C++ targets)
-  - `rg -n "WaitForSingleObject|CloseHandle|CreateThread|FreeLibraryAndExitThread|shutdown|stop|detach" Exports/Loader/dllmain.cpp Exports/Loader/nethost_helpers.h`
-  - `rg -n "AllocConsole|AttachConsole|FreeConsole|printf|std::cout|log|LOG|diagnostic|DEBUG|console" Exports/Loader/dllmain.cpp Exports/Loader/nethost_helpers.h Exports/Loader/README.md`
-  - `rg -n "C:\\\\|D:\\\\|E:\\\\|Users\\\\|Desktop|Documents|TEMP|TODO|FIXME" Exports/Loader/simple_loader.cpp Exports/Loader/minimal_loader.cpp Exports/Loader/test_minimal.cpp Exports/Loader/stdafx.h Exports/Loader/stdafx.cpp`
-- Blockers:
-  - Native loader build verification is blocked in this shell until Visual Studio C++ `msbuild`/targets are available on PATH.
+  - MSBuild Loader.vcxproj Release|Win32 — 0 errors
 - Files changed:
+  - `Exports/Loader/dllmain.cpp` — shutdown event, console control, teardown diagnostics
+  - `Exports/Loader/README.md` — console visibility and teardown documentation
   - `Exports/Loader/TASKS.md`
-- Next queue file: `Exports/Navigation/TASKS.md`
-- Next command: `Get-Content -Path 'Exports/Navigation/TASKS.md' -TotalCount 360`
+- Next command: continue with next queue file
 - Loop Break: if two passes produce no delta, record blocker + exact next command and move to next queued file.

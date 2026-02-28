@@ -263,8 +263,42 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public async Task SelectOptimalQuestRewardAsync(QuestRewardSelectionStrategy strategy, CancellationToken cancellationToken = default)
         {
-            // Placeholder � select first reward (index 0)
-            await SelectGossipOptionAsync(0, cancellationToken);
+            await SelectOptimalQuestRewardAsync(strategy, Array.Empty<QuestRewardChoice>(), cancellationToken);
+        }
+
+        public async Task SelectOptimalQuestRewardAsync(QuestRewardSelectionStrategy strategy, IReadOnlyList<QuestRewardChoice> availableRewards, CancellationToken cancellationToken = default)
+        {
+            uint selectedIndex = SelectRewardIndex(strategy, availableRewards);
+            _logger.LogInformation("Quest reward selection: strategy={Strategy}, available={Count}, selectedIndex={Index}",
+                strategy, availableRewards.Count, selectedIndex);
+            await SelectGossipOptionAsync(selectedIndex, cancellationToken);
+        }
+
+        internal static uint SelectRewardIndex(QuestRewardSelectionStrategy strategy, IReadOnlyList<QuestRewardChoice> rewards)
+        {
+            if (rewards.Count == 0)
+                return 0;
+
+            return strategy switch
+            {
+                QuestRewardSelectionStrategy.HighestValue =>
+                    rewards.OrderByDescending(r => r.VendorValue).First().Index,
+
+                QuestRewardSelectionStrategy.BestForClass =>
+                    (rewards.FirstOrDefault(r => r.SuitableForClass) ?? rewards[0]).Index,
+
+                QuestRewardSelectionStrategy.BestStatUpgrade =>
+                    rewards.OrderByDescending(r => r.StatScore).First().Index,
+
+                QuestRewardSelectionStrategy.MostNeeded =>
+                    rewards.OrderByDescending(r => r.SuitableForClass)
+                           .ThenByDescending(r => r.StatScore)
+                           .ThenByDescending(r => r.VendorValue)
+                           .First().Index,
+
+                // FirstReward and Custom both fall through to index 0
+                _ => rewards[0].Index,
+            };
         }
 
         public async Task AcceptAllAvailableQuestsAsync(QuestAcceptanceFilter? filter = null, CancellationToken cancellationToken = default)
