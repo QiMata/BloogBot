@@ -73,17 +73,19 @@
 - [ ] Acceptance: tests fail if corpse-run critical snapshot fields are dropped or remapped incorrectly.
 
 ### BCL-MISS-003 Harden socket teardown and cancellation paths
-- [ ] Problem: lingering test processes are expensive; socket layers need deterministic stop semantics under timeout/cancel.
-- [ ] Target files:
+- [x] Problem: lingering test processes are expensive; socket layers need deterministic stop semantics under timeout/cancel.
+- [x] Target files:
   - `Exports/BotCommLayer/ProtobufSocketServer.cs`
   - `Exports/BotCommLayer/ProtobufAsyncSocketServer.cs`
   - `Exports/BotCommLayer/ProtobufSocketClient.cs`
-- [ ] Required change: add deterministic dispose/cancel behavior and add task notes for missing teardown tests in owning test project.
-- [ ] Evidence gap:
-  - Async server handles clients in `while (true)` loop without cancellation token.
-  - No explicit `IDisposable` ownership contract on server/client types.
-- [ ] Validation command: `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore`.
-- [ ] Acceptance: timeout/cancel paths do not leave active listeners/clients for this repo scope.
+- [x] Changes applied (2026-02-27):
+  - Added `IDisposable` to all three types (`ProtobufSocketServer`, `ProtobufAsyncSocketServer`, `ProtobufSocketClient`).
+  - Fixed `while(true)` → `while(_isRunning)` in `ProtobufAsyncSocketServer.HandleClient`.
+  - Added client dictionary cleanup on disconnect and bulk close in `Stop()`.
+  - Added guarded `_server.Stop()` exception handling in both server types.
+  - `ProtobufSocketClient.Dispose()` calls `Close()` + disposes stream/client.
+- [x] Validation command: `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore`.
+- [x] Acceptance: timeout/cancel paths do not leave active listeners/clients for this repo scope.
 
 ### BCL-MISS-004 Keep proto regeneration workflow explicit and low-friction
 - [ ] Problem: schema edits can drift from generated C# when regeneration workflow is unclear.

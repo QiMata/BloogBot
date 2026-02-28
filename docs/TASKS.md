@@ -68,6 +68,11 @@
 - [x] `BBR-MISS-003` BackgroundBotWorker StopAsync override added — deterministic teardown of bot runner + agent factory on shutdown
 - [x] `PFS-MISS-003` Protobuf→native path mode mapping clarified — `req.Straight` → local `smoothPath` variable + log labels fixed
 - [x] `PFS-MISS-005` Fail-fast on missing nav data — `Environment.Exit(1)` instead of warning-and-continue
+- [x] `PFS-MISS-001` LOS fallback already gated — `WWOW_ENABLE_LOS_FALLBACK` env var disabled by default, no change needed
+- [x] `PFS-MISS-002` Elevated LOS probes already diagnostics-only — `TryHasLosForFallback` only called within opt-in fallback path
+
+### Exports/BotCommLayer
+- [x] `BCL-MISS-003` Socket teardown hardened — `IDisposable` on server/client types, `while(true)` → `while(_isRunning)`, client cleanup on disconnect
 
 ### Services/CppCodeIntelligenceMCP (Deferred — unused service)
 - [x] `CPPMCP-BLD-001` System.Text.Json package downgrade fixed (8.0.5 → 9.0.5)
@@ -122,7 +127,7 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 |---|-----------|--------|----------|
 | 1 | `BotProfiles/TASKS.md` | **Partial** | BP-MISS-001/002 done, BP-MISS-003/004 pending |
 | 2 | `Exports/TASKS.md` | Pending | EXP-UMB-001..004 (documentation) |
-| 3 | `Exports/BotCommLayer/TASKS.md` | Pending | BCL-MISS-001..004 |
+| 3 | `Exports/BotCommLayer/TASKS.md` | **Partial** | BCL-MISS-003 done, BCL-MISS-001/002/004 pending |
 | 4 | `Exports/BotRunner/TASKS.md` | Pending | BR-MISS-001..003 |
 | 5 | `Exports/GameData.Core/TASKS.md` | **Partial** | GDC-MISS-001 done, GDC-MISS-002..003 pending |
 | 6 | `Exports/Loader/TASKS.md` | Pending | LDR-MISS-001..003 |
@@ -137,7 +142,7 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 15 | `Services/DecisionEngineService/TASKS.md` | **Partial** | DES-MISS-001/002/003/004 done, DES-MISS-005 pending |
 | 16 | `Services/ForegroundBotRunner/TASKS.md` | **Partial** | FG-MISS-001/002/003 done, FG-MISS-004/005 pending |
 | 17 | `Services/LoggingMCPServer/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
-| 18 | `Services/PathfindingService/TASKS.md` | **Partial** | PFS-MISS-003/005 done, PFS-MISS-001/002/004/006/007 pending |
+| 18 | `Services/PathfindingService/TASKS.md` | **Partial** | PFS-MISS-001/002/003/005 done, PFS-MISS-004/006/007 pending |
 | 19 | `Services/PromptHandlingService/TASKS.md` | **Partial** | PHS-MISS-001 done, PHS-MISS-002..003 pending |
 | 20 | `Services/WoWStateManager/TASKS.md` | **Partial** | WSM-MISS-001/002/003 done, WSM-MISS-004/005 pending |
 | 21 | `Tests/TASKS.md` | Pending | TST-UMB-001..005 |
@@ -149,18 +154,16 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-02-27
-- **Current work:** Quick-fix sweep batch 2 — 5 additional items completed. LoggingMCPServer + CppCodeIntelligenceMCP deprioritized per user.
+- **Current work:** Quick-fix sweep batch 3.
 - **Last delta (this session):**
-  - `BP-MISS-002`: Reflection-based regression test for profile factory wiring (4 tests, all pass)
-  - `BBR-MISS-003`: BackgroundBotWorker StopAsync override — deterministic teardown of bot runner + agent factory
-  - `DES-MISS-001`: CombatModelServiceListener now calls DecisionEngine.GetNextActions instead of base pass-through
-  - `DES-MISS-002`: DecisionEngineWorker heartbeat spam removed, replaced with idle-wait + lifecycle logging
-  - `WSM-MISS-002`: 3 dead pathfinding bootstrap helpers removed (~95 LOC: EnsurePathfindingServiceIsAvailable, LaunchPathfindingServiceExecutable, WaitForPathfindingServiceToStart)
-  - LoggingMCPServer and CppCodeIntelligenceMCP tasks marked as deferred (unused services)
+  - `BCL-MISS-003`: Socket teardown hardened — IDisposable on ProtobufSocketServer/AsyncServer/Client, while(true)→while(_isRunning), client cleanup on disconnect
+  - `PFS-MISS-001`: Verified LOS fallback already gated behind `WWOW_ENABLE_LOS_FALLBACK` env var (disabled by default) — no code change needed
+  - `PFS-MISS-002`: Verified elevated LOS probes already diagnostics-only — `TryHasLosForFallback` only called within opt-in fallback path
 - **Remaining open items:**
   - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004/005
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-004/005, DES-MISS-005
+  - BotCommLayer: BCL-MISS-001/002/004
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-  - Sub-TASKS queue: ~75 remaining items across local TASKS.md files
-- **Next task:** Continue quick-fix sweep. Next targets: PFS-MISS-001/002, BotCommLayer (BCL-MISS-002/003), Loader (LDR-MISS-002/003).
+  - Sub-TASKS queue: ~70 remaining items across local TASKS.md files
+- **Next task:** Continue quick-fix sweep through remaining local TASKS.md files.

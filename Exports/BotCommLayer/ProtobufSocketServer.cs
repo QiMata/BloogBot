@@ -8,10 +8,11 @@ using System.Threading;
 
 namespace BotCommLayer
 {
-    public class ProtobufSocketServer<TRequest, TResponse>
+    public class ProtobufSocketServer<TRequest, TResponse> : IDisposable
         where TRequest : IMessage<TRequest>, new()
         where TResponse : IMessage<TResponse>, new()
     {
+        private bool _disposed;
         private readonly TcpListener _server;
         private bool _isRunning;
         protected readonly ILogger _logger;
@@ -108,7 +109,19 @@ namespace BotCommLayer
         public void Stop()
         {
             _isRunning = false;
-            _server.Stop();
+            try { _server.Stop(); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Error stopping TCP listener: {ex.Message}");
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Stop();
+            GC.SuppressFinalize(this);
         }
     }
 }

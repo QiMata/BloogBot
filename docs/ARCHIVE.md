@@ -1692,3 +1692,14 @@ Replaced heartbeat-only worker loop (logged every 1s) with idle-wait pattern usi
 
 ### WSM-MISS-002 — Dead Pathfinding Bootstrap Helpers Removed (Done 2026-02-27)
 Removed 3 unused methods (~95 LOC) from `WoWStateManager/Program.cs`: `EnsurePathfindingServiceIsAvailable`, `LaunchPathfindingServiceExecutable`, `WaitForPathfindingServiceToStart`. These were superseded by the inline `LaunchPathfindingService` + `WaitForPathfindingService` flow used in `Main()`.
+
+## Quick-Fix Sweep Batch 3 (2026-02-27)
+
+### BCL-MISS-003 — Socket Teardown Hardened (Done 2026-02-27)
+Added `IDisposable` to all three BotCommLayer socket types: `ProtobufSocketServer<TRequest,TResponse>`, `ProtobufAsyncSocketServer<T>`, and `ProtobufSocketClient<TRequest,TResponse>`. Fixed `while(true)` → `while(_isRunning)` in async server's `HandleClient` loop. Added client dictionary cleanup on disconnect and bulk close in `Stop()`. Added guarded exception handling for `_server.Stop()` calls.
+
+### PFS-MISS-001 — LOS Fallback Already Gated (Verified 2026-02-27)
+Verified that `BuildLosFallbackPath` is already gated behind `WWOW_ENABLE_LOS_FALLBACK` env var (disabled by default, line 84 of `Navigation.cs`). Default production routing returns native navmesh output or empty array. No code change needed.
+
+### PFS-MISS-002 — Elevated LOS Probes Already Diagnostics-Only (Verified 2026-02-27)
+Verified that `TryHasLosForFallback` is only invoked within the opt-in `BuildLosFallbackPath` path (lines 139, 235, 248, 325). Default production routing never uses elevated LOS probes. No code change needed.

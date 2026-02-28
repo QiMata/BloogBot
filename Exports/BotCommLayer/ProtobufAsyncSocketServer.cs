@@ -10,8 +10,9 @@ using System.Threading;
 
 namespace BotCommLayer
 {
-    public class ProtobufAsyncSocketServer<T> where T : IMessage<T>
+    public class ProtobufAsyncSocketServer<T> : IDisposable where T : IMessage<T>
     {
+        private bool _disposed;
         private readonly TcpListener _server;
         private bool _isRunning;
         private readonly ILogger _logger;
@@ -69,8 +70,9 @@ namespace BotCommLayer
 
         private void HandleClient(TcpClient client)
         {
+            ulong clientId = 0;
             NetworkStream stream = client.GetStream();
-            while (true)
+            while (_isRunning)
             {
                 try
                 {
@@ -90,6 +92,7 @@ namespace BotCommLayer
                     AsyncRequest request = new();
                     request.MergeFrom(buffer);
 
+                    clientId = request.Id;
                     _clients.TryAdd(request.Id, client);
 
                     // Process
@@ -97,17 +100,45 @@ namespace BotCommLayer
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError($"Client Error: {ex}");
+                    if (_isRunning)
+                        _logger.LogError($"Client Error: {ex}");
                     break;
                 }
             }
-            client.Close();
+
+            // Clean up client entry
+            if (clientId != 0)
+                _clients.Remove(clientId);
+
+            try { client.Close(); }
+            catch { /* already closed */ }
         }
 
         public void Stop()
         {
             _isRunning = false;
-            _server.Stop();
+            try { _server.Stop(); }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error stopping TCP listener: {ex.Message}");
+            }
+
+            // Close all tracked client connections
+            foreach (var kvp in _clients)
+            {
+                try { kvp.Value.Close(); }
+                catch { /* already closed */ }
+            }
+            _clients.Clear();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Stop();
+            _instanceObservable?.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

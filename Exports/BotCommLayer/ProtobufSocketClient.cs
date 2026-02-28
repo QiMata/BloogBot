@@ -8,10 +8,11 @@ using System.Threading;
 
 namespace BotCommLayer
 {
-    public class ProtobufSocketClient<TRequest, TResponse>
+    public class ProtobufSocketClient<TRequest, TResponse> : IDisposable
         where TRequest : IMessage<TRequest>, new()
         where TResponse : IMessage<TResponse>, new()
     {
+        private bool _disposed;
         private TcpClient? _client;
         private NetworkStream? _stream;
         private readonly ILogger? _logger;
@@ -157,6 +158,16 @@ namespace BotCommLayer
         {
             _stream?.Close();
             _client?.Close();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Close();
+            _stream?.Dispose();
+            _client?.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

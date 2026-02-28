@@ -38,19 +38,11 @@ Master tracker: `MASTER-SUB-018`
   - native call boundary: `Services/PathfindingService/Repository/Navigation.cs`.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `PFS-MISS-001` Remove LOS-grid fallback from default production runback routing.
-- Problem: runtime can return `BuildLosFallbackPath` instead of native navmesh output.
-- Target files: `Services/PathfindingService/Repository/Navigation.cs`.
-- Required change: default routing returns native `FindPath` output or explicit no-path result; fallback path generation remains diagnostics-only and opt-in.
-- Validation command: `rg -n "WWOW_ENABLE_LOS_FALLBACK|BuildLosFallbackPath" Services/PathfindingService/Repository/Navigation.cs`
-- Acceptance criteria: default execution path cannot return fallback-generated routes.
+1. [x] `PFS-MISS-001` Remove LOS-grid fallback from default production runback routing.
+- **Status: Already addressed.** Default routing returns native `FindPath` output or empty array. `BuildLosFallbackPath` is gated behind `WWOW_ENABLE_LOS_FALLBACK` env var (disabled by default, line 84). No code change needed.
 
-2. [ ] `PFS-MISS-002` Remove elevated LOS probe acceptance from runtime path validation.
-- Problem: fallback validity uses elevated LOS probes that can accept unrealistic segments.
-- Target files: `Services/PathfindingService/Repository/Navigation.cs`.
-- Required change: runtime validation/simplification uses navmesh-walkable checks only; LOS probes remain diagnostics-only.
-- Validation command: `rg -n "TryHasLosForFallback|Offset|probe|elevat" Services/PathfindingService/Repository/Navigation.cs`
-- Acceptance criteria: runtime path validation no longer depends on elevated LOS probe checks.
+2. [x] `PFS-MISS-002` Remove elevated LOS probe acceptance from runtime path validation.
+- **Status: Already addressed.** `TryHasLosForFallback` is only called within the opt-in `BuildLosFallbackPath` path (lines 139, 235, 248, 325). Default production routing never invokes elevated LOS probes.
 
 3. [ ] `PFS-MISS-003` Add explicit protobuf->native path mode mapping.
 - Problem: `req.Straight` is passed directly to `smoothPath` without a mapping contract.
