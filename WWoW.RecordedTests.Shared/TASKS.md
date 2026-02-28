@@ -39,17 +39,11 @@
 - filtered command for `S3RecordedTestStorageTests` currently fails at compile stage due broader WWoW shared test API drift (including missing storage helper symbols and unrelated constructor/signature mismatches), so storage tests are not yet isolatable with current project wiring.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `WRTS-CONTRACT-001` Align S3 helper contract between tests and implementation.
-- Evidence: tests call `S3RecordedTestStorage.ParseS3Uri`, `GenerateS3Key`, and `GenerateS3Uri`; implementation currently exposes only a private parser and no generator helpers.
-- Files: `WWoW.RecordedTests.Shared/Storage/S3RecordedTestStorage.cs`, `Tests/WWoW.RecordedTests.Shared.Tests/Storage/S3RecordedTestStorageTests.cs`.
-- Implementation: expose one explicit helper surface (public or internal static) for S3 URI/key generation and parsing, then enforce consistent validation semantics.
-- Acceptance: S3 helper tests pass with deterministic parsing of bucket/key and deterministic key/URI generation.
+1. [x] `WRTS-CONTRACT-001` Align S3 helper contract between tests and implementation.
+- **Done (2026-02-28).** Made `ParseS3Uri` public static, added `GenerateS3Key` and `GenerateS3Uri` public static helpers.
 
-2. [ ] `WRTS-CONTRACT-002` Align Azure helper contract between tests and implementation.
-- Evidence: tests call `AzureBlobRecordedTestStorage.ParseAzureBlobUri`, `GenerateBlobName`, and `GenerateAzureBlobUri`; implementation currently has only an instance-private parser.
-- Files: `WWoW.RecordedTests.Shared/Storage/AzureBlobRecordedTestStorage.cs`, `Tests/WWoW.RecordedTests.Shared.Tests/Storage/AzureBlobRecordedTestStorageTests.cs`.
-- Implementation: expose one explicit helper surface for account/container/blob parsing and URI/blob-name generation with deterministic invalid-input behavior.
-- Acceptance: Azure helper tests pass and container/account/blob extraction behavior is stable across valid and invalid URI cases.
+2. [x] `WRTS-CONTRACT-002` Align Azure helper contract between tests and implementation.
+- **Done (2026-02-28).** Extracted `ParseAzureBlobUri` to public static (returns tuple), added `GenerateBlobName` and `GenerateAzureBlobUri` public static helpers. Internal callers use `ParseAndValidateAzureBlobUri` which validates container name.
 
 3. [ ] `WRTS-MISS-001` Implement S3 provider operations (upload/download/list/delete) and remove TODO-only behavior.
 - Evidence: all S3 methods currently log success but are stubbed.

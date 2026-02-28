@@ -117,7 +117,7 @@ public class MockMangosServerTests
     }
 
     [Fact]
-    public void EventHistory_TracksAllEvents()
+    public async Task EventHistory_TracksAllEvents()
     {
         // Arrange
         var server = new MockMangosServer();
@@ -125,8 +125,8 @@ public class MockMangosServerTests
         server.AddPlayer(player);
 
         // Act
-        _ = server.SendCommand<bool>("CastSpell", "Heal").Result;
-        _ = server.SendCommand<bool>("InteractWithObject", 2).Result; // Herb Node (interactable)
+        await server.SendCommand<bool>("CastSpell", "Heal");
+        await server.SendCommand<bool>("InteractWithObject", 2); // Herb Node (interactable)
 
         var history = server.GetEventHistory();
 
@@ -137,14 +137,14 @@ public class MockMangosServerTests
     }
 
     [Fact]
-    public void ClearEventHistory_RemovesAllEvents()
+    public async Task ClearEventHistory_RemovesAllEvents()
     {
         // Arrange
         var server = new MockMangosServer();
         var player = new MockPlayer { Id = 1 };
         server.AddPlayer(player);
 
-        _ = server.SendCommand<bool>("CastSpell", "Heal").Result;
+        await server.SendCommand<bool>("CastSpell", "Heal");
 
         // Act
         server.ClearEventHistory();

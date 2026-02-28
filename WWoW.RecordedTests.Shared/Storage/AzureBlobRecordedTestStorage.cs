@@ -75,7 +75,7 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
         ArgumentException.ThrowIfNullOrWhiteSpace(storageLocation);
         ArgumentException.ThrowIfNullOrWhiteSpace(localDestinationPath);
 
-        var blobName = ParseAzureBlobUri(storageLocation);
+        var blobName = ParseAndValidateAzureBlobUri(storageLocation);
 
         _logger?.Info($"Downloading artifact from Azure Blob '{blobName}' to {localDestinationPath}");
 
@@ -130,7 +130,7 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageLocation);
 
-        var blobName = ParseAzureBlobUri(storageLocation);
+        var blobName = ParseAndValidateAzureBlobUri(storageLocation);
 
         _logger?.Info($"Deleting artifact from Azure Blob '{blobName}'");
 
@@ -148,13 +148,19 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
         // No resources to dispose for Azure Blob Storage client
     }
 
-    private static string SanitizeBlobName(string name)
+    public static string GenerateBlobName(string blobPrefix, string testName, DateTimeOffset timestamp, string artifactName)
     {
-        // Azure Blob naming restrictions: forward slashes are allowed, backslashes are not
-        return name.Replace('\\', '/');
+        var sanitizedTestName = SanitizeBlobName(testName);
+        var timestampFolder = timestamp.ToString("yyyyMMdd_HHmmss");
+        return $"{blobPrefix}{sanitizedTestName}/{timestampFolder}/{artifactName}";
     }
 
-    private string ParseAzureBlobUri(string blobUri)
+    public static string GenerateAzureBlobUri(string accountName, string containerName, string blobName)
+    {
+        return $"https://{accountName}.blob.core.windows.net/{containerName}/{blobName}";
+    }
+
+    public static (string containerName, string blobName) ParseAzureBlobUri(string blobUri)
     {
         // Expected format: https://{account}.blob.core.windows.net/{container}/{blobName}
         var uri = new Uri(blobUri);
@@ -165,8 +171,12 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
             throw new ArgumentException($"Invalid Azure Blob URI format: {blobUri}");
         }
 
-        var containerName = pathParts[0];
-        var blobName = pathParts[1];
+        return (pathParts[0], pathParts[1]);
+    }
+
+    private string ParseAndValidateAzureBlobUri(string blobUri)
+    {
+        var (containerName, blobName) = ParseAzureBlobUri(blobUri);
 
         if (containerName != _configuration.ContainerName)
         {
@@ -175,6 +185,12 @@ public sealed class AzureBlobRecordedTestStorage : IRecordedTestStorage
         }
 
         return blobName;
+    }
+
+    private static string SanitizeBlobName(string name)
+    {
+        // Azure Blob naming restrictions: forward slashes are allowed, backslashes are not
+        return name.Replace('\\', '/');
     }
 }
 

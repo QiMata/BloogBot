@@ -42,23 +42,14 @@
 - `IMPLEMENTATION_STATUS.md` still carries broad TODO/limitations and stale completion statements (`:245-263`), duplicating/contradicting live behavior expectations.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `WWRPT-RUN-001` Stop background game loop during disconnect/teardown.
-- Evidence: `BackgroundRecordedTestRunner.DisconnectAsync` states `StopGameLoop` is unavailable, but `WoWSharpObjectManager` provides `StopGameLoop`.
-- Files: `WWoW.RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.cs`.
-- Implementation: call `StopGameLoop` before orchestrator/client disposal; keep idempotent guards for null/disposed states.
-- Acceptance: cancel/timeout leaves no lingering runner-managed game loop; teardown log explicitly records stop attempt/result.
+1. [x] `WWRPT-RUN-001` Stop background game loop during disconnect/teardown.
+- **Done (2026-02-28).** Added `_objectManager?.StopGameLoop()` call before orchestrator disposal in both WWoW and non-WWoW copies.
 
-2. [ ] `WWRPT-CFG-001` Align configuration precedence with documented behavior.
-- Evidence: parser comment/docs state `CLI > env > appsettings`, but provider registration currently allows json to override env.
-- Files: `WWoW.RecordedTests.PathingTests/Configuration/ConfigurationParser.cs`, `WWoW.RecordedTests.PathingTests/README.md`.
-- Implementation: reorder providers (or docs, if intentional) so behavior and documentation are identical.
-- Acceptance: conflicting test values resolve deterministically according to one documented precedence model.
+2. [x] `WWRPT-CFG-001` Align configuration precedence with documented behavior.
+- **Done (2026-02-28).** Reordered config providers: JSON → env → CLI. Fixed in both WWoW and non-WWoW copies.
 
-3. [ ] `WWRPT-PATH-001` Add path output validity gates before movement execution.
-- Evidence: navigation currently rejects only empty paths; invalid/degenerate waypoints are not rejected with actionable diagnostics.
-- Files: `WWoW.RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs`.
-- Implementation: validate path length, finite coordinates, and waypoint progression before issuing movement.
-- Acceptance: invalid path payload fails fast with a diagnostic that includes mapId/start/end/waypoint index.
+3. [x] `WWRPT-PATH-001` Add path output validity gates before movement execution.
+- **Done (2026-02-28).** Added finite coordinate validation loop after path retrieval. Non-finite waypoints now throw with waypoint index and coordinates. Fixed in both WWoW and non-WWoW copies.
 
 4. [ ] `WWRPT-DOC-001` Reduce stale or contradictory local docs.
 - Evidence: local docs still include legacy TODO status and mismatched command/config behavior.

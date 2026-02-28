@@ -176,6 +176,15 @@ public class BackgroundRecordedTestRunner(
         if (path == null || path.Length == 0)
             throw new InvalidOperationException("Pathfinding returned empty path");
 
+        // Validate all waypoints have finite coordinates
+        for (int i = 0; i < path.Length; i++)
+        {
+            var wp = path[i];
+            if (!float.IsFinite(wp.X) || !float.IsFinite(wp.Y) || !float.IsFinite(wp.Z))
+                throw new InvalidOperationException(
+                    $"Pathfinding returned non-finite coordinates at waypoint {i}: ({wp.X}, {wp.Y}, {wp.Z})");
+        }
+
         _logger.Info($"[BG] Path calculated: {path.Length} waypoints");
 
         var currentWaypointIndex = 0;
@@ -460,8 +469,8 @@ public class BackgroundRecordedTestRunner(
     /// <inheritdoc />
     public async Task DisconnectAsync(CancellationToken cancellationToken)
     {
-        // Note: WoWSharpObjectManager doesn't have StopGameLoop - the game loop continues
-        // but we're disconnecting the underlying orchestrator
+        // Stop the game loop before disconnecting to prevent update ticks on a dead connection
+        _objectManager?.StopGameLoop();
 
         if (_orchestrator != null)
         {

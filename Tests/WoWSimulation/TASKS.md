@@ -76,11 +76,8 @@
 - Required breakdown: inject configurable latency (default preserved), set low/zero latency for unit tests, and assert behavior parity.
 - Validation: `dotnet test Tests/WoWSimulation/WoWSimulation.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
 
-7. [ ] `WSIM-TST-007` Remove blocking task operations in tests to satisfy `xUnit1031` and avoid deadlock-prone waits.
-- Evidence: test build reports `xUnit1031` warnings at `MockMangosServerTests.cs:128`, `:129`, and `:147`.
-- Files: `Tests/WoWSimulation/MockMangosServerTests.cs`.
-- Required breakdown: convert blocking `.Result`/`.Wait()` style calls to `async Task` tests with `await`, preserving assertions and test intent.
-- Validation: `dotnet test Tests/WoWSimulation/WoWSimulation.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MockMangosServerTests" --logger "console;verbosity=minimal"`.
+7. [x] `WSIM-TST-007` Remove blocking task operations in tests to satisfy `xUnit1031` and avoid deadlock-prone waits.
+- **Done (2026-02-28).** Converted `EventHistory_TracksAllEvents` and `ClearEventHistory_RemovesAllEvents` from `void` with `.Result` to `async Task` with `await`.
 
 ## Simple Command Set
 - `dotnet test Tests/WoWSimulation/WoWSimulation.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MockMangosServerTests" --logger "console;verbosity=minimal"`

@@ -22,15 +22,15 @@ public class IntegrationTestConfig
     /// WoW Auth server port.
     /// Override: WWOW_TEST_AUTH_PORT
     /// </summary>
-    public int AuthServerPort { get; init; } = 
-        int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_AUTH_PORT") ?? "3724");
+    public int AuthServerPort { get; init; } =
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_AUTH_PORT"), out var authPort) ? authPort : 3724;
 
     /// <summary>
     /// WoW World server port.
     /// Override: WWOW_TEST_WORLD_PORT
     /// </summary>
-    public int WorldServerPort { get; init; } = 
-        int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_WORLD_PORT") ?? "8085");
+    public int WorldServerPort { get; init; } =
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_WORLD_PORT"), out var worldPort) ? worldPort : 8085;
 
     #endregion
 
@@ -40,15 +40,15 @@ public class IntegrationTestConfig
     /// PathfindingService IP address.
     /// Override: WWOW_TEST_PATHFINDING_IP
     /// </summary>
-    public string PathfindingServiceIp { get; init; } = 
+    public string PathfindingServiceIp { get; init; } =
         Environment.GetEnvironmentVariable("WWOW_TEST_PATHFINDING_IP") ?? "127.0.0.1";
 
     /// <summary>
     /// PathfindingService port.
     /// Override: WWOW_TEST_PATHFINDING_PORT
     /// </summary>
-    public int PathfindingServicePort { get; init; } = 
-        int.Parse(Environment.GetEnvironmentVariable("WWOW_TEST_PATHFINDING_PORT") ?? "5001");
+    public int PathfindingServicePort { get; init; } =
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_PATHFINDING_PORT"), out var pfPort) ? pfPort : 5001;
 
     #endregion
 

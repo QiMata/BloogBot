@@ -17,12 +17,12 @@ public static class ConfigurationParser
     public static TestConfiguration Parse(string[] args)
     {
         // Build configuration from all sources
-        // Priority (later overrides earlier): env → appsettings → CLI
+        // Priority (later overrides earlier): appsettings → env → CLI
         var configBuilder = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
-            .AddEnvironmentVariables()
             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
             .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true)
+            .AddEnvironmentVariables()
             .AddCommandLine(args, GetCommandLineMappings());
 
         var config = configBuilder.Build();

@@ -52,11 +52,8 @@
 - Required breakdown: add test classes for config parsing, health checks, process lifecycle, and trait attributes.
 - Validation: `dotnet test Tests/WWoW.Tests.Infrastructure/WWoW.Tests.Infrastructure.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`.
 
-2. [ ] `WWINF-TST-002` Harden `IntegrationTestConfig` environment parsing and add deterministic tests for invalid values.
-- Evidence: `AuthServerPort`, `WorldServerPort`, and `PathfindingServicePort` use `int.Parse`, so malformed env vars currently throw during config creation.
-- Files: `Tests/WWoW.Tests.Infrastructure/IntegrationTestConfig.cs`, `Tests/WWoW.Tests.Infrastructure/IntegrationTestConfigTests.cs`.
-- Required breakdown: move to `int.TryParse` with default fallback behavior and add tests for default, valid override, malformed, and out-of-range inputs.
-- Validation: `dotnet test Tests/WWoW.Tests.Infrastructure/WWoW.Tests.Infrastructure.csproj --configuration Release --no-restore --filter "FullyQualifiedName~IntegrationTestConfig" --logger "console;verbosity=minimal"`.
+2. [x] `WWINF-TST-002` Harden `IntegrationTestConfig` environment parsing and add deterministic tests for invalid values.
+- **Done (2026-02-28).** All `int.Parse()` calls replaced with `int.TryParse()` + default fallback in both `Tests/WWoW.Tests.Infrastructure/IntegrationTestConfig.cs` and `Tests/Tests.Infrastructure/IntegrationTestConfig.cs`.
 
 3. [ ] `WWINF-TST-003` Add timeout/cancellation coverage for `ServiceHealthChecker` to prevent lingering socket work.
 - Evidence: timeout currently depends on `Task.WhenAny(...)` path but has no tests proving bounded return time across unreachable endpoints.

@@ -171,6 +171,18 @@ public sealed class S3RecordedTestStorage : IRecordedTestStorage
         // _s3Client?.Dispose();
     }
 
+    public static string GenerateS3Key(string keyPrefix, string testName, DateTimeOffset timestamp, string artifactName)
+    {
+        var sanitizedTestName = SanitizeKey(testName);
+        var timestampFolder = timestamp.ToString("yyyyMMdd_HHmmss");
+        return $"{keyPrefix}{sanitizedTestName}/{timestampFolder}/{artifactName}";
+    }
+
+    public static string GenerateS3Uri(string bucketName, string s3Key)
+    {
+        return $"s3://{bucketName}/{s3Key}";
+    }
+
     private static string SanitizeKey(string name)
     {
         // S3 key restrictions: no \ or control characters
@@ -185,7 +197,7 @@ public sealed class S3RecordedTestStorage : IRecordedTestStorage
         return name;
     }
 
-    private static (string bucket, string key) ParseS3Uri(string s3Uri)
+    public static (string bucket, string key) ParseS3Uri(string s3Uri)
     {
         if (!s3Uri.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
         {

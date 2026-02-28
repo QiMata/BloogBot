@@ -42,17 +42,11 @@
 - uses stale commands `dotnet build StateManagerUI.csproj` / `dotnet run --project StateManagerUI.csproj` (`README.md:203`, `:209`) instead of `WoWStateManagerUI.csproj`.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `UI-MISS-001` Remove `NotImplementedException` path from `ConvertBack` and make converter direction explicit.
-- Evidence: `ConvertBack` throws in `UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs`.
-- Files: `UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs`, `UI/WoWStateManagerUI/MainWindow.xaml`.
-- Required breakdown: either implement safe reverse mapping for supported scenarios or switch to explicit `NotSupportedException` and enforce one-way binding usage.
-- Validation: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
+1. [x] `UI-MISS-001` Remove `NotImplementedException` path from `ConvertBack` and make converter direction explicit.
+- **Done (prior session).** `ConvertBack` now returns `Binding.DoNothing`.
 
-2. [ ] `UI-MISS-002` Align converter naming and logic with selection semantics (`-1` invalid, `0+` valid).
-- Evidence: converter name says "greater than zero" while code currently enables at `>= 0`.
-- Files: `UI/WoWStateManagerUI/Converters/GreaterThanZeroToBooleanConverter.cs`, `UI/WoWStateManagerUI/MainWindow.xaml`, `UI/WoWStateManagerUI/README.md`.
-- Required breakdown: choose one contract (strict `> 0` vs non-negative), update converter name/usage accordingly, and document the contract.
-- Validation: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
+2. [x] `UI-MISS-002` Align converter naming and logic with selection semantics (`-1` invalid, `0+` valid).
+- **Done (2026-02-28).** Fixed converter logic from `>= 0` to `> 0` to match the class name "GreaterThanZero".
 
 3. [ ] `UI-MISS-003` Add converter-level regression coverage for selection gating.
 - Evidence: no direct test currently asserts selection-index to enabled-state conversion behavior.

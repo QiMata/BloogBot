@@ -155,19 +155,25 @@ dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release
 | 26-41 | Remaining test/UI/AI projects | Pending | See local files |
 
 ## Session Handoff
-- **Last updated:** 2026-02-27
-- **Current work:** Quick-fix sweep batch 4.
+- **Last updated:** 2026-02-28
+- **Current work:** Quick-fix sweep batch 5.
 - **Last delta (this session):**
-  - `BCL-MISS-003`: Socket teardown hardened — IDisposable on all 3 socket types, while(true)→while(_isRunning), client cleanup
-  - `PFS-MISS-001/002`: Verified already gated/diagnostics-only — no code changes needed
-  - `WSM-MISS-004`: Action queue cap/expiry — TimestampedAction wrapper, 50-item cap, 5-min TTL, explicit drop logging
-  - `PHS-MISS-004`: Verified already addressed — all test methods have [Fact(Skip)] attributes
-  - Synced 4 local TASKS.md files with master completions (DecisionEngine, WoWStateManager, BackgroundBotRunner, PromptHandling)
+  - `WSIM-TST-007`: Converted blocking `.Result`/`.Wait()` to `async Task` + `await` in MockMangosServerTests.cs
+  - `UI-MISS-002`: Fixed converter logic `>= 0` → `> 0` to match "GreaterThanZero" class name
+  - `WWINF-TST-002`: Replaced `int.Parse()` with `int.TryParse()` + defaults in both IntegrationTestConfig copies
+  - `WWRPT-RUN-001`: Added `StopGameLoop()` call in BackgroundRecordedTestRunner.DisconnectAsync (both copies)
+  - `WWRPT-CFG-001`: Fixed config provider precedence: JSON → env → CLI (both copies)
+  - `WWRPT-PATH-001`: Added finite coordinate validation on path output (both copies)
+  - `WRTS-CONTRACT-001`: Made `ParseS3Uri` public static, added `GenerateS3Key`/`GenerateS3Uri` helpers
+  - `WRTS-CONTRACT-002`: Extracted `ParseAzureBlobUri` to public static, added `GenerateBlobName`/`GenerateAzureBlobUri` helpers
+  - Synced 5 local TASKS.md files (WoWSimulation, WoWStateManagerUI, WWoW.Tests.Infrastructure, WWoW.RecordedTests.PathingTests, WWoW.RecordedTests.Shared)
 - **Remaining open items:**
   - Design stubs: BR-MISS-001, WSC-MISS-004, NAV-MISS-001/002, FG-MISS-004/005
   - Service hardening: BBR-MISS-001/002/004/005, WSM-MISS-005, DES-MISS-005
   - BotCommLayer: BCL-MISS-001/002/004
+  - Test infrastructure: TINF-MISS-001..004, WINIMP-MISS-005
   - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
   - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-  - Sub-TASKS queue: ~65 remaining items across local TASKS.md files (mostly test creation and design tasks)
-- **Next task:** Continue quick-fix sweep — remaining actionable code-fix items are shrinking. Most remaining work is test creation or design decisions.
+  - Sub-TASKS queue: ~55 remaining items across local TASKS.md files (mostly test creation and design tasks)
+  - **NEW:** Investigate "There is no such command." errors in test/server logs — may indicate GM command failures affecting test state
+- **Next task:** Investigate "There is no such command." server errors, then continue quick-fix sweep.
