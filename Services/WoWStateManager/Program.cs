@@ -200,7 +200,7 @@ namespace WoWStateManager
                     FileName = "dotnet",
                     Arguments = $"\"{dllPath}\"",
                     UseShellExecute = false,
-                    CreateNoWindow = true,
+                    CreateNoWindow = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") != "1",
                     WorkingDirectory = serviceDir
                 };
 

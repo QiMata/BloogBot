@@ -367,10 +367,34 @@ namespace WoWSharpClient
                 WoWObjectType.GameObj => new WoWGameObject(new HighGuid(guid)),
                 WoWObjectType.DynamicObj => new WoWDynamicObject(new HighGuid(guid)),
                 WoWObjectType.Corpse => new WoWCorpse(new HighGuid(guid)),
-                _ => new WoWObject(new HighGuid(guid)),
+                _ => CreateFallbackObject(objectType, guid),
             };
             ApplyFieldDiffs(obj, fields);
             return obj;
+        }
+
+        /// <summary>
+        /// Fallback object creation when ObjectType byte is None/unknown.
+        /// MaNGOS sometimes sends CREATE_OBJECT with ObjectType=0 for dynamically
+        /// spawned game objects (fishing bobbers, traps, etc.). We detect these by
+        /// checking the GUID's high type bits: 0xF110/0xF130 = game object range.
+        /// Without this, the bobber is created as a generic WoWObject, fails the
+        /// OfType&lt;IWoWGameObject&gt;() filter, and never appears in NearbyObjects
+        /// or triggers auto-catch in HandleGameObjectCustomAnim.
+        /// </summary>
+        private static WoWObject CreateFallbackObject(WoWObjectType objectType, ulong guid)
+        {
+            ushort highType = (ushort)(guid >> 48);
+            if (highType is 0xF110 or 0xF130)
+            {
+                Log.Information("[CreateFallback] Guid=0x{Guid:X} has GO GUID range (0x{High:X4}) but objectType={Type} — creating WoWGameObject",
+                    guid, highType, objectType);
+                return new WoWGameObject(new HighGuid(guid));
+            }
+
+            Log.Debug("[CreateFallback] Guid=0x{Guid:X} objectType={Type} highType=0x{High:X4} — creating generic WoWObject",
+                guid, objectType, highType);
+            return new WoWObject(new HighGuid(guid));
         }
 
         private void EventEmitter_OnForceTimeSkipped(
@@ -548,7 +572,17 @@ namespace WoWSharpClient
             {
                 Log.Information("[ACK] TELEPORT 500ms fallback: clearing _isBeingTeleported");
                 _isBeingTeleported = false;
-                _movementController?.SendStopPacket((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
+                // Force one physics frame immediately to execute pending ground snap.
+                // The game loop guard blocks Update() while _isBeingTeleported is true,
+                // so we must explicitly run it here to avoid missing the ground snap window.
+                if (_isInControl && Player != null && _movementController != null)
+                {
+                    _movementController.Update(0.016f, (uint)_worldTimeTracker.NowMS.TotalMilliseconds);
+                }
+                else
+                {
+                    _movementController?.SendStopPacket((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
+                }
             });
         }
 
@@ -758,9 +792,22 @@ namespace WoWSharpClient
                                         Log.Information("[ProcessUpdates] GAMEOBJ CREATED: Guid=0x{Guid:X} DisplayId={DisplayId} TypeId={TypeId} CreatedBy=0x{CreatedBy:X} Pos=({X:F1},{Y:F1},{Z:F1})",
                                             update.Guid, go.DisplayId, go.TypeId, go.CreatedBy.FullGuid, go.Position.X, go.Position.Y, go.Position.Z);
 
-                                    if (update.MovementData != null && newObject is WoWUnit)
+                                    if (update.MovementData != null)
                                     {
-                                        ApplyMovementData((WoWUnit)newObject, update.MovementData);
+                                        if (newObject is WoWUnit unit)
+                                        {
+                                            ApplyMovementData(unit, update.MovementData);
+                                        }
+                                        else if (newObject is WoWGameObject gameObj)
+                                        {
+                                            // Apply position from CREATE_OBJECT movement block to game objects.
+                                            // Without this, bobbers/dynamic objects stay at (0,0,0) and never
+                                            // appear in NearbyObjects or get matched by SMSG_GAMEOBJECT_CUSTOM_ANIM.
+                                            gameObj.Position = new Position(
+                                                update.MovementData.X,
+                                                update.MovementData.Y,
+                                                update.MovementData.Z);
+                                        }
 
                                         Log.Verbose("[Movement-Add] Guid={Guid:X} Pos=({X:F2},{Y:F2},{Z:F2}) Flags=0x{Flags:X8}",
                                             update.Guid, update.MovementData.X, update.MovementData.Y,

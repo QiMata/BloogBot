@@ -82,11 +82,14 @@ namespace BotRunner.Tests.Helpers
         public event Action<string>? OnErrorLine;
 
         /// <summary>
-        /// Kills any lingering WoWStateManager and WoW processes left over from previous test runs.
-        /// Should be called before launching a new StateManager to prevent conflicts.
+        /// Kills repo-scoped lingering WoWStateManager and WoW processes left over from previous test runs.
+        /// Only kills processes whose MainModule path contains the repo marker ("Westworld of Warcraft"),
+        /// preventing collateral damage to other repos or unrelated processes.
         /// </summary>
         public static void KillLingeringProcesses(Action<string>? logger = null)
         {
+            const string repoMarker = "Westworld of Warcraft";
+
             foreach (var name in new[] { "WoWStateManager", "WoW" })
             {
                 try
@@ -96,7 +99,14 @@ namespace BotRunner.Tests.Helpers
                     {
                         try
                         {
-                            logger?.Invoke($"Killing lingering {name} process (PID: {proc.Id})...");
+                            var modulePath = proc.MainModule?.FileName ?? "";
+                            if (!modulePath.Contains(repoMarker, StringComparison.OrdinalIgnoreCase))
+                            {
+                                logger?.Invoke($"Skipping {name} PID {proc.Id} (not repo-scoped: {modulePath})");
+                                continue;
+                            }
+
+                            logger?.Invoke($"Killing lingering {name} process (PID: {proc.Id}, path: {modulePath})...");
                             proc.Kill(entireProcessTree: true);
                             proc.WaitForExit(5000);
                             logger?.Invoke($"  Killed PID {proc.Id}");
@@ -252,7 +262,7 @@ namespace BotRunner.Tests.Helpers
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                CreateNoWindow = true
+                CreateNoWindow = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") != "1"
             };
 
             // Standard env vars
@@ -362,11 +372,23 @@ namespace BotRunner.Tests.Helpers
             {
                 if (_stateManagerProcess != null && !_stateManagerProcess.HasExited)
                 {
+                    var pid = _stateManagerProcess.Id;
+                    OnOutputLine?.Invoke($"[Teardown] Killing StateManager PID {pid}...");
                     _stateManagerProcess.Kill(entireProcessTree: true);
-                    _stateManagerProcess.WaitForExit(10000);
+                    bool exited = _stateManagerProcess.WaitForExit(10000);
+                    OnOutputLine?.Invoke(exited
+                        ? $"[Teardown] StateManager PID {pid} exited (code {_stateManagerProcess.ExitCode})."
+                        : $"[Teardown] StateManager PID {pid} did not exit within 10s.");
+                }
+                else if (_stateManagerProcess != null)
+                {
+                    OnOutputLine?.Invoke($"[Teardown] StateManager PID {_stateManagerProcess.Id} already exited (code {_stateManagerProcess.ExitCode}).");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                OnOutputLine?.Invoke($"[Teardown] Error stopping StateManager: {ex.Message}");
+            }
             finally
             {
                 _stateManagerProcess?.Dispose();

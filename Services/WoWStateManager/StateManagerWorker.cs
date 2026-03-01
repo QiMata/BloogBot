@@ -112,7 +112,7 @@ namespace WoWStateManager
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                CreateNoWindow = true,
+                CreateNoWindow = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") != "1",
             };
             psi.Environment["WWOW_ACCOUNT_NAME"] = accountName;
             psi.Environment["WWOW_ACCOUNT_PASSWORD"] = "PASSWORD";

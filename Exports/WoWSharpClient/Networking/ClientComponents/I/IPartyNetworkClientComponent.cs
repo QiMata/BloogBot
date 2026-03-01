@@ -18,6 +18,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         bool IsInRaid { get; }
         bool IsGroupLeader { get; }
         uint GroupSize { get; }
+        ulong LeaderGuid { get; }
         LootMethod CurrentLootMethod { get; }
         bool HasPendingInvite { get; }
 

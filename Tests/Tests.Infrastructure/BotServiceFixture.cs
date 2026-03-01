@@ -36,6 +36,7 @@ namespace Tests.Infrastructure;
 /// </summary>
 public class BotServiceFixture : IAsyncLifetime
 {
+    private const string RepoMarker = "Westworld of Warcraft";
     private readonly MangosServerFixture _mangosFixture = new();
     private ITestOutputHelper? _output;
     private Process? _stateManagerProcess;
@@ -53,6 +54,12 @@ public class BotServiceFixture : IAsyncLifetime
     /// Whether all required services (MaNGOS + StateManager) are healthy and ready.
     /// </summary>
     public bool ServicesReady { get; private set; }
+
+    /// <summary>
+    /// Whether PathfindingService is listening on its configured port (default 5001).
+    /// Tests that require pathfinding should check this in addition to <see cref="ServicesReady"/>.
+    /// </summary>
+    public bool PathfindingServiceReady { get; private set; }
 
     /// <summary>
     /// Reason for service unavailability, if any.
@@ -168,6 +175,19 @@ public class BotServiceFixture : IAsyncLifetime
         {
             ServicesReady = true;
             Log("All services are ready!");
+
+            // Check if PathfindingService is also available (StateManager launches it as a child process).
+            // PathfindingService listens on port 5001 by default. If it's not running, tests that require
+            // pathfinding (corpse run, movement, gathering) will fail.
+            PathfindingServiceReady = await WaitForPathfindingServiceAsync();
+            Log($"  PathfindingService (5001): {PathfindingServiceReady}");
+            if (!PathfindingServiceReady)
+            {
+                Log("  [PathfindingService] WARNING: PathfindingService is not available on port 5001.");
+                Log("  [PathfindingService] Likely cause: WWOW_DATA_DIR is not set or does not contain mmaps/, maps/, vmaps/ subdirectories.");
+                Log("  [PathfindingService] Set WWOW_DATA_DIR to your nav data directory (e.g., D:\\World of Warcraft) and rebuild.");
+                Log("  [PathfindingService] Tests requiring pathfinding will be skipped.");
+            }
         }
         else
         {
@@ -337,11 +357,18 @@ public class BotServiceFixture : IAsyncLifetime
     {
         int smKilled = 0, wowKilled = 0, pfKilled = 0;
 
-        // 1. Kill stale StateManagers (they manage the entire bot lifecycle)
+        // 1. Kill stale StateManagers (repo-scoped — only kills processes from this repo)
         foreach (var proc in Process.GetProcessesByName("WoWStateManager"))
         {
             try
             {
+                var modulePath = proc.MainModule?.FileName ?? "";
+                if (!modulePath.Contains(RepoMarker, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log($"  [Cleanup] Skipping WoWStateManager PID {proc.Id} (not repo-scoped: {modulePath})");
+                    continue;
+                }
+
                 Log($"  [Cleanup] Killing stale WoWStateManager.exe PID {proc.Id} (started {proc.StartTime:HH:mm:ss})");
                 proc.Kill(entireProcessTree: true);
                 proc.WaitForExit(5000);
@@ -386,6 +413,44 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// Waits for PathfindingService to become available on port 5001.
+    /// StateManager launches PathfindingService as a child process. If WWOW_DATA_DIR
+    /// is missing or invalid, PathfindingService exits immediately with code 1.
+    /// </summary>
+    private async Task<bool> WaitForPathfindingServiceAsync()
+    {
+        const int pathfindingPort = 5001;
+        const int maxWaitSeconds = 30;
+
+        // If port is already in use, it's ready
+        if (IsPortInUse(pathfindingPort))
+        {
+            Log($"  [PathfindingService] Already listening on port {pathfindingPort}.");
+            return true;
+        }
+
+        // Give StateManager time to launch PathfindingService (it does this during Main())
+        Log($"  [PathfindingService] Waiting up to {maxWaitSeconds}s for port {pathfindingPort}...");
+        for (int i = 0; i < maxWaitSeconds; i++)
+        {
+            var ready = await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", pathfindingPort, 1000);
+            if (ready)
+            {
+                Log($"  [PathfindingService] Ready on port {pathfindingPort} after {i + 1}s.");
+                return true;
+            }
+
+            if (i % 10 == 9)
+                Log($"  [PathfindingService] Still waiting... ({i + 1}s)");
+
+            await Task.Delay(1000);
+        }
+
+        Log($"  [PathfindingService] Did not become ready within {maxWaitSeconds}s.");
+        return false;
+    }
+
     private async Task<bool> TryStartStateManagerAsync()
     {
         try
@@ -408,7 +473,7 @@ public class BotServiceFixture : IAsyncLifetime
                 FileName = smExe,
                 WorkingDirectory = smDir,
                 UseShellExecute = false,
-                CreateNoWindow = true,
+                CreateNoWindow = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") != "1",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
@@ -612,6 +677,13 @@ public class BotServiceFixture : IAsyncLifetime
         {
             try
             {
+                var modulePath = proc.MainModule?.FileName ?? "";
+                if (!modulePath.Contains(RepoMarker, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log($"  [Cleanup] Skipping PathfindingService PID {proc.Id} (not repo-scoped: {modulePath})");
+                    continue;
+                }
+
                 seenPids.Add(proc.Id);
                 Log($"  [Cleanup] Killing PathfindingService PID {proc.Id}");
                 if (ForceKillProcess(proc, label))

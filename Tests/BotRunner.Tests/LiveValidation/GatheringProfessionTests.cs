@@ -331,20 +331,32 @@ public class GatheringProfessionTests
             _output.WriteLine($"[{label}] Location {loc + 1}/{maxLocations}: checking natural {nodeName} near ({spawnX:F1}, {spawnY:F1}, {spawnZ:F1})");
 
             await _bot.BotTeleportAsync(account, map, spawnX, spawnY, safeZ);
-            await _bot.WaitForZStabilizationAsync(account, waitMs: 4000);
+            await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
 
             await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: false);
-            await Task.Delay(1500);
+            await Task.Delay(2000);
 
             // --- Scan for the node in NearbyObjects ---
             ulong nodeGuid = 0;
             float nodeX = 0, nodeY = 0, nodeZ = 0;
             var sw = Stopwatch.StartNew();
-            while (sw.Elapsed < TimeSpan.FromSeconds(10))
+            bool loggedDiag = false;
+            while (sw.Elapsed < TimeSpan.FromSeconds(8))
             {
                 await _bot.RefreshSnapshotsAsync();
                 var snap = GetSnapshot(label);
                 var gameObjects = snap?.NearbyObjects?.ToList() ?? [];
+
+                // Diagnostic: log all visible game objects on first scan to help debug visibility issues
+                if (!loggedDiag)
+                {
+                    loggedDiag = true;
+                    _output.WriteLine($"  [{label}] NearbyObjects count: {gameObjects.Count}");
+                    foreach (var go in gameObjects.Take(10))
+                        _output.WriteLine($"    GO entry={go.Entry} guid=0x{go.Base?.Guid ?? 0:X} displayId={go.DisplayId} pos=({go.Base?.Position?.X:F1}, {go.Base?.Position?.Y:F1}, {go.Base?.Position?.Z:F1})");
+                    if (gameObjects.Count > 10)
+                        _output.WriteLine($"    ... and {gameObjects.Count - 10} more");
+                }
 
                 var node = gameObjects.FirstOrDefault(go => go.Entry == nodeEntry);
                 if (node != null)
@@ -357,6 +369,7 @@ public class GatheringProfessionTests
                         nodeY = nodePos.Y;
                         nodeZ = nodePos.Z;
                     }
+                    _output.WriteLine($"  [{label}] Node detected after {sw.Elapsed.TotalSeconds:F1}s");
                     break;
                 }
 
@@ -377,10 +390,16 @@ public class GatheringProfessionTests
                 startDist = Distance(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
             _output.WriteLine($"  [{label}] Found {nodeName}: 0x{nodeGuid:X} at ({nodeX:F1}, {nodeY:F1}, {nodeZ:F1}), dist={startDist:F1}y");
 
-            if (startDist > 3f)
+            if (startDist > 5f)
             {
-                await _bot.BotTeleportAsync(account, map, nodeX + 1f, nodeY, nodeZ + 3f);
-                await _bot.WaitForZStabilizationAsync(account, waitMs: 3000);
+                // Teleport ~5y away from node (not on top) so gather interaction works naturally.
+                // Offset along the spawn→node vector so we approach from a natural direction.
+                float dx = nodeX - spawnX, dy = nodeY - spawnY;
+                float len = MathF.Sqrt(dx * dx + dy * dy);
+                float offsetX = len > 0.1f ? -5f * (dx / len) : -5f;
+                float offsetY = len > 0.1f ? -5f * (dy / len) : 0f;
+                await _bot.BotTeleportAsync(account, map, nodeX + offsetX, nodeY + offsetY, nodeZ + 3f);
+                await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
             }
 
             await _bot.RefreshSnapshotsAsync();
@@ -446,7 +465,7 @@ public class GatheringProfessionTests
         {
             _output.WriteLine($"[{label}] Moving to safe setup zone (Orgrimmar)");
             await _bot.BotTeleportAsync(account, OrgrimmarMap, OrgX, OrgY, OrgZ);
-            await _bot.WaitForZStabilizationAsync(account, waitMs: 5000);
+            await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
         }
     }
 

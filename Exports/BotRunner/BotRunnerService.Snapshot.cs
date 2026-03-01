@@ -95,9 +95,19 @@ namespace BotRunner
                 var factory = _agentFactoryAccessor?.Invoke();
                 if (factory != null)
                 {
-                    var members = factory.PartyAgent.GetGroupMembers();
-                    var leader = members.FirstOrDefault(m => m.IsLeader);
-                    _activitySnapshot.PartyLeaderGuid = leader?.Guid ?? (factory.PartyAgent.IsGroupLeader && factory.PartyAgent.GroupSize > 0 ? player.Guid : 0);
+                    // Prefer the stored LeaderGuid from SMSG_GROUP_LIST (most reliable)
+                    var storedLeader = factory.PartyAgent.LeaderGuid;
+                    if (storedLeader != 0)
+                    {
+                        _activitySnapshot.PartyLeaderGuid = storedLeader;
+                    }
+                    else
+                    {
+                        // Fallback: check group member IsLeader flags or self-leader state
+                        var members = factory.PartyAgent.GetGroupMembers();
+                        var leader = members.FirstOrDefault(m => m.IsLeader);
+                        _activitySnapshot.PartyLeaderGuid = leader?.Guid ?? (factory.PartyAgent.IsGroupLeader && factory.PartyAgent.GroupSize > 0 ? player.Guid : 0);
+                    }
                 }
                 else
                 {
