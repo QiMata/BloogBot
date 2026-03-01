@@ -47,6 +47,7 @@ public class LiveBotFixture : IAsyncLifetime
     private readonly Dictionary<string, int> _lastPrintedErrorCountByAccount = new(StringComparer.OrdinalIgnoreCase);
 
     public bool IsReady { get; private set; }
+    public bool GmModeInitialized { get; private set; }
     public string? FailureReason { get; private set; }
 
     /// <summary>
@@ -217,9 +218,32 @@ public class LiveBotFixture : IAsyncLifetime
                 return;
             }
 
-            // 5. Ensure clean state: revive dead characters, disband existing groups
+            // 5. Verify SOAP can resolve character names (prevents "Player not found!" errors).
+            _logger.LogInformation("[FIXTURE] Verifying SOAP player resolution...");
+            if (BgCharacterName != null)
+                await WaitForSoapPlayerResolutionAsync(BgCharacterName);
+            if (FgCharacterName != null)
+                await WaitForSoapPlayerResolutionAsync(FgCharacterName);
+
+            // 6. Ensure clean state: revive dead characters, disband existing groups
             _logger.LogInformation("[FIXTURE] Ensuring clean character state (revive + disband)...");
             await EnsureCleanCharacterStateAsync();
+
+            // 6. Enable GM mode once for the entire test session (eliminates per-test .gm on).
+            _logger.LogInformation("[FIXTURE] Enabling GM mode for all bots...");
+            if (BgAccountName != null)
+                await SendGmChatCommandAsync(BgAccountName, ".gm on");
+            if (FgAccountName != null)
+                await SendGmChatCommandAsync(FgAccountName, ".gm on");
+            GmModeInitialized = true;
+
+            // 7. Stage both bots at a shared starting location (Orgrimmar).
+            _logger.LogInformation("[FIXTURE] Staging bots at Orgrimmar...");
+            if (BgCharacterName != null)
+                await TeleportToNamedAsync(BgCharacterName, "Orgrimmar");
+            if (FgCharacterName != null)
+                await TeleportToNamedAsync(FgCharacterName, "Orgrimmar");
+            await Task.Delay(1500);
 
             _logger.LogInformation("[FIXTURE] Ready. BG='{Bg}', FG='{Fg}'", BgCharacterName ?? "N/A", FgCharacterName ?? "N/A");
             IsReady = true;
@@ -322,6 +346,41 @@ public class LiveBotFixture : IAsyncLifetime
 
         _logger.LogWarning("[FIXTURE] {Label} '{Name}' did not reach strict-alive state after revive wait window",
             label, characterName);
+    }
+
+    /// <summary>
+    /// Wait until SOAP can resolve a character name (prevents "Player not found!" errors
+    /// when the character hasn't fully loaded on the server yet).
+    /// Uses .pinfo which returns player info if the character is online.
+    /// </summary>
+    private async Task WaitForSoapPlayerResolutionAsync(string characterName, int timeoutMs = 15000)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try
+            {
+                var result = await ExecuteGMCommandAsync($".pinfo {characterName}");
+                if (!string.IsNullOrEmpty(result)
+                    && !result.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                    && !result.StartsWith("FAULT", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogInformation("[FIXTURE] SOAP resolved '{Name}' after {Elapsed:F1}s",
+                        characterName, sw.Elapsed.TotalSeconds);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("[FIXTURE] SOAP resolution attempt for '{Name}' failed: {Error}",
+                    characterName, ex.Message);
+            }
+
+            await Task.Delay(1000);
+        }
+
+        _logger.LogWarning("[FIXTURE] SOAP player resolution timed out for '{Name}' after {Timeout}ms",
+            characterName, timeoutMs);
     }
 
     private async Task EnsureNotGroupedAsync(string accountName, string label)
@@ -766,13 +825,13 @@ public class LiveBotFixture : IAsyncLifetime
 
     /// <summary>Set a character's level.</summary>
     public Task<string> SetLevelAsync(string? characterName, int level)
-        => ExecuteGMCommandAsync($".character level {characterName ?? BgCharacterName} {level}");
+        => ExecuteGMCommandWithRetryAsync($".character level {characterName ?? BgCharacterName} {level}");
 
     public Task<string> SetLevelAsync(int level) => SetLevelAsync(BgCharacterName, level);
 
     /// <summary>Add an item to a character's bags.</summary>
     public Task<string> AddItemAsync(string? characterName, uint itemId, int count = 1)
-        => ExecuteGMCommandAsync($".send items {characterName ?? BgCharacterName} \"Test\" \"item\" {itemId}:{count}");
+        => ExecuteGMCommandWithRetryAsync($".send items {characterName ?? BgCharacterName} \"Test\" \"item\" {itemId}:{count}");
 
     public Task<string> AddItemAsync(uint itemId, int count = 1) => AddItemAsync(BgCharacterName, itemId, count);
 
@@ -783,7 +842,7 @@ public class LiveBotFixture : IAsyncLifetime
         => ExecuteGMCommandAsync($".die");
 
     public Task<string> RevivePlayerAsync(string? characterName = null)
-        => ExecuteGMCommandAsync($".revive {characterName ?? BgCharacterName}");
+        => ExecuteGMCommandWithRetryAsync($".revive {characterName ?? BgCharacterName}");
 
     public Task<string> SetFullHealthManaAsync() => ExecuteGMCommandAsync(".modify hp 9999");
 
@@ -794,7 +853,7 @@ public class LiveBotFixture : IAsyncLifetime
         => ExecuteGMCommandAsync($".learn {spellId}");
 
     public Task<string> ResetSpellsAsync(string? characterName = null)
-        => ExecuteGMCommandAsync($".reset spells {characterName ?? BgCharacterName}");
+        => ExecuteGMCommandWithRetryAsync($".reset spells {characterName ?? BgCharacterName}");
 
     public Task<string> UnlearnSpellAsync(uint spellId)
         => ExecuteGMCommandAsync($".unlearn {spellId}");
@@ -804,7 +863,7 @@ public class LiveBotFixture : IAsyncLifetime
     /// Strips ALL equipment + inventory. Character must be online.
     /// </summary>
     public Task<string> ResetItemsAsync(string characterName)
-        => ExecuteGMCommandAsync($".reset items {characterName}");
+        => ExecuteGMCommandWithRetryAsync($".reset items {characterName}");
 
     /// <summary>
     /// Clear a bot's backpack by sending DestroyItem actions for all 16 slots.
@@ -891,20 +950,20 @@ public class LiveBotFixture : IAsyncLifetime
     /// Wait for Z to stabilize (not falling through world).
     /// Polls snapshots and checks Z samples over the given window.
     /// </summary>
-    public async Task<(bool stable, float finalZ)> WaitForZStabilizationAsync(string? accountName, int waitMs = 5000)
+    public async Task<(bool stable, float finalZ)> WaitForZStabilizationAsync(string? accountName, int waitMs = 3000)
     {
         var acct = accountName ?? BgAccountName;
         if (acct == null || _stateManagerClient == null) return (false, float.MinValue);
 
-        await Task.Delay(1000); // Let physics settle
+        await Task.Delay(500); // Let physics settle
         var samples = new List<float>();
-        for (int i = 0; i < waitMs / 1000; i++)
+        for (int i = 0; i < waitMs / 500; i++)
         {
             var snap = await GetSnapshotAsync(acct);
             var z = snap?.Player?.Unit?.GameObject?.Base?.Position?.Z;
             if (z.HasValue)
                 samples.Add(z.Value);
-            await Task.Delay(1000);
+            await Task.Delay(500);
         }
 
         if (samples.Count < 2)
@@ -919,7 +978,7 @@ public class LiveBotFixture : IAsyncLifetime
         return (zDelta < 50, finalZ);
     }
 
-    public Task<(bool stable, float finalZ)> WaitForZStabilizationAsync(int waitMs = 5000)
+    public Task<(bool stable, float finalZ)> WaitForZStabilizationAsync(int waitMs = 3000)
         => WaitForZStabilizationAsync(BgAccountName, waitMs);
 
     /// <summary>
@@ -1433,6 +1492,34 @@ public class LiveBotFixture : IAsyncLifetime
             captureResponse: true,
             delayMs: 1000,
             allowWhenDead: false);
+    }
+
+    /// <summary>
+    /// Wait for a bot to settle at the expected position after a teleport.
+    /// Polls snapshots until XY is within 50y of target and Z is stable (2 consecutive samples within 1y).
+    /// </summary>
+    public async Task<bool> WaitForTeleportSettledAsync(string accountName, float expectedX, float expectedY, int timeoutMs = 3000)
+    {
+        float? lastZ = null;
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            var snap = await GetSnapshotAsync(accountName);
+            var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+            if (pos != null)
+            {
+                var dx = pos.X - expectedX;
+                var dy = pos.Y - expectedY;
+                var dist2D = MathF.Sqrt(dx * dx + dy * dy);
+                if (dist2D < 50f && lastZ.HasValue && MathF.Abs(pos.Z - lastZ.Value) < 1f)
+                    return true;
+                lastZ = pos.Z;
+            }
+
+            await Task.Delay(500);
+        }
+
+        return false;
     }
 
     /// <summary>Teleport a bot to a named location by having it type .tele in chat (self-teleport).</summary>

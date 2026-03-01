@@ -67,11 +67,6 @@ public class OrgrimmarGroundZAnalysisTests
         var bgAccount = _bot.BgAccountName;
         var fgAccount = _bot.FgAccountName;
 
-        // Enable GM mode for setup safety (invulnerability, no mob aggro).
-        await _bot.SendGmChatCommandAsync(bgAccount!, ".gm on");
-        if (fgAccount != null)
-            await _bot.SendGmChatCommandAsync(fgAccount, ".gm on");
-
         _output.WriteLine("=== Orgrimmar Ground Z Post-Teleport Snap Verification ===");
         _output.WriteLine($"BG character: {_bot.BgCharacterName} (account: {bgAccount})");
         _output.WriteLine($"FG character: {_bot.FgCharacterName} (account: {fgAccount})");
@@ -171,11 +166,6 @@ public class OrgrimmarGroundZAnalysisTests
         var bgAccount = _bot.BgAccountName;
         var fgAccount = _bot.FgAccountName;
         bool hasFg = fgAccount != null;
-
-        // Enable GM mode for setup safety.
-        await _bot.SendGmChatCommandAsync(bgAccount!, ".gm on");
-        if (hasFg)
-            await _bot.SendGmChatCommandAsync(fgAccount!, ".gm on");
 
         _output.WriteLine("=== Orgrimmar Stand-and-Walk Test ===");
         _output.WriteLine("Teleporting both clients to Valley of Strength center,");

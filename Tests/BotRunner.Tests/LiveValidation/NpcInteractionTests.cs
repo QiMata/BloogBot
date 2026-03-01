@@ -124,9 +124,6 @@ public class NpcInteractionTests
 
     private async Task RunNpcInteraction(string npcType, float x, float y, float z, uint npcFlag, bool requireNpcInteraction)
     {
-        // Enable GM mode for setup safety.
-        await EnableGmModeAsync();
-
         // Setup both bots at the location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -268,13 +265,6 @@ public class NpcInteractionTests
         _output.WriteLine($"  [{label}] Setting level to {minLevel} (current={level}).");
         await _bot.SendGmChatCommandAsync(account, $".character level {minLevel}");
         await Task.Delay(1200);
-    }
-
-    private async Task EnableGmModeAsync()
-    {
-        await _bot.SendGmChatCommandAsync(_bot.BgAccountName!, ".gm on");
-        if (_bot.ForegroundBot != null)
-            await _bot.SendGmChatCommandAsync(_bot.FgAccountName!, ".gm on");
     }
 
     private void LogNpcFlags(string label, WoWActivitySnapshot? snap)

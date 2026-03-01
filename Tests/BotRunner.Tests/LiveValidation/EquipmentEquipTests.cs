@@ -106,7 +106,6 @@ public class EquipmentEquipTests
         if (!hasMaceProficiency)
         {
             _output.WriteLine($"  [{label}] Learning missing 1H mace proficiency (spell {OneHandMaceSpell}).");
-            await _bot.SendGmChatCommandAsync(account, ".gm on");
             await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
             await Task.Delay(1200);
             await _bot.SendGmChatCommandAsync(account, ".gm off");

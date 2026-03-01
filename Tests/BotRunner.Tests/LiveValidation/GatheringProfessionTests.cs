@@ -221,9 +221,6 @@ public class GatheringProfessionTests
     {
         await EnsureAliveAndAtSetupLocationAsync(account, label);
 
-        await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: true);
-        await Task.Delay(500);
-
         await _bot.RefreshSnapshotsAsync();
         var bagCount = GetBagItemCount(label);
         if (bagCount >= 12)
@@ -266,9 +263,6 @@ public class GatheringProfessionTests
     private async Task PrepareHerbalism(string account, string label)
     {
         await EnsureAliveAndAtSetupLocationAsync(account, label);
-
-        await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: true);
-        await Task.Delay(500);
 
         await _bot.RefreshSnapshotsAsync();
         var bagCount = GetBagItemCount(label);

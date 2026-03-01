@@ -75,9 +75,6 @@ public class ConsumableUsageTests
 
     private async Task<bool> RunConsumableScenario(string account, Func<Game.WoWPlayer?> getPlayer, string label)
     {
-        // Enable GM mode for setup safety (invulnerability, no mob aggro).
-        await _bot.SendGmChatCommandAsync(account, ".gm on");
-
         // --- Step 0: Remove stale Lion's Strength buff and clear inventory ---
         _output.WriteLine($"  [{label}] Step 0: Remove stale buffs + clear inventory");
         await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthSpellId}");

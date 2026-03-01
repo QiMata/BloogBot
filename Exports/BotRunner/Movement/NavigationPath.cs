@@ -43,7 +43,7 @@ public class NavigationPath(
 
     // Adaptive acceptance radius: turn angle at each waypoint determines how tightly
     // the bot must follow it. Straight paths get MAX, sharp corners get MIN.
-    private const float MIN_ACCEPTANCE_RADIUS = 2f;       // at 90°+ corners
+    private const float MIN_ACCEPTANCE_RADIUS = 3f;       // at 90°+ corners (was 2f; increased to prevent wall-stuck)
     private const float MAX_ACCEPTANCE_RADIUS = 6f;       // on straight paths
     private const float SHARP_TURN_ANGLE_DEG = 90f;       // angle that maps to MIN
     private const float WAYPOINT_REACH_DISTANCE = 3f;     // default fallback (no radii computed)
@@ -65,7 +65,7 @@ public class NavigationPath(
     private const float STALLED_NEAR_WAYPOINT_DISTANCE = 8f;
     private const float STALLED_SAMPLE_POSITION_EPSILON = 0.15f;
     private const float STALLED_SAMPLE_DISTANCE_EPSILON = 0.1f;
-    private const int STALLED_SAMPLE_THRESHOLD = 10;
+    private const int STALLED_SAMPLE_THRESHOLD = 6;      // detect stuck faster (was 10)
     private const int WAYPOINT_REACHABILITY_SCAN_LIMIT = 12;
     private const float PATH_POINT_DEDUP_EPSILON = 0.05f;
     private const float MAX_FIRST_WAYPOINT_DISTANCE = 120f;
@@ -739,6 +739,49 @@ public class NavigationPath(
             _waypointAcceptanceRadii[i] = MathF.Max(
                 MIN_ACCEPTANCE_RADIUS,
                 MAX_ACCEPTANCE_RADIUS - t * (MAX_ACCEPTANCE_RADIUS - MIN_ACCEPTANCE_RADIUS));
+        }
+    }
+
+    /// <summary>
+    /// Offset sharp-corner waypoints toward the inside of the turn to prevent
+    /// the bot's collision capsule from hitting the outer wall before reaching the waypoint.
+    /// </summary>
+    private void OffsetCornerWaypoints(Position start)
+    {
+        const float cornerAngleThreshold = 60f;
+        const float offsetDistance = 1.0f;
+        const float minSegmentLength = 4f; // only offset when segments are long enough
+
+        for (var i = 0; i < _waypoints.Length; i++)
+        {
+            if (i + 1 >= _waypoints.Length) continue; // skip destination
+
+            var prev = i == 0 ? start : _waypoints[i - 1];
+            var curr = _waypoints[i];
+            var next = _waypoints[i + 1];
+
+            var turnAngle = ComputeTurnAngle2D(prev, curr, next);
+            if (turnAngle < cornerAngleThreshold) continue;
+
+            // Compute bisector: average of incoming and outgoing unit vectors.
+            var inDx = curr.X - prev.X;
+            var inDy = curr.Y - prev.Y;
+            var inLen = MathF.Sqrt(inDx * inDx + inDy * inDy);
+            var outDx = next.X - curr.X;
+            var outDy = next.Y - curr.Y;
+            var outLen = MathF.Sqrt(outDx * outDx + outDy * outDy);
+            if (inLen < minSegmentLength || outLen < minSegmentLength) continue;
+
+            // Bisector points toward the "inside" of the turn.
+            var bisX = inDx / inLen + outDx / outLen;
+            var bisY = inDy / inLen + outDy / outLen;
+            var bisLen = MathF.Sqrt(bisX * bisX + bisY * bisY);
+            if (bisLen < 0.01f) continue;
+
+            _waypoints[i] = new Position(
+                curr.X + (bisX / bisLen) * offsetDistance,
+                curr.Y + (bisY / bisLen) * offsetDistance,
+                curr.Z);
         }
     }
 

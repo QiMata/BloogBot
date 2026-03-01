@@ -89,16 +89,6 @@ public class FishingProfessionTests
         if (fgAccount != null)
             _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccount})");
 
-        // --- Enable GM mode — prevents anti-undermap teleport loops and hostile targeting ---
-        _output.WriteLine("Enabling GM mode for all bots");
-        await _bot.SendGmChatCommandAsync(bgAccount, ".gm on");
-        await Task.Delay(500);
-        if (fgAccount != null)
-        {
-            await _bot.SendGmChatCommandAsync(fgAccount, ".gm on");
-            await Task.Delay(500);
-        }
-
         // --- Prepare both bots (learn fishing + equip pole) ---
         await PrepareBot(bgAccount, "BG");
         if (fgAccount != null)
@@ -143,10 +133,6 @@ public class FishingProfessionTests
 
             _output.WriteLine($"[{label}] Location {loc + 1}/{FishingSpots.Length}: " +
                 $"shore=({shoreX:F0}, {shoreY:F0}, {shoreZ:F0}), facing={facing:F2}");
-
-            // GM mode ON for teleport (prevents anti-undermap kicks during relocation)
-            await _bot.SendGmChatCommandAsync(account, ".gm on");
-            await Task.Delay(300);
 
             // Teleport to shore position
             await _bot.BotTeleportAsync(account, map, shoreX, shoreY, shoreZ);

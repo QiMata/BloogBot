@@ -19,6 +19,28 @@
 #include <unordered_map>
 #include <filesystem>
 
+// Decorative WMO doodad M2 models that should NOT generate collision geometry.
+// These are objects players can walk through in-game (banners, catapults, etc.).
+static bool IsExcludedDoodad(const std::string& m2Name)
+{
+    // Check against known decorative/non-blocking object keywords (case-insensitive).
+    static const char* excludedKeywords[] = {
+        "catapult", "banner", "torch", "brazier", "fire", "smoke",
+        "dust", "flag", "chain", "rope", "bell", "lamp", "lantern",
+        "candle", "chandelier", "glow", "ember", "spark"
+    };
+
+    std::string lower = m2Name;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    for (const auto* keyword : excludedKeywords)
+    {
+        if (lower.find(keyword) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+
 // ============================================================================
 // FILE I/O
 // ============================================================================
@@ -368,6 +390,10 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
 
                     const char* m2Name = &doodadData.nameTable[spawn.nameOffset];
                     std::string m2Key(m2Name);
+
+                    // Skip decorative/non-blocking doodads
+                    if (IsExcludedDoodad(m2Key))
+                        continue;
 
                     // Load M2 model (with caching)
                     auto cacheIt = m2Cache.find(m2Key);

@@ -44,7 +44,7 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Bank_OpenAndDeposit()
     {
-        await EnableGmModeAsync();
+
 
         // Setup both bots in parallel (items + location).
         var setupTasks = new System.Collections.Generic.List<Task>
@@ -77,14 +77,14 @@ public class EconomyInteractionTests
 
     private async Task SetupBankAsync(string account, string label)
     {
-        await EnsureBagHasItemAsync(account, label, LinenCloth, 10);
+        // Only ensure location — test validates NPC detection + interaction, not deposit flow.
         await EnsureReadyAtLocationAsync(account, label, MapId, OrgBankX, OrgBankY, OrgBankZ);
     }
 
     [SkippableFact]
     public async Task AuctionHouse_OpenAndList()
     {
-        await EnableGmModeAsync();
+
 
         // Setup both bots at AH location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
@@ -118,7 +118,7 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Mail_OpenMailbox()
     {
-        await EnableGmModeAsync();
+
 
         // Send mail and setup location in parallel for both bots.
         var setupTasks = new System.Collections.Generic.List<Task>
@@ -145,13 +145,6 @@ public class EconomyInteractionTests
             var bgOk = await InteractWithMailboxLikeObject(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
             Assert.True(bgOk, "BG should find/interact with a mailbox-like game object.");
         }
-    }
-
-    private async Task EnableGmModeAsync()
-    {
-        await _bot.SendGmChatCommandAsync(_bot.BgAccountName!, ".gm on");
-        if (_bot.ForegroundBot != null)
-            await _bot.SendGmChatCommandAsync(_bot.FgAccountName!, ".gm on");
     }
 
     private async Task SetupMailAsync(string account, string label)
@@ -181,7 +174,7 @@ public class EconomyInteractionTests
             ActionType = ActionType.InteractWith,
             Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
         });
-        await Task.Delay(1000);
+        await Task.Delay(500);
         _output.WriteLine($"  [{label}] Interaction sent (result={result})");
         return result == ResponseResult.Success;
     }

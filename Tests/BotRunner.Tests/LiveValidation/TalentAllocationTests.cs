@@ -70,9 +70,6 @@ public class TalentAllocationTests
 
     private async Task<bool> RunTalentScenario(string account, string label)
     {
-        // Enable GM mode for setup safety (invulnerability, no mob aggro).
-        await _bot.SendGmChatCommandAsync(account, ".gm on");
-
         await EnsureStrictAliveAsync(account, label);
         await EnsureLevelAtLeastAsync(account, label, MinTalentLevel);
         _ = await TryEnsureSpellAbsentAsync(account, label, Deflection1);

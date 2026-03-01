@@ -215,25 +215,25 @@ public class NavigationPathTests
     [Fact]
     public void GetNextWaypoint_DoesNotSkipShortCornerWaypoint_WhenSegmentTurns()
     {
-        // 90° turn: (0,0,0) → (2.8,0,0) → (2.8,1.5,0). Block LOS through the corner
+        // 90° turn: (0,0,0) → (3.5,0,0) → (3.5,1.5,0). Block LOS through the corner
         // so StringPull preserves the corner waypoint.
         var pathfinding = new DelegatePathfindingClient(
-            getPath: (_, start, _, _) => [start, new Position(2.8f, 0f, 0f), new Position(2.8f, 1.5f, 0f)],
+            getPath: (_, start, _, _) => [start, new Position(3.5f, 0f, 0f), new Position(3.5f, 1.5f, 0f)],
             isInLineOfSight: (_, from, to) => !(from.Y < 0.1f && to.Y > 0.1f));
 
         var navPath = new NavigationPath(pathfinding, () => 0);
         var waypoint = navPath.GetNextWaypoint(
             new Position(0f, 0f, 0f),
-            new Position(2.8f, 10f, 0f),
+            new Position(3.5f, 10f, 0f),
             mapId: 1,
             allowDirectFallback: false,
-            minWaypointDistance: 3f);
+            minWaypointDistance: 4f);
 
-        // Corner at (2.8,0,0) preserved by StringPull. 90° turn → 2y acceptance.
-        // Bot at 2.8y, effectiveRadius=max(2,3)=3 → enters loop.
-        // But commitDistance=2, dist=2.8 > 2 → doesn't advance past corner.
+        // Corner at (3.5,0,0) preserved by StringPull. 90° turn → 3y acceptance.
+        // Bot at 3.5y, effectiveRadius=max(3,4)=4 → enters loop.
+        // But commitDistance=3, dist=3.5 > 3 → doesn't advance past corner.
         Assert.NotNull(waypoint);
-        Assert.Equal(2.8f, waypoint!.X);
+        Assert.Equal(3.5f, waypoint!.X);
         Assert.Equal(0f, waypoint.Y);
     }
 
@@ -340,17 +340,17 @@ public class NavigationPathTests
         for (var i = 0; i < 30; i++)
         {
             waypoint = navPath.GetNextWaypoint(
-                new Position(0.6f, 0, 0),
+                new Position(-0.5f, 0, 0),
                 new Position(3, 12, 0),
                 mapId: 1,
                 allowDirectFallback: false,
-                minWaypointDistance: 3f);
+                minWaypointDistance: 4f);
         }
 
-        // Corner (3,0,0) has 90° turn → radius=2, commitDistance=2.
-        // Bot at 2.4y: effectiveRadius=max(2,3)=3, 2.4<3 → enters loop,
-        // but commitDistance=2, 2.4>2 → can't advance → stalled.
-        // After STALLED_SAMPLE_THRESHOLD (24) iterations, recalculation triggers.
+        // Corner (3,0,0) has 90° turn → radius=3, commitDistance=3.
+        // Bot at 3.5y: effectiveRadius=max(3,4)=4, 3.5<4 → enters loop,
+        // but commitDistance=3, 3.5>3 → can't advance → stalled.
+        // After STALLED_SAMPLE_THRESHOLD (6) iterations, recalculation triggers.
         Assert.NotNull(waypoint);
         Assert.Equal(3f, waypoint!.X);
         Assert.Equal(0f, waypoint.Y);

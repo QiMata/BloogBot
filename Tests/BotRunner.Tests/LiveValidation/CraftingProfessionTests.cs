@@ -83,9 +83,6 @@ public class CraftingProfessionTests
 
     private async Task<bool> RunCraftingScenario(string account, string label)
     {
-        // Enable GM mode for setup safety (invulnerability, no mob aggro).
-        await _bot.SendGmChatCommandAsync(account, ".gm on");
-
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
         if (snap == null)
@@ -117,7 +114,6 @@ public class CraftingProfessionTests
         if (!hasFirstAid || !hasBandageRecipe)
         {
             _output.WriteLine($"  [{label}] Learning missing First Aid spells: apprentice={!hasFirstAid}, recipe={!hasBandageRecipe}");
-            await _bot.SendGmChatCommandAsync(account, ".gm on");
             if (!hasFirstAid)
                 await _bot.BotLearnSpellAsync(account, FirstAidApprentice);
             if (!hasBandageRecipe)
