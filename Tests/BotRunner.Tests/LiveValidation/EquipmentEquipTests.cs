@@ -87,7 +87,7 @@ public class EquipmentEquipTests
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before equipment setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(2000);
+            await Task.Delay(1200);
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
             if (snap.Player == null)
@@ -132,7 +132,7 @@ public class EquipmentEquipTests
 
             _output.WriteLine($"  [{label}] Adding Worn Mace (item {WornMace}).");
             await _bot.BotAddItemAsync(account, WornMace);
-            await Task.Delay(1800);
+            await Task.Delay(1200);
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
             if (snap.Player == null)
@@ -150,7 +150,7 @@ public class EquipmentEquipTests
 
         // Ensure GM mode is off — GM mode blocks player equip actions (same as FISH-001).
         await _bot.SendGmChatCommandAsync(account, ".gm off");
-        await Task.Delay(1500);
+        await Task.Delay(800);
 
         // Equip and verify transition.
         _output.WriteLine($"  [{label}] Equipping Worn Mace.");
@@ -158,7 +158,7 @@ public class EquipmentEquipTests
         {
             ActionType = ActionType.EquipItem,
             Parameters = { new RequestParameter { IntParam = (int)WornMace } }
-        }, delayMs: 4000);
+        }, delayMs: 2500);
 
         await _bot.RefreshSnapshotsAsync();
         var after = await _bot.GetSnapshotAsync(account);

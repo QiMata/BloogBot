@@ -147,11 +147,20 @@ SlideResult CollideAndSlide(
         float minDist = FLT_MAX;
         
         for (const auto& hit : hits) {
-            if (!hit.hit || hit.startPenetrating) 
+            if (!hit.hit || hit.startPenetrating)
                 continue;
-            if (horizontalOnly && hit.region != SceneHit::CapsuleRegion::Side) 
-                continue;
-            if (hit.distance < 1e-6f) 
+            if (horizontalOnly) {
+                // In horizontal mode, always accept Side hits. For Bottom/Top hits,
+                // only accept if the hit normal has a significant horizontal component.
+                // This prevents bots from phasing through WMO objects at foot level
+                // (e.g. catapults, barricades) that register as Bottom capsule contacts
+                // but act as horizontal barriers.
+                if (hit.region != SceneHit::CapsuleRegion::Side) {
+                    float hMag = std::sqrt(hit.normal.x * hit.normal.x + hit.normal.y * hit.normal.y);
+                    if (hMag < 0.3f) continue;  // Skip purely vertical contacts (floor/ceiling)
+                }
+            }
+            if (hit.distance < 1e-6f)
                 continue;
             if (hit.distance < minDist) {
                 minDist = hit.distance;

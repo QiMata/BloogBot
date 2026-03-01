@@ -44,6 +44,8 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Bank_OpenAndDeposit()
     {
+        await EnableGmModeAsync();
+
         // Setup both bots in parallel (items + location).
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -82,6 +84,8 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task AuctionHouse_OpenAndList()
     {
+        await EnableGmModeAsync();
+
         // Setup both bots at AH location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -114,6 +118,8 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Mail_OpenMailbox()
     {
+        await EnableGmModeAsync();
+
         // Send mail and setup location in parallel for both bots.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -141,10 +147,17 @@ public class EconomyInteractionTests
         }
     }
 
+    private async Task EnableGmModeAsync()
+    {
+        await _bot.SendGmChatCommandAsync(_bot.BgAccountName!, ".gm on");
+        if (_bot.ForegroundBot != null)
+            await _bot.SendGmChatCommandAsync(_bot.FgAccountName!, ".gm on");
+    }
+
     private async Task SetupMailAsync(string account, string label)
     {
         await _bot.SendGmChatCommandAsync(account, ".send money self \"Test\" \"Gold\" 100");
-        await Task.Delay(1000);
+        await Task.Delay(800);
         await EnsureReadyAtLocationAsync(account, label, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
     }
 
@@ -236,7 +249,7 @@ public class EconomyInteractionTests
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before economy setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(2000);
+            await Task.Delay(1200);
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
         }
@@ -251,7 +264,7 @@ public class EconomyInteractionTests
 
         _output.WriteLine($"  [{label}] Teleporting to setup location (dist={dist:F1}y).");
         await _bot.BotTeleportAsync(account, mapId, x, y, z);
-        await Task.Delay(2500);
+        await Task.Delay(1500);
     }
 
     private async Task EnsureBagHasItemAsync(string account, string label, uint itemId, int addCount)
@@ -267,7 +280,7 @@ public class EconomyInteractionTests
 
         _output.WriteLine($"  [{label}] Adding item {itemId} x{addCount}.");
         await _bot.BotAddItemAsync(account, itemId, addCount);
-        await Task.Delay(1500);
+        await Task.Delay(1000);
     }
 
     private void LogNearbyGameObjects(WoWActivitySnapshot? snap, string label)

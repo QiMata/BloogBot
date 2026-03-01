@@ -20,7 +20,7 @@
 | # | ID | Task | Status |
 |---|-----|------|--------|
 | 1 | `PATH-REFACTOR-001` | **Complete pathfinding service + PhysicsEngine refactor.** BG falls on walkable slopes (should clamp to surface). FG bumps into walls/objects and gets stuck. BG forced through Orgrimmar WMO (catapult near bank). Physics slope handling, WMO collision, and wall-sliding all need rework. | **Open — P0** |
-| 2 | `TEST-GMMODE-001` | All LiveValidation tests outside of combat and corpse-run should use `.gm on` for setup safety. | **Open — P0** |
+| 2 | `TEST-GMMODE-001` | All LiveValidation tests outside of combat and corpse-run should use `.gm on` for setup safety. | **Done** |
 | 3 | `DB-CLEAN-001` | Remove all game object spawns with 0% spawn chance from MaNGOS DB. Also remove commands not from original MaNGOS (non-vanilla). | **Open — P0** |
 | 4 | `TEST-MINING-001` | Mining test does wasteful teleporting. FG bot stands on top of node instead of near it. Optimize teleport logic and fix FG node positioning. | **Open — P0** |
 | 5 | `TEST-LOG-CLEANUP` | Clean up all out-of-date test logs and temp files (AppData\Local\Temp\claude\ folders). | **Open — P0** |
@@ -120,44 +120,36 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 
 ## Session Handoff
 - **Last updated:** 2026-03-01
-- **Current work:** Parallelized all LiveValidation FG+BG tests; created priority tasks for pathfinding/physics refactor.
-- **Last delta:** `LV-PARALLEL-001` — All LiveValidation tests now run BG+FG scenarios in parallel via `Task.WhenAll`. No dual-client needed — single `StateManagerTestClient` with `SemaphoreSlim(1,1)` interleaves at every `await`.
+- **Current work:** Physics refactor + test hardening (PATH-REFACTOR-001 partial, TEST-GMMODE-001 done).
+- **Last delta:** C++ physics slope/collision fixes + `.gm on` for all non-combat/corpse tests + reduced excessive waits.
 - **Completed this session:**
-  1. `LV-PARALLEL-001` — Parallelized all 11 LiveValidation test files:
-     - CombatLoopTests (with ConcurrentDictionary target claiming + positional offsets)
-     - CharacterLifecycleTests (3 test methods)
-     - ConsumableUsageTests, EquipmentEquipTests, CraftingProfessionTests
-     - QuestInteractionTests, TalentAllocationTests, NpcInteractionTests
-     - BasicLoopTests (Physics + Teleport tests)
-     - DeathCorpseRunTests (parallel corpse-run scenarios)
-     - EconomyInteractionTests (Bank, AH, Mail — setup + interaction parallel)
-     - OrgrimmarGroundZAnalysisTests (parallel teleport per probe position)
-  2. Reverted dual-client approach — user clarified StateManager handles concurrent requests asynchronously; no second TCP connection needed.
-- **Observed issues (user-reported):**
-  - FG bot pathfinding issues in corpse-run (bumps walls, gets stuck)
-  - BG bot "falling" on walkable slopes (should clamp to surface)
-  - BG bot forced through Orgrimmar WMO catapult near bank (outside resurrect distance)
-  - Mining test does excessive teleporting; FG bot stands on top of node
-  - Some commands may not be original MaNGOS; nodes with 0% spawn chance pollute tests
+  1. **PATH-REFACTOR-001 (partial)** — Physics engine fixes:
+     - `PhysicsCollideSlide.cpp`: Fixed horizontal-only filter — Bottom/Top capsule hits with horizontal normals (hMag >= 0.3) now accepted. Fixes bot phasing through WMO objects (catapults, barricades) at foot level.
+     - `PhysicsEngine.cpp`: Split `maxSnapDown` into walkable (4.0y via STEP_DOWN_HEIGHT) and non-walkable (2.6y via STEP_HEIGHT + 0.5). Fixes BG bot "falling" on walkable slopes.
+     - `NavigationPath.cs`: Reduced STALLED_SAMPLE_THRESHOLD from 24 to 10 (~330ms at 30fps). Faster stuck detection.
+     - `MovementController.cs`: Reduced STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD from 30 to 15 ticks. Faster wall-stuck recovery.
+  2. **TEST-GMMODE-001 (done)** — Added `.gm on` to all non-combat/non-corpse LiveValidation tests:
+     - BasicLoopTests (5 test methods), ConsumableUsageTests, CraftingProfessionTests
+     - EconomyInteractionTests (3 test methods), EquipmentEquipTests (already managed .gm on/off)
+     - GroupFormationTests, NpcInteractionTests, OrgrimmarGroundZAnalysisTests (2 test methods)
+     - QuestInteractionTests, TalentAllocationTests
+  3. **Wait reductions** — Reduced excessive delays across all test files:
+     - ConsumableUsageTests: 5000ms → 2000ms item arrival wait
+     - EconomyInteractionTests: 2500ms → 1500ms teleport, 2000ms → 1200ms revive, 1000ms → 800ms mail
+     - NpcInteractionTests: 2500ms → 1500ms teleport, 2000ms → 1200ms revive, 1500ms → 1000ms additem
+     - CraftingProfessionTests: 4000ms → 2000ms post-teleport, 2000ms → 1200ms revive
+     - EquipmentEquipTests: 2000ms → 1200ms revive, 1800ms → 1200ms additem, 4000ms → 2500ms equip, 1500ms → 800ms gm off
+  4. Physics tests: 97/98 pass (1 pre-existing ExtractWmoDoodads_FromMpq MPQ failure).
 - **Files changed this session:**
-  - `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs` — parallel BG+FG with offsets + target claiming
-  - `Tests/BotRunner.Tests/LiveValidation/CharacterLifecycleTests.cs` — 3 test methods parallelized
-  - `Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs` — parallelized
-  - `Tests/BotRunner.Tests/LiveValidation/EquipmentEquipTests.cs` — parallelized
-  - `Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs` — parallelized
-  - `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs` — parallelized
-  - `Tests/BotRunner.Tests/LiveValidation/TalentAllocationTests.cs` — parallelized
-  - `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs` — parallelized
-  - `Tests/BotRunner.Tests/LiveValidation/BasicLoopTests.cs` — Physics + Teleport parallelized
-  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` — parallel corpse scenarios
-  - `Tests/BotRunner.Tests/LiveValidation/EconomyInteractionTests.cs` — parallel setup + interaction
-  - `Tests/BotRunner.Tests/LiveValidation/OrgrimmarGroundZAnalysisTests.cs` — parallel teleport per probe
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs` — reverted dual-client (single client)
-  - `docs/TASKS.md` — added P0 pathfinding/physics refactor tasks
+  - `Exports/Navigation/PhysicsCollideSlide.cpp` — horizontal-only filter accepts Bottom/Top with horizontal normals
+  - `Exports/Navigation/PhysicsEngine.cpp` — walkable vs non-walkable snap-down limits
+  - `Exports/BotRunner/Movement/NavigationPath.cs` — stuck threshold 24→10
+  - `Exports/WoWSharpClient/Movement/MovementController.cs` — stale forward threshold 30→15
+  - 10 LiveValidation test files — `.gm on` + reduced waits
+  - `docs/TASKS.md` — session handoff update
 - **What's truly next (by priority):**
-  1. `PATH-REFACTOR-001` — Complete pathfinding + PhysicsEngine refactor (slope clamping, WMO collision, wall-sliding)
-  2. `TEST-GMMODE-001` — Add `.gm on` to all non-combat/non-corpse test setup
-  3. `DB-CLEAN-001` — Remove 0% spawn chance objects and non-vanilla commands
-  4. `TEST-MINING-001` — Fix mining test teleport waste and FG node positioning
-  5. `TEST-LOG-CLEANUP` — Clean temp files and stale logs
+  1. `PATH-REFACTOR-001` (remaining) — Live validation of physics fixes; wall-sliding rework if still stuck
+  2. `DB-CLEAN-001` — Remove 0% spawn chance objects and non-vanilla commands
+  3. `TEST-MINING-001` — Fix mining test teleport waste and FG node positioning
+  4. `TEST-LOG-CLEANUP` — Clean temp files and stale logs
 - **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=normal"`

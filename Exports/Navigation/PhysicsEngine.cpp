@@ -681,8 +681,12 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
     // We only accept snap candidates within a reasonable step-down distance from this.
     // The full sweep range (STEP_DOWN_HEIGHT) is used to FIND surfaces, but the actual
     // snap is limited to avoid reaching lower floors in multi-story WMO buildings.
+    // For walkable surfaces (slopes), allow a larger snap distance (STEP_DOWN_HEIGHT)
+    // because walking downhill at speed can cover significant vertical distance per frame.
+    // Non-walkable candidates are still limited to STEP_HEIGHT + 0.5 to prevent wrong-floor snaps.
     const float preStepZ = originalZ - undoStepOffset;
-    const float maxSnapDown = PhysicsConstants::STEP_HEIGHT + 0.5f; // ~1.5y below real position
+    const float maxSnapDownWalkable = PhysicsConstants::STEP_DOWN_HEIGHT;  // 4.0y for walkable slopes
+    const float maxSnapDownNonWalkable = PhysicsConstants::STEP_HEIGHT + 0.5f; // ~2.6y for walls/steep
 
     // Collect candidates (walkable first; keep non-walkable only as last resort fallback).
     for (const auto& hit : downHits) {
@@ -702,8 +706,10 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
         if (snapZ > originalZ) snapZ = originalZ;
 
         // Reject candidates too far below the character's real position.
-        // This prevents snapping to lower floors in multi-story WMO buildings.
-        if (snapZ < preStepZ - maxSnapDown) continue;
+        // Walkable surfaces use a larger snap limit to handle downhill slopes.
+        // Non-walkable surfaces use a tighter limit to avoid wrong-floor snaps.
+        const float maxSnap = walkable ? maxSnapDownWalkable : maxSnapDownNonWalkable;
+        if (snapZ < preStepZ - maxSnap) continue;
 
         GroundCandidate c;
         c.hit = &hit;

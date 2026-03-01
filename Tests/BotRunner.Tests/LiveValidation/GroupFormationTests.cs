@@ -44,6 +44,10 @@ public class GroupFormationTests
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG account not available.");
         global::Tests.Infrastructure.Skip.If(_bot.ForegroundBot == null, "FG snapshot not available; requires dual-client run.");
 
+        // Enable GM mode for setup safety (invulnerability, no mob aggro).
+        await _bot.SendGmChatCommandAsync(bgAccount!, ".gm on");
+        await _bot.SendGmChatCommandAsync(fgAccount!, ".gm on");
+
         // Step 1: deterministic clean start from snapshot state (no GM chat disband).
         await EnsureNotGroupedAsync(bgAccount!, "BG");
         await EnsureNotGroupedAsync(fgAccount!, "FG");

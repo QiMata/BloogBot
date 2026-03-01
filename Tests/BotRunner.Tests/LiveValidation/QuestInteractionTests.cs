@@ -62,6 +62,9 @@ public class QuestInteractionTests
 
     private async Task RunQuestScenario(string account, string label)
     {
+        // Enable GM mode for setup safety (invulnerability, no mob aggro).
+        await _bot.SendGmChatCommandAsync(account, ".gm on");
+
         await EnsureStrictAliveAsync(account, label);
         await EnsureQuestAbsentAsync(account, label, TestQuestId);
 

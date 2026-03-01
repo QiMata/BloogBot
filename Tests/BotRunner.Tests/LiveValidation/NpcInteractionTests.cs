@@ -124,6 +124,9 @@ public class NpcInteractionTests
 
     private async Task RunNpcInteraction(string npcType, float x, float y, float z, uint npcFlag, bool requireNpcInteraction)
     {
+        // Enable GM mode for setup safety.
+        await EnableGmModeAsync();
+
         // Setup both bots at the location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -197,7 +200,7 @@ public class NpcInteractionTests
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before NPC setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(2000);
+            await Task.Delay(1200);
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
         }
@@ -215,7 +218,7 @@ public class NpcInteractionTests
 
         _output.WriteLine($"  [{label}] Teleporting to setup location (dist={dist:F1}y).");
         await _bot.BotTeleportAsync(account, mapId, x, y, z);
-        await Task.Delay(2500);
+        await Task.Delay(1500);
     }
 
     private async Task EnsureBagHasItemAsync(string account, string label, uint itemId, int addCount)
@@ -231,7 +234,7 @@ public class NpcInteractionTests
 
         _output.WriteLine($"  [{label}] Adding item {itemId} x{addCount}.");
         await _bot.BotAddItemAsync(account, itemId, addCount);
-        await Task.Delay(1500);
+        await Task.Delay(1000);
     }
 
     private async Task EnsureMoneyAtLeastAsync(string account, string label, long minCopper)
@@ -265,6 +268,13 @@ public class NpcInteractionTests
         _output.WriteLine($"  [{label}] Setting level to {minLevel} (current={level}).");
         await _bot.SendGmChatCommandAsync(account, $".character level {minLevel}");
         await Task.Delay(1200);
+    }
+
+    private async Task EnableGmModeAsync()
+    {
+        await _bot.SendGmChatCommandAsync(_bot.BgAccountName!, ".gm on");
+        if (_bot.ForegroundBot != null)
+            await _bot.SendGmChatCommandAsync(_bot.FgAccountName!, ".gm on");
     }
 
     private void LogNpcFlags(string label, WoWActivitySnapshot? snap)

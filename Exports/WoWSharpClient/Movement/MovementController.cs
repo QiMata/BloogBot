@@ -42,6 +42,13 @@ namespace WoWSharpClient.Movement
         // even when the character is idle (MOVEFLAG_NONE), so gravity applies and
         // the character snaps to the real ground height after teleport/zone change.
         private bool _needsGroundSnap = false;
+        // Server-authoritative Z from the teleport — used to clamp position.
+        // If the physics engine doesn't have geometry (e.g. docks, bridges, beaches)
+        // and gravity would pull us below the server's teleport Z, we clamp to prevent
+        // fallthrough. The threshold is tight (3y) because even small navmesh/heightmap
+        // mismatches at coasts and WMO surfaces cause cumulative gravity drift.
+        private float _teleportZ = float.NaN;
+        private const float GROUND_SNAP_MAX_DROP = 5.0f;
 
         // Network timing
         private uint _lastPacketTime;
@@ -53,7 +60,7 @@ namespace WoWSharpClient.Movement
         private int _staleForwardNoDisplacementTicks;
         private int _staleForwardRecoveryCount;
         private const float STALE_FORWARD_DISPLACEMENT_EPSILON = 0.05f;
-        private const int STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD = 30;
+        private const int STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD = 15;
         private const uint STALE_FORWARD_SUPPRESS_AFTER_RESET_MS = 2000;
         private const uint STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS = 1500;
         private const MovementFlags STALE_RECOVERY_MOVEMENT_MASK =
@@ -131,6 +138,7 @@ namespace WoWSharpClient.Movement
             if (_needsGroundSnap)
             {
                 _needsGroundSnap = false;
+
                 Log.Information("[MovementController] Post-teleport ground snap: Z={Z:F3} groundZ={GroundZ:F3} flags=0x{Flags:X}",
                     _player.Position.Z, _prevGroundZ, (uint)_player.MovementFlags);
 
@@ -256,6 +264,38 @@ namespace WoWSharpClient.Movement
                     output.NewVelY = 0;
                     output.NewVelZ = 0;
                     output.FallTime = 0;
+                }
+            }
+            // Guard against falling through objects that the navmesh doesn't model (docks, bridges,
+            // WMO platforms). After a teleport, if gravity would pull us more than GROUND_SNAP_MAX_DROP
+            // below the server-authoritative teleport Z, clamp position. This persists across frames
+            // until the player intentionally moves (FORWARD/BACKWARD/STRAFE/JUMP/SWIM), which clears
+            // the teleport Z clamp. The navmesh may see the ocean floor through a dock surface.
+            if (!float.IsNaN(_teleportZ) && output.NewPosZ < _teleportZ - GROUND_SNAP_MAX_DROP)
+            {
+                bool hasIntentionalMovement = (_player.MovementFlags & (MovementFlags.MOVEFLAG_FORWARD
+                    | MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT
+                    | MovementFlags.MOVEFLAG_STRAFE_RIGHT | MovementFlags.MOVEFLAG_JUMPING
+                    | MovementFlags.MOVEFLAG_SWIMMING)) != 0;
+                if (!hasIntentionalMovement)
+                {
+                    Log.Warning("[MovementController] Teleport Z clamp: suppressed drop to {NewZ:F1} (teleportZ={TeleZ:F1}, groundZ={GroundZ:F1}). Navmesh may lack geometry here.",
+                        output.NewPosZ, _teleportZ, output.GroundZ);
+                    output.NewPosZ = _teleportZ;
+                    output.NewVelX = 0;
+                    output.NewVelY = 0;
+                    output.NewVelZ = 0;
+                    output.FallTime = 0;
+                    // Clear falling/jumping flags — player is clamped to teleport Z, not falling.
+                    // Without this, MOVEFLAG_FALLINGFAR causes heartbeats that interrupt channeled
+                    // spells (e.g. fishing) because the server sees the player as "moving".
+                    output.MovementFlags = output.MovementFlags
+                        & ~((uint)MovementFlags.MOVEFLAG_FALLINGFAR | (uint)MovementFlags.MOVEFLAG_JUMPING);
+                }
+                else
+                {
+                    // Player is intentionally moving — they walked off the edge. Clear the clamp.
+                    _teleportZ = float.NaN;
                 }
             }
 
@@ -651,6 +691,7 @@ namespace WoWSharpClient.Movement
             // After teleport/zone change, force at least one physics step even while idle
             // so gravity applies and the character snaps to the real ground height.
             _needsGroundSnap = true;
+            _teleportZ = _player.Position.Z;
 
             _currentPath = null;
             _currentWaypointIndex = 0;

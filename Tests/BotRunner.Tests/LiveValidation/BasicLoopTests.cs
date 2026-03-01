@@ -88,6 +88,9 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Physics_PlayerNotFallingThroughWorld()
     {
+        // Enable GM mode for setup safety (invulnerability, no mob aggro).
+        await EnableGmModeAsync();
+
         // Setup both bots in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -133,6 +136,8 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Teleport_PlayerMovesToNewPosition()
     {
+        await EnableGmModeAsync();
+
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
 
@@ -189,6 +194,7 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Snapshot_SeesNearbyUnits()
     {
+        await EnableGmModeAsync();
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         await EnsureStrictAliveAsync(bgAccount, "BG");
@@ -209,6 +215,7 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Snapshot_SeesNearbyGameObjects()
     {
+        await EnableGmModeAsync();
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         await EnsureStrictAliveAsync(bgAccount, "BG");
@@ -229,6 +236,7 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task SetLevel_ChangesPlayerLevel()
     {
+        await EnableGmModeAsync();
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         await EnsureStrictAliveAsync(bgAccount, "BG");
@@ -394,6 +402,13 @@ public class BasicLoopTests
         }
 
         return Array.Empty<Game.WoWGameObject>();
+    }
+
+    private async Task EnableGmModeAsync()
+    {
+        await _bot.SendGmChatCommandAsync(_bot.BgAccountName!, ".gm on");
+        if (_bot.ForegroundBot != null)
+            await _bot.SendGmChatCommandAsync(_bot.FgAccountName!, ".gm on");
     }
 
     private static float Distance2D(float x1, float y1, float x2, float y2)

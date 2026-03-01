@@ -83,6 +83,9 @@ public class CraftingProfessionTests
 
     private async Task<bool> RunCraftingScenario(string account, string label)
     {
+        // Enable GM mode for setup safety (invulnerability, no mob aggro).
+        await _bot.SendGmChatCommandAsync(account, ".gm on");
+
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
         if (snap == null)
@@ -93,7 +96,7 @@ public class CraftingProfessionTests
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(2000);
+            await Task.Delay(1200);
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
         }
@@ -101,7 +104,7 @@ public class CraftingProfessionTests
         // Step 1: Teleport only when not already near setup location.
         var teleported = await EnsureNearSetupLocationAsync(account, label);
         if (teleported)
-            await Task.Delay(4000);
+            await Task.Delay(2000);
 
         await _bot.RefreshSnapshotsAsync();
         snap = await _bot.GetSnapshotAsync(account);

@@ -1,5 +1,6 @@
 using BotRunner.Clients;
 using GameData.Core.Models;
+using Pathfinding;
 using System.Collections.Generic;
 using System;
 
@@ -64,7 +65,7 @@ public class NavigationPath(
     private const float STALLED_NEAR_WAYPOINT_DISTANCE = 8f;
     private const float STALLED_SAMPLE_POSITION_EPSILON = 0.15f;
     private const float STALLED_SAMPLE_DISTANCE_EPSILON = 0.1f;
-    private const int STALLED_SAMPLE_THRESHOLD = 24;
+    private const int STALLED_SAMPLE_THRESHOLD = 10;
     private const int WAYPOINT_REACHABILITY_SCAN_LIMIT = 12;
     private const float PATH_POINT_DEDUP_EPSILON = 0.05f;
     private const float MAX_FIRST_WAYPOINT_DISTANCE = 120f;
@@ -939,4 +940,80 @@ public class NavigationPath(
     /// Number of remaining waypoints.
     /// </summary>
     public int RemainingWaypoints => Math.Max(0, _waypoints.Length - _currentIndex);
+
+    // =========================================================================
+    // TRANSPORT AWARENESS — elevator/boat/zeppelin integration
+    // =========================================================================
+
+    private TransportWaitingLogic? _activeTransportRide;
+    private TransportData.TransportDefinition? _pendingTransport;
+
+    /// <summary>
+    /// The currently active transport ride state machine, or null if not riding.
+    /// </summary>
+    public TransportWaitingLogic? ActiveTransportRide => _activeTransportRide;
+
+    /// <summary>
+    /// Whether a transport ride is currently active.
+    /// </summary>
+    public bool IsRidingTransport => _activeTransportRide != null
+        && _activeTransportRide.CurrentPhase != TransportPhase.Complete;
+
+    /// <summary>
+    /// Check if navigating from current to destination requires a transport (elevator).
+    /// If so, activates the transport state machine and returns true.
+    /// Call <see cref="GetTransportTarget"/> each tick while <see cref="IsRidingTransport"/> is true.
+    /// </summary>
+    public bool CheckTransportNeeded(Position current, Position destination, uint mapId)
+    {
+        // Don't re-detect if already riding
+        if (IsRidingTransport) return true;
+
+        var elevator = TransportData.DetectElevatorCrossing(mapId, current, destination);
+        if (elevator == null) return false;
+
+        var boardStop = TransportData.FindNearestStop(elevator, current);
+        var exitStop = TransportData.GetDestinationStop(elevator, current);
+        if (boardStop == null || exitStop == null) return false;
+
+        _pendingTransport = elevator;
+        _activeTransportRide = new TransportWaitingLogic(elevator, boardStop, exitStop);
+        return true;
+    }
+
+    /// <summary>
+    /// Get the position to move toward during a transport ride.
+    /// Returns null when the ride is complete — caller should resume normal pathfinding.
+    /// </summary>
+    public Position? GetTransportTarget(
+        Position currentPosition,
+        ulong currentTransportGuid,
+        IReadOnlyList<DynamicObjectProto>? nearbyObjects,
+        float deltaTimeSec)
+    {
+        if (_activeTransportRide == null) return null;
+
+        var target = _activeTransportRide.Update(
+            currentPosition, currentTransportGuid, nearbyObjects, deltaTimeSec);
+
+        // Ride complete — clear transport state and force path recalculation
+        if (_activeTransportRide.CurrentPhase == TransportPhase.Complete)
+        {
+            _pendingTransport = null;
+            _activeTransportRide = null;
+            Clear();
+        }
+
+        return target;
+    }
+
+    /// <summary>
+    /// Cancel any active transport ride. Use when the bot is interrupted
+    /// (death, combat, teleport).
+    /// </summary>
+    public void CancelTransportRide()
+    {
+        _pendingTransport = null;
+        _activeTransportRide = null;
+    }
 }
