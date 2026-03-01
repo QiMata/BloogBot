@@ -56,6 +56,7 @@ public class DeathCorpseRunTests
         _output = output;
         _bot.SetOutput(output);
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 5001. Set WWOW_DATA_DIR and rebuild.");
     }
 
     private readonly record struct LifeState(uint Health, bool Ghost, bool StandDead);
@@ -136,10 +137,14 @@ public class DeathCorpseRunTests
         {
             _output.WriteLine($"=== BG Bot: {bgChar} ({bgAccount}) ===");
             _output.WriteLine($"=== FG Bot: {fgChar} ({fgAccount}) ===");
-            _output.WriteLine("[PARITY] Running BG and FG corpse scenarios sequentially for deterministic kill/setup timing.");
+            _output.WriteLine("[PARITY] Running BG and FG corpse scenarios in parallel.");
 
-            var bgEvidence = await RunDeathScenario(bgAccount!, bgChar!, () => _bot.BackgroundBot, "BG");
-            var fgEvidence = await RunDeathScenario(fgAccount!, fgChar!, () => _bot.ForegroundBot, "FG");
+            var bgTask = RunDeathScenario(bgAccount!, bgChar!, () => _bot.BackgroundBot, "BG");
+            var fgTask = RunDeathScenario(fgAccount!, fgChar!, () => _bot.ForegroundBot, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+
+            var bgEvidence = await bgTask;
+            var fgEvidence = await fgTask;
 
             // BG uses our pathfinding — strict assertion.
             AssertScenario(bgEvidence);

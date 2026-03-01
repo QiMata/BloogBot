@@ -49,19 +49,25 @@ public class EquipmentEquipTests
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
-        bool bgPassed = await RunEquipScenario(bgAccount, "BG");
 
-        bool fgPassed = false;
+        bool bgPassed, fgPassed = false;
         if (_bot.ForegroundBot != null)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
-            fgPassed = await RunEquipScenario(fgAccount, "FG");
+            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
+            _output.WriteLine("[PARITY] Running BG and FG equip scenarios in parallel.");
+
+            var bgTask = RunEquipScenario(bgAccount, "BG");
+            var fgTask = RunEquipScenario(fgAccount, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+            bgPassed = await bgTask;
+            fgPassed = await fgTask;
         }
         else
         {
-            _output.WriteLine("\nFG Bot: NOT AVAILABLE (WoW.exe not running or injection failed)");
+            bgPassed = await RunEquipScenario(bgAccount, "BG");
+            _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 
         Assert.True(bgPassed, "BG bot: Worn Mace should move from bag snapshot to MAINHAND slot.");
@@ -103,6 +109,8 @@ public class EquipmentEquipTests
             await _bot.SendGmChatCommandAsync(account, ".gm on");
             await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
             await Task.Delay(1200);
+            await _bot.SendGmChatCommandAsync(account, ".gm off");
+            await Task.Delay(1000);
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
             if (snap.Player == null)
@@ -140,6 +148,10 @@ public class EquipmentEquipTests
             return false;
         }
 
+        // Ensure GM mode is off — GM mode blocks player equip actions (same as FISH-001).
+        await _bot.SendGmChatCommandAsync(account, ".gm off");
+        await Task.Delay(1500);
+
         // Equip and verify transition.
         _output.WriteLine($"  [{label}] Equipping Worn Mace.");
         await _bot.SendActionAndWaitAsync(account, new ActionMessage
@@ -157,15 +169,19 @@ public class EquipmentEquipTests
         bool mainhandEquipped = playerAfter.Inventory.TryGetValue(MainhandSlot, out ulong mainhandAfterGuid) && mainhandAfterGuid != 0;
         int maceCountAfterEquip = CountBagItem(playerAfter, WornMace);
         bool maceMovedFromBags = maceCountAfterEquip < maceCountBeforeEquip;
+        // If mainhand already had a Worn Mace (item 36), equipping another one swaps them —
+        // bag count stays the same but mainhand GUID changes. Accept this as a pass.
+        bool mainhandGuidChanged = mainhandAfterGuid != mainhandBeforeGuid;
 
         _output.WriteLine($"  [{label}] Mainhand after: {(mainhandEquipped ? $"GUID=0x{mainhandAfterGuid:X}" : "EMPTY")}");
         _output.WriteLine($"  [{label}] Worn Mace in bags before/after equip: {maceCountBeforeEquip} -> {maceCountAfterEquip}");
-        _output.WriteLine($"  [{label}] Transition checks: mainhandEquipped={mainhandEquipped}, movedFromBags={maceMovedFromBags}");
+        _output.WriteLine($"  [{label}] Transition checks: mainhandEquipped={mainhandEquipped}, movedFromBags={maceMovedFromBags}, guidChanged={mainhandGuidChanged}");
 
-        if (!mainhandEquipped || !maceMovedFromBags)
+        bool passed = mainhandEquipped && (maceMovedFromBags || mainhandGuidChanged);
+        if (!passed)
             _bot.DumpSnapshotDiagnostics(after, label);
 
-        return mainhandEquipped && maceMovedFromBags;
+        return passed;
     }
 
     private static int CountBagItem(Game.WoWPlayer player, uint itemId)

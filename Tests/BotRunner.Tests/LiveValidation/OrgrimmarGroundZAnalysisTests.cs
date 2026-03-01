@@ -83,26 +83,26 @@ public class OrgrimmarGroundZAnalysisTests
 
         foreach (var (label, px, py, recZ, simZ) in ProbePositions)
         {
-            // Teleport BG client to probe position (use recZ + 3 to avoid undermap detection)
+            // Teleport both clients to probe position in parallel (use recZ + 3 to avoid undermap detection)
             float teleZ = recZ + 3.0f;
-            await _bot.BotTeleportAsync(bgAccount!, MapId, px, py, teleZ);
-
-            // Teleport FG client to same position
+            var teleportTasks = new List<Task> { _bot.BotTeleportAsync(bgAccount!, MapId, px, py, teleZ) };
             if (hasFg)
-                await _bot.BotTeleportAsync(fgAccount!, MapId, px, py, teleZ);
+                teleportTasks.Add(_bot.BotTeleportAsync(fgAccount!, MapId, px, py, teleZ));
+            await Task.WhenAll(teleportTasks);
 
             // Wait for clients to settle (gravity + ground snap)
             await Task.Delay(3000);
 
-            // Read BG position from snapshot
+            // Read both positions from snapshots
             float bgZ = float.NaN;
+            float fgZ = float.NaN;
+
+            await _bot.RefreshSnapshotsAsync();
             var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
             var bgPos = bgSnap?.Player?.Unit?.GameObject?.Base?.Position;
             if (bgPos != null)
                 bgZ = bgPos.Z;
 
-            // Read FG position from snapshot
-            float fgZ = float.NaN;
             if (hasFg)
             {
                 var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);

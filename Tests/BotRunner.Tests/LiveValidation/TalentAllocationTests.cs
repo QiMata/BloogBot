@@ -44,20 +44,28 @@ public class TalentAllocationTests
     public async Task Talent_LearnViaGM_SpellAppearsInKnownSpells()
     {
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
-        var bgLearned = await RunTalentScenario(_bot.BgAccountName!, "BG");
-        Assert.True(bgLearned, "[BG] Spell 16462 should appear in snapshot spell list after .learn.");
 
+        bool bgLearned, fgLearned = false;
         if (_bot.ForegroundBot != null)
         {
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ===");
-            var fgLearned = await RunTalentScenario(_bot.FgAccountName!, "FG");
-            if (!fgLearned)
-                _output.WriteLine("[FG] WARNING: spell 16462 not visible in FG snapshot spell list; BG path remains authoritative.");
+            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ===");
+            _output.WriteLine("[PARITY] Running BG and FG talent scenarios in parallel.");
+
+            var bgTask = RunTalentScenario(_bot.BgAccountName!, "BG");
+            var fgTask = RunTalentScenario(_bot.FgAccountName!, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+            bgLearned = await bgTask;
+            fgLearned = await fgTask;
         }
         else
         {
+            bgLearned = await RunTalentScenario(_bot.BgAccountName!, "BG");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
+
+        Assert.True(bgLearned, "[BG] Spell 16462 should appear in snapshot spell list after .learn.");
+        if (_bot.ForegroundBot != null && !fgLearned)
+            _output.WriteLine("[FG] WARNING: spell 16462 not visible in FG snapshot spell list; BG path remains authoritative.");
     }
 
     private async Task<bool> RunTalentScenario(string account, string label)

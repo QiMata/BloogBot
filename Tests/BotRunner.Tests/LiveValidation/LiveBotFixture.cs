@@ -49,6 +49,13 @@ public class LiveBotFixture : IAsyncLifetime
     public bool IsReady { get; private set; }
     public string? FailureReason { get; private set; }
 
+    /// <summary>
+    /// Whether PathfindingService is listening on port 5001.
+    /// Tests that require pathfinding (corpse run, movement, gathering) should
+    /// check this via <c>Skip.IfNot(fixture.IsPathfindingReady, ...)</c>.
+    /// </summary>
+    public bool IsPathfindingReady => _serviceFixture.PathfindingServiceReady;
+
     /// <summary>Snapshot of the Background (headless) bot. Updated by calling <see cref="RefreshSnapshotsAsync"/>.</summary>
     public WoWActivitySnapshot? BackgroundBot { get; private set; }
 

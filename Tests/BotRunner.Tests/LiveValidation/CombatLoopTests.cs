@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
@@ -57,10 +58,13 @@ public class CombatLoopTests
         var bgPassed = false;
         var fgPassed = false;
 
+        // Shared set so concurrent bots claim different targets.
+        var claimedTargets = new ConcurrentDictionary<ulong, string>();
+
         if (_bot.ForegroundBot == null)
         {
             _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
-            bgPassed = await RunCombatScenarioAsync(bgAccount, "BG");
+            bgPassed = await RunCombatScenarioAsync(bgAccount, "BG", claimedTargets, offsetX: 0, offsetY: 0);
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
         else
@@ -69,10 +73,11 @@ public class CombatLoopTests
             Assert.NotNull(fgAccount);
             _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
             _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
-            _output.WriteLine("[PARITY] Running BG and FG combat scenarios concurrently.");
+            _output.WriteLine("[PARITY] Running BG and FG combat scenarios in parallel — each targets a different boar.");
 
-            var bgTask = RunCombatScenarioAsync(bgAccount, "BG");
-            var fgTask = RunCombatScenarioAsync(fgAccount, "FG");
+            // Offset positions so each bot lands near different boars.
+            var bgTask = RunCombatScenarioAsync(bgAccount, "BG", claimedTargets, offsetX: -8, offsetY: 0);
+            var fgTask = RunCombatScenarioAsync(fgAccount, "FG", claimedTargets, offsetX: +8, offsetY: 0);
             await Task.WhenAll(bgTask, fgTask);
 
             bgPassed = await bgTask;
@@ -84,10 +89,11 @@ public class CombatLoopTests
             Assert.True(fgPassed, "FG bot should target and kill a nearby mob (snapshot-confirmed).");
     }
 
-    private async Task<bool> RunCombatScenarioAsync(string account, string label)
+    private async Task<bool> RunCombatScenarioAsync(string account, string label,
+        ConcurrentDictionary<ulong, string> claimedTargets, float offsetX = 0, float offsetY = 0)
     {
         await EnsureStrictAliveAsync(account, label);
-        await EnsureNearMobAreaAsync(account, label);
+        await EnsureNearMobAreaAsync(account, label, offsetX, offsetY);
 
         await _bot.RefreshSnapshotsAsync();
         var selfSnap = await _bot.GetSnapshotAsync(account);
@@ -98,14 +104,14 @@ public class CombatLoopTests
             return false;
         }
 
-        _output.WriteLine($"  [{label}] Finding candidate mob in snapshot...");
-        var targetGuid = await FindLivingMobGuidAsync(account, selfGuid, TimeSpan.FromSeconds(12));
+        _output.WriteLine($"  [{label}] Finding candidate mob in snapshot (excluding {claimedTargets.Count} claimed)...");
+        var targetGuid = await FindLivingMobGuidAsync(account, selfGuid, TimeSpan.FromSeconds(12), claimedTargets);
         if (targetGuid == 0)
         {
             _output.WriteLine($"  [{label}] No mob found in first scan; issuing .respawn and retrying once.");
             var respawnTrace = await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: true, delayMs: 1000);
             AssertCommandSucceeded(respawnTrace, label, ".respawn");
-            targetGuid = await FindLivingMobGuidAsync(account, selfGuid, TimeSpan.FromSeconds(12));
+            targetGuid = await FindLivingMobGuidAsync(account, selfGuid, TimeSpan.FromSeconds(12), claimedTargets);
         }
 
         if (targetGuid == 0)
@@ -182,15 +188,18 @@ public class CombatLoopTests
         return deadOrGone;
     }
 
-    private async Task EnsureNearMobAreaAsync(string account, string label)
+    private async Task EnsureNearMobAreaAsync(string account, string label, float offsetX = 0, float offsetY = 0)
     {
+        var targetX = MobAreaX + offsetX;
+        var targetY = MobAreaY + offsetY;
+
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
         var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         if (pos == null)
             return;
 
-        var distance = Distance2D(pos.X, pos.Y, MobAreaX, MobAreaY);
+        var distance = Distance2D(pos.X, pos.Y, targetX, targetY);
         if (distance <= MobAreaRadius)
         {
             _output.WriteLine($"  [{label}] Already near mob area (distance={distance:F1}y); skipping teleport.");
@@ -198,13 +207,14 @@ public class CombatLoopTests
         }
 
         _output.WriteLine($"  [{label}] Teleporting to mob area (distance={distance:F1}y).");
-        await _bot.BotTeleportAsync(account, MapId, MobAreaX, MobAreaY, MobAreaZ);
+        await _bot.BotTeleportAsync(account, MapId, targetX, targetY, MobAreaZ);
 
-        var arrived = await WaitForNearPositionAsync(account, MobAreaX, MobAreaY, MobAreaRadius, TimeSpan.FromSeconds(12));
+        var arrived = await WaitForNearPositionAsync(account, targetX, targetY, MobAreaRadius, TimeSpan.FromSeconds(12));
         Assert.True(arrived, $"[{label}] Failed to arrive near mob area after teleport.");
     }
 
-    private async Task<ulong> FindLivingMobGuidAsync(string account, ulong selfGuid, TimeSpan timeout)
+    private async Task<ulong> FindLivingMobGuidAsync(string account, ulong selfGuid, TimeSpan timeout,
+        ConcurrentDictionary<ulong, string>? claimedTargets = null)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < timeout)
@@ -246,6 +256,10 @@ public class CombatLoopTests
                     if (!isBoar)
                         return false;
 
+                    // Skip targets already claimed by the other bot.
+                    if (claimedTargets != null && claimedTargets.ContainsKey(guid))
+                        return false;
+
                     return true;
                 })
                 .OrderBy(u => u.GameObject?.Level ?? uint.MaxValue)
@@ -261,7 +275,11 @@ public class CombatLoopTests
                 var entry = mob.GameObject?.Entry ?? 0;
                 _output.WriteLine($"    Candidate target 0x{guid:X}: name='{name}' entry={entry} npcFlags=0x{mob.NpcFlags:X} HP={mob.Health}/{mob.MaxHealth} at ({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F1})");
                 if (guid != 0)
+                {
+                    // Atomically claim this target so the other bot picks a different one.
+                    claimedTargets?.TryAdd(guid, account);
                     return guid;
+                }
             }
 
             await Task.Delay(500);

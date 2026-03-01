@@ -88,7 +88,15 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Physics_PlayerNotFallingThroughWorld()
     {
-        await EnsureStrictAliveAsync(_bot.BgAccountName!, "BG");
+        // Setup both bots in parallel.
+        var setupTasks = new System.Collections.Generic.List<Task>
+        {
+            EnsureStrictAliveAsync(_bot.BgAccountName!, "BG")
+        };
+        if (_bot.ForegroundBot != null)
+            setupTasks.Add(EnsureStrictAliveAsync(_bot.FgAccountName!, "FG"));
+        await Task.WhenAll(setupTasks);
+
         await _bot.RefreshSnapshotsAsync();
 
         var bgPos = _bot.BackgroundBot?.Player?.Unit?.GameObject?.Base?.Position;
@@ -96,19 +104,29 @@ public class BasicLoopTests
         var initialZ = bgPos.Z;
         _output.WriteLine($"BG initial Z: {initialZ:F2}");
 
-        var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 6000);
-        _output.WriteLine($"BG final Z: {finalZ:F2}, stable={stable}, delta={Math.Abs(finalZ - initialZ):F2}");
-
-        Assert.True(finalZ > -500, $"BG physics broken: Z={finalZ:F2} below world floor threshold.");
-        Assert.True(stable, $"BG Z failed to stabilize: start={initialZ:F2}, end={finalZ:F2}.");
-
         if (_bot.ForegroundBot != null)
         {
-            await EnsureStrictAliveAsync(_bot.FgAccountName!, "FG");
-            var (fgStable, fgFinalZ) = await _bot.WaitForZStabilizationAsync(_bot.FgAccountName, waitMs: 6000);
+            _output.WriteLine("[PARITY] Running BG and FG Z-stabilization checks in parallel.");
+            var bgStabTask = _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 6000);
+            var fgStabTask = _bot.WaitForZStabilizationAsync(_bot.FgAccountName, waitMs: 6000);
+            await Task.WhenAll(bgStabTask, fgStabTask);
+
+            var (stable, finalZ) = await bgStabTask;
+            _output.WriteLine($"BG final Z: {finalZ:F2}, stable={stable}, delta={Math.Abs(finalZ - initialZ):F2}");
+            Assert.True(finalZ > -500, $"BG physics broken: Z={finalZ:F2} below world floor threshold.");
+            Assert.True(stable, $"BG Z failed to stabilize: start={initialZ:F2}, end={finalZ:F2}.");
+
+            var (fgStable, fgFinalZ) = await fgStabTask;
             _output.WriteLine($"FG final Z: {fgFinalZ:F2}, stable={fgStable}");
             Assert.True(fgFinalZ > -500, $"FG physics broken: Z={fgFinalZ:F2} below world floor threshold.");
             Assert.True(fgStable, $"FG Z failed to stabilize: end={fgFinalZ:F2}.");
+        }
+        else
+        {
+            var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 6000);
+            _output.WriteLine($"BG final Z: {finalZ:F2}, stable={stable}, delta={Math.Abs(finalZ - initialZ):F2}");
+            Assert.True(finalZ > -500, $"BG physics broken: Z={finalZ:F2} below world floor threshold.");
+            Assert.True(stable, $"BG Z failed to stabilize: start={initialZ:F2}, end={finalZ:F2}.");
         }
     }
 
@@ -117,48 +135,55 @@ public class BasicLoopTests
     {
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
-        await EnsureStrictAliveAsync(bgAccount, "BG");
 
-        await _bot.RefreshSnapshotsAsync();
-        var beforeBg = await _bot.GetSnapshotAsync(bgAccount);
-        var beforeBgPos = beforeBg?.Player?.Unit?.GameObject?.Base?.Position;
-        Assert.NotNull(beforeBgPos);
-        var bgDistanceBefore = Distance2D(beforeBgPos!.X, beforeBgPos.Y, RazorHillX, RazorHillY);
-
-        var bgMoved = await TeleportAndVerifyAsync(bgAccount, "BG");
-        Assert.True(bgMoved, "BG should arrive near Razor Hill after teleport command.");
-
-        var afterBg = await _bot.GetSnapshotAsync(bgAccount);
-        var afterBgPos = afterBg?.Player?.Unit?.GameObject?.Base?.Position;
-        Assert.NotNull(afterBgPos);
-        var bgStep = Distance2D(beforeBgPos.X, beforeBgPos.Y, afterBgPos!.X, afterBgPos.Y);
-        _output.WriteLine($"[BG] Teleport displacement: {bgStep:F1}y (distanceBefore={bgDistanceBefore:F1}y)");
-        if (bgDistanceBefore > RazorHillArrivalRadius)
-            Assert.True(bgStep > 5f, "BG teleport should move position by more than a trivial amount when not already near target.");
+        // Setup both bots in parallel.
+        var setupTasks = new System.Collections.Generic.List<Task>
+        {
+            EnsureStrictAliveAsync(bgAccount, "BG")
+        };
+        if (_bot.ForegroundBot != null)
+            setupTasks.Add(EnsureStrictAliveAsync(_bot.FgAccountName!, "FG"));
+        await Task.WhenAll(setupTasks);
 
         if (_bot.ForegroundBot != null)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
-            await EnsureStrictAliveAsync(fgAccount, "FG");
+            _output.WriteLine("[PARITY] Running BG and FG teleport scenarios in parallel.");
 
-            await _bot.RefreshSnapshotsAsync();
-            var beforeFg = await _bot.GetSnapshotAsync(fgAccount);
-            var beforeFgPos = beforeFg?.Player?.Unit?.GameObject?.Base?.Position;
-            Assert.NotNull(beforeFgPos);
-            var fgDistanceBefore = Distance2D(beforeFgPos!.X, beforeFgPos.Y, RazorHillX, RazorHillY);
+            var bgTask = RunTeleportScenarioAsync(bgAccount, "BG");
+            var fgTask = RunTeleportScenarioAsync(fgAccount, "FG");
+            await Task.WhenAll(bgTask, fgTask);
 
-            var fgMoved = await TeleportAndVerifyAsync(fgAccount, "FG");
-            Assert.True(fgMoved, "FG should arrive near Razor Hill after teleport command.");
-
-            var afterFg = await _bot.GetSnapshotAsync(fgAccount);
-            var afterFgPos = afterFg?.Player?.Unit?.GameObject?.Base?.Position;
-            Assert.NotNull(afterFgPos);
-            var fgStep = Distance2D(beforeFgPos.X, beforeFgPos.Y, afterFgPos!.X, afterFgPos.Y);
-            _output.WriteLine($"[FG] Teleport displacement: {fgStep:F1}y (distanceBefore={fgDistanceBefore:F1}y)");
-            if (fgDistanceBefore > RazorHillArrivalRadius)
-                Assert.True(fgStep > 5f, "FG teleport should move position by more than a trivial amount when not already near target.");
+            Assert.True(await bgTask, "BG should arrive near Razor Hill after teleport command.");
+            Assert.True(await fgTask, "FG should arrive near Razor Hill after teleport command.");
         }
+        else
+        {
+            var bgResult = await RunTeleportScenarioAsync(bgAccount, "BG");
+            Assert.True(bgResult, "BG should arrive near Razor Hill after teleport command.");
+        }
+    }
+
+    private async Task<bool> RunTeleportScenarioAsync(string account, string label)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var before = await _bot.GetSnapshotAsync(account);
+        var beforePos = before?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(beforePos);
+        var distanceBefore = Distance2D(beforePos!.X, beforePos.Y, RazorHillX, RazorHillY);
+
+        var moved = await TeleportAndVerifyAsync(account, label);
+
+        var after = await _bot.GetSnapshotAsync(account);
+        var afterPos = after?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(afterPos);
+        var step = Distance2D(beforePos.X, beforePos.Y, afterPos!.X, afterPos.Y);
+        _output.WriteLine($"[{label}] Teleport displacement: {step:F1}y (distanceBefore={distanceBefore:F1}y)");
+        if (distanceBefore > RazorHillArrivalRadius)
+            Assert.True(step > 5f, $"{label} teleport should move position by more than a trivial amount when not already near target.");
+
+        return moved;
     }
 
     [SkippableFact]

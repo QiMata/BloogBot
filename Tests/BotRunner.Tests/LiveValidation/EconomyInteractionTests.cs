@@ -44,73 +44,108 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Bank_OpenAndDeposit()
     {
-        await EnsureBagHasItemAsync(_bot.BgAccountName!, "BG", LinenCloth, 10);
+        // Setup both bots in parallel (items + location).
+        var setupTasks = new System.Collections.Generic.List<Task>
+        {
+            SetupBankAsync(_bot.BgAccountName!, "BG")
+        };
         if (_bot.ForegroundBot != null)
-            await EnsureBagHasItemAsync(_bot.FgAccountName!, "FG", LinenCloth, 10);
-
-        await EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, OrgBankX, OrgBankY, OrgBankZ);
-        if (_bot.ForegroundBot != null)
-            await EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, OrgBankX, OrgBankY, OrgBankZ);
-
-        _output.WriteLine("=== BG Bot ===");
-        var bgOk = await InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
-            (uint)NPCFlags.UNIT_NPC_FLAG_BANKER, "Banker", "BG");
-        Assert.True(bgOk, "BG should find/interact with a banker.");
+            setupTasks.Add(SetupBankAsync(_bot.FgAccountName!, "FG"));
+        await Task.WhenAll(setupTasks);
 
         if (_bot.ForegroundBot != null)
         {
-            _output.WriteLine("\n=== FG Bot ===");
-            var fgOk = await InteractWithNpcType(_bot.FgAccountName!, () => _bot.ForegroundBot,
+            _output.WriteLine("[PARITY] Running BG and FG bank interactions in parallel.");
+            var bgTask = InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
+                (uint)NPCFlags.UNIT_NPC_FLAG_BANKER, "Banker", "BG");
+            var fgTask = InteractWithNpcType(_bot.FgAccountName!, () => _bot.ForegroundBot,
                 (uint)NPCFlags.UNIT_NPC_FLAG_BANKER, "Banker", "FG");
-            Assert.True(fgOk, "FG should find/interact with a banker.");
+            await Task.WhenAll(bgTask, fgTask);
+
+            Assert.True(await bgTask, "BG should find/interact with a banker.");
+            Assert.True(await fgTask, "FG should find/interact with a banker.");
         }
+        else
+        {
+            var bgOk = await InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
+                (uint)NPCFlags.UNIT_NPC_FLAG_BANKER, "Banker", "BG");
+            Assert.True(bgOk, "BG should find/interact with a banker.");
+        }
+    }
+
+    private async Task SetupBankAsync(string account, string label)
+    {
+        await EnsureBagHasItemAsync(account, label, LinenCloth, 10);
+        await EnsureReadyAtLocationAsync(account, label, MapId, OrgBankX, OrgBankY, OrgBankZ);
     }
 
     [SkippableFact]
     public async Task AuctionHouse_OpenAndList()
     {
-        await EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, OrgAhX, OrgAhY, OrgAhZ);
+        // Setup both bots at AH location in parallel.
+        var setupTasks = new System.Collections.Generic.List<Task>
+        {
+            EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, OrgAhX, OrgAhY, OrgAhZ)
+        };
         if (_bot.ForegroundBot != null)
-            await EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, OrgAhX, OrgAhY, OrgAhZ);
-
-        _output.WriteLine("=== BG Bot ===");
-        var bgOk = await InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
-            (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER, "Auctioneer", "BG");
-        Assert.True(bgOk, "BG should find/interact with an auctioneer.");
+            setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, OrgAhX, OrgAhY, OrgAhZ));
+        await Task.WhenAll(setupTasks);
 
         if (_bot.ForegroundBot != null)
         {
-            _output.WriteLine("\n=== FG Bot ===");
-            var fgOk = await InteractWithNpcType(_bot.FgAccountName!, () => _bot.ForegroundBot,
+            _output.WriteLine("[PARITY] Running BG and FG auctioneer interactions in parallel.");
+            var bgTask = InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
+                (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER, "Auctioneer", "BG");
+            var fgTask = InteractWithNpcType(_bot.FgAccountName!, () => _bot.ForegroundBot,
                 (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER, "Auctioneer", "FG");
-            Assert.True(fgOk, "FG should find/interact with an auctioneer.");
+            await Task.WhenAll(bgTask, fgTask);
+
+            Assert.True(await bgTask, "BG should find/interact with an auctioneer.");
+            Assert.True(await fgTask, "FG should find/interact with an auctioneer.");
+        }
+        else
+        {
+            var bgOk = await InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
+                (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER, "Auctioneer", "BG");
+            Assert.True(bgOk, "BG should find/interact with an auctioneer.");
         }
     }
 
     [SkippableFact]
     public async Task Mail_OpenMailbox()
     {
-        // Send one small mail so mailbox interaction has payload to observe.
-        await _bot.SendGmChatCommandAsync(_bot.BgAccountName!, ".send money self \"Test\" \"Gold\" 100");
+        // Send mail and setup location in parallel for both bots.
+        var setupTasks = new System.Collections.Generic.List<Task>
+        {
+            SetupMailAsync(_bot.BgAccountName!, "BG")
+        };
         if (_bot.ForegroundBot != null)
-            await _bot.SendGmChatCommandAsync(_bot.FgAccountName!, ".send money self \"Test\" \"Gold\" 100");
-        await Task.Delay(1000);
-
-        await EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
-        if (_bot.ForegroundBot != null)
-            await EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
-
-        _output.WriteLine("=== BG Bot ===");
-        var bgOk = await InteractWithMailboxLikeObject(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
-        Assert.True(bgOk, "BG should find/interact with a mailbox-like game object.");
+            setupTasks.Add(SetupMailAsync(_bot.FgAccountName!, "FG"));
+        await Task.WhenAll(setupTasks);
 
         if (_bot.ForegroundBot != null)
         {
-            _output.WriteLine("\n=== FG Bot ===");
-            var fgOk = await InteractWithMailboxLikeObject(_bot.FgAccountName!, () => _bot.ForegroundBot, "FG");
-            if (!fgOk)
+            _output.WriteLine("[PARITY] Running BG and FG mailbox interactions in parallel.");
+            var bgTask = InteractWithMailboxLikeObject(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
+            var fgTask = InteractWithMailboxLikeObject(_bot.FgAccountName!, () => _bot.ForegroundBot, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+
+            Assert.True(await bgTask, "BG should find/interact with a mailbox-like game object.");
+            if (!await fgTask)
                 _output.WriteLine("WARNING: FG mailbox interaction not observed in this run; BG path remains authoritative.");
         }
+        else
+        {
+            var bgOk = await InteractWithMailboxLikeObject(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
+            Assert.True(bgOk, "BG should find/interact with a mailbox-like game object.");
+        }
+    }
+
+    private async Task SetupMailAsync(string account, string label)
+    {
+        await _bot.SendGmChatCommandAsync(account, ".send money self \"Test\" \"Gold\" 100");
+        await Task.Delay(1000);
+        await EnsureReadyAtLocationAsync(account, label, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
     }
 
     private async Task<bool> InteractWithNpcType(string account, Func<WoWActivitySnapshot?> getSnap, uint npcFlag, string npcType, string label)

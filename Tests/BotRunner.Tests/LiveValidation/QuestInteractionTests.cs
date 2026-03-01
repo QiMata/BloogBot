@@ -43,15 +43,19 @@ public class QuestInteractionTests
     public async Task Quest_AddCompleteAndRemove_AreReflectedInSnapshots()
     {
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
-        await RunQuestScenario(_bot.BgAccountName!, "BG");
 
         if (_bot.ForegroundBot != null)
         {
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ===");
-            await RunQuestScenario(_bot.FgAccountName!, "FG");
+            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ===");
+            _output.WriteLine("[PARITY] Running BG and FG quest scenarios in parallel.");
+
+            var bgTask = RunQuestScenario(_bot.BgAccountName!, "BG");
+            var fgTask = RunQuestScenario(_bot.FgAccountName!, "FG");
+            await Task.WhenAll(bgTask, fgTask);
         }
         else
         {
+            await RunQuestScenario(_bot.BgAccountName!, "BG");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
     }

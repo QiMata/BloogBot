@@ -51,9 +51,13 @@ public class NpcInteractionTests
     [SkippableFact]
     public async Task Vendor_SellJunkItems()
     {
-        await EnsureBagHasItemAsync(_bot.BgAccountName!, "BG", LinenCloth, 5);
+        var setupTasks = new System.Collections.Generic.List<Task>
+        {
+            EnsureBagHasItemAsync(_bot.BgAccountName!, "BG", LinenCloth, 5)
+        };
         if (_bot.ForegroundBot != null)
-            await EnsureBagHasItemAsync(_bot.FgAccountName!, "FG", LinenCloth, 5);
+            setupTasks.Add(EnsureBagHasItemAsync(_bot.FgAccountName!, "FG", LinenCloth, 5));
+        await Task.WhenAll(setupTasks);
 
         await RunNpcInteraction("Vendor (sell)", RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ,
             (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, requireNpcInteraction: true);
@@ -69,12 +73,19 @@ public class NpcInteractionTests
     [SkippableFact]
     public async Task Trainer_LearnAvailableSpells()
     {
-        await EnsureMoneyAtLeastAsync(_bot.BgAccountName!, "BG", 10000);
-        await EnsureLevelAtLeastAsync(_bot.BgAccountName!, "BG", 10);
+        var bgSetup = Task.WhenAll(
+            EnsureMoneyAtLeastAsync(_bot.BgAccountName!, "BG", 10000),
+            EnsureLevelAtLeastAsync(_bot.BgAccountName!, "BG", 10));
         if (_bot.ForegroundBot != null)
         {
-            await EnsureMoneyAtLeastAsync(_bot.FgAccountName!, "FG", 10000);
-            await EnsureLevelAtLeastAsync(_bot.FgAccountName!, "FG", 10);
+            var fgSetup = Task.WhenAll(
+                EnsureMoneyAtLeastAsync(_bot.FgAccountName!, "FG", 10000),
+                EnsureLevelAtLeastAsync(_bot.FgAccountName!, "FG", 10));
+            await Task.WhenAll(bgSetup, fgSetup);
+        }
+        else
+        {
+            await bgSetup;
         }
 
         await RunNpcInteraction("Trainer (learn)", RazorHillTrainerX, RazorHillTrainerY, RazorHillTrainerZ,
@@ -91,9 +102,13 @@ public class NpcInteractionTests
     [SkippableFact]
     public async Task ObjectManager_DetectsNpcFlags()
     {
-        await EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ);
+        var setupTasks = new System.Collections.Generic.List<Task>
+        {
+            EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ)
+        };
         if (_bot.ForegroundBot != null)
-            await EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ);
+            setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ));
+        await Task.WhenAll(setupTasks);
 
         await _bot.RefreshSnapshotsAsync();
 
@@ -109,26 +124,37 @@ public class NpcInteractionTests
 
     private async Task RunNpcInteraction(string npcType, float x, float y, float z, uint npcFlag, bool requireNpcInteraction)
     {
-        await EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, x, y, z);
+        // Setup both bots at the location in parallel.
+        var setupTasks = new System.Collections.Generic.List<Task>
+        {
+            EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, x, y, z)
+        };
         if (_bot.ForegroundBot != null)
-            await EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, x, y, z);
+            setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, x, y, z));
+        await Task.WhenAll(setupTasks);
 
-        // BG bot interaction
+        // Run interactions in parallel.
         _output.WriteLine($"=== BG Bot: {npcType} ===");
-        var bgOk = await InteractWithNpc(_bot.BgAccountName!, () => _bot.BackgroundBot, npcFlag, "BG");
-        if (requireNpcInteraction)
-            Assert.True(bgOk, $"BG should find and interact with NPC flag 0x{npcFlag:X} for scenario '{npcType}'.");
-
-        // FG bot interaction
         if (_bot.ForegroundBot != null)
         {
-            _output.WriteLine($"\n=== FG Bot: {npcType} ===");
-            var fgOk = await InteractWithNpc(_bot.FgAccountName!, () => _bot.ForegroundBot, npcFlag, "FG");
+            _output.WriteLine($"=== FG Bot: {npcType} ===");
+            _output.WriteLine($"[PARITY] Running BG and FG {npcType} interactions in parallel.");
+
+            var bgTask = InteractWithNpc(_bot.BgAccountName!, () => _bot.BackgroundBot, npcFlag, "BG");
+            var fgTask = InteractWithNpc(_bot.FgAccountName!, () => _bot.ForegroundBot, npcFlag, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+
             if (requireNpcInteraction)
-                Assert.True(fgOk, $"FG should find and interact with NPC flag 0x{npcFlag:X} for scenario '{npcType}'.");
+            {
+                Assert.True(await bgTask, $"BG should find and interact with NPC flag 0x{npcFlag:X} for scenario '{npcType}'.");
+                Assert.True(await fgTask, $"FG should find and interact with NPC flag 0x{npcFlag:X} for scenario '{npcType}'.");
+            }
         }
         else
         {
+            var bgOk = await InteractWithNpc(_bot.BgAccountName!, () => _bot.BackgroundBot, npcFlag, "BG");
+            if (requireNpcInteraction)
+                Assert.True(bgOk, $"BG should find and interact with NPC flag 0x{npcFlag:X} for scenario '{npcType}'.");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
     }

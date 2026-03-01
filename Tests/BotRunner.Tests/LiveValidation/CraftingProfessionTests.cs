@@ -53,21 +53,23 @@ public class CraftingProfessionTests
     [SkippableFact]
     public async Task FirstAid_LearnAndCraft_ProducesLinenBandage()
     {
-        bool bgPassed;
-
-        // === BG Bot ===
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
-        bgPassed = await RunCraftingScenario(_bot.BgAccountName!, "BG");
 
-        // === FG Bot ===
-        bool fgPassed = false;
+        bool bgPassed, fgPassed = false;
         if (_bot.ForegroundBot != null)
         {
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ===");
-            fgPassed = await RunCraftingScenario(_bot.FgAccountName!, "FG");
+            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ===");
+            _output.WriteLine("[PARITY] Running BG and FG crafting scenarios in parallel.");
+
+            var bgTask = RunCraftingScenario(_bot.BgAccountName!, "BG");
+            var fgTask = RunCraftingScenario(_bot.FgAccountName!, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+            bgPassed = await bgTask;
+            fgPassed = await fgTask;
         }
         else
         {
+            bgPassed = await RunCraftingScenario(_bot.BgAccountName!, "BG");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 

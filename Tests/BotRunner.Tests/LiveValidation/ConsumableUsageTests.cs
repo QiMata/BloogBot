@@ -42,24 +42,28 @@ public class ConsumableUsageTests
     [SkippableFact]
     public async Task UseConsumable_ElixirOfLionsStrength_BuffApplied()
     {
-        // === Background Bot ===
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
-        bool bgPassed = await RunConsumableScenario(bgAccount, () => _bot.BackgroundBot?.Player, "BG");
 
-        // === Foreground Bot ===
-        bool fgPassed = false;
+        bool bgPassed, fgPassed = false;
         if (_bot.ForegroundBot != null)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
-            fgPassed = await RunConsumableScenario(fgAccount, () => _bot.ForegroundBot?.Player, "FG");
+            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
+            _output.WriteLine("[PARITY] Running BG and FG consumable scenarios in parallel.");
+
+            var bgTask = RunConsumableScenario(bgAccount, () => _bot.BackgroundBot?.Player, "BG");
+            var fgTask = RunConsumableScenario(fgAccount, () => _bot.ForegroundBot?.Player, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+            bgPassed = await bgTask;
+            fgPassed = await fgTask;
         }
         else
         {
-            _output.WriteLine("\nFG Bot: NOT AVAILABLE (WoW.exe not running or injection failed)");
+            bgPassed = await RunConsumableScenario(bgAccount, () => _bot.BackgroundBot?.Player, "BG");
+            _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 
         Assert.True(bgPassed, "BG bot: Expected aura increase after using Elixir of Lion's Strength.");

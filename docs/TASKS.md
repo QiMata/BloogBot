@@ -13,139 +13,87 @@
 5. Move completed items to `docs/ARCHIVE.md`.
 6. Before session handoff, update `Session Handoff` in both this file and the active local file.
 7. If two consecutive passes produce no delta, record the blocker and advance to the next queued file.
+8. **The MaNGOS server is ALWAYS live.** Never defer live validation tests — run them every session. FISH-001, BBR-PAR-001, AI-PARITY, and all LiveValidation tests should be executed, not deferred.
 
 ## P0 — Active Priorities
 
 | # | ID | Task | Status |
 |---|-----|------|--------|
-| 1 | `PATH-SMOOTH-001` | Path smoothing Parts 1-4 (adaptive radius, StringPull, LOS skip, smoothPath swap) — all features gated on `enableProbeHeuristics` | Done |
-| 2 | `PATH-SMOOTH-002` | Part 5: Cliff/edge detection with GetGroundZ IPC | Done |
-| 3 | `PATH-SMOOTH-003` | Part 6: Fall distance tracking in C++ PhysicsEngine | Done |
-| 4 | `PATH-SMOOTH-004` | Part 7: Gap jump detection | Done |
-| 5 | `DYNOBJ-001` | nearbyObjects IPC pipeline (proto + service + marshal). Caller integration pending. | Done |
-| 6 | `FISH-001` | Fix FishingProfessionTests: BG bobber not tracked. Diagnostic logging added to `WoWSharpObjectManager` (GO CREATE) and `SpellHandler.HandleGameObjectCustomAnim`. Needs live test run to capture output. | In Progress |
-| 7 | `FG-STUCK-001` | FG ghost stuck on terrain — WoW.exe native limitation, not a code bug. Recovery logic exists (`RecoverRunbackStall()`). Soft FG assertions are correct. | Won't Fix |
-| 8 | — | Complete missing-implementation backlog (section below) | Open |
-| 9 | `SOAP-CMD-001` | Harden SOAP `ExecuteGMCommandAsync` — throw on "no such command" FAULT, fix `.teleport` → `.tele`/`.go xyz` in all PathingTestDefinitions, consolidate duplicated `ContainsCommandRejection` | Done (partial — throw + command fixes done; ContainsCommandRejection consolidation deferred) |
-| 10 | `DB-CLEAN-001` | Clean up game object spawns with 0% spawn chance from MaNGOS DB (read-only audit + SOAP cleanup) | Low Priority |
+| 1 | `PATH-REFACTOR-001` | **Complete pathfinding service + PhysicsEngine refactor.** BG falls on walkable slopes (should clamp to surface). FG bumps into walls/objects and gets stuck. BG forced through Orgrimmar WMO (catapult near bank). Physics slope handling, WMO collision, and wall-sliding all need rework. | **Open — P0** |
+| 2 | `TEST-GMMODE-001` | All LiveValidation tests outside of combat and corpse-run should use `.gm on` for setup safety. | **Open — P0** |
+| 3 | `DB-CLEAN-001` | Remove all game object spawns with 0% spawn chance from MaNGOS DB. Also remove commands not from original MaNGOS (non-vanilla). | **Open — P0** |
+| 4 | `TEST-MINING-001` | Mining test does wasteful teleporting. FG bot stands on top of node instead of near it. Optimize teleport logic and fix FG node positioning. | **Open — P0** |
+| 5 | `TEST-LOG-CLEANUP` | Clean up all out-of-date test logs and temp files (AppData\Local\Temp\claude\ folders). | **Open — P0** |
+| 6 | `LV-PARALLEL-001` | Parallelize all LiveValidation FG+BG tests to run in parallel via Task.WhenAll. | **Done** |
+| 7 | `FISH-001` | FishingProfessionTests: BG fishing end-to-end. Root cause: MOVEFLAG_FALLINGFAR heartbeats during Z clamp interrupted fishing channel. | **Done** |
+| 8 | `TIER2-001` | Frame-ahead simulator, transport waiting, cross-map routing. FrameAheadSimulator, TransportData, TransportWaitingLogic, CrossMapRouter, MapTransitionGraph + NavigationPath integration. 73 tests (54 unit + 19 integration). | **Done** |
+| 9 | `AI-PARITY` | All 3 AI parity gates validated: CORPSE (1/1, 4m56s), COMBAT (1/1, 6s), GATHER (2/2, 4m20s). | **Done** |
 
-## P1 — Missing Implementation Inventory
+## Open — Storage Stubs (Blocked on NuGet)
 
-### Exports/BotRunner
-- [x] `BR-MISS-001` `ScanForQuestUnitsTask` TODO → defer rationale in `QuestingTask.cs:51` (needs quest objective→unit mapping + NPC filter design)
-- [x] `BR-MISS-002` Corpse-run setup fixed to Orgrimmar with reclaim gating — code-complete + live validated
-- [x] `BR-MISS-003` Snapshot fallback logging — bare `catch { }` blocks replaced with `TryPopulate()` helper emitting `[Snapshot] {Field} unavailable: {Type}` at Debug level
+| ID | Task | Blocker |
+|----|------|---------|
+| `RTS-MISS-001` | S3 ops in RecordedTests.Shared | Requires AWSSDK.S3 |
+| `RTS-MISS-002` | Azure ops in RecordedTests.Shared | Requires Azure.Storage.Blobs |
+| `WRTS-MISS-001` | S3 ops in WWoW.RecordedTests.Shared | Requires AWSSDK.S3 |
+| `WRTS-MISS-002` | Azure ops in WWoW.RecordedTests.Shared | Requires Azure.Storage.Blobs |
 
-### Exports/WoWSharpClient
-- [x] `WSC-MISS-001` Missing `WoWPlayer` fields — 11 properties added (ChosenTitle, KnownTitles, etc.) + CopyFrom + switch wiring
-- [x] `WSC-MISS-002` `CMSG_CANCEL_AURA` send path — `CancelAura()` on ObjectManager + `DismissBuff()` on WoWUnit
-- [x] `WSC-MISS-003` Custom navigation strategy — downgraded to Debug log (valid no-op for callers handling navigation externally)
-- [x] `WSC-MISS-004` Placeholder quest reward selection — strategy-aware SelectRewardIndex with HighestValue/BestForClass/BestStatUpgrade/MostNeeded
+## Open — Test Coverage Gaps (Remaining RPTT/RTS/WRTS TST tasks)
 
-### Exports/Navigation
-- [x] `NAV-MISS-001` `OverlapCapsule` export in `PhysicsTestExports.cpp` — implemented: routes to `SceneQuery::OverlapCapsule` via VMapManager2/StaticMapTree lookup
-- [x] `NAV-MISS-002` `returnPhysMat`/`backfaceCulling` in `SceneQuery.h` — resolved: comments updated to "Reserved" with explicit behavior documentation (not evaluated by current paths)
-- [x] `NAV-MISS-003` PathFinder debug path — replaced hardcoded `C:\Users\Drew\...` with printf
-- [x] `NAV-MISS-004` Corpse runback path consumption — code-complete + live validated
+These are incremental coverage expansion tasks. The test projects are healthy; these are additional test surfaces.
 
-### Exports/WinImports
-- [x] `WINIMP-MISS-001` Empty `SafeInjection.cs` deleted (implementation is nested in WinProcessImports.cs)
-- [x] `WINIMP-MISS-002` Duplicate P/Invoke declarations normalized — removed raw-uint set, kept typed-enum set, updated SafeInjection call site
-- [x] `WINIMP-MISS-003` `CancellationToken` added to `WoWProcessDetector.WaitForProcessReadyAsync` — plumbed through to Task.Delay and monitor methods
-- [x] `WINIMP-MISS-004` VK_A constant fixed (`0x53` → `0x41`, was duplicate of VK_S)
+| ID | Project | Remaining | Current Pass Count |
+|----|---------|-----------|-------------------|
+| `RPTT-TST-002..006` | RecordedTests.PathingTests.Tests | Program.FilterTests, lifecycle, timeout, disconnect | 115/115 |
+| `RTS-TST-002..006` | RecordedTests.Shared.Tests | S3/Azure storage tests (blocked on NuGet) | 323/323 |
+| `WRTS-TST-001..006` | WWoW.RecordedTests.Shared.Tests | S3/Azure storage tests (blocked on NuGet) | 262/283 (21 pre-existing) |
+| `RPTT-TST-002..006` | WWoW.RecordedTests.PathingTests.Tests | Program.FilterTests, lifecycle, timeout, disconnect | 85/85 |
 
-### Services/ForegroundBotRunner
-- [x] `FG-MISS-001` `NotImplementedException` in `WoWObject.cs` → safe defaults (0, null, empty)
-- [x] `FG-MISS-002` `NotImplementedException` in `WoWUnit.cs` → safe defaults (~50 properties)
-- [x] `FG-MISS-003` `NotImplementedException` in `WoWPlayer.cs` → safe defaults (~35 properties)
-- [x] `FG-MISS-004` Regression gate for FG materialization throws — 4 source-scanning tests in ForegroundObjectRegressionTests.cs
-- [x] `FG-MISS-005` Triage FG memory/warden TODOs — all triaged with explicit IDs (FG-WARDEN-001/002) or defer rationale
+## Open — Infrastructure Projects (No Test Projects)
 
-### Services
-- [x] `PHS-MISS-001` `NotImplementedException` → `ArgumentException` in `PromptFunctionBase.cs:47`
-- [x] `WSM-MISS-001` PathfindingService readiness gate — fail-fast on unavailability instead of proceeding
-- [x] `WSM-MISS-003` `StopManagedService` → `StopManagedServiceAsync` with awaited stop + timeout (no more fire-and-forget)
-- [x] `DES-MISS-003` FileSystemWatcher lifetime fixed — stored as field, IDisposable implemented
-- [x] `DES-MISS-004` Null/empty path validation added to CombatPredictionService + DecisionEngine constructors
-- [x] `WSM-MISS-002` Dead pathfinding bootstrap helpers removed from Program.cs (EnsurePathfindingServiceIsAvailable, LaunchPathfindingServiceExecutable, WaitForPathfindingServiceToStart)
-- [x] `DES-MISS-001` CombatModelServiceListener pass-through replaced with prediction-backed handler
-- [x] `DES-MISS-002` DecisionEngineWorker heartbeat spam replaced with idle-wait + lifecycle logging (full wiring deferred — needs config)
-- [x] `BBR-MISS-001` Action dispatch correlation token — `[act-N]` through receive/dispatch/completion logs in BotRunnerService.cs
-- [x] `BBR-MISS-002` Stuck-forward zero-displacement loops — code-complete + live validated (stall detection in RetrieveCorpseTask.cs)
-- [x] `BBR-MISS-003` BackgroundBotWorker StopAsync override added — deterministic teardown of bot runner + agent factory on shutdown
-- [x] `BBR-MISS-004` Path consumption for corpse runback — code-complete + live validated (probe/fallback disabled)
-- [x] `BBR-MISS-005` Parity regression checks — code-complete + live validated (infrastructure exists, BasicLoopTests+DeathCorpseRunTests pass)
-- [x] `PFS-MISS-003` Protobuf→native path mode mapping clarified — `req.Straight` → local `smoothPath` variable + log labels fixed
-- [x] `PFS-MISS-005` Fail-fast on missing nav data — `Environment.Exit(1)` instead of warning-and-continue
-- [x] `PFS-MISS-001` LOS fallback already gated — `WWOW_ENABLE_LOS_FALLBACK` env var disabled by default, no change needed
-- [x] `PFS-MISS-002` Elevated LOS probes already diagnostics-only — `TryHasLosForFallback` only called within opt-in fallback path
-- [x] `PFS-MISS-006` Orgrimmar corpse-run regression vectors — 3 tests (graveyard→center, entrance→VoS, reverse) with finite-coordinate + min-waypoint assertions
+| # | Local file | Task IDs | Notes |
+|---|-----------|----------|-------|
+| 1 | `UI/Systems/Systems.AppHost/TASKS.md` | SAH-MISS-001..006 | 2 source files, .NET Aspire orchestration |
+| 2 | `UI/Systems/Systems.ServiceDefaults/TASKS.md` | SSD-MISS-001..006 | 1 source file, OpenTelemetry/health config |
 
-### Exports/BotCommLayer
-- [x] `BCL-MISS-001` Snapshot contract parity audit — corpse lifecycle field map documented with proto field numbers, population sites, consumer patterns
-- [x] `BCL-MISS-002` Death/runback serialization tests — 3 round-trip tests for ghost form, resurrection, and corpse-run movement via StateChangeResponse
-- [x] `BCL-MISS-003` Socket teardown hardened — `IDisposable` on server/client types, `while(true)` → `while(_isRunning)`, client cleanup on disconnect
-- [x] `BCL-MISS-004` Proto regen workflow docs — canonical command, repo-local protoc default, C++ external target documented
-- [x] `WSM-MISS-004` Action queue cap/expiry — `TimestampedAction` wrapper, 50-item depth cap, 5-min TTL, explicit drop logging
-- [x] `WSM-MISS-005` Action-forwarding contract tests — 24 tests (proto round-trip, dead/ghost detection, EnqueueAction, ActionType coverage)
-- [x] `PHS-MISS-004` Test discovery already addressed — all methods have `[Fact(Skip)]` attributes
-- [x] `PHS-MISS-002` Transfer-contract tests for PromptFunctionBase — 14 tests (TransferHistory, TransferChatHistory, TransferPromptRunner, ResetChat)
-- [x] `PHS-MISS-003` System prompt preservation and InitializeChat semantics — covered in PromptFunctionBaseTransferTests
-- [x] `DES-MISS-005` Decision service contract tests — 16 tests (MLModel predict/learn, GetNextActions routing, DecisionEngine lifecycle)
+## Open — AI Parity (Needs Live Server)
 
-### Exports/Loader
-- [x] `LDR-MISS-001` Loader teardown hardened — shutdown event, 5s wait with diagnostics, thread exit code logging, FreeConsole on detach
-- [x] `LDR-MISS-002` Console visibility controlled by WWOW_LOADER_CONSOLE env var — suppress with =0, README updated
-- [x] `LDR-MISS-003` VS-generated TODO boilerplate removed from stdafx.h/stdafx.cpp; debug stub files already deleted
+| # | Local file | Task IDs | Notes |
+|---|-----------|----------|-------|
+| 1 | `WWoWBot.AI/TASKS.md` | AI-PARITY-001..GATHER-001 | **Done** — all 3 parity gates pass live (2026-02-28) |
 
-### Exports/WinImports (continued)
-- [x] `WINIMP-MISS-005` Cleanup evidence hooks — structured summary table in run-tests.ps1, PID/name in WoWProcessDetector detection logs
+## Open — Live Validation Failures (Discovered 2026-02-28)
 
-### Services/PathfindingService (continued)
-- [x] `PFS-MISS-004` Path provenance metadata — `result` + `raw_corner_count` fields in CalculatePathResponse proto
-- [x] `PFS-MISS-007` Path data integrity tests — 4 proto round-trip tests (count/order/precision/empty)
+| ID | Test | Error | Owner | Status |
+|----|------|-------|-------|--------|
+| `LV-EQUIP-001` | EquipmentEquipTests | BG equip swap assertion: bag count unchanged when mainhand already had Worn Mace. | `Tests/BotRunner.Tests` | **Done** — fixed assertion to accept mainhandGuidChanged + added `.gm off` guard |
+| `LV-GROUP-001` | GroupFormationTests | SMSG_GROUP_LIST parsed leaderGuid but never stored it persistently. Snapshot returned 0. | `Exports/WoWSharpClient` | **Done** — added LeaderGuid property to IPartyNetworkClientComponent, stored in ParseGroupList/SetLeader, used in snapshot |
+| `LV-GROUNDZ-001` | OrgrimmarGroundZAnalysis.PostTeleportSnap | GROUND_SNAP_MAX_DROP=3.0 too restrictive (Org navmesh 3.4y below WMO). Also physics blocked by `_isBeingTeleported` guard. | `Exports/WoWSharpClient/Movement` | **Done** — increased MAX_DROP to 5.0, force physics frame on teleport flag clear |
+| `LV-QUEST-001` | QuestInteractionTests | Quest not in snapshot after `.quest add`. Already tracked as WSM-PAR-001. | `Services/WoWStateManager` | Open |
 
-### Services/CppCodeIntelligenceMCP (Deferred — unused service)
-- [x] `CPPMCP-BLD-001` System.Text.Json package downgrade fixed (8.0.5 → 9.0.5)
-- [x] `CPPMCP-ARCH-002` 10 zero-byte tool placeholder files deleted
-- [x] `CPPMCP-MISS-002` Symbol usage analysis `IsUsed` flag — documented as deferred (needs AST-level resolution)
-- [ ] ~~`CPPMCP-MISS-001` File analysis response — deprioritized (service unused)~~
+## Deferred (Unused Services)
 
-### Services/LoggingMCPServer (Deferred — unused service)
-- [x] `LMCP-MISS-001` Dead code files deleted
-- [x] `LMCP-MISS-002` Duplicate class definitions removed
-- [x] `LMCP-MISS-003` GetRecentLogs fixed — non-destructive snapshot
-- [ ] ~~`LMCP-MISS-004..006` — deprioritized (service unused)~~
+| Local file | Status |
+|-----------|--------|
+| `Services/CppCodeIntelligenceMCP/TASKS.md` | CPPMCP-MISS-001 deprioritized |
+| `Services/LoggingMCPServer/TASKS.md` | LMCP-MISS-004..006 deprioritized |
 
-### UI
-- [x] `UI-MISS-001` `ConvertBack` → `Binding.DoNothing` in `GreaterThanZeroToBooleanConverter.cs`
+## Sub-TASKS Execution Queue (Partial — only non-Done rows)
 
-### GameData.Core
-- [x] `GDC-MISS-001` `DeathState.cs` FIXME → clear XML docs with player vs creature semantics
-- [x] `GDC-MISS-002` Corpse lifecycle interface contract documented — XML docs on IWoWLocalPlayer + IWoWCorpse reclaim-critical fields
-- [x] `GDC-MISS-003` Snapshot interface drift fixed — `IWoWActivitySnapshot : IActivitySnapshot`, removed duplicated fields, documented hierarchy
+| # | Local file | Status | Next IDs |
+|---|-----------|--------|----------|
+| 11 | `RecordedTests.Shared/TASKS.md` | Pending | RTS-MISS-001..004 (blocked on NuGet) |
+| 24 | `Tests/PathfindingService.Tests/TASKS.md` | **Partial** | PFS-TST-002/003/005 need nav data |
+| 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | **Partial** | PFS-TST-002 low priority |
+| 26 | `Tests/RecordedTests.PathingTests.Tests/TASKS.md` | **Partial** | RPTT-TST-002..006 remaining |
+| 27 | `Tests/RecordedTests.Shared.Tests/TASKS.md` | **Partial** | RTS-TST-002..006 (storage blocked on NuGet) |
+| 31 | `Tests/WWoW.RecordedTests.PathingTests.Tests/TASKS.md` | **Partial** | RPTT-TST-002..006 remaining |
+| 32 | `Tests/WWoW.RecordedTests.Shared.Tests/TASKS.md` | **Partial** | WRTS-TST-001..006 (storage blocked on NuGet) |
+| 36 | `UI/Systems/Systems.AppHost/TASKS.md` | Pending | SAH-MISS-001..006 |
+| 37 | `UI/Systems/Systems.ServiceDefaults/TASKS.md` | Pending | SSD-MISS-001..006 |
+| 38 | `WWoWBot.AI/TASKS.md` | **Partial** | AI-PARITY-001..GATHER-001 (need live server) |
 
-### BotProfiles
-- [x] `BP-MISS-001` 16 miswired PvP factories fixed → `new PvPRotationTask(botContext)`
-- [x] `BP-MISS-002` Regression test for profile factory wiring — reflection-based test guards PvP↔PvE cross-wiring
-- [x] `BP-MISS-003` Druid feral identity aligned — folder `DruidFeralCombat` → `DruidFeral` to match class/namespace/FileName
-- [x] `BP-MISS-004` Profile capability map — `PROFILE_TASK_MAP.md` with 27-spec factory/task file map
-
-### Storage (S3/Azure stubs — deferred, pending NuGet dependencies)
-- [ ] `RTS-MISS-001` S3 ops — requires AWSSDK.S3 NuGet package
-- [ ] `RTS-MISS-002` Azure ops — requires Azure.Storage.Blobs NuGet package
-- [ ] `WRTS-MISS-001` S3 ops — requires AWSSDK.S3 NuGet package
-- [ ] `WRTS-MISS-002` Azure ops — requires Azure.Storage.Blobs NuGet package
-
-### RecordedTests.PathingTests
-- [x] `RPT-MISS-001` Non-cancellable orchestration paths removed — CancellationToken threaded through Program.cs, RunTestsAsync, DisposeAsync
-- [x] `RPT-MISS-002` Deterministic lingering-process teardown — CleanupRepoScopedProcesses in Program.cs (PID-scoped, repo-filtered)
-- [x] `RPT-MISS-003` Corpse-run scenario fixed to Orgrimmar — code-complete + live validated
-- [x] `RPT-MISS-004` Path output consumption in runback — code-complete + live validated
-- [x] `RPT-MISS-005` Test commands simplified — legacy `WWoW.` prefixes removed from README.md
-
-### Tests
-- [x] `WSC-TST-001` TODO redundancy comments removed from `SMSG_UPDATE_OBJECT_Tests.cs` and `OpcodeHandler_Tests.cs`
+> All other queue rows (1-10, 12-23, 28-30, 33-35) are **Done** — see `docs/ARCHIVE.md`.
 
 ## Canonical Commands
 
@@ -161,69 +109,55 @@ dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --con
 
 # Combined live validation (crafting + corpse)
 dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~CraftingProfessionTests"
+
+# Tier 2: Frame-ahead + transport + cross-map
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~FrameAheadSimulator|FullyQualifiedName~TransportWaiting|FullyQualifiedName~CrossMapRouter"
+dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~FrameAhead|FullyQualifiedName~ElevatorScenario"
+
+# AI tests
+dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"
 ```
 
-## Sub-TASKS Execution Queue
-
-| # | Local file | Status | Next IDs |
-|---|-----------|--------|----------|
-| 1 | `BotProfiles/TASKS.md` | **Done** | BP-MISS-001/002/003/004 all done |
-| 2 | `Exports/TASKS.md` | **Done** | EXP-UMB-001..004 verified complete |
-| 3 | `Exports/BotCommLayer/TASKS.md` | **Done** | BCL-MISS-001/002/003/004 all done |
-| 4 | `Exports/BotRunner/TASKS.md` | **Done** | BR-MISS-001/002/003 all done |
-| 5 | `Exports/GameData.Core/TASKS.md` | **Done** | GDC-MISS-001/002/003 all done |
-| 6 | `Exports/Loader/TASKS.md` | **Done** | LDR-MISS-001/002/003 all done |
-| 7 | `Exports/Navigation/TASKS.md` | **Done** | NAV-MISS-001/002/003/004 all done |
-| 8 | `Exports/WinImports/TASKS.md` | **Done** | WINIMP-MISS-001/002/003/004/005 all done |
-| 9 | `Exports/WoWSharpClient/TASKS.md` | **Done** | WSC-MISS-001/002/003/004 all done |
-| 10 | `RecordedTests.PathingTests/TASKS.md` | **Done** | RPT-MISS-001/002/003/004/005 all done |
-| 11 | `RecordedTests.Shared/TASKS.md` | Pending | RTS-MISS-001..004 |
-| 12 | `Services/TASKS.md` | **Done** | SRV-UMB-001..004 verified complete |
-| 13 | `Services/BackgroundBotRunner/TASKS.md` | **Done** | BBR-MISS-001/002/003/004/005 all done |
-| 14 | `Services/CppCodeIntelligenceMCP/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
-| 15 | `Services/DecisionEngineService/TASKS.md` | **Done** | DES-MISS-001/002/003/004/005 all done |
-| 16 | `Services/ForegroundBotRunner/TASKS.md` | **Done** | FG-MISS-001/002/003/004/005 all done |
-| 17 | `Services/LoggingMCPServer/TASKS.md` | **Deferred** | Unused service — deprioritized per user |
-| 18 | `Services/PathfindingService/TASKS.md` | **Done** | PFS-MISS-001/002/003/004/005/006/007 all done |
-| 19 | `Services/PromptHandlingService/TASKS.md` | **Done** | PHS-MISS-001/002/003/004 all done |
-| 20 | `Services/WoWStateManager/TASKS.md` | **Done** | WSM-MISS-001/002/003/004/005 all done |
-| 21 | `Tests/TASKS.md` | **Done** | TST-UMB-001..005 verified complete |
-| 22 | `Tests/BotRunner.Tests/TASKS.md` | **Done** | BRT-CR-001/002/003 done (live validated); BRT-PAR-001 live smoke passed; BRT-RT-001/002, BRT-PAR-002 remaining |
-| 23 | `Tests/Navigation.Physics.Tests/TASKS.md` | **Done** | NPT-MISS-001..003 shipped |
-| 24 | `Tests/PathfindingService.Tests/TASKS.md` | **Partial** | PFS-TST-001/004/006 done; PFS-TST-002/003/005 need nav data |
-| 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | **Partial** | PHS-TST-001/003/004/005 done; PHS-TST-002 low priority |
-| 26 | `Tests/RecordedTests.PathingTests.Tests/TASKS.md` | Pending | RPTT-TST-001..006 (coverage expansion) |
-| 27 | `Tests/RecordedTests.Shared.Tests/TASKS.md` | Pending | RTS-TST-001..006 (coverage expansion) |
-| 28 | `Tests/Tests.Infrastructure/TASKS.md` | Pending | TINF-MISS-001..006 (infra hardening) |
-| 29 | `Tests/WowSharpClient.NetworkTests/TASKS.md` | **Done** | WSCN-TST-001..006 all done (28 new tests, 117 total) |
-| 30 | `Tests/WoWSharpClient.Tests/TASKS.md` | **Done** | WSC-TST-001..004 all done (51 new/modified tests) |
-| 31 | `Tests/WWoW.RecordedTests.PathingTests.Tests/TASKS.md` | Pending | RPTT-TST-001..006 (coverage expansion) |
-| 32 | `Tests/WWoW.RecordedTests.Shared.Tests/TASKS.md` | **Partial** | WRTS-TST-000 done; WRTS-TST-001..006 pending |
-| 33 | `Tests/WoWSimulation/TASKS.md` | **Done** | WSIM-TST-001..007 all done (19 new tests, 26 total) |
-| 34 | `Tests/WWoW.Tests.Infrastructure/TASKS.md` | **Done** | WWINF-TST-001..006 all done (109 new tests) |
-| 35 | `UI/WoWStateManagerUI/TASKS.md` | **Done** | UI-MISS-001..004 all done (25 new tests in new project) |
-| 36-41 | Remaining AI/shared projects | Pending | See local files |
-
 ## Session Handoff
-- **Last updated:** 2026-02-28
-- **Current work:** Quick-fix sweep batch 19 — live validation + test coverage expansion.
-- **Last delta (this session):**
-  - Batch 19: Live validation + coverage expansion across 7 test projects.
-  - **Live validation passed:** DeathCorpseRunTests (full corpse cycle, 4.1min), BasicLoopTests (parity smoke)
-  - **Coverage expansion:** 232+ new tests across 7 projects:
-    - WoWSimulation: 19 new tests (26 total, WSIM-TST-001..006)
-    - WoWSharpClient.Tests: 51 new/modified tests (WSC-TST-001..004)
-    - WowSharpClient.NetworkTests: 28 new tests (117 total, WSCN-TST-001..006)
-    - WWoW.Tests.Infrastructure: 109 new tests (WWINF-TST-001..006)
-    - WoWStateManagerUI.Tests: 25 new tests in new project (UI-MISS-003/004)
-    - BotRunner.Tests: 43 NavigationPath unit tests pass, 218 combat/unit tests pass
-  - **Live items marked validated:** BBR-MISS-002/004/005, BR-MISS-002, NAV-MISS-004, RPT-MISS-003/004, BRT-CR-002/003
-- **Build verification:**
-  - Full .NET solution: 0 errors (only C++ vcxproj fail in dotnet CLI as expected)
-  - All test projects build and pass
-- **Remaining open items:**
-  - Deferred (NuGet): RTS-MISS-001/002, WRTS-MISS-001/002
-  - Deferred (unused): CPPMCP-MISS-001, LMCP-MISS-004..006
-  - Pending coverage expansion: RPTT-TST-001..006 (row 26/31), RTS-TST-001..006 (row 27), WRTS-TST-001..006 (row 32), TINF-MISS-001..006 (row 28)
-  - Remaining live tasks: BRT-RT-001/002, BRT-PAR-002
-- **Sweep status:** All live validation items verified. Coverage expansion 70% complete (7/10 test project rows done).
+- **Last updated:** 2026-03-01
+- **Current work:** Parallelized all LiveValidation FG+BG tests; created priority tasks for pathfinding/physics refactor.
+- **Last delta:** `LV-PARALLEL-001` — All LiveValidation tests now run BG+FG scenarios in parallel via `Task.WhenAll`. No dual-client needed — single `StateManagerTestClient` with `SemaphoreSlim(1,1)` interleaves at every `await`.
+- **Completed this session:**
+  1. `LV-PARALLEL-001` — Parallelized all 11 LiveValidation test files:
+     - CombatLoopTests (with ConcurrentDictionary target claiming + positional offsets)
+     - CharacterLifecycleTests (3 test methods)
+     - ConsumableUsageTests, EquipmentEquipTests, CraftingProfessionTests
+     - QuestInteractionTests, TalentAllocationTests, NpcInteractionTests
+     - BasicLoopTests (Physics + Teleport tests)
+     - DeathCorpseRunTests (parallel corpse-run scenarios)
+     - EconomyInteractionTests (Bank, AH, Mail — setup + interaction parallel)
+     - OrgrimmarGroundZAnalysisTests (parallel teleport per probe position)
+  2. Reverted dual-client approach — user clarified StateManager handles concurrent requests asynchronously; no second TCP connection needed.
+- **Observed issues (user-reported):**
+  - FG bot pathfinding issues in corpse-run (bumps walls, gets stuck)
+  - BG bot "falling" on walkable slopes (should clamp to surface)
+  - BG bot forced through Orgrimmar WMO catapult near bank (outside resurrect distance)
+  - Mining test does excessive teleporting; FG bot stands on top of node
+  - Some commands may not be original MaNGOS; nodes with 0% spawn chance pollute tests
+- **Files changed this session:**
+  - `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs` — parallel BG+FG with offsets + target claiming
+  - `Tests/BotRunner.Tests/LiveValidation/CharacterLifecycleTests.cs` — 3 test methods parallelized
+  - `Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs` — parallelized
+  - `Tests/BotRunner.Tests/LiveValidation/EquipmentEquipTests.cs` — parallelized
+  - `Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs` — parallelized
+  - `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs` — parallelized
+  - `Tests/BotRunner.Tests/LiveValidation/TalentAllocationTests.cs` — parallelized
+  - `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs` — parallelized
+  - `Tests/BotRunner.Tests/LiveValidation/BasicLoopTests.cs` — Physics + Teleport parallelized
+  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` — parallel corpse scenarios
+  - `Tests/BotRunner.Tests/LiveValidation/EconomyInteractionTests.cs` — parallel setup + interaction
+  - `Tests/BotRunner.Tests/LiveValidation/OrgrimmarGroundZAnalysisTests.cs` — parallel teleport per probe
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs` — reverted dual-client (single client)
+  - `docs/TASKS.md` — added P0 pathfinding/physics refactor tasks
+- **What's truly next (by priority):**
+  1. `PATH-REFACTOR-001` — Complete pathfinding + PhysicsEngine refactor (slope clamping, WMO collision, wall-sliding)
+  2. `TEST-GMMODE-001` — Add `.gm on` to all non-combat/non-corpse test setup
+  3. `DB-CLEAN-001` — Remove 0% spawn chance objects and non-vanilla commands
+  4. `TEST-MINING-001` — Fix mining test teleport waste and FG node positioning
+  5. `TEST-LOG-CLEANUP` — Clean temp files and stale logs
+- **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=normal"`

@@ -45,18 +45,24 @@ public class CharacterLifecycleTests
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
-        var bgPassed = await RunAddItemScenarioAsync(bgAccount, "BG", LinenCloth, 1, "Linen Cloth");
 
-        var fgPassed = false;
+        bool bgPassed, fgPassed = false;
         if (_bot.ForegroundBot != null)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
-            fgPassed = await RunAddItemScenarioAsync(fgAccount, "FG", LinenCloth, 1, "Linen Cloth");
+            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
+            _output.WriteLine("[PARITY] Running BG and FG add-item scenarios in parallel.");
+
+            var bgTask = RunAddItemScenarioAsync(bgAccount, "BG", LinenCloth, 1, "Linen Cloth");
+            var fgTask = RunAddItemScenarioAsync(fgAccount, "FG", LinenCloth, 1, "Linen Cloth");
+            await Task.WhenAll(bgTask, fgTask);
+            bgPassed = await bgTask;
+            fgPassed = await fgTask;
         }
         else
         {
+            bgPassed = await RunAddItemScenarioAsync(bgAccount, "BG", LinenCloth, 1, "Linen Cloth");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 
@@ -71,18 +77,24 @@ public class CharacterLifecycleTests
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
-        var bgPassed = await RunAddItemScenarioAsync(bgAccount, "BG", MinorHealingPotion, 5, "Minor Healing Potion");
 
-        var fgPassed = false;
+        bool bgPassed, fgPassed = false;
         if (_bot.ForegroundBot != null)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
-            _output.WriteLine($"\n=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
-            fgPassed = await RunAddItemScenarioAsync(fgAccount, "FG", MinorHealingPotion, 5, "Minor Healing Potion");
+            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
+            _output.WriteLine("[PARITY] Running BG and FG add-item scenarios in parallel.");
+
+            var bgTask = RunAddItemScenarioAsync(bgAccount, "BG", MinorHealingPotion, 5, "Minor Healing Potion");
+            var fgTask = RunAddItemScenarioAsync(fgAccount, "FG", MinorHealingPotion, 5, "Minor Healing Potion");
+            await Task.WhenAll(bgTask, fgTask);
+            bgPassed = await bgTask;
+            fgPassed = await fgTask;
         }
         else
         {
+            bgPassed = await RunAddItemScenarioAsync(bgAccount, "BG", MinorHealingPotion, 5, "Minor Healing Potion");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 
@@ -100,9 +112,8 @@ public class CharacterLifecycleTests
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgCharacter), "BG character name unavailable.");
 
         _output.WriteLine($"=== BG Bot: {bgCharacter} ({bgAccount}) ===");
-        var bgPassed = await RunDeathScenarioAsync(bgAccount, bgCharacter!, "BG");
 
-        var fgPassed = false;
+        bool bgPassed, fgPassed = false;
         if (_bot.ForegroundBot != null)
         {
             var fgAccount = _bot.FgAccountName!;
@@ -110,11 +121,18 @@ public class CharacterLifecycleTests
             var fgCharacter = _bot.FgCharacterName;
             global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgCharacter), "FG character name unavailable.");
 
-            _output.WriteLine($"\n=== FG Bot: {fgCharacter} ({fgAccount}) ===");
-            fgPassed = await RunDeathScenarioAsync(fgAccount, fgCharacter!, "FG");
+            _output.WriteLine($"=== FG Bot: {fgCharacter} ({fgAccount}) ===");
+            _output.WriteLine("[PARITY] Running BG and FG death scenarios in parallel.");
+
+            var bgTask = RunDeathScenarioAsync(bgAccount, bgCharacter!, "BG");
+            var fgTask = RunDeathScenarioAsync(fgAccount, fgCharacter!, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+            bgPassed = await bgTask;
+            fgPassed = await fgTask;
         }
         else
         {
+            bgPassed = await RunDeathScenarioAsync(bgAccount, bgCharacter!, "BG");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 
