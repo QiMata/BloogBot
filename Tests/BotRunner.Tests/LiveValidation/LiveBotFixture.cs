@@ -66,11 +66,11 @@ public class LiveBotFixture : IAsyncLifetime
     /// <summary>All bot snapshots (both BG + FG). Updated by calling <see cref="RefreshSnapshotsAsync"/>.</summary>
     public List<WoWActivitySnapshot> AllBots { get; private set; } = [];
 
-    /// <summary>Character name of the Background bot.</summary>
-    public string? BgCharacterName => BackgroundBot?.CharacterName;
+    /// <summary>Character name of the Background bot. Preserved across transient state flickers.</summary>
+    public string? BgCharacterName { get; private set; }
 
-    /// <summary>Character name of the Foreground bot.</summary>
-    public string? FgCharacterName => ForegroundBot?.CharacterName;
+    /// <summary>Character name of the Foreground bot. Preserved across transient state flickers.</summary>
+    public string? FgCharacterName { get; private set; }
 
     /// <summary>Account name of the Background bot (from config).</summary>
     public string? BgAccountName { get; private set; }
@@ -245,6 +245,10 @@ public class LiveBotFixture : IAsyncLifetime
                 await TeleportToNamedAsync(FgCharacterName, "Orgrimmar");
             await Task.Delay(1500);
 
+            // 8. Stabilization: wait for all known bots to be solidly InWorld before declaring ready.
+            //    Teleport and GM commands can cause transient CharacterSelect flickers.
+            await WaitForBotsStabilizedAsync();
+
             _logger.LogInformation("[FIXTURE] Ready. BG='{Bg}', FG='{Fg}'", BgCharacterName ?? "N/A", FgCharacterName ?? "N/A");
             IsReady = true;
         }
@@ -257,34 +261,50 @@ public class LiveBotFixture : IAsyncLifetime
 
     private void IdentifyBots(List<WoWActivitySnapshot> inWorldBots)
     {
-        // Always rebuild bot-role assignment from the latest in-world snapshots.
-        // Without resetting, stale references can survive when one bot briefly
-        // drops out of InWorld and pollute role-specific test reads.
-        ForegroundBot = null;
-        BackgroundBot = null;
-        FgAccountName = null;
-        BgAccountName = null;
+        // Non-destructive: only update snapshot references when we find a matching bot
+        // in the current InWorld list. If a bot temporarily drops out (e.g. CharacterSelect
+        // flicker during teleport), preserve the last known account name so tests can still
+        // send commands. The snapshot reference will be stale but the account name stays valid.
+        //
+        // Account names are ONLY cleared during the initial call from fixture init (when
+        // they haven't been set yet) or when explicitly rebuilding (e.g. during init).
 
-        // Match by account name: TESTBOT1 = Foreground (injected, gold standard), TESTBOT2 = Background (headless).
+        // Match by account name: TESTBOT1 = Foreground (injected, gold standard), others = Background (headless).
+        WoWActivitySnapshot? newFg = null;
+        WoWActivitySnapshot? newBg = null;
+
         foreach (var snap in inWorldBots)
         {
             if (snap.AccountName.EndsWith("1", StringComparison.OrdinalIgnoreCase))
-            {
-                ForegroundBot = snap;
-                FgAccountName = snap.AccountName;
-            }
+                newFg = snap;
             else
-            {
-                BackgroundBot = snap;
-                BgAccountName = snap.AccountName;
-            }
+                newBg = snap;
         }
 
-        // Fallback: if only one bot and it wasn't matched above
-        if (BackgroundBot == null && ForegroundBot == null && inWorldBots.Count >= 1)
+        // Update snapshot references (always — null if bot dropped out of InWorld)
+        ForegroundBot = newFg;
+        BackgroundBot = newBg;
+
+        // Update account/character names only when we discover new ones — never null
+        // them out once set, since tests need these to send SOAP/chat commands even
+        // when the bot's snapshot is temporarily unavailable.
+        if (newFg != null)
+        {
+            FgAccountName = newFg.AccountName;
+            FgCharacterName = newFg.CharacterName;
+        }
+        if (newBg != null)
+        {
+            BgAccountName = newBg.AccountName;
+            BgCharacterName = newBg.CharacterName;
+        }
+
+        // Fallback: if only one bot and neither role was matched, assign it as BG
+        if (newBg == null && newFg == null && inWorldBots.Count >= 1)
         {
             BackgroundBot = inWorldBots[0];
             BgAccountName = BackgroundBot.AccountName;
+            BgCharacterName = BackgroundBot.CharacterName;
         }
     }
 
@@ -351,7 +371,7 @@ public class LiveBotFixture : IAsyncLifetime
     /// <summary>
     /// Wait until SOAP can resolve a character name (prevents "Player not found!" errors
     /// when the character hasn't fully loaded on the server yet).
-    /// Uses .pinfo which returns player info if the character is online.
+    /// Uses ".revive" which returns a known success/failure result on MaNGOS.
     /// </summary>
     private async Task WaitForSoapPlayerResolutionAsync(string characterName, int timeoutMs = 15000)
     {
@@ -360,9 +380,13 @@ public class LiveBotFixture : IAsyncLifetime
         {
             try
             {
-                var result = await ExecuteGMCommandAsync($".pinfo {characterName}");
+                // Use ".revive <name>" as the probe — it's harmless on an alive character
+                // and returns "Player not found" if the character hasn't loaded yet.
+                // Avoids ".pinfo" which may not be available at all GM levels.
+                var result = await ExecuteGMCommandAsync($".revive {characterName}");
                 if (!string.IsNullOrEmpty(result)
                     && !result.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                    && !result.Contains("not available", StringComparison.OrdinalIgnoreCase)
                     && !result.StartsWith("FAULT", StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.LogInformation("[FIXTURE] SOAP resolved '{Name}' after {Elapsed:F1}s",
@@ -381,6 +405,48 @@ public class LiveBotFixture : IAsyncLifetime
 
         _logger.LogWarning("[FIXTURE] SOAP player resolution timed out for '{Name}' after {Timeout}ms",
             characterName, timeoutMs);
+    }
+
+    /// <summary>
+    /// Wait until all known bots are solidly InWorld (2 consecutive polls).
+    /// GM commands and teleports can cause transient CharacterSelect flickers.
+    /// </summary>
+    private async Task WaitForBotsStabilizedAsync(int timeoutMs = 15000)
+    {
+        var sw = Stopwatch.StartNew();
+        int consecutiveInWorld = 0;
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            var snapshots = await _stateManagerClient!.QuerySnapshotsAsync();
+            var inWorld = snapshots
+                .Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName))
+                .ToList();
+
+            // Check that every known bot is InWorld
+            bool bgOk = BgAccountName == null || inWorld.Any(s => s.AccountName == BgAccountName);
+            bool fgOk = FgAccountName == null || inWorld.Any(s => s.AccountName == FgAccountName);
+
+            if (bgOk && fgOk)
+            {
+                consecutiveInWorld++;
+                if (consecutiveInWorld >= 2)
+                {
+                    // Update snapshot references with the stable data
+                    AllBots = inWorld;
+                    IdentifyBots(inWorld);
+                    _logger.LogInformation("[FIXTURE] Bots stabilized InWorld after {Elapsed:F1}s", sw.Elapsed.TotalSeconds);
+                    return;
+                }
+            }
+            else
+            {
+                consecutiveInWorld = 0;
+            }
+
+            await Task.Delay(1000);
+        }
+
+        _logger.LogWarning("[FIXTURE] Bot stabilization timed out after {Timeout}ms — proceeding with last known state", timeoutMs);
     }
 
     private async Task EnsureNotGroupedAsync(string accountName, string label)
@@ -428,15 +494,44 @@ public class LiveBotFixture : IAsyncLifetime
     public async Task RefreshSnapshotsAsync()
     {
         if (_stateManagerClient == null) return;
-        var snapshots = await _stateManagerClient.QuerySnapshotsAsync();
 
-        AllBots = snapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
+        // Determine how many bots we expect based on previously known account names.
+        int expectedCount = (BgAccountName != null ? 1 : 0) + (FgAccountName != null ? 1 : 0);
+
+        List<WoWActivitySnapshot> inWorld;
+        // Brief retry: if InWorld count drops below expected (transient CharacterSelect flicker),
+        // poll up to 3 times with 500ms intervals before accepting the reduced list.
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            var snapshots = await _stateManagerClient.QuerySnapshotsAsync();
+            inWorld = snapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
+
+            if (inWorld.Count >= expectedCount || expectedCount == 0)
+            {
+                AllBots = inWorld;
+                IdentifyBots(inWorld);
+                LogSnapshotMessages();
+                return;
+            }
+
+            // Short wait before retry — transient flicker usually resolves in <1s
+            if (attempt < 2)
+                await Task.Delay(500);
+        }
+
+        // Accept whatever we have after retries
+        var finalSnapshots = await _stateManagerClient.QuerySnapshotsAsync();
+        AllBots = finalSnapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
         IdentifyBots(AllBots);
+        LogSnapshotMessages();
+    }
 
+    private void LogSnapshotMessages()
+    {
         // Surface chat/error messages from snapshots to test output (via ITestOutputHelper so they appear in xUnit output)
         foreach (var snap in AllBots)
         {
-            var label = snap.AccountName?.Contains("WR") == true ? "FG" : "BG";
+            var label = snap.AccountName == FgAccountName ? "FG" : "BG";
             var accountKey = string.IsNullOrWhiteSpace(snap.AccountName) ? label : snap.AccountName;
             WriteSnapshotMessageDelta(accountKey, label, snap.RecentChatMessages, _lastPrintedChatCountByAccount, "CHAT");
             WriteSnapshotMessageDelta(accountKey, label, snap.RecentErrors, _lastPrintedErrorCountByAccount, "ERROR");
