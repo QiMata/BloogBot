@@ -35,7 +35,7 @@ namespace BotRunner.Tests.Helpers
     public class StateManagerLaunchConfig
     {
         /// <summary>Account name to use.</summary>
-        public string AccountName { get; set; } = "ORWR1";
+        public string AccountName { get; set; } = "TESTBOT1";
 
         /// <summary>What mode the bot should operate in once injected.</summary>
         public BotTaskMode TaskMode { get; set; } = BotTaskMode.Default;

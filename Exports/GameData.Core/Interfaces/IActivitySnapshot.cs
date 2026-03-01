@@ -9,7 +9,7 @@ namespace GameData.Core.Interfaces
         /// <summary>Unix timestamp (seconds) when the snapshot was captured.</summary>
         uint Timestamp { get; set; }
 
-        /// <summary>Account name (e.g. "ORWR1") that owns this snapshot.</summary>
+        /// <summary>Account name (e.g. "TESTBOT1") that owns this snapshot.</summary>
         string AccountName { get; set; }
     }
 }

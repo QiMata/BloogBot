@@ -1,6 +1,6 @@
 [
   {
-    "AccountName": "ORWR1",
+    "AccountName": "TESTBOT1",
     "Openness": 1.0,
     "Conscientiousness": 1.0,
     "Extraversion": 1.0,
@@ -10,7 +10,7 @@
     "RunnerType": "Foreground"
   },
   {
-    "AccountName": "ORSH1",
+    "AccountName": "TESTBOT2",
     "Openness": 1.0,
     "Conscientiousness": 1.0,
     "Extraversion": 1.0,

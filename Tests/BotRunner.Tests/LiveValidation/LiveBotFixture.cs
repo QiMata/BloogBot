@@ -265,10 +265,10 @@ public class LiveBotFixture : IAsyncLifetime
         FgAccountName = null;
         BgAccountName = null;
 
-        // Match by account name: ORWR1 = Foreground (Warrior/injected), ORSH1 = Background (Shaman/headless).
+        // Match by account name: TESTBOT1 = Foreground (injected, gold standard), TESTBOT2 = Background (headless).
         foreach (var snap in inWorldBots)
         {
-            if (snap.AccountName.Contains("WR", StringComparison.OrdinalIgnoreCase))
+            if (snap.AccountName.EndsWith("1", StringComparison.OrdinalIgnoreCase))
             {
                 ForegroundBot = snap;
                 FgAccountName = snap.AccountName;
@@ -1627,7 +1627,7 @@ public class LiveBotFixture : IAsyncLifetime
             using var realmConn = new MySql.Data.MySqlClient.MySqlConnection(MangosRealmDbConnectionString);
             await realmConn.OpenAsync();
 
-            var gmAccounts = new[] { "ADMINISTRATOR", "ORWR1", "ORSH1" };
+            var gmAccounts = new[] { "ADMINISTRATOR", "TESTBOT1", "TESTBOT2" };
             var updatedAccounts = 0;
             foreach (var accountName in gmAccounts)
             {

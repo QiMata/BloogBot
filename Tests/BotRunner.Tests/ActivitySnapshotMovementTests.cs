@@ -289,8 +289,8 @@ namespace BotRunner.Tests
             // Arrange: snapshot with inventory data
             var snapshot = new WoWActivitySnapshot
             {
-                AccountName = "ORWR1",
-                CharacterName = "Dralrahgra",
+                AccountName = "TESTBOT1",
+                CharacterName = "Testbot",
                 ScreenState = "InWorld",
                 Player = new WoWPlayer()
             };

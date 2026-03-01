@@ -14,7 +14,7 @@
 | Server protocol docs | `docs/server-protocol/` (7 docs from Task 21) |
 | Recordings | `C:\Users\lrhod\Documents\BloogBot\MovementRecordings\` |
 | Packet captures | `C:\Users\lrhod\Documents\BloogBot\PacketCaptures\` |
-| Test account | ORWR1 (GM level 3, character: Dralrahgra on Kalimdor) |
+| Test accounts | TESTBOT1 (Foreground/injected), TESTBOT2 (Background/headless) — GM level 6, same character type |
 | Memory notes | `C:\Users\lrhod\.claude\projects\e--repos-BloogBot\memory\` |
 | GM commands | `SendChatMessage('.command', 'SAY')` or DoString |
 

@@ -27,7 +27,7 @@ public class ActionForwardingContractTests
         {
             ActionForward = new ActionForwardRequest
             {
-                AccountName = "ORSH1",
+                AccountName = "TESTBOT1",
                 Action = new ActionMessage
                 {
                     ActionType = ActionType.SendChat,
@@ -39,7 +39,7 @@ public class ActionForwardingContractTests
         var bytes = request.ToByteArray();
         var deserialized = AsyncRequest.Parser.ParseFrom(bytes);
 
-        Assert.Equal("ORSH1", deserialized.ActionForward.AccountName);
+        Assert.Equal("TESTBOT1", deserialized.ActionForward.AccountName);
         Assert.Equal(ActionType.SendChat, deserialized.ActionForward.Action.ActionType);
         Assert.Single(deserialized.ActionForward.Action.Parameters);
         Assert.Equal("/say Hello", deserialized.ActionForward.Action.Parameters[0].StringParam);
@@ -63,7 +63,7 @@ public class ActionForwardingContractTests
         {
             ActionForward = new ActionForwardRequest
             {
-                AccountName = "ORWR1",
+                AccountName = "TESTBOT2",
                 Action = action
             }
         };

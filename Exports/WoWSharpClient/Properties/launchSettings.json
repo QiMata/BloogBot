@@ -2,7 +2,7 @@
   "profiles": {
     "WoWSlimClient": {
       "commandName": "Project",
-      "commandLineArgs": "-a ORWR1"
+      "commandLineArgs": "-a TESTBOT1"
     }
   }
 }
