@@ -810,7 +810,7 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
     // WMO DOODAD EXTRACTION
     // ==========================================================================
 
-    [Fact]
+    [Fact(Skip = "One-time utility — 359 .doodads files already extracted. StormLib.dll not available at runtime.")]
     public void ExtractWmoDoodads_FromMpq()
     {
         if (!_fixture.IsInitialized) { _output.WriteLine("SKIP: Not initialized"); return; }
