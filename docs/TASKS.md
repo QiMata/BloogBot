@@ -21,9 +21,9 @@
 |---|-----|------|--------|
 | 1 | `PATH-REFACTOR-001` | **Complete pathfinding service + PhysicsEngine refactor.** BG falls on walkable slopes (should clamp to surface). FG bumps into walls/objects and gets stuck. BG forced through Orgrimmar WMO (catapult near bank). Physics slope handling, WMO collision, and wall-sliding all need rework. | **Open — P0** |
 | 2 | `TEST-GMMODE-001` | All LiveValidation tests outside of combat and corpse-run should use `.gm on` for setup safety. | **Done** |
-| 3 | `DB-CLEAN-001` | Remove all game object spawns with 0% spawn chance from MaNGOS DB. Also remove commands not from original MaNGOS (non-vanilla). | **Open — P0** |
-| 4 | `TEST-MINING-001` | Mining test does wasteful teleporting. FG bot stands on top of node instead of near it. Optimize teleport logic and fix FG node positioning. | **Open — P0** |
-| 5 | `TEST-LOG-CLEANUP` | Clean up all out-of-date test logs and temp files (AppData\Local\Temp\claude\ folders). | **Open — P0** |
+| 3 | `DB-CLEAN-001` | Remove all game object spawns with 0% spawn chance from MaNGOS DB. Also remove commands not from original MaNGOS (non-vanilla). | **Done** — pool_gameobject chance=0 is standard MaNGOS (equal distribution), NOT "never spawns." Command table already sanitized (4 legitimate entries remain). |
+| 4 | `TEST-MINING-001` | Mining test does wasteful teleporting. FG bot stands on top of node instead of near it. Optimize teleport logic and fix FG node positioning. | **Done** — eliminated re-teleport, FG bot positioned 5y from node (not on top), reduced wait times |
+| 5 | `TEST-LOG-CLEANUP` | Clean up all out-of-date test logs and temp files (AppData\Local\Temp\claude\ folders). | **Done** — cleaned 3GB of stale tmp/ contents |
 | 6 | `LV-PARALLEL-001` | Parallelize all LiveValidation FG+BG tests to run in parallel via Task.WhenAll. | **Done** |
 | 7 | `FISH-001` | FishingProfessionTests: BG fishing end-to-end. Root cause: MOVEFLAG_FALLINGFAR heartbeats during Z clamp interrupted fishing channel. | **Done** |
 | 8 | `TIER2-001` | Frame-ahead simulator, transport waiting, cross-map routing. FrameAheadSimulator, TransportData, TransportWaitingLogic, CrossMapRouter, MapTransitionGraph + NavigationPath integration. 73 tests (54 unit + 19 integration). | **Done** |
@@ -120,36 +120,21 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 
 ## Session Handoff
 - **Last updated:** 2026-03-01
-- **Current work:** Physics refactor + test hardening (PATH-REFACTOR-001 partial, TEST-GMMODE-001 done).
-- **Last delta:** C++ physics slope/collision fixes + `.gm on` for all non-combat/corpse tests + reduced excessive waits.
+- **Current work:** Cleanup sprint — all P0 maintenance tasks closed. Physics fixes need live validation.
+- **Last delta:** Skipped ExtractWmoDoodads, committed all uncommitted code (infra, Tier 2, test coverage), cleaned 3GB tmp/, fixed mining test positioning, verified DB-CLEAN-001 not needed.
 - **Completed this session:**
-  1. **PATH-REFACTOR-001 (partial)** — Physics engine fixes:
-     - `PhysicsCollideSlide.cpp`: Fixed horizontal-only filter — Bottom/Top capsule hits with horizontal normals (hMag >= 0.3) now accepted. Fixes bot phasing through WMO objects (catapults, barricades) at foot level.
-     - `PhysicsEngine.cpp`: Split `maxSnapDown` into walkable (4.0y via STEP_DOWN_HEIGHT) and non-walkable (2.6y via STEP_HEIGHT + 0.5). Fixes BG bot "falling" on walkable slopes.
-     - `NavigationPath.cs`: Reduced STALLED_SAMPLE_THRESHOLD from 24 to 10 (~330ms at 30fps). Faster stuck detection.
-     - `MovementController.cs`: Reduced STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD from 30 to 15 ticks. Faster wall-stuck recovery.
-  2. **TEST-GMMODE-001 (done)** — Added `.gm on` to all non-combat/non-corpse LiveValidation tests:
-     - BasicLoopTests (5 test methods), ConsumableUsageTests, CraftingProfessionTests
-     - EconomyInteractionTests (3 test methods), EquipmentEquipTests (already managed .gm on/off)
-     - GroupFormationTests, NpcInteractionTests, OrgrimmarGroundZAnalysisTests (2 test methods)
-     - QuestInteractionTests, TalentAllocationTests
-  3. **Wait reductions** — Reduced excessive delays across all test files:
-     - ConsumableUsageTests: 5000ms → 2000ms item arrival wait
-     - EconomyInteractionTests: 2500ms → 1500ms teleport, 2000ms → 1200ms revive, 1000ms → 800ms mail
-     - NpcInteractionTests: 2500ms → 1500ms teleport, 2000ms → 1200ms revive, 1500ms → 1000ms additem
-     - CraftingProfessionTests: 4000ms → 2000ms post-teleport, 2000ms → 1200ms revive
-     - EquipmentEquipTests: 2000ms → 1200ms revive, 1800ms → 1200ms additem, 4000ms → 2500ms equip, 1500ms → 800ms gm off
-  4. Physics tests: 97/98 pass (1 pre-existing ExtractWmoDoodads_FromMpq MPQ failure).
-- **Files changed this session:**
-  - `Exports/Navigation/PhysicsCollideSlide.cpp` — horizontal-only filter accepts Bottom/Top with horizontal normals
-  - `Exports/Navigation/PhysicsEngine.cpp` — walkable vs non-walkable snap-down limits
-  - `Exports/BotRunner/Movement/NavigationPath.cs` — stuck threshold 24→10
-  - `Exports/WoWSharpClient/Movement/MovementController.cs` — stale forward threshold 30→15
-  - 10 LiveValidation test files — `.gm on` + reduced waits
-  - `docs/TASKS.md` — session handoff update
+  1. **ExtractWmoDoodads_FromMpq** — Skipped (359 .doodads already extracted, StormLib.dll unavailable). Physics: 97/97 pass + 1 skip.
+  2. **DB-CLEAN-001 (done)** — Investigated pool_gameobject chance=0 = standard MaNGOS equal distribution (NOT "never spawns"). Command table has 4 legitimate entries (wareffort, debug). No action needed.
+  3. **TEST-MINING-001 (done)** — Eliminated wasteful re-teleport in GatheringProfessionTests. FG bot positioned 5y from node (not on top). Reduced wait times (4s→2s Z stabilization, 3s→2s respawn).
+  4. **TEST-LOG-CLEANUP (done)** — Cleaned 3GB of stale tmp/ contents (dotnet caches, logs, backups). Claude temp is 25K.
+  5. **Anti-regression** — Committed ALL uncommitted code from previous sessions (5 commits):
+     - `5f7678b`: Repo-scoped process cleanup, PathfindingService readiness, FISH-001, mining fix, S3 tests
+     - `65b123e`: Tier 2 (FrameAheadSimulator, TransportData, TransportWaitingLogic, CrossMapRouter, MapTransitionGraph)
+     - `4770a3b`: 33 new test files across RecordedTests, PathingTests, AI
+     - `281792b`: TASKS.md updates
+     - `50d9616`: tmp/ cleanup
+  6. **Calibration metrics confirmed:** avg=0.0126y, p99=0.2000y, worst=0.9877y (all gates PASS)
 - **What's truly next (by priority):**
-  1. `PATH-REFACTOR-001` (remaining) — Live validation of physics fixes; wall-sliding rework if still stuck
-  2. `DB-CLEAN-001` — Remove 0% spawn chance objects and non-vanilla commands
-  3. `TEST-MINING-001` — Fix mining test teleport waste and FG node positioning
-  4. `TEST-LOG-CLEANUP` — Clean temp files and stale logs
-- **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=normal"`
+  1. `PATH-REFACTOR-001` (remaining) — Run LiveValidation suite to validate physics fixes live. Wall-sliding rework if still stuck.
+  2. `LV-QUEST-001` — QuestInteractionTests: quest not in snapshot after `.quest add`
+- **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 10m`
