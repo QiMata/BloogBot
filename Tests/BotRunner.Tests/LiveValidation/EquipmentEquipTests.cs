@@ -101,15 +101,15 @@ public class EquipmentEquipTests
         _output.WriteLine($"  [{label}] Mainhand before: {(mainhandBeforeEquipped ? $"GUID=0x{mainhandBeforeGuid:X}" : "EMPTY")}");
         _output.WriteLine($"  [{label}] Worn Mace count in bags before setup: {maceCountBeforeSetup}");
 
-        // Learn proficiency only if missing.
+        // Grant mace proficiency: .learn adds the spell, .setskill adds the weapon skill.
+        // .setskill requires a selected target, so BotSetSkillAsync auto-selects self first.
         bool hasMaceProficiency = playerBefore.SpellList.Contains(OneHandMaceSpell);
         if (!hasMaceProficiency)
         {
             _output.WriteLine($"  [{label}] Learning missing 1H mace proficiency (spell {OneHandMaceSpell}).");
             await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
+            await _bot.BotSetSkillAsync(account, 54, 1, 300); // skill 54 = Maces
             await Task.Delay(1200);
-            await _bot.SendGmChatCommandAsync(account, ".gm off");
-            await Task.Delay(1000);
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
             if (snap.Player == null)

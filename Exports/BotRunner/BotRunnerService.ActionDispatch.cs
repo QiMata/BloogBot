@@ -225,6 +225,23 @@ namespace BotRunner
 
                     case CharacterAction.SendChat:
                         var chatMsg = (string)actionEntry.Item2[0];
+
+                        // Internal bot command: .targetself sets CMSG_SET_SELECTION to the
+                        // player's own GUID without sending anything to server chat.
+                        // This enables GM commands like .setskill that require a selected target.
+                        if (chatMsg.Equals(".targetself", StringComparison.OrdinalIgnoreCase))
+                        {
+                            builder.Do("Target Self", time =>
+                            {
+                                var player = _objectManager.Player;
+                                if (player == null) return BehaviourTreeStatus.Failure;
+                                _objectManager.SetTarget(player.Guid);
+                                Log.Information("[BOT RUNNER] Self-targeted (GUID=0x{Guid:X})", player.Guid);
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
+
                         builder.Do($"Send Chat: {chatMsg}", time =>
                         {
                             var player = _objectManager.Player;

@@ -90,26 +90,32 @@ public class ConsumableUsageTests
         // --- Step 1: Add elixir via GM chat ---
         _output.WriteLine($"  [{label}] Step 1: Add Elixir of Lion's Strength (item {ElixirOfLionsStrength})");
         await _bot.BotAddItemAsync(account, ElixirOfLionsStrength, 3);
-        _output.WriteLine($"  [{label}] Waiting for item to arrive...");
-        await Task.Delay(2000);
 
-        // Verify elixir was added
-        await _bot.RefreshSnapshotsAsync();
-        var playerAfterAdd = getPlayer();
-        if (playerAfterAdd != null)
+        // Poll for item to appear in snapshot (FG injection client needs more time
+        // for WoW.exe memory to reflect GM-added items).
+        bool hasElixir = false;
+        for (int poll = 0; poll < 5 && !hasElixir; poll++)
         {
-            bool hasElixir = false;
-            foreach (var kvp in playerAfterAdd.BagContents)
+            await Task.Delay(1000);
+            await _bot.RefreshSnapshotsAsync();
+            var playerCheck = getPlayer();
+            if (playerCheck?.BagContents != null)
             {
-                if (kvp.Value == ElixirOfLionsStrength)
+                foreach (var kvp in playerCheck.BagContents)
                 {
-                    _output.WriteLine($"  [{label}] Found elixir at bag slot [{kvp.Key}]");
-                    hasElixir = true;
-                    break;
+                    if (kvp.Value == ElixirOfLionsStrength)
+                    {
+                        _output.WriteLine($"  [{label}] Found elixir at bag slot [{kvp.Key}] (poll {poll + 1})");
+                        hasElixir = true;
+                        break;
+                    }
                 }
             }
-            if (!hasElixir)
-                _output.WriteLine($"  [{label}] WARNING: Elixir {ElixirOfLionsStrength} not found in bags (bags may be full, count={playerAfterAdd.BagContents.Count})!");
+        }
+        if (!hasElixir)
+        {
+            var playerAfterAdd = getPlayer();
+            _output.WriteLine($"  [{label}] WARNING: Elixir {ElixirOfLionsStrength} not found in bags after 5 polls (bags count={playerAfterAdd?.BagContents.Count ?? 0})!");
         }
 
         // --- Step 2: Use elixir via action forwarding ---

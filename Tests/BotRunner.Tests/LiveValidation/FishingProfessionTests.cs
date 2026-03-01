@@ -227,12 +227,50 @@ public class FishingProfessionTests
 
             if (needsLearn)
             {
+                // MaNGOS `.learn <castSpell>` teaches the spell but does NOT always
+                // create the associated SKILL entry. The TRAINING spells (7733/7734)
+                // trigger the full trainer effect chain which properly creates skill 356.
+                const uint apprenticeFishingTraining = 7733;
+                const uint journeymanFishingTraining = 7734;
+                _output.WriteLine($"[{label}] Teaching fishing via training spells ({apprenticeFishingTraining}, {journeymanFishingTraining})...");
+                await _bot.BotLearnSpellAsync(account, apprenticeFishingTraining);
+                await _bot.BotLearnSpellAsync(account, journeymanFishingTraining);
+                // Also teach cast spells directly as fallback
                 await _bot.BotLearnSpellAsync(account, FishingData.FishingRank1);
                 await _bot.BotLearnSpellAsync(account, FishingData.FishingRank2);
+                await Task.Delay(2000);
+                await _bot.RefreshSnapshotsAsync();
             }
 
             if (needsSkillTune)
-                await _bot.SendGmChatCommandAsync(account, $".setskill {FishingData.FishingSkillId} 150 300");
+            {
+                // Verify the skill entry was created by the training spells
+                var postSnap = await _bot.GetSnapshotAsync(account);
+                var skillExists = postSnap?.Player?.SkillInfo?.ContainsKey(FishingData.FishingSkillId) == true;
+                var skillVal = skillExists ? postSnap!.Player!.SkillInfo![FishingData.FishingSkillId] : 0;
+                _output.WriteLine($"[{label}] Fishing skill exists={skillExists}, value={skillVal}");
+                if (!skillExists)
+                {
+                    // Training spells may not have created the skill either.
+                    // Try `.learn all_crafts` as a last resort (teaches all professions + creates skills).
+                    _output.WriteLine($"[{label}] Skill still not created; trying .learn all_crafts...");
+                    await _bot.SendGmChatCommandAsync(account, ".learn all_crafts");
+                    await Task.Delay(3000);
+                    await _bot.RefreshSnapshotsAsync();
+                    postSnap = await _bot.GetSnapshotAsync(account);
+                    skillExists = postSnap?.Player?.SkillInfo?.ContainsKey(FishingData.FishingSkillId) == true;
+                    _output.WriteLine($"[{label}] After all_crafts: fishing skill exists={skillExists}");
+                }
+                if (skillExists)
+                {
+                    await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, 150, 300);
+                    await Task.Delay(1000);
+                }
+                else
+                {
+                    _output.WriteLine($"[{label}] WARNING: Could not create fishing skill; will attempt fishing at default level.");
+                }
+            }
 
             if (needsPole)
             {

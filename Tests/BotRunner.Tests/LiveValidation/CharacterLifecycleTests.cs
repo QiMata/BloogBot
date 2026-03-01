@@ -231,29 +231,44 @@ public class CharacterLifecycleTests
 
         var baseline = await _bot.GetSnapshotAsync(account);
         if (!IsStrictAlive(baseline))
+        {
+            _output.WriteLine($"  [{label}] FAIL: Baseline not strict-alive after setup.");
             return false;
+        }
+
+        _output.WriteLine($"  [{label}] Baseline alive — health={baseline!.Player!.Unit!.Health}, flags=0x{baseline.Player.PlayerFlags:X}");
 
         var deathResult = await _bot.InduceDeathForTestAsync(account, characterName, timeoutMs: 15000, requireCorpseTransition: false);
         _output.WriteLine($"  [{label}] Death setup: success={deathResult.Succeeded}, command={deathResult.Command}, details={deathResult.Details}");
         if (!deathResult.Succeeded)
             return false;
 
-        var deadStateObserved = await WaitForDeadOrGhostStateAsync(account, TimeSpan.FromSeconds(8));
+        var deadStateObserved = await WaitForDeadOrGhostStateAsync(account, TimeSpan.FromSeconds(10));
         _output.WriteLine($"  [{label}] Dead/ghost state observed: {deadStateObserved}");
         if (!deadStateObserved)
+        {
+            var debugSnap = await _bot.GetSnapshotAsync(account);
+            _output.WriteLine($"  [{label}] FAIL: Dead state not detected. health={debugSnap?.Player?.Unit?.Health}, flags=0x{debugSnap?.Player?.PlayerFlags:X}, bytes1=0x{debugSnap?.Player?.Unit?.Bytes1:X}");
             return false;
+        }
 
         // Use SOAP revive only as a deterministic cleanup fallback; reclaim timer can be long.
         var reviveResult = await _bot.RevivePlayerAsync(characterName);
         _output.WriteLine($"  [{label}] SOAP revive result: {reviveResult}");
 
-        var aliveAgain = await WaitForStrictAliveAsync(account, TimeSpan.FromSeconds(15));
+        // FG descriptor memory may lag behind server state after SOAP revive;
+        // allow up to 20s for the WoW client to process the update packet.
+        var aliveAgain = await WaitForStrictAliveAsync(account, TimeSpan.FromSeconds(20));
         if (!aliveAgain)
+        {
+            var debugSnap = await _bot.GetSnapshotAsync(account);
+            _output.WriteLine($"  [{label}] FAIL: Not strict-alive after revive. health={debugSnap?.Player?.Unit?.Health}, flags=0x{debugSnap?.Player?.PlayerFlags:X}, bytes1=0x{debugSnap?.Player?.Unit?.Bytes1:X}");
             return false;
+        }
 
         var afterRevive = await _bot.GetSnapshotAsync(account);
         var health = afterRevive?.Player?.Unit?.Health ?? 0;
-        _output.WriteLine($"  [{label}] After revive: health={health}");
+        _output.WriteLine($"  [{label}] After revive: health={health}, flags=0x{afterRevive?.Player?.PlayerFlags:X}");
         return health > 0 && IsStrictAlive(afterRevive);
     }
 

@@ -49,6 +49,7 @@ public class LiveBotFixture : IAsyncLifetime
     public bool IsReady { get; private set; }
     public bool GmModeInitialized { get; private set; }
     public string? FailureReason { get; private set; }
+    private bool _fgGmModeSent;
 
     /// <summary>
     /// Whether PathfindingService is listening on port 5001.
@@ -229,12 +230,16 @@ public class LiveBotFixture : IAsyncLifetime
             _logger.LogInformation("[FIXTURE] Ensuring clean character state (revive + disband)...");
             await EnsureCleanCharacterStateAsync();
 
-            // 6. Enable GM mode once for the entire test session (eliminates per-test .gm on).
-            _logger.LogInformation("[FIXTURE] Enabling GM mode for all bots...");
-            if (BgAccountName != null)
-                await SendGmChatCommandAsync(BgAccountName, ".gm on");
+            // 6. Enable GM mode for FG only. BG must NEVER receive .gm on/.gm off via chat —
+            //    MaNGOS responds with a packet that disconnects the headless client, breaking
+            //    all subsequent commands and position tracking. BG commands work via GM account
+            //    level (set to 6 in EnsureGmCommandsEnabledAsync) without needing .gm on.
             if (FgAccountName != null)
+            {
+                _logger.LogInformation("[FIXTURE] Enabling GM mode for FG bot...");
                 await SendGmChatCommandAsync(FgAccountName, ".gm on");
+                _fgGmModeSent = true;
+            }
             GmModeInitialized = true;
 
             // 7. Stage both bots at a shared starting location (Orgrimmar).
@@ -510,6 +515,7 @@ public class LiveBotFixture : IAsyncLifetime
             {
                 AllBots = inWorld;
                 IdentifyBots(inWorld);
+                await EnsureFgGmModeAsync();
                 LogSnapshotMessages();
                 return;
             }
@@ -523,6 +529,7 @@ public class LiveBotFixture : IAsyncLifetime
         var finalSnapshots = await _stateManagerClient.QuerySnapshotsAsync();
         AllBots = finalSnapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
         IdentifyBots(AllBots);
+        await EnsureFgGmModeAsync();
         LogSnapshotMessages();
     }
 
@@ -536,6 +543,20 @@ public class LiveBotFixture : IAsyncLifetime
             WriteSnapshotMessageDelta(accountKey, label, snap.RecentChatMessages, _lastPrintedChatCountByAccount, "CHAT");
             WriteSnapshotMessageDelta(accountKey, label, snap.RecentErrors, _lastPrintedErrorCountByAccount, "ERROR");
         }
+    }
+
+    /// <summary>
+    /// Send .gm on to FG bot if it just appeared InWorld and hasn't received it yet.
+    /// FG enters world late (WoW.exe injection takes 60s+), so this catches the case
+    /// where fixture init completed before FG was available.
+    /// </summary>
+    private async Task EnsureFgGmModeAsync()
+    {
+        if (_fgGmModeSent || FgAccountName == null || ForegroundBot == null) return;
+
+        _logger.LogInformation("[FIXTURE] FG bot just entered world — sending deferred .gm on");
+        await SendGmChatCommandAsync(FgAccountName, ".gm on");
+        _fgGmModeSent = true;
     }
 
     private void WriteSnapshotMessageDelta(
@@ -1127,6 +1148,17 @@ public class LiveBotFixture : IAsyncLifetime
         int delayMs = 2000,
         bool allowWhenDead = false)
     {
+        // CRITICAL: .gm on / .gm off via chat disconnects the BG headless client.
+        // MaNGOS responds with a packet that kills the connection, breaking all
+        // subsequent commands and position tracking. Skip for BG bots silently.
+        if (accountName == BgAccountName &&
+            command.StartsWith(".gm ", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("[CMD-SKIP] [{Account}] Skipping '{Command}' — .gm commands disconnect BG headless client",
+                accountName, command);
+            return new GmChatCommandTrace(0, ResponseResult.Success, Array.Empty<string>(), Array.Empty<string>());
+        }
+
         var attemptCount = TrackChatCommand(accountName, command);
         LogDuplicateCommand("CHAT", command, attemptCount, accountName);
 
@@ -1542,6 +1574,14 @@ public class LiveBotFixture : IAsyncLifetime
             usedCorpsePositionFallback);
     }
 
+    /// <summary>
+    /// Make the bot select itself (CMSG_SET_SELECTION → own GUID).
+    /// Required before GM commands like .setskill that need a selected target.
+    /// This is an internal bot command — nothing is sent to server chat.
+    /// </summary>
+    public Task BotSelectSelfAsync(string accountName)
+        => SendGmChatCommandAsync(accountName, ".targetself");
+
     /// <summary>Learn a spell for a specific bot by having it type .learn in chat.</summary>
     public Task BotLearnSpellAsync(string accountName, uint spellId)
         => SendGmChatCommandAsync(accountName, $".learn {spellId}");
@@ -1549,6 +1589,16 @@ public class LiveBotFixture : IAsyncLifetime
     /// <summary>Unlearn a spell for a specific bot by having it type .unlearn in chat.</summary>
     public Task BotUnlearnSpellAsync(string accountName, uint spellId)
         => SendGmChatCommandAsync(accountName, $".unlearn {spellId}");
+
+    /// <summary>
+    /// Set a skill value for a bot. Automatically selects self first (required by .setskill).
+    /// </summary>
+    public async Task BotSetSkillAsync(string accountName, uint skillId, int currentValue, int maxValue)
+    {
+        await BotSelectSelfAsync(accountName);
+        await Task.Delay(300);
+        await SendGmChatCommandAsync(accountName, $".setskill {skillId} {currentValue} {maxValue}");
+    }
 
     /// <summary>Add an item to a bot's own bags by having it type .additem in chat.</summary>
     public Task BotAddItemAsync(string accountName, uint itemId, int count = 1)
