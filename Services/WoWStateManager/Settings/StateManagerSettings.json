@@ -1,6 +1,8 @@
 [
   {
     "AccountName": "TESTBOT1",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
     "Openness": 1.0,
     "Conscientiousness": 1.0,
     "Extraversion": 1.0,
@@ -11,6 +13,8 @@
   },
   {
     "AccountName": "TESTBOT2",
+    "CharacterClass": "Warrior",
+    "CharacterRace": "Orc",
     "Openness": 1.0,
     "Conscientiousness": 1.0,
     "Extraversion": 1.0,

@@ -91,5 +91,18 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("BehaviorConfig", NullValueHandling = NullValueHandling.Ignore)]
         public BotBehaviorConfig? BehaviorConfig { get; set; }
+
+        /// <summary>
+        /// Optional: Character class override. If set, used instead of parsing class from AccountName.
+        /// Allows account names like "TESTBOT1" that don't encode race/class.
+        /// </summary>
+        [JsonProperty("CharacterClass", NullValueHandling = NullValueHandling.Ignore)]
+        public string? CharacterClass { get; set; }
+
+        /// <summary>
+        /// Optional: Character race override. If set, used instead of parsing race from AccountName.
+        /// </summary>
+        [JsonProperty("CharacterRace", NullValueHandling = NullValueHandling.Ignore)]
+        public string? CharacterRace { get; set; }
     }
 }

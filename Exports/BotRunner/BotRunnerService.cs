@@ -282,8 +282,8 @@ namespace BotRunner
 
             if (_objectManager.CharacterSelectScreen?.CharacterSelects.Count == 0)
             {
-                Class @class = WoWNameGenerator.ParseClassCode(_activitySnapshot.AccountName.Substring(2, 2));
-                Race race = WoWNameGenerator.ParseRaceCode(_activitySnapshot.AccountName[..2]);
+                Class @class = WoWNameGenerator.ResolveClass(_activitySnapshot.AccountName);
+                Race race = WoWNameGenerator.ResolveRace(_activitySnapshot.AccountName);
                 Gender gender = WoWNameGenerator.DetermineGender(@class);
 
                 _behaviorTree = BuildCreateCharacterSequence(
@@ -468,8 +468,7 @@ namespace BotRunner
 
             try
             {
-                var classCode = accountName.Substring(2, 2);
-                var @class = WoWNameGenerator.ParseClassCode(classCode);
+                var @class = WoWNameGenerator.ResolveClass(accountName);
 
                 // IdleTask sits at the bottom of the stack â€” does nothing.
                 // StateManager sends actions via IPC that build behavior trees.

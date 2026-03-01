@@ -465,31 +465,21 @@ namespace ForegroundBotRunner
 
         private static IDependencyContainer CreateClassContainer(string? accountName, PathfindingClient pathfindingClient)
         {
-            BotProfiles.Common.BotBase botProfile;
+            var @class = WoWNameGenerator.ResolveClass(accountName);
 
-            if (!string.IsNullOrEmpty(accountName) && accountName.Length >= 4)
+            BotProfiles.Common.BotBase botProfile = @class switch
             {
-                var classCode = accountName.Substring(2, 2);
-                var @class = WoWNameGenerator.ParseClassCode(classCode);
-
-                botProfile = @class switch
-                {
-                    Class.Warrior => new WarriorArms.WarriorArms(),
-                    Class.Paladin => new PaladinRetribution.PaladinRetribution(),
-                    Class.Rogue => new RogueCombat.RogueCombat(),
-                    Class.Hunter => new HunterBeastMastery.HunterBeastMastery(),
-                    Class.Priest => new PriestDiscipline.PriestDiscipline(),
-                    Class.Shaman => new ShamanEnhancement.ShamanEnhancement(),
-                    Class.Mage => new MageArcane.MageArcane(),
-                    Class.Warlock => new WarlockAffliction.WarlockAffliction(),
-                    Class.Druid => new DruidRestoration.DruidRestoration(),
-                    _ => new WarriorArms.WarriorArms()
-                };
-            }
-            else
-            {
-                botProfile = new WarriorArms.WarriorArms();
-            }
+                Class.Warrior => new WarriorArms.WarriorArms(),
+                Class.Paladin => new PaladinRetribution.PaladinRetribution(),
+                Class.Rogue => new RogueCombat.RogueCombat(),
+                Class.Hunter => new HunterBeastMastery.HunterBeastMastery(),
+                Class.Priest => new PriestDiscipline.PriestDiscipline(),
+                Class.Shaman => new ShamanEnhancement.ShamanEnhancement(),
+                Class.Mage => new MageArcane.MageArcane(),
+                Class.Warlock => new WarlockAffliction.WarlockAffliction(),
+                Class.Druid => new DruidRestoration.DruidRestoration(),
+                _ => new WarriorArms.WarriorArms()
+            };
 
             return new ClassContainer(
                 botProfile.Name,

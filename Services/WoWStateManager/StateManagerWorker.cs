@@ -97,7 +97,7 @@ namespace WoWStateManager
             _worldStateManagerSocketListener.DataMessageStream.Subscribe(OnWorldStateUpdate);
         }
 
-        public void StartBackgroundBotWorker(string accountName)
+        public void StartBackgroundBotWorker(string accountName, string? characterClass = null, string? characterRace = null)
         {
             var tokenSource = new CancellationTokenSource();
 
@@ -116,6 +116,10 @@ namespace WoWStateManager
             };
             psi.Environment["WWOW_ACCOUNT_NAME"] = accountName;
             psi.Environment["WWOW_ACCOUNT_PASSWORD"] = "PASSWORD";
+            if (!string.IsNullOrEmpty(characterClass))
+                psi.Environment["WWOW_CHARACTER_CLASS"] = characterClass;
+            if (!string.IsNullOrEmpty(characterRace))
+                psi.Environment["WWOW_CHARACTER_RACE"] = characterRace;
 
             var process = Process.Start(psi);
             var pid = (uint?)process?.Id;
@@ -156,7 +160,7 @@ namespace WoWStateManager
             _logger.LogInformation($"Started BackgroundBotRunner process for account {accountName} (PID: {pid})");
         }
 
-        public void StartForegroundBotWorker(string accountName, int? targetProcessId = null)
+        public void StartForegroundBotWorker(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null)
         {
             // Backoff: prevent rapid re-launch loops if process dies immediately
             lock (_managedServicesLock)
@@ -170,7 +174,7 @@ namespace WoWStateManager
             }
 
             // Start WoW process and inject the bot worker service
-            StartForegroundBotRunner(accountName, targetProcessId);
+            StartForegroundBotRunner(accountName, targetProcessId, characterClass, characterRace);
         }
 
         /// <summary>
@@ -533,17 +537,17 @@ namespace WoWStateManager
                 {
                     case Settings.BotRunnerType.Foreground:
                         _logger.LogInformation($"Starting Foreground bot worker for {accountName} (DLL injection)");
-                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId);
+                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace);
                         break;
 
                     case Settings.BotRunnerType.Background:
                         _logger.LogInformation($"Starting Background bot worker for {accountName} (headless)");
-                        StartBackgroundBotWorker(accountName);
+                        StartBackgroundBotWorker(accountName, characterSettings.CharacterClass, characterSettings.CharacterRace);
                         break;
 
                     default:
                         _logger.LogWarning($"Unknown RunnerType {characterSettings.RunnerType} for {accountName}, defaulting to Foreground");
-                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId);
+                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace);
                         break;
                 }
 
@@ -557,7 +561,7 @@ namespace WoWStateManager
             return true;
         }
 
-        private void StartForegroundBotRunner(string accountName, int? targetProcessId = null)
+        private void StartForegroundBotRunner(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null)
         {
             // Set the path to ForegroundBotRunner.dll in an environment variable
             var foregroundBotDllPath = Path.Combine(AppContext.BaseDirectory, "ForegroundBotRunner.dll");
@@ -569,6 +573,10 @@ namespace WoWStateManager
             // The password is always "PASSWORD" as set by MangosSOAPClient.CreateAccountAsync
             Environment.SetEnvironmentVariable("WWOW_ACCOUNT_NAME", accountName);
             Environment.SetEnvironmentVariable("WWOW_ACCOUNT_PASSWORD", "PASSWORD");
+            if (!string.IsNullOrEmpty(characterClass))
+                Environment.SetEnvironmentVariable("WWOW_CHARACTER_CLASS", characterClass);
+            if (!string.IsNullOrEmpty(characterRace))
+                Environment.SetEnvironmentVariable("WWOW_CHARACTER_RACE", characterRace);
             _logger.LogInformation($"Set credentials environment variables for ForegroundBotRunner: WWOW_ACCOUNT_NAME={accountName}");
 
             // Enable optional loader console + extra diagnostics (config flag or always on for now)
