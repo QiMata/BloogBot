@@ -60,6 +60,13 @@ Master tracker: `MASTER-SUB-020`
 - Validation: 24/24 pass (`dotnet test --filter ActionForwardingContractTests|ForegroundObjectRegressionTests`).
 - [x] Acceptance: regressions fail deterministically on dead/ghost filtering and proto contract drift.
 
+### WSM-PAR-001 Research: Quest snapshot sync lag (linked: BRT-PAR-002)
+- [ ] **Research.** Parity loop (BRT-PAR-001, 2026-02-28) found `Quest_AddCompleteAndRemove_AreReflectedInSnapshots` failing because quest state changes are not reflected in the snapshot in time for the assertion.
+- Symptom: quest is added/completed via GM commands, but the snapshot snapshot does not reflect the change within the test's polling window.
+- Next step: investigate snapshot pipeline latency for quest fields — determine if the issue is a polling interval, a missing `SMSG_QUEST_*` handler, or a delayed snapshot push from the BG client.
+- Owner: `Services/WoWStateManager` (snapshot forwarding) + `Exports/WoWSharpClient` (quest packet handlers)
+- Calibration link: N/A (not a physics/navigation issue)
+
 ## Simple Command Set
 1. Build service: `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore`
 2. Corpse-run scenario: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`

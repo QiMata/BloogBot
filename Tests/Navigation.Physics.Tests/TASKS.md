@@ -37,6 +37,13 @@
 
 No active tasks — all P0 tasks completed. See `TASKS_ARCHIVE.md` for details.
 
+### Parity Routing (BRT-PAR-002)
+BRT-PAR-001 parity loop (2026-02-28) found **no physics/navigation regressions**. All 4 live failures (gathering node visibility, FlightMaster NPC timing, quest snapshot sync, PathfindingService readiness) are routed to non-physics owners:
+- World object visibility → `Services/BackgroundBotRunner/TASKS.md` (BBR-PAR-001)
+- NPC interaction timing → `Services/BackgroundBotRunner/TASKS.md` (BBR-PAR-002)
+- Quest snapshot sync → `Services/WoWStateManager/TASKS.md` (WSM-PAR-001)
+- PathfindingService readiness → `Services/PathfindingService/TASKS.md` (PFS-PAR-001)
+
 ## Simple Command Set
 1. Single project sweep: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"`.
 2. Fast frame-loop verification: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~FrameByFramePhysicsTests" --logger "console;verbosity=minimal"`.

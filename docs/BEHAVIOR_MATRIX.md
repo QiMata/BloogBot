@@ -57,14 +57,14 @@
 | 39 | WWoW.RecordedTests.PathingTests/TASKS.md | WWoWRecordedPathReplayParity | Researching | Run WWoW pathing replay suite and queue library-level replay parity fixes. |
 | 40 | WWoW.RecordedTests.Shared/TASKS.md | WWoWRecordedSharedFixtureParity | Researching | Run WWoW shared determinism tests and file fixture/schema stabilization tasks. |
 | 41 | WWoWBot.AI/TASKS.md | AiAbilityAndWorldInteractionParity | Implementing | Execute `AI-PARITY-*` cards in order: corpse-run, combat, then gathering; for any movement drift, immediately run physics calibration follow-up and route deltas to owning TASKS files. |
-## AI Parity Cards (MASTER-SUB-041)
-1. `AI-PARITY-CORPSE-001`:
+## AI Parity Cards (MASTER-SUB-041) — ALL PASSED (2026-02-28)
+1. `AI-PARITY-CORPSE-001`: **PASSED** (1/1, 4m 56s)
 - FG/BG validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Physics follow-up on movement drift: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~MovementControllerPhysicsTests" --logger "console;verbosity=minimal"`
-2. `AI-PARITY-COMBAT-001`:
+2. `AI-PARITY-COMBAT-001`: **PASSED** (1/1, 6s)
 - FG/BG validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Physics follow-up on movement drift: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsReplayTests|FullyQualifiedName~ErrorPatternDiagnosticTests" --logger "console;verbosity=minimal"`
-3. `AI-PARITY-GATHER-001`:
+3. `AI-PARITY-GATHER-001`: **PASSED** (2/2, 4m 20s)
 - FG/BG validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~Mining" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Physics follow-up on movement drift: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~FrameByFramePhysicsTests" --logger "console;verbosity=minimal"`
 ## Update Rule

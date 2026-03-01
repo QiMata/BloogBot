@@ -56,6 +56,17 @@
 - [x] **Code-complete.** Parity infrastructure exists in `DeathCorpseRunTests.cs` (FG/BG dual-client test harness). Full parity regression requires extending assertions with movement cadence, ability usage, and packet timing comparisons.
 - [ ] Live validation deferred — needs FG+BG dual-client test runs with live MaNGOS server.
 
+### BBR-PAR-001 Improved: World object visibility — gathering node detection timing (linked: BRT-PAR-002)
+- [x] **Diagnostics shipped (2026-02-28).** Research confirmed the 40y snapshot filter (BotRunnerService.Snapshot.cs:233-234) is NOT the root cause — player teleports to spawn location, so distance is ~0y. Real issue is server-side visibility timing after `.respawn` command.
+- Fix: Increased respawn delay (1500→3000ms), detection loop timeout (10→15s), added first-scan diagnostic dump (NearbyObjects count + first 10 GOs with entry/guid/displayId/position).
+- [ ] Live validation needed: run `dotnet test --filter "GatheringProfessionTests"` with live MaNGOS to confirm improved timing resolves herb/mining node detection.
+- Files: `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
+
+### BBR-PAR-002 Research: NPC interaction timing — FlightMaster discovery (linked: BRT-PAR-002)
+- [ ] **Research.** `FlightMaster_DiscoverNodes` failed in parity loop — NPC interaction timing issue where the BG client does not detect or interact with the FlightMaster NPC reliably.
+- Next step: trace `SMSG_UPDATE_OBJECT` NPC creation packets in FG vs BG to compare NPC visibility timing and interaction readiness.
+- Owner: `Services/BackgroundBotRunner` (BG NPC interaction)
+
 ## Simple Command Set
 1. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
@@ -64,14 +75,13 @@
 
 ## Session Handoff
 - Last updated: 2026-02-28
-- Active task: BBR-MISS-001 done, BBR-MISS-002/004/005 code-complete (live validation deferred)
-- Last delta: BBR-MISS-001 (action correlation token in BotRunnerService.cs)
+- Active task: BBR-PAR-001 diagnostics shipped; BBR-PAR-002 still open.
+- Last delta: BBR-PAR-001 timing/diagnostics improvements to GatheringProfessionTests (respawn delay 1500→3000ms, detection loop 10→15s, first-scan diagnostic dump). Root cause confirmed as server tick timing, not 40y filter.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release` — 0 errors
-  - BotRunner.Tests: 67/67 pass
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release` — 0 errors (63 warnings)
 - Files changed:
-  - `Exports/BotRunner/BotRunnerService.cs` — correlation token fields + logs
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs` — timing + diagnostic improvements
   - `Services/BackgroundBotRunner/TASKS.md`
-- Next command: continue with next queue file
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~GatheringProfessionTests" --blame-hang --blame-hang-timeout 10m` (live validation)
 - Blockers: BBR-MISS-002/004/005 live validation requires running MaNGOS server

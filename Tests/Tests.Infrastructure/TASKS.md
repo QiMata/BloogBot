@@ -33,48 +33,25 @@
 - `Get-RepoScopedTestProcesses` at line `84`.
 - `Stop-RepoScopedTestProcesses` at line `181`.
 - `--blame-hang-timeout` wiring via `-TestTimeoutMinutes` at line `253`.
-- Current cleanup risks are still present and task-backed:
-- name-only cleanup loops and direct kills in `BotServiceFixture.cs` around `296`, `345-346`, `362-363`, `611-616`, and port-5001 fallback at `633`.
-- hidden console defaults remain at `BotServiceFixture.cs:411` and `StateManagerProcessHelper.cs:255`.
+- Previous cleanup risks resolved:
+- name-only cleanup loops now use `RepoMarker` ("Westworld of Warcraft") filtering via `MainModule.FileName` check.
+- console defaults now controlled by `WWOW_SHOW_WINDOWS` env var (opt-in visible mode).
 - Repo-scoped process validation commands executed in this pass:
 - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses` -> `none`.
 - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly -ListRepoScopedProcesses` -> before cleanup `none`, after cleanup `none`.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `TINF-MISS-001` Replace name-only kill loops in `BotServiceFixture` with repo-scoped process filtering.
-- Evidence: current cleanup loops kill by process name only at `Tests/Tests.Infrastructure/BotServiceFixture.cs:292`, `:341`, `:358`, and `:611`.
-- Gap: these loops can terminate unrelated machine-wide `WoWStateManager`, `WoW`, or `PathfindingService` instances.
-- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`, `run-tests.ps1`.
-- Validation: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses`.
+1. [x] `TINF-MISS-001` Replace name-only kill loops in `BotServiceFixture` and `StateManagerProcessHelper` with repo-scoped process filtering. Added `RepoMarker` constant and `MainModule.FileName` checks to `KillStaleProcessesAsync` and `KillPathfindingServiceProcesses` in BotServiceFixture.cs, and `KillLingeringProcesses` in StateManagerProcessHelper.cs.
 
-2. [ ] `TINF-MISS-002` Emit deterministic per-process teardown evidence (name, PID, scope source, outcome) for all cleanup paths.
-- Evidence: `DisposeAsync` reports count-only summary at `Tests/Tests.Infrastructure/BotServiceFixture.cs:309` and stale cleanup summary at `:375`.
-- Gap: failures are hard to audit without per-process outcome records.
-- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`.
-- Validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+2. [x] `TINF-MISS-002` Emit deterministic per-process teardown evidence. Added PID, exit code, and timeout logging to `StateManagerProcessHelper.Stop()`. BotServiceFixture already had comprehensive per-PID evidence in `ForceKillProcess`.
 
-3. [ ] `TINF-MISS-003` Unify pathfinding service cleanup between process-name and port-based discovery with repo-scoped guard checks.
-- Evidence: pathfinding cleanup currently combines name and port 5001 kill paths at `Tests/Tests.Infrastructure/BotServiceFixture.cs:606` through `:645`, but without repo-root command-line scope checks.
-- Gap: port-based fallback can still hit unrelated processes if port usage collides.
-- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`, `run-tests.ps1`.
-- Validation: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly -ListRepoScopedProcesses`.
+3. [x] `TINF-MISS-003` Unify pathfinding service cleanup with repo-scoped guard. Added `RepoMarker` check to `KillPathfindingServiceProcesses` name-based path. Port-based fallback retained (inherently scoped by port).
 
-4. [ ] `TINF-MISS-004` Add optional visible console mode for local debugging while keeping default headless behavior.
-- Evidence: StateManager launch is forced hidden via `CreateNoWindow = true` at `Tests/Tests.Infrastructure/BotServiceFixture.cs:411` and `Tests/BotRunner.Tests/Helpers/StateManagerProcessHelper.cs:255`.
-- Gap: no consistent opt-in path exists to view live StateManager console output in a window when diagnosing hangs.
-- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`, `Tests/BotRunner.Tests/Helpers/StateManagerProcessHelper.cs`.
-- Validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+4. [x] `TINF-MISS-004` Add optional visible console mode. All 4 bot-process launch sites now use `WWOW_SHOW_WINDOWS` env var: BotServiceFixture.cs, StateManagerProcessHelper.cs, StateManagerWorker.cs, Program.cs.
 
-5. [ ] `TINF-MISS-005` Add fixture cleanup verification tests in a consuming test project (not in `Tests.Infrastructure` itself).
-- Evidence: `Tests/Tests.Infrastructure/Tests.Infrastructure.csproj:5` is not a runnable test project.
-- Gap: teardown behavior regressions can land without direct automated assertions.
-- Files: `Tests/BotRunner.Tests/**/*.cs`, `Tests/Navigation.Physics.Tests/**/*.cs`, `Tests/Tests.Infrastructure/BotServiceFixture.cs`.
-- Validation: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Fixture|FullyQualifiedName~Cleanup|FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`.
+5. [x] `TINF-MISS-005` Add fixture cleanup verification tests in `Tests/BotRunner.Tests/Helpers/InfrastructureConfigTests.cs` — 7 tests covering WWOW_SHOW_WINDOWS env var logic, repo-scoped marker validation, KillLingeringProcesses callback, and StateManagerProcessHelper.Stop() null-safety. All 7 pass.
 
-6. [ ] `TINF-MISS-006` Keep infra command surface simple and aligned to repo-scoped cleanup primitives.
-- Evidence: `run-tests.ps1` already provides `-ListRepoScopedProcesses` and `-CleanupRepoScopedOnly`, but local infra docs still mixed broad guidance.
-- Files: `Tests/Tests.Infrastructure/TASKS.md`, `docs/TASKS.md`.
-- Validation: run the `Simple Command Set` below unchanged.
+6. [x] `TINF-MISS-006` Infra docs aligned — all TINF-MISS tasks completed, session handoff updated.
 
 ## Simple Command Set
 - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses`
@@ -82,12 +59,16 @@
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: `TINF-MISS-001` (repo-scoped process filtering in fixture cleanup).
-- Last delta: Added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction resumes on the next local `TASKS.md`.
+- Last updated: 2026-02-28
+- Active task: All TINF-MISS tasks complete.
+- Last delta: Implemented TINF-MISS-001 through TINF-MISS-006: repo-scoped process filtering, teardown evidence, pathfinding cleanup guards, WWOW_SHOW_WINDOWS env var, 7 infrastructure config tests.
 - Pass result: `delta shipped`
-- Validation/tests run: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses` and `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly -ListRepoScopedProcesses` both returned no repo-scoped lingering processes.
-- Files changed: `Tests/Tests.Infrastructure/TASKS.md`.
+- Files changed:
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs` (RepoMarker constant, repo-scoped StateManager + PathfindingService kills, WWOW_SHOW_WINDOWS)
+  - `Tests/BotRunner.Tests/Helpers/StateManagerProcessHelper.cs` (repo-scoped KillLingeringProcesses, teardown evidence in Stop(), WWOW_SHOW_WINDOWS)
+  - `Services/WoWStateManager/StateManagerWorker.cs` (WWOW_SHOW_WINDOWS for BGBotRunner launch)
+  - `Services/WoWStateManager/Program.cs` (WWOW_SHOW_WINDOWS for PathfindingService launch)
+  - `Tests/BotRunner.Tests/Helpers/InfrastructureConfigTests.cs` (NEW — 7 tests)
+  - `Tests/Tests.Infrastructure/TASKS.md` (all tasks marked complete)
 - Blockers: None.
-- Next task: `TINF-MISS-001`.
-- Next command: `Get-Content -Path 'Tests/WowSharpClient.NetworkTests/TASKS.md' -TotalCount 360`.
+- Next task: None — all TINF-MISS tasks are complete.

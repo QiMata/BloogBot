@@ -1714,3 +1714,74 @@ All PromptHandlingService test methods already have `[Fact(Skip = "Integration: 
 
 ### Local TASKS.md Sync (2026-02-27)
 Synced 4 local TASKS.md files with master completion status: `Services/DecisionEngineService/TASKS.md` (DES-MISS-001/002/003/004), `Services/WoWStateManager/TASKS.md` (WSM-MISS-001/002/003/004), `Services/BackgroundBotRunner/TASKS.md` (BBR-MISS-003), `Services/PromptHandlingService/TASKS.md` (PHS-MISS-001/004).
+
+## Tier 2 — Transport/Elevator/Cross-Map (2026-02-28)
+
+### PATH-SMOOTH-001..004 — Path Smoothing (Done)
+Parts 1-7 complete: adaptive radius, StringPull, LOS skip, smoothPath swap, cliff/edge detection, fall distance tracking, gap jump detection. All gated on `enableProbeHeuristics`.
+
+### DYNOBJ-001 — nearbyObjects IPC Pipeline (Done)
+Proto + service + marshal for dynamic object visibility. Caller integration completed.
+
+### TIER2-001 — Frame-Ahead Simulator (Done)
+Multi-frame physics stepping via `FrameAheadSimulator.cs`. 10 unit tests + 4 integration tests with real Navigation.dll. Jump FallTime=0 initiation rule discovered and documented.
+
+### TIER2-002 — Transport Knowledge Base (Done)
+`TransportData.cs` static database: 3 Undercity elevators, 1 Thunder Bluff elevator, 4 boats, 3 zeppelins (11 total). `TransportWaitingLogic.cs` state machine (6 phases). 25 unit tests + 15 elevator scenario tests.
+
+### TIER2-003 — Cross-Map Pathfinding (Done)
+`MapTransitionGraph.cs` (30 edges) + `CrossMapRouter.cs` (same-map walk, elevator crossing, cross-map transitions, 1-hop routing). 17 unit tests.
+
+### TIER2-004 — NavigationPath Transport Integration (Done)
+`CheckTransportNeeded()`, `GetTransportTarget()`, `CancelTransportRide()` added to NavigationPath.cs. 43/43 existing tests pass.
+
+### PFS-PAR-001 — PathfindingService Readiness Check (Done 2026-02-28)
+Added `WaitForPathfindingServiceAsync()` to `BotServiceFixture.cs` — waits up to 30s for port 5001 after StateManager ready. `PathfindingServiceReady` property exposed through `LiveBotFixture.IsPathfindingReady`. `DeathCorpseRunTests` skips gracefully with WWOW_DATA_DIR guidance.
+
+### BBR-PAR-001 — Gathering Node Detection Timing (Diagnostics Done 2026-02-28)
+Respawn delay increased 1500→3000ms, detection loop 10→15s, first-scan diagnostic dump added. Root cause confirmed: server tick timing, not 40y snapshot filter.
+
+### FG-STUCK-001 — FG Ghost Stuck on Terrain (Won't Fix)
+WoW.exe native limitation, not a code bug. Recovery logic exists (`RecoverRunbackStall()`). Soft FG assertions are correct.
+
+### SOAP-CMD-001 — SOAP ExecuteGMCommandAsync Hardening (Done, partial)
+Throw on "no such command" FAULT, `.teleport` → `.tele`/`.go xyz` in all PathingTestDefinitions. ContainsCommandRejection consolidation deferred.
+
+## Missing Implementation Inventory — All Complete (Archived 2026-02-28)
+
+All [x] items from the P1 Missing Implementation Inventory have been completed across all subsystems:
+- Exports: BR-MISS-001/002/003, WSC-MISS-001/002/003/004, NAV-MISS-001/002/003/004, WINIMP-MISS-001/002/003/004/005, FG-MISS-001/002/003/004/005, LDR-MISS-001/002/003
+- Services: PHS-MISS-001/002/003/004, WSM-MISS-001/002/003/004/005, DES-MISS-001/002/003/004/005, BBR-MISS-001/002/003/004/005, PFS-MISS-001/002/003/004/005/006/007
+- BotCommLayer: BCL-MISS-001/002/003/004
+- UI: UI-MISS-001
+- GameData.Core: GDC-MISS-001/002/003
+- BotProfiles: BP-MISS-001/002/003/004
+- RecordedTests.PathingTests: RPT-MISS-001/002/003/004/005
+- Tests: WSC-TST-001
+- CppCodeIntelligenceMCP: CPPMCP-BLD-001, CPPMCP-ARCH-002, CPPMCP-MISS-002 (remaining deferred — unused service)
+- LoggingMCPServer: LMCP-MISS-001/002/003 (remaining deferred — unused service)
+
+## Sub-TASKS Queue — Done Rows Archived (2026-02-28)
+
+Rows 1-10, 12-13, 15-16, 18-23, 28-30, 33-35 all completed:
+- BotProfiles, Exports (umbrella + BotCommLayer + BotRunner + GameData.Core + Loader + Navigation + WinImports + WoWSharpClient)
+- RecordedTests.PathingTests, Services (umbrella + BackgroundBotRunner + DecisionEngine + ForegroundBotRunner + PathfindingService + PromptHandlingService + WoWStateManager)
+- Tests (umbrella + BotRunner.Tests + Navigation.Physics.Tests + Tests.Infrastructure + WoWSharpClient.NetworkTests + WoWSharpClient.Tests + WoWSimulation + WWoW.Tests.Infrastructure)
+- UI/WoWStateManagerUI
+
+## Coverage Expansion — Batch 2026-02-28
+
+### RecordedTests.Shared.Tests — +39 tests (323 total)
+OrchestrationOptionsTests (6), OrchestrationResultTests (9), ServerInfoTests (9), DelegateFactoryTests (9), TestArtifactTests (6).
+
+### RecordedTests.PathingTests.Tests — +19 tests (115 total)
+PathingTestDefinitionTests (19) — all properties, defaults, TransportMode enum, `with` expression.
+
+### WWoW.RecordedTests.Shared.Tests — +35 tests (262 pass, 21 pre-existing fail)
+OrchestrationOptionsTests (6), OrchestrationResultTests (9), ServerInfoTests (7), DelegateFactoryTests (9), TestArtifactTests (5).
+
+### WWoW.RecordedTests.PathingTests.Tests — +15 tests (85 total)
+PathingTestDefinitionTests (15).
+
+### WWoWBot.AI.Tests — +117 tests (121 total, was 4)
+ForbiddenTransitionRuleTests (20), ForbiddenTransitionRegistryTests (17), AdvisoryValidatorTests (13), AdvisoryResolutionTests (8), InMemoryAdvisoryOverrideLogTests (8), StateChangeEventTests (21), BotStateObservableTests (11), MinorStateTests (10), BotActivityTests (2), DecisionInvocationSettingsTests (11).

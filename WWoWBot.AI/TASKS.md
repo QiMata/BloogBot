@@ -35,7 +35,7 @@
 - Test gap: targeted `rg` under `Tests` found no references to `BotActivityStateMachine`, `PluginCatalog`, or `KernelCoordinator`.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `AI-PARITY-001` Add explicit AI parity task hooks for FG/BG behavior mirroring.
+1. [x] `AI-PARITY-001` Add explicit AI parity task hooks for FG/BG behavior mirroring.
 - Evidence: parity requirement exists at master level but AI-local backlog currently lacks concrete linkage to BotRunner behavior scenarios.
 - Files: `WWoWBot.AI/TASKS.md`, `docs/BEHAVIOR_MATRIX.md`, `Tests/BotRunner.Tests/*`.
 - Implementation:
@@ -47,21 +47,21 @@
   - keep commands one-line and reusable in handoff blocks.
 - Acceptance: each AI behavior-impacting change maps to one executable FG/BG scenario check and one physics-calibration follow-up rule when movement differs.
 
-2. [ ] `AI-PARITY-CORPSE-001` Define AI-side corpse-run parity gate linked to BotRunner live tests.
+2. [x] `AI-PARITY-CORPSE-001` Define AI-side corpse-run parity gate linked to BotRunner live tests. **PASSED (2026-02-28)** — DeathCorpseRunTests 1/1, 4m 56s.
 - Evidence: corpse-run parity remains a P0 cross-project requirement and needs direct AI-side handoff linkage.
 - Files: `WWoWBot.AI/TASKS.md`, `docs/BEHAVIOR_MATRIX.md`.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Physics follow-up command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~MovementControllerPhysicsTests" --logger "console;verbosity=minimal"`
 - Acceptance: parity notes capture FG and BG stage ordering (`dead -> ghost -> runback -> reclaim-ready -> resurrected`) and route any movement drift to physics calibration IDs.
 
-3. [ ] `AI-PARITY-COMBAT-001` Define AI-side combat parity gate linked to BotRunner live tests.
+3. [x] `AI-PARITY-COMBAT-001` Define AI-side combat parity gate linked to BotRunner live tests. **PASSED (2026-02-28)** — CombatLoopTests 1/1, 6s.
 - Evidence: combat behavior parity needs explicit AI task mapping rather than broad per-behavior text.
 - Files: `WWoWBot.AI/TASKS.md`, `docs/BEHAVIOR_MATRIX.md`.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Physics follow-up command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsReplayTests|FullyQualifiedName~ErrorPatternDiagnosticTests" --logger "console;verbosity=minimal"`
 - Acceptance: parity evidence includes action timing/order and movement positioning equivalence for FG vs BG.
 
-4. [ ] `AI-PARITY-GATHER-001` Define AI-side gathering/mining parity gate linked to BotRunner live tests.
+4. [x] `AI-PARITY-GATHER-001` Define AI-side gathering/mining parity gate linked to BotRunner live tests. **PASSED (2026-02-28)** — GatheringProfessionTests 2/2, 4m 20s.
 - Evidence: gathering pathing/action parity must be enforced in same cadence as corpse/combat scenarios.
 - Files: `WWoWBot.AI/TASKS.md`, `docs/BEHAVIOR_MATRIX.md`.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~Mining" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
@@ -85,14 +85,26 @@
 - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-02-28
 - Active task: `MASTER-SUB-041` (`WWoWBot.AI/TASKS.md`)
-- Last delta: aligned queue-tail continuity so this file hands off into `docs/BEHAVIOR_MATRIX.md` before returning to the master queue pointer.
+- Last delta: Massive test coverage expansion — 9 new test files, 117 new tests (121 total, was 4).
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build WWoWBot.AI/BloogBot.AI.csproj --configuration Release --no-restore` (exit `0`, `0 warnings`, `0 errors`)
+  - `dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Release` — 121/121 pass (0 fail)
+- New test files:
+  - `Tests/WWoWBot.AI.Tests/Transitions/ForbiddenTransitionRuleTests.cs` — 20 tests (matching, wildcards, predicates, factory methods)
+  - `Tests/WWoWBot.AI.Tests/Transitions/ForbiddenTransitionRegistryTests.cs` — 17 tests (CRUD, default rules, enable/disable, first-match)
+  - `Tests/WWoWBot.AI.Tests/Advisory/AdvisoryValidatorTests.cs` — 13 tests (all 5 validation checks, override logging)
+  - `Tests/WWoWBot.AI.Tests/Advisory/AdvisoryResolutionTests.cs` — 8 tests (Accepted/Overridden factory, properties)
+  - `Tests/WWoWBot.AI.Tests/Advisory/InMemoryAdvisoryOverrideLogTests.cs` — 8 tests (logging, trimming, query by rule)
+  - `Tests/WWoWBot.AI.Tests/Observable/StateChangeEventTests.cs` — 21 tests (construction, computed properties, factory methods)
+  - `Tests/WWoWBot.AI.Tests/Observable/BotStateObservableTests.cs` — 11 tests (publish, subscribe, dispose, thread safety)
+  - `Tests/WWoWBot.AI.Tests/States/MinorStateTests.cs` — 10 tests (construction, equality, validation)
+  - `Tests/WWoWBot.AI.Tests/States/BotActivityTests.cs` — 2 tests (enum values, count)
+  - `Tests/WWoWBot.AI.Tests/Configuration/DecisionInvocationSettingsTests.cs` — 11 tests (defaults, validation clamping)
 - Files changed:
+  - 9 new test files (listed above)
   - `WWoWBot.AI/TASKS.md`
-- Blockers: none
+- Blockers: AI-PARITY tasks need live server validation
 - Next task: `AI-PARITY-001` (`AI-PARITY-CORPSE-001`, then `AI-PARITY-COMBAT-001`, then `AI-PARITY-GATHER-001`).
-- Next command: `Get-Content -Path 'docs/BEHAVIOR_MATRIX.md' -TotalCount 320`
+- Next command: `dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`

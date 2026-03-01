@@ -72,6 +72,12 @@ Master tracker: `MASTER-SUB-018`
 - Validation: 6/6 ProtoInteropExtensionsTests pass (2 existing + 4 new).
 - Acceptance: tests fail on coordinate drift, dropped nodes, order mismatch, or precision truncation.
 
+### PFS-PAR-001 ~~Research~~ Done: PathfindingService readiness timeout during gathering tests
+- [x] **Done (2026-02-28).** Root cause: `BotServiceFixture` only checked StateManager (port 8088), never PathfindingService (port 5001). If PathfindingService fails to start (WWOW_DATA_DIR missing), StateManager continues but tests requiring pathfinding fail.
+- Fix: Added `WaitForPathfindingServiceAsync()` to `BotServiceFixture.cs` — waits up to 30s for port 5001 after StateManager ready. `PathfindingServiceReady` property exposed through `LiveBotFixture.IsPathfindingReady`. `DeathCorpseRunTests` now skips gracefully with diagnostic message about WWOW_DATA_DIR.
+- Files: `Tests/Tests.Infrastructure/BotServiceFixture.cs`, `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`, `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+- Validation: `dotnet build Tests/Tests.Infrastructure/Tests.Infrastructure.csproj -c Release` — 0 errors; InfrastructureConfig tests 7/7 pass
+
 ## Simple Command Set
 1. Build service: `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore`
 2. Pathfinding tests: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
