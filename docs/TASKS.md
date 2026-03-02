@@ -120,20 +120,22 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 
 ## Session Handoff
 - **Last updated:** 2026-03-01
-- **Current work:** Physics calibration complete — transition errors reduced by 79%. 97/97 physics tests pass.
-- **Last delta:** SurfaceStep ground Z lookahead (transition avg 0.063→0.013y, -79%; p99 0.980→0.200y, -80%; worst 0.988→0.497y, -50%). Previous: JumpStart lookahead, FG corpse-run stall recovery, PhysicsCollideSlide corner trap.
+- **Current work:** Physics calibration — air mode now perfect (0.000y across 2275 frames). 97/97 physics tests pass.
+- **Last delta:** Trust velocity for JumpStart frames (air avg 0.009→0.000y, p99 0.360→0.000y, worst 0.876→0.000y). Engine was overriding trusted Vz with JUMP_VELOCITY (7.96 y/s) on first airborne frame, but the WoW client applies jump impulse mid-tick producing apparent Vz >> JUMP_VELOCITY (~62 y/s). Fix: skip JUMP_VELOCITY override when TRUST_INPUT_VELOCITY is set.
 - **Completed this session:**
-  1. **Physics calibration — JumpStart lookahead** — On JumpStart transition frames (grounded→airborne), the ReplayEngine was passing grounded flags to the engine. The engine ran ground sweep instead of airborne physics, producing ~0.98y vertical error. Fix: detect JumpStart by comparing current vs next frame flags; override `cleanedMoveFlags` to include JUMPING.
-  2. **Physics calibration — SurfaceStep ground Z lookahead** — On SurfaceStep frames (ground-to-ground Z change >0.5y), the engine's GetGroundZ refinement couldn't find the step-up surface (+0.5y search cap) and two downstream guardrails (non-walkable support clamp, ground Z refinement safety net) clamped Z back to `input.z`. Fix in 3 parts: (a) ReplayEngine provides `Vz = deltaZ/dt` on SurfaceStep frames; (b) Engine trust-grounded path uses target Z directly when `input.vz > 0.1` with GetGroundZ verification; (c) Skip ground Z refinement safety net and non-walkable guardrail when surface step hint is active.
-  3. **Physics calibration — FallTime fix** — Changed `input.FallTime = 1` to `input.FallTime = 0` on first airborne frame.
-  4. **Previous session items** — PhysicsCollideSlide corner trap fix, FG corpse-run jump+backward recovery, reverted doodad filter + detour system, DeathCorpseRunTests diagnostics. LiveValidation: 18/20 passing.
+  1. **Physics calibration — Trust velocity for JumpStart** — Air mode worst 0.876y→0.000y. Root cause: the engine's JUMP_VELOCITY override (`st.vz = 7.96`) clobbered the trusted Vz from the recording (~62 y/s). The WoW client applies jump impulse mid-tick, so the first-frame Z delta is ~1.0y, not the 0.125y that JUMP_VELOCITY×dt gives. Fix: gate `st.vz = JUMP_VELOCITY` on `!trustInputVel` so replay calibration uses the recording's exact velocity.
+  2. **Previous session items** — JumpStart lookahead, SurfaceStep ground Z lookahead, FallTime fix, PhysicsCollideSlide corner trap, FG corpse-run stall recovery.
 - **Physics calibration state (97/97 pass, 1 skip):**
   - ground: n=18881, avg=0.013y, p99=0.170y, worst=0.520y
-  - air: n=2275, avg=0.009y, p99=0.360y, worst=0.876y
+  - **air: n=2275, avg=0.000y, p99=0.000y, worst=0.000y** ← PERFECT
   - swim: n=1569, avg=0.000y, p99=0.000y, worst=0.003y
   - transition: n=399, avg=0.013y, p99=0.200y, worst=0.497y
-  - transport: n=1647, avg=0.028y, p99=0.308y, worst=0.329y
-  - Remaining worst transition frame (0.497y) is a single SurfaceStep where GetGroundZ returned a surface 0.5y from the recording's target. All [Z-SPIKE] artifact frames excluded from clean metrics.
+  - transport: n=1647, avg=0.027y, p99=0.308y, worst=0.329y
+- **Remaining error analysis:**
+  - Ground worst (0.520y): WMO floor geometry mismatch in Orgrimmar — capsule sweep vs GetGroundZ disagree
+  - Transition worst (0.497y): Single SurfaceStep at geometry discontinuity
+  - DirectionChange (0.200y cap): `maxReplayInputDrop` safety clamp
+  - Transport worst (0.329y): Elevator timing mismatch (horizontal error)
 - **Remaining LiveValidation failures (18/20):**
   - **FishingProfessionTests** — BG fishing catch: SMSG_GAMEOBJECT_CUSTOM_ANIM handler doesn't detect bobber bite.
   - **ConsumableUsageTests** — FG transient: memory lag for GM-added items (intermittent).

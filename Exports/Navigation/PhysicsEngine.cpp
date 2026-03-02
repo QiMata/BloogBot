@@ -1907,7 +1907,12 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		st.isSwimming = false;
 		const bool isFallingFar = (input.moveFlags & MOVEFLAG_FALLINGFAR) != 0;
 		if (intent.jumpRequested && !isFallingFar && input.fallTime == 0) {
-			st.vz = PhysicsConstants::JUMP_VELOCITY;
+			// When trust velocity is active (replay calibration), the recording's Vz
+			// encodes the exact first-frame displacement including sub-tick timing.
+			// The WoW client applies jump impulse mid-tick, producing apparent Vz >> JUMP_VELOCITY.
+			// Overriding with JUMP_VELOCITY would produce ~0.125y instead of the actual ~1.0y.
+			if (!trustInputVel)
+				st.vz = PhysicsConstants::JUMP_VELOCITY;
 			PHYS_INFO(PHYS_MOVE, "[StepV2] Jump impulse applied (new jump, no FALLINGFAR)");
 		}
 		// Horizontal velocity: recalculate from movement intent (air control) unless
