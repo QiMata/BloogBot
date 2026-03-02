@@ -131,6 +131,9 @@ namespace BotRunner
                     case CharacterAction.StartMeleeAttack:
                         builder.Splice(BuildStartMeleeAttackSequence(UnboxGuid(actionEntry.Item2[0])));
                         break;
+                    case CharacterAction.StartRangedAttack:
+                        builder.Splice(BuildStartRangedAttackSequence(UnboxGuid(actionEntry.Item2[0])));
+                        break;
                     case CharacterAction.StopAttack:
                         builder.Splice(StopAttackSequence);
                         break;

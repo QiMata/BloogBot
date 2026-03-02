@@ -30,6 +30,30 @@ namespace BotRunner
             .End()
             .Build();
 
+        /// <summary>
+        /// Sequence to start ranged auto-attack (bow/gun/thrown) on a target.
+        /// Uses the same CMSG_ATTACKSWING opcode — the server determines
+        /// melee vs ranged based on equipped weapon and distance.
+        /// </summary>
+        private IBehaviourTreeNode BuildStartRangedAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
+            .Sequence("Start Ranged Attack Sequence")
+                .Splice(CheckForTarget(targetGuid))
+                .Do("Start Ranged Attack", time =>
+                {
+                    if (targetGuid == 0)
+                    {
+                        Log.Warning("[BOT RUNNER] StartRangedAttack requested with targetGuid=0; ignoring.");
+                        return BehaviourTreeStatus.Failure;
+                    }
+
+                    _objectManager.SetTarget(targetGuid);
+                    _objectManager.StartRangedAttack();
+                    Log.Information($"[BOT RUNNER] Started ranged attack on target {targetGuid:X}");
+                    return BehaviourTreeStatus.Success;
+                })
+            .End()
+            .Build();
+
         private IBehaviourTreeNode StopAttackSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Attack Sequence")
                 // Check if any auto-attack (melee, ranged, or wand) is active

@@ -43,6 +43,7 @@ public enum CharacterAction
     DisbandGroup,       // Disband the current group.
 
     StartMeleeAttack,   // Start melee auto-attack on a target.
+    StartRangedAttack,  // Start ranged auto-attack (bow/gun/thrown) on a target.
     StopAttack,         // Cease any ongoing attack.
     CastSpell,          // Cast or channel a spell on a target or location.
     StopCast,           // Stop casting a spell.

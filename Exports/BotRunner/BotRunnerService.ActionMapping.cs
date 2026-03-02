@@ -51,6 +51,7 @@ namespace BotRunner
             Communication.ActionType.LeaveGroup => CharacterAction.LeaveGroup,
             Communication.ActionType.DisbandGroup => CharacterAction.DisbandGroup,
             Communication.ActionType.StartMeleeAttack => CharacterAction.StartMeleeAttack,
+            Communication.ActionType.StartRangedAttack => CharacterAction.StartRangedAttack,
             Communication.ActionType.StopAttack => CharacterAction.StopAttack,
             Communication.ActionType.CastSpell => CharacterAction.CastSpell,
             Communication.ActionType.StopCast => CharacterAction.StopCast,
