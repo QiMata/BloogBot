@@ -661,9 +661,11 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
     // ---------------------------------------------------------------------
     const float walkableCosMin = PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
     const float snapEps = 1e-4f;
-    // Allow wall contact up to capsule radius. Walking near WMO walls naturally
-    // produces shallow overlaps; only reject if the capsule center is inside geometry.
-    const float maxAllowedPenDepth = radius;
+    // Tightened penetration tolerance (Phase 1b): 0.5× radius instead of 1.0× radius.
+    // Previous tolerance allowed contacts where the capsule center was nearly inside geometry,
+    // masking bad candidates. Half-radius still permits natural wall contact when walking
+    // near WMO walls but rejects deeper overlaps that indicate wrong-floor candidates.
+    const float maxAllowedPenDepth = radius * 0.5f;
 
     struct GroundCandidate
     {
