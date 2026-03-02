@@ -367,9 +367,10 @@ public class GatheringProfessionTests
     /// <summary>
     /// Try gathering at natural spawn locations.
     ///
-    /// Strategy: teleport near known spawn points (from DB), use .respawn to force
-    /// depleted nodes back, then scan the character's NearbyObjects for the node.
+    /// Strategy: teleport near known spawn points (from DB), scan the character's
+    /// NearbyObjects for the node. Pool spawns are random — try all locations.
     /// NO .gobject add - we only gather naturally-spawning nodes.
+    /// NOTE: .respawn only affects creatures, NOT game objects in MaNGOS.
     /// </summary>
     private async Task<bool> TryGatherAtSpawns(string account, string label,
         List<(int map, float x, float y, float z)> spawns,
@@ -377,7 +378,9 @@ public class GatheringProfessionTests
         uint initialSkill,
         uint gatherSpellId = 0, string? parkAccount = null)
     {
-        int maxLocations = Math.Min(spawns.Count, 5);
+        // Try all available locations — MaNGOS pool_gameobject only spawns a subset
+        // at any given time, so limiting to 5 of 10 misses nodes that ARE spawned.
+        int maxLocations = spawns.Count;
 
         // GM mode stays ON — gathering works with GM mode enabled.
 
@@ -395,9 +398,6 @@ public class GatheringProfessionTests
 
             await _bot.BotTeleportAsync(account, map, spawnX, spawnY, safeZ);
             await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
-
-            await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: false);
-            await Task.Delay(2000);
 
             // --- Scan for the node in NearbyObjects ---
             ulong nodeGuid = 0;
