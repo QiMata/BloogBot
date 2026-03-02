@@ -64,6 +64,10 @@ public class QuestInteractionTests
 
         try
         {
+            // Self-selection required — MaNGOS .quest commands need getSelectedPlayer()
+            await _bot.BotSelectSelfAsync(account);
+            await Task.Delay(300);
+
             _output.WriteLine($"  [{label}] Step 1: Add quest {TestQuestId}");
             var addTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest add {TestQuestId}", captureResponse: true, delayMs: 1000);
             AssertCommandSucceeded(addTrace, label, ".quest add");
@@ -75,6 +79,8 @@ public class QuestInteractionTests
             var addedQuest = addedSnap?.Player?.QuestLogEntries?.FirstOrDefault(q => q.QuestLog1 == (uint)TestQuestId);
 
             _output.WriteLine($"  [{label}] Step 2: Complete quest {TestQuestId}");
+            await _bot.BotSelectSelfAsync(account);
+            await Task.Delay(300);
             var completeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest complete {TestQuestId}", captureResponse: true, delayMs: 1000);
             AssertCommandSucceeded(completeTrace, label, ".quest complete");
 
@@ -104,6 +110,8 @@ public class QuestInteractionTests
             }
 
             _output.WriteLine($"  [{label}] Step 3: Remove quest {TestQuestId}");
+            await _bot.BotSelectSelfAsync(account);
+            await Task.Delay(300);
             var removeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: true, delayMs: 1000);
             AssertCommandSucceeded(removeTrace, label, ".quest remove");
 
@@ -121,6 +129,8 @@ public class QuestInteractionTests
                 if (HasQuest(snap, TestQuestId))
                 {
                     _output.WriteLine($"  [{label}] Cleanup: removing quest {TestQuestId} left over from failed scenario.");
+                    await _bot.BotSelectSelfAsync(account);
+                    await Task.Delay(300);
                     await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: false, delayMs: 500);
                 }
             }
@@ -142,6 +152,8 @@ public class QuestInteractionTests
             return;
 
         _output.WriteLine($"  [{label}] Quest {questId} already present; removing for clean setup.");
+        await _bot.BotSelectSelfAsync(account);
+        await Task.Delay(300);
         var trace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {questId}", captureResponse: true, delayMs: 1000);
         AssertCommandSucceeded(trace, label, ".quest remove (setup)");
 

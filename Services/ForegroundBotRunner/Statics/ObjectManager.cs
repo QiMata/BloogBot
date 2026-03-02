@@ -1501,14 +1501,38 @@ namespace ForegroundBotRunner.Statics
             if (Player is not LocalPlayer localPlayer) return;
 
             localPlayer.PlayerSpells.Clear();
+
+            var spellsBasePtr = MemoryManager.ReadIntPtr(0x00C0D788);
+
+            // Build new raw ID set — atomically swapped onto LocalPlayer at end to avoid
+            // ConcurrentModificationException in KnownSpellIds/BotRunnerService snapshot thread.
+            var rawIds = new HashSet<uint>();
+
+            int consecutiveZeros = 0;
             for (var i = 0; i < 1024; i++)
             {
                 var currentSpellId = MemoryManager.ReadInt(MemoryAddresses.LocalPlayerSpellsBase + 4 * i);
-                if (currentSpellId == 0) break;
 
-                var spellsBasePtr = MemoryManager.ReadIntPtr(0x00C0D788);
+                if (currentSpellId == 0)
+                {
+                    // .unlearn leaves zero gaps in the spell array; skip them rather than stopping early.
+                    // Break only when 10+ consecutive zeros are seen — that's the real end of the list.
+                    consecutiveZeros++;
+                    if (consecutiveZeros >= 10) break;
+                    continue;
+                }
+                consecutiveZeros = 0;
+
+                // Sanity check: WoW 1.12.1 spell IDs top out around 25000; skip garbage values.
+                if (currentSpellId < 0 || currentSpellId > 30000) continue;
+
+                // Track raw ID first — before any name lookup.
+                // Talent spells (e.g. 16462 Deflection) may not have a client DB entry and would
+                // be silently dropped by the name-lookup below. rawIds captures all IDs.
+                rawIds.Add((uint)currentSpellId);
+
+                // Name lookup for PlayerSpells (used for CastSpell-by-name).
                 if (spellsBasePtr == nint.Zero) continue;
-
                 var spellPtr = MemoryManager.ReadIntPtr(spellsBasePtr + currentSpellId * 4);
                 if (spellPtr == nint.Zero) continue;
 
@@ -1523,7 +1547,23 @@ namespace ForegroundBotRunner.Statics
                 else
                     localPlayer.PlayerSpells.Add(name, [currentSpellId]);
             }
+
+            // Atomic reference swap — readers always see a complete, consistent snapshot.
+            localPlayer.RawSpellBookIds = rawIds;
+
+            // Diagnostic: log spell-book presence of known talent spell for troubleshooting.
+            // Runs at most every 5 s to avoid log spam.
+            if ((DateTime.UtcNow - _lastSpellDiagUtc).TotalSeconds >= 5)
+            {
+                _lastSpellDiagUtc = DateTime.UtcNow;
+                if (rawIds.Contains(16462))
+                    Log.Debug("[SPELLBOOK-DIAG] Spell 16462 FOUND in array (total={Count})", rawIds.Count);
+                else
+                    Log.Debug("[SPELLBOOK-DIAG] Spell 16462 NOT in array (total={Count})", rawIds.Count);
+            }
         }
+
+        private DateTime _lastSpellDiagUtc = DateTime.MinValue;
 
         public void RefreshSkills()
         {
@@ -2019,7 +2059,10 @@ namespace ForegroundBotRunner.Statics
             get
             {
                 if (Player is not LocalPlayer lp) return [];
-                return lp.PlayerSpells.Values.SelectMany(v => v).Select(id => (uint)id).ToArray();
+                // Use RawSpellBookIds — includes ALL spell IDs from the spell book array,
+                // even talent spells (e.g. 16462 Deflection) that lack a client DB entry
+                // and would be silently dropped by the PlayerSpells name-lookup path.
+                return lp.RawSpellBookIds;
             }
         }
 

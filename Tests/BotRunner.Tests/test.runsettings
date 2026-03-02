@@ -4,7 +4,8 @@
     <TargetPlatform>x86</TargetPlatform>
     <!-- Hard stop for hangs so dotnet test does not run indefinitely.
          Suite has 37 tests; fishing (2m) + corpse-run (2m) + mining (2.5m) + fixture init (90s)
-         means the suite needs ~15 min to complete all tests. 20 min gives headroom. -->
-    <TestSessionTimeout>1200000</TestSessionTimeout>
+         means the suite needs ~15 min to complete all tests. 25 min gives headroom for
+         the 3s PostGatherCooldown added to BuildGatherNodeSequence. -->
+    <TestSessionTimeout>1500000</TestSessionTimeout>
   </RunConfiguration>
 </RunSettings>

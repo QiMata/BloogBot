@@ -17,6 +17,14 @@ namespace ForegroundBotRunner.Objects
             : base(pointer, guid, objectType) { }
 
         public readonly IDictionary<string, int[]> PlayerSpells = new Dictionary<string, int[]>();
+        /// <summary>
+        /// Raw spell IDs from the spell book array, populated by RefreshSpells() via atomic replacement.
+        /// Includes all spell IDs regardless of whether a name can be resolved via the spell DB.
+        /// Talent spells (e.g. 16462 Deflection) may not have a DB entry in the client and would
+        /// otherwise be silently dropped by the name-lookup path in PlayerSpells.
+        /// Assignment is a single reference swap (thread-safe: readers always see a consistent snapshot).
+        /// </summary>
+        public IReadOnlyCollection<uint> RawSpellBookIds = Array.Empty<uint>();
         public readonly List<int> PlayerSkills = [];
         public new ulong TargetGuid => MemoryManager.ReadUlong(Offsets.Player.TargetGuid, true);
 

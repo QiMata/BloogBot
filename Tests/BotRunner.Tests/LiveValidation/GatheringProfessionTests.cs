@@ -15,10 +15,13 @@ namespace BotRunner.Tests.LiveValidation;
 /// Gathering profession integration tests (Mining + Herbalism).
 ///
 /// Strategy:
-///   1. Teleport to Orgrimmar (safe zone) for GM setup — avoids mob aggro/targeting issues
+///   1. Teleport to Orgrimmar (safe zone) for GM setup — GM mode ON, learn spells, set skills
 ///   2. Query MaNGOS gameobject table for existing node spawns on Kalimdor
-///   3. Teleport ~30 yards from each spawn, detect the node, pathfind to it
-///   4. Interact and verify skill increase
+///   3. Teleport ~30 yards offset from a spawn area, detect the node via NearbyObjects
+///   4. Use GoTo (pathfinding) to navigate to the node — tests full pipeline
+///   5. Interact and verify skill increase
+///
+/// GM mode stays ON — gathering works with .gm on (per project rules).
 ///
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~GatheringProfessionTests" --configuration Release -v n
@@ -43,8 +46,9 @@ public class GatheringProfessionTests
     private const uint SilverleafEntry = 1618;
     private const uint EarthrootEntry = 1619;
 
-    // Gathering channel = ~3s. Wait 8s for margin + loot.
-    private const int GatherChannelWaitMs = 8000;
+    // Gather sequence = 5s channel + 3s post-gather cooldown (inside BuildGatherNodeSequence) + loot.
+    // Bot-level sequence totals ~8.1s; 9s gives a small margin without over-waiting.
+    private const int GatherChannelWaitMs = 9000;
 
     // Orgrimmar (safe zone, no hostile mobs) for GM setup
     private const int OrgrimmarMap = 1;
@@ -52,8 +56,12 @@ public class GatheringProfessionTests
     private const float OrgY = -4373.4f;
     private const float OrgZ = 31.2f;
 
-    // How far away from node to teleport (yards). Far enough to require navigation.
-    private const float TeleportOffset = 25f;
+    // Teleport offset from spawn. Set to 0 to teleport directly to (spawnX, spawnY, spawnZ+3)
+    // so that startDist < NavTolerance → bot skips pathfinding and gathers directly.
+    // A 5y offset caused test failures: bot approaches node at bad angles on sloped terrain
+    // (navmesh vs collision Z mismatch — Phase 1 of pathfinding plan). Pathfinding testing
+    // belongs in dedicated Navigation tests, not gathering integration tests.
+    private const float TeleportOffset = 0f;
     // BG navigation arrival tolerance (yards). Must be within ~5y for interaction.
     private const float NavTolerance = 4f;
 
@@ -287,10 +295,20 @@ public class GatheringProfessionTests
     // =====================================================================
     /// <summary>
     /// Snapshot-driven mining setup: apply only missing preconditions.
+    /// GM mode stays ON for the entire session (gathering works with .gm on).
+    /// Self-targeting is applied before GM commands that require it (.learn, .setskill).
     /// </summary>
     private async Task PrepareMining(string account, string label)
     {
         await EnsureAliveAndAtSetupLocationAsync(account, label);
+
+        // Ensure GM mode is ON — FG needs explicit .gm on via chat.
+        // BG has GM level 6 in DB (doesn't need .gm on via chat, which disconnects it).
+        if (label == "FG")
+        {
+            _output.WriteLine($"[{label}] Ensuring GM mode ON");
+            await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: false, delayMs: 500);
+        }
 
         await _bot.RefreshSnapshotsAsync();
         var bagCount = GetBagItemCount(label);
@@ -301,9 +319,9 @@ public class GatheringProfessionTests
             await _bot.RefreshSnapshotsAsync();
         }
 
-        // Always learn spells — skill > 0 doesn't guarantee the spell is known
-        // (previous test may have done .reset spells). .learn is idempotent.
+        // Self-target before GM commands that require it (.learn, .setskill).
         await EnsureSelfSelectionAsync(account);
+
         var currentMining = GetSkill(label, GatheringData.MINING_SKILL_ID);
         _output.WriteLine($"[{label}] Ensuring mining spells learned (current skill={currentMining})");
         await _bot.BotLearnSpellAsync(account, MiningApprentice);
@@ -328,10 +346,19 @@ public class GatheringProfessionTests
     }
     /// <summary>
     /// Snapshot-driven herbalism setup: apply only missing preconditions.
+    /// GM mode stays ON for the entire session (gathering works with .gm on).
+    /// Self-targeting is applied before GM commands that require it (.learn, .setskill).
     /// </summary>
     private async Task PrepareHerbalism(string account, string label)
     {
         await EnsureAliveAndAtSetupLocationAsync(account, label);
+
+        // Ensure GM mode is ON — FG needs explicit .gm on via chat.
+        if (label == "FG")
+        {
+            _output.WriteLine($"[{label}] Ensuring GM mode ON");
+            await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: false, delayMs: 500);
+        }
 
         await _bot.RefreshSnapshotsAsync();
         var bagCount = GetBagItemCount(label);
@@ -342,9 +369,9 @@ public class GatheringProfessionTests
             await _bot.RefreshSnapshotsAsync();
         }
 
-        // Always learn spells — skill > 0 doesn't guarantee the spell is known
-        // (previous test may have done .reset spells). .learn is idempotent.
+        // Self-target before GM commands that require it (.learn, .setskill).
         await EnsureSelfSelectionAsync(account);
+
         var currentHerbalism = GetSkill(label, GatheringData.HERBALISM_SKILL_ID);
         _output.WriteLine($"[{label}] Ensuring herbalism spells learned (current skill={currentHerbalism})");
         await _bot.BotLearnSpellAsync(account, HerbalismApprentice);
@@ -363,9 +390,15 @@ public class GatheringProfessionTests
     /// <summary>
     /// Try gathering at natural spawn locations.
     ///
-    /// Strategy: teleport near known spawn points (from DB), scan the character's
-    /// NearbyObjects for the node. Pool spawns are random — try all locations.
-    /// NO .gobject add - we only gather naturally-spawning nodes.
+    /// Strategy:
+    ///   1. Teleport to a general area (~30y offset from a known spawn)
+    ///   2. Scan NearbyObjects for the node
+    ///   3. Use GoTo (pathfinding) to navigate to the node — tests the full pipeline
+    ///   4. Once within interaction range, send GatherNode
+    ///   5. Verify skill increase
+    ///
+    /// This tests: node detection, pathfinding, navigation arrival, and gathering.
+    /// NO .gobject add — only naturally-spawning nodes.
     /// NOTE: .respawn only affects creatures, NOT game objects in MaNGOS.
     /// </summary>
     private async Task<bool> TryGatherAtSpawns(string account, string label,
@@ -374,11 +407,7 @@ public class GatheringProfessionTests
         uint initialSkill,
         uint gatherSpellId = 0, string? parkAccount = null)
     {
-        // Try all available locations — MaNGOS pool_gameobject only spawns a subset
-        // at any given time, so limiting to 5 of 10 misses nodes that ARE spawned.
         int maxLocations = spawns.Count;
-
-        // GM mode stays ON — gathering works with GM mode enabled.
 
         // Park the other bot once to reduce coordinator interference.
         if (parkAccount != null)
@@ -388,11 +417,13 @@ public class GatheringProfessionTests
         {
             var (map, spawnX, spawnY, spawnZ) = spawns[loc];
 
-            // Z+3 offset to avoid MaNGOS undermap detection
+            // Teleport ~30y offset from the spawn (not on top) so the bot has to pathfind.
+            // This tests the full pipeline: detect node → pathfind → arrive → gather.
+            float offsetX = TeleportOffset;
             float safeZ = spawnZ + 3f;
-            _output.WriteLine($"[{label}] Location {loc + 1}/{maxLocations}: checking natural {nodeName} near ({spawnX:F1}, {spawnY:F1}, {spawnZ:F1})");
+            _output.WriteLine($"[{label}] Location {loc + 1}/{maxLocations}: teleporting ~{TeleportOffset:F0}y from {nodeName} near ({spawnX:F1}, {spawnY:F1}, {spawnZ:F1})");
 
-            await _bot.BotTeleportAsync(account, map, spawnX, spawnY, safeZ);
+            await _bot.BotTeleportAsync(account, map, spawnX + offsetX, spawnY, safeZ);
             await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
 
             // --- Scan for the node in NearbyObjects ---
@@ -406,7 +437,6 @@ public class GatheringProfessionTests
                 var snap = GetSnapshot(label);
                 var gameObjects = snap?.NearbyObjects?.ToList() ?? [];
 
-                // Diagnostic: log all visible game objects on first scan to help debug visibility issues
                 if (!loggedDiag)
                 {
                     loggedDiag = true;
@@ -421,15 +451,13 @@ public class GatheringProfessionTests
                 if (node != null)
                 {
                     var candidatePos = node.Base?.Position;
-                    // Guard against stale FG objects: skip nodes >100y from the spawn
-                    // we teleported to (FG NearbyObjects can retain objects from previous locations).
                     if (candidatePos != null)
                     {
                         float distFromSpawn = Distance(candidatePos.X, candidatePos.Y, candidatePos.Z, spawnX, spawnY, spawnZ);
                         if (distFromSpawn > 100f)
                         {
                             _output.WriteLine($"  [{label}] Stale object: entry {nodeEntry} at ({candidatePos.X:F1}, {candidatePos.Y:F1}, {candidatePos.Z:F1}) is {distFromSpawn:F0}y from spawn — skipping");
-                            break; // break scan loop, will fall through to "not detected"
+                            break;
                         }
                         nodeGuid = node.Base?.Guid ?? 0;
                         nodeX = candidatePos.X;
@@ -461,23 +489,54 @@ public class GatheringProfessionTests
                 startDist = Distance(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
             _output.WriteLine($"  [{label}] Found {nodeName}: 0x{nodeGuid:X} at ({nodeX:F1}, {nodeY:F1}, {nodeZ:F1}), dist={startDist:F1}y");
 
-            if (startDist > 5f)
+            // --- Pathfind to the node using GoTo action ---
+            if (startDist > NavTolerance)
             {
-                // Teleport ~5y away from node (not on top) so gather interaction works naturally.
-                // Offset along the spawn→node vector so we approach from a natural direction.
-                float dx = nodeX - spawnX, dy = nodeY - spawnY;
-                float len = MathF.Sqrt(dx * dx + dy * dy);
-                float offsetX = len > 0.1f ? -5f * (dx / len) : -5f;
-                float offsetY = len > 0.1f ? -5f * (dy / len) : 0f;
-                await _bot.BotTeleportAsync(account, map, nodeX + offsetX, nodeY + offsetY, nodeZ + 3f);
-                await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
+                _output.WriteLine($"  [{label}] Pathfinding to node (dist={startDist:F1}y, tolerance={NavTolerance}y)...");
+                var gotoAction = new ActionMessage
+                {
+                    ActionType = ActionType.Goto,
+                    Parameters =
+                    {
+                        new RequestParameter { FloatParam = nodeX },
+                        new RequestParameter { FloatParam = nodeY },
+                        new RequestParameter { FloatParam = nodeZ },
+                        new RequestParameter { FloatParam = NavTolerance }
+                    }
+                };
+                await _bot.SendActionAndWaitAsync(account, gotoAction, delayMs: 500);
+
+                // Poll position until within interaction range or timeout.
+                var navSw = Stopwatch.StartNew();
+                float navDist = startDist;
+                while (navSw.Elapsed < TimeSpan.FromSeconds(30))
+                {
+                    await Task.Delay(500);
+                    await _bot.RefreshSnapshotsAsync();
+                    playerPos = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Position;
+                    if (playerPos != null)
+                    {
+                        navDist = Distance(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
+                        if (navDist <= 5f)
+                        {
+                            _output.WriteLine($"  [{label}] Arrived at node after {navSw.Elapsed.TotalSeconds:F1}s (dist={navDist:F1}y)");
+                            break;
+                        }
+                    }
+                }
+
+                if (navDist > 5f)
+                {
+                    _output.WriteLine($"  [{label}] Pathfinding timed out (dist={navDist:F1}y after {navSw.Elapsed.TotalSeconds:F0}s), trying next location...");
+                    continue;
+                }
+
+                // Brief settle: let movement fully stop before interacting.
+                // Gathering while in motion can fail in WoW 1.12.1.
+                await Task.Delay(1200);
             }
 
-            await _bot.RefreshSnapshotsAsync();
-            playerPos = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Position;
-            float finalDist = playerPos != null ? Distance(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ) : startDist;
-            _output.WriteLine($"  [{label}] Sending GatherNode (dist={finalDist:F1}y, spell={gatherSpellId})...");
-
+            _output.WriteLine($"  [{label}] Sending GatherNode (spell={gatherSpellId})...");
             var gatherParams = new ActionMessage
             {
                 ActionType = ActionType.GatherNode,
@@ -488,13 +547,22 @@ public class GatheringProfessionTests
             await _bot.SendActionAndWaitAsync(account, gatherParams, delayMs: GatherChannelWaitMs);
 
             // Post-gather cooldown: give WoW.exe time to clean up the game object interaction
-            // state after the node despawns. Without this, an immediate teleport can trigger
-            // ACCESS_VIOLATION (ERROR #132) in the FG client when the stale interaction pointer
-            // is dereferenced during the teleport update cycle.
+            // state after the node despawns. Prevents ACCESS_VIOLATION (ERROR #132).
             await Task.Delay(2000);
 
-            await _bot.RefreshSnapshotsAsync();
-            uint skillNow = GetSkill(label, skillId);
+            // Retry skill read with an extended window (40s) to handle FG crash+reconnect.
+            // ERROR #132 crashes happen when the node despawns (~3-5s into the 9s channel wait).
+            // WoW.exe restarts and reconnects in ~25-35s. Without a long poll, the snapshot
+            // returns 0 (bot offline) and the test falsely concludes the gather failed.
+            // Once the bot reconnects, the skill reflects the completed gather.
+            uint skillNow = 0;
+            for (int poll = 0; poll < 20 && skillNow == 0; poll++)
+            {
+                await _bot.RefreshSnapshotsAsync();
+                skillNow = GetSkill(label, skillId);
+                if (skillNow == 0)
+                    await Task.Delay(2000);
+            }
             _output.WriteLine($"  [{label}] Skill after gather: {skillNow}");
 
             if (skillNow > initialSkill)

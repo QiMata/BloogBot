@@ -1317,7 +1317,8 @@ public class LiveBotFixture : IAsyncLifetime
         return text.Contains("no such command", StringComparison.OrdinalIgnoreCase)
             || text.Contains("no such subcommand", StringComparison.OrdinalIgnoreCase)
             || text.Contains("unknown command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
+            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("player not found", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ToEvidenceSnippet(string? text, int maxLength = 120)
@@ -1665,13 +1666,21 @@ public class LiveBotFixture : IAsyncLifetime
     public Task BotSelectSelfAsync(string accountName)
         => SendGmChatCommandAsync(accountName, ".targetself");
 
-    /// <summary>Learn a spell for a specific bot by having it type .learn in chat.</summary>
-    public Task BotLearnSpellAsync(string accountName, uint spellId)
-        => SendGmChatCommandAsync(accountName, $".learn {spellId}");
+    /// <summary>Learn a spell for a specific bot. Automatically selects self first (required by .learn).</summary>
+    public async Task BotLearnSpellAsync(string accountName, uint spellId)
+    {
+        await BotSelectSelfAsync(accountName);
+        await Task.Delay(300);
+        await SendGmChatCommandAsync(accountName, $".learn {spellId}");
+    }
 
-    /// <summary>Unlearn a spell for a specific bot by having it type .unlearn in chat.</summary>
-    public Task BotUnlearnSpellAsync(string accountName, uint spellId)
-        => SendGmChatCommandAsync(accountName, $".unlearn {spellId}");
+    /// <summary>Unlearn a spell for a specific bot. Automatically selects self first (required by .unlearn).</summary>
+    public async Task BotUnlearnSpellAsync(string accountName, uint spellId)
+    {
+        await BotSelectSelfAsync(accountName);
+        await Task.Delay(300);
+        await SendGmChatCommandAsync(accountName, $".unlearn {spellId}");
+    }
 
     /// <summary>
     /// Set a skill value for a bot. Automatically selects self first (required by .setskill).

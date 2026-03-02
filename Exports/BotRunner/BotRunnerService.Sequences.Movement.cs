@@ -121,7 +121,9 @@ namespace BotRunner
         {
             DateTime? interactedAt = null;
             bool looted = false;
+            DateTime? targetClearedAt = null;
             const double GatherChannelSeconds = 5.0;
+            const double PostGatherCooldownSeconds = 3.0;
 
             return new BehaviourTreeBuilder()
                 .Sequence("Gather Node Sequence")
@@ -162,6 +164,15 @@ namespace BotRunner
                                 _objectManager.CastSpellOnGameObject(gatherSpellId, guid);
                             }
 
+                            // Clear target immediately after the interaction/cast has been sent.
+                            // For FG: CGGameObject_C::OnRightClick registers a game object interaction
+                            // state machine that holds a pointer to the node. When the node despawns
+                            // (~3s after gather), the callback dereferences that pointer → ERROR #132
+                            // (ACCESS_VIOLATION at 0x006F876A reading 0x0000001E).
+                            // The gather spell is already in flight; clearing target does not cancel it.
+                            _objectManager.SetTarget(0);
+                            Log.Information("[GATHER] Target pre-cleared (crash prevention) for node 0x{Guid:X}", guid);
+
                             interactedAt = DateTime.UtcNow;
                         }
 
@@ -193,13 +204,25 @@ namespace BotRunner
                         looted = true;
                         return BehaviourTreeStatus.Success;
                     })
-                    .Do("Clear Target After Gather", time =>
+                    .Do("Post-Gather Cooldown", time =>
                     {
-                        // Clear the target after gathering to prevent stale references to despawned nodes.
-                        // The mined/herbed node will despawn shortly after loot; if the target still references
-                        // the freed object, WoW.exe (FG) can crash with ACCESS_VIOLATION (ERROR #132).
-                        _objectManager.SetTarget(0);
-                        Log.Information("[GATHER] Target cleared after gather (node 0x{Guid:X})", guid);
+                        // Clear target on the first tick, then hold Running for PostGatherCooldownSeconds.
+                        // WoW.exe (FG) crashes with ACCESS_VIOLATION (ERROR #132, 0x006F876A) when the
+                        // game object interaction state machine still holds a reference to a despawned node.
+                        // SetTarget(0) + 3s wait gives the engine time to release the object reference.
+                        if (targetClearedAt == null)
+                        {
+                            _objectManager.SetTarget(0);
+                            Log.Information("[GATHER] Target cleared; holding {Secs}s post-gather cooldown (node 0x{Guid:X})",
+                                PostGatherCooldownSeconds, guid);
+                            targetClearedAt = DateTime.UtcNow;
+                            return BehaviourTreeStatus.Running;
+                        }
+
+                        if ((DateTime.UtcNow - targetClearedAt.Value).TotalSeconds < PostGatherCooldownSeconds)
+                            return BehaviourTreeStatus.Running;
+
+                        Log.Information("[GATHER] Post-gather cooldown complete (node 0x{Guid:X})", guid);
                         return BehaviourTreeStatus.Success;
                     })
                 .End()
