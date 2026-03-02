@@ -58,6 +58,8 @@ public class NavigationPath(
     private const float CLIFF_PROBE_DISTANCE = 3f;        // probe ground 3yd ahead
     private const float CLIFF_DROP_THRESHOLD = 8f;         // 8yd drop = cliff danger
     private const float CLIFF_LETHAL_DROP = 50f;           // guaranteed death fall
+    private const float CLIFF_LATERAL_PROBE_DISTANCE = 1.5f; // probe ground 1.5yd to each side
+    private const float CLIFF_NEARBY_DROP_THRESHOLD = 3f;    // 3yd drop = nearby cliff danger
 
     // Jump physics constraints (derived from PhysicsConstants)
     private const float JUMP_VELOCITY = 7.95577f;
@@ -498,6 +500,17 @@ public class NavigationPath(
                 farthestVisible = candidate;
             }
 
+            // Phase 5a: When string-pulling would skip corners (farthestVisible > next),
+            // verify the direct shortcut segment has sufficient lateral clearance for the
+            // character's capsule. If the shortcut is too narrow (e.g., cutting across a
+            // narrow bridge or ledge), fall back to the immediate next waypoint so the
+            // original corners — which route around the narrow passage — are preserved.
+            if (farthestVisible > anchorIndex + 1
+                && !IsSegmentWideEnoughForCharacter(anchor, path[farthestVisible], mapId))
+            {
+                farthestVisible = anchorIndex + 1;
+            }
+
             // Always preserve the waypoint we advance to (it's either the farthest
             // visible or the next one if nothing further was visible).
             pulled.Add(path[farthestVisible]);
@@ -902,6 +915,130 @@ public class NavigationPath(
     }
 
     /// <summary>
+    /// Probes ground Z at an angular offset from the movement direction.
+    /// Returns the drop distance if an edge/cliff is detected, or 0 if safe.
+    /// Returns -1 if the probe is unavailable (no pathfinding client or probe failed).
+    /// </summary>
+    /// <param name="currentPos">Current character position.</param>
+    /// <param name="headingRadians">Movement heading in radians (atan2(dy, dx) toward target).</param>
+    /// <param name="angleOffsetRadians">Angle offset from heading (positive = left/CCW, negative = right/CW).</param>
+    /// <param name="mapId">Map ID for ground Z query.</param>
+    /// <param name="probeDistance">How far to probe from current position.</param>
+    private float ProbeEdgeAtAngle(Position currentPos, float headingRadians, float angleOffsetRadians, uint mapId, float probeDistance)
+    {
+        if (_pathfinding == null) return -1f;
+
+        var probeAngle = headingRadians + angleOffsetRadians;
+        var probeX = currentPos.X + MathF.Cos(probeAngle) * probeDistance;
+        var probeY = currentPos.Y + MathF.Sin(probeAngle) * probeDistance;
+
+        try
+        {
+            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, new Position(probeX, probeY, currentPos.Z));
+            if (!found) return float.MaxValue; // void/no ground = lethal
+            var drop = currentPos.Z - groundZ;
+            return drop > 0 ? drop : 0f;
+        }
+        catch
+        {
+            return -1f; // IPC failure
+        }
+    }
+
+    /// <summary>
+    /// Multi-directional cliff probe. Checks for cliffs in 5 directions relative
+    /// to the movement heading: forward (0deg), forward-left (+45deg), forward-right (-45deg),
+    /// left (+90deg), and right (-90deg).
+    /// <para>
+    /// Forward probe uses <see cref="CLIFF_PROBE_DISTANCE"/> (3yd).
+    /// Diagonal probes (+/-45deg) use the average of forward and lateral distances.
+    /// Lateral probes (+/-90deg) use <see cref="CLIFF_LATERAL_PROBE_DISTANCE"/> (1.5yd).
+    /// </para>
+    /// Returns the result of each probe as a <see cref="CliffProbeResult"/>.
+    /// </summary>
+    public CliffProbeResult ProbeEdgesMultiDirectional(Position currentPos, Position targetWaypoint, uint mapId)
+    {
+        var dx = targetWaypoint.X - currentPos.X;
+        var dy = targetWaypoint.Y - currentPos.Y;
+        var len = MathF.Sqrt(dx * dx + dy * dy);
+        if (len < 0.01f)
+            return new CliffProbeResult(0f, 0f, 0f, 0f, 0f);
+
+        var heading = MathF.Atan2(dy, dx);
+
+        const float deg45 = MathF.PI / 4f;
+        const float deg90 = MathF.PI / 2f;
+        var diagonalDistance = (CLIFF_PROBE_DISTANCE + CLIFF_LATERAL_PROBE_DISTANCE) / 2f; // 2.25yd
+
+        var forward      = ProbeEdgeAtAngle(currentPos, heading, 0f,     mapId, CLIFF_PROBE_DISTANCE);
+        var forwardLeft  = ProbeEdgeAtAngle(currentPos, heading, deg45,  mapId, diagonalDistance);
+        var forwardRight = ProbeEdgeAtAngle(currentPos, heading, -deg45, mapId, diagonalDistance);
+        var left         = ProbeEdgeAtAngle(currentPos, heading, deg90,  mapId, CLIFF_LATERAL_PROBE_DISTANCE);
+        var right        = ProbeEdgeAtAngle(currentPos, heading, -deg90, mapId, CLIFF_LATERAL_PROBE_DISTANCE);
+
+        return new CliffProbeResult(forward, forwardLeft, forwardRight, left, right);
+    }
+
+    /// <summary>
+    /// Whether a cliff is detected in ANY direction around the movement heading.
+    /// Uses <see cref="CLIFF_NEARBY_DROP_THRESHOLD"/> (3yd) for lateral/diagonal probes
+    /// and <see cref="CLIFF_DROP_THRESHOLD"/> (8yd) for the forward probe.
+    /// Returns true if any probe detects a significant drop.
+    /// </summary>
+    public bool IsCliffNearby(Position currentPos, Position targetWaypoint, uint mapId)
+    {
+        var result = ProbeEdgesMultiDirectional(currentPos, targetWaypoint, mapId);
+        return result.IsCliffDetected(CLIFF_DROP_THRESHOLD, CLIFF_NEARBY_DROP_THRESHOLD);
+    }
+
+    /// <summary>
+    /// Result of a multi-directional cliff probe. Each field contains the drop distance
+    /// in that direction: 0 = safe/level, positive = drop detected, -1 = unavailable,
+    /// float.MaxValue = void/no ground.
+    /// </summary>
+    public readonly record struct CliffProbeResult(
+        float Forward,
+        float ForwardLeft,
+        float ForwardRight,
+        float Left,
+        float Right)
+    {
+        /// <summary>
+        /// Whether any probe detected a cliff. The forward probe uses a separate
+        /// (typically higher) threshold since forward drops are expected when
+        /// descending terrain intentionally.
+        /// </summary>
+        public bool IsCliffDetected(float forwardThreshold, float lateralThreshold)
+        {
+            return DropExceedsThreshold(Forward, forwardThreshold)
+                || DropExceedsThreshold(ForwardLeft, lateralThreshold)
+                || DropExceedsThreshold(ForwardRight, lateralThreshold)
+                || DropExceedsThreshold(Left, lateralThreshold)
+                || DropExceedsThreshold(Right, lateralThreshold);
+        }
+
+        /// <summary>
+        /// The maximum drop distance across all probes, ignoring unavailable probes (-1).
+        /// </summary>
+        public float MaxDrop => MathF.Max(0f, MathF.Max(
+            MathF.Max(EffectiveDrop(Forward), EffectiveDrop(ForwardLeft)),
+            MathF.Max(MathF.Max(EffectiveDrop(ForwardRight), EffectiveDrop(Left)), EffectiveDrop(Right))));
+
+        /// <summary>
+        /// Whether any probe returned void/no-ground (float.MaxValue).
+        /// </summary>
+        public bool HasVoid =>
+            Forward == float.MaxValue || ForwardLeft == float.MaxValue ||
+            ForwardRight == float.MaxValue || Left == float.MaxValue || Right == float.MaxValue;
+
+        private static bool DropExceedsThreshold(float drop, float threshold) =>
+            drop >= threshold || drop == float.MaxValue;
+
+        private static float EffectiveDrop(float drop) =>
+            drop < 0 ? 0f : drop; // treat unavailable (-1) as 0
+    }
+
+    /// <summary>
     /// Fall damage estimation using vanilla WoW 1.12.1 formula.
     /// No damage below ~14.57yd. Above that, scales with max health.
     /// </summary>
@@ -1113,5 +1250,106 @@ public class NavigationPath(
     {
         _pendingTransport = null;
         _activeTransportRide = null;
+    }
+
+    // ── Phase 5a: Runtime path width validation ──────────────────────────
+
+    /// <summary>
+    /// Phase 5a: Check whether a path segment has sufficient lateral clearance
+    /// for the character's capsule radius.
+    ///
+    /// Probes the ground at two points perpendicular to the segment direction
+    /// at ±capsuleRadius from the segment midpoint. If either lateral probe
+    /// has no ground or has a Z difference exceeding the threshold, the
+    /// segment is considered too narrow (e.g., a ledge, bridge edge, or
+    /// narrow corridor wall).
+    /// </summary>
+    /// <param name="from">Start of the segment.</param>
+    /// <param name="to">End of the segment.</param>
+    /// <param name="mapId">Map ID for ground queries.</param>
+    /// <returns>True if the segment is wide enough; false if too narrow.</returns>
+    private bool IsSegmentWideEnoughForCharacter(Position from, Position to, uint mapId)
+    {
+        // If pathfinding is unavailable, skip the check (conservative: assume OK).
+        if (_pathfinding == null)
+            return true;
+
+        const float LATERAL_Z_THRESHOLD = 2.0f;
+
+        // Compute the midpoint of the segment.
+        float midX = (from.X + to.X) * 0.5f;
+        float midY = (from.Y + to.Y) * 0.5f;
+        float midZ = (from.Z + to.Z) * 0.5f;
+
+        // Compute the segment direction in 2D (XY plane).
+        float dx = to.X - from.X;
+        float dy = to.Y - from.Y;
+        float len2D = MathF.Sqrt(dx * dx + dy * dy);
+
+        // Degenerate segment (zero-length in 2D): can't determine perpendicular.
+        if (len2D < 0.001f)
+            return true;
+
+        // Perpendicular direction (rotated 90 degrees in XY plane).
+        float perpX = -dy / len2D;
+        float perpY = dx / len2D;
+
+        // Probe at +capsuleRadius and -capsuleRadius from the midpoint.
+        var probeLeft = new Position(
+            midX + perpX * _capsuleRadius,
+            midY + perpY * _capsuleRadius,
+            midZ);
+
+        var probeRight = new Position(
+            midX - perpX * _capsuleRadius,
+            midY - perpY * _capsuleRadius,
+            midZ);
+
+        try
+        {
+            var (leftZ, leftFound) = _pathfinding.GetGroundZ(mapId, probeLeft);
+            if (!leftFound || MathF.Abs(leftZ - midZ) > LATERAL_Z_THRESHOLD)
+                return false;
+
+            var (rightZ, rightFound) = _pathfinding.GetGroundZ(mapId, probeRight);
+            if (!rightFound || MathF.Abs(rightZ - midZ) > LATERAL_Z_THRESHOLD)
+                return false;
+        }
+        catch
+        {
+            // If the ground query throws, be conservative and assume passable.
+            return true;
+        }
+
+        return true;
+    }
+
+    // ── Phase 5b: Runtime path headroom validation ───────────────────────
+
+    /// <summary>
+    /// Phase 5b: Check whether a path segment has sufficient overhead clearance
+    /// for the character's capsule height.
+    ///
+    /// TODO: This is a placeholder. Proper headroom validation requires an
+    /// overhead ray-cast (casting upward from the ground to detect ceilings),
+    /// which is not currently available via the pathfinding service. When
+    /// overhead collision queries are added to the PathfindingService, this
+    /// method should:
+    ///   1. Sample the segment at the midpoint (and optionally at 1/4 and 3/4).
+    ///   2. At each sample, cast a ray upward from ground level.
+    ///   3. If the ray hits geometry at a distance less than _capsuleHeight,
+    ///      the segment lacks headroom (return false).
+    /// </summary>
+    /// <param name="from">Start of the segment.</param>
+    /// <param name="to">End of the segment.</param>
+    /// <param name="mapId">Map ID for collision queries.</param>
+    /// <returns>True if headroom is sufficient; false otherwise. Currently always returns true.</returns>
+    private bool HasSufficientHeadroom(Position from, Position to, uint mapId)
+    {
+        // Placeholder — always passes until overhead ray-cast is available.
+        _ = from;
+        _ = to;
+        _ = mapId;
+        return true;
     }
 }
