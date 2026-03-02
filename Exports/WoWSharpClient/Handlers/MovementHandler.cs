@@ -76,8 +76,12 @@ namespace WoWSharpClient.Handlers
                                 }
                             }
 
+                            // MSG_MOVE_TELEPORT has no counter field, but the server tracks
+                            // m_sequenceIndex internally. Use a local counter that increments
+                            // on each teleport so the ACK echoes the expected value.
+                            var teleportCounter = WoWSharpObjectManager.Instance.IncrementTeleportSequence();
                             WoWSharpEventEmitter.Instance.FireOnTeleport(
-                                new RequiresAcknowledgementArgs(teleportGuid, 0)
+                                new RequiresAcknowledgementArgs(teleportGuid, teleportCounter)
                             );
                             break;
                         }

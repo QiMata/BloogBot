@@ -62,6 +62,7 @@ namespace WoWSharpClient
 
         private bool _isInControl = false;
         private bool _isBeingTeleported = true;
+        private uint _teleportSequence;  // Local counter for MSG_MOVE_TELEPORT_ACK (server increments on each teleport)
         private ulong _currentTargetGuid;
 
         // Temporary diagnostic: log all opcodes received after GAMEOBJ_USE
@@ -541,6 +542,16 @@ namespace WoWSharpClient
         {
             _isBeingTeleported = true;
             ResetMovementStateForTeleport("notify-teleport-incoming");
+        }
+
+        /// <summary>
+        /// Increment the local teleport sequence counter and return the new value.
+        /// MSG_MOVE_TELEPORT packets don't include a counter, but the server tracks
+        /// an internal m_sequenceIndex. The ACK must echo the matching counter.
+        /// </summary>
+        public uint IncrementTeleportSequence()
+        {
+            return ++_teleportSequence;
         }
 
         private void EventEmitter_OnTeleport(object? sender, RequiresAcknowledgementArgs e)
