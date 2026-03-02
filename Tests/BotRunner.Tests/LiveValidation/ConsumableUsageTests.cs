@@ -48,7 +48,8 @@ public class ConsumableUsageTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        if (_bot.ForegroundBot != null)
+        var hasFg = _bot.ForegroundBot != null;
+        if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
@@ -68,7 +69,7 @@ public class ConsumableUsageTests
         }
 
         Assert.True(bgPassed, "BG bot: Expected aura increase after using Elixir of Lion's Strength.");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             Assert.True(fgPassed, "FG bot: Expected aura increase after using Elixir of Lion's Strength.");
     }
 

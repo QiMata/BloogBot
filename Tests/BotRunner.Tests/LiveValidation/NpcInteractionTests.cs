@@ -99,11 +99,12 @@ public class NpcInteractionTests
     [SkippableFact]
     public async Task ObjectManager_DetectsNpcFlags()
     {
+        var hasFg = _bot.ForegroundBot != null;
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ)
         };
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ));
         await Task.WhenAll(setupTasks);
 
@@ -117,7 +118,7 @@ public class NpcInteractionTests
         Assert.True(bgWithFlags.Count > 0, "[BG] At least one nearby unit should have non-zero NPC flags at Razor Hill vendor area.");
 
         // FG bot NPC detection — parity check
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             LogNpcFlags("FG", _bot.ForegroundBot);
             var fgUnits = _bot.ForegroundBot?.NearbyUnits?.ToList() ?? [];
@@ -133,18 +134,20 @@ public class NpcInteractionTests
 
     private async Task RunNpcInteraction(string npcType, float x, float y, float z, uint npcFlag, bool requireNpcInteraction)
     {
+        var hasFg = _bot.ForegroundBot != null;
+
         // Setup both bots at the location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, x, y, z)
         };
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, x, y, z));
         await Task.WhenAll(setupTasks);
 
         // Run interactions in parallel.
         _output.WriteLine($"=== BG Bot: {npcType} ===");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             _output.WriteLine($"=== FG Bot: {npcType} ===");
             _output.WriteLine($"[PARITY] Running BG and FG {npcType} interactions in parallel.");

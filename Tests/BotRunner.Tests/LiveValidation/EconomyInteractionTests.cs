@@ -42,17 +42,18 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Bank_OpenAndDeposit()
     {
+        var hasFg = _bot.ForegroundBot != null;
 
         // Setup both bots in parallel (items + location).
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             SetupBankAsync(_bot.BgAccountName!, "BG")
         };
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             setupTasks.Add(SetupBankAsync(_bot.FgAccountName!, "FG"));
         await Task.WhenAll(setupTasks);
 
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             _output.WriteLine("[PARITY] Running BG and FG bank interactions in parallel.");
             var bgTask = InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
@@ -81,17 +82,18 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task AuctionHouse_OpenAndList()
     {
+        var hasFg = _bot.ForegroundBot != null;
 
         // Setup both bots at AH location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, OrgAhX, OrgAhY, OrgAhZ)
         };
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, OrgAhX, OrgAhY, OrgAhZ));
         await Task.WhenAll(setupTasks);
 
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             _output.WriteLine("[PARITY] Running BG and FG auctioneer interactions in parallel.");
             var bgTask = InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
@@ -114,17 +116,18 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Mail_OpenMailbox()
     {
+        var hasFg = _bot.ForegroundBot != null;
 
         // Send mail and setup location in parallel for both bots.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             SetupMailAsync(_bot.BgAccountName!, "BG")
         };
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             setupTasks.Add(SetupMailAsync(_bot.FgAccountName!, "FG"));
         await Task.WhenAll(setupTasks);
 
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             _output.WriteLine("[PARITY] Running BG and FG mailbox interactions in parallel.");
             var bgTask = InteractWithMailboxLikeObject(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");

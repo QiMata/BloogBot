@@ -84,12 +84,14 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Physics_PlayerNotFallingThroughWorld()
     {
+        var hasFg = _bot.ForegroundBot != null;
+
         // Setup both bots in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             EnsureStrictAliveAsync(_bot.BgAccountName!, "BG")
         };
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             setupTasks.Add(EnsureStrictAliveAsync(_bot.FgAccountName!, "FG"));
         await Task.WhenAll(setupTasks);
 
@@ -100,7 +102,7 @@ public class BasicLoopTests
         var initialZ = bgPos.Z;
         _output.WriteLine($"BG initial Z: {initialZ:F2}");
 
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             _output.WriteLine("[PARITY] Running BG and FG Z-stabilization checks in parallel.");
             var bgStabTask = _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 3000);
@@ -132,17 +134,18 @@ public class BasicLoopTests
 
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
+        var hasFg = _bot.ForegroundBot != null;
 
         // Setup both bots in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             EnsureStrictAliveAsync(bgAccount, "BG")
         };
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             setupTasks.Add(EnsureStrictAliveAsync(_bot.FgAccountName!, "FG"));
         await Task.WhenAll(setupTasks);
 
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);

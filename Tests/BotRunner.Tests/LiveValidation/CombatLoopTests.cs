@@ -53,11 +53,12 @@ public class CombatLoopTests
         Assert.NotNull(bgAccount);
         var bgPassed = false;
         var fgPassed = false;
+        var hasFg = _bot.ForegroundBot != null;
 
         // Shared set so concurrent bots claim different targets.
         var claimedTargets = new ConcurrentDictionary<ulong, string>();
 
-        if (_bot.ForegroundBot == null)
+        if (!hasFg)
         {
             _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
             bgPassed = await RunCombatScenarioAsync(bgAccount, "BG", claimedTargets, offsetX: 0, offsetY: 0);
@@ -81,7 +82,7 @@ public class CombatLoopTests
         }
 
         Assert.True(bgPassed, "BG bot should target and kill a nearby mob (snapshot-confirmed).");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             Assert.True(fgPassed, "FG bot should target and kill a nearby mob (snapshot-confirmed).");
     }
 

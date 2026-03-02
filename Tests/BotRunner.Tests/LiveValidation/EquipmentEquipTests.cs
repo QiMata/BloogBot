@@ -48,7 +48,8 @@ public class EquipmentEquipTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        if (_bot.ForegroundBot != null)
+        var hasFg = _bot.ForegroundBot != null;
+        if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
@@ -68,7 +69,7 @@ public class EquipmentEquipTests
         }
 
         Assert.True(bgPassed, "BG bot: Worn Mace should move from bag snapshot to MAINHAND slot.");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             Assert.True(fgPassed, "FG bot: Worn Mace should move from bag snapshot to MAINHAND slot.");
     }
 

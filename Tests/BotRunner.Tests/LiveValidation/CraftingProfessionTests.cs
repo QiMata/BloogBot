@@ -53,7 +53,8 @@ public class CraftingProfessionTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
 
         bool bgPassed, fgPassed = false;
-        if (_bot.ForegroundBot != null)
+        var hasFg = _bot.ForegroundBot != null;
+        if (hasFg)
         {
             _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ===");
             _output.WriteLine("[PARITY] Running BG and FG crafting scenarios in parallel.");
@@ -71,7 +72,7 @@ public class CraftingProfessionTests
         }
 
         Assert.True(bgPassed, "BG bot: Crafting should produce Linen Bandage item in bag snapshot.");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             Assert.True(fgPassed, "FG bot: Crafting should produce Linen Bandage item in bag snapshot.");
         }

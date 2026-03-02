@@ -43,7 +43,8 @@ public class TalentAllocationTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
 
         bool bgLearned, fgLearned = false;
-        if (_bot.ForegroundBot != null)
+        var hasFg = _bot.ForegroundBot != null;
+        if (hasFg)
         {
             _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ===");
             _output.WriteLine("[PARITY] Running BG and FG talent scenarios in parallel.");
@@ -61,7 +62,7 @@ public class TalentAllocationTests
         }
 
         Assert.True(bgLearned, "[BG] Spell 16462 should appear in snapshot spell list after .learn.");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
         {
             Assert.True(fgLearned, "[FG] Spell 16462 should appear in FG snapshot spell list after .learn.");
         }

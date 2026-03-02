@@ -47,7 +47,8 @@ public class CharacterLifecycleTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        if (_bot.ForegroundBot != null)
+        var hasFg = _bot.ForegroundBot != null;
+        if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
@@ -67,7 +68,7 @@ public class CharacterLifecycleTests
         }
 
         Assert.True(bgPassed, "BG bot: expected Linen Cloth to appear in bag snapshot after .additem.");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             Assert.True(fgPassed, "FG bot: expected Linen Cloth to appear in bag snapshot after .additem.");
     }
 
@@ -79,7 +80,8 @@ public class CharacterLifecycleTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        if (_bot.ForegroundBot != null)
+        var hasFg = _bot.ForegroundBot != null;
+        if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
@@ -99,7 +101,7 @@ public class CharacterLifecycleTests
         }
 
         Assert.True(bgPassed, "BG bot: expected Minor Healing Potion to appear in bag snapshot after .additem.");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             Assert.True(fgPassed, "FG bot: expected Minor Healing Potion to appear in bag snapshot after .additem.");
     }
 
@@ -114,7 +116,8 @@ public class CharacterLifecycleTests
         _output.WriteLine($"=== BG Bot: {bgCharacter} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        if (_bot.ForegroundBot != null)
+        var hasFg = _bot.ForegroundBot != null;
+        if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
             Assert.NotNull(fgAccount);
@@ -137,7 +140,7 @@ public class CharacterLifecycleTests
         }
 
         Assert.True(bgPassed, "BG bot: expected strict alive -> dead/ghost -> strict alive transition.");
-        if (_bot.ForegroundBot != null)
+        if (hasFg)
             Assert.True(fgPassed, "FG bot: expected strict alive -> dead/ghost -> strict alive transition.");
     }
 
