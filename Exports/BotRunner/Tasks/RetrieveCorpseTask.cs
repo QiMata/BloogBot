@@ -321,6 +321,21 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         _lastDrivenWaypoint = null;
         _runbackRecoveryHoldUntilUtc = now + RunbackRecoveryHold;
 
+        // On 2nd+ recovery: jump + backward step to break server-side collision.
+        // FG (injected client) has server-authoritative movement. When stuck at a collision
+        // point, ForceStopImmediate only clears local control bits — the server position
+        // doesn't budge (step=0.0). A jump creates vertical displacement that can push the
+        // character past the collision plane. A backward step shifts the XY position away
+        // from the wall. Together, these give the rebuilt path a new starting position.
+        // For BG, the jump/back adds physics variation that helps path diversity.
+        if (_runbackRecoveryCount >= 2)
+        {
+            ObjectManager.Turn180();
+            ObjectManager.StartMovement(ControlBits.Front | ControlBits.Jump);
+            _runbackRecoveryHoldUntilUtc = now + TimeSpan.FromMilliseconds(2500);
+            Log.Information("[RETRIEVE_CORPSE] Stall recovery #{Attempt}: jump+backward to break collision deadlock", _runbackRecoveryCount);
+        }
+
         Log.Warning("[RETRIEVE_CORPSE] Runback stall recovery #{Attempt}: {Reason} (distance2D={Distance2D:F1}). Cleared movement and rebuilding path.",
             _runbackRecoveryCount, reason, corpseHorizontalDistance);
 

@@ -295,6 +295,27 @@ public static class ReplayEngine
 
             // Strip TELEPORT_TO_PLANE from moveFlags
             uint cleanedMoveFlags = currentFrame.MovementFlags & ~TELEPORT_TO_PLANE & ~SPLINE_ELEVATION;
+            uint nextCleanFlags = nextFrame.MovementFlags & ~TELEPORT_TO_PLANE & ~SPLINE_ELEVATION;
+
+            // JumpStart lookahead: if the current frame is grounded but the next frame
+            // is airborne, the jump begins during this interval. Override the engine
+            // input to use airborne flags so it applies jump impulse and airborne physics
+            // instead of ground sweep. Without this, the engine outputs ground-level Z
+            // while the recording shows the character already in the air (~0.98y error).
+            bool isJumpStartFrame = (cleanedMoveFlags & 0x6000) == 0 && (nextCleanFlags & 0x6000) != 0;
+            if (isJumpStartFrame)
+            {
+                cleanedMoveFlags |= (nextCleanFlags & 0x6000);
+                fallStartFrameIndex = i;
+            }
+
+            // SurfaceStep lookahead: both frames grounded but Z changes > 0.5y (walking
+            // over stairs, ramps, ledges). Provide Vz hint so the engine's trust-grounded
+            // refinement can widen its ground search to find the target surface.
+            bool isNextAirborne = (nextCleanFlags & 0x6000) != 0;
+            bool isSurfaceStepFrame = !isJumpStartFrame && !isNextAirborne
+                && (cleanedMoveFlags & 0x6000) == 0
+                && MathF.Abs(nextWorldZ - worldZ) > 0.5f;
 
             // Build nearby objects array for this frame.
             // For transport frames, use the NEXT frame's GO positions so the engine
@@ -375,7 +396,7 @@ public static class ReplayEngine
                 //   nextGO), so transport-local velocity avoids double-counting elevator
                 //   movement. Without trust, the engine can't reproduce jump trajectories
                 //   on moving platforms (errors up to ~1.2y).
-                bool isAirborne = (currentFrame.MovementFlags & 0x6000) != 0;
+                bool isAirborne = (cleanedMoveFlags & 0x6000) != 0;
                 bool useReplayTrust = !onTransportFrame || (onTransportFrame && isAirborne);
                 if (useReplayTrust)
                 {
@@ -423,13 +444,18 @@ public static class ReplayEngine
                         input.Vz = isAirborne
                             ? deltaZ / dt + 0.5f * GRAVITY * dt  // Remove gravity contribution
                             : isSwim ? deltaZ / dt                // Swim: provide Z velocity directly
+                            : isSurfaceStepFrame ? deltaZ / dt    // Surface step: hint for wider ground search
                             : 0;                                  // Grounded: engine handles Z via sweep/snap
                         input.PhysicsFlags = PHYSICS_FLAG_TRUST_INPUT_VELOCITY;
                     }
                 }
 
+                // First airborne frame (jump start): FallTime must be 0 so the engine
+                // applies JUMP_VELOCITY impulse (the engine gates on fallTime == 0).
+                // Subsequent airborne frames use fallTimeMs computed from frame timestamps
+                // which is already set above (line 335).
                 if (isAirborne && !wasAirborne)
-                    input.FallTime = 1;
+                    input.FallTime = 0;
 
                 var output = StepPhysicsV2(ref input);
                 prevOutput = output;
@@ -443,7 +469,6 @@ public static class ReplayEngine
                 float vertError = MathF.Abs(dz);
 
                 bool isSwimming = (currentFrame.MovementFlags & 0x00200000) != 0;
-                uint nextCleanFlags = nextFrame.MovementFlags & ~TELEPORT_TO_PLANE & ~SPLINE_ELEVATION;
                 bool flagsChanged = cleanedMoveFlags != nextCleanFlags;
 
                 // Classify transition type

@@ -146,15 +146,19 @@ public class DeathCorpseRunTests
             var bgEvidence = await bgTask;
             var fgEvidence = await fgTask;
 
-            // BG uses our pathfinding — strict assertion.
-            AssertScenario(bgEvidence);
+            // Cleanup: revive any bot left dead/ghost so downstream tests aren't affected.
+            if (!bgEvidence.AlivePhaseObserved && !string.IsNullOrWhiteSpace(bgChar))
+                await _bot.RevivePlayerAsync(bgChar!);
+            if (!fgEvidence.AlivePhaseObserved && !string.IsNullOrWhiteSpace(fgChar))
+                await _bot.RevivePlayerAsync(fgChar!);
+            if (!bgEvidence.AlivePhaseObserved || !fgEvidence.AlivePhaseObserved)
+                await Task.Delay(2000);
 
-            // FG uses WoW.exe native movement — assert early phases only.
-            // The WoW client can get stuck on terrain (stale MOVEFLAG_FORWARD)
-            // which is a native client limitation, not our pathfinding code.
+            // Both BG and FG must complete the full corpse-run lifecycle.
+            AssertScenario(bgEvidence);
             AssertScenarioFG(fgEvidence);
 
-            // Parity: only compare phases both bots reliably reach.
+            // Parity: both bots should reach the same lifecycle phases.
             Assert.Equal(bgEvidence.DeadCorpsePhaseObserved, fgEvidence.DeadCorpsePhaseObserved);
             Assert.Equal(bgEvidence.GhostPhaseObserved, fgEvidence.GhostPhaseObserved);
             return;
@@ -190,23 +194,23 @@ public class DeathCorpseRunTests
     }
 
     /// <summary>
-    /// FG assertion: validates early lifecycle phases (death, ghost, movement toward corpse).
-    /// The WoW.exe native client can get stuck on terrain obstacles, so completion phases
-    /// (reclaim, alive) and stale forward flags are logged as warnings, not hard failures.
+    /// FG assertion: validates the full corpse-run lifecycle (same as BG).
+    /// If FG can't complete the corpse run, the test must fail so the pathfinding/collision
+    /// issue is surfaced rather than silently cascading into downstream FG test failures.
     /// </summary>
     private void AssertScenarioFG(CorpsePhaseEvidence evidence)
     {
+        // Full lifecycle assertions — same as BG. FG must also complete the corpse run.
+        Assert.True(evidence.Succeeded, $"[{evidence.Label}] scenario failed: {evidence.FailureReason}");
         Assert.True(evidence.DeadCorpsePhaseObserved, $"[{evidence.Label}] dead-corpse phase was not observed.");
         Assert.True(evidence.GhostPhaseObserved, $"[{evidence.Label}] ghost phase was not observed.");
+        Assert.True(evidence.MovingToCorpsePhaseObserved || evidence.ImmediateCorpseRangePhaseObserved,
+            $"[{evidence.Label}] corpse-approach phase not proven (improvementTicks={evidence.DistanceImprovementTicks}, initial2D={evidence.InitialDistanceToCorpse2D:F1}, best2D={evidence.BestDistanceToCorpse2D:F1}, travel={evidence.CumulativeGhostTravel:F1}, immediateRange={evidence.ImmediateCorpseRangePhaseObserved}).");
+        Assert.True(evidence.ReclaimReadyPhaseObserved, $"[{evidence.Label}] reclaim-ready phase was not observed.");
+        Assert.True(evidence.AlivePhaseObserved, $"[{evidence.Label}] alive phase was not observed after corpse retrieval.");
+        Assert.False(evidence.StaleForwardFlagObserved, $"[{evidence.Label}] stale MOVEFLAG_FORWARD detected while not moving.");
         Assert.True(evidence.PostDeathGmChatCommands == 0,
             $"[{evidence.Label}] GM chat commands were sent after death during corpse behavior (delta={evidence.PostDeathGmChatCommands}).");
-
-        if (!evidence.Succeeded)
-            _output.WriteLine($"  [FG-WARNING] FG scenario did not complete: {evidence.FailureReason}");
-        if (evidence.StaleForwardFlagObserved)
-            _output.WriteLine($"  [FG-WARNING] Stale MOVEFLAG_FORWARD detected — WoW native movement stuck on terrain.");
-        if (!evidence.AlivePhaseObserved)
-            _output.WriteLine($"  [FG-WARNING] Alive phase not observed — FG may not have completed corpse retrieval.");
     }
 
     private async Task<CorpsePhaseEvidence> RunDeathScenario(
@@ -497,8 +501,10 @@ public class DeathCorpseRunTests
             var runSw = Stopwatch.StartNew();
             var previousPos = ghostPos;
             var noMovementTicks = 0;
+            var noProgressTicks = 0; // moving but not getting closer to corpse
             var staleForwardTicks = 0;
             var ignoredInitialTeleportJump = false;
+            var previousDist2D = initialDist2D;
             while (runSw.Elapsed < runbackObservationWindow)
             {
                 await Task.Delay(3000);
@@ -516,7 +522,7 @@ public class DeathCorpseRunTests
                 var reclaimDelay = GetReclaimDelaySeconds(snap);
                 var movementFlags = GetMovementFlags(snap);
 
-                _output.WriteLine($"  [{label}] Run tick: dist2D={distanceToCorpse2D:F1}, step={stepDistance:F1}, reclaimDelay={reclaimDelay}s, moveFlags=0x{movementFlags:X}");
+                _output.WriteLine($"  [{label}] Run tick: pos=({currentPos.X:F1},{currentPos.Y:F1},{currentPos.Z:F1}), dist2D={distanceToCorpse2D:F1}, step={stepDistance:F1}, reclaimDelay={reclaimDelay}s, moveFlags=0x{movementFlags:X}");
 
                 if (!ignoredInitialTeleportJump && stepDistance >= 80f)
                 {
@@ -549,8 +555,29 @@ public class DeathCorpseRunTests
                 }
 
                 noMovementTicks = stepDistance < 0.2f ? noMovementTicks + 1 : 0;
+                if (noMovementTicks >= 5 && !arrivedNearCorpse)
+                {
+                    _output.WriteLine($"  [{label}] STUCK WARNING: no movement for {noMovementTicks} ticks at ({currentPos.X:F1}, {currentPos.Y:F1}, {currentPos.Z:F1}), dist2D={distanceToCorpse2D:F1}y, moveFlags=0x{movementFlags:X}, travel={evidence.CumulativeGhostTravel:F1}y");
+                }
                 if (noMovementTicks >= 15 && !arrivedNearCorpse && evidence.CumulativeGhostTravel < MinimumGhostTravelDistance)
-                    return await RetryOrFailRunbackAsync($"corpse run stalled with minimal movement (travel={evidence.CumulativeGhostTravel:F1}y, moveFlags=0x{movementFlags:X})");
+                    return await RetryOrFailRunbackAsync($"corpse run stalled with minimal movement at ({currentPos.X:F1}, {currentPos.Y:F1}, {currentPos.Z:F1}), dist2D={distanceToCorpse2D:F1}y, travel={evidence.CumulativeGhostTravel:F1}y, moveFlags=0x{movementFlags:X}");
+
+                // No-progress detection: moving but not getting closer to corpse.
+                // Bot may oscillate (0.4-0.6y/tick) at a collision point without approaching.
+                // Log warnings but don't fail — the task-level stall recovery (20s) + detour
+                // waypoint system needs time to reroute. Only the overall observation window
+                // timeout should fail the test.
+                if (stepDistance >= 0.2f && distanceToCorpse2D >= previousDist2D - 1f && !arrivedNearCorpse)
+                    noProgressTicks++;
+                else
+                    noProgressTicks = 0;
+
+                if (noProgressTicks >= 8 && noProgressTicks % 4 == 0 && !arrivedNearCorpse)
+                {
+                    _output.WriteLine($"  [{label}] STUCK WARNING: moving but no progress toward corpse for {noProgressTicks} ticks at ({currentPos.X:F1}, {currentPos.Y:F1}, {currentPos.Z:F1}), dist2D={distanceToCorpse2D:F1}y, moveFlags=0x{movementFlags:X}");
+                }
+
+                previousDist2D = distanceToCorpse2D;
 
                 if (distanceToCorpse2D <= RetrieveRange)
                     arrivedNearCorpse = true;

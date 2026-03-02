@@ -1951,22 +1951,42 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			// input.z (one-frame lag). Refine here first so trusted XY drives final support Z.
 			const bool wasGroundedAfterSweep = st.isGrounded;
 			const bool snapped = TryDownwardStepSnap(input, st, r, h);
-			const float refineBaseZ = std::max(st.z, input.z);
-			// Trust mode shifts XY to the next frame's position, so the ground Z at
-			// (trustedX, trustedY) can differ from the sweep's landing Z. Use generous
-			// tolerances: the "closest to z" selection in GetGroundZ already picks the
-			// right surface among multi-level candidates, so we just need to accept it.
-			const float maxRise = 0.60f;
-			const float maxDrop = 1.0f;
-			float preciseZ = SceneQuery::GetGroundZ(
-				input.mapId, st.x, st.y, refineBaseZ + 0.25f, PhysicsConstants::STEP_DOWN_HEIGHT);
-			if (VMAP::IsValidHeight(preciseZ) &&
-				preciseZ <= refineBaseZ + maxRise &&
-				preciseZ >= refineBaseZ - maxDrop) {
-				st.z = preciseZ;
+			// When the replay provides a non-zero Vz for a grounded frame, the character
+			// is walking over a terrain step (SurfaceStep). Use the target Z directly
+			// since the ground query's +0.5y search cap and maxRise=0.6y tolerance
+			// miss step-up surfaces >0.75y above the starting position.
+			const bool hasSurfaceStepHint = (std::fabs(input.vz) > 0.1f);
+			if (hasSurfaceStepHint) {
+				const float targetZ = input.z + input.vz * dt;
+				// Verify the target is reachable: query ground from above the target
+				float verifyZ = SceneQuery::GetGroundZ(
+					input.mapId, st.x, st.y, targetZ + 1.0f, 3.0f);
+				if (VMAP::IsValidHeight(verifyZ) && std::fabs(verifyZ - targetZ) < 0.5f) {
+					st.z = verifyZ;
+				} else {
+					st.z = targetZ;
+				}
 				st.isGrounded = true;
 				st.vz = 0.0f;
 				st.fallTime = 0.0f;
+			} else {
+				const float refineBaseZ = std::max(st.z, input.z);
+				// Trust mode shifts XY to the next frame's position, so the ground Z at
+				// (trustedX, trustedY) can differ from the sweep's landing Z. Use generous
+				// tolerances: the "closest to z" selection in GetGroundZ already picks the
+				// right surface among multi-level candidates, so we just need to accept it.
+				const float maxRise = 0.60f;
+				const float maxDrop = 1.0f;
+				float preciseZ = SceneQuery::GetGroundZ(
+					input.mapId, st.x, st.y, refineBaseZ + 0.25f, PhysicsConstants::STEP_DOWN_HEIGHT);
+				if (VMAP::IsValidHeight(preciseZ) &&
+					preciseZ <= refineBaseZ + maxRise &&
+					preciseZ >= refineBaseZ - maxDrop) {
+					st.z = preciseZ;
+					st.isGrounded = true;
+					st.vz = 0.0f;
+					st.fallTime = 0.0f;
+				}
 			}
 
 			// Preserve trusted horizontal velocity for replay output.
@@ -2219,7 +2239,10 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// Primary Z refinement now happens inside ExecuteDownPass and PhysicsGroundSnap functions
 	// via GetGroundZ at exact character XY. This multi-ray probe catches cases where the
 	// capsule sweep completely missed thin WMO floor meshes (e.g. in Orgrimmar).
-	if (st.isGrounded && !isSwimming) {
+	// Skip when SurfaceStep hint is active — the trust-grounded path already placed Z
+	// at the recording's target surface; re-probing would clamp it back to input.z.
+	const bool surfaceStepHintActive = (std::fabs(input.vz) > 0.1f) && trustGroundedReplayInput;
+	if (st.isGrounded && !isSwimming && !surfaceStepHintActive) {
 		const float preRefineZ = st.z;
 		const float refineReferenceZ = input.z;
 		const float maxRise = trustGroundedReplayInput ? 0.3f : 0.2f;
@@ -2610,10 +2633,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 
 	// Replay trust guardrail: when we remain grounded on non-walkable support,
 	// keep Z tightly bounded to the captured frame to avoid persistent over-lift.
+	// Skip when a SurfaceStep hint is present (input.vz significant) — the recording
+	// explicitly shows a large Z change that the guardrail would incorrectly clamp.
 	if (trustGroundedReplayInput && st.isGrounded && !isSwimming && !inputAirborneFlag) {
 		const bool nonWalkableSupport =
 			st.groundNormal.z < PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z;
-		if (nonWalkableSupport) {
+		const bool surfaceStepActive = (std::fabs(input.vz) > 0.1f);
+		if (nonWalkableSupport && !surfaceStepActive) {
 			const float speedSq = (input.vx * input.vx) + (input.vy * input.vy);
 			const bool movingReplay = speedSq > 1e-6f;
 			float maxReplayRise = 0.0f;

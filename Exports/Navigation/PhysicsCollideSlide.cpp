@@ -277,11 +277,51 @@ SlideResult CollideAndSlide(
                 }
             }
 
-            // Crease blocked or invalid - we're stuck in a corner
-            result.distanceRemaining = remaining;
-            result.hitCorner = true;
-            PHYS_INFO(PHYS_MOVE, "[CollideAndSlide] STUCK in corner - stopping");
-            break;
+            // Crease blocked or invalid — try sliding along individual constraint
+            // normals before giving up (Quake-style corner escape).
+            {
+                bool escapedCorner = false;
+                for (size_t ci = 0; ci < constraintNormals.size(); ++ci) {
+                    G3D::Vector3 slideDir = ComputeSlideTangent(originalDirN2D, constraintNormals[ci]);
+                    float slideMag = slideDir.magnitude();
+                    if (slideMag < 1e-6f) continue;
+                    slideDir = slideDir * (1.0f / slideMag);
+
+                    // Ensure this slide doesn't violate any OTHER constraint
+                    bool blocked = false;
+                    for (size_t cj = 0; cj < constraintNormals.size(); ++cj) {
+                        if (ci == cj) continue;
+                        if (IsDirectionBlocked(slideDir, constraintNormals[cj])) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                    if (blocked) continue;
+
+                    // Also reject if the slide opposes the original direction
+                    if (slideDir.dot(originalDirN2D) <= 0.0f) continue;
+
+                    currentDir = slideDir;
+                    if (horizontalOnly) {
+                        currentDir.z = 0.0f;
+                        currentDir = currentDir.directionOrZero();
+                    }
+                    targetPosition = currentPosition + currentDir * remaining;
+                    escapedCorner = true;
+                    PHYS_INFO(PHYS_MOVE, "[CollideAndSlide] corner escape via slide along constraint normal");
+                    break;
+                }
+
+                result.hitCorner = true;
+                if (escapedCorner) {
+                    continue;  // retry with the new slide direction
+                }
+
+                // All individual slides blocked too — truly stuck
+                result.distanceRemaining = remaining;
+                PHYS_INFO(PHYS_MOVE, "[CollideAndSlide] STUCK in corner - stopping");
+                break;
+            }
         }
 
         // Single constraint - compute slide using PhysX-style collisionResponse
