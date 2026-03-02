@@ -1980,13 +1980,17 @@ namespace ForegroundBotRunner.Statics
 
         public void CastSpellOnGameObject(int spellId, ulong gameObjectGuid)
         {
-            // FG bot: native WoW.exe handles gathering via CGGameObject_C::OnRightClick,
-            // which automatically sends both CMSG_GAMEOBJ_USE + CMSG_CAST_SPELL. No-op here.
+            // FG bot: CGGameObject_C::OnRightClick sends both CMSG_GAMEOBJ_USE + CMSG_CAST_SPELL
+            // automatically. InteractWithGameObject below triggers the right-click; this is a no-op
+            // because the native handler handles spell casting as part of the interaction.
         }
 
         public void InteractWithGameObject(ulong gameObjectGuid)
         {
-            // FG bot: right-click interaction is handled natively by WoW.exe. No-op here.
+            // FG bot: find the game object and call native CGGameObject_C::OnRightClick.
+            var obj = Objects.FirstOrDefault(o => o.Guid == gameObjectGuid);
+            if (obj is WoWObject wowObj && wowObj.ObjectType == WoWObjectType.GameObj)
+                wowObj.Interact(); // CGGameObject_C::OnRightClick at 0x5F8660
         }
 
         public Task LootTargetAsync(ulong targetGuid, CancellationToken ct = default)

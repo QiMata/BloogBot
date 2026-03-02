@@ -528,11 +528,18 @@ namespace WoWSharpClient.Handlers
                     return;
                 }
 
-                // Fish bite: anim 0 on a bobber created by our player
-                Log.Information("[CustomAnim] GO match: DisplayId={DisplayId} CreatedBy=0x{CreatedBy:X} PlayerGuid=0x{PlayerGuid:X}",
-                    go.DisplayId, go.CreatedBy.FullGuid, om.PlayerGuid.FullGuid);
+                // Fish bite: anim 0 on a bobber created by our player.
+                // CreatedBy may be 0x0 if the CREATE_OBJECT packet omitted the field from its update mask
+                // (common on MaNGOS for dynamically spawned objects like fishing bobbers).
+                // Fallback: accept any bobber (DisplayId 668, TypeId 17) with anim=0 when CreatedBy is missing.
+                bool isPlayerCreated = go.CreatedBy.FullGuid == om.PlayerGuid.FullGuid;
+                bool isBobber = go.DisplayId == 668 && go.TypeId == 17;
+                bool isFallbackBobber = go.CreatedBy.FullGuid == 0UL && isBobber;
 
-                if (anim == 0 && go.CreatedBy.FullGuid == om.PlayerGuid.FullGuid)
+                Log.Information("[CustomAnim] GO match: DisplayId={DisplayId} TypeId={TypeId} CreatedBy=0x{CreatedBy:X} PlayerGuid=0x{PlayerGuid:X} isPlayerCreated={IsPlayer} isFallbackBobber={IsFallback}",
+                    go.DisplayId, go.TypeId, go.CreatedBy.FullGuid, om.PlayerGuid.FullGuid, isPlayerCreated, isFallbackBobber);
+
+                if (anim == 0 && (isPlayerCreated || isFallbackBobber))
                 {
                     Log.Information("[FishBite] Bobber 0x{Guid:X} — auto-interacting", guid);
                     om.InteractWithGameObject(guid);

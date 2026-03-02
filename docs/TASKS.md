@@ -120,31 +120,26 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-02 (session 3)
-- **Current work:** PATH-REFACTOR-001 complete. All 5 LiveValidation tiers complete. 1247/1247 unit tests pass, 97/97 physics replay pass.
-- **Completed session 3 (2026-03-02 continuation):**
-  1. **Pre-existing test failures (5):** Fixed TargetPositioningService + 4 RetrieveCorpseTask tests broken by combat distance refactor (missing GetGroundZ override, StopAllMovement→ForceStopImmediate, non-strict LOS path test)
-  2. **Tier 2 (delay→polling):** ConsumableUsage, EquipmentEquip, CraftingProfession, EconomyInteraction — Task.Delay→Stopwatch+200ms poll with early exit
-  3. **Tier 3 (DRY):** WaitForSnapshotConditionAsync + EnsureStrictAliveAsync extracted to LiveBotFixture, ~130 lines removed across 7 files, GatheringProfession self-melee hack→BotSelectSelfAsync
-  4. **Tier 4 (FG parity):** TalentAllocation WARNING→Assert, GatheringProfession FG herbalism parity test
-  5. **Tier 1 (correctness):** I-N3 NpcInteraction assertions, I-Z1 OrgrimmarGroundZ skip guard, I-T1 TalentAllocation .unlearn validation, I-QW1 QuestInteraction tightened assertion + WSM-PAR-001 doc
-  6. **CombatRangeTests reliability:** Teleport arrival polling, distance-aware boar finding, diagnostic logging on target selection failure
-  7. **Tests:** 1247/1247 BotRunner unit, 97/97 physics. No regressions.
-  8. Total: 7 commits this session, 20+ files changed
+- **Last updated:** 2026-03-01 (session 4)
+- **Current work:** PATH-REFACTOR-001 complete. All 5 LiveValidation tiers complete. 1247/1247 unit tests pass, 97/97 physics replay pass. LiveValidation: 25/28 pass (up from 10/28 → 22/27 → 25/28).
+- **Completed session 4 (2026-03-01):**
+  1. **TargetGuid sync verified:** CombatRange 8/8 pass in isolation (confirms `1cabf05` TargetGuid fix)
+  2. **Teleport reliability fix (`e0fa2fc`):** `_isBeingTeleported` flag stuck when chat "You are being teleported" fires but MSG_MOVE_TELEPORT never arrives. Added 2s timeout with `_teleportFlagSetTicks` timestamp tracking. Root cause of 15 cascading LiveValidation failures.
+  3. **FG race condition fix (`a20fe92`):** `_bot.ForegroundBot != null` TOCTOU across 9 test files — captured `var hasFg` once at method start. 14 methods fixed across BasicLoop, CombatLoop, ConsumableUsage, CraftingProfession, EconomyInteraction, EquipmentEquip, NpcInteraction, TalentAllocation, CharacterLifecycle.
+  4. **Tests:** 1247/1247 BotRunner unit, 97/97 physics. No regressions.
+  5. Total: 2 commits this session (+ 3 from previous context), 10+ files changed
+- **Completed session 3 (2026-03-02 continuation):** Pre-existing test failures (5), Tier 2 delay→polling, Tier 3 DRY, Tier 4 FG parity, Tier 1 correctness, CombatRange reliability. 7 commits, 20+ files.
 - **Completed session 2 (2026-03-02):** Phase 4b cliff rerouting, Phase 6a batch GroundZ, Phase 6c metrics, Part C process orphan prevention, ranged class distance (32 files), Tier 5 state management. 10 commits, 80+ files.
 - **Completed session 1 (2026-03-01):** Phases 0-5, combat distance system, melee distance (28 files), StartRangedAttack, combat range tests
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md` (57 tasks across 6 pathfinding phases + 5 test tiers — ALL COMPLETE except Phase 6b)
-- **LiveValidation results (run 3 — 27 of ~40 tests before host crash):**
-  - **22 passed:** BasicLoop (6/6), CharacterLifecycle (3/4), CombatLoop (1/1), CombatRange (6/8), ConsumableUsage (1/1), CraftingProfession (1/1), DeathCorpseRun (1/1), EconomyInteraction (3/3), EquipmentEquip (1/1)
-  - **5 failed:** Death_KillAndRevive (FG flaky), AutoAttack_StartAndStop (BG target GUID), MeleeAttack_WithinRange (BG target GUID), FishingProfession (BG catch, known), GatheringProfession.Mining (FG, new)
-  - **Improvements from this session:** SeesNearbyGameObjects FAIL→PASS, Equipment_AddItemToInventory FAIL→PASS
-  - **Test host crashes:** 32-bit testhost crash during GatheringProfession (3 of 3 runs crashed at same point)
+- **LiveValidation results (session 4 — 25/28 passed before 10min timeout):**
+  - **25 passed:** BasicLoop (6/6), CharacterLifecycle (3/4), CombatLoop (1/1), CombatRange (8/8), ConsumableUsage (1/1), CraftingProfession (1/1), DeathCorpseRun (1/1), EconomyInteraction (3/3), EquipmentEquip (1/1)
+  - **3 failed:** Death_KillAndRevive (FG race — likely fixed by `a20fe92`), FishingProfession (BG catch, pre-existing), GatheringProfession.Mining (FG, pre-existing)
+  - **Improvements this session:** CombatRange 6/8→8/8, 15 cascading teleport failures→0
 - **Remaining known issues:**
-  1. **FishingProfessionTests** — SMSG_GAMEOBJECT_CUSTOM_ANIM handler EXISTS (SpellHandler.cs:505-553) but BG catch fails at runtime. Needs packet trace analysis: is packet arriving? Is bobber GUID matched? Is CreatedBy correct?
-  2. **Equipment_AddItemToInventory** — FG item polling timing (pre-existing)
-  3. **CombatRange melee target selection** — Target GUID not appearing in snapshot after StartMeleeAttack. Reliability fix applied (distance-aware mob finding, arrival polling). Needs revalidation.
-  4. **GatheringProfession.Mining FG** — New failure: "FG: Failed to gather Copper Vein at any spawned location. skill=1." Needs investigation.
-  5. **Test host stability** — 32-bit testhost crashes during extended LiveValidation runs
+  1. **FishingProfessionTests** — SMSG_GAMEOBJECT_CUSTOM_ANIM handler EXISTS (SpellHandler.cs:505-553) but BG catch fails at runtime. Needs packet trace analysis.
+  2. **GatheringProfession.Mining FG** — FG bot dispatches GatherNode but mining channel doesn't complete. Skill stays at 1. Needs FG gathering pipeline investigation.
+  3. **Death_KillAndRevive FG** — Likely fixed by `a20fe92` race condition fix. Needs revalidation.
 - **Remaining plan work:**
   1. Phase 6b: DotRecast evaluation (separate branch — low priority)
   2. Remaining Tier 2 delay replacements in DeathCorpseRun + FishingProfession tests
