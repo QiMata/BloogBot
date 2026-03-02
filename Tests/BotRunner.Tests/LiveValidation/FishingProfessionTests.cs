@@ -264,7 +264,13 @@ public class FishingProfessionTests
             if (needsPole)
             {
                 await _bot.BotAddItemAsync(account, FishingData.FishingPole);
-                await Task.Delay(500);
+                // Wait for fishing pole to appear in bag snapshot before equipping.
+                // EquipItem action searches ObjectManager inventory — if the UPDATE_OBJECT
+                // packet hasn't arrived yet, the item won't be found and equip silently fails.
+                var poleAppeared = await _bot.WaitForSnapshotConditionAsync(account,
+                    s => s?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true,
+                    TimeSpan.FromSeconds(8));
+                _output.WriteLine($"[{label}] Fishing pole in bags: {poleAppeared}");
             }
 
             // Shiny Bauble (+25 fishing) increases catch rate — skip if already in bags
@@ -286,11 +292,39 @@ public class FishingProfessionTests
             _output.WriteLine($"[{label}] Setup already satisfied.");
         }
 
+        // Equip the fishing pole and verify it actually equipped.
+        // The EquipItem action's BuildEquipItemByIdSequence searches ObjectManager.GetContainedItems()
+        // for the item, then calls EquipItem(bag, slot). If the item hasn't been synced yet,
+        // the brute-force fallback sends CMSG_AUTOEQUIP_ITEM for every slot — unreliable.
         await _bot.SendActionAndWaitAsync(account, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
             Parameters = { new RequestParameter { IntParam = (int)FishingData.FishingPole } }
-        }, delayMs: 1500);
+        }, delayMs: 2000);
+
+        // Verify fishing pole was consumed from bags (moved to equipment slot).
+        // If still in bags, the equip action failed — retry once.
+        await _bot.RefreshSnapshotsAsync();
+        var equipSnap = await _bot.GetSnapshotAsync(account);
+        var poleStillInBags = equipSnap?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true;
+        if (poleStillInBags)
+        {
+            _output.WriteLine($"[{label}] Fishing pole still in bags after first equip attempt; retrying...");
+            await Task.Delay(1500);
+            await _bot.SendActionAndWaitAsync(account, new ActionMessage
+            {
+                ActionType = ActionType.EquipItem,
+                Parameters = { new RequestParameter { IntParam = (int)FishingData.FishingPole } }
+            }, delayMs: 2000);
+            await _bot.RefreshSnapshotsAsync();
+            equipSnap = await _bot.GetSnapshotAsync(account);
+            poleStillInBags = equipSnap?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true;
+            _output.WriteLine($"[{label}] Fishing pole still in bags after retry: {poleStillInBags}");
+        }
+        else
+        {
+            _output.WriteLine($"[{label}] Fishing pole equipped (no longer in bags).");
+        }
     }
 
     private async Task<bool> CastAndWaitForCatch(string account, string label, uint baseSkill)
