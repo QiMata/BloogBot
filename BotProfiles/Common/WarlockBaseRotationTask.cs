@@ -1,12 +1,25 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace BotProfiles.Common
 {
     public abstract class WarlockBaseRotationTask : CombatRotationTask, IBotTask
     {
+        // Vanilla 1.12.1 warlock base spell ranges
+        protected const float ShadowBoltBaseRange = 30f;
+        protected const float CurseBaseRange = 30f;      // Curse of Agony, etc.
+        protected const float ImmolateBaseRange = 30f;
+        protected const float CorruptionBaseRange = 30f;
+        protected const float SiphonLifeBaseRange = 30f;
+        protected const float DrainSoulBaseRange = 30f;
+        protected const float FearBaseRange = 20f;
+        protected const float DeathCoilBaseRange = 30f;
+        protected const float ConflagrateBaseRange = 30f;
+        protected const float HauntBaseRange = 30f;
+
         protected WarlockBaseRotationTask(IBotContext botContext) : base(botContext) { }
 
         protected virtual IEnumerable<string> DotSpells =>
@@ -43,8 +56,8 @@ namespace BotProfiles.Common
                     ObjectManager.Pet.Cast(Torment);
             }
 
-            TryCastSpell(LifeTap, 0, int.MaxValue,
-                ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
+            TryCastSpell(LifeTap, condition:
+                ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80, castOnSelf: true);
 
             BeforeRotation();
 
@@ -53,28 +66,28 @@ namespace BotProfiles.Common
             if (target.HealthPercent <= 20)
             {
                 ObjectManager.StopWandAttack();
-                TryCastSpell(DrainSoul, 0, 29);
+                TryCastSpell(DrainSoul, 0f, GetSpellRange(DrainSoulBaseRange));
                 return;
             }
 
-            TryCastSpell(CurseOfAgony, 0, 28,
+            TryCastSpell(CurseOfAgony, 0f, GetSpellRange(CurseBaseRange),
                 !target.HasDebuff(CurseOfAgony) && target.HealthPercent > 90);
 
-            TryCastSpell(Immolate, 0, 28,
+            TryCastSpell(Immolate, 0f, GetSpellRange(ImmolateBaseRange),
                 !target.HasDebuff(Immolate) && target.HealthPercent > 30);
 
             AfterImmolate();
 
-            TryCastSpell(Corruption, 0, 28,
+            TryCastSpell(Corruption, 0f, GetSpellRange(CorruptionBaseRange),
                 !target.HasDebuff(Corruption) && target.HealthPercent > 30);
 
-            TryCastSpell(SiphonLife, 0, 28,
+            TryCastSpell(SiphonLife, 0f, GetSpellRange(SiphonLifeBaseRange),
                 !target.HasDebuff(SiphonLife) && target.HealthPercent > 50);
 
             AfterDots();
 
             if (AllDotsActive())
-                TryCastSpell(ShadowBolt, 0, 28, target.HealthPercent > 40);
+                TryCastSpell(ShadowBolt, 0f, GetSpellRange(ShadowBoltBaseRange), target.HealthPercent > 40);
         }
 
         protected virtual void BeforeRotation() { }

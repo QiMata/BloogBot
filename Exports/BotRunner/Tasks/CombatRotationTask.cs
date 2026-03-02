@@ -81,22 +81,52 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     }
 
     /// <summary>
+    /// Calculate the effective spell range to the current target using vanilla 1.12.1 formula:
+    /// baseSpellRange + attacker.BoundingRadius + target.BoundingRadius.
+    /// Falls back to default bounding radii if data is unavailable (zero).
+    /// </summary>
+    /// <param name="baseSpellRange">The spell's base range in yards (e.g. 30 for Frostbolt, 36 for Fireball).</param>
+    protected float GetSpellRange(float baseSpellRange)
+    {
+        var target = ObjectManager.GetTarget(ObjectManager.Player);
+        return GetSpellRange(baseSpellRange, target);
+    }
+
+    /// <summary>
+    /// Calculate the effective spell range to a specific target using vanilla 1.12.1 formula:
+    /// baseSpellRange + attacker.BoundingRadius + target.BoundingRadius.
+    /// Falls back to default bounding radii if data is unavailable (zero).
+    /// </summary>
+    /// <param name="baseSpellRange">The spell's base range in yards (e.g. 30 for Frostbolt, 36 for Fireball).</param>
+    /// <param name="target">The target unit.</param>
+    protected float GetSpellRange(float baseSpellRange, IWoWUnit? target)
+    {
+        var playerRadius = ObjectManager.Player.BoundingRadius;
+        if (playerRadius <= 0f) playerRadius = CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS;
+
+        var targetRadius = target?.BoundingRadius ?? CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS;
+        if (targetRadius <= 0f) targetRadius = CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS;
+
+        return CombatDistance.GetSpellRange(baseSpellRange, playerRadius, targetRadius);
+    }
+
+    /// <summary>
     /// Attempt to cast a spell if ready (condition-only overload for legacy profiles).
     /// </summary>
     protected bool TryCastSpell(string spellName, bool condition, bool castOnSelf = false)
-        => TryCastSpell(spellName, 0, int.MaxValue, condition, castOnSelf);
+        => TryCastSpell(spellName, 0f, float.MaxValue, condition, castOnSelf);
 
     /// <summary>
     /// Attempt to cast a spell if ready and in range, with optional callback after cast.
     /// </summary>
-    protected bool TryCastSpell(string spellName, int minRange = 0, int maxRange = int.MaxValue, bool condition = true, bool castOnSelf = false, Action? callback = null)
+    protected bool TryCastSpell(string spellName, float minRange = 0f, float maxRange = float.MaxValue, bool condition = true, bool castOnSelf = false, Action? callback = null)
     {
         if (!condition) return false;
 
         var target = ObjectManager.GetTarget(ObjectManager.Player);
         if (target == null && !castOnSelf) return false;
 
-        var distance = castOnSelf ? 0 : ObjectManager.Player.Position.DistanceTo(target!.Position);
+        var distance = castOnSelf ? 0f : ObjectManager.Player.Position.DistanceTo(target!.Position);
         if (distance < minRange || distance > maxRange) return false;
 
         if (!ObjectManager.IsSpellReady(spellName)) return false;
@@ -492,18 +522,18 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
     /// <param name="spellName">Healing spell to cast.</param>
     /// <param name="healthThreshold">HP% threshold — party members below this are candidates.</param>
     /// <param name="maxRange">Max casting range for the heal (default 40y).</param>
-    protected bool TryCastHeal(string spellName, int healthThreshold = 70, int maxRange = 40)
+    protected bool TryCastHeal(string spellName, int healthThreshold = 70, float maxRange = 40f)
     {
         var healTarget = GetHealTarget(healthThreshold);
         if (healTarget == null) return false;
 
         if (healTarget.Guid == ObjectManager.Player.Guid)
-            return TryCastSpell(spellName, 0, int.MaxValue, true, castOnSelf: true);
+            return TryCastSpell(spellName, 0f, float.MaxValue, true, castOnSelf: true);
 
         // Target the party member for healing
         var prevTarget = ObjectManager.GetTarget(ObjectManager.Player);
         ObjectManager.SetTarget(healTarget.Guid);
-        var result = TryCastSpell(spellName, 0, maxRange);
+        var result = TryCastSpell(spellName, 0f, maxRange);
 
         // Re-target enemy
         if (prevTarget != null && prevTarget.HealthPercent > 0)

@@ -8,16 +8,16 @@ namespace WarlockDestruction.Tasks
     {
         protected override void BeforeRotation()
         {
-            TryCastSpell(DeathCoil, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
-            TryCastSpell(Fear, 0, 20,
+            TryCastSpell(DeathCoil, 0f, GetSpellRange(DeathCoilBaseRange), ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
+            TryCastSpell(Fear, 0f, GetSpellRange(FearBaseRange),
                 (ObjectManager.GetTarget(ObjectManager.Player).IsCasting ||
                  ObjectManager.GetTarget(ObjectManager.Player).IsChanneling) &&
                 !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Fear));
-            TryCastSpell(LifeTap, 0, int.MaxValue,
-                ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
+            TryCastSpell(LifeTap, condition:
+                ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80, castOnSelf: true);
         }
 
         protected override void AfterImmolate() =>
-            TryCastSpell(Conflagrate, 0, 28, ObjectManager.GetTarget(ObjectManager.Player)?.HasDebuff(Immolate) == true);
+            TryCastSpell(Conflagrate, 0f, GetSpellRange(ConflagrateBaseRange), ObjectManager.GetTarget(ObjectManager.Player)?.HasDebuff(Immolate) == true);
     }
 }

@@ -7,7 +7,7 @@ namespace WarlockDemonology.Tasks
     public class PvERotationTask(IBotContext botContext) : WarlockBaseRotationTask(botContext), IBotTask
     {
         protected override void BeforeRotation() =>
-            TryCastSpell(DemonicEmpowerment, 0, int.MaxValue,
-                ObjectManager.Pet != null && !ObjectManager.Pet.HasBuff(DemonicEmpowerment));
+            TryCastSpell(DemonicEmpowerment, condition:
+                ObjectManager.Pet != null && !ObjectManager.Pet.HasBuff(DemonicEmpowerment), castOnSelf: true);
     }
 }

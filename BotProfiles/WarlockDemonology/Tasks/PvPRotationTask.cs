@@ -8,15 +8,15 @@ namespace WarlockDemonology.Tasks
     {
         protected override void BeforeRotation()
         {
-            TryCastSpell(DeathCoil, 0, 20, ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
-            TryCastSpell(Fear, 0, 20,
+            TryCastSpell(DeathCoil, 0f, GetSpellRange(DeathCoilBaseRange), ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
+            TryCastSpell(Fear, 0f, GetSpellRange(FearBaseRange),
                 (ObjectManager.GetTarget(ObjectManager.Player).IsCasting ||
                  ObjectManager.GetTarget(ObjectManager.Player).IsChanneling) &&
                 !ObjectManager.GetTarget(ObjectManager.Player).HasDebuff(Fear));
-            TryCastSpell(LifeTap, 0, int.MaxValue,
-                ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80);
-            TryCastSpell(DemonicEmpowerment, 0, int.MaxValue,
-                ObjectManager.Pet != null && !ObjectManager.Pet.HasBuff(DemonicEmpowerment));
+            TryCastSpell(LifeTap, condition:
+                ObjectManager.Player.HealthPercent > 85 && ObjectManager.Player.ManaPercent < 80, castOnSelf: true);
+            TryCastSpell(DemonicEmpowerment, condition:
+                ObjectManager.Pet != null && !ObjectManager.Pet.HasBuff(DemonicEmpowerment), castOnSelf: true);
         }
     }
 }

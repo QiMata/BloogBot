@@ -1,17 +1,24 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestShadow.Tasks
 {
     public class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
+        // Vanilla 1.12.1 priest base spell ranges
+        private const float ShadowWordPainBaseRange = 30f;
+        private const float MindBlastBaseRange = 30f;
+        private const float MindFlayBaseRange = 20f;
+        private const float VampiricEmbraceBaseRange = 30f;
+
         public void Update()
         {
             if (!EnsureTarget())
                 return;
 
-            if (Update(30))
+            if (Update(GetSpellRange(ShadowWordPainBaseRange)))
                 return;
 
             PerformCombatRotation();
@@ -35,20 +42,20 @@ namespace PriestShadow.Tasks
             TryCastSpell(PowerWordShield, condition: player.HealthPercent < 60 && !player.HasDebuff(WeakenedSoul), castOnSelf: true);
 
             // Psychic Scream when overwhelmed or low HP
-            TryCastSpell(PsychicScream, 0, 8, player.HealthPercent < 35 || ObjectManager.Aggressors.Count() > 2);
+            TryCastSpell(PsychicScream, 0f, 8f, player.HealthPercent < 35 || ObjectManager.Aggressors.Count() > 2);
 
             // Dispel Magic on self
             TryCastSpell(DispelMagic, condition: player.HasMagicDebuff, castOnSelf: true);
 
             // DoTs on target
-            TryCastSpell(VampiricEmbrace, 0, 29, !target.HasDebuff(VampiricEmbrace));
-            TryCastSpell(ShadowWordPain, 0, 29, !target.HasDebuff(ShadowWordPain));
+            TryCastSpell(VampiricEmbrace, 0f, GetSpellRange(VampiricEmbraceBaseRange), !target.HasDebuff(VampiricEmbrace));
+            TryCastSpell(ShadowWordPain, 0f, GetSpellRange(ShadowWordPainBaseRange), !target.HasDebuff(ShadowWordPain));
 
             // Mind Blast on cooldown
-            TryCastSpell(MindBlast, 0, 29);
+            TryCastSpell(MindBlast, 0f, GetSpellRange(MindBlastBaseRange));
 
             // Mind Flay as filler
-            TryCastSpell(MindFlay, 0, 19);
+            TryCastSpell(MindFlay, 0f, GetSpellRange(MindFlayBaseRange));
 
             // Wand fallback at low mana
             if (player.ManaPercent < 8)

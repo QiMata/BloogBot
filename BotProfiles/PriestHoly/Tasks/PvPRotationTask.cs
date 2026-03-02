@@ -1,17 +1,23 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace PriestHoly.Tasks
 {
     public class PvPRotationTask(IBotContext botContext) : CombatRotationTask(botContext), IBotTask
     {
+        // Vanilla 1.12.1 priest base spell ranges
+        private const float ShadowWordPainBaseRange = 30f;
+        private const float SmiteBaseRange = 30f;
+        private const float HolyFireBaseRange = 30f;
+
         public void Update()
         {
             if (!EnsureTarget())
                 return;
 
-            if (Update(30))
+            if (Update(GetSpellRange(SmiteBaseRange)))
                 return;
 
             PerformCombatRotation();
@@ -35,7 +41,7 @@ namespace PriestHoly.Tasks
             TryCastSpell(InnerFire, condition: !player.HasBuff(InnerFire), castOnSelf: true);
 
             // Psychic Scream when low HP or overwhelmed
-            TryCastSpell(PsychicScream, 0, 8, player.HealthPercent < 40 || ObjectManager.Aggressors.Count() > 2);
+            TryCastSpell(PsychicScream, 0f, 8f, player.HealthPercent < 40 || ObjectManager.Aggressors.Count() > 2);
 
             // Renew HoT on self
             TryCastSpell(Renew, condition: player.HealthPercent < 75 && !player.HasBuff(Renew), castOnSelf: true);
@@ -47,9 +53,9 @@ namespace PriestHoly.Tasks
             TryCastSpell(DispelMagic, condition: player.HasMagicDebuff, castOnSelf: true);
 
             // Damage rotation
-            TryCastSpell(HolyFire, 0, 29);
-            TryCastSpell(ShadowWordPain, 0, 29, !target.HasDebuff(ShadowWordPain));
-            TryCastSpell(Smite, 0, 29);
+            TryCastSpell(HolyFire, 0f, GetSpellRange(HolyFireBaseRange));
+            TryCastSpell(ShadowWordPain, 0f, GetSpellRange(ShadowWordPainBaseRange), !target.HasDebuff(ShadowWordPain));
+            TryCastSpell(Smite, 0f, GetSpellRange(SmiteBaseRange));
 
             // Wand fallback
             if (player.ManaPercent < 10)

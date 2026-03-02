@@ -1,12 +1,21 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
+using GameData.Core.Models;
 using static BotRunner.Constants.Spellbook;
 
 namespace MageArcane.Tasks
 {
     public class PvERotationTask : CombatRotationTask, IBotTask
     {
+        // Vanilla 1.12.1 mage base spell ranges
+        private const float ArcaneMissilesBaseRange = 30f;
+        private const float ArcaneBarrageBaseRange = 30f;
+        private const float FireballBaseRange = 35f;
+        private const float FireBlastBaseRange = 20f;
+        private const float CounterspellBaseRange = 30f;
+        private const float FlamestrikeBaseRange = 30f;
+
         internal PvERotationTask(IBotContext botContext) : base(botContext) { }
 
         public void Update()
@@ -32,7 +41,7 @@ namespace MageArcane.Tasks
 
         private void ExecuteRotation()
         {
-            if (Update(30))
+            if (Update(GetSpellRange(ArcaneMissilesBaseRange)))
                 return;
 
             bool hasWand = ObjectManager.GetEquippedItem(EquipSlot.Ranged) != null;
@@ -40,27 +49,27 @@ namespace MageArcane.Tasks
             if (useWand)
                 ObjectManager.CastSpell("Shoot");
 
-            TryCastSpell(PresenceOfMind, 0, 50, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
+            TryCastSpell(PresenceOfMind, condition: ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80, castOnSelf: true);
 
-            TryCastSpell(ArcanePower, 0, 50, ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
+            TryCastSpell(ArcanePower, condition: ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80, castOnSelf: true);
 
-            TryCastSpell(Counterspell, 0, 29, ObjectManager.GetTarget(ObjectManager.Player).Mana > 0 && ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
+            TryCastSpell(Counterspell, 0f, GetSpellRange(CounterspellBaseRange), ObjectManager.GetTarget(ObjectManager.Player).Mana > 0 && ObjectManager.GetTarget(ObjectManager.Player).IsCasting);
 
-            TryCastSpell(ManaShield, 0, 50, !ObjectManager.Player.HasBuff(ManaShield) && ObjectManager.Player.HealthPercent < 20);
+            TryCastSpell(ManaShield, condition: !ObjectManager.Player.HasBuff(ManaShield) && ObjectManager.Player.HealthPercent < 20, castOnSelf: true);
 
-            TryCastSpell(FireBlast, 0, 19, !ObjectManager.Player.HasBuff(Clearcasting));
+            TryCastSpell(FireBlast, 0f, GetSpellRange(FireBlastBaseRange), !ObjectManager.Player.HasBuff(Clearcasting));
 
-            TryCastSpell(FrostNova, 0, 10, !ObjectManager.Units.Any(u => u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Health > 0 && u.Position.DistanceTo(ObjectManager.Player.Position) < 15), callback: FrostNovaCallback);
+            TryCastSpell(FrostNova, 0f, 10f, !ObjectManager.Units.Any(u => u.Guid != ObjectManager.GetTarget(ObjectManager.Player).Guid && u.Health > 0 && u.Position.DistanceTo(ObjectManager.Player.Position) < 15), callback: FrostNovaCallback);
 
-            TryCastSpell(ArcaneExplosion, 0, 10, ObjectManager.Aggressors.Count() > 2);
+            TryCastSpell(ArcaneExplosion, 0f, 10f, ObjectManager.Aggressors.Count() > 2);
 
-            TryCastSpell(Flamestrike, 0, 30, ObjectManager.Aggressors.Count() > 2);
+            TryCastSpell(Flamestrike, 0f, GetSpellRange(FlamestrikeBaseRange), ObjectManager.Aggressors.Count() > 2);
 
-            TryCastSpell(ArcaneBarrage, 0, 30, ObjectManager.Player.Level >= 40);
+            TryCastSpell(ArcaneBarrage, 0f, GetSpellRange(ArcaneBarrageBaseRange), ObjectManager.Player.Level >= 40);
 
-            TryCastSpell(Fireball, 0, 34, ObjectManager.Player.Level < 15 || ObjectManager.Player.HasBuff(PresenceOfMind));
+            TryCastSpell(Fireball, 0f, GetSpellRange(FireballBaseRange), ObjectManager.Player.Level < 15 || ObjectManager.Player.HasBuff(PresenceOfMind));
 
-            TryCastSpell(ArcaneMissiles, 0, 29, ObjectManager.Player.Level >= 15);
+            TryCastSpell(ArcaneMissiles, 0f, GetSpellRange(ArcaneMissilesBaseRange), ObjectManager.Player.Level >= 15);
         }
 
         private Action FrostNovaCallback => () => StartKite(1500);

@@ -7,6 +7,9 @@ namespace ShamanRestoration.Tasks
 {
     public class PvPRotationTask : CombatRotationTask, IBotTask
     {
+        // Vanilla 1.12.1 shaman base spell ranges
+        private const float LightningBoltBaseRange = 30f;
+
         internal PvPRotationTask(IBotContext botContext) : base(botContext) { }
 
 
@@ -18,7 +21,7 @@ namespace ShamanRestoration.Tasks
                 return;
             }
 
-            if (Update(30))
+            if (Update(GetSpellRange(LightningBoltBaseRange)))
                 return;
 
             PerformCombatRotation();
@@ -28,11 +31,11 @@ namespace ShamanRestoration.Tasks
             ObjectManager.StopAllMovement();
             ObjectManager.Face(ObjectManager.GetTarget(ObjectManager.Player).Position);
 
-            TryCastSpell(HealingWave, 0, int.MaxValue, ObjectManager.Player.HealthPercent < 50, castOnSelf: true);
+            TryCastSpell(HealingWave, condition: ObjectManager.Player.HealthPercent < 50, castOnSelf: true);
 
-            TryCastSpell(GroundingTotem, 0, int.MaxValue, ObjectManager.Aggressors.Any(a => a.IsCasting));
+            TryCastSpell(GroundingTotem, condition: ObjectManager.Aggressors.Any(a => a.IsCasting), castOnSelf: true);
 
-            TryCastSpell(LightningBolt, 0, 30, ObjectManager.Player.ManaPercent > 20);
+            TryCastSpell(LightningBolt, 0f, GetSpellRange(LightningBoltBaseRange), ObjectManager.Player.ManaPercent > 20);
         }
     }
 }
