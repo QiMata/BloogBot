@@ -16,6 +16,10 @@ namespace BotRunner.Combat
         // Fishing skill ID
         public const uint FishingSkillId = 356;
 
+        // Fishing pole weapon proficiency — required to equip fishing poles.
+        // Real trainers grant this alongside fishing spells; GM .learn does not.
+        public const uint FishingPoleProficiency = 7738;
+
         // Fishing bobber display IDs (vanilla 1.12.1)
         public const uint BobberDisplayId = 668;
 

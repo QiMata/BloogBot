@@ -203,99 +203,73 @@ public class FishingProfessionTests
         }
 
         var spellKnown = snap.Player?.SpellList?.Contains((uint)FishingData.FishingRank1) == true;
+        var poleProfKnown = snap.Player?.SpellList?.Contains(FishingData.FishingPoleProficiency) == true;
         var currentSkill = GetFishingSkillFromSnapshot(snap);
-        var hasPoleInBags = snap.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true;
 
         var needsLearn = !spellKnown;
-        var needsSkillTune = currentSkill < 150 || currentSkill >= 300;
-        var needsPole = !hasPoleInBags;
+        var needsPoleProf = !poleProfKnown;
 
-        if (needsLearn || needsSkillTune || needsPole)
+        // Always enter setup block — skill is reset to 1/300 and items are reset every run.
         {
-            _output.WriteLine($"[{label}] Setup deltas: learn={needsLearn}, skillTune={needsSkillTune}, pole={needsPole}");
+            _output.WriteLine($"[{label}] Setup: learn={needsLearn}, poleProf={needsPoleProf}, skill={currentSkill}");
 
-            if (needsLearn)
+            if (needsLearn || needsPoleProf)
             {
-                // MaNGOS `.learn <castSpell>` teaches the spell but does NOT always
-                // create the associated SKILL entry. The TRAINING spells (7733/7734)
-                // trigger the full trainer effect chain which properly creates skill 356.
-                const uint apprenticeFishingTraining = 7733;
-                const uint journeymanFishingTraining = 7734;
-                _output.WriteLine($"[{label}] Teaching fishing via training spells ({apprenticeFishingTraining}, {journeymanFishingTraining})...");
-                await _bot.BotLearnSpellAsync(account, apprenticeFishingTraining);
-                await _bot.BotLearnSpellAsync(account, journeymanFishingTraining);
-                // Also teach cast spells directly as fallback
-                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank1);
-                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank2);
+                // Teach ALL fishing ranks to raise the natural skill cap to 300.
+                // MaNGOS caps skill max based on the highest known fishing spell.
+                // Training spells (7733/7734) trigger the full trainer effect chain
+                // and may also create the SKILL entry.
+                _output.WriteLine($"[{label}] Teaching fishing (all ranks) + pole proficiency...");
+                await _bot.BotLearnSpellAsync(account, 7733u);  // Apprentice Training (teaches rank 1)
+                await _bot.BotLearnSpellAsync(account, 7734u);  // Journeyman Training (teaches rank 2)
+                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank1);   // 7620
+                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank2);   // 7731
+                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank3);   // 7732 Expert (cap 225)
+                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank4);   // 18248 Artisan (cap 300)
+                await _bot.BotLearnSpellAsync(account, FishingData.FishingPoleProficiency); // 7738
                 await Task.Delay(500);
                 await _bot.RefreshSnapshotsAsync();
             }
 
-            if (needsSkillTune)
+            // Always set fishing skill to 1/300 — ensures room for skill-ups during the test.
+            // MaNGOS caps max based on highest known fishing rank; Artisan (18248) allows 300.
             {
-                // Verify the skill entry was created by the training spells
                 var postSnap = await _bot.GetSnapshotAsync(account);
                 var skillExists = postSnap?.Player?.SkillInfo?.ContainsKey(FishingData.FishingSkillId) == true;
-                var skillVal = skillExists ? postSnap!.Player!.SkillInfo![FishingData.FishingSkillId] : 0;
-                _output.WriteLine($"[{label}] Fishing skill exists={skillExists}, value={skillVal}");
+                _output.WriteLine($"[{label}] Fishing skill exists={skillExists}");
                 if (!skillExists)
                 {
-                    // Training spells may not have created the skill either.
-                    // Try `.learn all_crafts` as a last resort (teaches all professions + creates skills).
                     _output.WriteLine($"[{label}] Skill still not created; trying .learn all_crafts...");
                     await _bot.SendGmChatCommandAsync(account, ".learn all_crafts");
                     await Task.Delay(1000);
                     await _bot.RefreshSnapshotsAsync();
-                    postSnap = await _bot.GetSnapshotAsync(account);
-                    skillExists = postSnap?.Player?.SkillInfo?.ContainsKey(FishingData.FishingSkillId) == true;
-                    _output.WriteLine($"[{label}] After all_crafts: fishing skill exists={skillExists}");
                 }
-                if (skillExists)
-                {
-                    await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, 150, 300);
-                    await Task.Delay(500);
-                }
-                else
-                {
-                    _output.WriteLine($"[{label}] WARNING: Could not create fishing skill; will attempt fishing at default level.");
-                }
-            }
-
-            if (needsPole)
-            {
-                await _bot.BotAddItemAsync(account, FishingData.FishingPole);
-                // Wait for fishing pole to appear in bag snapshot before equipping.
-                // EquipItem action searches ObjectManager inventory — if the UPDATE_OBJECT
-                // packet hasn't arrived yet, the item won't be found and equip silently fails.
-                var poleAppeared = await _bot.WaitForSnapshotConditionAsync(account,
-                    s => s?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true,
-                    TimeSpan.FromSeconds(8));
-                _output.WriteLine($"[{label}] Fishing pole in bags: {poleAppeared}");
-            }
-
-            // Shiny Bauble (+25 fishing) increases catch rate — skip if already in bags
-            await _bot.RefreshSnapshotsAsync();
-            var baubleSnap = await _bot.GetSnapshotAsync(account);
-            var hasBauble = baubleSnap?.Player?.BagContents?.Values.Contains((uint)FishingData.ShinyBauble) == true;
-            if (!hasBauble)
-            {
-                await _bot.BotAddItemAsync(account, FishingData.ShinyBauble);
-                await Task.Delay(300);
-            }
-            else
-            {
-                _output.WriteLine($"[{label}] Shiny Bauble already in bags; skipping additem.");
+                // Set skill to 1/300 — low value with headroom for increase
+                await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, 1, 300);
+                await Task.Delay(500);
+                await _bot.RefreshSnapshotsAsync();
             }
         }
-        else
-        {
-            _output.WriteLine($"[{label}] Setup already satisfied.");
-        }
 
-        // Equip the fishing pole and verify it actually equipped.
-        // The EquipItem action's BuildEquipItemByIdSequence searches ObjectManager.GetContainedItems()
-        // for the item, then calls EquipItem(bag, slot). If the item hasn't been synced yet,
-        // the brute-force fallback sends CMSG_AUTOEQUIP_ITEM for every slot — unreliable.
+        // Clear all equipment first. Fishing pole has inv_type=17 (2H weapon) in MaNGOS,
+        // so CMSG_AUTOEQUIP_ITEM tries to put it in MAINHAND. If mainhand is occupied,
+        // the swap can silently fail. Clearing equipment ensures clean equip.
+        _output.WriteLine($"[{label}] Clearing items/equipment for clean fishing pole equip...");
+        await _bot.ExecuteGMCommandAsync($".reset items {snap?.CharacterName}");
+        await Task.Delay(1000);
+
+        // Re-add the fishing pole to the now-empty inventory
+        await _bot.BotAddItemAsync(account, FishingData.FishingPole);
+        var poleAppeared = await _bot.WaitForSnapshotConditionAsync(account,
+            s => s?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true,
+            TimeSpan.FromSeconds(8));
+        _output.WriteLine($"[{label}] Fishing pole re-added to bags: {poleAppeared}");
+
+        // Re-add Shiny Bauble if needed
+        await _bot.BotAddItemAsync(account, FishingData.ShinyBauble);
+        await Task.Delay(300);
+
+        // Now equip the fishing pole — mainhand should be empty after .reset items
         await _bot.SendActionAndWaitAsync(account, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
@@ -303,13 +277,12 @@ public class FishingProfessionTests
         }, delayMs: 2000);
 
         // Verify fishing pole was consumed from bags (moved to equipment slot).
-        // If still in bags, the equip action failed — retry once.
         await _bot.RefreshSnapshotsAsync();
         var equipSnap = await _bot.GetSnapshotAsync(account);
         var poleStillInBags = equipSnap?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true;
         if (poleStillInBags)
         {
-            _output.WriteLine($"[{label}] Fishing pole still in bags after first equip attempt; retrying...");
+            _output.WriteLine($"[{label}] WARNING: Fishing pole still in bags after equip. Retrying once...");
             await Task.Delay(1500);
             await _bot.SendActionAndWaitAsync(account, new ActionMessage
             {
