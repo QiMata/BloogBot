@@ -38,10 +38,6 @@ public class CombatLoopTests
     private const ulong CreatureGuidHighMask = 0xF000000000000000UL;
     private const ulong CreatureGuidHighPrefix = 0xF000000000000000UL;
 
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
-
     public CombatLoopTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -131,7 +127,6 @@ public class CombatLoopTests
             _output.WriteLine($"  [{label}] Target selection dispatch failed: {selectResult}");
             return false;
         }
-        await Task.Delay(700);
 
         var selected = await WaitForSelectedTargetAsync(account, targetGuid, TimeSpan.FromSeconds(4));
         _output.WriteLine($"  [{label}] Selected target in snapshot: {selected}");
@@ -324,7 +319,7 @@ public class CombatLoopTests
     {
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
-        if (IsStrictAlive(snap))
+        if (LiveBotFixture.IsStrictAlive(snap))
             return;
 
         var characterName = snap?.CharacterName;
@@ -344,7 +339,7 @@ public class CombatLoopTests
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
-            if (IsStrictAlive(snap))
+            if (LiveBotFixture.IsStrictAlive(snap))
                 return true;
             await Task.Delay(350);
         }
@@ -373,18 +368,6 @@ public class CombatLoopTests
         var dx = x2 - x1;
         var dy = y2 - y1;
         return (float)Math.Sqrt(dx * dx + dy * dy);
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
     private static bool ContainsCombatCommandFailure(string? text)

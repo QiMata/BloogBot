@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -30,10 +31,6 @@ public class EquipmentEquipTests
     private const uint WornMace = 36;
     private const uint MainhandSlot = 15;
     private const uint OneHandMaceSpell = 198;
-
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
     public EquipmentEquipTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -83,13 +80,19 @@ public class EquipmentEquipTests
             return false;
 
         // Strict-alive guard to avoid dead-state GM command rejections.
-        if (!IsStrictAlive(snap))
+        if (!LiveBotFixture.IsStrictAlive(snap))
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before equipment setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(1200);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
+            var reviveSw = Stopwatch.StartNew();
+            while (reviveSw.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                await Task.Delay(500);
+                await _bot.RefreshSnapshotsAsync();
+                snap = await _bot.GetSnapshotAsync(account) ?? snap;
+                if (LiveBotFixture.IsStrictAlive(snap))
+                    break;
+            }
             if (snap.Player == null)
                 return false;
         }
@@ -109,9 +112,15 @@ public class EquipmentEquipTests
             _output.WriteLine($"  [{label}] Learning missing 1H mace proficiency (spell {OneHandMaceSpell}).");
             await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
             await _bot.BotSetSkillAsync(account, 54, 1, 300); // skill 54 = Maces
-            await Task.Delay(1200);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
+            var learnSw = Stopwatch.StartNew();
+            while (learnSw.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(500);
+                await _bot.RefreshSnapshotsAsync();
+                snap = await _bot.GetSnapshotAsync(account) ?? snap;
+                if (snap.Player?.SpellList.Contains(OneHandMaceSpell) == true)
+                    break;
+            }
             if (snap.Player == null)
                 return false;
             playerBefore = snap.Player;
@@ -126,14 +135,28 @@ public class EquipmentEquipTests
             {
                 _output.WriteLine($"  [{label}] Bag nearly full ({bagItemCount}); clearing inventory before additem.");
                 await _bot.BotClearInventoryAsync(account, includeExtraBags: false);
-                await Task.Delay(1200);
+                var clearSw = Stopwatch.StartNew();
+                while (clearSw.Elapsed < TimeSpan.FromSeconds(5))
+                {
+                    await Task.Delay(500);
+                    await _bot.RefreshSnapshotsAsync();
+                    var clearSnap = await _bot.GetSnapshotAsync(account);
+                    if (clearSnap?.Player?.BagContents.Count < bagItemCount)
+                        break;
+                }
             }
 
             _output.WriteLine($"  [{label}] Adding Worn Mace (item {WornMace}).");
             await _bot.BotAddItemAsync(account, WornMace);
-            await Task.Delay(1200);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
+            var addItemSw = Stopwatch.StartNew();
+            while (addItemSw.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(500);
+                await _bot.RefreshSnapshotsAsync();
+                snap = await _bot.GetSnapshotAsync(account) ?? snap;
+                if (snap.Player != null && CountBagItem(snap.Player, WornMace) > 0)
+                    break;
+            }
             if (snap.Player == null)
                 return false;
             playerBefore = snap.Player;
@@ -185,15 +208,4 @@ public class EquipmentEquipTests
     private static int CountBagItem(Game.WoWPlayer player, uint itemId)
         => player.BagContents.Values.Count(id => id == itemId);
 
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
-    }
 }

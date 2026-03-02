@@ -41,7 +41,7 @@ public class DeathCorpseRunTests
     private const float MinimumRunbackYardsPerSecond = 3.5f;
     private const int RunbackObservationPadSeconds = 45;
     private const int MinRunbackObservationSeconds = 45;
-    private const int MaxRunbackObservationSeconds = 360;
+    private const int MaxRunbackObservationSeconds = 180;
 
     private static readonly TimeSpan GhostSettleWindow = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan GhostSettleMinimumDuration = TimeSpan.FromSeconds(4);
@@ -505,6 +505,9 @@ public class DeathCorpseRunTests
             var staleForwardTicks = 0;
             var ignoredInitialTeleportJump = false;
             var previousDist2D = initialDist2D;
+            // Stuck checkpoint: if bot stays within 1.0y of this position for 30+s, early-terminate.
+            var stuckCheckpointPos = ghostPos;
+            var stuckCheckpointSw = Stopwatch.StartNew();
             while (runSw.Elapsed < runbackObservationWindow)
             {
                 await Task.Delay(3000);
@@ -561,6 +564,20 @@ public class DeathCorpseRunTests
                 }
                 if (noMovementTicks >= 15 && !arrivedNearCorpse && evidence.CumulativeGhostTravel < MinimumGhostTravelDistance)
                     return await RetryOrFailRunbackAsync($"corpse run stalled with minimal movement at ({currentPos.X:F1}, {currentPos.Y:F1}, {currentPos.Z:F1}), dist2D={distanceToCorpse2D:F1}y, travel={evidence.CumulativeGhostTravel:F1}y, moveFlags=0x{movementFlags:X}");
+
+                // Stuck checkpoint: if the bot hasn't moved more than 1.0y from the checkpoint
+                // position in 30+ seconds, it's stuck — break out early to avoid wasting the full window.
+                var displacementFromCheckpoint = DistanceTo2D(currentPos.X, currentPos.Y, stuckCheckpointPos.X, stuckCheckpointPos.Y);
+                if (displacementFromCheckpoint > 1.0f)
+                {
+                    stuckCheckpointPos = currentPos;
+                    stuckCheckpointSw.Restart();
+                }
+                else if (stuckCheckpointSw.Elapsed.TotalSeconds >= 30 && !arrivedNearCorpse)
+                {
+                    _output.WriteLine($"  [{label}] STUCK: position unchanged (displacement={displacementFromCheckpoint:F2}y) for {stuckCheckpointSw.Elapsed.TotalSeconds:F0}s at ({currentPos.X:F1}, {currentPos.Y:F1}, {currentPos.Z:F1}), dist2D={distanceToCorpse2D:F1}y");
+                    return await RetryOrFailRunbackAsync($"bot stuck at same position for {stuckCheckpointSw.Elapsed.TotalSeconds:F0}s (displacement={displacementFromCheckpoint:F2}y, dist2D={distanceToCorpse2D:F1}y)");
+                }
 
                 // No-progress detection: moving but not getting closer to corpse.
                 // Bot may oscillate (0.4-0.6y/tick) at a collision point without approaching.

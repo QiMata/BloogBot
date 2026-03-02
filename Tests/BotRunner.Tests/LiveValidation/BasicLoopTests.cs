@@ -33,10 +33,6 @@ public class BasicLoopTests
     private const float RazorHillArrivalRadius = 35f;
     private const uint MoveFlagForward = 0x00000001;
 
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
-
     public BasicLoopTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -57,7 +53,7 @@ public class BasicLoopTests
         Assert.False(string.IsNullOrWhiteSpace(bg.AccountName));
         Assert.NotEqual(0UL, bg.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL);
         Assert.NotNull(bg.Player?.Unit?.GameObject?.Base?.Position);
-        Assert.True(IsStrictAlive(bg), "BG should be strict-alive at basic-loop login check.");
+        Assert.True(LiveBotFixture.IsStrictAlive(bg), "BG should be strict-alive at basic-loop login check.");
 
         var bgPos = bg.Player!.Unit!.GameObject!.Base!.Position!;
         _output.WriteLine($"BG Bot: {bg.CharacterName} ({bg.AccountName}) GUID=0x{bg.Player.Unit.GameObject.Base.Guid:X}");
@@ -72,7 +68,7 @@ public class BasicLoopTests
             Assert.False(string.IsNullOrWhiteSpace(fg.AccountName));
             Assert.NotEqual(0UL, fg.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL);
             Assert.NotNull(fg.Player?.Unit?.GameObject?.Base?.Position);
-            Assert.True(IsStrictAlive(fg), "FG should be strict-alive at basic-loop login check.");
+            Assert.True(LiveBotFixture.IsStrictAlive(fg), "FG should be strict-alive at basic-loop login check.");
 
             var fgPos = fg.Player!.Unit!.GameObject!.Base!.Position!;
             _output.WriteLine($"FG Bot: {fg.CharacterName} ({fg.AccountName}) GUID=0x{fg.Player.Unit.GameObject.Base.Guid:X}");
@@ -133,7 +129,6 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Teleport_PlayerMovesToNewPosition()
     {
-
 
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
@@ -309,7 +304,7 @@ public class BasicLoopTests
     {
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
-        if (IsStrictAlive(snap))
+        if (LiveBotFixture.IsStrictAlive(snap))
             return;
 
         var characterName = snap?.CharacterName;
@@ -329,7 +324,7 @@ public class BasicLoopTests
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
-            if (IsStrictAlive(snap))
+            if (LiveBotFixture.IsStrictAlive(snap))
                 return true;
             await Task.Delay(400);
         }
@@ -406,18 +401,6 @@ public class BasicLoopTests
         var dx = x2 - x1;
         var dy = y2 - y1;
         return (float)Math.Sqrt(dx * dx + dy * dy);
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
 }

@@ -34,9 +34,6 @@ public class FishingProfessionTests
     // Fishing channel = 20s server-side. Wait 22s for margin.
     private const int FishingChannelWaitMs = 22000;
     private const int MaxFishingAttempts = 3;
-    private const uint PlayerFlagGhost = 0x10;
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7;
 
     // --- Fishing locations: positions near fishable water ---
     // Each entry: (mapId, shoreX, shoreY, shoreZ, facingRadians)
@@ -136,7 +133,7 @@ public class FishingProfessionTests
 
             // Teleport to shore position
             await _bot.BotTeleportAsync(account, map, shoreX, shoreY, shoreZ);
-            await Task.Delay(4000); // zone load + Z stabilization
+            await _bot.WaitForZStabilizationAsync(account, waitMs: 4000); // polls Z samples, auto-exits on 3 stable readings
 
             // Verify position is stable
             await _bot.RefreshSnapshotsAsync();
@@ -196,7 +193,7 @@ public class FishingProfessionTests
         if (snap == null)
             throw new InvalidOperationException($"[{label}] Missing snapshot during fishing setup.");
 
-        if (!IsStrictAlive(snap))
+        if (!LiveBotFixture.IsStrictAlive(snap))
         {
             _output.WriteLine($"[{label}] Not strict-alive; reviving before setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
@@ -270,9 +267,19 @@ public class FishingProfessionTests
                 await Task.Delay(1500);
             }
 
-            // Shiny Bauble (+25 fishing) increases catch rate
-            await _bot.BotAddItemAsync(account, FishingData.ShinyBauble);
-            await Task.Delay(500);
+            // Shiny Bauble (+25 fishing) increases catch rate — skip if already in bags
+            await _bot.RefreshSnapshotsAsync();
+            var baubleSnap = await _bot.GetSnapshotAsync(account);
+            var hasBauble = baubleSnap?.Player?.BagContents?.Values.Contains((uint)FishingData.ShinyBauble) == true;
+            if (!hasBauble)
+            {
+                await _bot.BotAddItemAsync(account, FishingData.ShinyBauble);
+                await Task.Delay(500);
+            }
+            else
+            {
+                _output.WriteLine($"[{label}] Shiny Bauble already in bags; skipping additem.");
+            }
         }
         else
         {
@@ -318,8 +325,8 @@ public class FishingProfessionTests
                 _output.WriteLine($"  [{label}] CastSpell failed, trying .cast fallback...");
                 await _bot.SendGmChatCommandAsync(account, $".cast {FishingData.FishingRank1}");
 
-                // Wait 6s for CREATE packet to arrive and snapshot to update
-                await Task.Delay(6000);
+                // Wait 3s for CREATE packet to arrive and snapshot to update (spell channel is ~3s)
+                await Task.Delay(3000);
                 await _bot.RefreshSnapshotsAsync();
                 await Task.Delay(500);
                 await _bot.RefreshSnapshotsAsync();
@@ -434,15 +441,4 @@ public class FishingProfessionTests
         return 0;
     }
 
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
-    }
 }

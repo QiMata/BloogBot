@@ -29,9 +29,6 @@ public class NpcInteractionTests
     private const float RazorHillTrainerX = 311.35f, RazorHillTrainerY = -4827.79f, RazorHillTrainerZ = 9.66f;
     private const float OrgrimmarFmX = 1676.25f, OrgrimmarFmY = -4313.45f, OrgrimmarFmZ = 61.72f;
     private const uint LinenCloth = 2589;
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
     public NpcInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -193,7 +190,7 @@ public class NpcInteractionTests
         if (snap == null)
             return;
 
-        if (!IsStrictAlive(snap))
+        if (!LiveBotFixture.IsStrictAlive(snap))
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before NPC setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
@@ -288,18 +285,6 @@ public class NpcInteractionTests
             var guid = u.GameObject?.Base?.Guid ?? 0;
             _output.WriteLine($"    [{guid:X8}] {u.GameObject?.Name} NpcFlags={u.NpcFlags}");
         }
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
     private static float DistanceTo(float x1, float y1, float z1, float x2, float y2, float z2)

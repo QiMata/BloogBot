@@ -29,9 +29,6 @@ public class EconomyInteractionTests
     private const float OrgAhX = 1687.26f, OrgAhY = -4464.71f, OrgAhZ = 20.15f;
     private const float OrgMailboxX = 1615.58f, OrgMailboxY = -4391.60f, OrgMailboxZ = 10.11f;
     private const uint LinenCloth = 2589;
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
     public EconomyInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -44,7 +41,6 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Bank_OpenAndDeposit()
     {
-
 
         // Setup both bots in parallel (items + location).
         var setupTasks = new System.Collections.Generic.List<Task>
@@ -85,7 +81,6 @@ public class EconomyInteractionTests
     public async Task AuctionHouse_OpenAndList()
     {
 
-
         // Setup both bots at AH location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -119,7 +114,6 @@ public class EconomyInteractionTests
     public async Task Mail_OpenMailbox()
     {
 
-
         // Send mail and setup location in parallel for both bots.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
@@ -149,8 +143,8 @@ public class EconomyInteractionTests
 
     private async Task SetupMailAsync(string account, string label)
     {
-        await _bot.SendGmChatCommandAsync(account, ".send money self \"Test\" \"Gold\" 100");
-        await Task.Delay(800);
+        // .send money removed — test only validates mailbox detection + interaction,
+        // not mail retrieval. The send command was never validated and added 800ms of dead wait.
         await EnsureReadyAtLocationAsync(account, label, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
     }
 
@@ -200,6 +194,8 @@ public class EconomyInteractionTests
             return false;
         }
 
+        // TODO: Name-based heuristic — fragile if server returns localized or missing names.
+        // Consider detecting by GameObjectType (TYPE_MAILBOX = 19) when snapshot exposes it reliably.
         var mailboxNamed = objects
             .FirstOrDefault(go => (go.Name ?? string.Empty)
                 .Contains("mail", StringComparison.OrdinalIgnoreCase));
@@ -238,7 +234,7 @@ public class EconomyInteractionTests
         if (snap == null)
             return;
 
-        if (!IsStrictAlive(snap))
+        if (!LiveBotFixture.IsStrictAlive(snap))
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before economy setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
@@ -286,18 +282,6 @@ public class EconomyInteractionTests
             var pos = go.Base?.Position;
             _output.WriteLine($"    [{goGuid:X8}] {go.Name} ({pos?.X:F1}, {pos?.Y:F1}, {pos?.Z:F1})");
         }
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
     private static float DistanceTo(float x1, float y1, float z1, float x2, float y2, float z2)

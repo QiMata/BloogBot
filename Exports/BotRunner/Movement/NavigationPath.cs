@@ -16,13 +16,15 @@ public class NavigationPath(
     Func<long>? tickProvider = null,
     bool enableProbeHeuristics = true,
     bool enableDynamicProbeSkipping = true,
-    bool strictPathValidation = false)
+    bool strictPathValidation = false,
+    float capsuleRadius = 0.3064f)
 {
     private readonly PathfindingClient? _pathfinding = pathfinding;
     private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
     private readonly bool _enableProbeHeuristics = enableProbeHeuristics;
     private readonly bool _enableDynamicProbeSkipping = enableProbeHeuristics && enableDynamicProbeSkipping;
     private readonly bool _strictPathValidation = strictPathValidation;
+    private readonly float _capsuleRadius = capsuleRadius;
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
     private int _currentIndex;
@@ -748,7 +750,7 @@ public class NavigationPath(
     private void OffsetCornerWaypoints(Position start)
     {
         const float cornerAngleThreshold = 60f;
-        const float offsetDistance = 1.0f;
+        float offsetDistance = _capsuleRadius * 3.0f; // 3× radius gives safe wall clearance at full speed
         const float minSegmentLength = 4f; // only offset when segments are long enough
 
         for (var i = 0; i < _waypoints.Length; i++)

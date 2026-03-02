@@ -27,9 +27,6 @@ public class QuestInteractionTests
     private readonly ITestOutputHelper _output;
 
     private const int TestQuestId = 783; // A Threat Within
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
 
     public QuestInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -103,7 +100,7 @@ public class QuestInteractionTests
     {
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
-        if (IsStrictAlive(snap))
+        if (LiveBotFixture.IsStrictAlive(snap))
             return;
 
         var characterName = snap?.CharacterName;
@@ -118,7 +115,7 @@ public class QuestInteractionTests
             await Task.Delay(1000);
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account);
-            if (IsStrictAlive(snap))
+            if (LiveBotFixture.IsStrictAlive(snap))
                 return;
         }
 
@@ -194,15 +191,4 @@ public class QuestInteractionTests
         Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
 
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
-    }
 }

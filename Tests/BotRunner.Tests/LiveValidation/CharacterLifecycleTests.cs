@@ -230,7 +230,7 @@ public class CharacterLifecycleTests
         await _bot.RefreshSnapshotsAsync();
 
         var baseline = await _bot.GetSnapshotAsync(account);
-        if (!IsStrictAlive(baseline))
+        if (!LiveBotFixture.IsStrictAlive(baseline))
         {
             _output.WriteLine($"  [{label}] FAIL: Baseline not strict-alive after setup.");
             return false;
@@ -269,14 +269,14 @@ public class CharacterLifecycleTests
         var afterRevive = await _bot.GetSnapshotAsync(account);
         var health = afterRevive?.Player?.Unit?.Health ?? 0;
         _output.WriteLine($"  [{label}] After revive: health={health}, flags=0x{afterRevive?.Player?.PlayerFlags:X}");
-        return health > 0 && IsStrictAlive(afterRevive);
+        return health > 0 && LiveBotFixture.IsStrictAlive(afterRevive);
     }
 
     private async Task EnsureStrictAliveAsync(string account, string label)
     {
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
-        if (IsStrictAlive(snap))
+        if (LiveBotFixture.IsStrictAlive(snap))
             return;
 
         var characterName = snap?.CharacterName;
@@ -296,7 +296,7 @@ public class CharacterLifecycleTests
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
-            if (IsStrictAlive(snap))
+            if (LiveBotFixture.IsStrictAlive(snap))
                 return true;
 
             await Task.Delay(500);
@@ -366,18 +366,6 @@ public class CharacterLifecycleTests
         }
 
         return false;
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
     private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)

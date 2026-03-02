@@ -347,7 +347,7 @@ public class LiveBotFixture : IAsyncLifetime
     private async Task EnsureAliveForSetupAsync(string accountName, string characterName, string label)
     {
         var baseline = await GetSnapshotAsync(accountName);
-        if (IsStrictAliveState(baseline))
+        if (IsStrictAlive(baseline))
         {
             _logger.LogInformation("[FIXTURE] {Label} '{Name}' already strict-alive; skipping revive setup.", label, characterName);
             return;
@@ -360,7 +360,7 @@ public class LiveBotFixture : IAsyncLifetime
         while (sw.Elapsed < TimeSpan.FromSeconds(12))
         {
             var snapshot = await GetSnapshotAsync(accountName);
-            if (IsStrictAliveState(snapshot))
+            if (IsStrictAlive(snapshot))
             {
                 _logger.LogInformation("[FIXTURE] {Label} '{Name}' is strict-alive after {Elapsed:F1}s",
                     label, characterName, sw.Elapsed.TotalSeconds);
@@ -825,7 +825,7 @@ public class LiveBotFixture : IAsyncLifetime
         return true;
     }
 
-    private static bool IsStrictAliveState(WoWActivitySnapshot? snap)
+    public static bool IsStrictAlive(WoWActivitySnapshot? snap)
     {
         var player = snap?.Player;
         var unit = player?.Unit;

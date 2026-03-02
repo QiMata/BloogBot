@@ -106,12 +106,10 @@ public class GatheringProfessionTests
             uint fgSkillAfter = GetSkill("FG", GatheringData.MINING_SKILL_ID);
             _output.WriteLine($"FG Results: gathered={fgGathered}, skill {fgSkillBefore} → {fgSkillAfter}");
 
-            // Soft-check FG: don't block BG test if FG has stale skill state
-            // (e.g., after WoW.exe restart mid-session).  Final assertion at end covers both.
-            if (!fgGathered)
-                _output.WriteLine($"WARNING — FG: Failed to gather Copper Vein. skill={fgSkillAfter}.");
-            if (fgSkillAfter <= fgSkillBefore)
-                _output.WriteLine($"WARNING — FG: Mining skill did not increase ({fgSkillBefore} → {fgSkillAfter}).");
+            Assert.True(fgGathered,
+                $"FG: Failed to gather Copper Vein at any spawned location. skill={fgSkillAfter}.");
+            Assert.True(fgSkillAfter > fgSkillBefore,
+                $"FG: Mining skill did not increase ({fgSkillBefore} → {fgSkillAfter}).");
         }
         else
         {

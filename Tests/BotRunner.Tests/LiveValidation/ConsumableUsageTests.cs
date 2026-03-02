@@ -94,9 +94,9 @@ public class ConsumableUsageTests
         // Poll for item to appear in snapshot (FG injection client needs more time
         // for WoW.exe memory to reflect GM-added items).
         bool hasElixir = false;
-        for (int poll = 0; poll < 5 && !hasElixir; poll++)
+        for (int poll = 0; poll < 10 && !hasElixir; poll++)
         {
-            await Task.Delay(1000);
+            await Task.Delay(300);
             await _bot.RefreshSnapshotsAsync();
             var playerCheck = getPlayer();
             if (playerCheck?.BagContents != null)
@@ -115,7 +115,7 @@ public class ConsumableUsageTests
         if (!hasElixir)
         {
             var playerAfterAdd = getPlayer();
-            _output.WriteLine($"  [{label}] WARNING: Elixir {ElixirOfLionsStrength} not found in bags after 5 polls (bags count={playerAfterAdd?.BagContents.Count ?? 0})!");
+            _output.WriteLine($"  [{label}] WARNING: Elixir {ElixirOfLionsStrength} not found in bags after 10 polls (bags count={playerAfterAdd?.BagContents.Count ?? 0})!");
         }
 
         // --- Step 2: Use elixir via action forwarding ---

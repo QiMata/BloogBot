@@ -38,10 +38,6 @@ public class CraftingProfessionTests
     private const float OrgZ = 31.2f;
     private const float SetupArrivalDistance = 45f;
 
-    private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-    private const uint StandStateMask = 0xFF;
-    private const uint StandStateDead = 7; // UNIT_STAND_STATE_DEAD
-
     public CraftingProfessionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -76,8 +72,7 @@ public class CraftingProfessionTests
         Assert.True(bgPassed, "BG bot: Crafting should produce Linen Bandage item in bag snapshot.");
         if (_bot.ForegroundBot != null)
         {
-            if (!fgPassed)
-                _output.WriteLine("WARNING: FG did not craft Linen Bandage in this run; BG path remains authoritative.");
+            Assert.True(fgPassed, "FG bot: Crafting should produce Linen Bandage item in bag snapshot.");
         }
     }
 
@@ -89,13 +84,20 @@ public class CraftingProfessionTests
             return false;
 
         // Step 0: Strict-alive guard (avoid dead-state GM command rejection).
-        if (!IsStrictAlive(snap))
+        if (!LiveBotFixture.IsStrictAlive(snap))
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(1200);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
+            // Poll for alive state instead of fixed delay (same ~1200ms budget)
+            var reviveSw = System.Diagnostics.Stopwatch.StartNew();
+            while (reviveSw.ElapsedMilliseconds < 3000)
+            {
+                await Task.Delay(500);
+                await _bot.RefreshSnapshotsAsync();
+                snap = await _bot.GetSnapshotAsync(account) ?? snap;
+                if (LiveBotFixture.IsStrictAlive(snap))
+                    break;
+            }
         }
 
         // Step 1: Teleport only when not already near setup location.
@@ -118,9 +120,22 @@ public class CraftingProfessionTests
                 await _bot.BotLearnSpellAsync(account, FirstAidApprentice);
             if (!hasBandageRecipe)
                 await _bot.BotLearnSpellAsync(account, LinenBandageRecipe);
-            // Wait for SMSG_LEARNED_SPELL to be processed so the bot's
+            // Poll for SMSG_LEARNED_SPELL to be processed so the bot's
             // internal Spells collection is updated before CastSpell action.
-            await Task.Delay(2000);
+            var learnSw = System.Diagnostics.Stopwatch.StartNew();
+            while (learnSw.ElapsedMilliseconds < 5000)
+            {
+                await Task.Delay(500);
+                await _bot.RefreshSnapshotsAsync();
+                var learnSnap = await _bot.GetSnapshotAsync(account);
+                var learnedFirstAid = learnSnap?.Player?.SpellList?.Contains(FirstAidApprentice) == true;
+                var learnedRecipe = learnSnap?.Player?.SpellList?.Contains(LinenBandageRecipe) == true;
+                if (learnedFirstAid && learnedRecipe)
+                {
+                    _output.WriteLine($"  [{label}] Spells confirmed in snapshot after {learnSw.ElapsedMilliseconds}ms");
+                    break;
+                }
+            }
         }
         else
         {
@@ -252,18 +267,6 @@ public class CraftingProfessionTests
         _output.WriteLine($"  [{label}] Teleporting to setup location.");
         await _bot.BotTeleportAsync(account, OrgrimmarMap, OrgX, OrgY, OrgZ);
         return true;
-    }
-
-    private static bool IsStrictAlive(WoWActivitySnapshot? snap)
-    {
-        var player = snap?.Player;
-        var unit = player?.Unit;
-        if (player == null || unit == null)
-            return false;
-
-        var hasGhostFlag = (player.PlayerFlags & PlayerFlagGhost) != 0;
-        var standState = unit.Bytes1 & StandStateMask;
-        return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
     private static float DistanceTo(float x1, float y1, float z1, float x2, float y2, float z2)

@@ -832,6 +832,14 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
                 chosenPenCount = penCount;
             }
         }
+        if (chosen) {
+            std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(3);
+            oss << "[DownPass] RESCUE: least-bad walkable at ("
+                << st.x << ", " << st.y << ", " << chosen->snapZ
+                << ") pen=" << chosenMaxPen << " penCount=" << chosenPenCount
+                << " map=" << input.mapId;
+            PHYS_INFO(PHYS_MOVE, oss.str());
+        }
     }
 
     if (chosen && chosen->hit) {
@@ -1668,6 +1676,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 						bestPen = &hhit;
 						bestPenZ = hhit.point.z;
 					}
+				}
+				if (bestPen) {
+					std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(3);
+					oss << "[PreMove] RESCUE: penetrating walkable contact at ("
+						<< st.x << ", " << st.y << ", " << st.z
+						<< ") penZ=" << bestPenZ << " map=" << input.mapId;
+					PHYS_INFO(PHYS_MOVE, oss.str());
 				}
 				best = bestPen;
 			}
