@@ -1,5 +1,6 @@
 using BotRunner.Movement;
 using BotRunner.Interfaces;
+using GameData.Core.Constants;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
@@ -21,11 +22,22 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     // Disable probe heuristics/pruning so corners are not skipped into walls.
     // strictPathValidation is OFF because long outdoor corpse runs (460y+) have
     // segments where collision-based LOS rejects valid navmesh paths.
-    private readonly NavigationPath _navPath = new(
-        botContext.Container.PathfindingClient,
-        enableProbeHeuristics: false,
-        enableDynamicProbeSkipping: false,
-        strictPathValidation: false);
+    private readonly NavigationPath _navPath = CreateCorpseNavPath(botContext);
+
+    private static NavigationPath CreateCorpseNavPath(IBotContext ctx)
+    {
+        var player = ctx.ObjectManager.Player;
+        var (radius, height) = player != null
+            ? RaceDimensions.GetCapsuleForRace(player.Race, player.Gender)
+            : (0.3064f, 2.0313f);
+        return new NavigationPath(
+            ctx.Container.PathfindingClient,
+            enableProbeHeuristics: false,
+            enableDynamicProbeSkipping: false,
+            strictPathValidation: false,
+            capsuleRadius: radius,
+            capsuleHeight: height);
+    }
     private DateTime _startTime = DateTime.UtcNow;
     private DateTime _lastReclaimAttempt = DateTime.MinValue;
     private DateTime _lastCooldownLog = DateTime.MinValue;

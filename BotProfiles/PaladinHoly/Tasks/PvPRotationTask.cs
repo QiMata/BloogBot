@@ -13,7 +13,8 @@ namespace PaladinHoly.Tasks
             if (!EnsureTarget())
                 return;
 
-            if (Update(5))
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            if (target != null && Update(GetMeleeRange(target)))
                 return;
 
             PerformCombatRotation();

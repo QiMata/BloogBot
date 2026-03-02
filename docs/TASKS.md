@@ -143,7 +143,7 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
   - **CharacterLifecycleTests.Equipment_AddItemToInventory** — FG item polling timing
 - **Remaining plan work:**
   1. Phase 1b: Ground snap penetration tolerance tightening (PhysicsEngine.cpp)
-  2. Phase 2c: Pass capsule dimensions through pipeline (NavigationPath → callers)
+  2. ~~Phase 2c: Pass capsule dimensions through pipeline~~ **Done** — capsuleRadius + capsuleHeight passed from RaceDimensions per race/gender at all 4 NavigationPath construction sites (BotTask, BuildGoToSequence, TargetPositioningService, RetrieveCorpseTask)
   3. Phase 3: Navmesh-collision Z alignment (post-path Z correction)
   4. Phase 4: Enhanced cliff safety (multi-directional probing)
   5. Phase 5: Character size support (Gnome to Tauren width/height checks)

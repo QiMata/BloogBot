@@ -17,7 +17,8 @@ public class NavigationPath(
     bool enableProbeHeuristics = true,
     bool enableDynamicProbeSkipping = true,
     bool strictPathValidation = false,
-    float capsuleRadius = 0.3064f)
+    float capsuleRadius = 0.3064f,
+    float capsuleHeight = 2.0313f)
 {
     private readonly PathfindingClient? _pathfinding = pathfinding;
     private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
@@ -25,6 +26,7 @@ public class NavigationPath(
     private readonly bool _enableDynamicProbeSkipping = enableProbeHeuristics && enableDynamicProbeSkipping;
     private readonly bool _strictPathValidation = strictPathValidation;
     private readonly float _capsuleRadius = capsuleRadius;
+    private readonly float _capsuleHeight = capsuleHeight;
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
     private int _currentIndex;
@@ -655,14 +657,63 @@ public class NavigationPath(
         var pulledPath = _enableProbeHeuristics
             ? StringPullPath(mapId, start, prunedPath)
             : prunedPath;
-        var usable = IsPathUsable(mapId, start, end, pulledPath);
-        if (!usable && pulledPath.Length > 0)
+
+        // Phase 3a: Post-path Z correction — replace navmesh Z with collision ground Z
+        // where they differ. Fixes Orgrimmar WMO areas where navmesh Z diverges from
+        // the actual walkable surface by a few yards.
+        var zCorrectedPath = CorrectPathZFromCollision(mapId, pulledPath);
+
+        var usable = IsPathUsable(mapId, start, end, zCorrectedPath);
+        if (!usable && zCorrectedPath.Length > 0)
         {
-            Serilog.Log.Warning("[NavigationPath] Path rejected by IsPathUsable: raw={RawCount} sanitized={SanitizedCount} pruned={PrunedCount} pulled={PulledCount} smooth={Smooth} strict={Strict} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
-                rawPath.Length, sanitizedPath.Length, prunedPath.Length, pulledPath.Length, smoothPath, _strictPathValidation,
+            Serilog.Log.Warning("[NavigationPath] Path rejected by IsPathUsable: raw={RawCount} sanitized={SanitizedCount} pruned={PrunedCount} pulled={PulledCount} zCorrected={ZCorrectedCount} smooth={Smooth} strict={Strict} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
+                rawPath.Length, sanitizedPath.Length, prunedPath.Length, pulledPath.Length, zCorrectedPath.Length, smoothPath, _strictPathValidation,
                 start.X, start.Y, start.Z, end.X, end.Y, end.Z);
         }
-        return usable ? pulledPath : [];
+        return usable ? zCorrectedPath : [];
+    }
+
+    /// <summary>
+    /// Phase 3a: Correct waypoint Z values using collision ground queries.
+    /// The navmesh may produce Z values that differ from the actual walkable surface
+    /// (e.g., Orgrimmar WMO floors where navmesh is 3-4y below the collision surface).
+    /// For each waypoint, query GetGroundZ and use the collision Z if it's within 5y
+    /// of the navmesh Z. If the collision query fails or returns a value too far from
+    /// the navmesh Z, keep the original navmesh Z.
+    /// </summary>
+    private Position[] CorrectPathZFromCollision(uint mapId, Position[] path)
+    {
+        if (_pathfinding == null || path.Length == 0)
+            return path;
+
+        const float MAX_Z_CORRECTION = 5.0f; // Max navmesh-collision Z delta to accept
+
+        var corrected = new Position[path.Length];
+        int corrections = 0;
+
+        for (int i = 0; i < path.Length; i++)
+        {
+            var wp = path[i];
+            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, wp);
+            if (found && MathF.Abs(groundZ - wp.Z) <= MAX_Z_CORRECTION)
+            {
+                corrected[i] = new Position(wp.X, wp.Y, groundZ);
+                if (MathF.Abs(groundZ - wp.Z) > 0.1f)
+                    corrections++;
+            }
+            else
+            {
+                corrected[i] = wp;
+            }
+        }
+
+        if (corrections > 0)
+        {
+            Serilog.Log.Debug("[NavigationPath] Z-corrected {Count}/{Total} waypoints from collision ground (mapId={MapId})",
+                corrections, path.Length, mapId);
+        }
+
+        return corrected;
     }
 
     public void CalculatePath(Position start, Position end, uint mapId, bool force = false)

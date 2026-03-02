@@ -1,4 +1,5 @@
 using BotRunner.Movement;
+using GameData.Core.Constants;
 using GameData.Core.Models;
 using Serilog;
 using System;
@@ -24,7 +25,7 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages moving the bot to the specified location.</returns>
         private IBehaviourTreeNode BuildGoToSequence(float x, float y, float z, float tolerance)
         {
-            var navPath = new NavigationPath(_container.PathfindingClient);
+            NavigationPath? navPath = null;
             DateTime? noPathSinceUtc = null;
             DateTime lastNoPathLogUtc = DateTime.MinValue;
 
@@ -34,6 +35,14 @@ namespace BotRunner
                 {
                     if (_objectManager.Player?.Position == null)
                         return BehaviourTreeStatus.Running;
+
+                    if (navPath == null)
+                    {
+                        var (radius, height) = RaceDimensions.GetCapsuleForRace(
+                            _objectManager.Player.Race, _objectManager.Player.Gender);
+                        navPath = new NavigationPath(_container.PathfindingClient,
+                            capsuleRadius: radius, capsuleHeight: height);
+                    }
 
                     var target = new Position(x, y, z);
                     var dist = _objectManager.Player.Position.DistanceTo(target);

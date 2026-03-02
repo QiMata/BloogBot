@@ -13,7 +13,8 @@ namespace RogueSubtlety.Tasks
             if (!EnsureTarget())
                 return;
 
-            if (Update(5))
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            if (target != null && Update(GetMeleeRange(target)))
                 return;
 
             PerformCombatRotation();
@@ -26,7 +27,7 @@ namespace RogueSubtlety.Tasks
                 return;
 
             // Position behind target
-            MoveBehindTarget(5);
+            MoveBehindTarget(GetMeleeRange(target));
 
             ObjectManager.StopAllMovement();
             ObjectManager.Face(target.Position);

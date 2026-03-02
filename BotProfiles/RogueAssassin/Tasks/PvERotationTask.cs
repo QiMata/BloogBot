@@ -33,7 +33,8 @@ namespace RogueAssassin.Tasks
             if (!EnsureTarget())
                 return;
 
-            if (Update(3))
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            if (target != null && Update(GetMeleeRange(target)))
                 return;
 
             // Ensure Sword/Mace/1H is equipped (not dagger)

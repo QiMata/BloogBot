@@ -1,4 +1,5 @@
 using BotRunner.Clients;
+using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using System;
 
@@ -12,15 +13,15 @@ namespace BotRunner.Movement
     public class TargetPositioningService : ITargetPositioningService
     {
         private readonly IObjectManager _objectManager;
+        private readonly PathfindingClient _pathfindingClient;
         private readonly float _engagementRange;
-        private readonly NavigationPath _navPath;
+        private NavigationPath? _navPath;
 
         public TargetPositioningService(IObjectManager objectManager, PathfindingClient pathfindingClient, float engagementRange = 25f)
         {
             _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-            ArgumentNullException.ThrowIfNull(pathfindingClient);
+            _pathfindingClient = pathfindingClient ?? throw new ArgumentNullException(nameof(pathfindingClient));
             _engagementRange = engagementRange;
-            _navPath = new NavigationPath(pathfindingClient);
         }
 
         public bool EnsureInCombatRange(IWoWUnit target)
@@ -32,6 +33,13 @@ namespace BotRunner.Movement
             if (player == null)
             {
                 return false;
+            }
+
+            if (_navPath == null)
+            {
+                var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
+                _navPath = new NavigationPath(_pathfindingClient,
+                    capsuleRadius: radius, capsuleHeight: height);
             }
 
             var playerPosition = player.Position;

@@ -13,7 +13,8 @@ namespace DruidFeral.Tasks
             if (!EnsureTarget())
                 return;
 
-            if (Update(3))
+            var target = ObjectManager.GetTarget(ObjectManager.Player);
+            if (target != null && Update(GetMeleeRange(target)))
                 return;
 
             if (ObjectManager.Player.HealthPercent < 30 && ObjectManager.Player.Mana >= ObjectManager.GetManaCost(HealingTouch))

@@ -1,6 +1,7 @@
 using BotRunner.Constants;
 using BotRunner.Interfaces;
 using BotRunner.Movement;
+using GameData.Core.Constants;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
@@ -55,8 +56,15 @@ public abstract class BotTask(IBotContext botContext)
     /// </summary>
     protected void NavigateToward(Position destination)
     {
-        _navPath ??= new NavigationPath(Container.PathfindingClient);
         var player = ObjectManager.Player;
+        if (_navPath == null)
+        {
+            var (radius, height) = player != null
+                ? RaceDimensions.GetCapsuleForRace(player.Race, player.Gender)
+                : (0.3064f, 2.0313f);
+            _navPath = new NavigationPath(Container.PathfindingClient,
+                capsuleRadius: radius, capsuleHeight: height);
+        }
         if (player?.Position == null)
             return;
 
