@@ -121,27 +121,28 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 
 ## Session Handoff
 - **Last updated:** 2026-03-01 (session 4)
-- **Current work:** PATH-REFACTOR-001 complete. All 5 LiveValidation tiers complete. 1247/1247 unit tests pass, 97/97 physics replay pass. LiveValidation: 25/28 pass (up from 10/28 → 22/27 → 25/28).
+- **Current work:** PATH-REFACTOR-001 complete. All 5 LiveValidation tiers complete. 1247/1247 unit tests pass, 97/97 physics replay pass. **LiveValidation: 36/37 pass** (up from 10→22→25→36).
 - **Completed session 4 (2026-03-01):**
   1. **TargetGuid sync verified:** CombatRange 8/8 pass in isolation (confirms `1cabf05` TargetGuid fix)
   2. **Teleport reliability fix (`e0fa2fc`):** `_isBeingTeleported` flag stuck when chat "You are being teleported" fires but MSG_MOVE_TELEPORT never arrives. Added 2s timeout with `_teleportFlagSetTicks` timestamp tracking. Root cause of 15 cascading LiveValidation failures.
-  3. **FG race condition fix (`a20fe92`):** `_bot.ForegroundBot != null` TOCTOU across 9 test files — captured `var hasFg` once at method start. 14 methods fixed across BasicLoop, CombatLoop, ConsumableUsage, CraftingProfession, EconomyInteraction, EquipmentEquip, NpcInteraction, TalentAllocation, CharacterLifecycle.
-  4. **Tests:** 1247/1247 BotRunner unit, 97/97 physics. No regressions.
-  5. Total: 2 commits this session (+ 3 from previous context), 10+ files changed
+  3. **FG race condition fix (`a20fe92`):** `_bot.ForegroundBot != null` TOCTOU across 9 test files — captured `var hasFg` once at method start. 14 methods fixed.
+  4. **FG InteractWithGameObject fix (`1b30a5a`):** FG ObjectManager.InteractWithGameObject was a no-op — GatherNode actions never triggered CGGameObject_C::OnRightClick. Mining now works.
+  5. **BG fishing bobber CreatedBy fallback (`1b30a5a`):** SpellHandler accepts bobber with CreatedBy=0x0 (MaNGOS omits field from UPDATE_MASK). However, fishing still fails — SMSG_CAST_FAILED means spell is server-rejected.
+  6. **Tier 2 delay reduction (`46d8a60`):** DeathCorpseRun + FishingProfession — 15 fixed delays reduced/replaced with polling. ~12-18s savings per suite run.
+  7. **Tests:** 1247/1247 BotRunner unit, 97/97 physics. No regressions.
+  8. Total: 4 commits this session, 15+ files changed
 - **Completed session 3 (2026-03-02 continuation):** Pre-existing test failures (5), Tier 2 delay→polling, Tier 3 DRY, Tier 4 FG parity, Tier 1 correctness, CombatRange reliability. 7 commits, 20+ files.
 - **Completed session 2 (2026-03-02):** Phase 4b cliff rerouting, Phase 6a batch GroundZ, Phase 6c metrics, Part C process orphan prevention, ranged class distance (32 files), Tier 5 state management. 10 commits, 80+ files.
 - **Completed session 1 (2026-03-01):** Phases 0-5, combat distance system, melee distance (28 files), StartRangedAttack, combat range tests
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md` (57 tasks across 6 pathfinding phases + 5 test tiers — ALL COMPLETE except Phase 6b)
-- **LiveValidation results (session 4 — 25/28 passed before 10min timeout):**
-  - **25 passed:** BasicLoop (6/6), CharacterLifecycle (3/4), CombatLoop (1/1), CombatRange (8/8), ConsumableUsage (1/1), CraftingProfession (1/1), DeathCorpseRun (1/1), EconomyInteraction (3/3), EquipmentEquip (1/1)
-  - **3 failed:** Death_KillAndRevive (FG race — likely fixed by `a20fe92`), FishingProfession (BG catch, pre-existing), GatheringProfession.Mining (FG, pre-existing)
-  - **Improvements this session:** CombatRange 6/8→8/8, 15 cascading teleport failures→0
+- **LiveValidation results (session 4 final — 36/37 passed, 10min timeout cut ~3 remaining):**
+  - **36 passed:** BasicLoop (6/6), CharacterLifecycle (4/4), CombatLoop (1/1), CombatRange (8/8), ConsumableUsage (1/1), CraftingProfession (1/1), DeathCorpseRun (1/1), EconomyInteraction (3/3), EquipmentEquip (1/1), GatheringProfession (2/2), GroupFormation (1/1), NpcInteraction (6/6), OrgrimmarGroundZ (1/1)
+  - **1 failed:** FishingProfession (BG: SMSG_CAST_FAILED — server rejects fishing spell; not a bobber/CreatedBy issue)
+  - **Improvements this session:** GatheringProfession.Mining FAIL→PASS, Death_KillAndRevive FAIL→PASS, CombatRange 6/8→8/8, 15 cascading teleport failures→0
 - **Remaining known issues:**
-  1. **FishingProfessionTests** — SMSG_GAMEOBJECT_CUSTOM_ANIM handler EXISTS (SpellHandler.cs:505-553) but BG catch fails at runtime. Needs packet trace analysis.
-  2. **GatheringProfession.Mining FG** — FG bot dispatches GatherNode but mining channel doesn't complete. Skill stays at 1. Needs FG gathering pipeline investigation.
-  3. **Death_KillAndRevive FG** — Likely fixed by `a20fe92` race condition fix. Needs revalidation.
+  1. **FishingProfessionTests** — SMSG_CAST_FAILED (server rejects fishing spell 7620). Cast action and `.cast` GM fallback both fail. Likely: fishing pole not equipped in correct slot, or skill registration incomplete. Needs SMSG_CAST_FAILED payload decode.
 - **Remaining plan work:**
   1. Phase 6b: DotRecast evaluation (separate branch — low priority)
-  2. Remaining Tier 2 delay replacements in DeathCorpseRun + FishingProfession tests
+  2. FishingProfession: decode SMSG_CAST_FAILED payload, fix root cause (likely equip/skill issue)
   3. LV-QUEST-001 / WSM-PAR-001 quest snapshot sync lag
-- **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m`
+- **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 12m`
