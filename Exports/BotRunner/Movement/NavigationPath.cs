@@ -717,8 +717,12 @@ public class NavigationPath(
         }
     }
 
-    private void ComputeWaypointAcceptanceRadii(Position start)
+    private void ComputeWaypointAcceptanceRadii(Position start, float characterSpeed = 7.0f)
     {
+        // Speed-based floor: at full speed the bot covers characterSpeed yards per second.
+        // Half a second at 20% margin prevents overshoot at full run speed.
+        float speedBasedFloor = characterSpeed * 0.5f * 1.2f;
+
         _waypointAcceptanceRadii = new float[_waypoints.Length];
         for (var i = 0; i < _waypoints.Length; i++)
         {
@@ -737,9 +741,8 @@ public class NavigationPath(
 
             // Map: 0° (straight) → MAX_ACCEPTANCE, ≥90° → MIN_ACCEPTANCE
             var t = Math.Clamp(turnAngleDeg / SHARP_TURN_ANGLE_DEG, 0f, 1f);
-            _waypointAcceptanceRadii[i] = MathF.Max(
-                MIN_ACCEPTANCE_RADIUS,
-                MAX_ACCEPTANCE_RADIUS - t * (MAX_ACCEPTANCE_RADIUS - MIN_ACCEPTANCE_RADIUS));
+            float angleBasedRadius = MAX_ACCEPTANCE_RADIUS - t * (MAX_ACCEPTANCE_RADIUS - MIN_ACCEPTANCE_RADIUS);
+            _waypointAcceptanceRadii[i] = MathF.Max(speedBasedFloor, angleBasedRadius);
         }
     }
 

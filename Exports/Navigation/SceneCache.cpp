@@ -174,6 +174,19 @@ static bool ShouldExcludeDoodad(const char* m2Name)
     std::string nameLower(m2Name);
     std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
 
+    // Priority whitelist: walkable structural doodads that must ALWAYS be included,
+    // even if they contain an excluded keyword (e.g., "dock_torch" should keep "dock").
+    static const char* s_walkableKeywords[] = {
+        "plank", "dock", "bridge", "platform", "floor", "ramp",
+        "stair", "walkway", "boardwalk", "pier", "gangway"
+    };
+
+    for (const char* keyword : s_walkableKeywords)
+    {
+        if (nameLower.find(keyword) != std::string::npos)
+            return false;  // Always include walkable geometry
+    }
+
     // Keywords for decorative / non-blocking M2 doodads
     static const char* s_excludedKeywords[] = {
         "catapult", "banner", "torch", "brazier", "fire", "smoke",

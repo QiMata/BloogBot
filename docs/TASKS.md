@@ -122,39 +122,31 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ## Session Handoff
 - **Last updated:** 2026-03-02
 - **Current work:** PATH-REFACTOR-001 pathfinding overhaul + LiveValidation test evaluation.
-- **Completed this session:**
-  1. GM mode stays ON for fishing and gathering tests (removed `.gm off` from FishingProfessionTests, GatheringProfessionTests)
-  2. Reduced Z-stabilization waits from 6s→3s in BasicLoopTests (4 occurrences)
-  3. Wired up `OffsetCornerWaypoints()` in NavigationPath.cs (existed but was never called)
-  4. Added `SemaphoreSlim _refreshLock` to `RefreshSnapshotsAsync()` — prevents race conditions when parallel corpse-run tasks both call it
-  5. Added decorative doodad exclusion filter in SceneCache.cpp (`ShouldExcludeDoodad()`) — skips catapult, banner, torch, brazier, etc. from collision geometry
-  6. **Fixed `LV-TPCOUNT-001`** — Added `_teleportSequence` counter in WoWSharpObjectManager, `IncrementTeleportSequence()` called on each MSG_MOVE_TELEPORT. Previously sent counter=0, now correctly increments.
-  7. **Full verification run:** 97/97 physics tests pass, 18/20 LiveValidation pass (no regressions).
-- **Previous session:** Physics calibration — air mode perfect (0.000y). Trust velocity fix for JumpStart frames.
-- **Physics calibration state (97/97 pass, 1 skip):**
-  - ground: n=18881, avg=0.013y, p99=0.170y, worst=0.520y
-  - **air: n=2275, avg=0.000y, p99=0.000y, worst=0.000y** ← PERFECT
-  - swim: n=1569, avg=0.000y, p99=0.000y, worst=0.003y
-  - transition: n=399, avg=0.013y, p99=0.200y, worst=0.497y
-  - transport: n=1647, avg=0.027y, p99=0.308y, worst=0.329y
-- **Remaining error analysis:**
-  - Ground worst (0.520y): WMO floor geometry mismatch in Orgrimmar — capsule sweep vs GetGroundZ disagree
-  - Transition worst (0.497y): Single SurfaceStep at geometry discontinuity
-  - DirectionChange (0.200y cap): `maxReplayInputDrop` safety clamp
-  - Transport worst (0.329y): Elevator timing mismatch (horizontal error)
-- **Remaining LiveValidation failures (18/20 pass):**
-  - **FishingProfessionTests** — BG fishing catch: SMSG_GAMEOBJECT_CUSTOM_ANIM handler doesn't detect bobber bite (pre-existing).
-  - **CharacterLifecycleTests.Equipment_AddItemToInventory** — FG item polling: Linen Cloth not in bag snapshot after `.additem` (pre-existing, needs wider polling window).
-  - `LV-QUEST-001` — Quest not in snapshot after `.quest add` (pre-existing, not in suite).
-- **What's truly next (by priority):**
-  1. **Fix BG fishing catch** — Investigate SMSG_GAMEOBJECT_CUSTOM_ANIM handler in `WoWSharpClient/Handlers/SpellHandler.cs`.
-  2. **Increase FG item polling window** — ConsumableUsageTests FG failure is timing-related.
-  3. `PATH-REFACTOR-001` — Orgrimmar navmesh-vs-collision mismatch.
-  4. `LV-QUEST-001` — QuestInteractionTests.
-- **Files changed this session:**
-  - `Tests/Navigation.Physics.Tests/Helpers/ReplayEngine.cs` — JumpStart lookahead (lines 298-310), SurfaceStep detection (lines 312-316), isAirborne from cleanedMoveFlags (line 390), SurfaceStep Vz hint (line 447), FallTime=0 fix (line 448)
-  - `Exports/Navigation/PhysicsEngine.cpp` — SurfaceStep trust-grounded Z placement (lines 1954-1985), skip ground Z refinement safety net on SurfaceStep (line 2245), skip non-walkable guardrail on SurfaceStep (line 2640)
-  - `Exports/Navigation/PhysicsCollideSlide.cpp` — Corner escape (previous session)
-  - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs` — Jump+backward stall recovery (previous session)
-  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` — Diagnostics (previous session)
-- **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 10m`
+- **Completed this session (2026-03-02):**
+  1. **Phase 0b:** Eliminated fallback #11B — stalled waypoint index-only advance → always recalculate path
+  2. **Phase 0c:** Eliminated fallback #17A — Z interpolation from path removed; keeps current Z + diagnostic at 30 frames
+  3. **Phase 0d:** Added RESCUE diagnostics to PhysicsEngine.cpp fallbacks #1 and #2A
+  4. **Phase 1a:** SceneCache doodad whitelist — walkable structural doodads (plank, dock, bridge, platform, ramp, stair) always included even if they match an exclusion keyword
+  5. **Phase 1c:** Teleport Z clamp grace period (30 frames) in MovementController.cs
+  6. **Phase 2a:** Capsule-radius corner offsets — `capsuleRadius * 3.0f` instead of hardcoded 1.0f
+  7. **Phase 2b:** Speed-scaled acceptance radius — floor of `speed * 0.5 * 1.2` prevents overshoot at full run speed
+  8. **Tier 1 (7 items):** I-Z1 SkippableFact, S2 .gm off removed, F1 early-exit stabilization, I-U1 delay reduction, I-N3 assertion added, I-T1 .unlearn skip, I-QW1 strict assertion
+  9. **Tier 2 (14 files):** Replaced 90+ Task.Delay calls with Stopwatch polling patterns. Fishing WaitForZ, cast 6s→3s; Crafting revive/learn polling; Equipment 4× delay→poll; Economy removed dead .send money; Combat removed 700ms; Death 360s→180s + stuck detection; Consumable 1000ms→300ms polling
+  10. **Tier 3:** Extracted IsStrictAlive into LiveBotFixture as public static. Removed 10 duplicate private copies + 30 orphaned constants across test files.
+  11. **Tier 4:** FG parity WARNING→Assert for TalentAllocation, Crafting, Gathering
+  12. **Physics regression:** 97/97 pass, no regression from any changes
+  13. Total: 3 commits, 20+ files changed, net -62 lines (deduplication)
+- **Previous session:** LiveValidation reliability + teleport counter fix (`2709dbe`). Physics calibration — air mode perfect.
+- **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md` (57 tasks across 6 pathfinding phases + 5 test tiers)
+- **Remaining LiveValidation failures (pre-existing):**
+  - **FishingProfessionTests** — BG fishing catch: SMSG_GAMEOBJECT_CUSTOM_ANIM handler
+  - **CharacterLifecycleTests.Equipment_AddItemToInventory** — FG item polling timing
+- **Remaining plan work:**
+  1. Phase 1b: Ground snap penetration tolerance tightening (PhysicsEngine.cpp)
+  2. Phase 2c: Pass capsule dimensions through pipeline (NavigationPath → callers)
+  3. Phase 3: Navmesh-collision Z alignment (post-path Z correction)
+  4. Phase 4: Enhanced cliff safety (multi-directional probing)
+  5. Phase 5: Character size support (Gnome to Tauren width/height checks)
+  6. Phase 6: Structural improvements (query batching, DotRecast evaluation)
+  7. Part C: Process orphan prevention (fixture dispose guard, stale PID check)
+- **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m`
