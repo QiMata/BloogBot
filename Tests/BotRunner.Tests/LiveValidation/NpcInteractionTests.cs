@@ -109,14 +109,26 @@ public class NpcInteractionTests
 
         await _bot.RefreshSnapshotsAsync();
 
-        // BG bot NPC detection
+        // BG bot NPC detection — must find at least one NPC with non-zero flags
         LogNpcFlags("BG", _bot.BackgroundBot);
+        var bgUnits = _bot.BackgroundBot?.NearbyUnits?.ToList() ?? [];
+        var bgWithFlags = bgUnits.Where(u => u.NpcFlags != (uint)NPCFlags.UNIT_NPC_FLAG_NONE).ToList();
+        Assert.True(bgUnits.Count > 0, "[BG] ObjectManager should detect nearby units at Razor Hill vendor area.");
+        Assert.True(bgWithFlags.Count > 0, "[BG] At least one nearby unit should have non-zero NPC flags at Razor Hill vendor area.");
 
-        // FG bot NPC detection
+        // FG bot NPC detection — parity check
         if (_bot.ForegroundBot != null)
+        {
             LogNpcFlags("FG", _bot.ForegroundBot);
+            var fgUnits = _bot.ForegroundBot?.NearbyUnits?.ToList() ?? [];
+            var fgWithFlags = fgUnits.Where(u => u.NpcFlags != (uint)NPCFlags.UNIT_NPC_FLAG_NONE).ToList();
+            Assert.True(fgUnits.Count > 0, "[FG] ObjectManager should detect nearby units at Razor Hill vendor area.");
+            Assert.True(fgWithFlags.Count > 0, "[FG] At least one nearby unit should have non-zero NPC flags at Razor Hill vendor area.");
+        }
         else
+        {
             _output.WriteLine("FG Bot: NOT AVAILABLE");
+        }
     }
 
     private async Task RunNpcInteraction(string npcType, float x, float y, float z, uint npcFlag, bool requireNpcInteraction)

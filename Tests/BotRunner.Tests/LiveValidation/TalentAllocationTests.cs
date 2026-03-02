@@ -71,7 +71,10 @@ public class TalentAllocationTests
     {
         await EnsureStrictAliveAsync(account, label);
         await EnsureLevelAtLeastAsync(account, label, MinTalentLevel);
-        _ = await TryEnsureSpellAbsentAsync(account, label, Deflection1);
+        var spellCleared = await TryEnsureSpellAbsentAsync(account, label, Deflection1);
+        Assert.True(spellCleared,
+            $"[{label}] .unlearn {Deflection1} failed — spell still known. " +
+            "Cannot validate .learn if the spell is already present (test would trivially pass).");
 
         _output.WriteLine($"  [{label}] Learning spell {Deflection1}");
         var learnTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".learn {Deflection1}", captureResponse: true, delayMs: 1000);

@@ -86,9 +86,22 @@ public class QuestInteractionTests
                 TimeSpan.FromSeconds(12));
             var completionReportedInChat = completeTrace.ChatMessages.Concat(completeTrace.ErrorMessages)
                 .Any(m => m.Contains("completed", StringComparison.OrdinalIgnoreCase));
-            Assert.True(
-                completedOrChanged || completionReportedInChat,
-                $"[{label}] Quest {TestQuestId} completion should be reflected by quest-log change/removal or explicit completed chat response.");
+
+            if (!completedOrChanged && completionReportedInChat)
+            {
+                // Known weakness WSM-PAR-001: Quest completion was confirmed via chat but NOT
+                // reflected in the ActivitySnapshot quest log. This means the snapshot pipeline
+                // does not yet surface quest-completion state changes reliably. Log as warning
+                // rather than failing, but this SHOULD be fixed so snapshot is the source of truth.
+                _output.WriteLine($"  [{label}] WARNING (WSM-PAR-001): Quest {TestQuestId} completion confirmed via chat " +
+                    "but NOT reflected in snapshot. Snapshot pipeline needs quest-completion wiring.");
+            }
+            else
+            {
+                Assert.True(completedOrChanged,
+                    $"[{label}] Quest {TestQuestId} completion must be reflected by quest-log change/removal in the ActivitySnapshot. " +
+                    "Chat fallback alone is not sufficient (see WSM-PAR-001).");
+            }
 
             _output.WriteLine($"  [{label}] Step 3: Remove quest {TestQuestId}");
             var removeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: true, delayMs: 1000);
