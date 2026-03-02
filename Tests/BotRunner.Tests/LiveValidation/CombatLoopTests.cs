@@ -107,6 +107,18 @@ public class CombatLoopTests
             _output.WriteLine($"  [{label}] No mob found in first scan; issuing .respawn and retrying once.");
             var respawnTrace = await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: true, delayMs: 1000);
             AssertCommandSucceeded(respawnTrace, label, ".respawn");
+
+            // Verify .respawn actually populated the area with nearby units before proceeding.
+            var respawnVerified = await WaitForNearbyUnitsAsync(account, TimeSpan.FromSeconds(6));
+            if (!respawnVerified)
+            {
+                _output.WriteLine($"  [{label}] Warning: .respawn did not produce any nearby units within 6s.");
+            }
+            else
+            {
+                _output.WriteLine($"  [{label}] .respawn verified — nearby units detected.");
+            }
+
             targetGuid = await FindLivingMobGuidAsync(account, selfGuid, TimeSpan.FromSeconds(12), claimedTargets);
         }
 
@@ -358,6 +370,26 @@ public class CombatLoopTests
             if (pos != null && Distance2D(pos.X, pos.Y, x, y) <= radius)
                 return true;
             await Task.Delay(350);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Wait for any nearby units to appear in the snapshot after .respawn.
+    /// Returns true if at least one living unit (non-self) is detected.
+    /// </summary>
+    private async Task<bool> WaitForNearbyUnitsAsync(string account, TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var snap = await _bot.GetSnapshotAsync(account);
+            var unitCount = snap?.NearbyUnits?.Count(u => u.Health > 0) ?? 0;
+            if (unitCount > 0)
+                return true;
+            await Task.Delay(500);
         }
 
         return false;

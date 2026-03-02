@@ -121,35 +121,44 @@ public class GatheringProfessionTests
         Assert.NotNull(bgAccount);
         _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
 
-        // Park the OTHER bot in Orgrimmar so CombatCoordinator doesn't send GOTOs
-        // that overwrite the GatherNode behavior tree during the mining channel.
-        var fgParkAccount = _bot.FgAccountName;
-        if (fgParkAccount != null)
+        try
         {
-            _output.WriteLine("[FG-park] Parking FG bot in Orgrimmar for BG test");
-            await _bot.BotTeleportAsync(fgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
+            // Park the OTHER bot in Orgrimmar so CombatCoordinator doesn't send GOTOs
+            // that overwrite the GatherNode behavior tree during the mining channel.
+            var fgParkAccount = _bot.FgAccountName;
+            if (fgParkAccount != null)
+            {
+                _output.WriteLine("[FG-park] Parking FG bot in Orgrimmar for BG test");
+                await _bot.BotTeleportAsync(fgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
+            }
+
+            await PrepareMining(bgAccount, "BG");
+
+            await _bot.RefreshSnapshotsAsync();
+            uint bgSkillBefore = GetSkill("BG", GatheringData.MINING_SKILL_ID);
+            _output.WriteLine($"BG initial mining skill: {bgSkillBefore}");
+            global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG mining skill already capped ({bgSkillBefore}); cannot assert further increase.");
+
+            bool bgGathered = await TryGatherAtSpawns(bgAccount, "BG", spawns,
+                CopperVeinEntry, GatheringData.MINING_SKILL_ID, "Copper Vein",
+                initialSkill: bgSkillBefore,
+                gatherSpellId: MiningGatherSpell, parkAccount: _bot.FgAccountName);
+
+            await _bot.RefreshSnapshotsAsync();
+            uint bgSkillAfter = GetSkill("BG", GatheringData.MINING_SKILL_ID);
+            _output.WriteLine($"BG Results: gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
+
+            Assert.True(bgGathered,
+                $"BG: Failed to gather Copper Vein at any of {spawns.Count} locations. skill={bgSkillAfter}.");
+            Assert.True(bgSkillAfter > bgSkillBefore,
+                $"BG: Mining skill did not increase ({bgSkillBefore} → {bgSkillAfter}).");
         }
-
-        await PrepareMining(bgAccount, "BG");
-
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillBefore = GetSkill("BG", GatheringData.MINING_SKILL_ID);
-        _output.WriteLine($"BG initial mining skill: {bgSkillBefore}");
-        global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG mining skill already capped ({bgSkillBefore}); cannot assert further increase.");
-
-        bool bgGathered = await TryGatherAtSpawns(bgAccount, "BG", spawns,
-            CopperVeinEntry, GatheringData.MINING_SKILL_ID, "Copper Vein",
-            initialSkill: bgSkillBefore,
-            gatherSpellId: MiningGatherSpell, parkAccount: _bot.FgAccountName);
-
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillAfter = GetSkill("BG", GatheringData.MINING_SKILL_ID);
-        _output.WriteLine($"BG Results: gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
-
-        Assert.True(bgGathered,
-            $"BG: Failed to gather Copper Vein at any of {spawns.Count} locations. skill={bgSkillAfter}.");
-        Assert.True(bgSkillAfter > bgSkillBefore,
-            $"BG: Mining skill did not increase ({bgSkillBefore} → {bgSkillAfter}).");
+        finally
+        {
+            // Return bot to safe zone on failure to avoid leaving it stranded
+            // at a remote mining node location, which can corrupt subsequent tests.
+            await ReturnToSafeZoneAsync(bgAccount, "BG");
+        }
     }
 
     // =====================================================================
@@ -175,38 +184,47 @@ public class GatheringProfessionTests
             "No Peacebloom/Silverleaf/Earthroot spawns found in gameobject table (Kalimdor).");
         _output.WriteLine($"Found {allSpawns.Count} herb spawn locations");
 
-        // --- Prepare: learn Herbalism + set skill ---
-        await PrepareHerbalism(bgAccount, "BG");
-
-        // --- Record initial skill ---
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillBefore = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
-        _output.WriteLine($"Initial herbalism skill: BG={bgSkillBefore}");
-        global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG herbalism skill already capped ({bgSkillBefore}); cannot assert further increase.");
-
-        // --- Try each spawn location ---
-        var herbEntries = allSpawns.Select(s => s.entry).Distinct().ToArray();
-
-        bool bgGathered = false;
-        foreach (var entry in herbEntries)
+        try
         {
-            var entrySpawns = allSpawns.Where(s => s.entry == entry).Select(s => (s.map, s.x, s.y, s.z)).ToList();
-            bgGathered = await TryGatherAtSpawns(bgAccount, "BG", entrySpawns,
-                entry, GatheringData.HERBALISM_SKILL_ID, $"herb (entry {entry})",
-                initialSkill: bgSkillBefore,
-                gatherSpellId: HerbalismGatherSpell);
-            if (bgGathered) break;
+            // --- Prepare: learn Herbalism + set skill ---
+            await PrepareHerbalism(bgAccount, "BG");
+
+            // --- Record initial skill ---
+            await _bot.RefreshSnapshotsAsync();
+            uint bgSkillBefore = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
+            _output.WriteLine($"Initial herbalism skill: BG={bgSkillBefore}");
+            global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG herbalism skill already capped ({bgSkillBefore}); cannot assert further increase.");
+
+            // --- Try each spawn location ---
+            var herbEntries = allSpawns.Select(s => s.entry).Distinct().ToArray();
+
+            bool bgGathered = false;
+            foreach (var entry in herbEntries)
+            {
+                var entrySpawns = allSpawns.Where(s => s.entry == entry).Select(s => (s.map, s.x, s.y, s.z)).ToList();
+                bgGathered = await TryGatherAtSpawns(bgAccount, "BG", entrySpawns,
+                    entry, GatheringData.HERBALISM_SKILL_ID, $"herb (entry {entry})",
+                    initialSkill: bgSkillBefore,
+                    gatherSpellId: HerbalismGatherSpell);
+                if (bgGathered) break;
+            }
+
+            // --- Assert ---
+            await _bot.RefreshSnapshotsAsync();
+            uint bgSkillAfter = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
+            _output.WriteLine($"Results: BG gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
+
+            Assert.True(bgGathered,
+                $"BG: Failed to gather herb at any of {allSpawns.Count} locations. skill={bgSkillAfter}.");
+            Assert.True(bgSkillAfter > bgSkillBefore,
+                $"BG: Herbalism skill did not increase ({bgSkillBefore} → {bgSkillAfter}).");
         }
-
-        // --- Assert ---
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillAfter = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
-        _output.WriteLine($"Results: BG gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
-
-        Assert.True(bgGathered,
-            $"BG: Failed to gather herb at any of {allSpawns.Count} locations. skill={bgSkillAfter}.");
-        Assert.True(bgSkillAfter > bgSkillBefore,
-            $"BG: Herbalism skill did not increase ({bgSkillBefore} → {bgSkillAfter}).");
+        finally
+        {
+            // Return bot to safe zone on failure to avoid leaving it stranded
+            // at a remote herb node location, which can corrupt subsequent tests.
+            await ReturnToSafeZoneAsync(bgAccount, "BG");
+        }
     }
 
     // =====================================================================
@@ -483,6 +501,33 @@ public class GatheringProfessionTests
     {
         var bags = GetSnapshot(label)?.Player?.BagContents;
         return bags != null && bags.Values.Any(v => v == itemId);
+    }
+
+    /// <summary>
+    /// Best-effort return to safe zone (Orgrimmar) after test completion or failure.
+    /// Prevents leaving the bot stranded at a remote gathering location.
+    /// </summary>
+    private async Task ReturnToSafeZoneAsync(string account, string label)
+    {
+        try
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var snap = GetSnapshot(label);
+            var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+            if (pos != null)
+            {
+                var distToOrg = Distance(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
+                if (distToOrg > 80f)
+                {
+                    _output.WriteLine($"[{label}] Cleanup: returning to Orgrimmar (dist={distToOrg:F0}y)");
+                    await _bot.BotTeleportAsync(account, OrgrimmarMap, OrgX, OrgY, OrgZ);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[{label}] Cleanup warning: safe zone return failed — {ex.Message}");
+        }
     }
 
     private static float Distance(float x1, float y1, float z1, float x2, float y2, float z2)

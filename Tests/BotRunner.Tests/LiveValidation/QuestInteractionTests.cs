@@ -62,38 +62,60 @@ public class QuestInteractionTests
         await EnsureStrictAliveAsync(account, label);
         await EnsureQuestAbsentAsync(account, label, TestQuestId);
 
-        _output.WriteLine($"  [{label}] Step 1: Add quest {TestQuestId}");
-        var addTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest add {TestQuestId}", captureResponse: true, delayMs: 1000);
-        AssertCommandSucceeded(addTrace, label, ".quest add");
+        try
+        {
+            _output.WriteLine($"  [{label}] Step 1: Add quest {TestQuestId}");
+            var addTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest add {TestQuestId}", captureResponse: true, delayMs: 1000);
+            AssertCommandSucceeded(addTrace, label, ".quest add");
 
-        var added = await WaitForQuestPresenceAsync(account, TestQuestId, shouldExist: true, TimeSpan.FromSeconds(12));
-        Assert.True(added, $"[{label}] Quest {TestQuestId} should appear in ActivitySnapshot quest log after add.");
-        await _bot.RefreshSnapshotsAsync();
-        var addedSnap = await _bot.GetSnapshotAsync(account);
-        var addedQuest = addedSnap?.Player?.QuestLogEntries?.FirstOrDefault(q => q.QuestLog1 == (uint)TestQuestId);
+            var added = await WaitForQuestPresenceAsync(account, TestQuestId, shouldExist: true, TimeSpan.FromSeconds(12));
+            Assert.True(added, $"[{label}] Quest {TestQuestId} should appear in ActivitySnapshot quest log after add.");
+            await _bot.RefreshSnapshotsAsync();
+            var addedSnap = await _bot.GetSnapshotAsync(account);
+            var addedQuest = addedSnap?.Player?.QuestLogEntries?.FirstOrDefault(q => q.QuestLog1 == (uint)TestQuestId);
 
-        _output.WriteLine($"  [{label}] Step 2: Complete quest {TestQuestId}");
-        var completeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest complete {TestQuestId}", captureResponse: true, delayMs: 1000);
-        AssertCommandSucceeded(completeTrace, label, ".quest complete");
+            _output.WriteLine($"  [{label}] Step 2: Complete quest {TestQuestId}");
+            var completeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest complete {TestQuestId}", captureResponse: true, delayMs: 1000);
+            AssertCommandSucceeded(completeTrace, label, ".quest complete");
 
-        var completedOrChanged = await WaitForQuestCompletedChangedOrRemovedAsync(
-            account,
-            TestQuestId,
-            addedQuest?.QuestLog2 ?? 0,
-            addedQuest?.QuestLog3 ?? 0,
-            TimeSpan.FromSeconds(12));
-        var completionReportedInChat = completeTrace.ChatMessages.Concat(completeTrace.ErrorMessages)
-            .Any(m => m.Contains("completed", StringComparison.OrdinalIgnoreCase));
-        Assert.True(
-            completedOrChanged || completionReportedInChat,
-            $"[{label}] Quest {TestQuestId} completion should be reflected by quest-log change/removal or explicit completed chat response.");
+            var completedOrChanged = await WaitForQuestCompletedChangedOrRemovedAsync(
+                account,
+                TestQuestId,
+                addedQuest?.QuestLog2 ?? 0,
+                addedQuest?.QuestLog3 ?? 0,
+                TimeSpan.FromSeconds(12));
+            var completionReportedInChat = completeTrace.ChatMessages.Concat(completeTrace.ErrorMessages)
+                .Any(m => m.Contains("completed", StringComparison.OrdinalIgnoreCase));
+            Assert.True(
+                completedOrChanged || completionReportedInChat,
+                $"[{label}] Quest {TestQuestId} completion should be reflected by quest-log change/removal or explicit completed chat response.");
 
-        _output.WriteLine($"  [{label}] Step 3: Remove quest {TestQuestId}");
-        var removeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: true, delayMs: 1000);
-        AssertCommandSucceeded(removeTrace, label, ".quest remove");
+            _output.WriteLine($"  [{label}] Step 3: Remove quest {TestQuestId}");
+            var removeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: true, delayMs: 1000);
+            AssertCommandSucceeded(removeTrace, label, ".quest remove");
 
-        var removed = await WaitForQuestPresenceAsync(account, TestQuestId, shouldExist: false, TimeSpan.FromSeconds(12));
-        Assert.True(removed, $"[{label}] Quest {TestQuestId} should be absent from ActivitySnapshot quest log after remove.");
+            var removed = await WaitForQuestPresenceAsync(account, TestQuestId, shouldExist: false, TimeSpan.FromSeconds(12));
+            Assert.True(removed, $"[{label}] Quest {TestQuestId} should be absent from ActivitySnapshot quest log after remove.");
+        }
+        finally
+        {
+            // Ensure quest is cleaned up even if assertions fail mid-scenario.
+            // This prevents stale quest state from contaminating subsequent test runs.
+            try
+            {
+                await _bot.RefreshSnapshotsAsync();
+                var snap = await _bot.GetSnapshotAsync(account);
+                if (HasQuest(snap, TestQuestId))
+                {
+                    _output.WriteLine($"  [{label}] Cleanup: removing quest {TestQuestId} left over from failed scenario.");
+                    await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: false, delayMs: 500);
+                }
+            }
+            catch (Exception ex)
+            {
+                _output.WriteLine($"  [{label}] Cleanup warning: quest removal failed — {ex.Message}");
+            }
+        }
     }
 
     private async Task EnsureStrictAliveAsync(string account, string label)

@@ -144,10 +144,15 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 - **Remaining LiveValidation failures (pre-existing):**
   - **FishingProfessionTests** — BG fishing catch: SMSG_GAMEOBJECT_CUSTOM_ANIM handler
   - **CharacterLifecycleTests.Equipment_AddItemToInventory** — FG item polling timing
+- **Completed this session (2026-03-01, Tier 5 state management):**
+  1. **I-QI1:** Quest cleanup on failure — try/finally in `RunQuestScenario` removes quest via `.quest remove` if left over from failed scenario
+  2. **I-ST3:** Gathering position cleanup — try/finally in both mining and herbalism tests with `ReturnToSafeZoneAsync` to return bot to Orgrimmar on failure (no `.gobject add` cleanup needed; tests use natural spawns only)
+  3. **I-ST4:** Combat `.respawn` verification — `WaitForNearbyUnitsAsync` confirms mobs appeared after `.respawn` before proceeding
+  4. **I-CB2:** False positive — `claimedTargets` IS actively used (checked in `FindLivingMobGuidAsync` filter, populated via `TryAdd`). No change needed.
+  5. Build verified: 0 errors, 320 warnings (all pre-existing)
 - **Remaining plan work:**
   1. Phase 4b: Path rerouting around cliff edges (uses Phase 4a CliffProbeResult)
   2. Phase 6a: PathfindingService query batching (BatchGroundZRequest in protobuf)
   3. Phase 6b: DotRecast evaluation (separate branch)
   4. Remaining BotProfile ranged class distance updates (hunters, casters — use CombatDistance.GetSpellRange)
-  5. Remaining Tier 5 test state management items (quest cleanup, gather cleanup)
 - **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m`
