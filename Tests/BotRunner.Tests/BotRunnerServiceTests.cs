@@ -270,6 +270,9 @@ namespace BotRunner.Tests
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
 
         public override bool IsInLineOfSight(uint mapId, Position from, Position to) => true;
+
+        public override (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
+            => (0f, false);
     }
 
     internal sealed class TestPathfindingClient(Position[] path) : PathfindingClient

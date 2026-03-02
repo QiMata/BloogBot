@@ -695,7 +695,7 @@ public class RetrieveCorpseTaskTests
 
         task.Update();
 
-        om.Verify(o => o.StopAllMovement(), Times.Once);
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
         om.Verify(o => o.RetrieveCorpse(), Times.Once);
         Assert.Single(stack);
     }
@@ -717,7 +717,7 @@ public class RetrieveCorpseTaskTests
 
         task.Update();
 
-        om.Verify(o => o.StopAllMovement(), Times.Once);
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
         Assert.Empty(stack);
     }
@@ -854,8 +854,12 @@ public class RetrieveCorpseTaskTests
     }
 
     [Fact]
-    public void Update_FarFromCorpse_WithServicePathBlockedByLineOfSight_DoesNotDriveInvalidRoute()
+    public void Update_FarFromCorpse_WithServicePathBlockedByLineOfSight_DrivesFirstCornerInNonStrictMode()
     {
+        // Corpse run NavigationPath uses strictPathValidation: false and
+        // enableProbeHeuristics: false, so LOS blocks between corners do NOT
+        // prevent the bot from driving the navmesh path. The bot trusts the
+        // navmesh and drives the first corner waypoint.
         var corpsePos = new Position(100, 100, 0);
         var firstCorner = new Position(20f, 0f, 0f);
         var blockedCorner = new Position(20f, 30f, 0f);
@@ -892,8 +896,10 @@ public class RetrieveCorpseTaskTests
 
         Assert.Single(stack);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
-        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
-        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
+            MathF.Abs(p.X - firstCorner.X) < 0.01f &&
+            MathF.Abs(p.Y - firstCorner.Y) < 0.01f &&
+            MathF.Abs(p.Z - firstCorner.Z) < 0.01f)), Times.Once);
         om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
     }
 
@@ -1066,7 +1072,7 @@ public class RetrieveCorpseTaskTests
         task.Update();
 
         Assert.Single(stack);
-        om.Verify(o => o.StopAllMovement(), Times.Once);
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
         om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
         om.Verify(o => o.RetrieveCorpse(), Times.Never);
     }
