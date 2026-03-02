@@ -121,11 +121,15 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 
 ## Session Handoff
 - **Last updated:** 2026-03-01
-- **Current work:** Physics calibration — air mode now perfect (0.000y across 2275 frames). 97/97 physics tests pass.
-- **Last delta:** Trust velocity for JumpStart frames (air avg 0.009→0.000y, p99 0.360→0.000y, worst 0.876→0.000y). Engine was overriding trusted Vz with JUMP_VELOCITY (7.96 y/s) on first airborne frame, but the WoW client applies jump impulse mid-tick producing apparent Vz >> JUMP_VELOCITY (~62 y/s). Fix: skip JUMP_VELOCITY override when TRUST_INPUT_VELOCITY is set.
+- **Current work:** LiveValidation reliability improvements. Commit `77df281` pushed.
 - **Completed this session:**
-  1. **Physics calibration — Trust velocity for JumpStart** — Air mode worst 0.876y→0.000y. Root cause: the engine's JUMP_VELOCITY override (`st.vz = 7.96`) clobbered the trusted Vz from the recording (~62 y/s). The WoW client applies jump impulse mid-tick, so the first-frame Z delta is ~1.0y, not the 0.125y that JUMP_VELOCITY×dt gives. Fix: gate `st.vz = JUMP_VELOCITY` on `!trustInputVel` so replay calibration uses the recording's exact velocity.
-  2. **Previous session items** — JumpStart lookahead, SurfaceStep ground Z lookahead, FallTime fix, PhysicsCollideSlide corner trap, FG corpse-run stall recovery.
+  1. GM mode stays ON for fishing and gathering tests (removed `.gm off` from FishingProfessionTests, GatheringProfessionTests)
+  2. Reduced Z-stabilization waits from 6s→3s in BasicLoopTests (4 occurrences)
+  3. Wired up `OffsetCornerWaypoints()` in NavigationPath.cs (existed but was never called)
+  4. Added `SemaphoreSlim _refreshLock` to `RefreshSnapshotsAsync()` — prevents race conditions when parallel corpse-run tasks both call it
+  5. Added decorative doodad exclusion filter in SceneCache.cpp (`ShouldExcludeDoodad()`) — skips catapult, banner, torch, brazier, etc. from collision geometry
+  6. Tracked `LV-TPCOUNT-001` — BG client sends teleport ACK counter=0, server expects incrementing sequence. Root cause: `MovementHandler.cs:80` passes 0 for MSG_MOVE_TELEPORT (no counter in packet). Fix: add local `_teleportSequence` counter in WoWSharpObjectManager, increment on each teleport.
+- **Previous session:** Physics calibration — air mode perfect (0.000y). Trust velocity fix for JumpStart frames.
 - **Physics calibration state (97/97 pass, 1 skip):**
   - ground: n=18881, avg=0.013y, p99=0.170y, worst=0.520y
   - **air: n=2275, avg=0.000y, p99=0.000y, worst=0.000y** ← PERFECT
