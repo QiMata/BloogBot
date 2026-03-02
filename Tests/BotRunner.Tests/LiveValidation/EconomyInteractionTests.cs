@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -177,7 +178,8 @@ public class EconomyInteractionTests
     {
         WoWActivitySnapshot? snap = null;
         var objects = Enumerable.Empty<Game.WoWGameObject>().ToList();
-        for (var attempt = 1; attempt <= 8; attempt++)
+        var discoverSw = Stopwatch.StartNew();
+        while (discoverSw.Elapsed < TimeSpan.FromSeconds(5))
         {
             await _bot.RefreshSnapshotsAsync();
             snap = getSnap();
@@ -185,7 +187,7 @@ public class EconomyInteractionTests
             if (objects.Count > 0)
                 break;
 
-            await Task.Delay(1000);
+            await Task.Delay(200);
         }
 
         if (objects.Count == 0)
@@ -238,9 +240,19 @@ public class EconomyInteractionTests
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before economy setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(1200);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
+            // Poll for alive state instead of fixed 1200ms delay.
+            var reviveSw = Stopwatch.StartNew();
+            while (reviveSw.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                await Task.Delay(200);
+                await _bot.RefreshSnapshotsAsync();
+                snap = await _bot.GetSnapshotAsync(account) ?? snap;
+                if (LiveBotFixture.IsStrictAlive(snap))
+                {
+                    _output.WriteLine($"  [{label}] Revive confirmed after {reviveSw.ElapsedMilliseconds}ms");
+                    break;
+                }
+            }
         }
 
         var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
@@ -253,7 +265,20 @@ public class EconomyInteractionTests
 
         _output.WriteLine($"  [{label}] Teleporting to setup location (dist={dist:F1}y).");
         await _bot.BotTeleportAsync(account, mapId, x, y, z);
-        await Task.Delay(1500);
+        // Poll for position to arrive near target instead of fixed 1500ms delay.
+        var teleSw = Stopwatch.StartNew();
+        while (teleSw.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            await Task.Delay(200);
+            await _bot.RefreshSnapshotsAsync();
+            var teleSnap = await _bot.GetSnapshotAsync(account);
+            var telePos = teleSnap?.Player?.Unit?.GameObject?.Base?.Position;
+            if (telePos != null && DistanceTo(telePos.X, telePos.Y, telePos.Z, x, y, z) <= SetupArrivalDistance)
+            {
+                _output.WriteLine($"  [{label}] Teleport confirmed after {teleSw.ElapsedMilliseconds}ms");
+                break;
+            }
+        }
     }
 
     private async Task EnsureBagHasItemAsync(string account, string label, uint itemId, int addCount)
@@ -269,7 +294,19 @@ public class EconomyInteractionTests
 
         _output.WriteLine($"  [{label}] Adding item {itemId} x{addCount}.");
         await _bot.BotAddItemAsync(account, itemId, addCount);
-        await Task.Delay(1000);
+        // Poll for item to appear in bags instead of fixed 1000ms delay.
+        var addSw = Stopwatch.StartNew();
+        while (addSw.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            await Task.Delay(200);
+            await _bot.RefreshSnapshotsAsync();
+            var addSnap = await _bot.GetSnapshotAsync(account);
+            if (addSnap?.Player?.BagContents?.Values.Any(v => v == itemId) == true)
+            {
+                _output.WriteLine($"  [{label}] Item {itemId} confirmed in bags after {addSw.ElapsedMilliseconds}ms");
+                break;
+            }
+        }
     }
 
     private void LogNearbyGameObjects(WoWActivitySnapshot? snap, string label)

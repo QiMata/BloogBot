@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -89,10 +90,10 @@ public class CraftingProfessionTests
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
             // Poll for alive state instead of fixed delay (same ~1200ms budget)
-            var reviveSw = System.Diagnostics.Stopwatch.StartNew();
+            var reviveSw = Stopwatch.StartNew();
             while (reviveSw.ElapsedMilliseconds < 3000)
             {
-                await Task.Delay(500);
+                await Task.Delay(200);
                 await _bot.RefreshSnapshotsAsync();
                 snap = await _bot.GetSnapshotAsync(account) ?? snap;
                 if (LiveBotFixture.IsStrictAlive(snap))
@@ -103,7 +104,22 @@ public class CraftingProfessionTests
         // Step 1: Teleport only when not already near setup location.
         var teleported = await EnsureNearSetupLocationAsync(account, label);
         if (teleported)
-            await Task.Delay(2000);
+        {
+            // Poll for position to update near the setup location instead of fixed 2000ms delay.
+            var teleSw = Stopwatch.StartNew();
+            while (teleSw.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                await Task.Delay(200);
+                await _bot.RefreshSnapshotsAsync();
+                snap = await _bot.GetSnapshotAsync(account) ?? snap;
+                var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+                if (pos != null && DistanceTo(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ) <= SetupArrivalDistance)
+                {
+                    _output.WriteLine($"  [{label}] Teleport confirmed after {teleSw.ElapsedMilliseconds}ms");
+                    break;
+                }
+            }
+        }
 
         await _bot.RefreshSnapshotsAsync();
         snap = await _bot.GetSnapshotAsync(account);
@@ -122,10 +138,10 @@ public class CraftingProfessionTests
                 await _bot.BotLearnSpellAsync(account, LinenBandageRecipe);
             // Poll for SMSG_LEARNED_SPELL to be processed so the bot's
             // internal Spells collection is updated before CastSpell action.
-            var learnSw = System.Diagnostics.Stopwatch.StartNew();
+            var learnSw = Stopwatch.StartNew();
             while (learnSw.ElapsedMilliseconds < 5000)
             {
-                await Task.Delay(500);
+                await Task.Delay(200);
                 await _bot.RefreshSnapshotsAsync();
                 var learnSnap = await _bot.GetSnapshotAsync(account);
                 var learnedFirstAid = learnSnap?.Player?.SpellList?.Contains(FirstAidApprentice) == true;
@@ -158,9 +174,17 @@ public class CraftingProfessionTests
             _output.WriteLine(
                 $"  [{label}] Clearing inventory for deterministic craft verification (bandageSlots={bandageSlotsBefore}, clothSlots={linenClothSlotsBefore}, bagItems={bagItemCount}).");
             await _bot.BotClearInventoryAsync(account, includeExtraBags: false);
-            await Task.Delay(1500);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
+            // Poll for inventory clear instead of fixed 1500ms delay.
+            var clearSw = Stopwatch.StartNew();
+            while (clearSw.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                await Task.Delay(200);
+                await _bot.RefreshSnapshotsAsync();
+                snap = await _bot.GetSnapshotAsync(account) ?? snap;
+                var currentBagCount = snap.Player?.BagContents?.Count ?? bagItemCount;
+                if (currentBagCount < bagItemCount)
+                    break;
+            }
             bagItems = snap.Player?.BagContents?.Values ?? Enumerable.Empty<uint>();
             linenClothSlotsBefore = bagItems.Count(itemId => itemId == LinenCloth);
             bandageSlotsBefore = bagItems.Count(itemId => itemId == LinenBandageItem);
@@ -170,11 +194,18 @@ public class CraftingProfessionTests
         {
             _output.WriteLine($"  [{label}] Adding Linen Cloth for craft input.");
             await _bot.BotAddItemAsync(account, LinenCloth, 1);
-            await Task.Delay(1500);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
-            bagItems = snap.Player?.BagContents?.Values ?? Enumerable.Empty<uint>();
-            linenClothSlotsBefore = bagItems.Count(itemId => itemId == LinenCloth);
+            // Poll for linen cloth to appear in bags instead of fixed 1500ms delay.
+            var addClothSw = Stopwatch.StartNew();
+            while (addClothSw.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                await Task.Delay(200);
+                await _bot.RefreshSnapshotsAsync();
+                snap = await _bot.GetSnapshotAsync(account) ?? snap;
+                bagItems = snap.Player?.BagContents?.Values ?? Enumerable.Empty<uint>();
+                linenClothSlotsBefore = bagItems.Count(itemId => itemId == LinenCloth);
+                if (linenClothSlotsBefore > 0)
+                    break;
+            }
         }
         else
         {
@@ -196,12 +227,26 @@ public class CraftingProfessionTests
         {
             ActionType = ActionType.CastSpell,
             Parameters = { new RequestParameter { IntParam = (int)LinenBandageRecipe } }
-        }, delayMs: 3500);
+        }, delayMs: 500);
 
-        await _bot.RefreshSnapshotsAsync();
-        var after = await _bot.GetSnapshotAsync(account);
-        var bandageSlotsAfter = after?.Player?.BagContents?.Values.Count(itemId => itemId == LinenBandageItem) ?? 0;
-        var crafted = bandageSlotsAfter > bandageSlotsBefore;
+        // Poll for bandage to appear in bags (crafting channel ~3.5s server-side).
+        WoWActivitySnapshot? after = null;
+        int bandageSlotsAfter = 0;
+        bool crafted = false;
+        var craftSw = Stopwatch.StartNew();
+        while (craftSw.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            after = await _bot.GetSnapshotAsync(account);
+            bandageSlotsAfter = after?.Player?.BagContents?.Values.Count(itemId => itemId == LinenBandageItem) ?? 0;
+            crafted = bandageSlotsAfter > bandageSlotsBefore;
+            if (crafted)
+            {
+                _output.WriteLine($"  [{label}] Bandage detected after {craftSw.ElapsedMilliseconds}ms");
+                break;
+            }
+            await Task.Delay(200);
+        }
         if (!crafted)
         {
             _output.WriteLine($"  [{label}] CastSpell path did not produce bandage; retrying via .cast {LinenBandageRecipe}.");
@@ -231,14 +276,14 @@ public class CraftingProfessionTests
                 delayMs: 4000);
 
             // Poll for bandage to appear (server may need a tick to create the item)
-            for (int poll = 0; poll < 3 && !crafted; poll++)
+            var triggeredSw = Stopwatch.StartNew();
+            while (triggeredSw.Elapsed < TimeSpan.FromSeconds(5) && !crafted)
             {
+                await Task.Delay(200);
                 await _bot.RefreshSnapshotsAsync();
                 after = await _bot.GetSnapshotAsync(account);
                 bandageSlotsAfter = after?.Player?.BagContents?.Values.Count(itemId => itemId == LinenBandageItem) ?? 0;
                 crafted = bandageSlotsAfter > bandageSlotsBefore;
-                if (!crafted)
-                    await Task.Delay(1000);
             }
         }
 

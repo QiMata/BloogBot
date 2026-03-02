@@ -118,31 +118,8 @@ public class QuestInteractionTests
         }
     }
 
-    private async Task EnsureStrictAliveAsync(string account, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (LiveBotFixture.IsStrictAlive(snap))
-            return;
-
-        var characterName = snap?.CharacterName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(characterName), $"{label}: missing character name for revive setup.");
-
-        _output.WriteLine($"  [{label}] Not strict-alive; reviving before quest setup.");
-        await _bot.RevivePlayerAsync(characterName!);
-
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(15))
-        {
-            await Task.Delay(1000);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account);
-            if (LiveBotFixture.IsStrictAlive(snap))
-                return;
-        }
-
-        global::Tests.Infrastructure.Skip.If(true, $"{label}: could not establish strict-alive setup state.");
-    }
+    private Task EnsureStrictAliveAsync(string account, string label)
+        => _bot.EnsureStrictAliveAsync(account, label);
 
     private async Task EnsureQuestAbsentAsync(string account, string label, int questId)
     {

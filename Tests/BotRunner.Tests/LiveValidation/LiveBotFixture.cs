@@ -841,6 +841,65 @@ public class LiveBotFixture : IAsyncLifetime
         return unit.Health > 0 && !hasGhostFlag && standState != standStateDead;
     }
 
+    /// <summary>
+    /// Generic snapshot polling helper. Refreshes snapshots in a loop until the predicate
+    /// returns true or the timeout expires. Replaces ad-hoc Stopwatch + while + RefreshSnapshots
+    /// polling loops scattered across test files.
+    /// </summary>
+    /// <param name="accountName">Account to poll snapshots for.</param>
+    /// <param name="predicate">Condition to check on each snapshot. Null snapshots are treated as non-matching.</param>
+    /// <param name="timeout">Maximum time to wait before returning false.</param>
+    /// <param name="pollIntervalMs">Milliseconds between polls (default 400ms).</param>
+    /// <returns>True if the predicate was satisfied within the timeout, false otherwise.</returns>
+    public async Task<bool> WaitForSnapshotConditionAsync(
+        string accountName,
+        Func<WoWActivitySnapshot, bool> predicate,
+        TimeSpan timeout,
+        int pollIntervalMs = 400)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            await RefreshSnapshotsAsync();
+            var snap = await GetSnapshotAsync(accountName);
+            if (snap != null && predicate(snap))
+                return true;
+            await Task.Delay(pollIntervalMs);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Ensure a bot is strict-alive before test setup. If dead or ghost, issues a SOAP revive
+    /// and polls snapshots until the alive state is confirmed. Skips the test if alive state
+    /// cannot be established (infrastructure issue, not a test failure).
+    /// </summary>
+    /// <param name="account">Account name of the bot to check.</param>
+    /// <param name="label">Human-readable label for log messages (e.g. "BG", "FG").</param>
+    /// <param name="timeoutSeconds">Seconds to wait for strict-alive after revive (default 15).</param>
+    public async Task EnsureStrictAliveAsync(string account, string label, int timeoutSeconds = 15)
+    {
+        await RefreshSnapshotsAsync();
+        var snap = await GetSnapshotAsync(account);
+        if (IsStrictAlive(snap))
+            return;
+
+        var characterName = snap?.CharacterName;
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(characterName),
+            $"{label}: missing character name for revive setup.");
+
+        _logger.LogInformation("[{Label}] Not strict-alive at setup; reviving.", label);
+        await RevivePlayerAsync(characterName!);
+
+        var restored = await WaitForSnapshotConditionAsync(
+            account,
+            IsStrictAlive,
+            TimeSpan.FromSeconds(timeoutSeconds));
+
+        global::Tests.Infrastructure.Skip.If(!restored,
+            $"{label}: failed to restore strict-alive setup state.");
+    }
+
     // ---- GM Command Helpers (via SOAP — independent of bots) ----
 
     /// <summary>Execute any GM command via SOAP.</summary>

@@ -258,7 +258,7 @@ public class CharacterLifecycleTests
 
         // FG descriptor memory may lag behind server state after SOAP revive;
         // allow up to 20s for the WoW client to process the update packet.
-        var aliveAgain = await WaitForStrictAliveAsync(account, TimeSpan.FromSeconds(20));
+        var aliveAgain = await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(20));
         if (!aliveAgain)
         {
             var debugSnap = await _bot.GetSnapshotAsync(account);
@@ -272,38 +272,8 @@ public class CharacterLifecycleTests
         return health > 0 && LiveBotFixture.IsStrictAlive(afterRevive);
     }
 
-    private async Task EnsureStrictAliveAsync(string account, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (LiveBotFixture.IsStrictAlive(snap))
-            return;
-
-        var characterName = snap?.CharacterName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(characterName), $"{label}: missing character name for revive setup.");
-
-        _output.WriteLine($"  [{label}] Not strict-alive at setup. Reviving before scenario.");
-        await _bot.RevivePlayerAsync(characterName!);
-
-        var restored = await WaitForStrictAliveAsync(account, TimeSpan.FromSeconds(15));
-        global::Tests.Infrastructure.Skip.If(!restored, $"{label}: could not establish strict-alive state for setup.");
-    }
-
-    private async Task<bool> WaitForStrictAliveAsync(string account, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            if (LiveBotFixture.IsStrictAlive(snap))
-                return true;
-
-            await Task.Delay(500);
-        }
-
-        return false;
-    }
+    private Task EnsureStrictAliveAsync(string account, string label)
+        => _bot.EnsureStrictAliveAsync(account, label);
 
     private async Task<bool> WaitForDeadOrGhostStateAsync(string account, TimeSpan timeout)
     {

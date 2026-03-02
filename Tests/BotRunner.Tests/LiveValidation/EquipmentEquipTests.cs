@@ -87,7 +87,7 @@ public class EquipmentEquipTests
             var reviveSw = Stopwatch.StartNew();
             while (reviveSw.Elapsed < TimeSpan.FromSeconds(10))
             {
-                await Task.Delay(500);
+                await Task.Delay(200);
                 await _bot.RefreshSnapshotsAsync();
                 snap = await _bot.GetSnapshotAsync(account) ?? snap;
                 if (LiveBotFixture.IsStrictAlive(snap))
@@ -115,7 +115,7 @@ public class EquipmentEquipTests
             var learnSw = Stopwatch.StartNew();
             while (learnSw.Elapsed < TimeSpan.FromSeconds(5))
             {
-                await Task.Delay(500);
+                await Task.Delay(200);
                 await _bot.RefreshSnapshotsAsync();
                 snap = await _bot.GetSnapshotAsync(account) ?? snap;
                 if (snap.Player?.SpellList.Contains(OneHandMaceSpell) == true)
@@ -138,7 +138,7 @@ public class EquipmentEquipTests
                 var clearSw = Stopwatch.StartNew();
                 while (clearSw.Elapsed < TimeSpan.FromSeconds(5))
                 {
-                    await Task.Delay(500);
+                    await Task.Delay(200);
                     await _bot.RefreshSnapshotsAsync();
                     var clearSnap = await _bot.GetSnapshotAsync(account);
                     if (clearSnap?.Player?.BagContents.Count < bagItemCount)
@@ -151,7 +151,7 @@ public class EquipmentEquipTests
             var addItemSw = Stopwatch.StartNew();
             while (addItemSw.Elapsed < TimeSpan.FromSeconds(5))
             {
-                await Task.Delay(500);
+                await Task.Delay(200);
                 await _bot.RefreshSnapshotsAsync();
                 snap = await _bot.GetSnapshotAsync(account) ?? snap;
                 if (snap.Player != null && CountBagItem(snap.Player, WornMace) > 0)
@@ -173,17 +173,36 @@ public class EquipmentEquipTests
         // GM mode stays ON — equip actions work with GM mode enabled.
         // Previous .gm off here corrupted GM state for downstream tests and risked BG disconnect.
 
-        // Equip and verify transition.
+        // Equip and verify transition — poll for mainhand slot change instead of fixed delay.
         _output.WriteLine($"  [{label}] Equipping Worn Mace.");
         await _bot.SendActionAndWaitAsync(account, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
             Parameters = { new RequestParameter { IntParam = (int)WornMace } }
-        }, delayMs: 2500);
+        }, delayMs: 500);
 
-        await _bot.RefreshSnapshotsAsync();
-        var after = await _bot.GetSnapshotAsync(account);
-        var playerAfter = after?.Player;
+        WoWActivitySnapshot? after = null;
+        Game.WoWPlayer? playerAfter = null;
+        var equipSw = Stopwatch.StartNew();
+        while (equipSw.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            after = await _bot.GetSnapshotAsync(account);
+            playerAfter = after?.Player;
+            if (playerAfter != null)
+            {
+                bool slotFilled = playerAfter.Inventory.TryGetValue(MainhandSlot, out ulong mhGuid) && mhGuid != 0;
+                bool guidDiffers = mhGuid != mainhandBeforeGuid;
+                bool bagCountDropped = CountBagItem(playerAfter, WornMace) < maceCountBeforeEquip;
+                if (slotFilled && (guidDiffers || bagCountDropped))
+                {
+                    _output.WriteLine($"  [{label}] Equip detected after {equipSw.ElapsedMilliseconds}ms");
+                    break;
+                }
+            }
+            await Task.Delay(200);
+        }
+
         if (playerAfter == null)
             return false;
 

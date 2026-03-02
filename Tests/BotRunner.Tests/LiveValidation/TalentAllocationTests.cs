@@ -61,8 +61,10 @@ public class TalentAllocationTests
         }
 
         Assert.True(bgLearned, "[BG] Spell 16462 should appear in snapshot spell list after .learn.");
-        if (_bot.ForegroundBot != null && !fgLearned)
-            _output.WriteLine("[FG] WARNING: spell 16462 not visible in FG snapshot spell list; BG path remains authoritative.");
+        if (_bot.ForegroundBot != null)
+        {
+            Assert.True(fgLearned, "[FG] Spell 16462 should appear in FG snapshot spell list after .learn.");
+        }
     }
 
     private async Task<bool> RunTalentScenario(string account, string label)
@@ -79,31 +81,8 @@ public class TalentAllocationTests
         return learned;
     }
 
-    private async Task EnsureStrictAliveAsync(string account, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (LiveBotFixture.IsStrictAlive(snap))
-            return;
-
-        var characterName = snap?.CharacterName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(characterName), $"{label}: missing character name for revive setup.");
-
-        _output.WriteLine($"  [{label}] Not strict-alive; reviving before talent setup.");
-        await _bot.RevivePlayerAsync(characterName!);
-
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(15))
-        {
-            await Task.Delay(1000);
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account);
-            if (LiveBotFixture.IsStrictAlive(snap))
-                return;
-        }
-
-        global::Tests.Infrastructure.Skip.If(true, $"{label}: could not establish strict-alive setup state.");
-    }
+    private Task EnsureStrictAliveAsync(string account, string label)
+        => _bot.EnsureStrictAliveAsync(account, label);
 
     private async Task EnsureLevelAtLeastAsync(string account, string label, uint minLevel)
     {

@@ -168,10 +168,6 @@ public class GatheringProfessionTests
     [SkippableFact]
     public async Task Herbalism_GatherHerb_SkillIncreases()
     {
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
-
         // --- Find herb spawns in Kalimdor (Durotar/Mulgore — low-level zones) ---
         var allSpawns = new List<(int map, float x, float y, float z, uint entry)>();
         foreach (var entry in new[] { PeacebloomEntry, SilverleafEntry, EarthrootEntry })
@@ -184,20 +180,79 @@ public class GatheringProfessionTests
             "No Peacebloom/Silverleaf/Earthroot spawns found in gameobject table (Kalimdor).");
         _output.WriteLine($"Found {allSpawns.Count} herb spawn locations");
 
+        var herbEntries = allSpawns.Select(s => s.entry).Distinct().ToArray();
+
+        // --- FG FIRST: native WoW right-click interaction (gold standard) ---
+        var fgAccount = _bot.FgAccountName;
+        if (fgAccount != null && _bot.ForegroundBot != null)
+        {
+            // Park BG bot nearby so CombatCoordinator doesn't send
+            // competing GOTO actions that overwrite the test's navigation.
+            var bgParkAccount = _bot.BgAccountName;
+            if (bgParkAccount != null)
+            {
+                _output.WriteLine("[BG] Parking BG bot in Orgrimmar (prevents CombatCoordinator interference)");
+                await _bot.BotTeleportAsync(bgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
+            }
+
+            _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccount})");
+            await PrepareHerbalism(fgAccount, "FG");
+
+            await _bot.RefreshSnapshotsAsync();
+            uint fgSkillBefore = GetSkill("FG", GatheringData.HERBALISM_SKILL_ID);
+            _output.WriteLine($"FG initial herbalism skill: {fgSkillBefore}");
+
+            bool fgGathered = false;
+            foreach (var entry in herbEntries)
+            {
+                var entrySpawns = allSpawns.Where(s => s.entry == entry).Select(s => (s.map, s.x, s.y, s.z)).ToList();
+                fgGathered = await TryGatherAtSpawns(fgAccount, "FG", entrySpawns,
+                    entry, GatheringData.HERBALISM_SKILL_ID, $"herb (entry {entry})",
+                    initialSkill: fgSkillBefore,
+                    gatherSpellId: HerbalismGatherSpell, parkAccount: _bot.BgAccountName);
+                if (fgGathered) break;
+            }
+
+            await _bot.RefreshSnapshotsAsync();
+            uint fgSkillAfter = GetSkill("FG", GatheringData.HERBALISM_SKILL_ID);
+            _output.WriteLine($"FG Results: gathered={fgGathered}, skill {fgSkillBefore} → {fgSkillAfter}");
+
+            Assert.True(fgGathered,
+                $"FG: Failed to gather herb at any of {allSpawns.Count} locations. skill={fgSkillAfter}.");
+            Assert.True(fgSkillAfter > fgSkillBefore,
+                $"FG: Herbalism skill did not increase ({fgSkillBefore} → {fgSkillAfter}).");
+        }
+        else
+        {
+            _output.WriteLine("FG bot not available — skipping FG herbalism test.");
+        }
+
+        // --- BG: headless protocol emulation ---
+        var bgAccount = _bot.BgAccountName!;
+        Assert.NotNull(bgAccount);
+        _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
+
         try
         {
+            // Park the OTHER bot in Orgrimmar so CombatCoordinator doesn't send GOTOs
+            // that overwrite the GatherNode behavior tree during the herbalism channel.
+            var fgParkAccount = _bot.FgAccountName;
+            if (fgParkAccount != null)
+            {
+                _output.WriteLine("[FG-park] Parking FG bot in Orgrimmar for BG test");
+                await _bot.BotTeleportAsync(fgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
+            }
+
             // --- Prepare: learn Herbalism + set skill ---
             await PrepareHerbalism(bgAccount, "BG");
 
             // --- Record initial skill ---
             await _bot.RefreshSnapshotsAsync();
             uint bgSkillBefore = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
-            _output.WriteLine($"Initial herbalism skill: BG={bgSkillBefore}");
+            _output.WriteLine($"BG initial herbalism skill: {bgSkillBefore}");
             global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG herbalism skill already capped ({bgSkillBefore}); cannot assert further increase.");
 
             // --- Try each spawn location ---
-            var herbEntries = allSpawns.Select(s => s.entry).Distinct().ToArray();
-
             bool bgGathered = false;
             foreach (var entry in herbEntries)
             {
@@ -205,14 +260,14 @@ public class GatheringProfessionTests
                 bgGathered = await TryGatherAtSpawns(bgAccount, "BG", entrySpawns,
                     entry, GatheringData.HERBALISM_SKILL_ID, $"herb (entry {entry})",
                     initialSkill: bgSkillBefore,
-                    gatherSpellId: HerbalismGatherSpell);
+                    gatherSpellId: HerbalismGatherSpell, parkAccount: _bot.FgAccountName);
                 if (bgGathered) break;
             }
 
             // --- Assert ---
             await _bot.RefreshSnapshotsAsync();
             uint bgSkillAfter = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
-            _output.WriteLine($"Results: BG gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
+            _output.WriteLine($"BG Results: gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
 
             Assert.True(bgGathered,
                 $"BG: Failed to gather herb at any of {allSpawns.Count} locations. skill={bgSkillAfter}.");
@@ -249,7 +304,7 @@ public class GatheringProfessionTests
         var currentMining = GetSkill(label, GatheringData.MINING_SKILL_ID);
         if (currentMining < 1)
         {
-            await EnsureSelfSelectionForBgAsync(account, label);
+            await EnsureSelfSelectionAsync(account);
             _output.WriteLine($"[{label}] Applying mining skills (.learn/.setskill)");
             await _bot.BotLearnSpellAsync(account, MiningApprentice);
             await _bot.BotLearnSpellAsync(account, MiningGatherSpell);
@@ -292,7 +347,7 @@ public class GatheringProfessionTests
         var currentHerbalism = GetSkill(label, GatheringData.HERBALISM_SKILL_ID);
         if (currentHerbalism < 1)
         {
-            await EnsureSelfSelectionForBgAsync(account, label);
+            await EnsureSelfSelectionAsync(account);
             _output.WriteLine($"[{label}] Applying herbalism skills (.learn/.setskill)");
             await _bot.BotLearnSpellAsync(account, HerbalismApprentice);
             await _bot.BotLearnSpellAsync(account, HerbalismGatherSpell);
@@ -477,21 +532,15 @@ public class GatheringProfessionTests
         }
     }
 
-    private async Task EnsureSelfSelectionForBgAsync(string account, string label)
+    /// <summary>
+    /// Select self before GM commands like .setskill that require a target.
+    /// Uses the proper .targetself chat command instead of the melee-attack workaround.
+    /// Works for both BG (headless) and FG (injected) bots.
+    /// </summary>
+    private async Task EnsureSelfSelectionAsync(string account)
     {
-        if (label != "BG")
-            return;
-
-        await _bot.RefreshSnapshotsAsync();
-        var playerGuid = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Guid ?? 0;
-        if (playerGuid == 0)
-            return;
-
-        await _bot.SendActionAndWaitAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.StartMeleeAttack,
-            Parameters = { new RequestParameter { LongParam = (long)playerGuid } }
-        }, delayMs: 500);
+        await _bot.BotSelectSelfAsync(account);
+        await Task.Delay(300);
     }
 
     private int GetBagItemCount(string label)

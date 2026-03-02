@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -94,9 +95,9 @@ public class ConsumableUsageTests
         // Poll for item to appear in snapshot (FG injection client needs more time
         // for WoW.exe memory to reflect GM-added items).
         bool hasElixir = false;
-        for (int poll = 0; poll < 10 && !hasElixir; poll++)
+        for (int poll = 0; poll < 15 && !hasElixir; poll++)
         {
-            await Task.Delay(300);
+            await Task.Delay(200);
             await _bot.RefreshSnapshotsAsync();
             var playerCheck = getPlayer();
             if (playerCheck?.BagContents != null)
@@ -115,7 +116,7 @@ public class ConsumableUsageTests
         if (!hasElixir)
         {
             var playerAfterAdd = getPlayer();
-            _output.WriteLine($"  [{label}] WARNING: Elixir {ElixirOfLionsStrength} not found in bags after 10 polls (bags count={playerAfterAdd?.BagContents.Count ?? 0})!");
+            _output.WriteLine($"  [{label}] WARNING: Elixir {ElixirOfLionsStrength} not found in bags after 15 polls (bags count={playerAfterAdd?.BagContents.Count ?? 0})!");
         }
 
         // --- Step 2: Use elixir via action forwarding ---
@@ -124,12 +125,26 @@ public class ConsumableUsageTests
         {
             ActionType = ActionType.UseItem,
             Parameters = { new RequestParameter { IntParam = (int)ElixirOfLionsStrength } }
-        }, delayMs: 2000);
+        }, delayMs: 500);
 
-        // --- Step 3: Verify buff is active (check for specific spell ID, not count increase) ---
-        _output.WriteLine($"  [{label}] Step 3: Check auras for Lion's Strength buff (spell {LionsStrengthSpellId})");
-        await _bot.RefreshSnapshotsAsync();
-        var player = getPlayer();
+        // --- Step 3: Poll for buff (buff application is near-instant after item use) ---
+        _output.WriteLine($"  [{label}] Step 3: Polling for Lion's Strength buff (spell {LionsStrengthSpellId})");
+        bool hasBuff = false;
+        Game.WoWPlayer? player = null;
+        var buffSw = Stopwatch.StartNew();
+        while (buffSw.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            player = getPlayer();
+            if (player?.Unit?.Auras?.Contains(LionsStrengthSpellId) == true)
+            {
+                hasBuff = true;
+                _output.WriteLine($"  [{label}] Buff detected after {buffSw.ElapsedMilliseconds}ms");
+                break;
+            }
+            await Task.Delay(200);
+        }
+
         if (player == null)
         {
             _output.WriteLine($"  [{label}] Player snapshot null — skipping");
@@ -137,7 +152,6 @@ public class ConsumableUsageTests
         }
 
         int aurasAfter = player.Unit?.Auras?.Count ?? 0;
-        bool hasBuff = player.Unit?.Auras?.Contains(LionsStrengthSpellId) == true;
         _output.WriteLine($"  [{label}] Auras after: {aurasAfter} (before: {aurasBefore}), hasLionsStrength={hasBuff}");
 
         if (player.Unit?.Auras != null)

@@ -495,19 +495,8 @@ public class CombatRangeTests
         return 0UL;
     }
 
-    private async Task<bool> WaitForConditionAsync(string account, TimeSpan timeout, Func<WoWActivitySnapshot, bool> condition)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            if (snap != null && condition(snap))
-                return true;
-            await Task.Delay(300);
-        }
-        return false;
-    }
+    private Task<bool> WaitForConditionAsync(string account, TimeSpan timeout, Func<WoWActivitySnapshot, bool> condition)
+        => _bot.WaitForSnapshotConditionAsync(account, condition, timeout, pollIntervalMs: 300);
 
     private static float Distance2D(float x1, float y1, float x2, float y2)
     {

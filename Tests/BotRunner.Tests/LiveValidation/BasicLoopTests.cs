@@ -300,37 +300,8 @@ public class BasicLoopTests
         Assert.True(moved, $"{label}: failed to arrive near Razor Hill during setup.");
     }
 
-    private async Task EnsureStrictAliveAsync(string account, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (LiveBotFixture.IsStrictAlive(snap))
-            return;
-
-        var characterName = snap?.CharacterName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(characterName), $"{label}: missing character name for revive setup.");
-
-        _output.WriteLine($"[{label}] Not strict-alive; reviving for setup.");
-        await _bot.RevivePlayerAsync(characterName!);
-
-        var restored = await WaitForStrictAliveAsync(account, TimeSpan.FromSeconds(15));
-        global::Tests.Infrastructure.Skip.If(!restored, $"{label}: failed to restore strict-alive setup state.");
-    }
-
-    private async Task<bool> WaitForStrictAliveAsync(string account, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            if (LiveBotFixture.IsStrictAlive(snap))
-                return true;
-            await Task.Delay(400);
-        }
-
-        return false;
-    }
+    private Task EnsureStrictAliveAsync(string account, string label)
+        => _bot.EnsureStrictAliveAsync(account, label);
 
     private async Task<bool> WaitForLevelAtLeastAsync(string account, uint level, TimeSpan timeout)
     {
