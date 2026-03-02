@@ -62,6 +62,7 @@ namespace WoWSharpClient
 
         private bool _isInControl = false;
         private bool _isBeingTeleported = true;
+        private long _teleportFlagSetTicks;  // Stopwatch.GetTimestamp() when _isBeingTeleported was last set true
         private uint _teleportSequence;  // Local counter for MSG_MOVE_TELEPORT_ACK (server increments on each teleport)
         private ulong _currentTargetGuid;
 
@@ -528,6 +529,20 @@ namespace WoWSharpClient
                 {
                     ResetMovementStateForTeleport("chat-teleport-message");
                     _isBeingTeleported = true;
+                    _teleportFlagSetTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+
+                    // Safety timeout: if MSG_MOVE_TELEPORT never arrives (server rejected
+                    // the teleport after sending the chat message), auto-clear after 2s
+                    // to avoid permanently blocking the movement controller.
+                    var capturedTicks = _teleportFlagSetTicks;
+                    Task.Delay(2000).ContinueWith(_ =>
+                    {
+                        if (_isBeingTeleported && _teleportFlagSetTicks == capturedTicks)
+                        {
+                            Log.Warning("[TELEPORT] 2s timeout: clearing _isBeingTeleported (MSG_MOVE_TELEPORT never arrived after chat notification)");
+                            _isBeingTeleported = false;
+                        }
+                    });
                 }
             }
 
@@ -541,6 +556,7 @@ namespace WoWSharpClient
         public void NotifyTeleportIncoming()
         {
             _isBeingTeleported = true;
+            _teleportFlagSetTicks = System.Diagnostics.Stopwatch.GetTimestamp();
             ResetMovementStateForTeleport("notify-teleport-incoming");
         }
 
@@ -558,6 +574,7 @@ namespace WoWSharpClient
         {
             // _isBeingTeleported is already set by NotifyTeleportIncoming() before the update was queued.
             _isBeingTeleported = true;
+            _teleportFlagSetTicks = System.Diagnostics.Stopwatch.GetTimestamp();
             ResetMovementStateForTeleport("teleport-opcode");
 
             var player = (WoWLocalPlayer)Player;
