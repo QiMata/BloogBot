@@ -33,7 +33,7 @@ namespace Game {
             "blRlbXBsYXRlGAQgASgNEhEKCWRpc3BsYXlJZBgFIAEoDRINCgVmbGFncxgG",
             "IAEoDRIUCgxkeW5hbWljRmxhZ3MYByABKA0SDAoEbmFtZRgIIAEoCRINCgVl",
             "bnRyeRgJIAEoDRIWCg5nYW1lT2JqZWN0VHlwZRgKIAEoDRIOCgZhcnRLaXQY",
-            "CyABKA0SFAoMYW5pbVByb2dyZXNzGAwgASgNIosHCgdXb1dVbml0EicKCmdh",
+            "CyABKA0SFAoMYW5pbVByb2dyZXNzGAwgASgNIrgHCgdXb1dVbml0EicKCmdh",
             "bWVPYmplY3QYASABKAsyEy5nYW1lLldvV0dhbWVPYmplY3QSDQoFY2hhcm0Y",
             "AiABKAQSDgoGc3VtbW9uGAMgASgEEhEKCWNoYXJtZWRCeRgEIAEoBBISCgpz",
             "dW1tb25lZEJ5GAUgASgEEhEKCWNyZWF0ZWRCeRgGIAEoBBISCgp0YXJnZXRH",
@@ -49,7 +49,8 @@ namespace Game {
             "DRIUCgxkeW5hbWljRmxhZ3MYFyABKA0SEAoIbnBjRmxhZ3MYGCABKA0SDQoF",
             "YXVyYXMYGSADKA0SEQoJYXVyYUZsYWdzGBogAygNEhIKCmF1cmFMZXZlbHMY",
             "GyADKA0SGAoQYXVyYUFwcGxpY2F0aW9ucxgcIAMoDRIRCglhdXJhU3RhdGUY",
-            "HSABKA0SEQoJcGV0TnVtYmVyGB4gASgNGiwKClBvd2VyRW50cnkSCwoDa2V5",
+            "HSABKA0SEQoJcGV0TnVtYmVyGB4gASgNEhYKDmJvdW5kaW5nUmFkaXVzGB8g",
+            "ASgCEhMKC2NvbWJhdFJlYWNoGCAgASgCGiwKClBvd2VyRW50cnkSCwoDa2V5",
             "GAEgASgNEg0KBXZhbHVlGAIgASgNOgI4ARovCg1NYXhQb3dlckVudHJ5EgsK",
             "A2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoDToCOAEaLAoKU3RhdHNFbnRyeRIL",
             "CgNrZXkYASABKA0SDQoFdmFsdWUYAiABKA06AjgBGjIKEFJlc2lzdGFuY2Vz",
@@ -173,7 +174,7 @@ namespace Game {
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Game.Race), }, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWObject), global::Game.WoWObject.Parser, new[]{ "Guid", "MapId", "ZoneId", "ObjectType", "ScaleX", "Height", "Facing", "Position" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWGameObject), global::Game.WoWGameObject.Parser, new[]{ "Base", "GoState", "Level", "FactionTemplate", "DisplayId", "Flags", "DynamicFlags", "Name", "Entry", "GameObjectType", "ArtKit", "AnimProgress" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWUnit), global::Game.WoWUnit.Parser, new[]{ "GameObject", "Charm", "Summon", "CharmedBy", "SummonedBy", "CreatedBy", "TargetGuid", "Persuaded", "ChannelObject", "ChannelSpellId", "Health", "MaxHealth", "Power", "MaxPower", "Stats", "Resistances", "Bytes0", "Bytes1", "Bytes2", "MountDisplayId", "UnitFlags", "MovementFlags", "DynamicFlags", "NpcFlags", "Auras", "AuraFlags", "AuraLevels", "AuraApplications", "AuraState", "PetNumber" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, null, null, }),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWUnit), global::Game.WoWUnit.Parser, new[]{ "GameObject", "Charm", "Summon", "CharmedBy", "SummonedBy", "CreatedBy", "TargetGuid", "Persuaded", "ChannelObject", "ChannelSpellId", "Health", "MaxHealth", "Power", "MaxPower", "Stats", "Resistances", "Bytes0", "Bytes1", "Bytes2", "MountDisplayId", "UnitFlags", "MovementFlags", "DynamicFlags", "NpcFlags", "Auras", "AuraFlags", "AuraLevels", "AuraApplications", "AuraState", "PetNumber", "BoundingRadius", "CombatReach" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, null, null, }),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWPlayer), global::Game.WoWPlayer.Parser, new[]{ "Unit", "PlayerBytes0", "PlayerBytes1", "PlayerBytes2", "PlayerFlags", "QuestLogEntries", "Inventory", "BagContents", "KeyRing", "FarsightGuid", "ComboTargetGuid", "PlayerXP", "SkillInfo", "SpellList", "SpellCooldowns", "SpellStacks", "BuffList", "CharacterPoints1", "CharacterPoints2", "TrackCreatures", "TrackResources", "BlockPercent", "DodgePercent", "ParryPercent", "CritPercent", "RangedCritPercent", "ExploredZones", "RestStateExperience", "Coinage", "PosModDamageDone", "NegModDamageDone", "PctModDamageDone", "PosStats", "NegStats", "PosResistBuff", "NegResistBuff", "AmmoId", "SelfResSpell", "PvpMedals", "SessionKills", "WatchedFactionIndex", "CombatRating", "CorpseRecoveryDelaySeconds" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, null, null, null, null, null, null, null, null, null, null, null, }),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWItem), global::Game.WoWItem.Parser, new[]{ "GameObject", "Owner", "Contained", "Creator", "GiftCreator", "StackCount", "Duration", "SpellCharges", "ItemFlags", "Enchantments", "Durability", "PropertySeed", "RandomPropertiesId" }, null, null, null, new pbr::GeneratedClrTypeInfo[] { null, null, }),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWContainer), global::Game.WoWContainer.Parser, new[]{ "Item", "ItemSlots" }, null, null, null, null),
@@ -1366,6 +1367,8 @@ namespace Game {
       auraApplications_ = other.auraApplications_.Clone();
       auraState_ = other.auraState_;
       petNumber_ = other.petNumber_;
+      boundingRadius_ = other.boundingRadius_;
+      combatReach_ = other.combatReach_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -1730,6 +1733,36 @@ namespace Game {
       }
     }
 
+    /// <summary>Field number for the "boundingRadius" field.</summary>
+    public const int BoundingRadiusFieldNumber = 31;
+    private float boundingRadius_;
+    /// <summary>
+    /// UNIT_FIELD_BOUNDINGRADIUS — collision radius
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float BoundingRadius {
+      get { return boundingRadius_; }
+      set {
+        boundingRadius_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "combatReach" field.</summary>
+    public const int CombatReachFieldNumber = 32;
+    private float combatReach_;
+    /// <summary>
+    /// UNIT_FIELD_COMBATREACH — melee attack range component
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float CombatReach {
+      get { return combatReach_; }
+      set {
+        combatReach_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -1775,6 +1808,8 @@ namespace Game {
       if(!auraApplications_.Equals(other.auraApplications_)) return false;
       if (AuraState != other.AuraState) return false;
       if (PetNumber != other.PetNumber) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(BoundingRadius, other.BoundingRadius)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(CombatReach, other.CombatReach)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -1812,6 +1847,8 @@ namespace Game {
       hash ^= auraApplications_.GetHashCode();
       if (AuraState != 0) hash ^= AuraState.GetHashCode();
       if (PetNumber != 0) hash ^= PetNumber.GetHashCode();
+      if (BoundingRadius != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(BoundingRadius);
+      if (CombatReach != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(CombatReach);
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -1926,6 +1963,14 @@ namespace Game {
         output.WriteRawTag(240, 1);
         output.WriteUInt32(PetNumber);
       }
+      if (BoundingRadius != 0F) {
+        output.WriteRawTag(253, 1);
+        output.WriteFloat(BoundingRadius);
+      }
+      if (CombatReach != 0F) {
+        output.WriteRawTag(133, 2);
+        output.WriteFloat(CombatReach);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -2032,6 +2077,14 @@ namespace Game {
         output.WriteRawTag(240, 1);
         output.WriteUInt32(PetNumber);
       }
+      if (BoundingRadius != 0F) {
+        output.WriteRawTag(253, 1);
+        output.WriteFloat(BoundingRadius);
+      }
+      if (CombatReach != 0F) {
+        output.WriteRawTag(133, 2);
+        output.WriteFloat(CombatReach);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -2115,6 +2168,12 @@ namespace Game {
       }
       if (PetNumber != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(PetNumber);
+      }
+      if (BoundingRadius != 0F) {
+        size += 2 + 4;
+      }
+      if (CombatReach != 0F) {
+        size += 2 + 4;
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -2204,6 +2263,12 @@ namespace Game {
       }
       if (other.PetNumber != 0) {
         PetNumber = other.PetNumber;
+      }
+      if (other.BoundingRadius != 0F) {
+        BoundingRadius = other.BoundingRadius;
+      }
+      if (other.CombatReach != 0F) {
+        CombatReach = other.CombatReach;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -2351,6 +2416,14 @@ namespace Game {
             PetNumber = input.ReadUInt32();
             break;
           }
+          case 253: {
+            BoundingRadius = input.ReadFloat();
+            break;
+          }
+          case 261: {
+            CombatReach = input.ReadFloat();
+            break;
+          }
         }
       }
     #endif
@@ -2495,6 +2568,14 @@ namespace Game {
           }
           case 240: {
             PetNumber = input.ReadUInt32();
+            break;
+          }
+          case 253: {
+            BoundingRadius = input.ReadFloat();
+            break;
+          }
+          case 261: {
+            CombatReach = input.ReadFloat();
             break;
           }
         }

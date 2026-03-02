@@ -74,6 +74,8 @@ message WoWUnit {
     repeated uint32 auraApplications = 28;
     uint32 auraState = 29;
     uint32 petNumber = 30;
+    float boundingRadius = 31;     // UNIT_FIELD_BOUNDINGRADIUS — collision radius
+    float combatReach = 32;        // UNIT_FIELD_COMBATREACH — melee attack range component
 }
 
 // Definition for WoWPlayer, extending WoWUnit

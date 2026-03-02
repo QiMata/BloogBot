@@ -366,6 +366,8 @@ namespace BotRunner
             TryPopulate(() => protoUnit.ChannelSpellId = unit.ChannelingId, "ChannelSpellId");
             TryPopulate(() => protoUnit.SummonedBy = unit.SummonedByGuid, "SummonedBy");
             TryPopulate(() => protoUnit.NpcFlags = (uint)unit.NpcFlags, "NpcFlags");
+            TryPopulate(() => protoUnit.BoundingRadius = unit.BoundingRadius, "BoundingRadius");
+            TryPopulate(() => protoUnit.CombatReach = unit.CombatReach, "CombatReach");
             TryPopulate(() => { if (unit.Bytes0 != null && unit.Bytes0.Length > 0) protoUnit.Bytes0 = unit.Bytes0[0]; }, "Bytes0");
             TryPopulate(() => { if (unit.Bytes1 != null && unit.Bytes1.Length > 0) protoUnit.Bytes1 = unit.Bytes1[0]; }, "Bytes1");
             TryPopulate(() => { if (unit.Bytes2 != null && unit.Bytes2.Length > 0) protoUnit.Bytes2 = unit.Bytes2[0]; }, "Bytes2");

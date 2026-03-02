@@ -1,6 +1,7 @@
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using System;
 using System.Linq;
 
@@ -47,6 +48,36 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Calculate the actual melee attack range to the current target using vanilla 1.12.1 formula:
+    /// attacker.CombatReach + target.CombatReach + BASE_OFFSET + leeway(if both moving).
+    /// Falls back to the hardcoded distance if CombatReach data is unavailable (zero).
+    /// </summary>
+    protected float GetMeleeRange(IWoWUnit target)
+    {
+        var playerReach = ObjectManager.Player.CombatReach;
+        var targetReach = target.CombatReach;
+
+        // If server hasn't sent CombatReach data yet, use defaults
+        if (playerReach <= 0f) playerReach = CombatDistance.DEFAULT_PLAYER_COMBAT_REACH;
+        if (targetReach <= 0f) targetReach = CombatDistance.DEFAULT_CREATURE_COMBAT_REACH;
+
+        bool bothMoving = CombatDistance.IsMovingXZ((uint)ObjectManager.Player.MovementFlags)
+                       && CombatDistance.IsMovingXZ((uint)target.MovementFlags);
+
+        return CombatDistance.GetMeleeAttackRange(playerReach, targetReach, bothMoving);
+    }
+
+    /// <summary>
+    /// Calculate the interaction distance to a target NPC/object using bounding radius.
+    /// </summary>
+    protected float GetInteractionRange(IWoWUnit target)
+    {
+        var radius = target.BoundingRadius;
+        if (radius <= 0f) radius = CombatDistance.DEFAULT_PLAYER_BOUNDING_RADIUS;
+        return CombatDistance.GetInteractionDistance(radius);
     }
 
     /// <summary>
