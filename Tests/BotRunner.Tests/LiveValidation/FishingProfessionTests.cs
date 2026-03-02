@@ -155,7 +155,7 @@ public class FishingProfessionTests
 
             // GM mode stays ON — fishing works with GM mode enabled.
             // Brief stabilization for physics to settle position after teleport + facing.
-            await Task.Delay(1000);
+            await Task.Delay(500);
 
             // Log nearby game objects (fishing nodes, etc.)
             await _bot.RefreshSnapshotsAsync();
@@ -197,7 +197,7 @@ public class FishingProfessionTests
         {
             _output.WriteLine($"[{label}] Not strict-alive; reviving before setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(2000);
+            await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(5));
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
         }
@@ -227,7 +227,7 @@ public class FishingProfessionTests
                 // Also teach cast spells directly as fallback
                 await _bot.BotLearnSpellAsync(account, FishingData.FishingRank1);
                 await _bot.BotLearnSpellAsync(account, FishingData.FishingRank2);
-                await Task.Delay(2000);
+                await Task.Delay(500);
                 await _bot.RefreshSnapshotsAsync();
             }
 
@@ -244,7 +244,7 @@ public class FishingProfessionTests
                     // Try `.learn all_crafts` as a last resort (teaches all professions + creates skills).
                     _output.WriteLine($"[{label}] Skill still not created; trying .learn all_crafts...");
                     await _bot.SendGmChatCommandAsync(account, ".learn all_crafts");
-                    await Task.Delay(3000);
+                    await Task.Delay(1000);
                     await _bot.RefreshSnapshotsAsync();
                     postSnap = await _bot.GetSnapshotAsync(account);
                     skillExists = postSnap?.Player?.SkillInfo?.ContainsKey(FishingData.FishingSkillId) == true;
@@ -253,7 +253,7 @@ public class FishingProfessionTests
                 if (skillExists)
                 {
                     await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, 150, 300);
-                    await Task.Delay(1000);
+                    await Task.Delay(500);
                 }
                 else
                 {
@@ -264,7 +264,7 @@ public class FishingProfessionTests
             if (needsPole)
             {
                 await _bot.BotAddItemAsync(account, FishingData.FishingPole);
-                await Task.Delay(1500);
+                await Task.Delay(500);
             }
 
             // Shiny Bauble (+25 fishing) increases catch rate — skip if already in bags
@@ -274,7 +274,7 @@ public class FishingProfessionTests
             if (!hasBauble)
             {
                 await _bot.BotAddItemAsync(account, FishingData.ShinyBauble);
-                await Task.Delay(500);
+                await Task.Delay(300);
             }
             else
             {
@@ -325,10 +325,8 @@ public class FishingProfessionTests
                 _output.WriteLine($"  [{label}] CastSpell failed, trying .cast fallback...");
                 await _bot.SendGmChatCommandAsync(account, $".cast {FishingData.FishingRank1}");
 
-                // Wait 3s for CREATE packet to arrive and snapshot to update (spell channel is ~3s)
-                await Task.Delay(3000);
-                await _bot.RefreshSnapshotsAsync();
-                await Task.Delay(500);
+                // Wait for CREATE packet to arrive and snapshot to update
+                await Task.Delay(2000);
                 await _bot.RefreshSnapshotsAsync();
 
                 snap = GetSnapshot(label);

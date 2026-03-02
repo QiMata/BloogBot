@@ -152,7 +152,18 @@ public class DeathCorpseRunTests
             if (!fgEvidence.AlivePhaseObserved && !string.IsNullOrWhiteSpace(fgChar))
                 await _bot.RevivePlayerAsync(fgChar!);
             if (!bgEvidence.AlivePhaseObserved || !fgEvidence.AlivePhaseObserved)
-                await Task.Delay(2000);
+            {
+                var reviveSw = Stopwatch.StartNew();
+                while (reviveSw.Elapsed < TimeSpan.FromSeconds(5))
+                {
+                    await _bot.RefreshSnapshotsAsync();
+                    var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
+                    var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
+                    if (LiveBotFixture.IsStrictAlive(bgSnap) && LiveBotFixture.IsStrictAlive(fgSnap))
+                        break;
+                    await Task.Delay(500);
+                }
+            }
 
             // Both BG and FG must complete the full corpse-run lifecycle.
             AssertScenario(bgEvidence);
@@ -253,7 +264,7 @@ public class DeathCorpseRunTests
             {
                 _output.WriteLine($"  [{label}] TEARDOWN: SOAP revive cleanup");
                 await _bot.RevivePlayerAsync(characterName);
-                await Task.Delay(1000);
+                await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(5));
             }
 
             if (postDeathGmBaseline >= 0)
@@ -280,7 +291,6 @@ public class DeathCorpseRunTests
         {
             _output.WriteLine($"  [{label}] Setup not strict-alive; SOAP revive fallback once.");
             await _bot.RevivePlayerAsync(characterName);
-            await Task.Delay(1000);
         }
 
         var setupSw = Stopwatch.StartNew();
@@ -291,7 +301,7 @@ public class DeathCorpseRunTests
             if (IsStrictAlive(setupState))
                 break;
 
-            await Task.Delay(1000);
+            await Task.Delay(500);
         }
 
         if (!IsStrictAlive(setupState))
@@ -311,9 +321,17 @@ public class DeathCorpseRunTests
             return await FailAsync("unable to execute Orgrimmar named teleport setup");
         }
 
-        await Task.Delay(2000);
-        snap = await GetSnapshotForAccountAsync();
-        setupState = GetLifeState(snap);
+        // Poll for position to stabilize after teleport instead of fixed delay.
+        var tpSw = Stopwatch.StartNew();
+        while (tpSw.Elapsed < TimeSpan.FromSeconds(6))
+        {
+            snap = await GetSnapshotForAccountAsync();
+            setupState = GetLifeState(snap);
+            var tpPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+            if (IsStrictAlive(setupState) && tpPos != null)
+                break;
+            await Task.Delay(500);
+        }
         var setupPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         if (!IsStrictAlive(setupState) || setupPos == null)
             return await FailAsync("invalid setup after Orgrimmar teleport");
@@ -374,7 +392,7 @@ public class DeathCorpseRunTests
         var ghostSw = Stopwatch.StartNew();
         while (ghostSw.Elapsed < ReleaseToGhostTimeout)
         {
-            await Task.Delay(1000);
+            await Task.Delay(500);
             snap = await GetSnapshotForAccountAsync();
             if (!ValidateNoPostDeathGmCommands("ghost-confirmation"))
                 return await FailAsync(evidence.FailureReason);
@@ -641,7 +659,7 @@ public class DeathCorpseRunTests
             var reclaimSw = Stopwatch.StartNew();
             while (reclaimSw.Elapsed < ReclaimTimeout)
             {
-                await Task.Delay(3000);
+                await Task.Delay(1000);
                 snap = await GetSnapshotForAccountAsync();
                 if (!ValidateNoPostDeathGmCommands("reclaim-ready-wait"))
                     return await FailAsync(evidence.FailureReason);
@@ -673,7 +691,7 @@ public class DeathCorpseRunTests
         var aliveSw = Stopwatch.StartNew();
         while (aliveSw.Elapsed < AliveAfterRetrieveTimeout)
         {
-            await Task.Delay(2000);
+            await Task.Delay(500);
             snap = await GetSnapshotForAccountAsync();
             if (!ValidateNoPostDeathGmCommands("alive-confirmation"))
                 return await FailAsync(evidence.FailureReason);
