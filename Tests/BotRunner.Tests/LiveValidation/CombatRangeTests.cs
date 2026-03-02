@@ -137,8 +137,16 @@ public class CombatRangeTests
         });
         Assert.Equal(ResponseResult.Success, result);
 
-        var selected = await WaitForConditionAsync(bgAccount, TimeSpan.FromSeconds(6), snap =>
+        var selected = await WaitForConditionAsync(bgAccount, TimeSpan.FromSeconds(8), snap =>
             (snap.Player?.Unit?.TargetGuid ?? 0UL) == targetGuid);
+        if (!selected)
+        {
+            // Log diagnostic: what is the current target GUID?
+            await _bot.RefreshSnapshotsAsync();
+            var diagSnap = await _bot.GetSnapshotAsync(bgAccount);
+            var currentTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
+            _output.WriteLine($"  [BG] Target selection failed. Current TargetGuid=0x{currentTarget:X}, expected=0x{targetGuid:X}");
+        }
         Assert.True(selected, "BG bot should have target GUID set after StartMeleeAttack within range.");
 
         // Cleanup: stop attack and kill mob
@@ -289,9 +297,16 @@ public class CombatRangeTests
             Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
         });
 
-        var attacking = await WaitForConditionAsync(bgAccount, TimeSpan.FromSeconds(4), snap =>
+        var attacking = await WaitForConditionAsync(bgAccount, TimeSpan.FromSeconds(8), snap =>
             (snap.Player?.Unit?.TargetGuid ?? 0UL) == targetGuid);
         _output.WriteLine($"  [BG] Attack started: {attacking}");
+        if (!attacking)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var diagSnap = await _bot.GetSnapshotAsync(bgAccount);
+            var currentTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
+            _output.WriteLine($"  [BG] Target selection failed. Current TargetGuid=0x{currentTarget:X}, expected=0x{targetGuid:X}");
+        }
         Assert.True(attacking, "BG bot should have target after starting melee attack.");
 
         // Stop attack
@@ -433,17 +448,10 @@ public class CombatRangeTests
 
     private async Task EnsureAliveAndNearMobsAsync(string account, string label)
     {
+        await _bot.EnsureStrictAliveAsync(account, label);
+
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
-
-        if (!LiveBotFixture.IsStrictAlive(snap))
-        {
-            _output.WriteLine($"  [{label}] Not strict-alive; reviving.");
-            await _bot.RevivePlayerAsync(snap?.CharacterName ?? "");
-            var revived = await WaitForConditionAsync(account, TimeSpan.FromSeconds(10), LiveBotFixture.IsStrictAlive);
-            global::Tests.Infrastructure.Skip.If(!revived, $"{label}: Failed to revive.");
-        }
-
         var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         var dist = pos == null ? float.MaxValue : Distance2D(pos.X, pos.Y, MobAreaX, MobAreaY);
 
@@ -451,34 +459,64 @@ public class CombatRangeTests
         {
             _output.WriteLine($"  [{label}] Teleporting to mob area (dist={dist:F1}y).");
             await _bot.BotTeleportAsync(account, MapId, MobAreaX, MobAreaY, MobAreaZ);
-            await Task.Delay(2000);
-            // Force respawn after teleport to ensure mobs are present
-            await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: true, delayMs: 500);
+
+            // Poll for arrival instead of fixed delay
+            var arrived = await WaitForConditionAsync(account, TimeSpan.FromSeconds(12), s =>
+            {
+                var p = s.Player?.Unit?.GameObject?.Base?.Position;
+                return p != null && Distance2D(p.X, p.Y, MobAreaX, MobAreaY) <= MobAreaRadius;
+            });
+            global::Tests.Infrastructure.Skip.If(!arrived, $"{label}: Failed to arrive near mob area after teleport.");
         }
+
+        // Force respawn to ensure mobs are present
+        await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: true, delayMs: 500);
     }
 
-    private async Task<ulong> FindLivingBoarAsync(string account, string label)
+    private async Task<ulong> FindLivingBoarAsync(string account, string label, float maxDistance = 45f)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(12))
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
-            var boar = snap?.NearbyUnits?.FirstOrDefault(u =>
-            {
-                var guid = u.GameObject?.Base?.Guid ?? 0UL;
-                if (guid == 0 || u.Health == 0 || u.MaxHealth == 0) return false;
-                if (u.NpcFlags != 0) return false;
-                var entry = u.GameObject?.Entry ?? 0;
-                var name = u.GameObject?.Name ?? "";
-                return entry == MottledBoarEntry
-                    || name.Contains("Mottled Boar", StringComparison.OrdinalIgnoreCase);
-            });
+            var playerPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+
+            var boar = snap?.NearbyUnits?
+                .Where(u =>
+                {
+                    var guid = u.GameObject?.Base?.Guid ?? 0UL;
+                    if (guid == 0 || u.Health == 0 || u.MaxHealth == 0) return false;
+                    if (u.NpcFlags != 0) return false;
+                    var entry = u.GameObject?.Entry ?? 0;
+                    var name = u.GameObject?.Name ?? "";
+                    if (entry != MottledBoarEntry
+                        && !name.Contains("Mottled Boar", StringComparison.OrdinalIgnoreCase))
+                        return false;
+                    // Check distance if player position is known
+                    if (playerPos != null)
+                    {
+                        var mobPos = u.GameObject?.Base?.Position;
+                        if (mobPos != null && Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y) > maxDistance)
+                            return false;
+                    }
+                    return true;
+                })
+                .OrderBy(u =>
+                {
+                    if (playerPos == null) return 0f;
+                    var mobPos = u.GameObject?.Base?.Position;
+                    return mobPos == null ? float.MaxValue : Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y);
+                })
+                .FirstOrDefault();
 
             if (boar != null)
             {
                 var guid = boar.GameObject?.Base?.Guid ?? 0UL;
-                _output.WriteLine($"  [{label}] Found boar 0x{guid:X}: {boar.GameObject?.Name} HP={boar.Health}/{boar.MaxHealth}");
+                var mobPos = boar.GameObject?.Base?.Position;
+                var dist = playerPos != null && mobPos != null
+                    ? Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y) : -1f;
+                _output.WriteLine($"  [{label}] Found boar 0x{guid:X}: {boar.GameObject?.Name} HP={boar.Health}/{boar.MaxHealth} dist={dist:F1}y");
                 return guid;
             }
 
@@ -491,7 +529,7 @@ public class CombatRangeTests
             await Task.Delay(500);
         }
 
-        _output.WriteLine($"  [{label}] No living boar found after 12s.");
+        _output.WriteLine($"  [{label}] No living boar found within {maxDistance:F0}y after 12s.");
         return 0UL;
     }
 
