@@ -276,9 +276,21 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
-    public Task DisposeAsync()
+    public async Task DisposeAsync()
     {
         int wowKilled = 0, pfKilled = 0;
+
+        // Snapshot PIDs we launched so we can check for orphans after cleanup.
+        // Copy under lock to avoid racing with the stdout capture callback.
+        int? stateManagerPid = null;
+        List<int> launchedPids;
+        lock (_managedWoWPids)
+            launchedPids = new List<int>(_managedWoWPids);
+        try
+        {
+            stateManagerPid = _stateManagerProcess?.Id;
+        }
+        catch { /* process may have exited */ }
 
         try
         {
@@ -303,9 +315,9 @@ public class BotServiceFixture : IAsyncLifetime
             }
 
             // 2. Brief delay for the process tree to finish dying
-            Thread.Sleep(1000);
+            await Task.Delay(1000);
 
-            // 3. Kill ALL WoW.exe processes using ForceKillProcess (tries Process.Kill,
+            // 3. Kill ALL WoW.exe processes using ForceKillProcessAsync (tries Process.Kill,
             //    then taskkill /F, then CloseMainWindow). WoW.exe is created via native
             //    CreateProcess by StateManager, so .NET's Process.Kill() often gets
             //    "Access is denied" — the taskkill fallback handles this.
@@ -314,20 +326,25 @@ public class BotServiceFixture : IAsyncLifetime
                 try
                 {
                     Log($"Cleanup: killing WoW.exe PID {proc.Id}");
-                    if (ForceKillProcess(proc, "WoW"))
+                    if (await ForceKillProcessAsync(proc, "WoW"))
                         wowKilled++;
                 }
                 finally { proc.Dispose(); }
             }
 
             // 4. Kill orphaned PathfindingService (supports both self-hosted exe and dotnet-hosted dll)
-            pfKilled += KillPathfindingServiceProcesses("PF");
+            pfKilled += await KillPathfindingServiceProcessesAsync("PF");
 
             lock (_managedWoWPids)
                 _managedWoWPids.Clear();
 
             if (wowKilled + pfKilled > 0)
                 Log($"Dispose cleanup summary: {wowKilled} WoW.exe, {pfKilled} PathfindingService killed.");
+
+            // 5. PC1: Orphan detection — wait, then check if any PIDs we launched are still alive.
+            //    We only CHECK PIDs from _managedWoWPids and _stateManagerProcess — never blanket-kill.
+            //    Log warnings only; do not force-kill (process safety rules).
+            await CheckForOrphanedProcessesAsync(stateManagerPid, launchedPids);
         }
         finally
         {
@@ -343,8 +360,75 @@ public class BotServiceFixture : IAsyncLifetime
                 // Mutex was not owned — this is fine (e.g., InitializeAsync failed before acquiring)
             }
         }
+    }
 
-        return Task.CompletedTask;
+    /// <summary>
+    /// PC1: Post-cleanup orphan detection. Waits 10 seconds after normal cleanup,
+    /// then checks if any PIDs that THIS fixture launched are still alive.
+    /// Logs warnings only — does NOT force-kill (per project process safety rules).
+    /// Only checks PIDs from <see cref="_managedWoWPids"/> and the StateManager process.
+    /// </summary>
+    private async Task CheckForOrphanedProcessesAsync(int? stateManagerPid, List<int> wowPids)
+    {
+        // Build the full list of PIDs this fixture is responsible for
+        var allTrackedPids = new List<(int pid, string source)>();
+        if (stateManagerPid.HasValue)
+            allTrackedPids.Add((stateManagerPid.Value, "StateManager"));
+        foreach (var pid in wowPids)
+            allTrackedPids.Add((pid, "WoW.exe"));
+
+        if (allTrackedPids.Count == 0)
+        {
+            Log("[OrphanCheck] No PIDs were tracked by this fixture — skipping orphan check.");
+            return;
+        }
+
+        Log($"[OrphanCheck] Waiting 10s before checking {allTrackedPids.Count} tracked PIDs for orphans...");
+        await Task.Delay(10_000);
+
+        var orphans = new List<string>();
+        foreach (var (pid, source) in allTrackedPids)
+        {
+            try
+            {
+                var proc = Process.GetProcessById(pid);
+                // Process exists — check if it's truly the same process (not a recycled PID)
+                try
+                {
+                    var name = proc.ProcessName;
+                    orphans.Add($"PID {pid} ({source}, ProcessName='{name}')");
+                }
+                catch
+                {
+                    orphans.Add($"PID {pid} ({source}, could not read ProcessName)");
+                }
+                finally
+                {
+                    proc.Dispose();
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Process no longer exists — this is the expected/happy path
+            }
+            catch (InvalidOperationException)
+            {
+                // Process has exited between GetProcessById and property access
+            }
+        }
+
+        if (orphans.Count > 0)
+        {
+            Log($"[OrphanCheck] WARNING: {orphans.Count} process(es) launched by this fixture are STILL ALIVE after cleanup:");
+            foreach (var orphan in orphans)
+                Log($"  [OrphanCheck]   - {orphan}");
+            Log("[OrphanCheck] These may be orphaned processes. Manual cleanup may be required.");
+            Log("[OrphanCheck] NOT force-killing per process safety rules — only the session owner should kill specific PIDs.");
+        }
+        else
+        {
+            Log($"[OrphanCheck] All {allTrackedPids.Count} tracked PIDs confirmed dead. No orphans detected.");
+        }
     }
 
     /// <summary>
@@ -387,14 +471,14 @@ public class BotServiceFixture : IAsyncLifetime
             try
             {
                 Log($"  [Cleanup] Killing orphaned WoW.exe PID {proc.Id}");
-                if (ForceKillProcess(proc, "Cleanup-WoW"))
+                if (await ForceKillProcessAsync(proc, "Cleanup-WoW"))
                     wowKilled++;
             }
             finally { proc.Dispose(); }
         }
 
         // 3. Kill orphaned PathfindingService (supports both self-hosted exe and dotnet-hosted dll)
-        pfKilled += KillPathfindingServiceProcesses("Cleanup-PF");
+        pfKilled += await KillPathfindingServiceProcessesAsync("Cleanup-PF");
 
         int totalKilled = smKilled + wowKilled + pfKilled;
         if (totalKilled > 0)
@@ -581,8 +665,10 @@ public class BotServiceFixture : IAsyncLifetime
     /// (proven to work for WoW.exe created via native CreateProcess), with Process.Kill()
     /// and CloseMainWindow() as fallbacks. Verifies the process is actually dead before
     /// returning success.
+    ///
+    /// Async to avoid blocking the test thread during post-kill waits.
     /// </summary>
-    private bool ForceKillProcess(Process proc, string label)
+    private async Task<bool> ForceKillProcessAsync(Process proc, string label)
     {
         var pid = proc.Id;
         try
@@ -615,7 +701,7 @@ public class BotServiceFixture : IAsyncLifetime
                 if (exitCode == 0)
                 {
                     // Wait for the process to actually terminate
-                    Thread.Sleep(1000);
+                    await Task.Delay(1000);
                     if (IsProcessDead(pid))
                         return true;
                     Log($"  [{label}] taskkill reported success but PID {pid} still alive!");
@@ -647,7 +733,7 @@ public class BotServiceFixture : IAsyncLifetime
         try
         {
             proc.CloseMainWindow();
-            Thread.Sleep(2000);
+            await Task.Delay(2000);
         }
         catch (Exception ex)
         {
@@ -668,7 +754,7 @@ public class BotServiceFixture : IAsyncLifetime
     /// 1) direct PathfindingService.exe process name
     /// 2) dotnet-hosted PathfindingService.dll discovered via listening port
     /// </summary>
-    private int KillPathfindingServiceProcesses(string label)
+    private async Task<int> KillPathfindingServiceProcessesAsync(string label)
     {
         var killed = 0;
         var seenPids = new HashSet<int>();
@@ -686,7 +772,7 @@ public class BotServiceFixture : IAsyncLifetime
 
                 seenPids.Add(proc.Id);
                 Log($"  [Cleanup] Killing PathfindingService PID {proc.Id}");
-                if (ForceKillProcess(proc, label))
+                if (await ForceKillProcessAsync(proc, label))
                     killed++;
             }
             finally { proc.Dispose(); }
@@ -703,7 +789,7 @@ public class BotServiceFixture : IAsyncLifetime
                 proc = Process.GetProcessById(pid);
                 seenPids.Add(pid);
                 Log($"  [Cleanup] Killing process on PathfindingService port 5001 (PID {pid}, Name '{proc.ProcessName}')");
-                if (ForceKillProcess(proc, $"{label}-Port5001"))
+                if (await ForceKillProcessAsync(proc, $"{label}-Port5001"))
                     killed++;
             }
             catch (ArgumentException)

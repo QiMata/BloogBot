@@ -2,9 +2,80 @@ using BotRunner.Clients;
 using GameData.Core.Models;
 using Pathfinding;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System;
 
 namespace BotRunner.Movement;
+
+/// <summary>
+/// Lightweight counters for debugging and monitoring pathfinding behaviour.
+/// Single-threaded per bot — no locks needed.
+/// </summary>
+public sealed class NavigationMetrics
+{
+    /// <summary>Total paths computed via GetValidatedPath.</summary>
+    public int PathsCalculated { get; private set; }
+
+    /// <summary>Paths that returned empty (sanitization, validation, or pathfinding failure).</summary>
+    public int PathsFailed { get; private set; }
+
+    /// <summary>Individual waypoints reached and advanced past.</summary>
+    public int WaypointsReached { get; private set; }
+
+    /// <summary>Stall/recalculation events (forced path recalculations).</summary>
+    public int RecalculationsTriggered { get; private set; }
+
+    /// <summary>Waypoints whose Z was corrected by Phase 3a collision ground queries.</summary>
+    public int ZCorrections { get; private set; }
+
+    /// <summary>String-pull segments rejected by Phase 5a width check.</summary>
+    public int WidthChecksFailed { get; private set; }
+
+    /// <summary>Multi-directional cliff probe activations.</summary>
+    public int CliffProbesTriggered { get; private set; }
+
+    /// <summary>Running average of path waypoint count across all calculated paths.</summary>
+    public float AveragePathLength { get; private set; }
+
+    /// <summary>Wall-clock milliseconds spent on the most recent path calculation.</summary>
+    public long LastPathDurationMs { get; private set; }
+
+    // Running totals for computing the average incrementally.
+    private long _totalWaypointCount;
+
+    internal void IncrementPathsCalculated() => PathsCalculated++;
+    internal void IncrementPathsFailed() => PathsFailed++;
+    internal void IncrementWaypointsReached() => WaypointsReached++;
+    internal void IncrementRecalculationsTriggered() => RecalculationsTriggered++;
+    internal void AddZCorrections(int count) { ZCorrections += count; }
+    internal void IncrementWidthChecksFailed() => WidthChecksFailed++;
+    internal void IncrementCliffProbesTriggered() => CliffProbesTriggered++;
+
+    internal void RecordPathLength(int waypointCount)
+    {
+        _totalWaypointCount += waypointCount;
+        AveragePathLength = PathsCalculated > 0
+            ? (float)_totalWaypointCount / PathsCalculated
+            : 0f;
+    }
+
+    internal void RecordPathDuration(long elapsedMs) => LastPathDurationMs = elapsedMs;
+
+    /// <summary>Reset all counters to zero.</summary>
+    public void Reset()
+    {
+        PathsCalculated = 0;
+        PathsFailed = 0;
+        WaypointsReached = 0;
+        RecalculationsTriggered = 0;
+        ZCorrections = 0;
+        WidthChecksFailed = 0;
+        CliffProbesTriggered = 0;
+        AveragePathLength = 0f;
+        LastPathDurationMs = 0;
+        _totalWaypointCount = 0;
+    }
+}
 
 /// <summary>
 /// Manages a path of waypoints from the pathfinding service.
@@ -36,6 +107,11 @@ public class NavigationPath(
     private Position? _lastWaypointSamplePosition;
     private float _lastWaypointSampleDistance = float.NaN;
     private int _stalledNearWaypointSamples;
+
+    /// <summary>
+    /// Pathfinding metrics for debugging and monitoring.
+    /// </summary>
+    public NavigationMetrics Metrics { get; } = new();
 
     // LOS-based string-pulling and runtime lookahead skip
     private const int MAX_STRINGPULL_LOOKAHEAD = 8;
@@ -212,6 +288,7 @@ public class NavigationPath(
                 && ShouldSkipProbeWaypoint(currentPosition, mapId, effectiveRadius, distanceToWaypoint))
             {
                 _currentIndex++;
+                Metrics.IncrementWaypointsReached();
                 continue;
             }
 
@@ -219,6 +296,7 @@ public class NavigationPath(
                 break;
 
             _currentIndex++;
+            Metrics.IncrementWaypointsReached();
         }
 
         // After reaching the current waypoint, try to skip further ahead via LOS.
@@ -508,6 +586,7 @@ public class NavigationPath(
             if (farthestVisible > anchorIndex + 1
                 && !IsSegmentWideEnoughForCharacter(anchor, path[farthestVisible], mapId))
             {
+                Metrics.IncrementWidthChecksFailed();
                 farthestVisible = anchorIndex + 1;
             }
 
@@ -660,6 +739,9 @@ public class NavigationPath(
         if (_pathfinding == null)
             return [];
 
+        Metrics.IncrementPathsCalculated();
+        var sw = Stopwatch.StartNew();
+
         var rawPath = _pathfinding.GetPath(mapId, start, end, smoothPath);
         var sanitizedPath = SanitizePath(rawPath);
         var prunedPath = _enableProbeHeuristics
@@ -677,13 +759,22 @@ public class NavigationPath(
         var zCorrectedPath = CorrectPathZFromCollision(mapId, pulledPath);
 
         var usable = IsPathUsable(mapId, start, end, zCorrectedPath);
+
+        sw.Stop();
+        Metrics.RecordPathDuration(sw.ElapsedMilliseconds);
+
         if (!usable && zCorrectedPath.Length > 0)
         {
             Serilog.Log.Warning("[NavigationPath] Path rejected by IsPathUsable: raw={RawCount} sanitized={SanitizedCount} pruned={PrunedCount} pulled={PulledCount} zCorrected={ZCorrectedCount} smooth={Smooth} strict={Strict} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
                 rawPath.Length, sanitizedPath.Length, prunedPath.Length, pulledPath.Length, zCorrectedPath.Length, smoothPath, _strictPathValidation,
                 start.X, start.Y, start.Z, end.X, end.Y, end.Z);
         }
-        return usable ? zCorrectedPath : [];
+
+        var result = usable ? zCorrectedPath : [];
+        Metrics.RecordPathLength(result.Length);
+        if (result.Length == 0)
+            Metrics.IncrementPathsFailed();
+        return result;
     }
 
     /// <summary>
@@ -722,6 +813,7 @@ public class NavigationPath(
 
         if (corrections > 0)
         {
+            Metrics.AddZCorrections(corrections);
             Serilog.Log.Debug("[NavigationPath] Z-corrected {Count}/{Total} waypoints from collision ground (mapId={MapId})",
                 corrections, path.Length, mapId);
         }
@@ -734,6 +826,9 @@ public class NavigationPath(
         var nowTick = _tickProvider();
         if (!force && _hasCalculatedPath && nowTick - _lastCalculationTick < RECALCULATE_COOLDOWN_MS)
             return;
+
+        if (force)
+            Metrics.IncrementRecalculationsTriggered();
 
         _lastCalculationTick = nowTick;
         _hasCalculatedPath = true;
@@ -958,6 +1053,8 @@ public class NavigationPath(
     /// </summary>
     public CliffProbeResult ProbeEdgesMultiDirectional(Position currentPos, Position targetWaypoint, uint mapId)
     {
+        Metrics.IncrementCliffProbesTriggered();
+
         var dx = targetWaypoint.X - currentPos.X;
         var dy = targetWaypoint.Y - currentPos.Y;
         var len = MathF.Sqrt(dx * dx + dy * dy);

@@ -19,7 +19,7 @@
 
 | # | ID | Task | Status |
 |---|-----|------|--------|
-| 1 | `PATH-REFACTOR-001` | **Complete pathfinding service + PhysicsEngine refactor.** BG falls on walkable slopes (should clamp to surface). FG bumps into walls/objects and gets stuck. BG forced through Orgrimmar WMO (catapult near bank). Physics slope handling, WMO collision, and wall-sliding all need rework. | **Open — P0** |
+| 1 | `PATH-REFACTOR-001` | **Complete pathfinding service + PhysicsEngine refactor.** Phases 0-5 complete: fallback reduction, doodad whitelist, penetration tolerance, capsule-radius paths, Z correction, cliff probes, width validation. Remaining: Phase 4b rerouting, Phase 6a batching. | **In Progress — P0** |
 | 2 | `TEST-GMMODE-001` | All LiveValidation tests outside of combat and corpse-run should use `.gm on` for setup safety. | **Done** |
 | 3 | `DB-CLEAN-001` | Remove all game object spawns with 0% spawn chance from MaNGOS DB. Also remove commands not from original MaNGOS (non-vanilla). | **Done** — pool_gameobject chance=0 is standard MaNGOS (equal distribution), NOT "never spawns." Command table already sanitized (4 legitimate entries remain). |
 | 4 | `TEST-MINING-001` | Mining test does wasteful teleporting. FG bot stands on top of node instead of near it. Optimize teleport logic and fix FG node positioning. | **Done** — eliminated re-teleport, FG bot positioned 5y from node (not on top), reduced wait times |
@@ -120,33 +120,34 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-02
-- **Current work:** PATH-REFACTOR-001 pathfinding overhaul + LiveValidation test evaluation.
-- **Completed this session (2026-03-02):**
-  1. **Phase 0b:** Eliminated fallback #11B — stalled waypoint index-only advance → always recalculate path
-  2. **Phase 0c:** Eliminated fallback #17A — Z interpolation from path removed; keeps current Z + diagnostic at 30 frames
-  3. **Phase 0d:** Added RESCUE diagnostics to PhysicsEngine.cpp fallbacks #1 and #2A
-  4. **Phase 1a:** SceneCache doodad whitelist — walkable structural doodads (plank, dock, bridge, platform, ramp, stair) always included even if they match an exclusion keyword
-  5. **Phase 1c:** Teleport Z clamp grace period (30 frames) in MovementController.cs
-  6. **Phase 2a:** Capsule-radius corner offsets — `capsuleRadius * 3.0f` instead of hardcoded 1.0f
-  7. **Phase 2b:** Speed-scaled acceptance radius — floor of `speed * 0.5 * 1.2` prevents overshoot at full run speed
-  8. **Tier 1 (7 items):** I-Z1 SkippableFact, S2 .gm off removed, F1 early-exit stabilization, I-U1 delay reduction, I-N3 assertion added, I-T1 .unlearn skip, I-QW1 strict assertion
-  9. **Tier 2 (14 files):** Replaced 90+ Task.Delay calls with Stopwatch polling patterns. Fishing WaitForZ, cast 6s→3s; Crafting revive/learn polling; Equipment 4× delay→poll; Economy removed dead .send money; Combat removed 700ms; Death 360s→180s + stuck detection; Consumable 1000ms→300ms polling
-  10. **Tier 3:** Extracted IsStrictAlive into LiveBotFixture as public static. Removed 10 duplicate private copies + 30 orphaned constants across test files.
-  11. **Tier 4:** FG parity WARNING→Assert for TalentAllocation, Crafting, Gathering
-  12. **Physics regression:** 97/97 pass, no regression from any changes
-  13. Total: 3 commits, 20+ files changed, net -62 lines (deduplication)
-- **Previous session:** LiveValidation reliability + teleport counter fix (`2709dbe`). Physics calibration — air mode perfect.
+- **Last updated:** 2026-03-01
+- **Current work:** PATH-REFACTOR-001 pathfinding overhaul + combat distance system + LiveValidation test evaluation.
+- **Completed this session (2026-03-01):**
+  1. **Phase 1b:** Ground snap penetration tolerance tightened (radius * 0.5f in PhysicsEngine.cpp)
+  2. **Phase 2c:** Per-race capsule dimensions through pipeline — NavigationPath accepts capsuleRadius + capsuleHeight; BotTask, GoToSequence, TargetPositioningService, RetrieveCorpseTask lazy-init with RaceDimensions
+  3. **Phase 3a:** Post-path Z correction from collision ground — CorrectPathZFromCollision queries GetGroundZ per waypoint, fixes Orgrimmar WMO Z divergence
+  4. **Phase 4a:** Multi-directional cliff probing — 5-point fan probe (forward, ±45°, ±90°), dual threshold (8y forward, 3y lateral)
+  5. **Phase 5a:** Segment width validation — IsSegmentWideEnoughForCharacter wired into StringPullPath, preserves corners when shortcut too narrow
+  6. **Phase 5b:** Headroom check placeholder (needs overhead ray-cast)
+  7. **Phase 6c:** Navigation metrics class — PathsCalculated, PathsFailed, WaypointsReached, ZCorrections, WidthChecksFailed, etc.
+  8. **Combat distance system:** CombatDistance utility class (vanilla 1.12.1 melee range formula with leeway), BoundingRadius/CombatReach wired into proto + snapshot pipeline
+  9. **StartRangedAttack:** Added to CharacterAction enum, ActionMapping, ActionDispatch, and Sequences.Combat
+  10. **Melee distance overhaul (28 files):** All melee BotProfile rotation tasks (Warrior×3, Rogue×3, Paladin×3, DruidFeral, ShamanEnhancement) + 6 FG rotations + trade sequence use CombatDistance formulas instead of hardcoded values
+  11. **Combat range tests (8 tests):** CombatReach populated, melee within/outside range, ranged within/outside range, interaction distance, formula validation, start/stop lifecycle
+  12. **CombatDistance unit tests (31 tests):** Melee range, interaction distance, spell range, IsMovingXZ, IsFacing, IsBehind, boundary conditions
+  13. **NavigationPath test fixes (8 tests):** Updated assertions for capsule-radius corner offsets + speed-scaled acceptance radius
+  14. **Part C:** Process orphan prevention in BotServiceFixture (dispose guard + async ForceKillProcess)
+  15. **Physics regression:** 97/97 pass. **BotRunner unit tests:** 146/146 pass. No regressions.
+  16. Total: 7 commits, 60+ files changed across pathfinding, combat, and tests
+- **Previous session (2026-03-02):** Phase 0b/0c/0d, Phase 1a/1c, Phase 2a/2b, Tiers 1-4 test fixes
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md` (57 tasks across 6 pathfinding phases + 5 test tiers)
 - **Remaining LiveValidation failures (pre-existing):**
   - **FishingProfessionTests** — BG fishing catch: SMSG_GAMEOBJECT_CUSTOM_ANIM handler
   - **CharacterLifecycleTests.Equipment_AddItemToInventory** — FG item polling timing
 - **Remaining plan work:**
-  1. Phase 1b: Ground snap penetration tolerance tightening (PhysicsEngine.cpp)
-  2. ~~Phase 2c: Pass capsule dimensions through pipeline~~ **Done** — capsuleRadius + capsuleHeight passed from RaceDimensions per race/gender at all 4 NavigationPath construction sites (BotTask, BuildGoToSequence, TargetPositioningService, RetrieveCorpseTask)
-  3. Phase 3: Navmesh-collision Z alignment (post-path Z correction)
-  4. Phase 4: Enhanced cliff safety (multi-directional probing)
-  5. Phase 5: Character size support (Gnome to Tauren width/height checks)
-  6. Phase 6: Structural improvements (query batching, DotRecast evaluation)
-  7. Part C: Process orphan prevention (fixture dispose guard, stale PID check)
+  1. Phase 4b: Path rerouting around cliff edges (uses Phase 4a CliffProbeResult)
+  2. Phase 6a: PathfindingService query batching (BatchGroundZRequest in protobuf)
+  3. Phase 6b: DotRecast evaluation (separate branch)
+  4. Remaining BotProfile ranged class distance updates (hunters, casters — use CombatDistance.GetSpellRange)
+  5. Remaining Tier 5 test state management items (quest cleanup, gather cleanup)
 - **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m`
