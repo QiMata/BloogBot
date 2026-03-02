@@ -626,7 +626,14 @@ namespace ForegroundBotRunner.Statics
         {
             if (guid == 0)
             {
-                Log.Debug("[FG] SetTarget skipped for GUID 0.");
+                // Clear the target — prevents stale references to despawned objects
+                // (e.g., after mining a node that gets removed).
+                ThreadSynchronizer.RunOnMainThread<int>(() =>
+                {
+                    Functions.SetTarget(0);
+                    Log.Debug("[FG] Target cleared (SetTarget(0)).");
+                    return 0;
+                });
                 return;
             }
 

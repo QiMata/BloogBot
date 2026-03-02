@@ -27,7 +27,8 @@ namespace WoWSharpClient.Handlers
                     spells.Add(new GameData.Core.Models.Spell(spellID, 0, "", "", ""));
                 }
 
-                WoWSharpObjectManager.Instance.Spells = spells;
+                lock (WoWSharpObjectManager.Instance.SpellLock)
+                    WoWSharpObjectManager.Instance.Spells = spells;
                 Log.Information($"[SpellHandler] Loaded {spellCount} spells from SMSG_INITIAL_SPELLS");
 
                 ushort cooldownCount = reader.ReadUInt16();
@@ -60,11 +61,14 @@ namespace WoWSharpClient.Handlers
             try
             {
                 uint spellId = reader.ReadUInt32();
-                var existing = WoWSharpObjectManager.Instance.Spells;
-                if (existing != null && !existing.Exists(s => s.Id == spellId))
+                lock (WoWSharpObjectManager.Instance.SpellLock)
                 {
-                    existing.Add(new GameData.Core.Models.Spell(spellId, 0, "", "", ""));
-                    Log.Information("[SpellHandler] Learned new spell: {SpellId} (total: {Count})", spellId, existing.Count);
+                    var existing = WoWSharpObjectManager.Instance.Spells;
+                    if (existing != null && !existing.Exists(s => s.Id == spellId))
+                    {
+                        existing.Add(new GameData.Core.Models.Spell(spellId, 0, "", "", ""));
+                        Log.Information("[SpellHandler] Learned new spell: {SpellId} (total: {Count})", spellId, existing.Count);
+                    }
                 }
             }
             catch (EndOfStreamException) { }

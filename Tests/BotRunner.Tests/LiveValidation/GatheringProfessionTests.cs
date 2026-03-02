@@ -487,6 +487,12 @@ public class GatheringProfessionTests
                 gatherParams.Parameters.Add(new RequestParameter { IntParam = (int)gatherSpellId });
             await _bot.SendActionAndWaitAsync(account, gatherParams, delayMs: GatherChannelWaitMs);
 
+            // Post-gather cooldown: give WoW.exe time to clean up the game object interaction
+            // state after the node despawns. Without this, an immediate teleport can trigger
+            // ACCESS_VIOLATION (ERROR #132) in the FG client when the stale interaction pointer
+            // is dereferenced during the teleport update cycle.
+            await Task.Delay(2000);
+
             await _bot.RefreshSnapshotsAsync();
             uint skillNow = GetSkill(label, skillId);
             _output.WriteLine($"  [{label}] Skill after gather: {skillNow}");

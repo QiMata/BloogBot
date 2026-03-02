@@ -674,6 +674,7 @@ namespace WoWSharpClient
         }
 
         public bool HasEnteredWorld { get; internal set; }
+        internal readonly object SpellLock = new();
         public List<Spell> Spells { get; internal set; } = [];
         public List<Cooldown> Cooldowns { get; internal set; } = [];
 
@@ -1733,13 +1734,21 @@ namespace WoWSharpClient
                             switch (questField)
                             {
                                 case 0:
+                                    var prevQuestId = player.QuestLog[questIndex].QuestId;
                                     player.QuestLog[questIndex].QuestId = (uint)value;
+                                    if ((uint)value != prevQuestId)
+                                        Log.Information("[QuestFieldDiff] QuestLog[{Index}].QuestId: {Prev} -> {New}",
+                                            questIndex, prevQuestId, (uint)value);
                                     break;
                                 case 1:
                                     player.QuestLog[questIndex].QuestCounters = (byte[])value;
                                     break;
                                 case 2:
+                                    var prevState = player.QuestLog[questIndex].QuestState;
                                     player.QuestLog[questIndex].QuestState = (uint)value;
+                                    if ((uint)value != prevState)
+                                        Log.Information("[QuestFieldDiff] QuestLog[{Index}].QuestState: {Prev} -> {New}",
+                                            questIndex, prevState, (uint)value);
                                     break;
                             }
                         }
@@ -2296,10 +2305,14 @@ namespace WoWSharpClient
 
         public bool CanCastSpell(int spellId, ulong targetGuid)
         {
-            return Spells.Any(s => s.Id == (uint)spellId);
+            lock (SpellLock)
+                return Spells.Any(s => s.Id == (uint)spellId);
         }
 
-        public IReadOnlyCollection<uint> KnownSpellIds => Spells.Select(s => s.Id).ToArray();
+        public IReadOnlyCollection<uint> KnownSpellIds
+        {
+            get { lock (SpellLock) return Spells.Select(s => s.Id).ToArray(); }
+        }
 
         public void UseItem(int bagId, int slotId, ulong targetGuid = 0)
         {

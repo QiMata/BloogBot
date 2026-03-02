@@ -193,6 +193,15 @@ namespace BotRunner
                         looted = true;
                         return BehaviourTreeStatus.Success;
                     })
+                    .Do("Clear Target After Gather", time =>
+                    {
+                        // Clear the target after gathering to prevent stale references to despawned nodes.
+                        // The mined/herbed node will despawn shortly after loot; if the target still references
+                        // the freed object, WoW.exe (FG) can crash with ACCESS_VIOLATION (ERROR #132).
+                        _objectManager.SetTarget(0);
+                        Log.Information("[GATHER] Target cleared after gather (node 0x{Guid:X})", guid);
+                        return BehaviourTreeStatus.Success;
+                    })
                 .End()
                 .Build();
         }

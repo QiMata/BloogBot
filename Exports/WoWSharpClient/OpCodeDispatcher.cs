@@ -2,6 +2,7 @@
 using WoWSharpClient.Handlers;
 using WoWSharpClient.Utils;
 using Serilog;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System;
@@ -13,13 +14,11 @@ namespace WoWSharpClient
     public class OpCodeDispatcher
     {
         private readonly Dictionary<Opcode, Action<Opcode, byte[]>> _handlers = [];
-        private readonly Queue<Action> _queue;
+        private readonly ConcurrentQueue<Action> _queue = new();
         private readonly Task _runnerTask;
 
         public OpCodeDispatcher()
         {
-            _queue = new Queue<Action>();
-
             RegisterHandlers();
 
             _runnerTask = Runner();
@@ -142,11 +141,10 @@ namespace WoWSharpClient
         {
             while (true)
             {
-                if (_queue.Count > 0)
+                while (_queue.TryDequeue(out var action))
                 {
                     try
                     {
-                        var action = _queue.Dequeue();
                         action();
                     }
                     catch (Exception e)
