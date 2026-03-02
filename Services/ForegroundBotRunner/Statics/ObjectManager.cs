@@ -1508,22 +1508,18 @@ namespace ForegroundBotRunner.Statics
             // ConcurrentModificationException in KnownSpellIds/BotRunnerService snapshot thread.
             var rawIds = new HashSet<uint>();
 
-            int consecutiveZeros = 0;
             for (var i = 0; i < 1024; i++)
             {
                 var currentSpellId = MemoryManager.ReadInt(MemoryAddresses.LocalPlayerSpellsBase + 4 * i);
 
                 if (currentSpellId == 0)
                 {
-                    // .unlearn leaves zero gaps in the spell array; skip them rather than stopping early.
-                    // Break only when 100+ consecutive zeros are seen — that's the real end of the list.
-                    // After many learn/unlearn cycles (as in the full test suite), the array can have
-                    // long runs of gaps that would prematurely terminate a threshold-of-10 scan.
-                    consecutiveZeros++;
-                    if (consecutiveZeros >= 100) break;
+                    // .unlearn leaves zero gaps in the spell array. Scan all 1024 entries unconditionally
+                    // so that newly-learned spells placed beyond a large gap are never missed.
+                    // The 1024-entry bound is well above vanilla WoW's spell count; the cost is minimal
+                    // (1024 integer reads per frame).
                     continue;
                 }
-                consecutiveZeros = 0;
 
                 // Sanity check: WoW 1.12.1 spell IDs top out around 25000; skip garbage values.
                 if (currentSpellId < 0 || currentSpellId > 30000) continue;
