@@ -120,26 +120,33 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-02
-- **Current work:** PATH-REFACTOR-001 pathfinding overhaul complete (Phases 0-6). Combat distance system complete. LiveValidation test evaluation ongoing.
-- **Completed this session (2026-03-02):**
-  1. **Phase 4b:** Cliff rerouting — RerouteAroundCliff offsets waypoints perpendicular to cliff edges, wired into GetValidatedPath pipeline
-  2. **Phase 6a:** Batch GroundZ queries — BatchGroundZRequest/Response in protobuf, handler in PathfindingSocketServer, BatchGetGroundZ in PathfindingClient with graceful fallback, CorrectPathZFromCollision uses single IPC call
-  3. **Phase 6c:** Navigation metrics — CliffReroutes counter added
-  4. **Part C:** Process orphan prevention — ForceKillProcessAsync, CheckForOrphanedProcessesAsync in BotServiceFixture
-  5. **Ranged class distance overhaul (32 files):** All caster/ranged BotProfiles (Hunter×6, Mage×5, Warlock×7, Priest×6, DruidBalance/Resto×4, ShamanElemental/Resto×4) + CombatRotationTask base class use GetSpellRange() with named constants
-  6. **Tier 5 state management:** Quest try/finally cleanup (I-QI1), gathering return-to-safe-zone (I-ST3), combat .respawn verification (I-ST4), claimedTargets confirmed used (I-CB2)
-  7. **Tests:** 97/97 physics, 166/166 BotRunner unit, 72/72 CombatRotation, 43/43 NavigationPath. No regressions.
-  8. Total: 10 commits, 80+ files changed across pathfinding, combat, BotProfiles, and tests
-- **Previous session (2026-03-01):** Phases 1b/2c/3a/4a/5a/5b, combat distance system, melee distance overhaul (28 files), StartRangedAttack, combat range tests
-- **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md` (57 tasks across 6 pathfinding phases + 5 test tiers)
-- **Remaining LiveValidation failures (pre-existing):**
-  - **FishingProfessionTests** — BG fishing catch: SMSG_GAMEOBJECT_CUSTOM_ANIM handler
-  - **CharacterLifecycleTests.Equipment_AddItemToInventory** — FG item polling timing
-  - **QuestInteractionTests** — Quest snapshot sync lag (WSM-PAR-001)
+- **Last updated:** 2026-03-02 (session 3)
+- **Current work:** PATH-REFACTOR-001 complete. All 5 LiveValidation tiers complete. 1247/1247 unit tests pass, 97/97 physics replay pass.
+- **Completed session 3 (2026-03-02 continuation):**
+  1. **Pre-existing test failures (5):** Fixed TargetPositioningService + 4 RetrieveCorpseTask tests broken by combat distance refactor (missing GetGroundZ override, StopAllMovement→ForceStopImmediate, non-strict LOS path test)
+  2. **Tier 2 (delay→polling):** ConsumableUsage, EquipmentEquip, CraftingProfession, EconomyInteraction — Task.Delay→Stopwatch+200ms poll with early exit
+  3. **Tier 3 (DRY):** WaitForSnapshotConditionAsync + EnsureStrictAliveAsync extracted to LiveBotFixture, ~130 lines removed across 7 files, GatheringProfession self-melee hack→BotSelectSelfAsync
+  4. **Tier 4 (FG parity):** TalentAllocation WARNING→Assert, GatheringProfession FG herbalism parity test
+  5. **Tier 1 (correctness):** I-N3 NpcInteraction assertions, I-Z1 OrgrimmarGroundZ skip guard, I-T1 TalentAllocation .unlearn validation, I-QW1 QuestInteraction tightened assertion + WSM-PAR-001 doc
+  6. **CombatRangeTests reliability:** Teleport arrival polling, distance-aware boar finding, diagnostic logging on target selection failure
+  7. **Tests:** 1247/1247 BotRunner unit, 97/97 physics. No regressions.
+  8. Total: 7 commits this session, 20+ files changed
+- **Completed session 2 (2026-03-02):** Phase 4b cliff rerouting, Phase 6a batch GroundZ, Phase 6c metrics, Part C process orphan prevention, ranged class distance (32 files), Tier 5 state management. 10 commits, 80+ files.
+- **Completed session 1 (2026-03-01):** Phases 0-5, combat distance system, melee distance (28 files), StartRangedAttack, combat range tests
+- **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md` (57 tasks across 6 pathfinding phases + 5 test tiers — ALL COMPLETE except Phase 6b)
+- **LiveValidation results (run 3 — 27 of ~40 tests before host crash):**
+  - **22 passed:** BasicLoop (6/6), CharacterLifecycle (3/4), CombatLoop (1/1), CombatRange (6/8), ConsumableUsage (1/1), CraftingProfession (1/1), DeathCorpseRun (1/1), EconomyInteraction (3/3), EquipmentEquip (1/1)
+  - **5 failed:** Death_KillAndRevive (FG flaky), AutoAttack_StartAndStop (BG target GUID), MeleeAttack_WithinRange (BG target GUID), FishingProfession (BG catch, known), GatheringProfession.Mining (FG, new)
+  - **Improvements from this session:** SeesNearbyGameObjects FAIL→PASS, Equipment_AddItemToInventory FAIL→PASS
+  - **Test host crashes:** 32-bit testhost crash during GatheringProfession (3 of 3 runs crashed at same point)
+- **Remaining known issues:**
+  1. **FishingProfessionTests** — SMSG_GAMEOBJECT_CUSTOM_ANIM handler EXISTS (SpellHandler.cs:505-553) but BG catch fails at runtime. Needs packet trace analysis: is packet arriving? Is bobber GUID matched? Is CreatedBy correct?
+  2. **Equipment_AddItemToInventory** — FG item polling timing (pre-existing)
+  3. **CombatRange melee target selection** — Target GUID not appearing in snapshot after StartMeleeAttack. Reliability fix applied (distance-aware mob finding, arrival polling). Needs revalidation.
+  4. **GatheringProfession.Mining FG** — New failure: "FG: Failed to gather Copper Vein at any spawned location. skill=1." Needs investigation.
+  5. **Test host stability** — 32-bit testhost crashes during extended LiveValidation runs
 - **Remaining plan work:**
   1. Phase 6b: DotRecast evaluation (separate branch — low priority)
-  2. Remaining Tier 2 delay replacements (90+ Task.Delay calls in LiveValidation tests)
-  3. Tier 3 code quality (IsStrictAlive dedup, EnsureStrictAliveAsync extraction)
-  4. Tier 4 FG parity enforcement (WARNING→Assert in crafting, talent, gathering tests)
+  2. Remaining Tier 2 delay replacements in DeathCorpseRun + FishingProfession tests
+  3. LV-QUEST-001 / WSM-PAR-001 quest snapshot sync lag
 - **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m`
