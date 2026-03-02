@@ -41,6 +41,7 @@ public class LiveBotFixture : IAsyncLifetime
     private ITestOutputHelper? _testOutput;
     private readonly object _commandTrackingLock = new();
     private readonly object _snapshotMessageDeltaLock = new();
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly Dictionary<string, int> _soapCommandCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Dictionary<string, int>> _chatCommandCountsByAccount = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _lastPrintedChatCountByAccount = new(StringComparer.OrdinalIgnoreCase);
@@ -500,37 +501,47 @@ public class LiveBotFixture : IAsyncLifetime
     {
         if (_stateManagerClient == null) return;
 
-        // Determine how many bots we expect based on previously known account names.
-        int expectedCount = (BgAccountName != null ? 1 : 0) + (FgAccountName != null ? 1 : 0);
-
-        List<WoWActivitySnapshot> inWorld;
-        // Brief retry: if InWorld count drops below expected (transient CharacterSelect flicker),
-        // poll up to 3 times with 500ms intervals before accepting the reduced list.
-        for (int attempt = 0; attempt < 3; attempt++)
+        // Serialize concurrent callers (e.g. parallel corpse-run tasks) to prevent
+        // race conditions on shared AllBots/BackgroundBot/ForegroundBot state.
+        await _refreshLock.WaitAsync();
+        try
         {
-            var snapshots = await _stateManagerClient.QuerySnapshotsAsync();
-            inWorld = snapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
+            // Determine how many bots we expect based on previously known account names.
+            int expectedCount = (BgAccountName != null ? 1 : 0) + (FgAccountName != null ? 1 : 0);
 
-            if (inWorld.Count >= expectedCount || expectedCount == 0)
+            List<WoWActivitySnapshot> inWorld;
+            // Brief retry: if InWorld count drops below expected (transient CharacterSelect flicker),
+            // poll up to 3 times with 500ms intervals before accepting the reduced list.
+            for (int attempt = 0; attempt < 3; attempt++)
             {
-                AllBots = inWorld;
-                IdentifyBots(inWorld);
-                await EnsureFgGmModeAsync();
-                LogSnapshotMessages();
-                return;
+                var snapshots = await _stateManagerClient.QuerySnapshotsAsync();
+                inWorld = snapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
+
+                if (inWorld.Count >= expectedCount || expectedCount == 0)
+                {
+                    AllBots = inWorld;
+                    IdentifyBots(inWorld);
+                    await EnsureFgGmModeAsync();
+                    LogSnapshotMessages();
+                    return;
+                }
+
+                // Short wait before retry — transient flicker usually resolves in <1s
+                if (attempt < 2)
+                    await Task.Delay(500);
             }
 
-            // Short wait before retry — transient flicker usually resolves in <1s
-            if (attempt < 2)
-                await Task.Delay(500);
+            // Accept whatever we have after retries
+            var finalSnapshots = await _stateManagerClient.QuerySnapshotsAsync();
+            AllBots = finalSnapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
+            IdentifyBots(AllBots);
+            await EnsureFgGmModeAsync();
+            LogSnapshotMessages();
         }
-
-        // Accept whatever we have after retries
-        var finalSnapshots = await _stateManagerClient.QuerySnapshotsAsync();
-        AllBots = finalSnapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
-        IdentifyBots(AllBots);
-        await EnsureFgGmModeAsync();
-        LogSnapshotMessages();
+        finally
+        {
+            _refreshLock.Release();
+        }
     }
 
     private void LogSnapshotMessages()

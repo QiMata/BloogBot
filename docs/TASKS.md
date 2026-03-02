@@ -70,6 +70,7 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 | `LV-GROUP-001` | GroupFormationTests | SMSG_GROUP_LIST parsed leaderGuid but never stored it persistently. Snapshot returned 0. | `Exports/WoWSharpClient` | **Done** — added LeaderGuid property to IPartyNetworkClientComponent, stored in ParseGroupList/SetLeader, used in snapshot |
 | `LV-GROUNDZ-001` | OrgrimmarGroundZAnalysis.PostTeleportSnap | GROUND_SNAP_MAX_DROP=3.0 too restrictive (Org navmesh 3.4y below WMO). Also physics blocked by `_isBeingTeleported` guard. | `Exports/WoWSharpClient/Movement` | **Done** — increased MAX_DROP to 5.0, force physics frame on teleport flag clear |
 | `LV-QUEST-001` | QuestInteractionTests | Quest not in snapshot after `.quest add`. Already tracked as WSM-PAR-001. | `Services/WoWStateManager` | Open |
+| `LV-TPCOUNT-001` | Teleport ACK counter | BG client sends MSG_MOVE_TELEPORT_ACK with counter=0, server expects counter=12+. `MovementHandler.cs:80` fires `RequiresAcknowledgementArgs(guid, 0)` for MSG_MOVE_TELEPORT (which has no counter field). Fix: track teleport sequence locally and increment on each MSG_MOVE_TELEPORT received. | `Exports/WoWSharpClient/Handlers` | **Open** |
 
 ## Deferred (Unused Services)
 

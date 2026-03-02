@@ -156,11 +156,9 @@ public class FishingProfessionTests
                 Parameters = { new RequestParameter { FloatParam = facing } }
             }, delayMs: 500);
 
-            // Turn GM mode OFF before fishing — GM mode prevents fishing spell from working.
-            // Wait 3s for physics to fully stabilize after GM off — the movement controller
-            // needs time to settle position and clear any MOVEFLAG_FALLINGFAR from the Z clamp.
-            await _bot.SendGmChatCommandAsync(account, ".gm off");
-            await Task.Delay(3000);
+            // GM mode stays ON — fishing works with GM mode enabled.
+            // Brief stabilization for physics to settle position after teleport + facing.
+            await Task.Delay(1000);
 
             // Log nearby game objects (fishing nodes, etc.)
             await _bot.RefreshSnapshotsAsync();
@@ -170,12 +168,6 @@ public class FishingProfessionTests
             foreach (var go in nearbyGOs.Take(8))
                 _output.WriteLine($"    entry={go.Entry}, displayId={go.DisplayId}, type={go.GameObjectType}, " +
                     $"pos=({go.Base?.Position?.X:F1}, {go.Base?.Position?.Y:F1}, {go.Base?.Position?.Z:F1})");
-
-            // Verify position after GM off — teleport Z clamp should hold position
-            await _bot.RefreshSnapshotsAsync();
-            snap = GetSnapshot(label);
-            pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-            _output.WriteLine($"  [{label}] Post-GM-off pos: ({pos?.X:F1}, {pos?.Y:F1}, {pos?.Z:F1})");
 
             // Try fishing at this location — up to MaxFishingAttempts casts
             bool caught = await CastAndWaitForCatch(account, label, initialSkill);

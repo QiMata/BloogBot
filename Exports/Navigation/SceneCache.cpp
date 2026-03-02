@@ -166,6 +166,30 @@ static G3D::Vector3 QuatRotate(float qx, float qy, float qz, float qw, const G3D
     );
 }
 
+// Decorative doodad exclusion: M2 models that should NOT generate collision geometry.
+// These are non-walkable props that block pathfinding (e.g. catapults, banners, braziers).
+static bool ShouldExcludeDoodad(const char* m2Name)
+{
+    // Lowercase the name for case-insensitive matching.
+    std::string nameLower(m2Name);
+    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+
+    // Keywords for decorative / non-blocking M2 doodads
+    static const char* s_excludedKeywords[] = {
+        "catapult", "banner", "torch", "brazier", "fire", "smoke",
+        "dust", "flag", "chain", "rope", "bell", "lamp", "lantern",
+        "candl", "broom", "barrel_burning", "bonfire", "campfire",
+        "emitter", "particle", "steam", "glow"
+    };
+
+    for (const char* keyword : s_excludedKeywords)
+    {
+        if (nameLower.find(keyword) != std::string::npos)
+            return true;
+    }
+    return false;
+}
+
 // Inverse of fixCoordSystem: VMAP internal M2 space → WoW M2 space
 // fixCoordSystem: (x,y,z) → (x,z,-y)
 // inverse:        (x,y,z) → (x,-z,y)
@@ -367,6 +391,11 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
                         continue;
 
                     const char* m2Name = &doodadData.nameTable[spawn.nameOffset];
+
+                    // Skip decorative doodads that shouldn't block pathfinding.
+                    if (ShouldExcludeDoodad(m2Name))
+                        continue;
+
                     std::string m2Key(m2Name);
 
                     // Load M2 model (with caching)

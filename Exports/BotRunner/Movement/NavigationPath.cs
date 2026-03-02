@@ -706,7 +706,10 @@ public class NavigationPath(
             _currentIndex = 0;
             _waypointAcceptanceRadii = [];
             if (_enableProbeHeuristics)
+            {
+                OffsetCornerWaypoints(start);
                 ComputeWaypointAcceptanceRadii(start);
+            }
         }
         catch
         {

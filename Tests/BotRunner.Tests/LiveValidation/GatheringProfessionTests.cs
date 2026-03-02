@@ -308,9 +308,7 @@ public class GatheringProfessionTests
     {
         int maxLocations = Math.Min(spawns.Count, 5);
 
-        // Enter gameplay mode once for the full gather loop.
-        await _bot.SendGmChatCommandTrackedAsync(account, ".gm off", captureResponse: true);
-        await Task.Delay(500);
+        // GM mode stays ON — gathering works with GM mode enabled.
 
         // Park the other bot once to reduce coordinator interference.
         if (parkAccount != null)

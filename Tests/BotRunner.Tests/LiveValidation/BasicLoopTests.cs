@@ -107,8 +107,8 @@ public class BasicLoopTests
         if (_bot.ForegroundBot != null)
         {
             _output.WriteLine("[PARITY] Running BG and FG Z-stabilization checks in parallel.");
-            var bgStabTask = _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 6000);
-            var fgStabTask = _bot.WaitForZStabilizationAsync(_bot.FgAccountName, waitMs: 6000);
+            var bgStabTask = _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 3000);
+            var fgStabTask = _bot.WaitForZStabilizationAsync(_bot.FgAccountName, waitMs: 3000);
             await Task.WhenAll(bgStabTask, fgStabTask);
 
             var (stable, finalZ) = await bgStabTask;
@@ -123,7 +123,7 @@ public class BasicLoopTests
         }
         else
         {
-            var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 6000);
+            var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 3000);
             _output.WriteLine($"BG final Z: {finalZ:F2}, stable={stable}, delta={Math.Abs(finalZ - initialZ):F2}");
             Assert.True(finalZ > -500, $"BG physics broken: Z={finalZ:F2} below world floor threshold.");
             Assert.True(stable, $"BG Z failed to stabilize: start={initialZ:F2}, end={finalZ:F2}.");
@@ -276,7 +276,7 @@ public class BasicLoopTests
 
         _output.WriteLine($"[{label}] Post-teleport pos: ({pos?.X:F1}, {pos?.Y:F1}, {pos?.Z:F1}), moveFlags=0x{movementFlags:X}");
 
-        var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(account, waitMs: 6000);
+        var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(account, waitMs: 3000);
         _output.WriteLine($"[{label}] Post-teleport Z stable={stable}, finalZ={finalZ:F2}");
         Assert.True(finalZ > -500, $"{label}: physics broken after teleport (Z={finalZ:F2}).");
         Assert.True(stable, $"{label}: post-teleport Z did not stabilize.");
