@@ -1032,9 +1032,11 @@ namespace WoWSharpClient
                     break;
                 case EUnitFields.UNIT_FIELD_TARGET:
                     unit.TargetHighGuid.LowGuidValue = (byte[])value;
+                    unit.TargetGuid = unit.TargetHighGuid.FullGuid;
                     break;
                 case EUnitFields.UNIT_FIELD_TARGET + 1:
                     unit.TargetHighGuid.HighGuidValue = (byte[])value;
+                    unit.TargetGuid = unit.TargetHighGuid.FullGuid;
                     break;
                 case EUnitFields.UNIT_FIELD_PERSUADED:
                     unit.Persuaded.LowGuidValue = (byte[])value;
