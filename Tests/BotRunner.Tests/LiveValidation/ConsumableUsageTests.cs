@@ -124,7 +124,7 @@ public class ConsumableUsageTests
         {
             ActionType = ActionType.UseItem,
             Parameters = { new RequestParameter { IntParam = (int)ElixirOfLionsStrength } }
-        }, delayMs: 5000);
+        }, delayMs: 2000);
 
         // --- Step 3: Verify buff is active (check for specific spell ID, not count increase) ---
         _output.WriteLine($"  [{label}] Step 3: Check auras for Lion's Strength buff (spell {LionsStrengthSpellId})");

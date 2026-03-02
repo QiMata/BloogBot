@@ -219,6 +219,9 @@ namespace WoWSharpClient.Movement
         }
 
         private int _deadReckonCount = 0;
+        private int _noGroundFrameCount = 0;
+        private int _teleportZGraceFrames = 0;
+        private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
 
         private void ApplyPhysicsResult(PhysicsOutput output, float deltaSec)
@@ -247,24 +250,30 @@ namespace WoWSharpClient.Movement
                 _physicsMovedCount++;
             }
 
-            // Z interpolation from path waypoints when physics doesn't provide valid ground
+            // When physics doesn't provide valid ground, keep current Z rather than interpolating
+            // from path waypoints. Path Z interpolation was masking missing collision geometry —
+            // the physics engine should find ground on its own. The teleport Z clamp (#4) handles
+            // the post-teleport geometry-loading window.
             bool physicsHasGround = output.GroundZ > -50000f;
             if (!physicsHasGround)
             {
-                if (_currentPath != null && _currentWaypointIndex < _currentPath.Length)
+                _noGroundFrameCount++;
+                output.NewPosZ = oldPos.Z;
+                output.NewVelX = 0;
+                output.NewVelY = 0;
+                output.NewVelZ = 0;
+                output.FallTime = 0;
+
+                if (_noGroundFrameCount == 30) // ~1 second at 30 FPS
                 {
-                    output.NewPosZ = InterpolatePathZ(output.NewPosX, output.NewPosY, oldPos.Z);
+                    Log.Warning("[MovementController] No ground for 30 frames at ({X:F1}, {Y:F1}, {Z:F1}). " +
+                        "Physics may be missing collision geometry here.",
+                        output.NewPosX, output.NewPosY, output.NewPosZ);
                 }
-                else
-                {
-                    // No ground data AND no path — keep current Z to prevent falling through world.
-                    // This happens when terrain isn't loaded (e.g. after teleport before physics catches up).
-                    output.NewPosZ = oldPos.Z;
-                    output.NewVelX = 0;
-                    output.NewVelY = 0;
-                    output.NewVelZ = 0;
-                    output.FallTime = 0;
-                }
+            }
+            else
+            {
+                _noGroundFrameCount = 0;
             }
             // Guard against falling through objects that the navmesh doesn't model (docks, bridges,
             // WMO platforms). After a teleport, if gravity would pull us more than GROUND_SNAP_MAX_DROP
@@ -294,8 +303,19 @@ namespace WoWSharpClient.Movement
                 }
                 else
                 {
-                    // Player is intentionally moving — they walked off the edge. Clear the clamp.
-                    _teleportZ = float.NaN;
+                    // Player started intentionally moving — begin grace period countdown.
+                    // Don't clear teleport Z immediately; give the physics engine time to find
+                    // proper ground under the new position. Only clear after the grace period
+                    // expires AND physics has found valid ground.
+                    if (_teleportZGraceFrames == 0)
+                        _teleportZGraceFrames = TELEPORT_Z_GRACE_DURATION;
+
+                    _teleportZGraceFrames--;
+                    if (_teleportZGraceFrames <= 0 && _noGroundFrameCount == 0)
+                    {
+                        _teleportZ = float.NaN;
+                        _teleportZGraceFrames = 0;
+                    }
                 }
             }
 
@@ -692,6 +712,8 @@ namespace WoWSharpClient.Movement
             // so gravity applies and the character snaps to the real ground height.
             _needsGroundSnap = true;
             _teleportZ = _player.Position.Z;
+            _teleportZGraceFrames = 0; // Reset grace countdown on new teleport
+            _noGroundFrameCount = 0;
 
             _currentPath = null;
             _currentWaypointIndex = 0;

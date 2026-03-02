@@ -153,15 +153,11 @@ public class NavigationPath(
             {
                 // In strict mode, never advance a stalled corner by index only.
                 // Recalculate so we keep following service-validated turns.
-                if (_strictPathValidation || !CanAdvanceToNextWaypoint(currentPosition, mapId, waypointDistance))
-                {
-                    CalculatePath(currentPosition, destination, mapId, force: true);
-                    AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
-                }
-                else
-                {
-                    _currentIndex++;
-                }
+                // Always recalculate when stalled — never advance by index alone.
+                // Index-only advance bypasses path validation and can push the bot
+                // into invalid geometry. If recalculation fails, mark path as exhausted.
+                CalculatePath(currentPosition, destination, mapId, force: true);
+                AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
                 _stalledNearWaypointSamples = 0;
                 _lastWaypointSampleDistance = float.NaN;
                 _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);

@@ -55,14 +55,10 @@ public class OrgrimmarGroundZAnalysisTests
         _bot.SetOutput(output);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DualClient_OrgrimmarGroundZ_PostTeleportSnap()
     {
-        if (!_bot.IsReady)
-        {
-            _output.WriteLine($"SKIP: LiveBotFixture not ready — {_bot.FailureReason}");
-            return;
-        }
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
 
         var bgAccount = _bot.BgAccountName;
         var fgAccount = _bot.FgAccountName;
@@ -154,14 +150,10 @@ public class OrgrimmarGroundZAnalysisTests
         Assert.Empty(failures);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task DualClient_OrgrimmarGroundZ_StandAndWalk()
     {
-        if (!_bot.IsReady)
-        {
-            _output.WriteLine($"SKIP: LiveBotFixture not ready — {_bot.FailureReason}");
-            return;
-        }
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
 
         var bgAccount = _bot.BgAccountName;
         var fgAccount = _bot.FgAccountName;

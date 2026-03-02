@@ -1082,14 +1082,27 @@ public class LiveBotFixture : IAsyncLifetime
         var acct = accountName ?? BgAccountName;
         if (acct == null || _stateManagerClient == null) return (false, float.MinValue);
 
-        await Task.Delay(500); // Let physics settle
+        await Task.Delay(500); // Let physics settle for one tick
         var samples = new List<float>();
-        for (int i = 0; i < waitMs / 500; i++)
+        int maxIterations = waitMs / 500;
+        for (int i = 0; i < maxIterations; i++)
         {
             var snap = await GetSnapshotAsync(acct);
             var z = snap?.Player?.Unit?.GameObject?.Base?.Position?.Z;
             if (z.HasValue)
+            {
                 samples.Add(z.Value);
+
+                // Early exit: 3 consecutive samples within 0.1y means Z is stable
+                if (samples.Count >= 3)
+                {
+                    float maxDelta = 0f;
+                    for (int j = samples.Count - 2; j >= samples.Count - 3 && j >= 0; j--)
+                        maxDelta = Math.Max(maxDelta, Math.Abs(samples[j + 1] - samples[j]));
+                    if (maxDelta < 0.1f && samples[^1] > -500f)
+                        return (true, samples[^1]);
+                }
+            }
             await Task.Delay(500);
         }
 

@@ -147,9 +147,8 @@ public class EquipmentEquipTests
             return false;
         }
 
-        // Ensure GM mode is off — GM mode blocks player equip actions (same as FISH-001).
-        await _bot.SendGmChatCommandAsync(account, ".gm off");
-        await Task.Delay(800);
+        // GM mode stays ON — equip actions work with GM mode enabled.
+        // Previous .gm off here corrupted GM state for downstream tests and risked BG disconnect.
 
         // Equip and verify transition.
         _output.WriteLine($"  [{label}] Equipping Worn Mace.");
