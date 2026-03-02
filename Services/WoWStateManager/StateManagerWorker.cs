@@ -392,9 +392,9 @@ namespace WoWStateManager
                 return;
             }
 
-            _activityMemberSocketListener.EnqueueAction(forward.AccountName, forward.Action);
-            response.Response = ResponseResult.Success;
-            _logger.LogInformation($"Action forward: queued {forward.Action.ActionType} for '{forward.AccountName}'");
+            var enqueued = _activityMemberSocketListener.EnqueueAction(forward.AccountName, forward.Action);
+            response.Response = enqueued ? ResponseResult.Success : ResponseResult.Failure;
+            _logger.LogInformation($"Action forward: {(enqueued ? "queued" : "DROPPED")} {forward.Action.ActionType} for '{forward.AccountName}'"  );
         }
 
         /// <summary>

@@ -1516,9 +1516,11 @@ namespace ForegroundBotRunner.Statics
                 if (currentSpellId == 0)
                 {
                     // .unlearn leaves zero gaps in the spell array; skip them rather than stopping early.
-                    // Break only when 10+ consecutive zeros are seen — that's the real end of the list.
+                    // Break only when 100+ consecutive zeros are seen — that's the real end of the list.
+                    // After many learn/unlearn cycles (as in the full test suite), the array can have
+                    // long runs of gaps that would prematurely terminate a threshold-of-10 scan.
                     consecutiveZeros++;
-                    if (consecutiveZeros >= 10) break;
+                    if (consecutiveZeros >= 100) break;
                     continue;
                 }
                 consecutiveZeros = 0;
@@ -1557,9 +1559,9 @@ namespace ForegroundBotRunner.Statics
             {
                 _lastSpellDiagUtc = DateTime.UtcNow;
                 if (rawIds.Contains(16462))
-                    Log.Debug("[SPELLBOOK-DIAG] Spell 16462 FOUND in array (total={Count})", rawIds.Count);
+                    Log.Information("[SPELLBOOK-DIAG] Spell 16462 FOUND in array (total={Count})", rawIds.Count);
                 else
-                    Log.Debug("[SPELLBOOK-DIAG] Spell 16462 NOT in array (total={Count})", rawIds.Count);
+                    Log.Information("[SPELLBOOK-DIAG] Spell 16462 NOT in array (total={Count})", rawIds.Count);
             }
         }
 

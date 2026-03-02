@@ -456,8 +456,13 @@ public class GatheringProfessionTests
                         float distFromSpawn = Distance(candidatePos.X, candidatePos.Y, candidatePos.Z, spawnX, spawnY, spawnZ);
                         if (distFromSpawn > 100f)
                         {
-                            _output.WriteLine($"  [{label}] Stale object: entry {nodeEntry} at ({candidatePos.X:F1}, {candidatePos.Y:F1}, {candidatePos.Z:F1}) is {distFromSpawn:F0}y from spawn — skipping");
-                            break;
+                            _output.WriteLine($"  [{label}] Stale object: entry {nodeEntry} at ({candidatePos.X:F1}, {candidatePos.Y:F1}, {candidatePos.Z:F1}) is {distFromSpawn:F0}y from spawn — waiting for cache to clear...");
+                            // continue the scan loop (not break) so we keep polling until the stale
+                            // GO disappears from the WoW.exe client cache (SMSG_DESTROY_OBJECT received)
+                            // or a valid local node appears. break would exit immediately and skip
+                            // this location without giving the client time to clear its stale GO cache.
+                            await Task.Delay(1500);
+                            continue;
                         }
                         nodeGuid = node.Base?.Guid ?? 0;
                         nodeX = candidatePos.X;

@@ -166,14 +166,17 @@ namespace WoWStateManager.Listeners
         /// Queues an action to be delivered to the specified bot on its next poll.
         /// Used by the test fixture (via port 8088) to send commands to bots.
         /// </summary>
-        public void EnqueueAction(string accountName, ActionMessage action)
+        /// <summary>
+        /// Returns true if the action was successfully enqueued, false if it was dropped (e.g. dead/ghost state).
+        /// </summary>
+        public bool EnqueueAction(string accountName, ActionMessage action)
         {
             if (action.ActionType == ActionType.SendChat
                 && CurrentActivityMemberList.TryGetValue(accountName, out var current)
                 && IsDeadOrGhostState(current, out var deadReason))
             {
                 _logger.LogInformation($"DROPPING QUEUED ACTION for '{accountName}': SendChat blocked while dead/ghost ({deadReason})");
-                return;
+                return false;
             }
 
             var queue = _pendingActions.GetOrAdd(accountName, _ => new ConcurrentQueue<TimestampedAction>());
@@ -186,6 +189,7 @@ namespace WoWStateManager.Listeners
 
             queue.Enqueue(new TimestampedAction(action));
             _logger.LogInformation($"QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
+            return true;
         }
 
         private static bool IsDeadOrGhostState(WoWActivitySnapshot? snap, out string reason)

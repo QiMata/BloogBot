@@ -81,6 +81,18 @@ public class TalentAllocationTests
         await _bot.BotSelectSelfAsync(account);
         await Task.Delay(300);
         var learnTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".learn {Deflection1}", captureResponse: true, delayMs: 1000);
+
+        // If the action was dropped (bot in dead/ghost state at dispatch time), re-confirm alive and retry once.
+        // This handles the case where a prior test crash left the FG bot's snapshot showing health=0.
+        if (learnTrace.DispatchResult == ResponseResult.Failure)
+        {
+            _output.WriteLine($"  [{label}] .learn was dropped (dead/ghost state at dispatch); ensuring alive and retrying...");
+            await EnsureStrictAliveAsync(account, label);
+            await _bot.BotSelectSelfAsync(account);
+            await Task.Delay(300);
+            learnTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".learn {Deflection1}", captureResponse: true, delayMs: 1000);
+        }
+
         AssertCommandSucceeded(learnTrace, label, ".learn");
 
         var learned = await WaitForSpellPresenceAsync(account, Deflection1, shouldExist: true, TimeSpan.FromSeconds(12));
