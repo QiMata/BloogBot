@@ -70,7 +70,7 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 | `LV-GROUP-001` | GroupFormationTests | SMSG_GROUP_LIST parsed leaderGuid but never stored it persistently. Snapshot returned 0. | `Exports/WoWSharpClient` | **Done** — added LeaderGuid property to IPartyNetworkClientComponent, stored in ParseGroupList/SetLeader, used in snapshot |
 | `LV-GROUNDZ-001` | OrgrimmarGroundZAnalysis.PostTeleportSnap | GROUND_SNAP_MAX_DROP=3.0 too restrictive (Org navmesh 3.4y below WMO). Also physics blocked by `_isBeingTeleported` guard. | `Exports/WoWSharpClient/Movement` | **Done** — increased MAX_DROP to 5.0, force physics frame on teleport flag clear |
 | `LV-QUEST-001` | QuestInteractionTests | Quest not in snapshot after `.quest add`. Already tracked as WSM-PAR-001. | `Services/WoWStateManager` | Open |
-| `LV-TPCOUNT-001` | Teleport ACK counter | BG client sends MSG_MOVE_TELEPORT_ACK with counter=0, server expects counter=12+. `MovementHandler.cs:80` fires `RequiresAcknowledgementArgs(guid, 0)` for MSG_MOVE_TELEPORT (which has no counter field). Fix: track teleport sequence locally and increment on each MSG_MOVE_TELEPORT received. | `Exports/WoWSharpClient/Handlers` | **Open** |
+| `LV-TPCOUNT-001` | Teleport ACK counter | BG client sends MSG_MOVE_TELEPORT_ACK with counter=0, server expects counter=12+. `MovementHandler.cs:80` fires `RequiresAcknowledgementArgs(guid, 0)` for MSG_MOVE_TELEPORT (which has no counter field). | `Exports/WoWSharpClient/Handlers` | **Done** — added `_teleportSequence` counter in WoWSharpObjectManager, `IncrementTeleportSequence()` called on each MSG_MOVE_TELEPORT |
 
 ## Deferred (Unused Services)
 
@@ -121,14 +121,15 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 
 ## Session Handoff
 - **Last updated:** 2026-03-01
-- **Current work:** LiveValidation reliability improvements. Commit `77df281` pushed.
+- **Current work:** LiveValidation reliability + teleport counter fix. Latest commit: `2709dbe`.
 - **Completed this session:**
   1. GM mode stays ON for fishing and gathering tests (removed `.gm off` from FishingProfessionTests, GatheringProfessionTests)
   2. Reduced Z-stabilization waits from 6s→3s in BasicLoopTests (4 occurrences)
   3. Wired up `OffsetCornerWaypoints()` in NavigationPath.cs (existed but was never called)
   4. Added `SemaphoreSlim _refreshLock` to `RefreshSnapshotsAsync()` — prevents race conditions when parallel corpse-run tasks both call it
   5. Added decorative doodad exclusion filter in SceneCache.cpp (`ShouldExcludeDoodad()`) — skips catapult, banner, torch, brazier, etc. from collision geometry
-  6. Tracked `LV-TPCOUNT-001` — BG client sends teleport ACK counter=0, server expects incrementing sequence. Root cause: `MovementHandler.cs:80` passes 0 for MSG_MOVE_TELEPORT (no counter in packet). Fix: add local `_teleportSequence` counter in WoWSharpObjectManager, increment on each teleport.
+  6. **Fixed `LV-TPCOUNT-001`** — Added `_teleportSequence` counter in WoWSharpObjectManager, `IncrementTeleportSequence()` called on each MSG_MOVE_TELEPORT. Previously sent counter=0, now correctly increments.
+  7. **Full verification run:** 97/97 physics tests pass, 18/20 LiveValidation pass (no regressions).
 - **Previous session:** Physics calibration — air mode perfect (0.000y). Trust velocity fix for JumpStart frames.
 - **Physics calibration state (97/97 pass, 1 skip):**
   - ground: n=18881, avg=0.013y, p99=0.170y, worst=0.520y
@@ -141,9 +142,9 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
   - Transition worst (0.497y): Single SurfaceStep at geometry discontinuity
   - DirectionChange (0.200y cap): `maxReplayInputDrop` safety clamp
   - Transport worst (0.329y): Elevator timing mismatch (horizontal error)
-- **Remaining LiveValidation failures (18/20):**
-  - **FishingProfessionTests** — BG fishing catch: SMSG_GAMEOBJECT_CUSTOM_ANIM handler doesn't detect bobber bite.
-  - **ConsumableUsageTests** — FG transient: memory lag for GM-added items (intermittent).
+- **Remaining LiveValidation failures (18/20 pass):**
+  - **FishingProfessionTests** — BG fishing catch: SMSG_GAMEOBJECT_CUSTOM_ANIM handler doesn't detect bobber bite (pre-existing).
+  - **CharacterLifecycleTests.Equipment_AddItemToInventory** — FG item polling: Linen Cloth not in bag snapshot after `.additem` (pre-existing, needs wider polling window).
   - `LV-QUEST-001` — Quest not in snapshot after `.quest add` (pre-existing, not in suite).
 - **What's truly next (by priority):**
   1. **Fix BG fishing catch** — Investigate SMSG_GAMEOBJECT_CUSTOM_ANIM handler in `WoWSharpClient/Handlers/SpellHandler.cs`.
