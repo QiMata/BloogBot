@@ -6,6 +6,7 @@ using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Globalization;
@@ -778,7 +779,7 @@ namespace WoWSharpClient
             InitializeMovementController();
         }
 
-        private readonly Queue<ObjectStateUpdate> _pendingUpdates = new();
+        private readonly ConcurrentQueue<ObjectStateUpdate> _pendingUpdates = new();
 
         public void QueueUpdate(ObjectStateUpdate update)
         {
@@ -792,9 +793,8 @@ namespace WoWSharpClient
                 await _updateSemaphore.WaitAsync(token);
                 try
                 {
-                    while (_pendingUpdates.Count > 0)
+                    while (_pendingUpdates.TryDequeue(out var update))
                     {
-                        var update = _pendingUpdates.Dequeue();
 
                         Log.Verbose("[ProcessUpdates] Op={Op} Type={Type} Guid={Guid:X}",
                             update.Operation, update.ObjectType, update.Guid);

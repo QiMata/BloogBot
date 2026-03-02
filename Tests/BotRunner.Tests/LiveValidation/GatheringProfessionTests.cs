@@ -172,7 +172,7 @@ public class GatheringProfessionTests
         var allSpawns = new List<(int map, float x, float y, float z, uint entry)>();
         foreach (var entry in new[] { PeacebloomEntry, SilverleafEntry, EarthrootEntry })
         {
-            var spawns = await _bot.QueryGameObjectSpawnsAsync(entry, mapFilter: 1, limit: 5);
+            var spawns = await _bot.QueryGameObjectSpawnsAsync(entry, mapFilter: 1, limit: 10);
             foreach (var s in spawns)
                 allSpawns.Add((s.map, s.x, s.y, s.z, entry));
         }
@@ -301,18 +301,16 @@ public class GatheringProfessionTests
             await _bot.RefreshSnapshotsAsync();
         }
 
+        // Always learn spells — skill > 0 doesn't guarantee the spell is known
+        // (previous test may have done .reset spells). .learn is idempotent.
+        await EnsureSelfSelectionAsync(account);
         var currentMining = GetSkill(label, GatheringData.MINING_SKILL_ID);
+        _output.WriteLine($"[{label}] Ensuring mining spells learned (current skill={currentMining})");
+        await _bot.BotLearnSpellAsync(account, MiningApprentice);
+        await _bot.BotLearnSpellAsync(account, MiningGatherSpell);
         if (currentMining < 1)
         {
-            await EnsureSelfSelectionAsync(account);
-            _output.WriteLine($"[{label}] Applying mining skills (.learn/.setskill)");
-            await _bot.BotLearnSpellAsync(account, MiningApprentice);
-            await _bot.BotLearnSpellAsync(account, MiningGatherSpell);
             await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.MINING_SKILL_ID} 1 300", captureResponse: true);
-        }
-        else
-        {
-            _output.WriteLine($"[{label}] Mining skill already present ({currentMining}) - skipping learn/setskill");
         }
 
         await _bot.RefreshSnapshotsAsync();
@@ -344,19 +342,17 @@ public class GatheringProfessionTests
             await _bot.RefreshSnapshotsAsync();
         }
 
+        // Always learn spells — skill > 0 doesn't guarantee the spell is known
+        // (previous test may have done .reset spells). .learn is idempotent.
+        await EnsureSelfSelectionAsync(account);
         var currentHerbalism = GetSkill(label, GatheringData.HERBALISM_SKILL_ID);
+        _output.WriteLine($"[{label}] Ensuring herbalism spells learned (current skill={currentHerbalism})");
+        await _bot.BotLearnSpellAsync(account, HerbalismApprentice);
+        await _bot.BotLearnSpellAsync(account, HerbalismGatherSpell);
         if (currentHerbalism < 1)
         {
-            await EnsureSelfSelectionAsync(account);
-            _output.WriteLine($"[{label}] Applying herbalism skills (.learn/.setskill)");
-            await _bot.BotLearnSpellAsync(account, HerbalismApprentice);
-            await _bot.BotLearnSpellAsync(account, HerbalismGatherSpell);
             await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300", captureResponse: true);
             await Task.Delay(500);
-        }
-        else
-        {
-            _output.WriteLine($"[{label}] Herbalism skill already present ({currentHerbalism}) - skipping learn/setskill");
         }
 
         await _bot.RefreshSnapshotsAsync();
@@ -424,13 +420,25 @@ public class GatheringProfessionTests
                 var node = gameObjects.FirstOrDefault(go => go.Entry == nodeEntry);
                 if (node != null)
                 {
-                    nodeGuid = node.Base?.Guid ?? 0;
-                    var nodePos = node.Base?.Position;
-                    if (nodePos != null)
+                    var candidatePos = node.Base?.Position;
+                    // Guard against stale FG objects: skip nodes >100y from the spawn
+                    // we teleported to (FG NearbyObjects can retain objects from previous locations).
+                    if (candidatePos != null)
                     {
-                        nodeX = nodePos.X;
-                        nodeY = nodePos.Y;
-                        nodeZ = nodePos.Z;
+                        float distFromSpawn = Distance(candidatePos.X, candidatePos.Y, candidatePos.Z, spawnX, spawnY, spawnZ);
+                        if (distFromSpawn > 100f)
+                        {
+                            _output.WriteLine($"  [{label}] Stale object: entry {nodeEntry} at ({candidatePos.X:F1}, {candidatePos.Y:F1}, {candidatePos.Z:F1}) is {distFromSpawn:F0}y from spawn — skipping");
+                            break; // break scan loop, will fall through to "not detected"
+                        }
+                        nodeGuid = node.Base?.Guid ?? 0;
+                        nodeX = candidatePos.X;
+                        nodeY = candidatePos.Y;
+                        nodeZ = candidatePos.Z;
+                    }
+                    else
+                    {
+                        nodeGuid = node.Base?.Guid ?? 0;
                     }
                     _output.WriteLine($"  [{label}] Node detected after {sw.Elapsed.TotalSeconds:F1}s");
                     break;
