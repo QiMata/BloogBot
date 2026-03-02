@@ -13,6 +13,7 @@ message PathfindingRequest {
         PhysicsInput step = 3;
         ReadyCheckRequest ready_check = 4;
         GetGroundZRequest ground_z = 5;
+        BatchGroundZRequest batch_ground_z = 6;
     }
 }
 
@@ -24,6 +25,7 @@ message PathfindingResponse {
         PhysicsOutput step = 3;
         ReadyCheckResponse ready_status = 4;
         GetGroundZResponse ground_z = 5;
+        BatchGroundZResponse batch_ground_z = 6;
         Error error = 99;
     }
 }
@@ -77,6 +79,23 @@ message GetGroundZRequest {
 }
 
 message GetGroundZResponse {
+    float ground_z = 1;
+    bool found = 2;
+}
+
+// Batch ground Z query — allows querying multiple positions in a single IPC round-trip.
+// Primary consumer: NavigationPath.CorrectPathZFromCollision, which queries every waypoint.
+message BatchGroundZRequest {
+    uint32 map_id = 1;
+    repeated game.Position positions = 2;
+    float max_search_dist = 3;          // Applied to all entries; 0 defaults to 10.0
+}
+
+message BatchGroundZResponse {
+    repeated BatchGroundZEntry results = 1;
+}
+
+message BatchGroundZEntry {
     float ground_z = 1;
     bool found = 2;
 }

@@ -162,6 +162,7 @@ namespace PathfindingService
                     PathfindingRequest.PayloadOneofCase.Los => HandleLineOfSight(request.Los),
                     PathfindingRequest.PayloadOneofCase.Step => HandlePhysics(request.Step),
                     PathfindingRequest.PayloadOneofCase.GroundZ => HandleGroundZ(request.GroundZ),
+                    PathfindingRequest.PayloadOneofCase.BatchGroundZ => HandleBatchGroundZ(request.BatchGroundZ),
                     _ => ErrorResponse("Unknown or unset request type.")
                 };
             }
@@ -297,6 +298,29 @@ namespace PathfindingService
             {
                 GroundZ = new GetGroundZResponse { GroundZ = groundZ, Found = found }
             };
+        }
+
+        private PathfindingResponse HandleBatchGroundZ(BatchGroundZRequest req)
+        {
+            if (req.Positions.Count == 0)
+                return ErrorResponse("BatchGroundZ request contains no positions.");
+
+            float maxDist = req.MaxSearchDist > 0 ? req.MaxSearchDist : 10.0f;
+            var response = new BatchGroundZResponse();
+
+            foreach (var pos in req.Positions)
+            {
+                if (pos == null || !IsFinitePosition(pos))
+                {
+                    response.Results.Add(new BatchGroundZEntry { GroundZ = 0f, Found = false });
+                    continue;
+                }
+
+                var (groundZ, found) = _physics.GetGroundZ(req.MapId, pos.X, pos.Y, pos.Z, maxDist);
+                response.Results.Add(new BatchGroundZEntry { GroundZ = groundZ, Found = found });
+            }
+
+            return new PathfindingResponse { BatchGroundZ = response };
         }
 
         // ------------- Validation and Helpers ----------------

@@ -34,6 +34,9 @@ public sealed class NavigationMetrics
     /// <summary>Multi-directional cliff probe activations.</summary>
     public int CliffProbesTriggered { get; private set; }
 
+    /// <summary>Waypoints rerouted around detected cliff edges.</summary>
+    public int CliffReroutes { get; private set; }
+
     /// <summary>Running average of path waypoint count across all calculated paths.</summary>
     public float AveragePathLength { get; private set; }
 
@@ -50,6 +53,7 @@ public sealed class NavigationMetrics
     internal void AddZCorrections(int count) { ZCorrections += count; }
     internal void IncrementWidthChecksFailed() => WidthChecksFailed++;
     internal void IncrementCliffProbesTriggered() => CliffProbesTriggered++;
+    internal void IncrementCliffReroutes() => CliffReroutes++;
 
     internal void RecordPathLength(int waypointCount)
     {
@@ -71,6 +75,7 @@ public sealed class NavigationMetrics
         ZCorrections = 0;
         WidthChecksFailed = 0;
         CliffProbesTriggered = 0;
+        CliffReroutes = 0;
         AveragePathLength = 0f;
         LastPathDurationMs = 0;
         _totalWaypointCount = 0;
@@ -758,19 +763,25 @@ public class NavigationPath(
         // the actual walkable surface by a few yards.
         var zCorrectedPath = CorrectPathZFromCollision(mapId, pulledPath);
 
-        var usable = IsPathUsable(mapId, start, end, zCorrectedPath);
+        // Phase 4b: Cliff rerouting — probe each segment for cliff edges and insert
+        // offset waypoints to steer the bot away from dangerous drops.
+        var cliffReroutedPath = _enableProbeHeuristics
+            ? ReroutePathAroundCliffs(mapId, start, zCorrectedPath)
+            : zCorrectedPath;
+
+        var usable = IsPathUsable(mapId, start, end, cliffReroutedPath);
 
         sw.Stop();
         Metrics.RecordPathDuration(sw.ElapsedMilliseconds);
 
-        if (!usable && zCorrectedPath.Length > 0)
+        if (!usable && cliffReroutedPath.Length > 0)
         {
-            Serilog.Log.Warning("[NavigationPath] Path rejected by IsPathUsable: raw={RawCount} sanitized={SanitizedCount} pruned={PrunedCount} pulled={PulledCount} zCorrected={ZCorrectedCount} smooth={Smooth} strict={Strict} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
-                rawPath.Length, sanitizedPath.Length, prunedPath.Length, pulledPath.Length, zCorrectedPath.Length, smoothPath, _strictPathValidation,
+            Serilog.Log.Warning("[NavigationPath] Path rejected by IsPathUsable: raw={RawCount} sanitized={SanitizedCount} pruned={PrunedCount} pulled={PulledCount} zCorrected={ZCorrectedCount} cliffRerouted={CliffReroutedCount} smooth={Smooth} strict={Strict} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
+                rawPath.Length, sanitizedPath.Length, prunedPath.Length, pulledPath.Length, zCorrectedPath.Length, cliffReroutedPath.Length, smoothPath, _strictPathValidation,
                 start.X, start.Y, start.Z, end.X, end.Y, end.Z);
         }
 
-        var result = usable ? zCorrectedPath : [];
+        var result = usable ? cliffReroutedPath : [];
         Metrics.RecordPathLength(result.Length);
         if (result.Length == 0)
             Metrics.IncrementPathsFailed();
@@ -1087,6 +1098,166 @@ public class NavigationPath(
         var result = ProbeEdgesMultiDirectional(currentPos, targetWaypoint, mapId);
         return result.IsCliffDetected(CLIFF_DROP_THRESHOLD, CLIFF_NEARBY_DROP_THRESHOLD);
     }
+
+    /// <summary>
+    /// Phase 4b: Attempt to reroute around a detected cliff edge by offsetting the path
+    /// perpendicular to the movement direction, away from the cliff side.
+    /// <para>
+    /// When cliff is on one side only: offsets away from that side.
+    /// When cliff is ahead: tries both left and right offsets, picks the one with valid ground.
+    /// </para>
+    /// </summary>
+    /// <param name="mapId">Map ID for ground Z queries.</param>
+    /// <param name="from">Current waypoint position (or bot position).</param>
+    /// <param name="to">Next waypoint position (movement target).</param>
+    /// <param name="probeResult">Multi-directional cliff probe result for this segment.</param>
+    /// <returns>An offset waypoint that avoids the cliff, or null if no safe reroute is found.</returns>
+    public Position? RerouteAroundCliff(uint mapId, Position from, Position to, CliffProbeResult probeResult)
+    {
+        if (_pathfinding == null)
+            return null;
+
+        // Compute movement heading and perpendicular (left = +90deg, right = -90deg)
+        var dx = to.X - from.X;
+        var dy = to.Y - from.Y;
+        var len = MathF.Sqrt(dx * dx + dy * dy);
+        if (len < 0.01f)
+            return null;
+
+        var heading = MathF.Atan2(dy, dx);
+        var offsetDistance = _capsuleRadius * 4.0f;
+
+        // Perpendicular directions: left is heading + 90deg, right is heading - 90deg
+        var leftAngle = heading + MathF.PI / 2f;
+        var rightAngle = heading - MathF.PI / 2f;
+
+        // Determine which sides have cliff danger using the thresholds
+        bool cliffForward = DropExceedsThresholdStatic(probeResult.Forward, CLIFF_DROP_THRESHOLD);
+        bool cliffLeft = DropExceedsThresholdStatic(probeResult.Left, CLIFF_NEARBY_DROP_THRESHOLD)
+                      || DropExceedsThresholdStatic(probeResult.ForwardLeft, CLIFF_NEARBY_DROP_THRESHOLD);
+        bool cliffRight = DropExceedsThresholdStatic(probeResult.Right, CLIFF_NEARBY_DROP_THRESHOLD)
+                       || DropExceedsThresholdStatic(probeResult.ForwardRight, CLIFF_NEARBY_DROP_THRESHOLD);
+
+        if (!cliffForward && !cliffLeft && !cliffRight)
+            return null; // No cliff detected — no reroute needed
+
+        // Midpoint of the segment — the rerouted waypoint will be offset from here
+        var midX = (from.X + to.X) / 2f;
+        var midY = (from.Y + to.Y) / 2f;
+        var midZ = (from.Z + to.Z) / 2f;
+
+        if (cliffLeft && !cliffRight)
+        {
+            // Cliff on left — offset right (away from cliff)
+            return TryOffsetWaypoint(mapId, midX, midY, midZ, rightAngle, offsetDistance);
+        }
+
+        if (cliffRight && !cliffLeft)
+        {
+            // Cliff on right — offset left (away from cliff)
+            return TryOffsetWaypoint(mapId, midX, midY, midZ, leftAngle, offsetDistance);
+        }
+
+        // Cliff ahead (or on both sides) — try both directions, pick whichever has ground
+        var leftCandidate = TryOffsetWaypoint(mapId, midX, midY, midZ, leftAngle, offsetDistance);
+        var rightCandidate = TryOffsetWaypoint(mapId, midX, midY, midZ, rightAngle, offsetDistance);
+
+        if (leftCandidate != null && rightCandidate != null)
+        {
+            // Both valid — prefer the one with ground closer to our current Z (less vertical change)
+            var leftDeltaZ = MathF.Abs(leftCandidate.Z - midZ);
+            var rightDeltaZ = MathF.Abs(rightCandidate.Z - midZ);
+            return leftDeltaZ <= rightDeltaZ ? leftCandidate : rightCandidate;
+        }
+
+        return leftCandidate ?? rightCandidate;
+    }
+
+    /// <summary>
+    /// Attempts to create an offset waypoint at the given angle from a midpoint.
+    /// Queries GetGroundZ to verify the offset position is walkable.
+    /// Returns the offset position with valid ground Z, or null if ground is not found
+    /// or the ground Z differs too much from the reference Z (potential cliff at the offset).
+    /// </summary>
+    private Position? TryOffsetWaypoint(uint mapId, float midX, float midY, float midZ, float angle, float distance)
+    {
+        var offsetX = midX + MathF.Cos(angle) * distance;
+        var offsetY = midY + MathF.Sin(angle) * distance;
+
+        try
+        {
+            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, new Position(offsetX, offsetY, midZ));
+            if (!found)
+                return null;
+
+            // Reject if the offset point itself is a cliff (ground is much lower than reference)
+            if (midZ - groundZ > CLIFF_DROP_THRESHOLD)
+                return null;
+
+            return new Position(offsetX, offsetY, groundZ);
+        }
+        catch
+        {
+            return null; // IPC failure
+        }
+    }
+
+    /// <summary>
+    /// Phase 4b path pipeline: scans each segment of the path for cliff edges and inserts
+    /// rerouted waypoints where needed. Processes segments from start toward end so that
+    /// inserted waypoints don't shift indices of segments not yet processed.
+    /// </summary>
+    private Position[] ReroutePathAroundCliffs(uint mapId, Position start, Position[] path)
+    {
+        if (_pathfinding == null || path.Length == 0)
+            return path;
+
+        var result = new List<Position>(path.Length + 4); // slight over-alloc for inserts
+        int reroutes = 0;
+
+        // Check segment from start to first waypoint
+        var prevPos = start;
+        for (int i = 0; i < path.Length; i++)
+        {
+            var wp = path[i];
+            var probeResult = ProbeEdgesMultiDirectional(prevPos, wp, mapId);
+
+            if (probeResult.IsCliffDetected(CLIFF_DROP_THRESHOLD, CLIFF_NEARBY_DROP_THRESHOLD))
+            {
+                var reroutedWp = RerouteAroundCliff(mapId, prevPos, wp, probeResult);
+                if (reroutedWp != null)
+                {
+                    result.Add(reroutedWp);
+                    reroutes++;
+                    Serilog.Log.Debug(
+                        "[NavigationPath] Cliff reroute at segment {Idx}: ({FX:F1},{FY:F1},{FZ:F1})->({TX:F1},{TY:F1},{TZ:F1}) via ({RX:F1},{RY:F1},{RZ:F1}) drop={MaxDrop:F1}",
+                        i, prevPos.X, prevPos.Y, prevPos.Z, wp.X, wp.Y, wp.Z,
+                        reroutedWp.X, reroutedWp.Y, reroutedWp.Z, probeResult.MaxDrop);
+                }
+            }
+
+            result.Add(wp);
+            prevPos = wp;
+        }
+
+        if (reroutes > 0)
+        {
+            for (int r = 0; r < reroutes; r++)
+                Metrics.IncrementCliffReroutes();
+
+            Serilog.Log.Information(
+                "[NavigationPath] Phase 4b: inserted {Count} cliff-reroute waypoint(s) (mapId={MapId}, path {Before}->{After})",
+                reroutes, mapId, path.Length, result.Count);
+        }
+
+        return result.Count == path.Length ? path : result.ToArray();
+    }
+
+    /// <summary>
+    /// Static helper matching CliffProbeResult.DropExceedsThreshold logic for use outside the record struct.
+    /// </summary>
+    private static bool DropExceedsThresholdStatic(float drop, float threshold) =>
+        drop >= threshold || drop == float.MaxValue;
 
     /// <summary>
     /// Result of a multi-directional cliff probe. Each field contains the drop distance

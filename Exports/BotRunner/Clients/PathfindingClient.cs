@@ -68,6 +68,56 @@ namespace BotRunner.Clients
             return (response.GroundZ.GroundZ, response.GroundZ.Found);
         }
 
+        /// <summary>
+        /// Queries ground Z for multiple positions in a single IPC round-trip.
+        /// Returns an array of (groundZ, found) results, one per input position, in the same order.
+        /// Falls back to individual GetGroundZ calls if the batch request fails (e.g., older service).
+        /// </summary>
+        public virtual (float groundZ, bool found)[] BatchGetGroundZ(uint mapId, Position[] positions, float maxSearchDist = 10.0f)
+        {
+            if (positions.Length == 0)
+                return [];
+
+            try
+            {
+                var request = new PathfindingRequest
+                {
+                    BatchGroundZ = new BatchGroundZRequest
+                    {
+                        MapId = mapId,
+                        MaxSearchDist = maxSearchDist
+                    }
+                };
+                foreach (var pos in positions)
+                    request.BatchGroundZ.Positions.Add(ToProto(pos));
+
+                var response = SendMessage(request);
+                _consecutiveFailures = 0;
+
+                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
+                    throw new Exception(response.Error.Message);
+
+                var results = new (float groundZ, bool found)[response.BatchGroundZ.Results.Count];
+                for (int i = 0; i < results.Length; i++)
+                {
+                    var entry = response.BatchGroundZ.Results[i];
+                    results[i] = (entry.GroundZ, entry.Found);
+                }
+                return results;
+            }
+            catch
+            {
+                // Fallback: individual queries (handles older PathfindingService without batch support)
+                var results = new (float groundZ, bool found)[positions.Length];
+                for (int i = 0; i < positions.Length; i++)
+                {
+                    try { results[i] = GetGroundZ(mapId, positions[i], maxSearchDist); }
+                    catch { results[i] = (0f, false); }
+                }
+                return results;
+            }
+        }
+
         public virtual bool IsInLineOfSight(uint mapId, Position from, Position to)
         {
             var request = new PathfindingRequest
