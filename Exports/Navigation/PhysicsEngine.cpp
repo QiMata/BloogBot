@@ -821,27 +821,34 @@ PhysicsEngine::SlideResult PhysicsEngine::ExecuteDownPass(
         }
     }
 
-    // If no candidate is penetration-free within slop, fall back to the "least bad" walkable candidate
-    // (min penetration). This mimics solver behavior where overlap correction will follow.
+    // Fallback #2C (ELIMINATED): Do NOT accept "least-bad" walkable candidate when all candidates
+    // have unacceptable penetration. Accepting bad geometry here masks missing/overlapping collision
+    // surfaces and produces subtle Z errors. Log the would-be rescue so the geometry gap can be fixed.
+    // The Z clamp in MovementController (#4) handles post-teleport frames; genuine geometry holes
+    // should be fixed in SceneCache/PhysicsEngine, not papered over here.
     if (!chosen && !candidates.empty()) {
+        const GroundCandidate* leastBad = nullptr;
+        float leastBadPen = FLT_MAX;
+        int leastBadPenCount = 0;
         for (const auto& c : candidates) {
             if (!c.walkable) continue;
             float maxPen = 0.0f; int penCount = 0;
             (void)validateCandidate(c, maxPen, penCount);
-            if (!chosen || maxPen < chosenMaxPen) {
-                chosen = &c;
-                chosenMaxPen = maxPen;
-                chosenPenCount = penCount;
+            if (!leastBad || maxPen < leastBadPen) {
+                leastBad = &c;
+                leastBadPen = maxPen;
+                leastBadPenCount = penCount;
             }
         }
-        if (chosen) {
+        if (leastBad) {
             std::ostringstream oss; oss.setf(std::ios::fixed); oss.precision(3);
-            oss << "[DownPass] RESCUE: least-bad walkable at ("
-                << st.x << ", " << st.y << ", " << chosen->snapZ
-                << ") pen=" << chosenMaxPen << " penCount=" << chosenPenCount
-                << " map=" << input.mapId;
+            oss << "[DownPass] GEOMETRY_GAP: least-bad walkable suppressed at ("
+                << st.x << ", " << st.y << ", " << leastBad->snapZ
+                << ") pen=" << leastBadPen << " penCount=" << leastBadPenCount
+                << " map=" << input.mapId << " -- fix collision geometry at this position";
             PHYS_INFO(PHYS_MOVE, oss.str());
         }
+        // chosen intentionally left nullptr -- let physics transition to falling/no-ground
     }
 
     if (chosen && chosen->hit) {
