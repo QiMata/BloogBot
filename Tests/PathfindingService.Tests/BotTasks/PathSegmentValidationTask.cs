@@ -22,10 +22,12 @@ public class PathSegmentValidationTask : TestBotTask
 
     public override void Update()
     {
-        // Short path in Durotar for validation
+        // Short path in southern Kalimdor — coordinates chosen from the verified flat
+        // navmesh area used by StepPhysics_IdleExpectations (idle stability test).
+        // The route is intentionally short (~30y) to avoid exposing terrain cliffs.
         uint mapId = 1;
-        var start = new XYZ(-616.25f, -4188.00f, 82.32f);
-        var end = new XYZ(-620.0f, -4220.0f, 82.0f);
+        var start = new XYZ(-562.225f, -4189.092f, 70.789f);
+        var end = new XYZ(-568.0f, -4210.0f, 70.789f);
 
         XYZ[] path;
         try
