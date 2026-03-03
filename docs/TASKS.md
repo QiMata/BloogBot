@@ -120,8 +120,15 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-02 (session 8)
-- **Current work:** Full LiveValidation suite running (BGPID=30483, output at /tmp/talent_lv_run.txt). TalentAllocation FG root-cause fixed (session 8).
+- **Last updated:** 2026-03-03 (session 9)
+- **Current work:** Complete. 38/40 LiveValidation passing (2 pre-existing failures: Fishing SMSG_GAMEOBJECT_CUSTOM_ANIM, Herbalism FG). TalentAllocationTests passes for both BG and FG bots.
+- **Completed session 9 (2026-03-03):**
+  - **TalentAllocationTests: FG bot finally passes** — three root causes fixed:
+    1. `_lastKnownSpellIds` (volatile): `KnownSpellIds` now reads from a thread-safe snapshot, preventing `spells=0` race condition when `LocalPlayer` is recreated by `SMSG_UPDATE_OBJECT`.
+    2. `_forceSpellRefresh`: LEARNED_SPELL/UNLEARNED_SPELL events (dispatched via no-args `SignalEventNoParamsFunPtr` in WoW 1.12.1, not the args hook) now set a flag that bypasses the 2-second RefreshSpells throttle.
+    3. Lua `GetTalentInfo` enumeration (STEP 5 in RefreshSpells): Enumerates all talent entries with `curRank > 0` and maps names to spell IDs via `_spellNameToIds`. Passive talent spells like Deflection (16462) are not in the static array at `0x00B700F0` when learned via GM `.learn` — GetTalentInfo covers this gap.
+    4. `SignalEventNoArgsHook` now always logs LEARNED_SPELL/UNLEARNED_SPELL events (not just first 20).
+  - Commit: `a4a5fc5` — pushed to `cpp_physics_system`
 - **Completed session 8 (2026-03-02):**
   - Root cause of TalentAllocation FG failure FOUND AND FIXED:
     - **Root cause:** `CharacterStateSocketListener.IsDeadOrGhostState` had a `deadTextSeen` heuristic that checked `RecentChatMessages` for any message containing "dead". When Testgrunt died during an earlier test (GatheringProfession), `[SYSTEM] You are dead.` was added to the 50-message rolling window. Even after revival, the stale message persisted. This caused `EnqueueAction` to silently drop `.unlearn 16462` for a fully-alive character.
@@ -129,7 +136,6 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
     - **Fix 1 (primary):** Removed `deadTextSeen` from `CharacterStateSocketListener.IsDeadOrGhostState`. health=0, ghostFlag (0x10), and standState=dead are real-time game-state fields and sufficient. Also removed unused `using System.Linq`.
     - **Fix 2 (defense-in-depth):** `TalentAllocationTests.TryEnsureSpellAbsentAsync` now uses `SendGmChatCommandTrackedAsync` for `.unlearn` instead of `SendGmChatCommandAsync`, detects drops, and retries once with `EnsureStrictAliveAsync`.
   - Commit: `62f04e7` — pushed to `cpp_physics_system`
-  - Full LiveValidation suite running in background — awaiting results
 - **Completed session 7 (2026-03-02):** Multi-session investigation of TalentAllocation FG failure. Added diagnostic output to TalentAllocationTests (POST-LEARN snapshot dump + per-poll logging). Confirmed: action IS delivered to TESTBOT1, FG WoW.exe IS in-world, but spell never appears in memory (stays at 16 spells). foreground_bot_debug.log confirmed "You already know that spell." response.
 - **Completed session 6 (2026-03-02):**
   - Root cause of Talent FG failure: `CharacterStateSocketListener.EnqueueAction` silently dropped `SendChat` actions when snapshot showed health=0 (dead/ghost state from prior test crash), but `HandleActionForward` always returned `ResponseResult.Success` — test believed the `.learn` command was delivered.
@@ -165,4 +171,4 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
   1. Phase 6b: DotRecast evaluation (separate branch — low priority)
   2. LV-QUEST-001 / WSM-PAR-001 quest snapshot sync lag
   3. Mining test reliability: investigate `.respawn` vs pool_gameobject respawn mechanics
-- **Next command:** Check /tmp/talent_lv_run.txt for results (grep for "TalentAllocation\|Passed\|Failed"). If all pass, update TASKS.md table entry for TalentAllocation to Done.
+- **Next session:** 38/40 tests pass. Remaining failures are pre-existing (Fishing SMSG_GAMEOBJECT_CUSTOM_ANIM, Herbalism FG). No immediate action needed. LV-QUEST-001 and Mining flakiness are the only open issues.
