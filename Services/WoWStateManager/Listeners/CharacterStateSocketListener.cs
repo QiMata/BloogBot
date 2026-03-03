@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using WoWStateManager.Coordination;
 using WoWStateManager.Settings;
 
@@ -216,18 +215,11 @@ namespace WoWStateManager.Listeners
             if (standState == standStateDead)
                 reasons.Add("standState=dead");
 
-            var deadTextSeen =
-                (snap?.RecentErrors?.Any(e =>
-                    e.Contains("dead", StringComparison.OrdinalIgnoreCase) ||
-                    e.Contains("can't chat", StringComparison.OrdinalIgnoreCase) ||
-                    e.Contains("cannot chat", StringComparison.OrdinalIgnoreCase)) ?? false)
-                || (snap?.RecentChatMessages?.Any(m =>
-                    m.Contains("dead", StringComparison.OrdinalIgnoreCase) ||
-                    m.Contains("can't chat", StringComparison.OrdinalIgnoreCase) ||
-                    m.Contains("cannot chat", StringComparison.OrdinalIgnoreCase)) ?? false);
-
-            if (deadTextSeen)
-                reasons.Add("deadTextSeen=1");
+            // NOTE: The former "deadTextSeen" heuristic (any RecentChatMessages/RecentErrors containing
+            // "dead") was removed. It caused false positives: a "[SYSTEM] You are dead." message from a
+            // prior test stayed in the 50-message rolling window and permanently blocked all subsequent
+            // chat actions for the rest of the session, even after the character was revived.
+            // health=0, ghostFlag, and standState=dead are real-time game-state fields and sufficient.
 
             if (reasons.Count == 0)
                 return false;

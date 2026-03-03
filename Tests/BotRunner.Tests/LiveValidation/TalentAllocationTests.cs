@@ -95,6 +95,17 @@ public class TalentAllocationTests
 
         AssertCommandSucceeded(learnTrace, label, ".learn");
 
+        // Diagnostic: dump snapshot state immediately after .learn dispatch
+        {
+            var diagSnap = await _bot.GetSnapshotAsync(account);
+            var spellCount = diagSnap?.Player?.SpellList?.Count ?? -1;
+            var health = diagSnap?.Player?.Unit?.Health ?? 0;
+            var screen = diagSnap?.ScreenState ?? "(null)";
+            var charName = diagSnap?.CharacterName ?? "(null)";
+            var hasSpell = diagSnap?.Player?.SpellList?.Contains(Deflection1) == true;
+            _output.WriteLine($"  [{label}] POST-LEARN snapshot: screen={screen}, char={charName}, health={health}, spells={spellCount}, has16462={hasSpell}");
+        }
+
         var learned = await WaitForSpellPresenceAsync(account, Deflection1, shouldExist: true, TimeSpan.FromSeconds(12));
         return learned;
     }
@@ -121,28 +132,47 @@ public class TalentAllocationTests
     private async Task<bool> TryEnsureSpellAbsentAsync(string account, string label, uint spellId)
     {
         // Always send .unlearn regardless of snapshot state.
-        // FG snapshot reads spells via RefreshSpells() which only fires on SMSG_LEARNED_SPELL.
-        // If the spell is already on the server but wasn't learned this session,
-        // the snapshot won't show it — but the server has it. By always unlearing:
+        // The server may have the spell even if the client memory scan doesn't show it
+        // (client-server desync from prior sessions). By always unlearning:
         //   1. We guarantee the server has the spell removed.
-        //   2. When .learn is sent next, SMSG_LEARNED_SPELL fires → RefreshSpells() updates → snapshot reflects it.
+        //   2. When .learn is sent next, SMSG_LEARNED_SPELL fires → WoW.exe memory updated → RefreshSpells picks it up.
         _output.WriteLine($"  [{label}] Ensuring spell {spellId} absent on server (always unlearn for clean state).");
         await _bot.BotSelectSelfAsync(account);
         await Task.Delay(300);
+        // Use tracked version so we can detect if the action was silently dropped (e.g. stale dead-state).
         // Ignore "you haven't learned that spell" response — that just means it was already absent.
-        await _bot.SendGmChatCommandAsync(account, $".unlearn {spellId}");
-        await Task.Delay(1500);
+        var unlearn = await _bot.SendGmChatCommandTrackedAsync(account, $".unlearn {spellId}", captureResponse: false, delayMs: 1000);
+        if (unlearn.DispatchResult == ResponseResult.Failure)
+        {
+            _output.WriteLine($"  [{label}] WARNING: .unlearn {spellId} was DROPPED (bot in dead/ghost state at dispatch); ensuring alive and retrying.");
+            await EnsureStrictAliveAsync(account, label);
+            await _bot.BotSelectSelfAsync(account);
+            await Task.Delay(300);
+            unlearn = await _bot.SendGmChatCommandTrackedAsync(account, $".unlearn {spellId}", captureResponse: false, delayMs: 1000);
+        }
+        if (unlearn.DispatchResult == ResponseResult.Failure)
+        {
+            _output.WriteLine($"  [{label}] ERROR: .unlearn {spellId} dropped twice — cannot guarantee clean state.");
+            return false;
+        }
         return true;
     }
 
     private async Task<bool> WaitForSpellPresenceAsync(string account, uint spellId, bool shouldExist, TimeSpan timeout)
     {
         var sw = Stopwatch.StartNew();
+        int pollCount = 0;
         while (sw.Elapsed < timeout)
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
             var hasSpell = snap?.Player?.SpellList?.Contains(spellId) == true;
+            var spellCount = snap?.Player?.SpellList?.Count ?? -1;
+            var health = snap?.Player?.Unit?.Health ?? 0;
+            var screen = snap?.ScreenState ?? "(null)";
+            if (pollCount % 4 == 0 || hasSpell == shouldExist) // log every 2s or on success
+                _output.WriteLine($"  [{account}] poll#{pollCount} {sw.Elapsed.TotalSeconds:F1}s: screen={screen}, health={health}, spells={spellCount}, has{spellId}={hasSpell}");
+            pollCount++;
             if (hasSpell == shouldExist)
                 return true;
 
