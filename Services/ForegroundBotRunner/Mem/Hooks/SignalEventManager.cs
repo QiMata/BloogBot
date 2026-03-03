@@ -129,7 +129,9 @@ namespace ForegroundBotRunner.Mem.Hooks
                 || eventName.StartsWith("UI_ERROR")
                 || eventName.StartsWith("UI_INFO")
                 || eventName.StartsWith("CHAT_MSG_SKILL")
-                || eventName == "CHAT_MSG_SYSTEM")
+                || eventName == "CHAT_MSG_SYSTEM"
+                || eventName == "LEARNED_SPELL"
+                || eventName == "UNLEARNED_SPELL")
                 DiagLog($"EVENT[{_eventCount}]: {eventName} format={typesArg}");
 
             var types = typesArg.TrimStart('%').Split('%');
@@ -211,7 +213,9 @@ namespace ForegroundBotRunner.Mem.Hooks
         private static void SignalEventNoArgsHook(string eventName)
         {
             _eventCount++;
-            if (_eventCount <= 20)
+            if (_eventCount <= 20
+                || eventName == "LEARNED_SPELL"
+                || eventName == "UNLEARNED_SPELL")
                 DiagLog($"EVENT_NOARGS[{_eventCount}]: {eventName}");
 
             OnNewSignalEventNoArgs?.Invoke(eventName);

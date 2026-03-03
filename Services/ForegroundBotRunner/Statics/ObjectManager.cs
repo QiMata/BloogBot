@@ -1115,6 +1115,45 @@ namespace ForegroundBotRunner.Statics
                 ClearCachedGuid(); // Clear cached GUID on disconnect
                 return;
             }
+
+            // LEARNED_SPELL fires when SMSG_LEARNED_SPELL is received by WoW.
+            // In WoW 1.12.1, this event is dispatched through the no-args SignalEvent path
+            // (SignalEventNoParamsFunPtr), so args is always empty and spellName is always null.
+            // We can't do a name-based lookup here; instead we set _forceSpellRefresh so that
+            // RefreshSpells() runs immediately on the next bot-loop tick and:
+            //   1. Rescans the static spell book array at 0x00B700F0 (catches most spells)
+            //   2. Runs the Lua GetTalentInfo enumeration (catches passive talent spells like
+            //      Deflection 16462 which appear in talent data but not the spell book array)
+            if (args.EventName == "LEARNED_SPELL" || args.EventName == "UNLEARNED_SPELL")
+            {
+                var spellName = args.Parameters.Length > 0 ? args.Parameters[0] as string : null;
+                DiagLog($"[SPELLBOOK] {args.EventName} event: '{spellName ?? "(null)"}' params={args.Parameters.Length}");
+                Log.Information("[SPELLBOOK] {Event} via WoW hook: {SpellName}", args.EventName, spellName ?? "(null)");
+
+                // Trigger an immediate bypass of the 2-second throttle regardless of whether
+                // we have a spell name. If we DO have a name (unexpected, but handle it):
+                if (!string.IsNullOrEmpty(spellName))
+                {
+                    if (_spellNameCacheBuilt && _spellNameToIds.TryGetValue(spellName, out var ids))
+                    {
+                        foreach (var id in ids)
+                            _persistentLearnedIds.Add(id);
+                        // Publish immediately so KnownSpellIds sees it without waiting for RefreshSpells().
+                        _lastKnownSpellIds = new HashSet<uint>(_persistentLearnedIds);
+                        DiagLog($"[SPELLBOOK] '{spellName}' → {ids.Count} IDs added (total={_persistentLearnedIds.Count})");
+                    }
+                    else
+                    {
+                        _pendingLearnedSpellNames.Add(spellName);
+                        DiagLog($"[SPELLBOOK] '{spellName}' queued ({(_spellNameCacheBuilt ? "not in cache" : "cache not ready")})");
+                    }
+                }
+
+                // Force an immediate RefreshSpells on the next bot-loop tick (bypasses 2s throttle).
+                _forceSpellRefresh = true;
+                return;
+            }
+
             if (args.EventName != "UNIT_MODEL_CHANGED" &&
                 args.EventName != "UPDATE_SELECTED_CHARACTER" &&
                 args.EventName != "VARIABLES_LOADED") return;
@@ -1498,78 +1537,291 @@ namespace ForegroundBotRunner.Statics
 
         public void RefreshSpells()
         {
-            if (Player is not LocalPlayer localPlayer) return;
-
-            localPlayer.PlayerSpells.Clear();
-
-            var spellsBasePtr = MemoryManager.ReadIntPtr(0x00C0D788);
-
-            // Build new raw ID set — atomically swapped onto LocalPlayer at end to avoid
-            // ConcurrentModificationException in KnownSpellIds/BotRunnerService snapshot thread.
-            var rawIds = new HashSet<uint>();
-
-            for (var i = 0; i < 1024; i++)
+            if (Player is not LocalPlayer localPlayer)
             {
-                var currentSpellId = MemoryManager.ReadInt(MemoryAddresses.LocalPlayerSpellsBase + 4 * i);
-
-                if (currentSpellId == 0)
+                // Throttled diagnostic: log when Player is not a LocalPlayer so we can detect
+                // the window after SMSG_UPDATE_OBJECT recreates the player object.
+                if ((DateTime.UtcNow - _lastSpellDiagUtc).TotalSeconds >= 2.0)
                 {
-                    // .unlearn leaves zero gaps in the spell array. Scan all 1024 entries unconditionally
-                    // so that newly-learned spells placed beyond a large gap are never missed.
-                    // The 1024-entry bound is well above vanilla WoW's spell count; the cost is minimal
-                    // (1024 integer reads per frame).
-                    continue;
+                    _lastSpellDiagUtc = DateTime.UtcNow;
+                    var playerType = Player?.GetType().Name ?? "null";
+                    DiagLog($"[SPELLBOOK] RefreshSpells: Player is not LocalPlayer (type={playerType}), _lastKnownSpellIds.Count={_lastKnownSpellIds.Count}");
                 }
-
-                // Sanity check: WoW 1.12.1 spell IDs top out around 25000; skip garbage values.
-                if (currentSpellId < 0 || currentSpellId > 30000) continue;
-
-                // Track raw ID first — before any name lookup.
-                // Talent spells (e.g. 16462 Deflection) may not have a client DB entry and would
-                // be silently dropped by the name-lookup below. rawIds captures all IDs.
-                rawIds.Add((uint)currentSpellId);
-
-                // Name lookup for PlayerSpells (used for CastSpell-by-name).
-                if (spellsBasePtr == nint.Zero) continue;
-                var spellPtr = MemoryManager.ReadIntPtr(spellsBasePtr + currentSpellId * 4);
-                if (spellPtr == nint.Zero) continue;
-
-                var spellNamePtr = MemoryManager.ReadIntPtr(spellPtr + 0x1E0);
-                if (spellNamePtr == nint.Zero) continue;
-
-                var name = MemoryManager.ReadString(spellNamePtr);
-                if (string.IsNullOrEmpty(name)) continue;
-
-                if (localPlayer.PlayerSpells.TryGetValue(name, out int[]? value))
-                    localPlayer.PlayerSpells[name] = [.. value, currentSpellId];
-                else
-                    localPlayer.PlayerSpells.Add(name, [currentSpellId]);
+                return;
             }
 
-            // Atomic reference swap — readers always see a complete, consistent snapshot.
-            localPlayer.RawSpellBookIds = rawIds;
+            // Throttle to once per 2 seconds — unless a LEARNED_SPELL/UNLEARNED_SPELL event
+            // fired since the last refresh (in which case _forceSpellRefresh bypasses the wait).
+            var forced = _forceSpellRefresh;
+            if (!forced && (DateTime.UtcNow - _lastSpellRefreshUtc).TotalSeconds < 2.0)
+                return;
+            _forceSpellRefresh = false;
+            _lastSpellRefreshUtc = DateTime.UtcNow;
+            if (forced)
+                DiagLog("[SPELLBOOK] RefreshSpells: forced by LEARNED_SPELL/UNLEARNED_SPELL event");
 
-            // Diagnostic: log spell-book presence of known talent spell for troubleshooting.
-            // Runs at most every 2 s to avoid log spam.
+            // Reset spell list when the logged-in character changes.
+            var charName = localPlayer.Name ?? string.Empty;
+            if (charName != _persistentLearnedCharacter)
+            {
+                _persistentLearnedIds.Clear();
+                _persistentLearnedCharacter = charName;
+                _initialSpellsSeeded = false;
+                DiagLog($"[SPELLBOOK] Character changed → '{charName}' (was '{_persistentLearnedCharacter}'), resetting spell list");
+            }
+
+            // STEP 1: Always scan the static spell array at 0x00B700F0.
+            // This array is populated at world entry from SMSG_INITIAL_SPELLS and updated by the
+            // WoW client when spells are learned/unlearned mid-session (SMSG_LEARNED_SPELL).
+            // Does NOT require the spell name cache — reads raw uint spell IDs directly.
+            // Re-scan every tick (not just once) to pick up spells learned after initial login.
+            {
+                const nint LocalPlayerSpellsBase = 0x00B700F0;
+                int scanned = 0;
+                for (int i = 0; i < 1024; i++)
+                {
+                    var spellId = (uint)MemoryManager.ReadInt(LocalPlayerSpellsBase + i * 4);
+                    if (spellId == 0) break;
+                    _persistentLearnedIds.Add(spellId);
+                    scanned++;
+                }
+                if (scanned > 0 && !_initialSpellsSeeded)
+                {
+                    _initialSpellsSeeded = true;
+                    DiagLog($"[SPELLBOOK] Static array: first scan found {scanned} spells");
+                }
+                else if (scanned == 0 && _initialSpellsSeeded)
+                {
+                    // Array returned 0 spells after we already seeded — log this anomaly.
+                    DiagLog($"[SPELLBOOK] WARNING: static array returned 0 entries (previously seeded={_initialSpellsSeeded}, persistent={_persistentLearnedIds.Count})");
+                }
+            }
+
+            // STEP 2: Try to build name→ID cache (needed for Lua tab enumeration and LEARNED_SPELL
+            // name-based lookup). Non-blocking — just returns false if not ready yet.
+            EnsureSpellNameCache();
+
+            if (_spellNameCacheBuilt)
+            {
+                // STEP 3: Flush any LEARNED_SPELL events that arrived before the cache was ready.
+                if (_pendingLearnedSpellNames.Count > 0)
+                {
+                    var pending = _pendingLearnedSpellNames.ToArray();
+                    _pendingLearnedSpellNames.Clear();
+                    foreach (var name in pending)
+                        if (_spellNameToIds.TryGetValue(name, out var ids))
+                            foreach (var id in ids)
+                                _persistentLearnedIds.Add(id);
+                }
+
+                // STEP 4: Enumerate spell book via Lua using GetNumSpellTabs/GetSpellTabInfo.
+                // This is the correct vanilla 1.12.1 API (GetNumSpells does not exist in 1.12.1).
+                // Enumerates ALL spell book entries including passive spells learned via .learn.
+                // Passive spells appear as grey icons in spell book tabs after being learned.
+                try
+                {
+                    var luaResult = Functions.LuaCallWithResult(
+                        "local r='' " +
+                        "local tabs=GetNumSpellTabs() " +
+                        "if tabs and tabs>0 then " +
+                        "for t=1,tabs do " +
+                        "local _,_,off,cnt=GetSpellTabInfo(t) " +
+                        "if off and cnt then " +
+                        "for i=off+1,off+cnt do " +
+                        "local n=GetSpellName(i,'spell') " +
+                        "if n and n~='' then r=r..'|'..n end " +
+                        "end end end end {0}=r");
+
+                    if (luaResult != null && luaResult.Length > 0 && !string.IsNullOrEmpty(luaResult[0]))
+                    {
+                        var names = luaResult[0].Split('|', StringSplitOptions.RemoveEmptyEntries);
+                        int added = 0;
+                        foreach (var name in names)
+                            if (_spellNameToIds.TryGetValue(name.Trim(), out var ids))
+                                foreach (var id in ids)
+                                    if (_persistentLearnedIds.Add(id))
+                                        added++;
+
+                        if (added > 0)
+                            DiagLog($"[SPELLBOOK] Lua tabs: {names.Length} names, +{added} new IDs, total={_persistentLearnedIds.Count}");
+                    }
+                    else
+                    {
+                        DiagLog($"[SPELLBOOK] Lua tabs: empty result (spell book not loaded yet?)");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagLog($"[SPELLBOOK] Lua enum error: {ex.Message}");
+                }
+
+                // STEP 5: Enumerate talent data to catch passive talent spells (e.g. Deflection 16462).
+                // Passive talents do NOT appear in the spell book tabs (GetSpellTabInfo/GetSpellName)
+                // and may NOT be in the static array at 0x00B700F0 when learned via GM .learn command.
+                // GetTalentInfo returns the currently allocated rank for each talent.
+                // If currentRank > 0, the talent is learned and we add its IDs via the name cache.
+                // NOTE: GM .learn teaches the spell directly but may show rank in the talent API too.
+                try
+                {
+                    var talentResult = Functions.LuaCallWithResult(
+                        "local r='' " +
+                        "local tabs=GetNumTalentTabs() " +
+                        "if tabs and tabs>0 then " +
+                        "for t=1,tabs do " +
+                        "local n=GetNumTalents(t) " +
+                        "if n then " +
+                        "for i=1,n do " +
+                        "local name,_,_,_,cur=GetTalentInfo(t,i) " +
+                        "if name and cur and cur>0 then r=r..'|'..name end " +
+                        "end end end end {0}=r");
+
+                    if (talentResult != null && talentResult.Length > 0 && !string.IsNullOrEmpty(talentResult[0]))
+                    {
+                        var names = talentResult[0].Split('|', StringSplitOptions.RemoveEmptyEntries);
+                        int added = 0;
+                        foreach (var name in names)
+                            if (_spellNameToIds.TryGetValue(name.Trim(), out var ids))
+                                foreach (var id in ids)
+                                    if (_persistentLearnedIds.Add(id))
+                                        added++;
+
+                        if (added > 0)
+                            DiagLog($"[SPELLBOOK] Lua talents: {names.Length} spent, +{added} new IDs, total={_persistentLearnedIds.Count}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagLog($"[SPELLBOOK] Lua talent enum error: {ex.Message}");
+                }
+            }
+
+            // Always publish the current known spell set.
+            var spellSnapshot = new HashSet<uint>(_persistentLearnedIds);
+            localPlayer.RawSpellBookIds = spellSnapshot;
+            // Also update the thread-safe snapshot so KnownSpellIds returns the right set
+            // even if LocalPlayer is recreated by SMSG_UPDATE_OBJECT before the next RefreshSpells tick.
+            _lastKnownSpellIds = spellSnapshot;
+
+            // Diagnostic
             if ((DateTime.UtcNow - _lastSpellDiagUtc).TotalSeconds >= 2)
             {
                 _lastSpellDiagUtc = DateTime.UtcNow;
-                if (rawIds.Contains(16462))
-                {
-                    Log.Information("[SPELLBOOK-DIAG] Spell 16462 FOUND in array (total={Count})", rawIds.Count);
-                    DiagLog($"SPELLBOOK-DIAG: 16462 FOUND (total={rawIds.Count})");
-                }
-                else
-                {
-                    Log.Information("[SPELLBOOK-DIAG] Spell 16462 NOT in array (total={Count})", rawIds.Count);
-                    // Dump first 30 spell IDs for diagnosis
-                    var idStr = string.Join(",", rawIds.Take(30));
-                    DiagLog($"SPELLBOOK-DIAG: 16462 NOT FOUND (total={rawIds.Count}) first30=[{idStr}]");
-                }
+                var found = _persistentLearnedIds.Contains(16462);
+                DiagLog($"SPELLBOOK-DIAG: 16462 {(found ? "FOUND" : "NOT FOUND")} " +
+                        $"(total={_persistentLearnedIds.Count}, seeded={_initialSpellsSeeded}, cacheBuilt={_spellNameCacheBuilt})");
             }
         }
 
         private DateTime _lastSpellDiagUtc = DateTime.MinValue;
+        private DateTime _lastSpellRefreshUtc = DateTime.MinValue;
+        private bool _initialSpellsSeeded = false;
+
+        /// <summary>
+        /// Set by the LEARNED_SPELL / UNLEARNED_SPELL event handler to bypass the 2-second
+        /// RefreshSpells throttle and do an immediate rescan on the next bot-loop tick.
+        /// This is necessary because WoW fires these events via the no-args SignalEvent function,
+        /// so the spell name is not available to do a name-based lookup. Instead we rely on the
+        /// static array and Lua GetTalentInfo to detect the change.
+        /// </summary>
+        private volatile bool _forceSpellRefresh = false;
+
+        /// <summary>
+        /// Accumulated spell IDs for the current character: initial spells (from 0x00B700F0 at
+        /// world entry) plus dynamically learned spells (from LEARNED_SPELL WoW event via hook).
+        /// Reset when the logged-in character changes.
+        /// </summary>
+        private HashSet<uint> _persistentLearnedIds = new();
+        private string _persistentLearnedCharacter = string.Empty;
+
+        /// <summary>
+        /// Thread-safe snapshot of the last known spell set. Updated by both RefreshSpells()
+        /// (bot-loop thread) and the LEARNED_SPELL event handler (WoW main thread).
+        /// Volatile ensures cross-thread visibility of the latest reference.
+        /// KnownSpellIds reads from this directly, bypassing LocalPlayer.RawSpellBookIds
+        /// so newly-learned spells are visible even if RefreshSpells() hasn't run yet.
+        /// </summary>
+        private volatile IReadOnlyCollection<uint> _lastKnownSpellIds = Array.Empty<uint>();
+
+        /// <summary>
+        /// Spell names queued from LEARNED_SPELL events that arrived before the name→ID cache
+        /// was ready. Flushed into _persistentLearnedIds once the cache is built.
+        /// </summary>
+        private readonly List<string> _pendingLearnedSpellNames = new();
+
+        /// <summary>
+        /// Maps spell name → list of spell IDs from the client spell DB (0x00C0D788 pointer chain).
+        /// Built once (non-null DB pointer required). Used to translate LEARNED_SPELL arg1 names
+        /// into IDs. Different ranks share a name (e.g. Deflection ranks 1-5 = IDs 16462-16466).
+        /// </summary>
+        private Dictionary<string, List<uint>> _spellNameToIds = new(StringComparer.OrdinalIgnoreCase);
+        private bool _spellNameCacheBuilt = false;
+
+        /// <summary>
+        /// Scans the client spell DB (0x00C0D788 pointer chain) once to build a
+        /// name → [id1, id2, ...] lookup. Different ranks of the same spell share
+        /// a name but have distinct IDs (e.g. Deflection rank 1-5 = 16462-16466).
+        /// </summary>
+        private void EnsureSpellNameCache()
+        {
+            if (_spellNameCacheBuilt) return;
+
+            var spellsBasePtr = MemoryManager.ReadIntPtr(0x00C0D788);
+            DiagLog($"[SPELLDB] 0x00C0D788 ptr={spellsBasePtr:X}");
+            if (spellsBasePtr == nint.Zero)
+            {
+                DiagLog("[SPELLDB] Spell DB pointer is null — will retry next call");
+                return;  // Don't set _spellNameCacheBuilt — retry on next RefreshSpells tick
+            }
+
+            // Test first few entries to validate DB structure before full scan
+            int validEntries = 0;
+            for (int id = 1; id <= 20; id++)
+            {
+                try
+                {
+                    var testPtr = MemoryManager.ReadIntPtr(spellsBasePtr + id * 4);
+                    if (testPtr != nint.Zero) validEntries++;
+                }
+                catch { }
+            }
+            DiagLog($"[SPELLDB] First 20 IDs: {validEntries} non-null pointers");
+
+            var count = 0;
+            for (int id = 1; id < 25000; id++)
+            {
+                try
+                {
+                    var spellPtr = MemoryManager.ReadIntPtr(spellsBasePtr + id * 4);
+                    if (spellPtr == nint.Zero) continue;
+                    var spellNamePtr = MemoryManager.ReadIntPtr(spellPtr + 0x1E0);
+                    if (spellNamePtr == nint.Zero) continue;
+                    var name = MemoryManager.ReadString(spellNamePtr);
+                    if (string.IsNullOrEmpty(name) || name.Length > 100) continue;
+                    if (!_spellNameToIds.TryGetValue(name, out var idList))
+                    {
+                        idList = new List<uint>();
+                        _spellNameToIds[name] = idList;
+                    }
+                    idList.Add((uint)id);
+                    count++;
+                }
+                catch { /* skip bad spell DB entries */ }
+            }
+
+            // Only mark built if we found at least some entries; retry if DB not yet loaded
+            if (count > 0)
+            {
+                _spellNameCacheBuilt = true;
+                DiagLog($"[SPELLDB] Cache built: {count} IDs across {_spellNameToIds.Count} unique names");
+                Log.Information("[SPELLDB] Spell name→ID cache built: {Count} IDs across {Names} unique names",
+                    count, _spellNameToIds.Count);
+            }
+            else
+            {
+                DiagLog("[SPELLDB] Cache scan found 0 entries — will retry next call");
+                _spellNameToIds.Clear();
+            }
+        }
 
         public void RefreshSkills()
         {
@@ -2064,11 +2316,21 @@ namespace ForegroundBotRunner.Statics
         {
             get
             {
-                if (Player is not LocalPlayer lp) return [];
-                // Use RawSpellBookIds — includes ALL spell IDs from the spell book array,
-                // even talent spells (e.g. 16462 Deflection) that lack a client DB entry
-                // and would be silently dropped by the PlayerSpells name-lookup path.
-                return lp.RawSpellBookIds;
+                // _lastKnownSpellIds is updated by both RefreshSpells() and the LEARNED_SPELL
+                // event handler. Using it as primary source avoids two failure modes:
+                //   1. LocalPlayer recreated by SMSG_UPDATE_OBJECT → RawSpellBookIds = [] for 2s
+                //   2. Bot-loop thread hung → RefreshSpells() not called → new spells never published
+                // The LEARNED_SPELL handler runs on WoW's main thread and updates _lastKnownSpellIds
+                // directly, so newly-learned spells are visible even if RefreshSpells() hasn't run.
+                var last = _lastKnownSpellIds;
+                if (last.Count > 0) return last;
+
+                // Fallback: LocalPlayer.RawSpellBookIds covers the startup window before
+                // RefreshSpells() has had a chance to run (so _lastKnownSpellIds is still empty).
+                if (Player is LocalPlayer lp && lp.RawSpellBookIds.Count > 0)
+                    return lp.RawSpellBookIds;
+
+                return Array.Empty<uint>();
             }
         }
 
