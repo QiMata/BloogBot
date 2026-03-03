@@ -120,8 +120,26 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-01 (session 5)
-- **Current work:** PATH-REFACTOR-001 complete. All 5 LiveValidation tiers complete. **LiveValidation: 36/37 pass → 37/37 target achieved** (FishingProfession FIXED). GatheringProfession.Mining has intermittent node respawn flakiness.
+- **Last updated:** 2026-03-02 (session 8)
+- **Current work:** Full LiveValidation suite running (BGPID=30483, output at /tmp/talent_lv_run.txt). TalentAllocation FG root-cause fixed (session 8).
+- **Completed session 8 (2026-03-02):**
+  - Root cause of TalentAllocation FG failure FOUND AND FIXED:
+    - **Root cause:** `CharacterStateSocketListener.IsDeadOrGhostState` had a `deadTextSeen` heuristic that checked `RecentChatMessages` for any message containing "dead". When Testgrunt died during an earlier test (GatheringProfession), `[SYSTEM] You are dead.` was added to the 50-message rolling window. Even after revival, the stale message persisted. This caused `EnqueueAction` to silently drop `.unlearn 16462` for a fully-alive character.
+    - **Effect:** `.unlearn 16462` never reached MaNGOS → spell stayed on server → `.learn 16462` got "You already know that spell." response (confirmed in `foreground_bot_debug.log`) → no SMSG_LEARNED_SPELL sent → WoW.exe memory never updated → RefreshSpells finds 16 spells without 16462 → 12s polling timeout → test fails.
+    - **Fix 1 (primary):** Removed `deadTextSeen` from `CharacterStateSocketListener.IsDeadOrGhostState`. health=0, ghostFlag (0x10), and standState=dead are real-time game-state fields and sufficient. Also removed unused `using System.Linq`.
+    - **Fix 2 (defense-in-depth):** `TalentAllocationTests.TryEnsureSpellAbsentAsync` now uses `SendGmChatCommandTrackedAsync` for `.unlearn` instead of `SendGmChatCommandAsync`, detects drops, and retries once with `EnsureStrictAliveAsync`.
+  - Commit: `62f04e7` — pushed to `cpp_physics_system`
+  - Full LiveValidation suite running in background — awaiting results
+- **Completed session 7 (2026-03-02):** Multi-session investigation of TalentAllocation FG failure. Added diagnostic output to TalentAllocationTests (POST-LEARN snapshot dump + per-poll logging). Confirmed: action IS delivered to TESTBOT1, FG WoW.exe IS in-world, but spell never appears in memory (stays at 16 spells). foreground_bot_debug.log confirmed "You already know that spell." response.
+- **Completed session 6 (2026-03-02):**
+  - Root cause of Talent FG failure: `CharacterStateSocketListener.EnqueueAction` silently dropped `SendChat` actions when snapshot showed health=0 (dead/ghost state from prior test crash), but `HandleActionForward` always returned `ResponseResult.Success` — test believed the `.learn` command was delivered.
+  - **Fix 1:** `EnqueueAction` now returns `bool` (true=enqueued, false=dropped). `HandleActionForward` returns `Failure` when dropped.
+  - **Fix 2:** `TalentAllocationTests.RunTalentScenario` retries `.learn` once if `DispatchResult==Failure` (re-confirms alive first).
+  - **Fix 3:** `RefreshSpells` `consecutiveZeros` threshold raised 10→100 → then changed to scan all 1024 slots unconditionally (no early exit).
+  - **Fix 4:** `SPELLBOOK-DIAG` log level `Debug`→`Information` for visibility.
+  - **Fix 5:** `GatheringProfessionTests` stale detection changed `break`→`continue` so the 8s scan loop keeps polling after detecting a stale cached GO, rather than immediately giving up on that location.
+  - Commit: `d9dd75e` — pushed to `cpp_physics_system`
+
 - **Completed session 5 (2026-03-01):**
   1. **FishingProfessionTests FIXED (`c917208`):** Three root causes identified and fixed:
      - Mainhand slot occupied (Worn Mace) → `.reset items` before equipping fishing pole
@@ -147,4 +165,4 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
   1. Phase 6b: DotRecast evaluation (separate branch — low priority)
   2. LV-QUEST-001 / WSM-PAR-001 quest snapshot sync lag
   3. Mining test reliability: investigate `.respawn` vs pool_gameobject respawn mechanics
-- **Next command:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=detailed"`
+- **Next command:** Check /tmp/talent_lv_run.txt for results (grep for "TalentAllocation\|Passed\|Failed"). If all pass, update TASKS.md table entry for TalentAllocation to Done.
