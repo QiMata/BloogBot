@@ -69,6 +69,27 @@ namespace WoWSharpClient.Movement
             MovementFlags.MOVEFLAG_STRAFE_LEFT |
             MovementFlags.MOVEFLAG_STRAFE_RIGHT;
 
+        // Wall contact state — updated each frame from physics output
+        public bool LastHitWall { get; private set; }
+        public Vector3 LastWallNormal { get; private set; } = new Vector3(0, 0, 1);
+        public float LastBlockedFraction { get; private set; } = 1.0f;
+
+        // Escalating stuck recovery (Phase 6)
+        // Level 1: clear path + callback (15 frames, 0.05y)
+        // Level 2: nearest-waypoint index warp (no full replan) — fires if stuck again in <30 frames
+        // Level 3: request perpendicular strafe via callback — fires if still stuck
+        private int _consecutiveStuckLevels = 0;
+        private Position _lastKnownGoodPosition = new(player.Position.X, player.Position.Y, player.Position.Z);
+        private const uint STALE_FORWARD_SUPPRESS_L2_MS = 800;  // shorter grace before L2 triggers
+        private const uint STALE_FORWARD_SUPPRESS_L3_MS = 600;  // even shorter for L3
+
+        /// <summary>
+        /// Fired when a stuck condition is escalated. Level 1=path cleared, Level 2=corridor reset,
+        /// Level 3=recovery strafe requested. Callers (BotRunner/StateManager) can use this to
+        /// trigger higher-level recovery (unstuck, respawn, GM fallback).
+        /// </summary>
+        public event Action<int /*level*/, Position /*position*/>? OnStuckRecoveryRequired;
+
         // Debug tracking
         private Vector3 _lastPhysicsPosition = new Vector3(player.Position.X, player.Position.Y, player.Position.Z);
         // _accumulatedDelta removed — was causing π speed multiplier bug in dead-reckoning
@@ -226,6 +247,17 @@ namespace WoWSharpClient.Movement
 
         private void ApplyPhysicsResult(PhysicsOutput output, float deltaSec)
         {
+            // Capture wall contact feedback for the path layer (Phase 1: physics-to-path feedback)
+            LastHitWall = output.HitWall;
+            LastWallNormal = new Vector3(output.WallNormalX, output.WallNormalY, output.WallNormalZ);
+            LastBlockedFraction = output.BlockedFraction;
+
+            if (output.HitWall)
+            {
+                Log.Verbose("[MovementController] Wall contact: normal=({Nx:F2},{Ny:F2},{Nz:F2}) blocked={Frac:P0}",
+                    output.WallNormalX, output.WallNormalY, output.WallNormalZ, 1.0f - output.BlockedFraction);
+            }
+
             var oldPos = _player.Position;
 
             // Diagnostic: detect if physics returned unchanged position while movement was expected.
@@ -454,37 +486,93 @@ namespace WoWSharpClient.Movement
             if (!hasHorizontalIntent || transientMotionState)
             {
                 _staleForwardNoDisplacementTicks = 0;
+                // Track last-known-good position when moving freely
+                if (frameDelta >= STALE_FORWARD_DISPLACEMENT_EPSILON)
+                    _lastKnownGoodPosition = new Position(_player.Position.X, _player.Position.Y, _player.Position.Z);
                 return;
             }
 
-            if (frameDelta < STALE_FORWARD_DISPLACEMENT_EPSILON)
-                _staleForwardNoDisplacementTicks++;
-            else
+            if (frameDelta >= STALE_FORWARD_DISPLACEMENT_EPSILON)
+            {
+                // Making progress — update last-known-good and reset stuck level counter
                 _staleForwardNoDisplacementTicks = 0;
+                _consecutiveStuckLevels = 0;
+                _lastKnownGoodPosition = new Position(_player.Position.X, _player.Position.Y, _player.Position.Z);
+                return;
+            }
 
+            _staleForwardNoDisplacementTicks++;
             if (_staleForwardNoDisplacementTicks < STALE_FORWARD_NO_DISPLACEMENT_THRESHOLD)
                 return;
 
+            // Stuck threshold reached — escalate recovery level
+            _consecutiveStuckLevels++;
+            var stuckLevel = Math.Min(_consecutiveStuckLevels, 3);
             var stuckFlags = flags;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardRecoveryCount++;
 
-            _velocity = Vector3.Zero;
-            _fallTimeMs = 0;
-            _pendingDepen = Vector3.Zero;
-            _standingOnInstanceId = 0;
-            _standingOnLocal = Vector3.Zero;
-            _currentPath = null;
-            _currentWaypointIndex = 0;
+            switch (stuckLevel)
+            {
+                case 1:
+                    // Level 1: Clear path and stop movement. Caller should replan.
+                    Log.Warning("[MovementController][STUCK-L1] Stale forward: clearing path, stopping (recoveries={Count}, frameDelta={Delta:F3})",
+                        _staleForwardRecoveryCount, frameDelta);
+                    _velocity = Vector3.Zero;
+                    _fallTimeMs = 0;
+                    _pendingDepen = Vector3.Zero;
+                    _standingOnInstanceId = 0;
+                    _standingOnLocal = Vector3.Zero;
+                    _currentPath = null;
+                    _currentWaypointIndex = 0;
+                    _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+                    _lastSentFlags = stuckFlags;
+                    _forceStopAfterReset = _lastSentFlags != MovementFlags.MOVEFLAG_NONE;
+                    _lastPacketTime = 0;
+                    _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
+                    OnStuckRecoveryRequired?.Invoke(1, new Position(_player.Position.X, _player.Position.Y, _player.Position.Z));
+                    break;
 
-            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-            _lastSentFlags = stuckFlags;
-            _forceStopAfterReset = _lastSentFlags != MovementFlags.MOVEFLAG_NONE;
-            _lastPacketTime = 0;
-            _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
+                case 2:
+                    // Level 2: Corridor reset — warp waypoint index to nearest waypoint without
+                    // clearing the entire path. Gives the bot a fresh waypoint target without a
+                    // full replan, which can resolve minor path-tracking divergence near walls.
+                    Log.Warning("[MovementController][STUCK-L2] Stale forward: corridor reset (path len={Len}, index={Idx})",
+                        _currentPath?.Length ?? 0, _currentWaypointIndex);
+                    if (_currentPath != null && _currentPath.Length > 0)
+                    {
+                        // Find nearest waypoint ahead of current index (don't go backward)
+                        var nearestIdx = _currentWaypointIndex;
+                        var nearestDist = float.MaxValue;
+                        for (int idx = _currentWaypointIndex; idx < _currentPath.Length; idx++)
+                        {
+                            var wp = _currentPath[idx];
+                            var d = HorizontalDistance(_player.Position.X, _player.Position.Y, wp.X, wp.Y);
+                            if (d < nearestDist) { nearestDist = d; nearestIdx = idx; }
+                        }
+                        _currentWaypointIndex = nearestIdx;
+                        Log.Warning("[MovementController][STUCK-L2] Reset waypoint index to {Idx} (dist={Dist:F1}y)", nearestIdx, nearestDist);
+                    }
+                    _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_L2_MS);
+                    OnStuckRecoveryRequired?.Invoke(2, new Position(_player.Position.X, _player.Position.Y, _player.Position.Z));
+                    break;
 
-            Log.Warning("[MovementController] Recovered stale forward movement (recoveries={Recoveries}, frameDelta={FrameDelta:F3}, flags=0x{Flags:X}). Scheduled stop/reset packet.",
-                _staleForwardRecoveryCount, frameDelta, (uint)stuckFlags);
+                default:
+                    // Level 3+: Signal caller to perform higher-level recovery (strafe, respawn, GM unstuck).
+                    Log.Warning("[MovementController][STUCK-L3] Stale forward: escalated to caller (level={Level}). LastGoodPos=({X:F1},{Y:F1},{Z:F1})",
+                        stuckLevel, _lastKnownGoodPosition.X, _lastKnownGoodPosition.Y, _lastKnownGoodPosition.Z);
+                    _velocity = Vector3.Zero;
+                    _pendingDepen = Vector3.Zero;
+                    _currentPath = null;
+                    _currentWaypointIndex = 0;
+                    _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+                    _lastSentFlags = stuckFlags;
+                    _forceStopAfterReset = _lastSentFlags != MovementFlags.MOVEFLAG_NONE;
+                    _lastPacketTime = 0;
+                    _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
+                    OnStuckRecoveryRequired?.Invoke(stuckLevel, _lastKnownGoodPosition);
+                    break;
+            }
         }
 
         private Opcode DetermineOpcode(MovementFlags current, MovementFlags previous)

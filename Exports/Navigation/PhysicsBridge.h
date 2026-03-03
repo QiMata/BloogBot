@@ -201,4 +201,13 @@ struct PhysicsOutput
     float splineProgress;      // 0.0 to 1.0 between current and next point
 
     // Removed: ramp interpolation diagnostics. Ramp state is no longer persisted across frames.
+
+    // Wall contact feedback — set from the SIDE pass of GroundMoveElevatedSweep.
+    // Path layer uses these to detect when the bot is stuck against a wall and trigger
+    // escalating recovery or dynamic obstacle rerouting.
+    bool hitWall;            // true if horizontal movement was blocked by a non-walkable surface
+    float wallNormalX;       // world-space surface normal of the wall hit
+    float wallNormalY;
+    float wallNormalZ;
+    float blockedFraction;   // fraction of requested horizontal move completed (0=fully blocked, 1=unblocked)
 };

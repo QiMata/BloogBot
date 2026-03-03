@@ -163,6 +163,7 @@ namespace PathfindingService
                     PathfindingRequest.PayloadOneofCase.Step => HandlePhysics(request.Step),
                     PathfindingRequest.PayloadOneofCase.GroundZ => HandleGroundZ(request.GroundZ),
                     PathfindingRequest.PayloadOneofCase.BatchGroundZ => HandleBatchGroundZ(request.BatchGroundZ),
+                    PathfindingRequest.PayloadOneofCase.SegmentDynCheck => HandleSegmentDynCheck(request.SegmentDynCheck),
                     _ => ErrorResponse("Unknown or unset request type.")
                 };
             }
@@ -283,6 +284,22 @@ namespace PathfindingService
             return new PathfindingResponse
             {
                 Los = new LineOfSightResponse { InLos = hasLOS }
+            };
+        }
+
+        private PathfindingResponse HandleSegmentDynCheck(SegmentDynCheckRequest req)
+        {
+            if (req.From == null || req.To == null || !IsFinitePosition(req.From) || !IsFinitePosition(req.To))
+                return ErrorResponse("Missing or non-finite position for SegmentDynCheck.");
+
+            bool intersects = _navigation.SegmentIntersectsDynamicObjects(
+                req.MapId,
+                req.From.X, req.From.Y, req.From.Z,
+                req.To.X, req.To.Y, req.To.Z);
+
+            return new PathfindingResponse
+            {
+                SegmentDynCheck = new SegmentDynCheckResponse { Intersects = intersects }
             };
         }
 
@@ -475,7 +492,13 @@ namespace PathfindingService
 				StandingOnLocalZ = nav.standingOnLocalZ,
 
 				FallDistance = nav.fallDistance,
-				FallStartZ = nav.fallStartZ
+				FallStartZ = nav.fallStartZ,
+
+				HitWall = nav.hitWall,
+				WallNormalX = nav.wallNormalX,
+				WallNormalY = nav.wallNormalY,
+				WallNormalZ = nav.wallNormalZ,
+				BlockedFraction = nav.blockedFraction
             };
         }
     }

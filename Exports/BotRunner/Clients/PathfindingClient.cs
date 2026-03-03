@@ -191,6 +191,37 @@ namespace BotRunner.Clients
                 };
             }
         }
+        /// <summary>
+        /// Check whether the segment (from → to) intersects any registered dynamic object
+        /// (closed door, trophy pillar, etc.) on the given map.
+        /// Returns false when no dynamic objects are registered (fast path).
+        /// Does NOT check static geometry — use IsInLineOfSight for that.
+        /// </summary>
+        public virtual bool SegmentIntersectsDynamicObjects(uint mapId, Position from, Position to)
+        {
+            try
+            {
+                var request = new PathfindingRequest
+                {
+                    SegmentDynCheck = new SegmentDynCheckRequest
+                    {
+                        MapId = mapId,
+                        From = ToProto(from),
+                        To = ToProto(to)
+                    }
+                };
+                var response = SendMessage(request);
+                _consecutiveFailures = 0;
+                if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
+                    return false; // Non-fatal — treat as clear
+                return response.SegmentDynCheck.Intersects;
+            }
+            catch
+            {
+                return false; // Pathfinding service unavailable — assume clear
+            }
+        }
+
         private static Game.Position ToProto(Position p) => new() { X = p.X, Y = p.Y, Z = p.Z };
     }
 }

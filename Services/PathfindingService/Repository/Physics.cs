@@ -276,5 +276,13 @@ namespace PathfindingService.Repository
         public float fallTime;
         public int currentSplineIndex;
         public float splineProgress;
+
+        // Wall contact feedback (mirrors PhysicsBridge.h)
+        [MarshalAs(UnmanagedType.I1)]
+        public bool hitWall;         // true if horizontal movement was blocked by a wall
+        public float wallNormalX;    // world-space wall surface normal
+        public float wallNormalY;
+        public float wallNormalZ;
+        public float blockedFraction; // 0=fully blocked, 1=no block
     }
 }

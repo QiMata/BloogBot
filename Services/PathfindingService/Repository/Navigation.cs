@@ -60,6 +60,11 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern void PathArrFree(IntPtr pathArr);
 
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SegmentIntersectsDynamicObjects")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool SegmentIntersectsDynamicObjectsNative(
+            uint mapId, float x0, float y0, float z0, float x1, float y1, float z1);
+
         private const string EnableLosFallbackEnv = "WWOW_ENABLE_LOS_FALLBACK";
 
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
@@ -378,6 +383,18 @@ namespace PathfindingService.Repository
             var dx = a.X - b.X;
             var dy = a.Y - b.Y;
             return MathF.Sqrt((dx * dx) + (dy * dy));
+        }
+
+        public bool SegmentIntersectsDynamicObjects(uint mapId, float x0, float y0, float z0, float x1, float y1, float z1)
+        {
+            try
+            {
+                return SegmentIntersectsDynamicObjectsNative(mapId, x0, y0, z0, x1, y1, z1);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

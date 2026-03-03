@@ -1023,6 +1023,11 @@ PhysicsEngine::ThreePassResult PhysicsEngine::PerformThreePassMove(
     // =========================================================================
     SlideResult sideResult = ExecuteSidePass(input, st, radius, height, decomposed);
     result.collisionSide = sideResult.hitWall || sideResult.hitCorner;
+    result.lastSideHitNormal = sideResult.lastHitNormal;
+    {
+        float sideTotal = sideResult.distanceMoved + sideResult.distanceRemaining;
+        result.sideBlockedFraction = (sideTotal > 0.001f) ? (sideResult.distanceMoved / sideTotal) : 1.0f;
+    }
 
     float afterSideX = st.x, afterSideY = st.y, afterSideZ = st.z;
     float sideDist = std::sqrt((afterSideX - afterUpX)*(afterSideX - afterUpX) + (afterSideY - afterUpY)*(afterSideY - afterUpY));
@@ -1279,6 +1284,13 @@ void PhysicsEngine::GroundMoveElevatedSweep(const PhysicsInput& input,
         PHYS_INFO(PHYS_MOVE, oss.str());
     }
 
+    // Propagate wall contact info to MovementState so StepV2 can relay it to PhysicsOutput
+    if (result.collisionSide) {
+        st.wallHit = true;
+        st.wallHitNormal = result.lastSideHitNormal;
+        st.wallBlockedFraction = result.sideBlockedFraction;
+    }
+
     // Resolve any remaining horizontal overlaps
     ApplyHorizontalDepenetration(input, st, r, h, /*walkableOnly*/ true);
 
@@ -1517,6 +1529,9 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			out.moveFlags &= ~MOVEFLAG_SWIMMING;
 
 		out.groundZ = input.z;
+		out.hitWall = false;
+		out.wallNormalX = 0.0f; out.wallNormalY = 0.0f; out.wallNormalZ = 1.0f;
+		out.blockedFraction = 1.0f;
 		PHYS_INFO(PHYS_MOVE, "[StepV2] dt<=0; returning output without simulation");
 		return out;
 	}
@@ -2773,6 +2788,12 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	out.groundNx = st.groundNormal.x;
 	out.groundNy = st.groundNormal.y;
 	out.groundNz = st.groundNormal.z;
+
+	out.hitWall = st.wallHit;
+	out.wallNormalX = st.wallHitNormal.x;
+	out.wallNormalY = st.wallHitNormal.y;
+	out.wallNormalZ = st.wallHitNormal.z;
+	out.blockedFraction = st.wallBlockedFraction;
 
 	out.pendingDepenX = deferredDepen.x;
 	out.pendingDepenY = deferredDepen.y;

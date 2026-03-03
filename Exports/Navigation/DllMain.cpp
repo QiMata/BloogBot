@@ -256,6 +256,69 @@ extern "C" __declspec(dllexport) bool LineOfSight(uint32_t mapId, XYZ from, XYZ 
     return SceneQuery::LineOfSight(mapId, G3D::Vector3(from.X, from.Y, from.Z), G3D::Vector3(to.X, to.Y, to.Z));
 }
 
+// Möller–Trumbore segment-triangle intersection.
+// Returns true if segment (p0→p1) intersects triangle (a, b, c).
+static bool SegmentIntersectsTriangle(
+    const G3D::Vector3& p0, const G3D::Vector3& p1,
+    const G3D::Vector3& ta, const G3D::Vector3& tb, const G3D::Vector3& tc)
+{
+    const float eps = 1e-8f;
+    const G3D::Vector3 dir = p1 - p0;
+    const G3D::Vector3 e1  = tb - ta;
+    const G3D::Vector3 e2  = tc - ta;
+    const G3D::Vector3 h   = dir.cross(e2);
+    const float a = e1.dot(h);
+    if (fabsf(a) < eps) return false;           // segment parallel to triangle
+    const float f = 1.0f / a;
+    const G3D::Vector3 s = p0 - ta;
+    const float u = f * s.dot(h);
+    if (u < 0.0f || u > 1.0f) return false;
+    const G3D::Vector3 q = s.cross(e1);
+    const float v = f * dir.dot(q);
+    if (v < 0.0f || u + v > 1.0f) return false;
+    const float t = f * e2.dot(q);
+    return t >= 0.0f && t <= 1.0f;             // hit within segment
+}
+
+// Check whether the line segment (x0,y0,z0)→(x1,y1,z1) intersects any triangle
+// belonging to a registered dynamic object on the given map.
+// Returns false when no dynamic objects are registered (fast path).
+// Used by the pathfinding layer to detect when a freshly-generated path segment
+// passes through a closed door or other registered dynamic obstacle.
+extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
+    uint32_t mapId,
+    float x0, float y0, float z0,
+    float x1, float y1, float z1)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    auto* reg = DynamicObjectRegistry::Instance();
+    if (!reg || reg->Count() == 0) return false;
+
+    // Build AABB of segment with a small radius pad so thin geometry is caught.
+    const float pad = 0.5f;
+    const G3D::AABox segBox(
+        G3D::Vector3(std::min(x0, x1) - pad, std::min(y0, y1) - pad, std::min(z0, z1) - pad),
+        G3D::Vector3(std::max(x0, x1) + pad, std::max(y0, y1) + pad, std::max(z0, z1) + pad));
+
+    std::vector<CapsuleCollision::Triangle> tris;
+    reg->QueryTriangles(mapId, segBox, tris);
+    if (tris.empty()) return false;
+
+    const G3D::Vector3 p0(x0, y0, z0);
+    const G3D::Vector3 p1(x1, y1, z1);
+    for (const auto& tri : tris)
+    {
+        const G3D::Vector3 ta(tri.a.x, tri.a.y, tri.a.z);
+        const G3D::Vector3 tb(tri.b.x, tri.b.y, tri.b.z);
+        const G3D::Vector3 tc(tri.c.x, tri.c.y, tri.c.z);
+        if (SegmentIntersectsTriangle(p0, p1, ta, tb, tc))
+            return true;
+    }
+    return false;
+}
+
 // DLL Entry Point
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {

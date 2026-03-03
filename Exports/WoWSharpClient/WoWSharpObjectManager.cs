@@ -2784,6 +2784,12 @@ namespace WoWSharpClient
             _movementController?.SetPath(path);
         }
 
+        /// <summary>
+        /// True if the most recent physics tick reported a wall contact during horizontal movement.
+        /// Path layer uses this to suppress false stall detection when the bot is genuinely blocked.
+        /// </summary>
+        public bool PhysicsHitWall => _movementController?.LastHitWall ?? false;
+
         public void RefreshSkills() { }
 
         public void RefreshSpells() { }

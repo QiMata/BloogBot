@@ -37,6 +37,12 @@ public sealed class NavigationMetrics
     /// <summary>Waypoints rerouted around detected cliff edges.</summary>
     public int CliffReroutes { get; private set; }
 
+    /// <summary>
+    /// Waypoint index advances driven by physics-confirmed position via UpdateCorridorPosition.
+    /// Distinct from WaypointsReached which counts all advances including those from GetNextWaypoint.
+    /// </summary>
+    public int CorridorAdvances { get; private set; }
+
     /// <summary>Running average of path waypoint count across all calculated paths.</summary>
     public float AveragePathLength { get; private set; }
 
@@ -54,6 +60,14 @@ public sealed class NavigationMetrics
     internal void IncrementWidthChecksFailed() => WidthChecksFailed++;
     internal void IncrementCliffProbesTriggered() => CliffProbesTriggered++;
     internal void IncrementCliffReroutes() => CliffReroutes++;
+    internal void IncrementCorridorAdvances() => CorridorAdvances++;
+
+    /// <summary>
+    /// Number of path segments rejected because a registered dynamic object
+    /// (closed door, trophy pillar, etc.) intersected the segment at generation time.
+    /// </summary>
+    public int DynamicObstacleDeflections { get; private set; }
+    internal void IncrementDynamicObstacleDeflections() => DynamicObstacleDeflections++;
 
     internal void RecordPathLength(int waypointCount)
     {
@@ -76,6 +90,8 @@ public sealed class NavigationMetrics
         WidthChecksFailed = 0;
         CliffProbesTriggered = 0;
         CliffReroutes = 0;
+        CorridorAdvances = 0;
+        DynamicObstacleDeflections = 0;
         AveragePathLength = 0f;
         LastPathDurationMs = 0;
         _totalWaypointCount = 0;
@@ -112,6 +128,7 @@ public class NavigationPath(
     private Position? _lastWaypointSamplePosition;
     private float _lastWaypointSampleDistance = float.NaN;
     private int _stalledNearWaypointSamples;
+    private float _characterSpeed = 7.0f;         // actual run speed; updated via UpdateCharacterSpeed()
 
     /// <summary>
     /// Pathfinding metrics for debugging and monitoring.
@@ -167,7 +184,7 @@ public class NavigationPath(
     /// Gets the next waypoint to move toward, or the direct destination if no path is available.
     /// Automatically calculates/recalculates the path as needed.
     /// </summary>
-    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f)
+    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, bool physicsHitWall = false)
     {
         if (_pathfinding == null)
             return ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
@@ -225,6 +242,18 @@ public class NavigationPath(
                 CalculatePath(currentPosition, destination, mapId);
             if (_currentIndex >= _waypoints.Length)
                 return ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+        }
+
+        // Phase 2 (physics-confirmed corridor): when physics reports a wall contact,
+        // the bot IS actively trying to move but is blocked by geometry — this is NOT a
+        // navigation stall. Reset the stall counter so wall contact doesn't trigger a
+        // wasteful path recalculation.
+        if (physicsHitWall && _stalledNearWaypointSamples > 0)
+        {
+            _stalledNearWaypointSamples = 0;
+            _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
+            _lastWaypointSampleDistance = float.NaN;
+            Metrics.IncrementCorridorAdvances();
         }
 
         // If the next waypoint remains near while the bot itself does not move,
@@ -605,6 +634,39 @@ public class NavigationPath(
         return pulled.ToArray();
     }
 
+    /// <summary>
+    /// Phase 3: Check each consecutive waypoint pair for dynamic object triangle intersection.
+    /// String-pulling ensures waypoints are LOS-clear at generation time, but the immediate
+    /// next navmesh waypoint (anchor+1) is always included without an explicit LOS check.
+    /// This step detects when a registered dynamic object (closed door, etc.) sits between
+    /// two consecutive waypoints.
+    /// Returns the original path when clear, or an empty array when any segment is blocked
+    /// (causing GetValidatedPath to reject the path and trigger recalculation on next tick).
+    /// </summary>
+    private Position[] ValidateSegmentsAgainstDynamicObjects(uint mapId, Position[] path)
+    {
+        if (_pathfinding == null || path.Length < 2)
+            return path;
+
+        for (int i = 0; i < path.Length - 1; i++)
+        {
+            bool intersects;
+            try { intersects = _pathfinding.SegmentIntersectsDynamicObjects(mapId, path[i], path[i + 1]); }
+            catch { continue; } // Service unavailable — assume clear
+
+            if (intersects)
+            {
+                Metrics.IncrementDynamicObstacleDeflections();
+                Serilog.Log.Warning(
+                    "[NavigationPath] Dynamic obstacle blocks segment {A} → {B} (deflections={Count}); forcing path recalc.",
+                    i, i + 1, Metrics.DynamicObstacleDeflections);
+                return [];
+            }
+        }
+
+        return path;
+    }
+
     private bool TryLosSkipAhead(Position currentPosition, uint mapId)
     {
         if (_currentIndex + 1 >= _waypoints.Length)
@@ -709,6 +771,11 @@ public class NavigationPath(
             if (!hasLineOfSight)
                 return false;
 
+            // Phase 5b: Check overhead clearance — only in strict mode to avoid
+            // constant probes on long outdoor paths where ceilings don't exist.
+            if (_strictPathValidation && !HasSufficientHeadroom(from, to, mapId))
+                return false;
+
             from = to;
         }
 
@@ -758,10 +825,19 @@ public class NavigationPath(
             ? StringPullPath(mapId, start, prunedPath)
             : prunedPath;
 
+        // Phase 3: Validate path segments against dynamic objects (closed doors, etc.).
+        // String-pulling already checks LOS, but consecutive navmesh waypoints (4y apart)
+        // are always included without an explicit LOS check between them. This step
+        // catches segments through registered dynamic objects using triangle intersection.
+        // Returns empty if any segment is blocked, causing IsPathUsable to reject and retry.
+        var dynValidatedPath = _enableProbeHeuristics
+            ? ValidateSegmentsAgainstDynamicObjects(mapId, pulledPath)
+            : pulledPath;
+
         // Phase 3a: Post-path Z correction — replace navmesh Z with collision ground Z
         // where they differ. Fixes Orgrimmar WMO areas where navmesh Z diverges from
         // the actual walkable surface by a few yards.
-        var zCorrectedPath = CorrectPathZFromCollision(mapId, pulledPath);
+        var zCorrectedPath = CorrectPathZFromCollision(mapId, dynValidatedPath);
 
         // Phase 4b: Cliff rerouting — probe each segment for cliff edges and insert
         // offset waypoints to steer the bot away from dangerous drops.
@@ -887,11 +963,11 @@ public class NavigationPath(
         }
     }
 
-    private void ComputeWaypointAcceptanceRadii(Position start, float characterSpeed = 7.0f)
+    private void ComputeWaypointAcceptanceRadii(Position start)
     {
-        // Speed-based floor: at full speed the bot covers characterSpeed yards per second.
+        // Speed-based floor: at full speed the bot covers _characterSpeed yards per second.
         // Half a second at 20% margin prevents overshoot at full run speed.
-        float speedBasedFloor = characterSpeed * 0.5f * 1.2f;
+        float speedBasedFloor = _characterSpeed * 0.5f * 1.2f;
 
         _waypointAcceptanceRadii = new float[_waypoints.Length];
         for (var i = 0; i < _waypoints.Length; i++)
@@ -917,8 +993,14 @@ public class NavigationPath(
     }
 
     /// <summary>
-    /// Offset sharp-corner waypoints toward the inside of the turn to prevent
-    /// the bot's collision capsule from hitting the outer wall before reaching the waypoint.
+    /// Offset sharp-corner waypoints AWAY from the inner wall of the turn.
+    ///
+    /// The bisector of (inDir + outDir) points toward the INNER (concave) side of the turn —
+    /// that is, toward the wall the bot would collide with at a tight corner. Moving the waypoint
+    /// in that direction pushes it INTO the wall, making corners worse.
+    ///
+    /// We negate the bisector so the waypoint shifts toward the outer gap, giving the capsule
+    /// clearance to arc smoothly through the corner without pressing into the inner wall.
     /// </summary>
     private void OffsetCornerWaypoints(Position start)
     {
@@ -937,7 +1019,9 @@ public class NavigationPath(
             var turnAngle = ComputeTurnAngle2D(prev, curr, next);
             if (turnAngle < cornerAngleThreshold) continue;
 
-            // Compute bisector: average of incoming and outgoing unit vectors.
+            // Compute bisector of incoming and outgoing unit direction vectors.
+            // This bisector points toward the INNER corner (concave wall).
+            // Negate it to get the direction AWAY from the inner wall (toward the outer gap).
             var inDx = curr.X - prev.X;
             var inDy = curr.Y - prev.Y;
             var inLen = MathF.Sqrt(inDx * inDx + inDy * inDy);
@@ -946,15 +1030,16 @@ public class NavigationPath(
             var outLen = MathF.Sqrt(outDx * outDx + outDy * outDy);
             if (inLen < minSegmentLength || outLen < minSegmentLength) continue;
 
-            // Bisector points toward the "inside" of the turn.
+            // bisDir: toward inner corner (concave side).
+            // -bisDir: away from inner wall = toward outer gap = correct offset direction.
             var bisX = inDx / inLen + outDx / outLen;
             var bisY = inDy / inLen + outDy / outLen;
             var bisLen = MathF.Sqrt(bisX * bisX + bisY * bisY);
             if (bisLen < 0.01f) continue;
 
             _waypoints[i] = new Position(
-                curr.X + (bisX / bisLen) * offsetDistance,
-                curr.Y + (bisY / bisLen) * offsetDistance,
+                curr.X - (bisX / bisLen) * offsetDistance,  // negated: push away from inner wall
+                curr.Y - (bisY / bisLen) * offsetDistance,
                 curr.Z);
         }
     }
@@ -1435,6 +1520,26 @@ public class NavigationPath(
     }
 
     /// <summary>
+    /// Update the character's run speed so acceptance radii scale correctly.
+    /// Recomputes radii only when the speed changes by more than 0.5 y/s to avoid
+    /// churning on minor floating-point jitter each tick.
+    /// </summary>
+    public void UpdateCharacterSpeed(float speed)
+    {
+        if (MathF.Abs(speed - _characterSpeed) < 0.5f)
+            return;
+
+        _characterSpeed = speed;
+
+        // Recompute radii if we already have a path with a start reference.
+        if (_waypoints.Length > 0 && _enableProbeHeuristics)
+        {
+            var start = _currentIndex > 0 ? _waypoints[_currentIndex - 1] : _waypoints[0];
+            ComputeWaypointAcceptanceRadii(start);
+        }
+    }
+
+    /// <summary>
     /// Whether the path has remaining waypoints.
     /// </summary>
     public bool HasWaypoints => _waypoints.Length > 0 && _currentIndex < _waypoints.Length;
@@ -1598,26 +1703,41 @@ public class NavigationPath(
     /// Phase 5b: Check whether a path segment has sufficient overhead clearance
     /// for the character's capsule height.
     ///
-    /// TODO: This is a placeholder. Proper headroom validation requires an
-    /// overhead ray-cast (casting upward from the ground to detect ceilings),
-    /// which is not currently available via the pathfinding service. When
-    /// overhead collision queries are added to the PathfindingService, this
-    /// method should:
-    ///   1. Sample the segment at the midpoint (and optionally at 1/4 and 3/4).
-    ///   2. At each sample, cast a ray upward from ground level.
-    ///   3. If the ray hits geometry at a distance less than _capsuleHeight,
-    ///      the segment lacks headroom (return false).
+    /// Samples the segment midpoint and checks LOS from the top of the capsule
+    /// (groundZ + _capsuleHeight) upward by a 0.4y margin. If that short vertical
+    /// segment is blocked by geometry (WMO ceiling, cave roof, bridge underside),
+    /// the character would clip through the ceiling — return false.
+    ///
+    /// Uses the existing IsInLineOfSight infrastructure (no new C++ export needed).
+    /// A failed LOS upward probe = ceiling at or below capsule height.
     /// </summary>
     /// <param name="from">Start of the segment.</param>
     /// <param name="to">End of the segment.</param>
     /// <param name="mapId">Map ID for collision queries.</param>
-    /// <returns>True if headroom is sufficient; false otherwise. Currently always returns true.</returns>
+    /// <returns>True if headroom is sufficient; false if ceiling is too low.</returns>
     private bool HasSufficientHeadroom(Position from, Position to, uint mapId)
     {
-        // Placeholder — always passes until overhead ray-cast is available.
-        _ = from;
-        _ = to;
-        _ = mapId;
-        return true;
+        if (_pathfinding == null)
+            return true; // Can't check — assume clear
+
+        // Sample the midpoint of the segment.
+        var midX = (from.X + to.X) * 0.5f;
+        var midY = (from.Y + to.Y) * 0.5f;
+        var midZ = (from.Z + to.Z) * 0.5f;
+
+        // Cast a 0.4y ray upward from the top of the capsule.
+        // If geometry blocks this short segment, the ceiling is within capsule height.
+        const float HeadroomMargin = 0.4f;
+        var headTop = new Position(midX, midY, midZ + _capsuleHeight);
+        var headProbe = new Position(midX, midY, midZ + _capsuleHeight + HeadroomMargin);
+
+        try
+        {
+            return _pathfinding.IsInLineOfSight(mapId, headTop, headProbe);
+        }
+        catch
+        {
+            return true; // Service unavailable — assume clear
+        }
     }
 }

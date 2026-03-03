@@ -128,6 +128,10 @@ private:
         G3D::Vector3 rampEnd;   // new stepped point
         G3D::Vector3 rampDir;   // horizontal movement direction used to form plane
         float rampLength = 0.0f; // horizontal distance along rampDir between start/end
+        // Wall contact state — set by GroundMoveElevatedSweep from SIDE pass result
+        bool wallHit = false;
+        G3D::Vector3 wallHitNormal;
+        float wallBlockedFraction = 1.0f;
     };
 
     // Added physics query result structs
@@ -398,6 +402,9 @@ private:
         G3D::Vector3 sideHitNormal = G3D::Vector3(0, 0, 1); // valid if nonWalkableSource==Side
         float actualStepUpDelta;        // How much we actually rose in UP pass
         G3D::Vector3 groundNormal;      // Normal of ground surface (if landed)
+        // Wall contact feedback (populated from SIDE pass result)
+        G3D::Vector3 lastSideHitNormal; // contact normal of the wall hit during SIDE pass
+        float sideBlockedFraction;      // fraction of side distance completed (0=fully blocked, 1=no block)
     };
 
     // Decomposes a movement direction into up/side/down components.

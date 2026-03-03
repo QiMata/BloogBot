@@ -14,6 +14,7 @@ message PathfindingRequest {
         ReadyCheckRequest ready_check = 4;
         GetGroundZRequest ground_z = 5;
         BatchGroundZRequest batch_ground_z = 6;
+        SegmentDynCheckRequest segment_dyn_check = 7;
     }
 }
 
@@ -26,6 +27,7 @@ message PathfindingResponse {
         ReadyCheckResponse ready_status = 4;
         GetGroundZResponse ground_z = 5;
         BatchGroundZResponse batch_ground_z = 6;
+        SegmentDynCheckResponse segment_dyn_check = 7;
         Error error = 99;
     }
 }
@@ -236,4 +238,25 @@ message PhysicsOutput {
 	// Fall tracking
 	float fall_distance = 29;   // Total Z drop on landing (positive = downward)
 	float fall_start_z = 30;    // Z when current fall began
+
+	// Wall contact feedback — from the SIDE pass of the 3-pass physics move.
+	// Path layer uses these to detect wall-blocked movement and trigger recovery.
+	bool hit_wall = 31;          // true if horizontal movement was blocked by a non-walkable wall
+	float wall_normal_x = 32;    // world-space wall surface normal X
+	float wall_normal_y = 33;    // world-space wall surface normal Y
+	float wall_normal_z = 34;    // world-space wall surface normal Z
+	float blocked_fraction = 35; // fraction of requested horizontal move completed (0=fully blocked, 1=unblocked)
+}
+
+// Segment vs dynamic-objects intersection check.
+// Returns true when the segment passes through a registered dynamic object
+// (closed door, trophy pillar, etc.). Does NOT test static geometry.
+message SegmentDynCheckRequest {
+    uint32 map_id = 1;
+    game.Position from = 2;
+    game.Position to = 3;
+}
+
+message SegmentDynCheckResponse {
+    bool intersects = 1;    // true if any dynamic-object triangle intersects the segment
 }
