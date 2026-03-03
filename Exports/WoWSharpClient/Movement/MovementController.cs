@@ -686,7 +686,7 @@ namespace WoWSharpClient.Movement
         }
 
         // ======== STATE MANAGEMENT ========
-        public void Reset()
+        public void Reset(float teleportDestZ = float.NaN)
         {
             // Reset physics state (after teleport, death, etc)
             var preResetFlags = _player.MovementFlags;
@@ -710,8 +710,10 @@ namespace WoWSharpClient.Movement
 
             // After teleport/zone change, force at least one physics step even while idle
             // so gravity applies and the character snaps to the real ground height.
+            // Use the packet's destination Z when provided — _player.Position.Z still holds
+            // the pre-teleport value at the time Reset() is called (position is written AFTER).
             _needsGroundSnap = true;
-            _teleportZ = _player.Position.Z;
+            _teleportZ = float.IsNaN(teleportDestZ) ? _player.Position.Z : teleportDestZ;
             _teleportZGraceFrames = 0; // Reset grace countdown on new teleport
             _noGroundFrameCount = 0;
 

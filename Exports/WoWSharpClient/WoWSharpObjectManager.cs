@@ -554,11 +554,11 @@ namespace WoWSharpClient
         /// Called by MovementHandler BEFORE queuing a teleport position update,
         /// so the position write guard in ProcessUpdatesAsync allows it through.
         /// </summary>
-        public void NotifyTeleportIncoming()
+        public void NotifyTeleportIncoming(float teleportDestZ = float.NaN)
         {
             _isBeingTeleported = true;
             _teleportFlagSetTicks = System.Diagnostics.Stopwatch.GetTimestamp();
-            ResetMovementStateForTeleport("notify-teleport-incoming");
+            ResetMovementStateForTeleport("notify-teleport-incoming", teleportDestZ);
         }
 
         /// <summary>
@@ -615,17 +615,17 @@ namespace WoWSharpClient
             });
         }
 
-        private void ResetMovementStateForTeleport(string source)
+        private void ResetMovementStateForTeleport(string source, float teleportDestZ = float.NaN)
         {
             if (Player is not WoWLocalPlayer player)
                 return;
 
             _controlBits = ControlBits.Nothing;
             player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
-            _movementController?.Reset();
+            _movementController?.Reset(teleportDestZ);
 
-            Log.Information("[TeleportReset] source={Source} flags cleared; pos=({X:F1},{Y:F1},{Z:F1})",
-                source, player.Position.X, player.Position.Y, player.Position.Z);
+            Log.Information("[TeleportReset] source={Source} flags cleared; teleportDestZ={DestZ:F1}; pos=({X:F1},{Y:F1},{Z:F1})",
+                source, teleportDestZ, player.Position.X, player.Position.Y, player.Position.Z);
         }
 
         private void EventEmitter_OnLoginVerifyWorld(object? sender, WorldInfo e)

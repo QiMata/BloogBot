@@ -83,6 +83,24 @@ For complex investigations spanning multiple services:
 
 This is important because the layered architecture means changes in Exports/ can affect multiple Services/.
 
+## Token-Efficient Tooling — Use by Default
+
+**Save context tokens by defaulting to these tools for read-heavy work:**
+
+- **Codex CLI** (`codex "..."`) — Default for:
+  - Reading log files (use instead of Read/cat for any log >50 lines)
+  - Scanning large code files for specific patterns
+  - Summarizing physics replay frame output
+  - Analyzing test runner output (pipe dotnet test output through Codex)
+  - Example: `codex "summarize anomalous frames in this physics replay: <paste output>"`
+  - **Rule:** Never Read/cat files >200 lines in main context when Codex can answer the question
+- **GH Copilot** (`gh copilot explain "..."`) — Default for:
+  - Code understanding questions ("how does X work?", "what does this pattern mean?")
+  - Asking how two modules relate without reading both
+  - Near-zero token cost for question answering about the codebase
+  - Example: `gh copilot explain "how does WoWSharpObjectManager.NotifyTeleportIncoming relate to MovementController Z clamp"`
+- **Physics frame analysis:** Always pipe replay frame diffs through Codex before surfacing to main context. Use: `dotnet test ... | codex "find frames where Z drops unexpectedly"`
+
 ## Process Safety — CRITICAL
 
 **NEVER blanket-kill dotnet or Game processes.** Multiple Claude Code instances may be running concurrently across repos on this machine.

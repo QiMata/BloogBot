@@ -50,7 +50,7 @@ namespace WoWSharpClient.Handlers
                                 "[MovementHandler] MSG_MOVE_TELEPORT: guid={Guid:X} pos=({X:F1},{Y:F1},{Z:F1})",
                                 teleportGuid, teleportData.X, teleportData.Y, teleportData.Z);
 
-                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
+                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming(teleportData.Z);
                             WoWSharpObjectManager.Instance.QueueUpdate(
                                 new WoWSharpObjectManager.ObjectStateUpdate(
                                     teleportGuid,
@@ -93,7 +93,9 @@ namespace WoWSharpClient.Handlers
                             movementUpdateData.MovementCounter = movementCounter;
 
                             // Queue the position update so the local player position reflects the teleport.
-                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming();
+                            // Pass destination Z from packet so _teleportZ clamp is set to the correct
+                            // post-teleport height (not the pre-teleport position captured from _player.Position.Z).
+                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming(movementUpdateData.Z);
                             WoWSharpObjectManager.Instance.QueueUpdate(
                                 new WoWSharpObjectManager.ObjectStateUpdate(
                                     guid,
