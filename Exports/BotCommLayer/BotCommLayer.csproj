@@ -5,6 +5,9 @@
     <PackAsTool>False</PackAsTool>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>latest</LangVersion>
+    <!-- Explicit AnyCPU prevents inheriting x86 from BotRunner.Tests solution platform config.
+         This DLL must load in both x86 (test host) and x64 (PathfindingService) processes. -->
+    <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
 
   <ItemGroup>

@@ -249,6 +249,7 @@ namespace BotRunner
                         {
                             var player = _objectManager.Player;
                             var isDeadOrGhost = player != null && IsDeadOrGhostState(player);
+                            DiagLog($"SENDCHAT-ACTION: chatMsg='{chatMsg}' dead={isDeadOrGhost} health={player?.Health ?? 0}");
                             if (isDeadOrGhost)
                             {
                                 Log.Information("[BOT RUNNER] Skipping chat while dead/ghost: {ChatMessage}", chatMsg);
@@ -257,6 +258,7 @@ namespace BotRunner
 
                             Log.Information($"[BOT RUNNER] Sending chat message: {chatMsg}");
                             _objectManager.SendChatMessage(chatMsg);
+                            DiagLog($"SENDCHAT-SENT: '{chatMsg}'");
                             return BehaviourTreeStatus.Success;
                         });
                         break;

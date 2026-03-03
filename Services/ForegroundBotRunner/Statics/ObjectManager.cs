@@ -1550,14 +1550,22 @@ namespace ForegroundBotRunner.Statics
             localPlayer.RawSpellBookIds = rawIds;
 
             // Diagnostic: log spell-book presence of known talent spell for troubleshooting.
-            // Runs at most every 5 s to avoid log spam.
-            if ((DateTime.UtcNow - _lastSpellDiagUtc).TotalSeconds >= 5)
+            // Runs at most every 2 s to avoid log spam.
+            if ((DateTime.UtcNow - _lastSpellDiagUtc).TotalSeconds >= 2)
             {
                 _lastSpellDiagUtc = DateTime.UtcNow;
                 if (rawIds.Contains(16462))
+                {
                     Log.Information("[SPELLBOOK-DIAG] Spell 16462 FOUND in array (total={Count})", rawIds.Count);
+                    DiagLog($"SPELLBOOK-DIAG: 16462 FOUND (total={rawIds.Count})");
+                }
                 else
+                {
                     Log.Information("[SPELLBOOK-DIAG] Spell 16462 NOT in array (total={Count})", rawIds.Count);
+                    // Dump first 30 spell IDs for diagnosis
+                    var idStr = string.Join(",", rawIds.Take(30));
+                    DiagLog($"SPELLBOOK-DIAG: 16462 NOT FOUND (total={rawIds.Count}) first30=[{idStr}]");
+                }
             }
         }
 
