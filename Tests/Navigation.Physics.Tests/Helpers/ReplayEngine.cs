@@ -309,13 +309,16 @@ public static class ReplayEngine
                 fallStartFrameIndex = i;
             }
 
-            // SurfaceStep lookahead: both frames grounded but Z changes > 0.5y (walking
+            // SurfaceStep lookahead: both frames grounded but Z changes > 0.35y (walking
             // over stairs, ramps, ledges). Provide Vz hint so the engine's trust-grounded
             // refinement can widen its ground search to find the target surface.
+            // 0.35y captures WMO stair/edge step-ups (0.38-0.43y) that the navmesh misses
+            // at the exact step-edge XY while keeping normal slope movement (< 0.35y/frame)
+            // on the standard probe path.
             bool isNextAirborne = (nextCleanFlags & 0x6000) != 0;
             bool isSurfaceStepFrame = !isJumpStartFrame && !isNextAirborne
                 && (cleanedMoveFlags & 0x6000) == 0
-                && MathF.Abs(nextWorldZ - worldZ) > 0.5f;
+                && MathF.Abs(nextWorldZ - worldZ) > 0.35f;
 
             // Build nearby objects array for this frame.
             // For transport frames, use the NEXT frame's GO positions so the engine

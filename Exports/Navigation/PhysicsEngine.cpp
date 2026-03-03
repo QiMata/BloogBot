@@ -2005,7 +2005,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 				// Verify the target is reachable: query ground from above the target
 				float verifyZ = SceneQuery::GetGroundZ(
 					input.mapId, st.x, st.y, targetZ + 1.0f, 3.0f);
-				if (VMAP::IsValidHeight(verifyZ) && std::fabs(verifyZ - targetZ) < 0.5f) {
+				if (VMAP::IsValidHeight(verifyZ) && std::fabs(verifyZ - targetZ) < 0.2f) {
 					st.z = verifyZ;
 				} else {
 					st.z = targetZ;
@@ -2015,14 +2015,11 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 				st.fallTime = 0.0f;
 			} else {
 				const float refineBaseZ = std::max(st.z, input.z);
-				// Trust mode shifts XY to the next frame's position, so the ground Z at
-				// (trustedX, trustedY) can differ from the sweep's landing Z. Use generous
-				// tolerances: the "closest to z" selection in GetGroundZ already picks the
-				// right surface among multi-level candidates, so we just need to accept it.
 				const float maxRise = 0.60f;
 				const float maxDrop = 1.0f;
 				float preciseZ = SceneQuery::GetGroundZ(
-					input.mapId, st.x, st.y, refineBaseZ + 0.25f, PhysicsConstants::STEP_DOWN_HEIGHT);
+					input.mapId, st.x, st.y, refineBaseZ + 0.25f,
+					PhysicsConstants::STEP_DOWN_HEIGHT);
 				if (VMAP::IsValidHeight(preciseZ) &&
 					preciseZ <= refineBaseZ + maxRise &&
 					preciseZ >= refineBaseZ - maxDrop) {
