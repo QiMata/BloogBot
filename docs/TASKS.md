@@ -72,6 +72,13 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 | `LV-QUEST-001` | QuestInteractionTests | Quest not in snapshot after `.quest add`. Already tracked as WSM-PAR-001. | `Services/WoWStateManager` | Open |
 | `LV-TPCOUNT-001` | Teleport ACK counter | BG client sends MSG_MOVE_TELEPORT_ACK with counter=0, server expects counter=12+. `MovementHandler.cs:80` fires `RequiresAcknowledgementArgs(guid, 0)` for MSG_MOVE_TELEPORT (which has no counter field). | `Exports/WoWSharpClient/Handlers` | **Done** — added `_teleportSequence` counter in WoWSharpObjectManager, `IncrementTeleportSequence()` called on each MSG_MOVE_TELEPORT |
 
+## Open — Pathfinding / Physics (2026-03-03)
+
+| ID | Issue | Owner | Status |
+|----|-------|-------|--------|
+| `PATH-DYNOBJ-001` | **Darkmoon Faire (and other world events) cause pathfinding failures.** Dynamic game objects (event tents, cages, etc.) are NOT in the precomputed navmesh or static collision system (SceneCache). Bot pathfinds through faire structures and gets stuck. Root cause: navmesh is precomputed offline from static WDT/ADT/WMO; dynamic game object spawns by MaNGOS server have no collision in the client. Fix approach: (1) detect world-event game objects from ObjectManager when they're visible, (2) query their WMO/M2 collision geometry from PathfindingService, (3) add dynamic obstacles to path-planning or force avoidance reroutes near known event coordinates. Short-term mitigation: hardcode known event bounding boxes as no-go zones in pathfinding when server has objects of event entry type. | `Exports/Navigation/` | **Open** |
+| `PATH-BOT-FORWARD-001` | **Bot runs forward briefly after teleport in gathering test.** After `BotTeleportAsync` + `WaitForZStabilizationAsync`, the bot movement system has residual velocity causing 1-2 steps forward. This is a visual artifact in tests; severity unknown for gameplay. Investigate: does `MovementController.Reset()` fully zero velocity and movement flags on teleport? | `Exports/WoWSharpClient/Movement` | **Open** |
+
 ## Deferred (Unused Services)
 
 | Local file | Status |
@@ -120,8 +127,15 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-03 (session 9)
-- **Current work:** Complete. 38/40 LiveValidation passing (2 pre-existing failures: Fishing SMSG_GAMEOBJECT_CUSTOM_ANIM, Herbalism FG). TalentAllocationTests passes for both BG and FG bots.
+- **Last updated:** 2026-03-03 (session 10)
+- **Current work:** Complete. Full suite running (background). Prior baseline: 38/40 passing.
+- **Completed session 10 (2026-03-03):**
+  1. **CLAUDE.md: Token-efficient tooling section** — Added Codex CLI + GH Copilot usage rules (read large files/logs via Codex, code understanding via gh copilot explain). Commit: `5e3aa22`.
+  2. **WWoWLogs cleanup** — Archived injection_firstchance.log (4MB) + startinjected.log (814KB) as .old; deleted stale Feb 7 logs.
+  3. **BG bot post-teleport Z sinking FIXED** — Root cause: `MovementController.Reset()` captured `_teleportZ` from `_player.Position.Z` (pre-teleport) before `MovementHandler` wrote the new destination. Fix: pass `teleportDestZ` from packet through `NotifyTeleportIncoming(destZ)` → `ResetMovementStateForTeleport(source, destZ)` → `Reset(destZ)` so `_teleportZ` always uses packet destination. Both MSG_MOVE_TELEPORT and MSG_MOVE_TELEPORT_ACK handlers updated. Files: `MovementHandler.cs`, `WoWSharpObjectManager.cs`, `MovementController.cs`. Commit: `5e3aa22`.
+  4. **PhysicsEngine fallback #2C ELIMINATED** — "Least-bad walkable" ground snap rescue removed. Now logs `GEOMETRY_GAP` diagnostic (position/mapId/penetration) when would-have-fired, leaves `chosen=null` so physics transitions to "no ground found" correctly. 97/97 physics replay tests pass. Commit: `bd5ea87`.
+  5. **CombatLoopTests REWRITTEN** — Test now validates real combat: (1) target GUID in snapshot, (2) bot facing within 90° of target, (3) target health decreases from bot auto-attacks within 15s. `.damage` used for cleanup only AFTER real damage validated. Bot teleported 3y from boar before attacking (BotRunner combat approach automation is separate work). Passes in ~4s. Commits: `4ead859`, `36dcadf`.
+- **Next priority:** Run full LiveValidation suite (in background). Then: PhysicsEngine fallback #11B (stalled waypoint advance), SceneCache doodad whitelist (Phase 1a), SMSG_GAMEOBJECT_CUSTOM_ANIM for fishing.
 - **Completed session 9 (2026-03-03):**
   - **TalentAllocationTests: FG bot finally passes** — three root causes fixed:
     1. `_lastKnownSpellIds` (volatile): `KnownSpellIds` now reads from a thread-safe snapshot, preventing `spells=0` race condition when `LocalPlayer` is recreated by `SMSG_UPDATE_OBJECT`.
