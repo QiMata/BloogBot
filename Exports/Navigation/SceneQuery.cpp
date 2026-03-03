@@ -312,6 +312,57 @@ bool SceneQuery::LineOfSight(uint32_t mapId, const G3D::Vector3& from, const G3D
         catch (...) {}
     }
 
+    // Dynamic objects LOS (Darkmoon Faire tents, closed doors, world event structures, etc.)
+    // DynamicObjectRegistry is updated each physics tick — current positions are always fresh.
+    {
+        auto* dynReg = DynamicObjectRegistry::Instance();
+        if (dynReg)
+        {
+            try
+            {
+                G3D::AABox rayBox(
+                    G3D::Vector3(std::min(from.x, to.x) - 1.0f, std::min(from.y, to.y) - 1.0f, std::min(from.z, to.z) - 1.0f),
+                    G3D::Vector3(std::max(from.x, to.x) + 1.0f, std::max(from.y, to.y) + 1.0f, std::max(from.z, to.z) + 1.0f));
+
+                std::vector<CapsuleCollision::Triangle> dynTris;
+                dynReg->QueryTriangles(mapId, rayBox, dynTris);
+
+                if (!dynTris.empty())
+                {
+                    G3D::Vector3 rayStart(from.x, from.y, from.z);
+                    G3D::Vector3 dir = G3D::Vector3(to.x, to.y, to.z) - rayStart;
+                    float rayLen = dir.magnitude();
+                    if (rayLen > 1e-6f)
+                    {
+                        dir = dir * (1.0f / rayLen);
+                        for (const auto& tri : dynTris)
+                        {
+                            G3D::Vector3 a(tri.a.x, tri.a.y, tri.a.z);
+                            G3D::Vector3 b(tri.b.x, tri.b.y, tri.b.z);
+                            G3D::Vector3 c(tri.c.x, tri.c.y, tri.c.z);
+                            G3D::Vector3 edge1 = b - a;
+                            G3D::Vector3 edge2 = c - a;
+                            G3D::Vector3 pvec = dir.cross(edge2);
+                            float det = edge1.dot(pvec);
+                            if (std::fabs(det) < 1e-7f) continue;
+                            float invDet = 1.0f / det;
+                            G3D::Vector3 tvec = rayStart - a;
+                            float u = tvec.dot(pvec) * invDet;
+                            if (u < 0.0f || u > 1.0f) continue;
+                            G3D::Vector3 qvec = tvec.cross(edge1);
+                            float v = dir.dot(qvec) * invDet;
+                            if (v < 0.0f || u + v > 1.0f) continue;
+                            float tHit = edge2.dot(qvec) * invDet;
+                            if (tHit >= 0.0f && tHit <= rayLen)
+                                return false;
+                        }
+                    }
+                }
+            }
+            catch (...) {}
+        }
+    }
+
     return true;
 }
 
