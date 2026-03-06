@@ -2217,8 +2217,8 @@ public class LiveBotFixture : IAsyncLifetime
 
             using var cmd = conn.CreateCommand();
             cmd.CommandText = mapFilter.HasValue
-                ? "SELECT map, position_x, position_y, position_z FROM gameobject WHERE id = @id AND map = @map LIMIT @limit"
-                : "SELECT map, position_x, position_y, position_z FROM gameobject WHERE id = @id LIMIT @limit";
+                ? "SELECT map, position_x, position_y, position_z FROM gameobject WHERE id = @id AND map = @map ORDER BY RAND() LIMIT @limit"
+                : "SELECT map, position_x, position_y, position_z FROM gameobject WHERE id = @id ORDER BY RAND() LIMIT @limit";
             cmd.Parameters.AddWithValue("@id", entry);
             cmd.Parameters.AddWithValue("@limit", limit);
             if (mapFilter.HasValue)
