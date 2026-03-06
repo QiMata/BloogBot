@@ -9,8 +9,14 @@
 
 | Item | Value |
 |------|-------|
-| Server | Elysium private server (vanilla 1.12.1 build 5875), stays running |
-| MaNGOS server source | `E:\repos\MaNGOS\source\src\` |
+| Server | VMaNGOS (vanilla 1.12.1 build 5875), always running locally |
+| VMaNGOS server binaries | `D:\vmangos-server\` (mangosd.exe, realmd.exe) |
+| VMaNGOS source (reference) | `D:\vmangos\` (cloned from github.com/vmangos/core) |
+| MaNGOS data directory | `D:\MaNGOS\data\` (maps, vmaps, mmaps, dbc) |
+| MaNGOS MySQL | `D:\MaNGOS\mysql5\` (mysqld.exe, data dir) |
+| VMaNGOS DB version | db-4a0668b (Jan 12, 2026), binary dev-2f1b104 (Feb 24, 2026) |
+| VMaNGOS databases | mangos (world), characters, realmd, logs |
+| VMaNGOS DB credentials | root:root (localhost:3306) |
 | Server protocol docs | `docs/server-protocol/` (7 docs from Task 21) |
 | Recordings | `C:\Users\lrhod\Documents\BloogBot\MovementRecordings\` |
 | Packet captures | `C:\Users\lrhod\Documents\BloogBot\PacketCaptures\` |
@@ -104,7 +110,20 @@ dotnet test Tests/BotRunner.Tests --filter "Category=Integration" --settings Tes
 
 ## Known Issues & Workarounds
 
-- **FastCall.dll stale copy** � `Bot\Debug\net8.0\FastCall.dll` can be 12KB (stale, missing `LuaCall` export). Correct version is 62KB. `BotServiceFixture` auto-detects and fixes.
-- **StateManager DLL lock race** � StateManager and test can fight over DLLs. Must kill ? build ? verify ? start SM ? test. Script `run-swimming-recording-test.ps1` handles this.
-- **Orgrimmar terrain divergence** � `FlatRunForward_FrameByFrame` test fails due to terrain elevation causing PhysicsEngine position divergence beyond 0.5y tolerance. Genuine calibration gap in C++ ground detection.
-- **Spline data scarcity** � Only 1 of 31 recordings has player spline data (`Dralrahgra_Durotar_2026-02-08_12-28-15.json`). All others predate the spline JSON fix.
+- **FastCall.dll stale copy** — `Bot\Debug\net8.0\FastCall.dll` can be 12KB (stale, missing `LuaCall` export). Correct version is 62KB. `BotServiceFixture` auto-detects and fixes.
+- **StateManager DLL lock race** — StateManager and test can fight over DLLs. Must kill → build → verify → start SM → test. Script `run-swimming-recording-test.ps1` handles this.
+- **Orgrimmar terrain divergence** — `FlatRunForward_FrameByFrame` test fails due to terrain elevation causing PhysicsEngine position divergence beyond 0.5y tolerance. Genuine calibration gap in C++ ground detection.
+- **Spline data scarcity** — Only 1 of 31 recordings has player spline data (`Dralrahgra_Durotar_2026-02-08_12-28-15.json`). All others predate the spline JSON fix.
+
+### VMaNGOS Server Startup
+
+Server infrastructure lives outside the repo at `D:\vmangos-server\`. Start order:
+1. MySQL: `D:\MaNGOS\mysql5\bin\mysqld.exe --console --max_allowed_packet=128M`
+2. Realm: `D:\vmangos-server\realmd.exe`
+3. World: `D:\vmangos-server\mangosd.exe`
+
+Startup batch script: `D:\vmangos-server\Start All.bat`
+
+Config files: `D:\vmangos-server\mangosd.conf`, `D:\vmangos-server\realmd.conf`
+- SOAP enabled on port 7878 (admin: ADMINISTRATOR/PASSWORD)
+- WowPatch = 10 (1.12 Drums of War)
