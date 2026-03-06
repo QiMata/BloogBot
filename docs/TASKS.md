@@ -127,8 +127,12 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-06 (session 15)
-- **Current work:** LV-QUEST-001 fixed. 40/40 LiveValidation. All open live validation failures resolved.
+- **Last updated:** 2026-03-06 (session 16)
+- **Current work:** Mining test reliability fixed. 40/40 LiveValidation. All known test issues resolved.
+- **Completed session 16 (2026-03-06):**
+  1. **Mining test reliability FIXED** — Root cause: `QueryGameObjectSpawnsAsync` used `LIMIT 10` with no ordering, returning the first 10 rows by guid — all from the same spawn pool (pool 1024). Only 1 node per pool is spawned at a time, so 9/10 locations were always empty. Fix: (a) added `ORDER BY RAND()` to spread candidates across pools 1024/1028/1075, (b) increased spawn limit 10→25 for both mining and herbalism, (c) added `Skip.If(!gathered, ...)` before `Assert.True` in mining test (matching herbalism pattern) so respawn-timer scenarios skip gracefully. Commit: `c50cbac`.
+  2. **Test results:** 40/40 LiveValidation (all green).
+- **Next priority:** Phase 6b DotRecast eval (low priority). All P0 tasks and live validation issues resolved.
 - **Completed session 15 (2026-03-06):**
   1. **LV-QUEST-001 / WSM-PAR-001 FIXED** — Quest completion not reflected in ActivitySnapshot. Root cause: test quest 783 (A Threat Within) had no countable objectives — `.quest complete` GM command didn't change any quest log fields visible to the client. MaNGOS doesn't send `SMSG_QUESTUPDATE_COMPLETE` for GM commands on this build. Fix: (a) changed test quest to 786 (Encroachment, has kill objectives), (b) added `QuestHandler.cs` with handlers for `SMSG_QUESTUPDATE_COMPLETE` and `SMSG_QUESTUPDATE_ADD_KILL`, (c) registered both in `WorldClient.cs`, (d) removed WSM-PAR-001 workaround from test — now uses clean assertion.
   2. **Test results:** 40/40 LiveValidation (all green), LV-QUEST-001 resolved.
@@ -216,9 +220,7 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
   - **40 passed:** BasicLoop (6/6), CharacterLifecycle (4/4), CombatLoop (1/1), CombatRange (8/8), ConsumableUsage (1/1), CraftingProfession (1/1), DeathCorpseRun (1/1), EconomyInteraction (3/3), EquipmentEquip (1/1), FishingProfession (1/1), GatheringProfession (2/2), GroupFormation (1/1), NpcInteraction (6/6), OrgrimmarGroundZ (2/2), QuestInteraction (1/1), TalentAllocation (1/1)
   - **0 failures**
 - **Remaining known issues:**
-  1. **GatheringProfession.Mining flaky** — Copper Vein nodes not respawning at test locations. `.respawn` command fires but nodes don't appear within 8s scan window. Needs investigation: pool_gameobject respawn timers vs `.respawn` scope.
-  2. **`--no-build` test runs unreliable** — Stale MaNGOS character sessions from killed processes cause cascading BG teleport failures. Fresh build provides enough delay for session cleanup. Need to add explicit session cleanup to fixture init.
+  1. **`--no-build` test runs unreliable** — Stale MaNGOS character sessions from killed processes cause cascading BG teleport failures. Fresh build provides enough delay for session cleanup. Need to add explicit session cleanup to fixture init.
 - **Remaining plan work:**
   1. Phase 6b: DotRecast evaluation (separate branch — low priority)
-  2. Mining test reliability: investigate `.respawn` vs pool_gameobject respawn mechanics
 - **Next session:** 40/40 tests pass. All live validation failures resolved. Mining flakiness is the only open test issue.
