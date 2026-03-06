@@ -184,6 +184,9 @@ public class RecordedGameObject
 
     [JsonPropertyName("distanceToPlayer")]
     public float DistanceToPlayer { get; set; }
+
+    [JsonPropertyName("animProgress")]
+    public uint AnimProgress { get; set; }
 }
 
 public class RecordedUnit

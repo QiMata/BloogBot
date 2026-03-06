@@ -175,6 +175,7 @@ message GameObjectSnapshot {
     string name = 9;
     float distanceToPlayer = 10;   // Yards from player to this object
     float scale = 11;              // Object scale (from OBJECT_FIELD_SCALE_X descriptor)
+    uint32 animProgress = 12;      // Animation progress (0-255); for transports, correlates with path position
 }
 
 // Snapshot of a nearby unit (NPC or other player) for pathing/collision validation.

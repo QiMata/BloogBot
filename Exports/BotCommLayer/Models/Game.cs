@@ -116,59 +116,60 @@ namespace Game {
             "V29XSXRlbRIRCglpdGVtU2xvdHMYAiADKA0iSAoNUXVlc3RMb2dFbnRyeRIR",
             "CglxdWVzdExvZzEYASABKA0SEQoJcXVlc3RMb2cyGAIgASgNEhEKCXF1ZXN0",
             "TG9nMxgDIAEoDSIrCghQb3NpdGlvbhIJCgF4GAEgASgCEgkKAXkYAiABKAIS",
-            "CQoBehgDIAEoAiLlAQoSR2FtZU9iamVjdFNuYXBzaG90EgwKBGd1aWQYASAB",
+            "CQoBehgDIAEoAiL7AQoSR2FtZU9iamVjdFNuYXBzaG90EgwKBGd1aWQYASAB",
             "KAQSDQoFZW50cnkYAiABKA0SEQoJZGlzcGxheUlkGAMgASgNEhYKDmdhbWVP",
             "YmplY3RUeXBlGAQgASgNEg0KBWZsYWdzGAUgASgNEg8KB2dvU3RhdGUYBiAB",
             "KA0SIAoIcG9zaXRpb24YByABKAsyDi5nYW1lLlBvc2l0aW9uEg4KBmZhY2lu",
             "ZxgIIAEoAhIMCgRuYW1lGAkgASgJEhgKEGRpc3RhbmNlVG9QbGF5ZXIYCiAB",
-            "KAISDQoFc2NhbGUYCyABKAIi6QMKDFVuaXRTbmFwc2hvdBIMCgRndWlkGAEg",
-            "ASgEEg0KBWVudHJ5GAIgASgNEgwKBG5hbWUYAyABKAkSIAoIcG9zaXRpb24Y",
-            "BCABKAsyDi5nYW1lLlBvc2l0aW9uEg4KBmZhY2luZxgFIAEoAhIVCg1tb3Zl",
-            "bWVudEZsYWdzGAYgASgNEg4KBmhlYWx0aBgHIAEoDRIRCgltYXhIZWFsdGgY",
-            "CCABKA0SDQoFbGV2ZWwYCSABKA0SEQoJdW5pdEZsYWdzGAogASgNEhgKEGRp",
-            "c3RhbmNlVG9QbGF5ZXIYCyABKAISFgoOYm91bmRpbmdSYWRpdXMYDCABKAIS",
-            "EwoLY29tYmF0UmVhY2gYDSABKAISEAoIbnBjRmxhZ3MYDiABKA0SEgoKdGFy",
-            "Z2V0R3VpZBgPIAEoBBIQCghpc1BsYXllchgQIAEoCBIRCgloYXNTcGxpbmUY",
-            "ESABKAgSEwoLc3BsaW5lRmxhZ3MYEiABKA0SGAoQc3BsaW5lVGltZVBhc3Nl",
-            "ZBgTIAEoBRIWCg5zcGxpbmVEdXJhdGlvbhgUIAEoBRIuChZzcGxpbmVGaW5h",
-            "bERlc3RpbmF0aW9uGBUgASgLMg4uZ2FtZS5Qb3NpdGlvbhIXCg9zcGxpbmVO",
-            "b2RlQ291bnQYFiABKA0ibQoLUGFja2V0RXZlbnQSEwoLdGltZXN0YW1wTXMY",
-            "ASABKAQSDgoGb3Bjb2RlGAIgASgNEhIKCmlzT3V0Ym91bmQYAyABKAgSDwoH",
-            "cGF5bG9hZBgEIAEoDBIUCgxhZmZlY3RlZEd1aWQYBSABKAQiuwcKDE1vdmVt",
-            "ZW50RGF0YRIVCg1tb3ZlbWVudEZsYWdzGAEgASgNEhAKCGZhbGxUaW1lGAIg",
-            "ASgNEhkKEWp1bXBWZXJ0aWNhbFNwZWVkGAMgASgCEhQKDGp1bXBTaW5Bbmds",
-            "ZRgEIAEoAhIUCgxqdW1wQ29zQW5nbGUYBSABKAISGwoTanVtcEhvcml6b250",
-            "YWxTcGVlZBgGIAEoAhIRCglzd2ltUGl0Y2gYByABKAISEQoJd2Fsa1NwZWVk",
-            "GAggASgCEhAKCHJ1blNwZWVkGAkgASgCEhQKDHJ1bkJhY2tTcGVlZBgKIAEo",
-            "AhIRCglzd2ltU3BlZWQYCyABKAISFQoNc3dpbUJhY2tTcGVlZBgMIAEoAhIQ",
-            "Cgh0dXJuUmF0ZRgNIAEoAhIgCghwb3NpdGlvbhgOIAEoCzIOLmdhbWUuUG9z",
-            "aXRpb24SDgoGZmFjaW5nGA8gASgCEhYKDmZyYW1lVGltZXN0YW1wGBAgASgE",
-            "EhUKDXRyYW5zcG9ydEd1aWQYESABKAQSGAoQdHJhbnNwb3J0T2Zmc2V0WBgS",
-            "IAEoAhIYChB0cmFuc3BvcnRPZmZzZXRZGBMgASgCEhgKEHRyYW5zcG9ydE9m",
-            "ZnNldFoYFCABKAISHAoUdHJhbnNwb3J0T3JpZW50YXRpb24YFSABKAISFwoP",
-            "ZmFsbFN0YXJ0SGVpZ2h0GBYgASgCEhQKDGN1cnJlbnRTcGVlZBgXIAEoAhIU",
-            "CgxmYWxsaW5nU3BlZWQYGCABKAISMwoRbmVhcmJ5R2FtZU9iamVjdHMYGSAD",
-            "KAsyGC5nYW1lLkdhbWVPYmplY3RTbmFwc2hvdBInCgtuZWFyYnlVbml0cxga",
-            "IAMoCzISLmdhbWUuVW5pdFNuYXBzaG90EhMKC3NwbGluZUZsYWdzGBsgASgN",
-            "EigKEHNwbGluZUZpbmFsUG9pbnQYHCABKAsyDi5nYW1lLlBvc2l0aW9uEhgK",
-            "EHNwbGluZVRhcmdldEd1aWQYHSABKAQSHgoWc3BsaW5lRmluYWxPcmllbnRh",
-            "dGlvbhgeIAEoAhIYChBzcGxpbmVUaW1lUGFzc2VkGB8gASgFEhYKDnNwbGlu",
-            "ZUR1cmF0aW9uGCAgASgFEhAKCHNwbGluZUlkGCEgASgNEiMKC3NwbGluZU5v",
-            "ZGVzGCIgAygLMg4uZ2FtZS5Qb3NpdGlvbhIuChZzcGxpbmVGaW5hbERlc3Rp",
-            "bmF0aW9uGCMgASgLMg4uZ2FtZS5Qb3NpdGlvbhISCgpzeXN0ZW1UaWNrGCQg",
-            "ASgNIvoBChFNb3ZlbWVudFJlY29yZGluZxIVCg1jaGFyYWN0ZXJOYW1lGAEg",
-            "ASgJEg0KBW1hcElkGAIgASgNEhAKCHpvbmVOYW1lGAMgASgJEhkKEXN0YXJ0",
-            "VGltZXN0YW1wVXRjGAQgASgEEhcKD2ZyYW1lSW50ZXJ2YWxNcxgFIAEoDRIi",
-            "CgZmcmFtZXMYBiADKAsyEi5nYW1lLk1vdmVtZW50RGF0YRITCgtkZXNjcmlw",
-            "dGlvbhgHIAEoCRIMCgRyYWNlGAggASgNEg4KBmdlbmRlchgJIAEoDRIiCgdw",
-            "YWNrZXRzGAogAygLMhEuZ2FtZS5QYWNrZXRFdmVudCKUAQoESXRlbRIKCgJp",
-            "ZBgBIAEoBBIMCgRuYW1lGAIgASgJEgwKBHNsb3QYAyABKAkSEAoIcXVhbnRp",
-            "dHkYBCABKA0SJAoFc3RhdHMYBSADKAsyFS5nYW1lLkl0ZW0uU3RhdHNFbnRy",
-            "eRosCgpTdGF0c0VudHJ5EgsKA2tleRgBIAEoDRINCgV2YWx1ZRgCIAEoDToC",
-            "OAEqmQEKBFJhY2USDQoJUkFDRV9OT05FEAASDgoKUkFDRV9IVU1BThABEgwK",
-            "CFJBQ0VfT1JDEAISDgoKUkFDRV9EV0FSRhADEhIKDlJBQ0VfTklHSFRfRUxG",
-            "EAQSDwoLUkFDRV9VTkRFQUQQBRIPCgtSQUNFX1RBVVJFThAGEg4KClJBQ0Vf",
-            "R05PTUUQBxIOCgpSQUNFX1RST0xMEAhiBnByb3RvMw=="));
+            "KAISDQoFc2NhbGUYCyABKAISFAoMYW5pbVByb2dyZXNzGAwgASgNIukDCgxV",
+            "bml0U25hcHNob3QSDAoEZ3VpZBgBIAEoBBINCgVlbnRyeRgCIAEoDRIMCgRu",
+            "YW1lGAMgASgJEiAKCHBvc2l0aW9uGAQgASgLMg4uZ2FtZS5Qb3NpdGlvbhIO",
+            "CgZmYWNpbmcYBSABKAISFQoNbW92ZW1lbnRGbGFncxgGIAEoDRIOCgZoZWFs",
+            "dGgYByABKA0SEQoJbWF4SGVhbHRoGAggASgNEg0KBWxldmVsGAkgASgNEhEK",
+            "CXVuaXRGbGFncxgKIAEoDRIYChBkaXN0YW5jZVRvUGxheWVyGAsgASgCEhYK",
+            "DmJvdW5kaW5nUmFkaXVzGAwgASgCEhMKC2NvbWJhdFJlYWNoGA0gASgCEhAK",
+            "CG5wY0ZsYWdzGA4gASgNEhIKCnRhcmdldEd1aWQYDyABKAQSEAoIaXNQbGF5",
+            "ZXIYECABKAgSEQoJaGFzU3BsaW5lGBEgASgIEhMKC3NwbGluZUZsYWdzGBIg",
+            "ASgNEhgKEHNwbGluZVRpbWVQYXNzZWQYEyABKAUSFgoOc3BsaW5lRHVyYXRp",
+            "b24YFCABKAUSLgoWc3BsaW5lRmluYWxEZXN0aW5hdGlvbhgVIAEoCzIOLmdh",
+            "bWUuUG9zaXRpb24SFwoPc3BsaW5lTm9kZUNvdW50GBYgASgNIm0KC1BhY2tl",
+            "dEV2ZW50EhMKC3RpbWVzdGFtcE1zGAEgASgEEg4KBm9wY29kZRgCIAEoDRIS",
+            "Cgppc091dGJvdW5kGAMgASgIEg8KB3BheWxvYWQYBCABKAwSFAoMYWZmZWN0",
+            "ZWRHdWlkGAUgASgEIrsHCgxNb3ZlbWVudERhdGESFQoNbW92ZW1lbnRGbGFn",
+            "cxgBIAEoDRIQCghmYWxsVGltZRgCIAEoDRIZChFqdW1wVmVydGljYWxTcGVl",
+            "ZBgDIAEoAhIUCgxqdW1wU2luQW5nbGUYBCABKAISFAoManVtcENvc0FuZ2xl",
+            "GAUgASgCEhsKE2p1bXBIb3Jpem9udGFsU3BlZWQYBiABKAISEQoJc3dpbVBp",
+            "dGNoGAcgASgCEhEKCXdhbGtTcGVlZBgIIAEoAhIQCghydW5TcGVlZBgJIAEo",
+            "AhIUCgxydW5CYWNrU3BlZWQYCiABKAISEQoJc3dpbVNwZWVkGAsgASgCEhUK",
+            "DXN3aW1CYWNrU3BlZWQYDCABKAISEAoIdHVyblJhdGUYDSABKAISIAoIcG9z",
+            "aXRpb24YDiABKAsyDi5nYW1lLlBvc2l0aW9uEg4KBmZhY2luZxgPIAEoAhIW",
+            "Cg5mcmFtZVRpbWVzdGFtcBgQIAEoBBIVCg10cmFuc3BvcnRHdWlkGBEgASgE",
+            "EhgKEHRyYW5zcG9ydE9mZnNldFgYEiABKAISGAoQdHJhbnNwb3J0T2Zmc2V0",
+            "WRgTIAEoAhIYChB0cmFuc3BvcnRPZmZzZXRaGBQgASgCEhwKFHRyYW5zcG9y",
+            "dE9yaWVudGF0aW9uGBUgASgCEhcKD2ZhbGxTdGFydEhlaWdodBgWIAEoAhIU",
+            "CgxjdXJyZW50U3BlZWQYFyABKAISFAoMZmFsbGluZ1NwZWVkGBggASgCEjMK",
+            "EW5lYXJieUdhbWVPYmplY3RzGBkgAygLMhguZ2FtZS5HYW1lT2JqZWN0U25h",
+            "cHNob3QSJwoLbmVhcmJ5VW5pdHMYGiADKAsyEi5nYW1lLlVuaXRTbmFwc2hv",
+            "dBITCgtzcGxpbmVGbGFncxgbIAEoDRIoChBzcGxpbmVGaW5hbFBvaW50GBwg",
+            "ASgLMg4uZ2FtZS5Qb3NpdGlvbhIYChBzcGxpbmVUYXJnZXRHdWlkGB0gASgE",
+            "Eh4KFnNwbGluZUZpbmFsT3JpZW50YXRpb24YHiABKAISGAoQc3BsaW5lVGlt",
+            "ZVBhc3NlZBgfIAEoBRIWCg5zcGxpbmVEdXJhdGlvbhggIAEoBRIQCghzcGxp",
+            "bmVJZBghIAEoDRIjCgtzcGxpbmVOb2RlcxgiIAMoCzIOLmdhbWUuUG9zaXRp",
+            "b24SLgoWc3BsaW5lRmluYWxEZXN0aW5hdGlvbhgjIAEoCzIOLmdhbWUuUG9z",
+            "aXRpb24SEgoKc3lzdGVtVGljaxgkIAEoDSL6AQoRTW92ZW1lbnRSZWNvcmRp",
+            "bmcSFQoNY2hhcmFjdGVyTmFtZRgBIAEoCRINCgVtYXBJZBgCIAEoDRIQCgh6",
+            "b25lTmFtZRgDIAEoCRIZChFzdGFydFRpbWVzdGFtcFV0YxgEIAEoBBIXCg9m",
+            "cmFtZUludGVydmFsTXMYBSABKA0SIgoGZnJhbWVzGAYgAygLMhIuZ2FtZS5N",
+            "b3ZlbWVudERhdGESEwoLZGVzY3JpcHRpb24YByABKAkSDAoEcmFjZRgIIAEo",
+            "DRIOCgZnZW5kZXIYCSABKA0SIgoHcGFja2V0cxgKIAMoCzIRLmdhbWUuUGFj",
+            "a2V0RXZlbnQilAEKBEl0ZW0SCgoCaWQYASABKAQSDAoEbmFtZRgCIAEoCRIM",
+            "CgRzbG90GAMgASgJEhAKCHF1YW50aXR5GAQgASgNEiQKBXN0YXRzGAUgAygL",
+            "MhUuZ2FtZS5JdGVtLlN0YXRzRW50cnkaLAoKU3RhdHNFbnRyeRILCgNrZXkY",
+            "ASABKA0SDQoFdmFsdWUYAiABKA06AjgBKpkBCgRSYWNlEg0KCVJBQ0VfTk9O",
+            "RRAAEg4KClJBQ0VfSFVNQU4QARIMCghSQUNFX09SQxACEg4KClJBQ0VfRFdB",
+            "UkYQAxISCg5SQUNFX05JR0hUX0VMRhAEEg8KC1JBQ0VfVU5ERUFEEAUSDwoL",
+            "UkFDRV9UQVVSRU4QBhIOCgpSQUNFX0dOT01FEAcSDgoKUkFDRV9UUk9MTBAI",
+            "YgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Game.Race), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -180,7 +181,7 @@ namespace Game {
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.WoWContainer), global::Game.WoWContainer.Parser, new[]{ "Item", "ItemSlots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.QuestLogEntry), global::Game.QuestLogEntry.Parser, new[]{ "QuestLog1", "QuestLog2", "QuestLog3" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.Position), global::Game.Position.Parser, new[]{ "X", "Y", "Z" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Game.GameObjectSnapshot), global::Game.GameObjectSnapshot.Parser, new[]{ "Guid", "Entry", "DisplayId", "GameObjectType", "Flags", "GoState", "Position", "Facing", "Name", "DistanceToPlayer", "Scale" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Game.GameObjectSnapshot), global::Game.GameObjectSnapshot.Parser, new[]{ "Guid", "Entry", "DisplayId", "GameObjectType", "Flags", "GoState", "Position", "Facing", "Name", "DistanceToPlayer", "Scale", "AnimProgress" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.UnitSnapshot), global::Game.UnitSnapshot.Parser, new[]{ "Guid", "Entry", "Name", "Position", "Facing", "MovementFlags", "Health", "MaxHealth", "Level", "UnitFlags", "DistanceToPlayer", "BoundingRadius", "CombatReach", "NpcFlags", "TargetGuid", "IsPlayer", "HasSpline", "SplineFlags", "SplineTimePassed", "SplineDuration", "SplineFinalDestination", "SplineNodeCount" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.PacketEvent), global::Game.PacketEvent.Parser, new[]{ "TimestampMs", "Opcode", "IsOutbound", "Payload", "AffectedGuid" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Game.MovementData), global::Game.MovementData.Parser, new[]{ "MovementFlags", "FallTime", "JumpVerticalSpeed", "JumpSinAngle", "JumpCosAngle", "JumpHorizontalSpeed", "SwimPitch", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "TurnRate", "Position", "Facing", "FrameTimestamp", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "FallStartHeight", "CurrentSpeed", "FallingSpeed", "NearbyGameObjects", "NearbyUnits", "SplineFlags", "SplineFinalPoint", "SplineTargetGuid", "SplineFinalOrientation", "SplineTimePassed", "SplineDuration", "SplineId", "SplineNodes", "SplineFinalDestination", "SystemTick" }, null, null, null, null),
@@ -5653,6 +5654,7 @@ namespace Game {
       name_ = other.name_;
       distanceToPlayer_ = other.distanceToPlayer_;
       scale_ = other.scale_;
+      animProgress_ = other.animProgress_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -5812,6 +5814,21 @@ namespace Game {
       }
     }
 
+    /// <summary>Field number for the "animProgress" field.</summary>
+    public const int AnimProgressFieldNumber = 12;
+    private uint animProgress_;
+    /// <summary>
+    /// Animation progress (0-255); for transports, correlates with path position
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint AnimProgress {
+      get { return animProgress_; }
+      set {
+        animProgress_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -5838,6 +5855,7 @@ namespace Game {
       if (Name != other.Name) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(DistanceToPlayer, other.DistanceToPlayer)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(Scale, other.Scale)) return false;
+      if (AnimProgress != other.AnimProgress) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -5856,6 +5874,7 @@ namespace Game {
       if (Name.Length != 0) hash ^= Name.GetHashCode();
       if (DistanceToPlayer != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(DistanceToPlayer);
       if (Scale != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(Scale);
+      if (AnimProgress != 0) hash ^= AnimProgress.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -5918,6 +5937,10 @@ namespace Game {
         output.WriteRawTag(93);
         output.WriteFloat(Scale);
       }
+      if (AnimProgress != 0) {
+        output.WriteRawTag(96);
+        output.WriteUInt32(AnimProgress);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -5972,6 +5995,10 @@ namespace Game {
         output.WriteRawTag(93);
         output.WriteFloat(Scale);
       }
+      if (AnimProgress != 0) {
+        output.WriteRawTag(96);
+        output.WriteUInt32(AnimProgress);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -6014,6 +6041,9 @@ namespace Game {
       }
       if (Scale != 0F) {
         size += 1 + 4;
+      }
+      if (AnimProgress != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(AnimProgress);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -6062,6 +6092,9 @@ namespace Game {
       }
       if (other.Scale != 0F) {
         Scale = other.Scale;
+      }
+      if (other.AnimProgress != 0) {
+        AnimProgress = other.AnimProgress;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -6129,6 +6162,10 @@ namespace Game {
             Scale = input.ReadFloat();
             break;
           }
+          case 96: {
+            AnimProgress = input.ReadUInt32();
+            break;
+          }
         }
       }
     #endif
@@ -6193,6 +6230,10 @@ namespace Game {
           }
           case 93: {
             Scale = input.ReadFloat();
+            break;
+          }
+          case 96: {
+            AnimProgress = input.ReadUInt32();
             break;
           }
         }
