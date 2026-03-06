@@ -44,6 +44,8 @@ namespace WoWSharpClient.Movement
         // even when the character is idle (MOVEFLAG_NONE), so gravity applies and
         // the character snaps to the real ground height after teleport/zone change.
         private bool _needsGroundSnap = false;
+        private int _groundSnapFrames = 0;
+        private const int GROUND_SNAP_MAX_FRAMES = 60; // ~2s at 30fps — safety limit
         // Server-authoritative Z from the teleport — used to clamp position.
         // If the physics engine doesn't have geometry (e.g. docks, bridges, beaches)
         // and gravity would pull us below the server's teleport Z, we clamp to prevent
@@ -155,22 +157,26 @@ namespace WoWSharpClient.Movement
             ObserveStaleForwardAndRecover(frameDelta, gameTimeMs);
             _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
 
-            // Post-teleport ground snap: physics has run at least once, character is now
-            // falling (MOVEFLAG_FALLINGFAR set) or already on the ground. Clear the flag
-            // and force a heartbeat so the server gets our corrected position.
+            // Post-teleport ground snap: keep running physics until the character reaches
+            // ground (no FALLINGFAR flag). One frame of gravity at 33ms only drops ~0.01y,
+            // so clearing immediately would strand the character in the air.
             if (_needsGroundSnap)
             {
-                _needsGroundSnap = false;
-
-                Log.Information("[MovementController] Post-teleport ground snap: Z={Z:F3} groundZ={GroundZ:F3} flags=0x{Flags:X}",
-                    _player.Position.Z, _prevGroundZ, (uint)_player.MovementFlags);
-
-                // Force a stop packet with the corrected position so the server knows
-                // where we actually landed. If physics set MOVEFLAG_FALLINGFAR, the normal
-                // packet logic below will handle ongoing fall updates.
-                if (_player.MovementFlags == MovementFlags.MOVEFLAG_NONE)
+                _groundSnapFrames++;
+                bool stillFalling = (_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0;
+                if (!stillFalling || _groundSnapFrames >= GROUND_SNAP_MAX_FRAMES)
                 {
-                    SendStopPacket(gameTimeMs);
+                    _needsGroundSnap = false;
+
+                    Log.Information("[MovementController] Post-teleport ground snap complete: Z={Z:F3} groundZ={GroundZ:F3} flags=0x{Flags:X}",
+                        _player.Position.Z, _prevGroundZ, (uint)_player.MovementFlags);
+
+                    // Force a stop packet with the corrected position so the server knows
+                    // where we actually landed.
+                    if (_player.MovementFlags == MovementFlags.MOVEFLAG_NONE)
+                    {
+                        SendStopPacket(gameTimeMs);
+                    }
                 }
             }
 
@@ -810,6 +816,7 @@ namespace WoWSharpClient.Movement
             // Use the packet's destination Z when provided — _player.Position.Z still holds
             // the pre-teleport value at the time Reset() is called (position is written AFTER).
             _needsGroundSnap = true;
+            _groundSnapFrames = 0;
             _teleportZ = float.IsNaN(teleportDestZ) ? _player.Position.Z : teleportDestZ;
             _teleportZGraceFrames = 0; // Reset grace countdown on new teleport
             _noGroundFrameCount = 0;

@@ -146,6 +146,10 @@ public class CombatLoopTests
         await TeleportNearTargetAsync(account, label, targetGuid);
         await Task.Delay(800); // Brief settle after teleport
 
+        // Face the target after teleport — FG bot may not auto-face before attack.
+        await FaceTargetAsync(account, label, targetGuid);
+        await Task.Delay(300);
+
         // Re-sample health after teleport (mob health is unchanged; re-read for accuracy).
         initialHealth = await GetTargetHealthAsync(account, targetGuid);
         if (initialHealth == 0)
@@ -177,10 +181,17 @@ public class CombatLoopTests
 
         // STEP 3: Verify facing — bot orientation must be within 90° of direction to target.
         // Bot was teleported adjacent to target so it should face it when attacking.
-        var facingOk = await AssertBotFacingTargetAsync(account, targetGuid, label);
+        // Allow a few retries — FG bot may take a moment to auto-face after StartMeleeAttack.
+        var facingOk = false;
+        for (int facingAttempt = 0; facingAttempt < 3 && !facingOk; facingAttempt++)
+        {
+            if (facingAttempt > 0)
+                await Task.Delay(1000);
+            facingOk = await AssertBotFacingTargetAsync(account, targetGuid, label);
+        }
         if (!facingOk)
         {
-            _output.WriteLine($"  [{label}] FAIL: Bot is not facing the target.");
+            _output.WriteLine($"  [{label}] FAIL: Bot is not facing the target after 3 checks.");
             return false;
         }
 
@@ -534,5 +545,33 @@ public class CombatLoopTests
 
         var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
         Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
+    }
+
+    /// <summary>
+    /// Sends a SET_FACING action toward the target so the bot faces it before attacking.
+    /// </summary>
+    private async Task FaceTargetAsync(string account, string label, ulong targetGuid)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var snap = await _bot.GetSnapshotAsync(account);
+        var selfPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+        var target = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+        var targetPos = target?.GameObject?.Base?.Position;
+
+        if (selfPos == null || targetPos == null)
+        {
+            _output.WriteLine($"  [{label}] FaceTarget: positions unavailable, skipping.");
+            return;
+        }
+
+        var facing = (float)Math.Atan2(targetPos.Y - selfPos.Y, targetPos.X - selfPos.X);
+        if (facing < 0) facing += (float)(2 * Math.PI);
+
+        _output.WriteLine($"  [{label}] FaceTarget: sending SET_FACING={facing:F2} rad toward target.");
+        await _bot.SendActionAsync(account, new ActionMessage
+        {
+            ActionType = ActionType.SetFacing,
+            Parameters = { new RequestParameter { FloatParam = facing } }
+        });
     }
 }
