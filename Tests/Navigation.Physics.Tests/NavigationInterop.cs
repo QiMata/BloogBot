@@ -170,6 +170,8 @@ public static partial class NavigationInterop
         public float DeltaTime;
         public uint FrameCounter;
         public uint PhysicsFlags;
+        public float StepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
+        public uint StepUpAge;          // frames since step-up detected
     }
 
     public const uint PHYSICS_FLAG_TRUST_INPUT_VELOCITY = 0x1;
@@ -198,6 +200,12 @@ public static partial class NavigationInterop
         public float FallTime;
         public int CurrentSplineIndex;
         public float SplineProgress;
+        [MarshalAs(UnmanagedType.I1)]
+        public bool HitWall;
+        public float WallNormalX, WallNormalY, WallNormalZ;
+        public float BlockedFraction;
+        public float StepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
+        public uint StepUpAge;          // frames since step-up detected
     }
 
     // ==========================================================================

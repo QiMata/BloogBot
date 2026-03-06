@@ -187,6 +187,10 @@ message PhysicsInput {
 
 	// Nearby dynamic objects for collision (elevators, doors, trophy pillars)
 	repeated DynamicObjectProto nearby_objects = 40;
+
+	// Step-up height persistence (from prior tick output)
+	float step_up_base_z = 41;     // Z height to maintain (-200000 = inactive)
+	uint32 step_up_age = 42;       // frames since step-up detected
 }
 
 // Physics output
@@ -246,6 +250,10 @@ message PhysicsOutput {
 	float wall_normal_y = 33;    // world-space wall surface normal Y
 	float wall_normal_z = 34;    // world-space wall surface normal Z
 	float blocked_fraction = 35; // fraction of requested horizontal move completed (0=fully blocked, 1=unblocked)
+
+	// Step-up height persistence — carry forward to next frame's input
+	float step_up_base_z = 36;     // Z height to maintain (-200000 = inactive)
+	uint32 step_up_age = 37;       // frames since step-up detected
 }
 
 // Segment vs dynamic-objects intersection check.

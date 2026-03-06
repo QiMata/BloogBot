@@ -30,6 +30,8 @@ namespace WoWSharpClient.Movement
         private Vector3 _pendingDepen = Vector3.Zero;
         private uint _standingOnInstanceId = 0;
         private Vector3 _standingOnLocal = Vector3.Zero;
+        private float _stepUpBaseZ = -200000f;
+        private uint _stepUpAge = 0;
 
         // Path-following state
         private Position[]? _currentPath;
@@ -234,6 +236,9 @@ namespace WoWSharpClient.Movement
                 StandingOnLocalX = _standingOnLocal.X,
                 StandingOnLocalY = _standingOnLocal.Y,
                 StandingOnLocalZ = _standingOnLocal.Z,
+
+                StepUpBaseZ = _stepUpBaseZ,
+                StepUpAge = _stepUpAge,
             };
 
             return _physics.PhysicsStep(input);
@@ -376,6 +381,8 @@ namespace WoWSharpClient.Movement
             _pendingDepen = new Vector3(output.PendingDepenX, output.PendingDepenY, output.PendingDepenZ);
             _standingOnInstanceId = output.StandingOnInstanceId;
             _standingOnLocal = new Vector3(output.StandingOnLocalX, output.StandingOnLocalY, output.StandingOnLocalZ);
+            _stepUpBaseZ = output.StepUpBaseZ;
+            _stepUpAge = output.StepUpAge;
 
             // Apply physics state flags (falling, swimming, etc)
             const MovementFlags PhysicsFlags =
@@ -795,6 +802,8 @@ namespace WoWSharpClient.Movement
             _pendingDepen = Vector3.Zero;
             _standingOnInstanceId = 0;
             _standingOnLocal = Vector3.Zero;
+            _stepUpBaseZ = -200000f;
+            _stepUpAge = 0;
 
             // After teleport/zone change, force at least one physics step even while idle
             // so gravity applies and the character snaps to the real ground height.

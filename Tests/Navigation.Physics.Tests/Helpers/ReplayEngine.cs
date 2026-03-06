@@ -375,6 +375,8 @@ public static class ReplayEngine
                     MapId = recording.MapId,
                     DeltaTime = dt,
                     FrameCounter = (uint)i,
+                    StepUpBaseZ = prevOutput.StepUpBaseZ,
+                    StepUpAge = prevOutput.StepUpAge,
                 };
 
                 // Pin and set nearby objects

@@ -2277,6 +2277,10 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	}
 
 	// Ground Z refinement safety net: multi-ray probing.
+	// Save pre-safety-net Z for step-up detection below. The safety net may
+	// override the sweep's step-up result; we need the original to detect it.
+	const float preSafetyNetZ = st.z;
+
 	// Primary Z refinement now happens inside ExecuteDownPass and PhysicsGroundSnap functions
 	// via GetGroundZ at exact character XY. This multi-ray probe catches cases where the
 	// capsule sweep completely missed thin WMO floor meshes (e.g. in Orgrimmar).
@@ -2741,6 +2745,36 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 			actualV.z = 0.0f;
 		}
 	}
+	// Step-up height persistence: after a significant grounded Z rise (stair/ledge),
+	// hold the height for a few frames to bridge navmesh polygon gaps at step edges.
+	// Uses preSafetyNetZ to detect step-ups that the safety net might have undone.
+	{
+		constexpr uint32_t MAX_STEP_UP_HOLD = 5;    // ~80-85ms at 60fps
+		constexpr float STEP_UP_RISE_THRESHOLD = 0.25f;
+		constexpr float STEP_UP_DROP_TOLERANCE = 0.15f;
+		const float highestZ = std::max(st.z, preSafetyNetZ);
+		const float zRise = highestZ - input.z;
+		const bool justSteppedUp = st.isGrounded && !isSwimming && !inputAirborneFlag
+			&& zRise > STEP_UP_RISE_THRESHOLD;
+
+		if (justSteppedUp) {
+			st.z = highestZ;
+			out.stepUpBaseZ = highestZ;
+			out.stepUpAge = 0;
+		} else if (input.stepUpBaseZ > PhysicsConstants::INVALID_HEIGHT
+				&& input.stepUpAge < MAX_STEP_UP_HOLD) {
+			if (st.isGrounded && st.z < input.stepUpBaseZ - STEP_UP_DROP_TOLERANCE) {
+				// Engine dropped below step-up base — hold
+				st.z = input.stepUpBaseZ;
+			}
+			out.stepUpBaseZ = input.stepUpBaseZ;
+			out.stepUpAge = input.stepUpAge + 1;
+		} else {
+			out.stepUpBaseZ = PhysicsConstants::INVALID_HEIGHT;
+			out.stepUpAge = 0;
+		}
+	}
+
 	// Output
 	out.x = st.x; out.y = st.y; out.z = st.z;
 	out.orientation = st.orientation; out.pitch = st.pitch;

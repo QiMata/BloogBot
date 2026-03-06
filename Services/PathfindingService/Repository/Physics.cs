@@ -241,6 +241,8 @@ namespace PathfindingService.Repository
         public float deltaTime;
         public uint frameCounter;
         public uint physicsFlags;
+        public float stepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
+        public uint stepUpAge;          // frames since step-up detected
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -284,5 +286,7 @@ namespace PathfindingService.Repository
         public float wallNormalY;
         public float wallNormalZ;
         public float blockedFraction; // 0=fully blocked, 1=no block
+        public float stepUpBaseZ;       // step-up height to maintain (-200000 = inactive)
+        public uint stepUpAge;          // frames since step-up detected
     }
 }

@@ -66,7 +66,7 @@ namespace Pathfinding {
             "Eg0KBWZvdW5kGAIgASgIIo0BChJEeW5hbWljT2JqZWN0UHJvdG8SDAoEZ3Vp",
             "ZBgBIAEoBBISCgpkaXNwbGF5X2lkGAIgASgNEgkKAXgYAyABKAISCQoBeRgE",
             "IAEoAhIJCgF6GAUgASgCEhMKC29yaWVudGF0aW9uGAYgASgCEg0KBXNjYWxl",
-            "GAcgASgCEhAKCGdvX3N0YXRlGAggASgNIqkHCgxQaHlzaWNzSW5wdXQSFgoO",
+            "GAcgASgCEhAKCGdvX3N0YXRlGAggASgNItYHCgxQaHlzaWNzSW5wdXQSFgoO",
             "bW92ZW1lbnRfZmxhZ3MYASABKA0SDQoFcG9zX3gYAiABKAISDQoFcG9zX3kY",
             "AyABKAISDQoFcG9zX3oYBCABKAISDgoGZmFjaW5nGAUgASgCEhYKDnRyYW5z",
             "cG9ydF9ndWlkGAYgASgEEhoKEnRyYW5zcG9ydF9vZmZzZXRfeBgHIAEoAhIa",
@@ -87,7 +87,8 @@ namespace Pathfinding {
             "b25fbG9jYWxfeBgjIAEoAhIbChNzdGFuZGluZ19vbl9sb2NhbF95GCQgASgC",
             "EhsKE3N0YW5kaW5nX29uX2xvY2FsX3oYJSABKAISFQoNcGh5c2ljc19mbGFn",
             "cxgmIAEoDRI3Cg5uZWFyYnlfb2JqZWN0cxgoIAMoCzIfLnBhdGhmaW5kaW5n",
-            "LkR5bmFtaWNPYmplY3RQcm90byKXBgoNUGh5c2ljc091dHB1dBIRCgluZXdf",
+            "LkR5bmFtaWNPYmplY3RQcm90bxIWCg5zdGVwX3VwX2Jhc2VfehgpIAEoAhIT",
+            "CgtzdGVwX3VwX2FnZRgqIAEoDSLEBgoNUGh5c2ljc091dHB1dBIRCgluZXdf",
             "cG9zX3gYASABKAISEQoJbmV3X3Bvc195GAIgASgCEhEKCW5ld19wb3NfehgD",
             "IAEoAhIRCgluZXdfdmVsX3gYBCABKAISEQoJbmV3X3ZlbF95GAUgASgCEhEK",
             "CW5ld192ZWxfehgGIAEoAhIWCg5tb3ZlbWVudF9mbGFncxgHIAEoDRITCgtv",
@@ -105,7 +106,8 @@ namespace Pathfinding {
             "ASgCEhQKDGZhbGxfc3RhcnRfehgeIAEoAhIQCghoaXRfd2FsbBgfIAEoCBIV",
             "Cg13YWxsX25vcm1hbF94GCAgASgCEhUKDXdhbGxfbm9ybWFsX3kYISABKAIS",
             "FQoNd2FsbF9ub3JtYWxfehgiIAEoAhIYChBibG9ja2VkX2ZyYWN0aW9uGCMg",
-            "ASgCImIKFlNlZ21lbnREeW5DaGVja1JlcXVlc3QSDgoGbWFwX2lkGAEgASgN",
+            "ASgCEhYKDnN0ZXBfdXBfYmFzZV96GCQgASgCEhMKC3N0ZXBfdXBfYWdlGCUg",
+            "ASgNImIKFlNlZ21lbnREeW5DaGVja1JlcXVlc3QSDgoGbWFwX2lkGAEgASgN",
             "EhwKBGZyb20YAiABKAsyDi5nYW1lLlBvc2l0aW9uEhoKAnRvGAMgASgLMg4u",
             "Z2FtZS5Qb3NpdGlvbiItChdTZWdtZW50RHluQ2hlY2tSZXNwb25zZRISCgpp",
             "bnRlcnNlY3RzGAEgASgIQg6qAgtQYXRoZmluZGluZ2IGcHJvdG8z"));
@@ -127,8 +129,8 @@ namespace Pathfinding {
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.BatchGroundZResponse), global::Pathfinding.BatchGroundZResponse.Parser, new[]{ "Results" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.BatchGroundZEntry), global::Pathfinding.BatchGroundZEntry.Parser, new[]{ "GroundZ", "Found" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.DynamicObjectProto), global::Pathfinding.DynamicObjectProto.Parser, new[]{ "Guid", "DisplayId", "X", "Y", "Z", "Orientation", "Scale", "GoState" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "FallStartZ", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags", "NearbyObjects" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "FallDistance", "FallStartZ", "HitWall", "WallNormalX", "WallNormalY", "WallNormalZ", "BlockedFraction" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "FallStartZ", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags", "NearbyObjects", "StepUpBaseZ", "StepUpAge" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "FallDistance", "FallStartZ", "HitWall", "WallNormalX", "WallNormalY", "WallNormalZ", "BlockedFraction", "StepUpBaseZ", "StepUpAge" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.SegmentDynCheckRequest), global::Pathfinding.SegmentDynCheckRequest.Parser, new[]{ "MapId", "From", "To" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.SegmentDynCheckResponse), global::Pathfinding.SegmentDynCheckResponse.Parser, new[]{ "Intersects" }, null, null, null, null)
           }));
@@ -4789,6 +4791,8 @@ namespace Pathfinding {
       standingOnLocalZ_ = other.standingOnLocalZ_;
       physicsFlags_ = other.physicsFlags_;
       nearbyObjects_ = other.nearbyObjects_.Clone();
+      stepUpBaseZ_ = other.stepUpBaseZ_;
+      stepUpAge_ = other.stepUpAge_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -5326,6 +5330,36 @@ namespace Pathfinding {
       get { return nearbyObjects_; }
     }
 
+    /// <summary>Field number for the "step_up_base_z" field.</summary>
+    public const int StepUpBaseZFieldNumber = 41;
+    private float stepUpBaseZ_;
+    /// <summary>
+    /// Step-up height persistence (from prior tick output)
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float StepUpBaseZ {
+      get { return stepUpBaseZ_; }
+      set {
+        stepUpBaseZ_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "step_up_age" field.</summary>
+    public const int StepUpAgeFieldNumber = 42;
+    private uint stepUpAge_;
+    /// <summary>
+    /// frames since step-up detected
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint StepUpAge {
+      get { return stepUpAge_; }
+      set {
+        stepUpAge_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -5381,6 +5415,8 @@ namespace Pathfinding {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StandingOnLocalZ, other.StandingOnLocalZ)) return false;
       if (PhysicsFlags != other.PhysicsFlags) return false;
       if(!nearbyObjects_.Equals(other.nearbyObjects_)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StepUpBaseZ, other.StepUpBaseZ)) return false;
+      if (StepUpAge != other.StepUpAge) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -5428,6 +5464,8 @@ namespace Pathfinding {
       if (StandingOnLocalZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StandingOnLocalZ);
       if (PhysicsFlags != 0) hash ^= PhysicsFlags.GetHashCode();
       hash ^= nearbyObjects_.GetHashCode();
+      if (StepUpBaseZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StepUpBaseZ);
+      if (StepUpAge != 0) hash ^= StepUpAge.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -5603,6 +5641,14 @@ namespace Pathfinding {
         output.WriteFloat(FallStartZ);
       }
       nearbyObjects_.WriteTo(output, _repeated_nearbyObjects_codec);
+      if (StepUpBaseZ != 0F) {
+        output.WriteRawTag(205, 2);
+        output.WriteFloat(StepUpBaseZ);
+      }
+      if (StepUpAge != 0) {
+        output.WriteRawTag(208, 2);
+        output.WriteUInt32(StepUpAge);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -5770,6 +5816,14 @@ namespace Pathfinding {
         output.WriteFloat(FallStartZ);
       }
       nearbyObjects_.WriteTo(ref output, _repeated_nearbyObjects_codec);
+      if (StepUpBaseZ != 0F) {
+        output.WriteRawTag(205, 2);
+        output.WriteFloat(StepUpBaseZ);
+      }
+      if (StepUpAge != 0) {
+        output.WriteRawTag(208, 2);
+        output.WriteUInt32(StepUpAge);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -5898,6 +5952,12 @@ namespace Pathfinding {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(PhysicsFlags);
       }
       size += nearbyObjects_.CalculateSize(_repeated_nearbyObjects_codec);
+      if (StepUpBaseZ != 0F) {
+        size += 2 + 4;
+      }
+      if (StepUpAge != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(StepUpAge);
+      }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -6028,6 +6088,12 @@ namespace Pathfinding {
         PhysicsFlags = other.PhysicsFlags;
       }
       nearbyObjects_.Add(other.nearbyObjects_);
+      if (other.StepUpBaseZ != 0F) {
+        StepUpBaseZ = other.StepUpBaseZ;
+      }
+      if (other.StepUpAge != 0) {
+        StepUpAge = other.StepUpAge;
+      }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -6205,6 +6271,14 @@ namespace Pathfinding {
           }
           case 322: {
             nearbyObjects_.AddEntriesFrom(input, _repeated_nearbyObjects_codec);
+            break;
+          }
+          case 333: {
+            StepUpBaseZ = input.ReadFloat();
+            break;
+          }
+          case 336: {
+            StepUpAge = input.ReadUInt32();
             break;
           }
         }
@@ -6386,6 +6460,14 @@ namespace Pathfinding {
             nearbyObjects_.AddEntriesFrom(ref input, _repeated_nearbyObjects_codec);
             break;
           }
+          case 333: {
+            StepUpBaseZ = input.ReadFloat();
+            break;
+          }
+          case 336: {
+            StepUpAge = input.ReadUInt32();
+            break;
+          }
         }
       }
     }
@@ -6466,6 +6548,8 @@ namespace Pathfinding {
       wallNormalY_ = other.wallNormalY_;
       wallNormalZ_ = other.wallNormalZ_;
       blockedFraction_ = other.blockedFraction_;
+      stepUpBaseZ_ = other.stepUpBaseZ_;
+      stepUpAge_ = other.stepUpAge_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -6941,6 +7025,36 @@ namespace Pathfinding {
       }
     }
 
+    /// <summary>Field number for the "step_up_base_z" field.</summary>
+    public const int StepUpBaseZFieldNumber = 36;
+    private float stepUpBaseZ_;
+    /// <summary>
+    /// Step-up height persistence — carry forward to next frame's input
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float StepUpBaseZ {
+      get { return stepUpBaseZ_; }
+      set {
+        stepUpBaseZ_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "step_up_age" field.</summary>
+    public const int StepUpAgeFieldNumber = 37;
+    private uint stepUpAge_;
+    /// <summary>
+    /// frames since step-up detected
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint StepUpAge {
+      get { return stepUpAge_; }
+      set {
+        stepUpAge_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -6991,6 +7105,8 @@ namespace Pathfinding {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(WallNormalY, other.WallNormalY)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(WallNormalZ, other.WallNormalZ)) return false;
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(BlockedFraction, other.BlockedFraction)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StepUpBaseZ, other.StepUpBaseZ)) return false;
+      if (StepUpAge != other.StepUpAge) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -7033,6 +7149,8 @@ namespace Pathfinding {
       if (WallNormalY != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(WallNormalY);
       if (WallNormalZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(WallNormalZ);
       if (BlockedFraction != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(BlockedFraction);
+      if (StepUpBaseZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StepUpBaseZ);
+      if (StepUpAge != 0) hash ^= StepUpAge.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -7191,6 +7309,14 @@ namespace Pathfinding {
         output.WriteRawTag(157, 2);
         output.WriteFloat(BlockedFraction);
       }
+      if (StepUpBaseZ != 0F) {
+        output.WriteRawTag(165, 2);
+        output.WriteFloat(StepUpBaseZ);
+      }
+      if (StepUpAge != 0) {
+        output.WriteRawTag(168, 2);
+        output.WriteUInt32(StepUpAge);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -7341,6 +7467,14 @@ namespace Pathfinding {
         output.WriteRawTag(157, 2);
         output.WriteFloat(BlockedFraction);
       }
+      if (StepUpBaseZ != 0F) {
+        output.WriteRawTag(165, 2);
+        output.WriteFloat(StepUpBaseZ);
+      }
+      if (StepUpAge != 0) {
+        output.WriteRawTag(168, 2);
+        output.WriteUInt32(StepUpAge);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -7455,6 +7589,12 @@ namespace Pathfinding {
       }
       if (BlockedFraction != 0F) {
         size += 2 + 4;
+      }
+      if (StepUpBaseZ != 0F) {
+        size += 2 + 4;
+      }
+      if (StepUpAge != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(StepUpAge);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -7572,6 +7712,12 @@ namespace Pathfinding {
       }
       if (other.BlockedFraction != 0F) {
         BlockedFraction = other.BlockedFraction;
+      }
+      if (other.StepUpBaseZ != 0F) {
+        StepUpBaseZ = other.StepUpBaseZ;
+      }
+      if (other.StepUpAge != 0) {
+        StepUpAge = other.StepUpAge;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -7732,6 +7878,14 @@ namespace Pathfinding {
             BlockedFraction = input.ReadFloat();
             break;
           }
+          case 293: {
+            StepUpBaseZ = input.ReadFloat();
+            break;
+          }
+          case 296: {
+            StepUpAge = input.ReadUInt32();
+            break;
+          }
         }
       }
     #endif
@@ -7889,6 +8043,14 @@ namespace Pathfinding {
           }
           case 285: {
             BlockedFraction = input.ReadFloat();
+            break;
+          }
+          case 293: {
+            StepUpBaseZ = input.ReadFloat();
+            break;
+          }
+          case 296: {
+            StepUpAge = input.ReadUInt32();
             break;
           }
         }

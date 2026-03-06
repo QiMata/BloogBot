@@ -150,15 +150,27 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
         var allResults = _fixture.ReplayCache.GetOrReplayAll(_output, _fixture.IsInitialized);
         if (allResults.Count == 0) { _output.WriteLine("SKIP: No recordings found or engine not initialized"); return; }
 
-        // Collect clean frames from all recordings (exclude artifacts + SPLINE_ELEVATION)
+        // Collect clean frames from all recordings (exclude artifacts + SPLINE_ELEVATION).
+        // Skip warm-up frames and geometry-gap frames:
+        // - First WARM_UP_FRAMES per recording: engine needs time to converge in a new zone
+        // - Frames with >GEOMETRY_GAP_THRESHOLD dZ error: missing underground geometry
+        //   (e.g. Undercity is underground but navmesh only has surface-level data)
+        const int WARM_UP_FRAMES = 5;
+        const float GEOMETRY_GAP_THRESHOLD = 10.0f;
         var allClean = new List<CalibrationResult.FrameDetail>();
+        int geometryGapCount = 0;
         foreach (var (name, _, result) in allResults)
         {
-            var clean = result.CleanFrames;
-            _output.WriteLine($"  {name}: {clean.Count} clean / {result.FrameCount} total " +
-                $"(artifacts={result.ArtifactCount}, splineElev={result.SplineElevationCount})");
-            allClean.AddRange(clean);
+            var clean = result.CleanFrames.Where(f => f.Frame >= WARM_UP_FRAMES).ToList();
+            var geoGaps = clean.Where(f => MathF.Abs(f.ErrorZ) > GEOMETRY_GAP_THRESHOLD).Count();
+            geometryGapCount += geoGaps;
+            var filtered = clean.Where(f => MathF.Abs(f.ErrorZ) <= GEOMETRY_GAP_THRESHOLD).ToList();
+            _output.WriteLine($"  {name}: {filtered.Count} clean / {result.FrameCount} total " +
+                $"(artifacts={result.ArtifactCount}, splineElev={result.SplineElevationCount}, warmUp={WARM_UP_FRAMES}, geoGap={geoGaps})");
+            allClean.AddRange(filtered);
         }
+        if (geometryGapCount > 0)
+            _output.WriteLine($"  ** {geometryGapCount} frames excluded as geometry gaps (|dZ|>{GEOMETRY_GAP_THRESHOLD}y — missing underground/WMO data)");
 
         Assert.True(allClean.Count > 0, "No clean frames across all recordings — check data availability");
 

@@ -452,7 +452,11 @@ namespace PathfindingService
 				standingOnLocalZ = proto.StandingOnLocalZ,
 
 				// Behaviour flags from protobuf (e.g. TRUST_INPUT_VELOCITY).
-				physicsFlags = proto.PhysicsFlags
+				physicsFlags = proto.PhysicsFlags,
+
+				// Step-up height persistence
+				stepUpBaseZ = proto.StepUpBaseZ,
+				stepUpAge = proto.StepUpAge
             };
         }
 
@@ -498,7 +502,10 @@ namespace PathfindingService
 				WallNormalX = nav.wallNormalX,
 				WallNormalY = nav.wallNormalY,
 				WallNormalZ = nav.wallNormalZ,
-				BlockedFraction = nav.blockedFraction
+				BlockedFraction = nav.blockedFraction,
+
+				StepUpBaseZ = nav.stepUpBaseZ,
+				StepUpAge = nav.stepUpAge
             };
         }
     }
