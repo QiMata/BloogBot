@@ -31,8 +31,9 @@ namespace ForegroundBotRunner
         private readonly Func<ObjectManager?> _getObjectManager;
 
         private volatile bool _isRecording;
-        private CancellationTokenSource? _recordingCts;
-        private Task? _recordingTask;
+        private System.Diagnostics.Stopwatch? _recordingStopwatch;
+        private long _lastCaptureMs;
+        private int _frameIntervalMs;
 
         private MovementRecording? _currentRecording;
         private readonly object _recordingLock = new();
@@ -52,6 +53,20 @@ namespace ForegroundBotRunner
 
         /// <summary>Replace NaN/Infinity with 0. Memory reads can return garbage during state transitions.</summary>
         private static float Safe(float v) => float.IsFinite(v) ? v : 0f;
+
+        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.</summary>
+        private static void CrashTrace(string message)
+        {
+            try
+            {
+                var logPath = Path.Combine("D:\\World of Warcraft\\WWoWLogs", "crash_trace.log");
+                try { Directory.CreateDirectory(Path.GetDirectoryName(logPath)!); } catch { }
+                using var sw = new StreamWriter(logPath, true);
+                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [Recorder] {message}");
+                sw.Flush();
+            }
+            catch { }
+        }
 
         public bool IsRecording => _isRecording;
 
@@ -129,6 +144,32 @@ namespace ForegroundBotRunner
                 return;
             }
 
+            // Capture frames on the main thread (safe — no cross-thread object manager access).
+            if (_isRecording && _recordingStopwatch != null)
+            {
+                long elapsedMs = _recordingStopwatch.ElapsedMilliseconds;
+                if (elapsedMs - _lastCaptureMs >= _frameIntervalMs)
+                {
+                    _lastCaptureMs = elapsedMs;
+                    try
+                    {
+                        var frame = CaptureFrame((ulong)elapsedMs);
+                        if (frame != null)
+                        {
+                            lock (_recordingLock)
+                            {
+                                _currentRecording?.Frames.Add(frame);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error capturing movement frame");
+                    }
+                }
+            }
+
+            CrashTrace($"Poll: pre-EnsureChatHook isRec={_isRecording} contId={objectManager.ContinentId}");
             EnsureChatHook();
 
             try
@@ -259,12 +300,12 @@ namespace ForegroundBotRunner
                     Gender = gender
                 };
 
-                _recordingCts = new CancellationTokenSource();
                 _isRecording = true;
                 _splineSampleCount = 0;
                 _lastGoState.Clear();
-
-                _recordingTask = Task.Run(() => RecordingLoop(frameIntervalMs, _recordingCts.Token));
+                _frameIntervalMs = frameIntervalMs;
+                _lastCaptureMs = -1; // Force immediate first capture
+                _recordingStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 var raceName = Enum.IsDefined(typeof(Race), (int)race) ? ((Race)race).ToString() : "Unknown";
                 var genderName = Enum.IsDefined(typeof(Gender), (byte)gender) ? ((Gender)gender).ToString() : "Unknown";
@@ -290,20 +331,13 @@ namespace ForegroundBotRunner
             lock (_recordingLock)
             {
                 _isRecording = false;
-                _recordingCts?.Cancel();
-
-                try
-                {
-                    _recordingTask?.Wait(TimeSpan.FromSeconds(2));
-                }
-                catch (AggregateException) { }
+                _recordingStopwatch?.Stop();
+                _recordingStopwatch = null;
 
                 if (_currentRecording == null || _currentRecording.Frames.Count == 0)
                 {
                     _logger.LogWarning("RECORDING_STOPPED: No frames captured");
                     _currentRecording = null;
-                    _recordingCts?.Dispose();
-                    _recordingCts = null;
                     return null;
                 }
 
@@ -313,8 +347,6 @@ namespace ForegroundBotRunner
                 recordingToSave = _currentRecording;
                 frameCount = _currentRecording.Frames.Count;
                 _currentRecording = null;
-                _recordingCts?.Dispose();
-                _recordingCts = null;
             }
 
             // Save on a background thread so the main WoW message pump isn't blocked.
@@ -334,37 +366,6 @@ namespace ForegroundBotRunner
             });
 
             return null; // Path not known synchronously; logged when save completes
-        }
-
-        private async Task RecordingLoop(int intervalMs, CancellationToken cancellationToken)
-        {
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            while (!cancellationToken.IsCancellationRequested && _isRecording)
-            {
-                try
-                {
-                    var frame = CaptureFrame((ulong)stopwatch.ElapsedMilliseconds);
-
-                    if (frame != null)
-                    {
-                        lock (_recordingLock)
-                        {
-                            _currentRecording?.Frames.Add(frame);
-                        }
-                    }
-
-                    await Task.Delay(intervalMs, cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error capturing movement frame");
-                }
-            }
         }
 
         private MovementData? CaptureFrame(ulong frameTimestamp)
@@ -477,6 +478,7 @@ namespace ForegroundBotRunner
                         }
                     }
                 }
+                CrashTrace($"CaptureFrame: pre-snapshot contId={objectManager!.ContinentId} pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})");
                 SnapshotNearbyGameObjects(objectManager!, frame, playerWorldPos, frame.TransportGuid);
                 SnapshotNearbyUnits(objectManager!, frame, playerWorldPos, unit.Guid);
 
@@ -556,7 +558,8 @@ namespace ForegroundBotRunner
                         Facing = Safe(gameObj.Facing),
                         Name = gameObj.Name ?? "",
                         DistanceToPlayer = Safe(dist),
-                        Scale = Safe(gameObj.ScaleX)
+                        Scale = Safe(gameObj.ScaleX),
+                        AnimProgress = gameObj.AnimProgress
                     };
 
                     // Detect GoState transitions (door open/close, elevator state changes)
@@ -735,13 +738,44 @@ namespace ForegroundBotRunner
             }
         }
 
-        private string SaveRecording(MovementRecording recording)
+        /// <summary>
+        /// Resolves the recordings directory. Priority:
+        /// 1. WWOW_RECORDINGS_DIR env var
+        /// 2. Repo path: walk up from assembly location to find Tests/Navigation.Physics.Tests/Recordings
+        /// 3. Fallback: Documents/BloogBot/MovementRecordings
+        /// </summary>
+        private static string ResolveRecordingsDirectory()
         {
-            var recordingsDir = Path.Combine(
+            // 1. Env var
+            var envDir = Environment.GetEnvironmentVariable("WWOW_RECORDINGS_DIR");
+            if (!string.IsNullOrEmpty(envDir) && Directory.Exists(envDir))
+                return envDir;
+
+            // 2. Walk up from assembly location to find repo root
+            var asmDir = Path.GetDirectoryName(typeof(MovementRecorder).Assembly.Location);
+            if (!string.IsNullOrEmpty(asmDir))
+            {
+                var dir = new DirectoryInfo(asmDir);
+                while (dir != null)
+                {
+                    var candidate = Path.Combine(dir.FullName, "Tests", "Navigation.Physics.Tests", "Recordings");
+                    if (Directory.Exists(candidate))
+                        return candidate;
+                    dir = dir.Parent;
+                }
+            }
+
+            // 3. Fallback
+            return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 "BloogBot",
                 "MovementRecordings"
             );
+        }
+
+        private string SaveRecording(MovementRecording recording)
+        {
+            var recordingsDir = ResolveRecordingsDirectory();
             Directory.CreateDirectory(recordingsDir);
 
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
@@ -830,7 +864,8 @@ namespace ForegroundBotRunner
                         Position = new { go.Position.X, go.Position.Y, go.Position.Z },
                         go.Facing,
                         go.Name,
-                        go.DistanceToPlayer
+                        go.DistanceToPlayer,
+                        go.AnimProgress
                     }),
                     NearbyUnits = f.NearbyUnits.Select(u => new
                     {
@@ -883,8 +918,6 @@ namespace ForegroundBotRunner
             {
                 StopRecording();
             }
-
-            _recordingCts?.Dispose();
         }
     }
 }

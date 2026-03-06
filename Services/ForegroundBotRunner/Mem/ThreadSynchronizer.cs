@@ -74,6 +74,19 @@ namespace ForegroundBotRunner.Mem
 
         private static bool _hookInstalled = false;
 
+        /// <summary>
+        /// When true, WndProc will NOT execute queued actions/delegates. Callers of
+        /// RunOnMainThread will timeout. Set this during map/instance transitions to
+        /// prevent Lua calls from crashing WoW when its internal state is unstable.
+        /// </summary>
+        public static volatile bool Paused = false;
+
+        /// <summary>True once the object manager has been valid at least once (i.e., we entered world).</summary>
+        private static bool _objMgrWasValid = false;
+
+        /// <summary>Grace period ticks after object manager teardown before resuming execution.</summary>
+        private static int _teardownGraceTicks = 0;
+
         static ThreadSynchronizer()
         {
             if (DISABLE_WINDOW_HOOK)
@@ -174,11 +187,47 @@ namespace ForegroundBotRunner.Mem
             catch { }
         }
 
+        /// <summary>
+        /// Crash-safe log: writes to D:/World of Warcraft/WWoWLogs/crash_trace.log with immediate flush.
+        /// Use this to trace what happens right before a native ACCESS_VIOLATION kills the process.
+        /// </summary>
+        private static void CrashTrace(string message)
+        {
+            try
+            {
+                var logPath = Path.Combine("D:\\World of Warcraft\\WWoWLogs", "crash_trace.log");
+                try { Directory.CreateDirectory(Path.GetDirectoryName(logPath)!); } catch { }
+                using var sw = new StreamWriter(logPath, true);
+                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] {message}");
+                sw.Flush();
+            }
+            catch { }
+        }
+
         private static int WndProc(nint hWnd, int msg, int wParam, int lParam)
         {
             try
             {
                 if (msg != WM_USER) return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);
+
+                // Paused is set by ObjectManager when it detects map transitions,
+                // logout, or any state where native calls/Lua would be unsafe.
+                if (Paused)
+                {
+                    CrashTrace($"WndProc: BLOCKED (paused) — dropping {actionQueue.Count}+{delegateQueue.Count}");
+                    while (actionQueue.Count > 0)
+                        actionQueue.Dequeue();
+                    lock (_queueLock)
+                    {
+                        while (delegateQueue.Count > 0)
+                        {
+                            var item = delegateQueue.Dequeue();
+                            item.resultHolder[0] = null!;
+                            item.signal.Set();
+                        }
+                    }
+                    return 0;
+                }
 
                 while (actionQueue.Count > 0)
                     actionQueue.Dequeue()?.Invoke();

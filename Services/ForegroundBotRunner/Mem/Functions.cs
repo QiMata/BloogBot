@@ -27,6 +27,7 @@ namespace ForegroundBotRunner.Mem
         // what does this do? [HandleProcessCorruptedStateExceptions]
         static public void EnumerateVisibleObjects(nint callback, int filter)
         {
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return;
             EnumerateVisibleObjectsFunction(callback, filter, MemoryAddresses.EnumerateVisibleObjectsFunPtr);
         }
 
@@ -78,6 +79,7 @@ namespace ForegroundBotRunner.Mem
 
         static public nint GetObjectPtr(ulong guid)
         {
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return nint.Zero;
             return GetObjectPtrFunction(guid);
         }
 
@@ -89,6 +91,7 @@ namespace ForegroundBotRunner.Mem
 
         static public ulong GetPlayerGuid()
         {
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return 0;
             return GetPlayerGuidFunction();
         }
 
@@ -231,6 +234,7 @@ namespace ForegroundBotRunner.Mem
         {
             try
             {
+                if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return;
                 SetTargetFunction(guid);
             }
             catch (AccessViolationException)

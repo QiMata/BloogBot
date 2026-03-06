@@ -97,6 +97,19 @@ namespace ForegroundBotRunner
             catch { /* Ignore logging errors */ }
         }
 
+        private static void CrashTrace(string message)
+        {
+            try
+            {
+                var logPath = System.IO.Path.Combine("D:\\World of Warcraft\\WWoWLogs", "crash_trace.log");
+                try { System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath)!); } catch { }
+                using var sw = new System.IO.StreamWriter(logPath, true);
+                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [Worker] {message}");
+                sw.Flush();
+            }
+            catch { }
+        }
+
         public ForegroundBotWorker(IConfiguration configuration, ILoggerFactory loggerFactory, PathfindingClient? pathfindingClient = null)
         {
             _configuration = configuration;
@@ -262,6 +275,7 @@ namespace ForegroundBotRunner
                         if (_objectManager?.HasEnteredWorld == true
                             && _objectManager?.IsContinentTransition != true)
                         {
+                            CrashTrace($"PRE-POLL: contId=0x{_objectManager.ContinentId:X} paused={Mem.ThreadSynchronizer.Paused} isRec={_movementRecorder?.IsRecording}");
                             _movementRecorder?.Poll();
 
                             // Launch automated movement scenarios (once)

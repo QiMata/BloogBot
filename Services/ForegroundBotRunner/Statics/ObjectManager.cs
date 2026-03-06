@@ -40,6 +40,20 @@ namespace ForegroundBotRunner.Statics
             catch { }
         }
 
+        /// <summary>Crash-safe trace log for diagnosing ACCESS_VIOLATION during map transitions.</summary>
+        private static void CrashTrace(string message)
+        {
+            try
+            {
+                var logPath = System.IO.Path.Combine("D:\\World of Warcraft\\WWoWLogs", "crash_trace.log");
+                try { Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath)!); } catch { }
+                using var sw = new System.IO.StreamWriter(logPath, true);
+                sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [ObjMgr] {message}");
+                sw.Flush();
+            }
+            catch { }
+        }
+
         // LUA SCRIPTS
         private const string WandLuaScript = "if IsCurrentAction(72) == nil then CastSpellByName('Shoot') end";
         private const string TurnOffWandLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Shoot') end";
@@ -1241,7 +1255,31 @@ namespace ForegroundBotRunner.Statics
                     // IMPORTANT: Skip during continent transitions (ContinentId == 0xFFFFFFFF while HasEnteredWorld)
                     // — zeppelin/boat crossings temporarily clear the GUID and ContinentId
                     bool isContinentTransition = HasEnteredWorld && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+
+                    // Detect instance/map transitions: map ID changed to a new valid map.
+                    bool mapChanged = _prevContinentId != 0xFFFFFFFF && continentId != _prevContinentId
+                                      && continentId != 0xFF && continentId != 0xFFFFFFFF;
+                    if (mapChanged && HasEnteredWorld)
+                    {
+                        CrashTrace($"MAP_CHANGE: {_prevContinentId} → {continentId} — pausing native calls");
+                        isContinentTransition = true;
+                        Mem.ThreadSynchronizer.Paused = true;
+                    }
+
                     _isContinentTransition = isContinentTransition;
+
+                    // Pause ThreadSynchronizer during any transition to prevent WndProc
+                    // from executing Lua calls while WoW's internal state is unstable.
+                    if (isContinentTransition)
+                    {
+                        Mem.ThreadSynchronizer.Paused = true;
+                        CrashTrace($"TRANSITION: contId=0x{continentId:X} paused=true logged={isLoggedIn} loading={isLoadingWorld}");
+                    }
+                    else if (Mem.ThreadSynchronizer.Paused && !isContinentTransition && isLoggedIn && !isLoadingWorld)
+                    {
+                        CrashTrace("TRANSITION_END: resuming native calls");
+                        Mem.ThreadSynchronizer.Paused = false;
+                    }
 
                     // When a continent transition starts, immediately clear stale objects.
                     // Object pointers become invalid during map changes — any access to
