@@ -72,6 +72,14 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 | `LV-QUEST-001` | QuestInteractionTests | Quest completion not reflected in snapshot (WSM-PAR-001). Root cause: quest 783 had no countable objectives — `.quest complete` didn't change any detectable field. MaNGOS doesn't send SMSG_QUESTUPDATE_COMPLETE for GM commands on this build. Fix: changed test quest to 786 (kill objectives), added QuestHandler for SMSG_QUESTUPDATE_COMPLETE + SMSG_QUESTUPDATE_ADD_KILL, removed WSM-PAR-001 workaround. | `Exports/WoWSharpClient/Handlers` | **Done** |
 | `LV-TPCOUNT-001` | Teleport ACK counter | BG client sends MSG_MOVE_TELEPORT_ACK with counter=0, server expects counter=12+. `MovementHandler.cs:80` fires `RequiresAcknowledgementArgs(guid, 0)` for MSG_MOVE_TELEPORT (which has no counter field). | `Exports/WoWSharpClient/Handlers` | **Done** — added `_teleportSequence` counter in WoWSharpObjectManager, `IncrementTeleportSequence()` called on each MSG_MOVE_TELEPORT |
 
+## Open — LiveValidation Audit (2026-03-06)
+
+| ID | Task | Status |
+|----|------|--------|
+| `LV-AUDIT-001` | LiveValidation test audit: 35 findings across 3 categories. 6 HIGH + 3 MEDIUM fixed. See `docs/LIVEVALIDATION_AUDIT.md`. 40/40 tests pass. | **Done** |
+| `LV-AUDIT-002` | Remaining MEDIUM items (AST-1/2/3/5/11/13/20, TIM-1/2/4/5/7/10/12) — lower risk, not causing false passes. | Open |
+| `LV-AUDIT-003` | BG bot target state tracking: `TargetGuid` stays 0 in snapshot after `CMSG_ATTACKSWING`. Fix in `WoWSharpObjectManager` or `BotRunnerService`. | Open |
+
 ## Open — Pathfinding / Physics (2026-03-03)
 
 | ID | Issue | Owner | Status |

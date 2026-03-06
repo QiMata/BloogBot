@@ -122,11 +122,14 @@ public class ConsumableUsageTests
 
         // --- Step 2: Use elixir via action forwarding ---
         _output.WriteLine($"  [{label}] Step 2: Use elixir via UseItem action");
-        await _bot.SendActionAndWaitAsync(account, new ActionMessage
+        var useResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.UseItem,
             Parameters = { new RequestParameter { IntParam = (int)ElixirOfLionsStrength } }
-        }, delayMs: 500);
+        });
+        // AST-4: Verify dispatch was accepted — silently rejected UseItem masks real failures.
+        Assert.Equal(ResponseResult.Success, useResult);
+        await Task.Delay(500);
 
         // --- Step 3: Poll for buff (buff application is near-instant after item use) ---
         _output.WriteLine($"  [{label}] Step 3: Polling for Lion's Strength buff (spell {LionsStrengthSpellId})");

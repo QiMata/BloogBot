@@ -176,11 +176,13 @@ public class EquipmentEquipTests
 
         // Equip and verify transition — poll for mainhand slot change instead of fixed delay.
         _output.WriteLine($"  [{label}] Equipping Worn Mace.");
-        await _bot.SendActionAndWaitAsync(account, new ActionMessage
+        var equipResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
             Parameters = { new RequestParameter { IntParam = (int)WornMace } }
-        }, delayMs: 500);
+        });
+        Assert.Equal(ResponseResult.Success, equipResult);
+        await Task.Delay(500);
 
         WoWActivitySnapshot? after = null;
         Game.WoWPlayer? playerAfter = null;

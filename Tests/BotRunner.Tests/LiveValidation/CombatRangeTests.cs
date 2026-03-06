@@ -350,17 +350,13 @@ public class CombatRangeTests
             (snap.Player?.Unit?.TargetGuid ?? 0UL) == targetGuid);
         _output.WriteLine($"  [BG] Ranged attack target selected: {selected}");
 
-        // Note: ranged attack may or may not work depending on equipped ranged slot.
-        // The test validates the action pipeline works — if no ranged weapon is equipped,
-        // the server treats it as melee auto-attack (same CMSG_ATTACKSWING opcode).
-        if (selected)
+        // AST-7: Assert target was actually selected. If no ranged weapon is equipped,
+        // skip the test rather than silently passing with ambiguous "maybe melee" log.
+        if (!selected)
         {
-            _output.WriteLine("  [BG] Ranged attack accepted by server — target GUID set.");
+            global::Tests.Infrastructure.Skip.If(true, "Ranged attack target not selected — likely no ranged weapon equipped. Skipping rather than false-passing.");
         }
-        else
-        {
-            _output.WriteLine("  [BG] Ranged attack may have been treated as melee (no ranged weapon equipped in slot).");
-        }
+        _output.WriteLine("  [BG] Ranged attack accepted by server — target GUID set.");
 
         // Cleanup
         await _bot.SendActionAsync(bgAccount, new ActionMessage { ActionType = ActionType.StopAttack });

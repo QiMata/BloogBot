@@ -336,7 +336,8 @@ public class GatheringProfessionTests
         await _bot.BotLearnSpellAsync(account, MiningGatherSpell);
         if (currentMining < 1)
         {
-            await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.MINING_SKILL_ID} 1 300", captureResponse: true);
+            var setSkillTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.MINING_SKILL_ID} 1 300", captureResponse: true);
+            AssertCommandSucceeded(setSkillTrace, label, $".setskill {GatheringData.MINING_SKILL_ID} 1 300");
         }
 
         await _bot.RefreshSnapshotsAsync();
@@ -386,7 +387,8 @@ public class GatheringProfessionTests
         await _bot.BotLearnSpellAsync(account, HerbalismGatherSpell);
         if (currentHerbalism < 1)
         {
-            await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300", captureResponse: true);
+            var setSkillTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300", captureResponse: true);
+            AssertCommandSucceeded(setSkillTrace, label, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300");
             await Task.Delay(500);
         }
 
@@ -433,6 +435,15 @@ public class GatheringProfessionTests
 
             await _bot.BotTeleportAsync(account, map, spawnX + offsetX, spawnY, safeZ);
             await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
+
+            // AST-15: Verify teleport actually placed the bot near the target position.
+            // If teleport failed silently, subsequent "node not found" errors are misleading.
+            await _bot.RefreshSnapshotsAsync();
+            var teleportSnap = GetSnapshot(label);
+            var teleportPos = teleportSnap?.Player?.Unit?.GameObject?.Base?.Position;
+            Assert.NotNull(teleportPos);
+            float teleportDist = Distance(teleportPos!.X, teleportPos.Y, teleportPos.Z, spawnX + offsetX, spawnY, safeZ);
+            Assert.True(teleportDist <= 50f, $"[{label}] Teleport verification failed: bot is {teleportDist:F1}y from target ({spawnX + offsetX:F1}, {spawnY:F1}, {safeZ:F1}). Teleport may have been rejected.");
 
             // --- Scan for the node in NearbyObjects ---
             // 3s max: static objects (herbs/ores) are either spawned or not — no loading delay.
@@ -536,8 +547,10 @@ public class GatheringProfessionTests
 
                 if (navDist > 5f)
                 {
-                    _output.WriteLine($"  [{label}] Pathfinding timed out (dist={navDist:F1}y after {navSw.Elapsed.TotalSeconds:F0}s), trying next location...");
-                    continue;
+                    _output.WriteLine($"  [{label}] Pathfinding timed out (dist={navDist:F1}y after {navSw.Elapsed.TotalSeconds:F0}s)");
+                    // GM-1: A pathfinding timeout when the bot needed to navigate is a real failure —
+                    // silently continuing masks broken pathfinding. Assert failure instead.
+                    Assert.Fail($"[{label}] Pathfinding failed: could not reach node within 30s (startDist={startDist:F1}y, finalDist={navDist:F1}y). This indicates a pathfinding or physics issue.");
                 }
 
                 // Brief settle: let movement fully stop before interacting.
@@ -685,5 +698,11 @@ public class GatheringProfessionTests
     private WoWActivitySnapshot? GetSnapshot(string label)
         => label == "FG" ? _bot.ForegroundBot : _bot.BackgroundBot;
 
+    private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
+    {
+        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
+        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
+        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
+    }
 }
 

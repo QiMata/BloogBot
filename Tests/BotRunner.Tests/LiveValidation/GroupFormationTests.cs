@@ -62,18 +62,24 @@ public class GroupFormationTests
 
         // Step 2: FG invites BG by name.
         _output.WriteLine($"[GROUP] FG invites BG by name: {bgName}");
-        await _bot.SendActionAndWaitAsync(fgAccount!, new ActionMessage
+        var inviteResult = await _bot.SendActionAsync(fgAccount!, new ActionMessage
         {
             ActionType = ActionType.SendGroupInvite,
             Parameters = { new RequestParameter { StringParam = bgName } }
-        }, delayMs: 1200);
+        });
+        // AST-18: Assert invite dispatch was accepted.
+        Assert.Equal(ResponseResult.Success, inviteResult);
+        await Task.Delay(1200);
 
         // Step 3: BG accepts invite.
         _output.WriteLine("[GROUP] BG accepts invite");
-        await _bot.SendActionAndWaitAsync(bgAccount!, new ActionMessage
+        var acceptResult = await _bot.SendActionAsync(bgAccount!, new ActionMessage
         {
             ActionType = ActionType.AcceptGroupInvite
-        }, delayMs: 1500);
+        });
+        // AST-18: Assert accept dispatch was accepted.
+        Assert.Equal(ResponseResult.Success, acceptResult);
+        await Task.Delay(1500);
 
         // Step 4: assert group state from snapshots.
         var formed = await WaitForGroupFormationAsync(fgAccount!, bgAccount!, timeoutMs: 20000);

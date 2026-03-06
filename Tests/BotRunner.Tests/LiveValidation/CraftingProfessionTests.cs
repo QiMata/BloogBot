@@ -251,11 +251,12 @@ public class CraftingProfessionTests
         if (!crafted)
         {
             _output.WriteLine($"  [{label}] CastSpell path did not produce bandage; retrying via .cast {LinenBandageRecipe}.");
-            await _bot.SendGmChatCommandTrackedAsync(
+            var castTrace = await _bot.SendGmChatCommandTrackedAsync(
                 account,
                 $".cast {LinenBandageRecipe}",
                 captureResponse: true,
                 delayMs: 1200);
+            AssertCommandSucceeded(castTrace, label, $".cast {LinenBandageRecipe}");
 
             await _bot.RefreshSnapshotsAsync();
             after = await _bot.GetSnapshotAsync(account);
@@ -321,5 +322,12 @@ public class CraftingProfessionTests
         var dy = y1 - y2;
         var dz = z1 - z2;
         return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
+    {
+        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
+        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
+        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
 }
