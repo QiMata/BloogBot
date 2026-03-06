@@ -69,7 +69,7 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 | `LV-EQUIP-001` | EquipmentEquipTests | BG equip swap assertion: bag count unchanged when mainhand already had Worn Mace. | `Tests/BotRunner.Tests` | **Done** — fixed assertion to accept mainhandGuidChanged + added `.gm off` guard |
 | `LV-GROUP-001` | GroupFormationTests | SMSG_GROUP_LIST parsed leaderGuid but never stored it persistently. Snapshot returned 0. | `Exports/WoWSharpClient` | **Done** — added LeaderGuid property to IPartyNetworkClientComponent, stored in ParseGroupList/SetLeader, used in snapshot |
 | `LV-GROUNDZ-001` | OrgrimmarGroundZAnalysis.PostTeleportSnap | GROUND_SNAP_MAX_DROP=3.0 too restrictive + `_needsGroundSnap` cleared after 1 frame (insufficient for 3.4y drop). | `Exports/WoWSharpClient/Movement` | **Done** — increased MAX_DROP to 5.0, multi-frame ground snap (keep running physics until FALLINGFAR clears, 60-frame safety limit). Commit `537935b`. |
-| `LV-QUEST-001` | QuestInteractionTests | Quest not in snapshot after `.quest add`. Already tracked as WSM-PAR-001. | `Services/WoWStateManager` | Open |
+| `LV-QUEST-001` | QuestInteractionTests | Quest completion not reflected in snapshot (WSM-PAR-001). Root cause: quest 783 had no countable objectives — `.quest complete` didn't change any detectable field. MaNGOS doesn't send SMSG_QUESTUPDATE_COMPLETE for GM commands on this build. Fix: changed test quest to 786 (kill objectives), added QuestHandler for SMSG_QUESTUPDATE_COMPLETE + SMSG_QUESTUPDATE_ADD_KILL, removed WSM-PAR-001 workaround. | `Exports/WoWSharpClient/Handlers` | **Done** |
 | `LV-TPCOUNT-001` | Teleport ACK counter | BG client sends MSG_MOVE_TELEPORT_ACK with counter=0, server expects counter=12+. `MovementHandler.cs:80` fires `RequiresAcknowledgementArgs(guid, 0)` for MSG_MOVE_TELEPORT (which has no counter field). | `Exports/WoWSharpClient/Handlers` | **Done** — added `_teleportSequence` counter in WoWSharpObjectManager, `IncrementTeleportSequence()` called on each MSG_MOVE_TELEPORT |
 
 ## Open — Pathfinding / Physics (2026-03-03)
@@ -127,8 +127,12 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-06 (session 14)
-- **Current work:** Step-up height persistence implemented end-to-end. 40/40 LiveValidation. 97/97 physics replay. All green.
+- **Last updated:** 2026-03-06 (session 15)
+- **Current work:** LV-QUEST-001 fixed. 40/40 LiveValidation. All open live validation failures resolved.
+- **Completed session 15 (2026-03-06):**
+  1. **LV-QUEST-001 / WSM-PAR-001 FIXED** — Quest completion not reflected in ActivitySnapshot. Root cause: test quest 783 (A Threat Within) had no countable objectives — `.quest complete` GM command didn't change any quest log fields visible to the client. MaNGOS doesn't send `SMSG_QUESTUPDATE_COMPLETE` for GM commands on this build. Fix: (a) changed test quest to 786 (Encroachment, has kill objectives), (b) added `QuestHandler.cs` with handlers for `SMSG_QUESTUPDATE_COMPLETE` and `SMSG_QUESTUPDATE_ADD_KILL`, (c) registered both in `WorldClient.cs`, (d) removed WSM-PAR-001 workaround from test — now uses clean assertion.
+  2. **Test results:** 40/40 LiveValidation (all green), LV-QUEST-001 resolved.
+- **Next priority:** Mining test reliability, Phase 6b DotRecast eval (low priority).
 - **Completed session 14 (2026-03-06):**
   1. **Step-up height persistence across all layers** — After a significant grounded Z rise (stair/ledge), hold the height for up to 5 frames (~85ms) to bridge navmesh polygon gaps at step edges. Uses `preSafetyNetZ` to detect step-ups that the safety net might undo, working in both replay and live mode. Full pipeline: `PhysicsBridge.h` → `PhysicsEngine.cpp` → `Physics.cs` → `pathfinding.proto` → `PathfindingSocketServer.cs` → `MovementController.cs` (round-trip persistence). Also fixed missing `PhysicsOutput` P/Invoke fields (`hitWall`, `wallNormalX/Y/Z`, `blockedFraction`) in `NavigationInterop.cs`. Commit: `960cb12`.
   2. **AggregateDriftGate pre-existing failure fixed** — Undercity underground frames (41y dZ errors from missing geometry) excluded via geometry-gap filter (`|dZ|>10y`) + warm-up frame exclusion (first 5 frames per recording). Was failing before step-up changes.
@@ -216,6 +220,5 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
   2. **`--no-build` test runs unreliable** — Stale MaNGOS character sessions from killed processes cause cascading BG teleport failures. Fresh build provides enough delay for session cleanup. Need to add explicit session cleanup to fixture init.
 - **Remaining plan work:**
   1. Phase 6b: DotRecast evaluation (separate branch — low priority)
-  2. LV-QUEST-001 / WSM-PAR-001 quest snapshot sync lag
-  3. Mining test reliability: investigate `.respawn` vs pool_gameobject respawn mechanics
-- **Next session:** 38/40 tests pass. Remaining failures are pre-existing (Fishing SMSG_GAMEOBJECT_CUSTOM_ANIM, Herbalism FG). No immediate action needed. LV-QUEST-001 and Mining flakiness are the only open issues.
+  2. Mining test reliability: investigate `.respawn` vs pool_gameobject respawn mechanics
+- **Next session:** 40/40 tests pass. All live validation failures resolved. Mining flakiness is the only open test issue.

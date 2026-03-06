@@ -26,7 +26,7 @@ public class QuestInteractionTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int TestQuestId = 783; // A Threat Within
+    private const int TestQuestId = 786; // Encroachment (kill 4 Quilboar + 4 Scouts — has countable objectives)
 
     public QuestInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -77,6 +77,7 @@ public class QuestInteractionTests
             await _bot.RefreshSnapshotsAsync();
             var addedSnap = await _bot.GetSnapshotAsync(account);
             var addedQuest = addedSnap?.Player?.QuestLogEntries?.FirstOrDefault(q => q.QuestLog1 == (uint)TestQuestId);
+            _output.WriteLine($"  [{label}] After add: QuestLog1={addedQuest?.QuestLog1} QuestLog2={addedQuest?.QuestLog2} QuestLog3={addedQuest?.QuestLog3}");
 
             _output.WriteLine($"  [{label}] Step 2: Complete quest {TestQuestId}");
             await _bot.BotSelectSelfAsync(account);
@@ -90,24 +91,8 @@ public class QuestInteractionTests
                 addedQuest?.QuestLog2 ?? 0,
                 addedQuest?.QuestLog3 ?? 0,
                 TimeSpan.FromSeconds(12));
-            var completionReportedInChat = completeTrace.ChatMessages.Concat(completeTrace.ErrorMessages)
-                .Any(m => m.Contains("completed", StringComparison.OrdinalIgnoreCase));
-
-            if (!completedOrChanged && completionReportedInChat)
-            {
-                // Known weakness WSM-PAR-001: Quest completion was confirmed via chat but NOT
-                // reflected in the ActivitySnapshot quest log. This means the snapshot pipeline
-                // does not yet surface quest-completion state changes reliably. Log as warning
-                // rather than failing, but this SHOULD be fixed so snapshot is the source of truth.
-                _output.WriteLine($"  [{label}] WARNING (WSM-PAR-001): Quest {TestQuestId} completion confirmed via chat " +
-                    "but NOT reflected in snapshot. Snapshot pipeline needs quest-completion wiring.");
-            }
-            else
-            {
-                Assert.True(completedOrChanged,
-                    $"[{label}] Quest {TestQuestId} completion must be reflected by quest-log change/removal in the ActivitySnapshot. " +
-                    "Chat fallback alone is not sufficient (see WSM-PAR-001).");
-            }
+            Assert.True(completedOrChanged,
+                $"[{label}] Quest {TestQuestId} completion must be reflected by quest-log change/removal in the ActivitySnapshot.");
 
             _output.WriteLine($"  [{label}] Step 3: Remove quest {TestQuestId}");
             await _bot.BotSelectSelfAsync(account);

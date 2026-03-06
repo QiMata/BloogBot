@@ -253,6 +253,10 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.SMSG_ATTACKSTOP, Handlers.SpellHandler.HandleAttackStop);
             BridgeToLegacy(Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM, Handlers.SpellHandler.HandleGameObjectCustomAnim);
 
+            // Quests
+            BridgeToLegacy(Opcode.SMSG_QUESTUPDATE_COMPLETE, Handlers.QuestHandler.HandleQuestUpdateComplete);
+            BridgeToLegacy(Opcode.SMSG_QUESTUPDATE_ADD_KILL, Handlers.QuestHandler.HandleQuestUpdateAddKill);
+
             // Death / corpse
             BridgeToLegacy(Opcode.SMSG_CORPSE_RECLAIM_DELAY, Handlers.DeathHandler.HandleCorpseReclaimDelay);
 
