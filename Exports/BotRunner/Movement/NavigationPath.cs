@@ -109,8 +109,8 @@ public class NavigationPath(
     bool enableProbeHeuristics = true,
     bool enableDynamicProbeSkipping = true,
     bool strictPathValidation = false,
-    float capsuleRadius = 0.3064f,
-    float capsuleHeight = 2.0313f)
+    float capsuleRadius = 0.6f,
+    float capsuleHeight = 2.5f)
 {
     private readonly PathfindingClient? _pathfinding = pathfinding;
     private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
@@ -145,10 +145,10 @@ public class NavigationPath(
 
     // Adaptive acceptance radius: turn angle at each waypoint determines how tightly
     // the bot must follow it. Straight paths get MAX, sharp corners get MIN.
-    private const float MIN_ACCEPTANCE_RADIUS = 3f;       // at 90°+ corners (was 2f; increased to prevent wall-stuck)
-    private const float MAX_ACCEPTANCE_RADIUS = 6f;       // on straight paths
+    private const float MIN_ACCEPTANCE_RADIUS = 3.5f;     // at 90°+ corners — padded for execution tolerance
+    private const float MAX_ACCEPTANCE_RADIUS = 7f;       // on straight paths — wider corridor for smoother flow
     private const float SHARP_TURN_ANGLE_DEG = 90f;       // angle that maps to MIN
-    private const float WAYPOINT_REACH_DISTANCE = 3f;     // default fallback (no radii computed)
+    private const float WAYPOINT_REACH_DISTANCE = 3.5f;   // default fallback (no radii computed)
     private const float CORNER_COMMIT_DISTANCE = 1.25f;   // default fallback
     private const float RECALCULATE_DISTANCE = 10f;
 

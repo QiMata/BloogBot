@@ -142,7 +142,7 @@ dtPolyRef PathFinder::getPolyByLocation(const float* point, float* distance) con
 	// we don't have it in our old path
 	// try to get it by findNearestPoly()
 	// first try with low search box
-	float extents[VERTEX_SIZE] = { 3.0f, 5.0f, 3.0f };    // bounds of poly search area
+	float extents[VERTEX_SIZE] = { 4.0f, 5.0f, 4.0f };    // bounds of poly search area (padded for corridor tolerance)
 	float closestPoint[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
 	dtStatus dtResult = m_navMeshQuery->findNearestPoly(point, extents, &m_filter, &polyRef, closestPoint);
 	if (dtStatusSucceed(dtResult) && polyRef != INVALID_POLYREF)
@@ -539,7 +539,7 @@ NavTerrain PathFinder::getNavTerrain(float x, float y, float z)
 	const float pos[VERTEX_SIZE] = { y, z, x };
 
 	// small search box first, then a tall one if we didn’t hit a poly
-	float ext[VERTEX_SIZE] = { 3.f, 5.f, 3.f };
+	float ext[VERTEX_SIZE] = { 4.f, 5.f, 4.f };
 	dtPolyRef ref = 0;
 	float nearest[VERTEX_SIZE];
 

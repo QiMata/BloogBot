@@ -232,6 +232,13 @@ namespace ForegroundBotRunner.Objects
 
         public void Interact()
         {
+            // Guard: don't call native right-click if the object manager is torn down
+            // or the object pointer is stale (e.g. mining node despawned during zone transition).
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero)
+                return;
+            if (Pointer == nint.Zero)
+                return;
+
             if (ObjectType == WoWObjectType.GameObj)
                 rightClickGameObjectFunction(Pointer);  // CGGameObject_C::OnRightClick — no extra params
             else

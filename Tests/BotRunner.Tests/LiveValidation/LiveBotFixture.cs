@@ -1038,8 +1038,12 @@ public class LiveBotFixture : IAsyncLifetime
     public Task<string> LearnSpellAsync(uint spellId)
         => ExecuteGMCommandAsync($".learn {spellId}");
 
-    public Task<string> ResetSpellsAsync(string? characterName = null)
-        => ExecuteGMCommandWithRetryAsync($".reset spells {characterName ?? BgCharacterName}");
+    /// <summary>
+    /// Reset spells via bot chat (.reset spells). VMaNGOS requires GetSelectedPlayer() — SOAP has no selection context.
+    /// Routes through bot chat where the player auto-selects itself.
+    /// </summary>
+    public async Task ResetSpellsAsync(string? accountName = null)
+        => await SendGmChatCommandAsync(accountName ?? BgAccountName!, ".reset spells");
 
     public Task<string> UnlearnSpellAsync(uint spellId)
         => ExecuteGMCommandAsync($".unlearn {spellId}");
