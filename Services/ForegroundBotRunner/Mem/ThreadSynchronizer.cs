@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -72,7 +73,7 @@ namespace ForegroundBotRunner.Mem
         // When disabled, RunOnMainThread will execute directly (WARNING: may cause threading issues)
         private static readonly bool DISABLE_WINDOW_HOOK = false; // Re-enabled: thread safety required for Lua calls
 
-        private static bool _hookInstalled = false;
+        private static volatile bool _hookInstalled = false;
 
         /// <summary>
         /// When true, WndProc will NOT execute queued actions/delegates. Callers of
@@ -82,10 +83,7 @@ namespace ForegroundBotRunner.Mem
         public static volatile bool Paused = false;
 
         /// <summary>True once the object manager has been valid at least once (i.e., we entered world).</summary>
-        private static bool _objMgrWasValid = false;
-
-        /// <summary>Grace period ticks after object manager teardown before resuming execution.</summary>
-        private static int _teardownGraceTicks = 0;
+        private static volatile bool _objMgrWasValid = false;
 
         static ThreadSynchronizer()
         {
@@ -123,8 +121,10 @@ namespace ForegroundBotRunner.Mem
                 action();
                 return;
             }
-            actionQueue.Enqueue(action);
-            SendUserMessage();
+            // Wrap the Action as a Func<int> so it goes through the delegate queue
+            // with signal-based wait. This ensures the action completes before we return,
+            // matching the synchronous contract even with PostMessage delivery.
+            RunOnMainThread<int>(() => { action(); return 0; });
         }
 
         // Diagnostic logging counter
@@ -204,33 +204,44 @@ namespace ForegroundBotRunner.Mem
             catch { }
         }
 
+        [HandleProcessCorruptedStateExceptions]
         private static int WndProc(nint hWnd, int msg, int wParam, int lParam)
         {
             try
             {
                 if (msg != WM_USER) return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);
 
-                // Paused is set by ObjectManager when it detects map transitions,
-                // logout, or any state where native calls/Lua would be unsafe.
-                if (Paused)
+                // Real-time ManagerBase + ContinentId check — catches transitions between ObjectManager polls.
+                // During login, _objMgrWasValid is false so Lua calls proceed (Lua works at charselect).
+                // Once we've been in-world, a null ManagerBase or transitional ContinentId means unsafe state.
+                bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
+                if (managerBaseValid)
+                    _objMgrWasValid = true;
+
+                uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                bool inTransition = _objMgrWasValid && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+
+                bool shouldBlock = Paused || (_objMgrWasValid && !managerBaseValid) || inTransition;
+                if (shouldBlock)
                 {
-                    CrashTrace($"WndProc: BLOCKED (paused) — dropping {actionQueue.Count}+{delegateQueue.Count}");
-                    while (actionQueue.Count > 0)
-                        actionQueue.Dequeue();
-                    lock (_queueLock)
-                    {
-                        while (delegateQueue.Count > 0)
-                        {
-                            var item = delegateQueue.Dequeue();
-                            item.resultHolder[0] = null!;
-                            item.signal.Set();
-                        }
-                    }
+                    DrainQueues($"paused={Paused} objMgrNull={!managerBaseValid} contId=0x{continentId:X}");
                     return 0;
                 }
 
                 while (actionQueue.Count > 0)
-                    actionQueue.Dequeue()?.Invoke();
+                {
+                    try
+                    {
+                        actionQueue.Dequeue()?.Invoke();
+                    }
+                    catch (AccessViolationException)
+                    {
+                        CrashTrace("WndProc: ACCESS_VIOLATION in action — auto-pausing");
+                        Paused = true;
+                        DrainQueues("ACCESS_VIOLATION in action");
+                        return 0;
+                    }
+                }
 
                 // Process delegate queue with proper signaling
                 while (true)
@@ -247,8 +258,27 @@ namespace ForegroundBotRunner.Mem
                     {
                         item.resultHolder[0] = item.function?.DynamicInvoke()!;
                     }
+                    catch (AccessViolationException)
+                    {
+                        CrashTrace("WndProc: ACCESS_VIOLATION in delegate — auto-pausing");
+                        Paused = true;
+                        item.resultHolder[0] = null!;
+                        item.signal.Set();
+                        DrainQueues("ACCESS_VIOLATION in delegate");
+                        return 0;
+                    }
                     catch (Exception ex)
                     {
+                        // DynamicInvoke wraps exceptions in TargetInvocationException
+                        if (ex.InnerException is AccessViolationException)
+                        {
+                            CrashTrace("WndProc: ACCESS_VIOLATION (wrapped) in delegate — auto-pausing");
+                            Paused = true;
+                            item.resultHolder[0] = null!;
+                            item.signal.Set();
+                            DrainQueues("ACCESS_VIOLATION wrapped in delegate");
+                            return 0;
+                        }
                         Log.Error($"[THREAD] Error invoking delegate: {ex.Message}");
                         item.resultHolder[0] = null!;
                     }
@@ -259,12 +289,36 @@ namespace ForegroundBotRunner.Mem
                 }
                 return 0;
             }
+            catch (AccessViolationException)
+            {
+                CrashTrace("WndProc: ACCESS_VIOLATION (outer) — auto-pausing");
+                Paused = true;
+                DrainQueues("ACCESS_VIOLATION outer");
+                return 0;
+            }
             catch (Exception e)
             {
                 Log.Error($"[THREAD]{e.Message} {e.StackTrace}");
             }
 
             return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);
+        }
+
+        /// <summary>Drains all queued work, signaling delegates with null results.</summary>
+        private static void DrainQueues(string reason)
+        {
+            CrashTrace($"WndProc: BLOCKED ({reason}) — dropping {actionQueue.Count}+{delegateQueue.Count}");
+            while (actionQueue.Count > 0)
+                actionQueue.Dequeue();
+            lock (_queueLock)
+            {
+                while (delegateQueue.Count > 0)
+                {
+                    var item = delegateQueue.Dequeue();
+                    item.resultHolder[0] = null!;
+                    item.signal.Set();
+                }
+            }
         }
 
         private static bool FindWindowProc(nint hWnd, nint lParam)
@@ -281,7 +335,12 @@ namespace ForegroundBotRunner.Mem
             return true;
         }
 
-        private static void SendUserMessage() => SendMessage(windowHandle, WM_USER, 0, 0);
+        // PostMessage instead of SendMessage: PostMessage puts WM_USER in the regular message queue,
+        // processed only during GetMessage/PeekMessage in WoW's main game loop — between frames when
+        // game state is stable. SendMessage dispatches via the "sent message" queue which can fire
+        // during nested SendMessage/PeekMessage calls inside packet processing, potentially executing
+        // our Lua calls while WoW is mid-transfer-teardown (before ContinentId even changes).
+        private static void SendUserMessage() => PostMessage(windowHandle, WM_USER, 0, 0);
 
         /// <summary>
         /// Simulates a spacebar press+release to trigger a jump.

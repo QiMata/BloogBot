@@ -271,11 +271,15 @@ namespace ForegroundBotRunner
                             _hooksInitialized = true;
                         }
 
-                        // Poll MovementRecorder and run automated scenarios when in world
-                        if (_objectManager?.HasEnteredWorld == true
-                            && _objectManager?.IsContinentTransition != true)
+                        // Poll MovementRecorder and run automated scenarios when in world.
+                        // Check ContinentId directly (not just IsContinentTransition) to catch
+                        // transitions before ObjectManager's separate poll loop detects them.
+                        var workerContId = _objectManager?.ContinentId ?? 0xFFFFFFFF;
+                        bool workerInTransition = _objectManager?.IsContinentTransition == true
+                            || workerContId == 0xFFFFFFFF || workerContId == 0xFF;
+                        if (_objectManager?.HasEnteredWorld == true && !workerInTransition)
                         {
-                            CrashTrace($"PRE-POLL: contId=0x{_objectManager.ContinentId:X} paused={Mem.ThreadSynchronizer.Paused} isRec={_movementRecorder?.IsRecording}");
+                            CrashTrace($"PRE-POLL: contId=0x{workerContId:X} paused={Mem.ThreadSynchronizer.Paused} isRec={_movementRecorder?.IsRecording}");
                             _movementRecorder?.Poll();
 
                             // Launch automated movement scenarios (once)
