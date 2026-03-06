@@ -1534,7 +1534,15 @@ namespace ForegroundBotRunner.Statics
                     lock (_objectsLock)
                     {
                         ObjectsBuffer.Clear();
-                        Functions.EnumerateVisibleObjects(callbackPtr, 0);
+                        if (!Functions.EnumerateVisibleObjects(callbackPtr, 0))
+                        {
+                            // SEH caught an ACCESS_VIOLATION — zone boundary cache reset in progress.
+                            // Discard partial results to avoid stale pointers.
+                            ObjectsBuffer.Clear();
+                            Player = null;
+                            Log.Warning("[OBJECT MANAGER] EnumerateVisibleObjects aborted (zone boundary cache reset) — skipping this frame");
+                            return;
+                        }
                     }
 
                     if (Player != null)

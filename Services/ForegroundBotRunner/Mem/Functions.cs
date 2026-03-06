@@ -22,13 +22,16 @@ namespace ForegroundBotRunner.Mem
         }
 
         [DllImport("FastCall.dll", EntryPoint = "EnumerateVisibleObjects")]
-        private static extern void EnumerateVisibleObjectsFunction(nint callback, int filter, nint ptr);
+        private static extern int EnumerateVisibleObjectsFunction(nint callback, int filter, nint ptr);
 
-        // what does this do? [HandleProcessCorruptedStateExceptions]
-        static public void EnumerateVisibleObjects(nint callback, int filter)
+        /// <summary>
+        /// Enumerates visible objects via WoW's native iterator.
+        /// Returns false if enumeration was aborted by an ACCESS_VIOLATION (zone boundary cache reset).
+        /// </summary>
+        static public bool EnumerateVisibleObjects(nint callback, int filter)
         {
-            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return;
-            EnumerateVisibleObjectsFunction(callback, filter, MemoryAddresses.EnumerateVisibleObjectsFunPtr);
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return false;
+            return EnumerateVisibleObjectsFunction(callback, filter, MemoryAddresses.EnumerateVisibleObjectsFunPtr) != 0;
         }
 
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]

@@ -23,11 +23,22 @@ extern "C"
     struct Intersection { float X; float Y; float Z; float R; };
     struct XYZ { float X; float Y; float Z; };
 
-    void __declspec(dllexport) __stdcall EnumerateVisibleObjects(unsigned int callback, int filter, unsigned int ptr)
+    // SEH-protected: WoW's internal object iteration can hit stale pointers during
+    // area boundary cache resets (sub-zone transitions on the same continent).
+    // Without __try/__except, the ACCESS_VIOLATION crashes the entire process.
+    int __declspec(dllexport) __stdcall EnumerateVisibleObjects(unsigned int callback, int filter, unsigned int ptr)
     {
-        typedef void __fastcall func(unsigned int callback, int filter);
-        func* function = (func*)ptr;
-        function(callback, filter);
+        __try
+        {
+            typedef void __fastcall func(unsigned int callback, int filter);
+            func* function = (func*)ptr;
+            function(callback, filter);
+            return 1; // Success
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0; // ACCESS_VIOLATION or other SEH exception — caller should skip this frame
+        }
     }
 
     void __declspec(dllexport) __stdcall LuaCall(char* code, unsigned int ptr)
