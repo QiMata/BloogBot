@@ -35,11 +35,13 @@ public class VendorBuySellTests
     private readonly ITestOutputHelper _output;
 
     private const int MapId = 1; // Kalimdor
-    // Razor Hill general goods vendor area
-    private const float VendorX = 340.36f, VendorY = -4686.29f, VendorZ = 16.54f;
 
-    // Weak Flux — cheap vendor item (1 silver) sold by Wuark (blacksmith at Razor Hill)
-    private const uint WeakFluxItemId = 2880;
+    // Grimtak — Razor Hill general goods vendor (entry 3881, NPC_FLAG_VENDOR)
+    // Exact spawn position from creature table so we can teleport within interaction range.
+    private const float GrimtakX = 305.722f, GrimtakY = -4665.87f, GrimtakZ = 16.527f;
+
+    // Refreshing Spring Water — cheap vendor item (25 copper) sold by Grimtak
+    private const uint BuyTestItemId = 159;
 
     // Linen Cloth — common junk item for sell test
     private const uint LinenClothItemId = 2589;
@@ -66,20 +68,16 @@ public class VendorBuySellTests
         await Task.Delay(2000);
         await _bot.RefreshSnapshotsAsync();
 
-        // Step 1: Teleport to vendor area
-        _output.WriteLine($"  [{label}] Step 1: Teleporting to Razor Hill vendor area");
-        await _bot.BotTeleportAsync(account, MapId, VendorX, VendorY, VendorZ + 3);
-        await Task.Delay(4000);
+        // Step 1: Teleport directly to Grimtak's position (within interaction range)
+        _output.WriteLine($"  [{label}] Step 1: Teleporting to Grimtak (Razor Hill vendor)");
+        await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ + 1);
+        await Task.Delay(3000);
         await _bot.RefreshSnapshotsAsync();
 
-        // Step 2: Find vendor NPC
+        // Step 2: Find Grimtak in NearbyUnits
         var (vendorGuid, npcX, npcY, npcZ) = await FindNpcByFlagAsync(account, label, (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, "vendor");
-        Assert.True(vendorGuid != 0, $"[{label}] Should find a vendor NPC near Razor Hill.");
-
-        // Step 2b: Teleport directly to the NPC (within interaction range)
-        _output.WriteLine($"  [{label}] Step 2b: Teleporting to NPC position ({npcX:F1}, {npcY:F1}, {npcZ:F1})");
-        await _bot.BotTeleportAsync(account, MapId, npcX, npcY, npcZ + 1);
-        await Task.Delay(2000);
+        Assert.True(vendorGuid != 0, $"[{label}] Should find Grimtak (vendor) near Razor Hill.");
+        _output.WriteLine($"  [{label}] Found vendor GUID=0x{vendorGuid:X} at ({npcX:F1}, {npcY:F1}, {npcZ:F1})");
 
         // Step 3: Ensure money for purchase
         await EnsureMoneyAsync(account, label, 1000); // 10 silver should be enough
@@ -87,18 +85,18 @@ public class VendorBuySellTests
         // Step 4: Record initial inventory
         await _bot.RefreshSnapshotsAsync();
         var snapBefore = await _bot.GetSnapshotAsync(account);
-        var itemCountBefore = CountItemInBags(snapBefore, WeakFluxItemId);
-        _output.WriteLine($"  [{label}] Weak Flux count before buy: {itemCountBefore}");
+        var itemCountBefore = CountItemInBags(snapBefore, BuyTestItemId);
+        _output.WriteLine($"  [{label}] Refreshing Spring Water count before buy: {itemCountBefore}");
 
         // Step 5: Buy item via ActionType with vendorGuid
-        _output.WriteLine($"  [{label}] Step 5: Buying Weak Flux (ID={WeakFluxItemId}) from vendor 0x{vendorGuid:X}");
+        _output.WriteLine($"  [{label}] Step 5: Buying Refreshing Spring Water (ID={BuyTestItemId}) from vendor 0x{vendorGuid:X}");
         var buyResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.BuyItem,
             Parameters =
             {
                 new RequestParameter { LongParam = (long)vendorGuid },
-                new RequestParameter { IntParam = (int)WeakFluxItemId },
+                new RequestParameter { IntParam = (int)BuyTestItemId },
                 new RequestParameter { IntParam = 1 } // quantity
             }
         });
@@ -106,12 +104,12 @@ public class VendorBuySellTests
         Assert.Equal(ResponseResult.Success, buyResult);
 
         // Step 6: Verify item appears in inventory
-        var itemAppeared = await WaitForItemCountChangeAsync(account, WeakFluxItemId, itemCountBefore, TimeSpan.FromSeconds(12));
-        Assert.True(itemAppeared, $"[{label}] Weak Flux should appear in inventory after BuyItem.");
-        _output.WriteLine($"  [{label}] Weak Flux confirmed in inventory after purchase.");
+        var itemAppeared = await WaitForItemCountChangeAsync(account, BuyTestItemId, itemCountBefore, TimeSpan.FromSeconds(12));
+        Assert.True(itemAppeared, $"[{label}] Refreshing Spring Water should appear in inventory after BuyItem.");
+        _output.WriteLine($"  [{label}] Refreshing Spring Water confirmed in inventory after purchase.");
 
         // Cleanup: destroy the purchased item
-        await DestroyItemByIdAsync(account, label, WeakFluxItemId);
+        await DestroyItemByIdAsync(account, label, BuyTestItemId);
     }
 
     [SkippableFact]
@@ -121,19 +119,14 @@ public class VendorBuySellTests
         var label = "BG";
         await _bot.EnsureStrictAliveAsync(account, label);
 
-        // Step 1: Teleport to vendor area
-        _output.WriteLine($"  [{label}] Step 1: Teleporting to Razor Hill vendor area");
-        await _bot.BotTeleportAsync(account, MapId, VendorX, VendorY, VendorZ + 3);
+        // Step 1: Teleport directly to Grimtak's position (within interaction range)
+        _output.WriteLine($"  [{label}] Step 1: Teleporting to Grimtak (Razor Hill vendor)");
+        await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ + 1);
         await Task.Delay(3000);
 
         // Step 2: Find vendor NPC
         var (vendorGuid, npcX, npcY, npcZ) = await FindNpcByFlagAsync(account, label, (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, "vendor");
-        Assert.True(vendorGuid != 0, $"[{label}] Should find a vendor NPC near Razor Hill.");
-
-        // Step 2b: Teleport directly to the NPC (within interaction range)
-        _output.WriteLine($"  [{label}] Step 2b: Teleporting to NPC position ({npcX:F1}, {npcY:F1}, {npcZ:F1})");
-        await _bot.BotTeleportAsync(account, MapId, npcX, npcY, npcZ + 1);
-        await Task.Delay(2000);
+        Assert.True(vendorGuid != 0, $"[{label}] Should find Grimtak (vendor) near Razor Hill.");
 
         // Step 3: Add a Linen Cloth to sell
         _output.WriteLine($"  [{label}] Step 3: Adding Linen Cloth to inventory");
