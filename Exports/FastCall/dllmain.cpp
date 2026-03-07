@@ -168,4 +168,239 @@ extern "C"
             return 0;
         }
     }
+
+    // ====================================================================
+    // SEH-protected wrappers for WoW native functions called from .NET 8.
+    // .NET 8 ignores [HandleProcessCorruptedStateExceptions], so
+    // AccessViolationException CANNOT be caught. All native WoW function
+    // calls MUST go through these C++ SEH wrappers.
+    // ====================================================================
+
+    // WoW's GetPlayerGuid — cdecl, no params, returns uint64 GUID.
+    unsigned long long __declspec(dllexport) __stdcall GetPlayerGuidSafe(unsigned int parPtr)
+    {
+        __try
+        {
+            typedef unsigned long long __cdecl func();
+            func* f = (func*)parPtr;
+            return f();
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's GetObjectByGuid — stdcall, single GUID param, returns object pointer.
+    unsigned int __declspec(dllexport) __stdcall GetObjectPtrByGuidSafe(unsigned long long parGuid, unsigned int parPtr)
+    {
+        __try
+        {
+            typedef unsigned int __stdcall func(unsigned long long guid);
+            func* f = (func*)parPtr;
+            return f(parGuid);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's CGUnit_C::GetCreatureRank — thiscall(unitPtr), returns int.
+    int __declspec(dllexport) __stdcall GetCreatureRankSafe(unsigned int parUnitPtr, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef int (__thiscall *func)(unsigned int thisPtr);
+            func f = (func)parFuncPtr;
+            return f(parUnitPtr);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's CGUnit_C::GetCreatureType — thiscall(unitPtr), returns int.
+    int __declspec(dllexport) __stdcall GetCreatureTypeSafe(unsigned int parUnitPtr, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef int (__thiscall *func)(unsigned int thisPtr);
+            func f = (func)parFuncPtr;
+            return f(parUnitPtr);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's CGUnit_C::GetFactionReaction — thiscall(unitPtr1, unitPtr2), returns int.
+    int __declspec(dllexport) __stdcall GetUnitReactionSafe(unsigned int parUnitPtr1, unsigned int parUnitPtr2, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef int (__thiscall *func)(unsigned int thisPtr, unsigned int otherPtr);
+            func f = (func)parFuncPtr;
+            return f(parUnitPtr1, parUnitPtr2);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 3; // Neutral
+        }
+    }
+
+    // WoW's ItemCacheGetRow — thiscall with complex signature.
+    unsigned int __declspec(dllexport) __stdcall GetItemCacheEntrySafe(
+        unsigned int parBasePtr, int parItemId, unsigned int parUnknown,
+        int parUnused1, int parUnused2, char parUnused3, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef unsigned int (__thiscall *func)(unsigned int thisPtr, int itemId,
+                unsigned int unknown, int unused1, int unused2, char unused3);
+            func f = (func)parFuncPtr;
+            return f(parBasePtr, parItemId, parUnknown, parUnused1, parUnused2, parUnused3);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's IsSpellOnCooldown — thiscall with ref param. Returns 1 on success, 0 on exception.
+    int __declspec(dllexport) __stdcall IsSpellOnCooldownSafe(
+        unsigned int parCooldownPtr, int parSpellId, int parUnused1,
+        int* parCooldownDuration, int parUnused2, int parUnused3, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef void (__thiscall *func)(unsigned int thisPtr, int spellId, int unused1,
+                int* cooldownDuration, int unused2, int unused3);
+            func f = (func)parFuncPtr;
+            f(parCooldownPtr, parSpellId, parUnused1, parCooldownDuration, parUnused2, parUnused3);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            if (parCooldownDuration) *parCooldownDuration = 0;
+            return 0;
+        }
+    }
+
+    // WoW's SetTarget — stdcall(guid).
+    int __declspec(dllexport) __stdcall SetTargetSafe(unsigned long long parGuid, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef void __stdcall func(unsigned long long guid);
+            func* f = (func*)parFuncPtr;
+            f(parGuid);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's SendMovementUpdate — thiscall(playerPtr, unknown, opcode, 0, 0).
+    int __declspec(dllexport) __stdcall SendMovementUpdateSafe(
+        unsigned int parPlayerPtr, unsigned int parUnknown, int parOpCode,
+        int parUnused1, int parUnused2, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef void (__thiscall *func)(unsigned int thisPtr, unsigned int unknown,
+                int opcode, int unused1, int unused2);
+            func f = (func)parFuncPtr;
+            f(parPlayerPtr, parUnknown, parOpCode, parUnused1, parUnused2);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's SetControlBit — thiscall(device, bit, state, tickCount).
+    int __declspec(dllexport) __stdcall SetControlBitSafe(
+        unsigned int parDevice, int parBit, int parState, int parTickCount, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef void (__thiscall *func)(unsigned int thisPtr, int bit, int state, int tickCount);
+            func f = (func)parFuncPtr;
+            f(parDevice, parBit, parState, parTickCount);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's SetFacing — thiscall(playerSetFacingPtr, facing).
+    int __declspec(dllexport) __stdcall SetFacingSafe(unsigned int parPtr, float parFacing, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef void (__thiscall *func)(unsigned int thisPtr, float facing);
+            func f = (func)parFuncPtr;
+            f(parPtr, parFacing);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's ReleaseCorpse — thiscall(ptr).
+    int __declspec(dllexport) __stdcall ReleaseCorpseSafe(unsigned int parPtr, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef int (__thiscall *func)(unsigned int thisPtr);
+            func f = (func)parFuncPtr;
+            return f(parPtr);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's RetrieveCorpse — cdecl, no params.
+    int __declspec(dllexport) __stdcall RetrieveCorpseSafe(unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef int __cdecl func();
+            func* f = (func*)parFuncPtr;
+            return f();
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // WoW's UseItem — thiscall(itemPtr, &unused, 0).
+    int __declspec(dllexport) __stdcall UseItemSafe(
+        unsigned int parItemPtr, unsigned long long* parUnused, int parUnused2, unsigned int parFuncPtr)
+    {
+        __try
+        {
+            typedef void (__thiscall *func)(unsigned int thisPtr, unsigned long long* unused, int unused2);
+            func f = (func)parFuncPtr;
+            f(parItemPtr, parUnused, parUnused2);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
 }

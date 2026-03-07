@@ -190,8 +190,8 @@ namespace ForegroundBotRunner.Mem.AntiWarden
             {
                 var wardenBaseAddr = MemoryManager.ReadIntPtr(_);
                 Log.Information($"[WARDEN] DisableWardenHook found WardenBaseAddress = {wardenBaseAddr} (0x{wardenBaseAddr:X})");
-                //InitializeWardenPageScanHook(wardenBaseAddr);
-                //InitializeWardenMemScanHook(wardenBaseAddr);
+                InitializeWardenPageScanHook(wardenBaseAddr);
+                InitializeWardenMemScanHook(wardenBaseAddr);
             }
         }
 
@@ -211,19 +211,24 @@ namespace ForegroundBotRunner.Mem.AntiWarden
             // so instead, we scan 5 bytes of memory 1 byte at a time until we find the function signature. and we start at 6000 and go down because occasionally
             // I've seen the same 5 bytes in memory more in more than one place, but through experimentation, it seems we always want the higher one.
 
-            // Known limitation: single-byte signature match is fragile. Full 5-byte comparison would be more reliable. (FG-WARDEN-001)
             for (var i = 0x10000; i > 0; i--)
             {
                 var tempPageScanPtr = nint.Add(wardenModuleStart, i);
                 var currentBytes = MemoryManager.ReadBytes(tempPageScanPtr, 5);
-                if (currentBytes != null && currentBytes[0] == pageScanOriginalBytes[0])
+                if (currentBytes != null && currentBytes.SequenceEqual(pageScanOriginalBytes))
                 {
                     pageScanPtr = tempPageScanPtr;
                     break;
                 }
             }
 
-            Log.Information($"[WARDEN] PageScan module found in memory, continuing with hook... {(int)pageScanPtr}");
+            if (pageScanPtr == nint.Zero)
+            {
+                Log.Warning("[WARDEN] PageScan signature not found in Warden module — hook skipped");
+                return;
+            }
+
+            Log.Information($"[WARDEN] PageScan module found at 0x{pageScanPtr:X}, hooking...");
 
             wardenPageScanDelegate = WardenPageScanHook;
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(wardenPageScanDelegate);
@@ -294,7 +299,13 @@ namespace ForegroundBotRunner.Mem.AntiWarden
                 }
             }
 
-            Log.Information($"[WARDEN] MemScan module found in memory, continuing with hook... {(int)memScanPtr}");
+            if (memScanPtr == nint.Zero)
+            {
+                Log.Warning("[WARDEN] MemScan signature not found in Warden module — hook skipped");
+                return;
+            }
+
+            Log.Information($"[WARDEN] MemScan module found at 0x{memScanPtr:X}, hooking...");
 
             wardenMemScanDelegate = WardenMemScanHook;
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(wardenMemScanDelegate);

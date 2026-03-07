@@ -1,5 +1,4 @@
 ﻿using GameData.Core.Enums;
-using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Serilog;
 using System;
@@ -35,113 +34,57 @@ namespace ForegroundBotRunner.Mem
             return EnumerateVisibleObjectsFunction(callback, filter, MemoryAddresses.EnumerateVisibleObjectsFunPtr) != 0;
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate int GetCreatureRankDelegate
-            (nint unitPtr);
+        // ====================================================================
+        // All WoW native function calls routed through FastCall.dll SEH wrappers.
+        // .NET 8 ignores [HandleProcessCorruptedStateExceptions], so catch(AV)
+        // is dead code. C++ __try/__except is the only reliable SEH protection.
+        // ====================================================================
 
-        private static readonly GetCreatureRankDelegate GetCreatureRankFunction =
-            Marshal.GetDelegateForFunctionPointer<GetCreatureRankDelegate>(MemoryAddresses.GetCreatureRankFunPtr);
+        [DllImport("FastCall.dll", EntryPoint = "GetCreatureRankSafe")]
+        private static extern int GetCreatureRankSafeFunction(nint unitPtr, nint funcPtr);
 
-        [HandleProcessCorruptedStateExceptions]
         static public int GetCreatureRank(nint unitPtr)
         {
-            try
-            {
-                return GetCreatureRankFunction(unitPtr);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] GetCreatureRank SEH exception for ptr 0x{Ptr:X} — returning 0", unitPtr);
-                return 0;
-            }
+            var result = GetCreatureRankSafeFunction(unitPtr, MemoryAddresses.GetCreatureRankFunPtr);
+            return result;
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate int GetCreatureTypeDelegate(nint unitPtr);
+        [DllImport("FastCall.dll", EntryPoint = "GetCreatureTypeSafe")]
+        private static extern int GetCreatureTypeSafeFunction(nint unitPtr, nint funcPtr);
 
-        private static readonly GetCreatureTypeDelegate GetCreatureTypeFunction =
-            Marshal.GetDelegateForFunctionPointer<GetCreatureTypeDelegate>(MemoryAddresses.GetCreatureTypeFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public CreatureType GetCreatureType(nint unitPtr)
         {
-            try
-            {
-                return (CreatureType)GetCreatureTypeFunction(unitPtr);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] GetCreatureType SEH exception for ptr 0x{Ptr:X} — returning NotSpecified", unitPtr);
-                return CreatureType.NotSpecified;
-            }
+            return (CreatureType)GetCreatureTypeSafeFunction(unitPtr, MemoryAddresses.GetCreatureTypeFunPtr);
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate nint ItemCacheGetRowDelegate(
-            nint ptr,
-            int itemId,
-            nint unknown,
-            int unused1,
-            int unused2,
-            char unused3);
+        [DllImport("FastCall.dll", EntryPoint = "GetItemCacheEntrySafe")]
+        private static extern nint GetItemCacheEntrySafeFunction(
+            nint basePtr, int itemId, nint unknown,
+            int unused1, int unused2, char unused3, nint funcPtr);
 
-        private static readonly ItemCacheGetRowDelegate GetItemCacheEntryFunction =
-            Marshal.GetDelegateForFunctionPointer<ItemCacheGetRowDelegate>(MemoryAddresses.GetItemCacheEntryFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public nint GetItemCacheEntry(int itemId)
         {
-            try
-            {
-                return GetItemCacheEntryFunction(MemoryAddresses.ItemCacheEntryBasePtr, itemId, nint.Zero, 0, 0, (char)0);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] GetItemCacheEntry SEH exception for itemId {ItemId} — returning null", itemId);
-                return nint.Zero;
-            }
+            return GetItemCacheEntrySafeFunction(
+                MemoryAddresses.ItemCacheEntryBasePtr, itemId, nint.Zero, 0, 0, (char)0,
+                MemoryAddresses.GetItemCacheEntryFunPtr);
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate nint GetObjectPtrDelegate(ulong guid);
+        [DllImport("FastCall.dll", EntryPoint = "GetObjectPtrByGuidSafe")]
+        private static extern nint GetObjectPtrByGuidSafeFunction(ulong guid, nint funcPtr);
 
-        private static readonly GetObjectPtrDelegate GetObjectPtrFunction =
-            Marshal.GetDelegateForFunctionPointer<GetObjectPtrDelegate>(MemoryAddresses.GetObjectPtrFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public nint GetObjectPtr(ulong guid)
         {
-            try
-            {
-                if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return nint.Zero;
-                return GetObjectPtrFunction(guid);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] GetObjectPtr SEH exception for GUID 0x{Guid:X} — returning null", guid);
-                return nint.Zero;
-            }
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return nint.Zero;
+            return GetObjectPtrByGuidSafeFunction(guid, MemoryAddresses.GetObjectPtrFunPtr);
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        private delegate ulong GetPlayerGuidDelegate();
+        [DllImport("FastCall.dll", EntryPoint = "GetPlayerGuidSafe")]
+        private static extern ulong GetPlayerGuidSafeFunction(nint funcPtr);
 
-        private static readonly GetPlayerGuidDelegate GetPlayerGuidFunction =
-            Marshal.GetDelegateForFunctionPointer<GetPlayerGuidDelegate>(MemoryAddresses.GetPlayerGuidFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public ulong GetPlayerGuid()
         {
-            try
-            {
-                if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return 0;
-                return GetPlayerGuidFunction();
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] GetPlayerGuid SEH exception — returning 0");
-                return 0;
-            }
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return 0;
+            return GetPlayerGuidSafeFunction(MemoryAddresses.GetPlayerGuidFunPtr);
         }
 
         [DllImport("FastCall.dll", EntryPoint = "GetText")]
@@ -152,59 +95,29 @@ namespace ForegroundBotRunner.Mem
             return GetTextFunction(varName, MemoryAddresses.GetTextFunPtr);
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate int GetUnitReactionDelegate(nint unitPtr1, nint unitPtr2);
+        [DllImport("FastCall.dll", EntryPoint = "GetUnitReactionSafe")]
+        private static extern int GetUnitReactionSafeFunction(nint unitPtr1, nint unitPtr2, nint funcPtr);
 
-        private static readonly GetUnitReactionDelegate GetUnitReactionFunction =
-            Marshal.GetDelegateForFunctionPointer<GetUnitReactionDelegate>(MemoryAddresses.GetUnitReactionFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public UnitReaction GetUnitReaction(nint unitPtr1, nint unitPtr2)
         {
-            try
-            {
-                return (UnitReaction)GetUnitReactionFunction(unitPtr1, unitPtr2);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] GetUnitReaction SEH exception — returning Neutral");
-                return UnitReaction.Neutral;
-            }
+            return (UnitReaction)GetUnitReactionSafeFunction(unitPtr1, unitPtr2, MemoryAddresses.GetUnitReactionFunPtr);
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate void IsSpellOnCooldownDelegate(
-            nint spellCooldownPtr,
-            int spellId,
-            int unused1,
-            ref int cooldownDuration,
-            int unused2,
-            bool unused3);
+        [DllImport("FastCall.dll", EntryPoint = "IsSpellOnCooldownSafe")]
+        private static extern int IsSpellOnCooldownSafeFunction(
+            nint cooldownPtr, int spellId, int unused1,
+            ref int cooldownDuration, int unused2, int unused3, nint funcPtr);
 
-        private static readonly IsSpellOnCooldownDelegate IsSpellOnCooldownFunction =
-            Marshal.GetDelegateForFunctionPointer<IsSpellOnCooldownDelegate>(MemoryAddresses.IsSpellOnCooldownFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public bool IsSpellOnCooldown(int spellId)
         {
-            try
-            {
-                var cooldownDuration = 0;
-                IsSpellOnCooldownFunction(
-                    0x00CECAEC,
-                    spellId,
-                    0,
-                    ref cooldownDuration,
-                    0,
-                    false);
-
-                return cooldownDuration != 0;
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] IsSpellOnCooldown SEH exception for spellId {SpellId} — returning false", spellId);
-                return false;
-            }
+            var cooldownDuration = 0;
+            var result = IsSpellOnCooldownSafeFunction(
+                0x00CECAEC, spellId, 0,
+                ref cooldownDuration, 0, 0,
+                MemoryAddresses.IsSpellOnCooldownFunPtr);
+            if (result == 0)
+                Log.Warning("[FG] IsSpellOnCooldown SEH exception for spellId {SpellId}", spellId);
+            return cooldownDuration != 0;
         }
 
         [DllImport("FastCall.dll", EntryPoint = "LootSlot")]
@@ -265,54 +178,32 @@ namespace ForegroundBotRunner.Mem
             });
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate int ReleaseCorpseDelegate(nint ptr);
+        [DllImport("FastCall.dll", EntryPoint = "ReleaseCorpseSafe")]
+        private static extern int ReleaseCorpseSafeFunction(nint ptr, nint funcPtr);
 
-        private static readonly ReleaseCorpseDelegate ReleaseCorpseFunction =
-            Marshal.GetDelegateForFunctionPointer<ReleaseCorpseDelegate>(MemoryAddresses.ReleaseCorpseFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public void ReleaseCorpse(nint ptr)
         {
-            try
-            {
-                ReleaseCorpseFunction(ptr);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Error("AccessViolationException occurred while trying to release corpse. Most likely, this is due to a transient error that caused the player pointer to temporarily equal IntPtr.Zero. The bot should keep trying to release and recover from this error.");
-            }
+            if (ReleaseCorpseSafeFunction(ptr, MemoryAddresses.ReleaseCorpseFunPtr) == 0)
+                Log.Warning("[FG] ReleaseCorpse SEH exception — skipping");
         }
 
-        private delegate int RetrieveCorpseDelegate();
-
-        private static readonly RetrieveCorpseDelegate RetrieveCorpseFunction =
-            Marshal.GetDelegateForFunctionPointer<RetrieveCorpseDelegate>(MemoryAddresses.RetrieveCorpseFunPtr);
+        [DllImport("FastCall.dll", EntryPoint = "RetrieveCorpseSafe")]
+        private static extern int RetrieveCorpseSafeFunction(nint funcPtr);
 
         static public void RetrieveCorpse()
         {
-            var result = RetrieveCorpseFunction();
+            var result = RetrieveCorpseSafeFunction(MemoryAddresses.RetrieveCorpseFunPtr);
             Log.Information("[FG] RetrieveCorpse() returned {Result}", result);
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate void SetTargetDelegate(ulong guid);
+        [DllImport("FastCall.dll", EntryPoint = "SetTargetSafe")]
+        private static extern int SetTargetSafeFunction(ulong guid, nint funcPtr);
 
-        private static readonly SetTargetDelegate SetTargetFunction =
-            Marshal.GetDelegateForFunctionPointer<SetTargetDelegate>(MemoryAddresses.SetTargetFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public void SetTarget(ulong guid)
         {
-            try
-            {
-                if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return;
-                SetTargetFunction(guid);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Error("[FG] AccessViolationException in SetTarget for GUID 0x{Guid:X}", guid);
-            }
+            if (MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) == nint.Zero) return;
+            if (SetTargetSafeFunction(guid, MemoryAddresses.SetTargetFunPtr) == 0)
+                Log.Warning("[FG] SetTarget SEH exception for GUID 0x{Guid:X}", guid);
         }
 
         [DllImport("FastCall.dll", EntryPoint = "SellItemByGuid")]
@@ -324,87 +215,43 @@ namespace ForegroundBotRunner.Mem
                 Log.Warning("[FG] SellItemByGuid SEH exception caught — skipping this frame");
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate void SendMovementUpdateDelegate(
-            nint playerPtr,
-            nint unknown,
-            int OpCode,
-            int unknown2,
-            int unknown3);
+        [DllImport("FastCall.dll", EntryPoint = "SendMovementUpdateSafe")]
+        private static extern int SendMovementUpdateSafeFunction(
+            nint playerPtr, nint unknown, int opCode, int unused1, int unused2, nint funcPtr);
 
-        private static readonly SendMovementUpdateDelegate SendMovementUpdateFunction =
-            Marshal.GetDelegateForFunctionPointer<SendMovementUpdateDelegate>(MemoryAddresses.SendMovementUpdateFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public void SendMovementUpdate(nint playerPtr, int opcode)
         {
-            try
-            {
-                SendMovementUpdateFunction(playerPtr, 0x00BE1E2C, opcode, 0, 0);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] SendMovementUpdate SEH exception for opcode 0x{Opcode:X} — skipping", opcode);
-            }
+            if (SendMovementUpdateSafeFunction(playerPtr, 0x00BE1E2C, opcode, 0, 0, MemoryAddresses.SendMovementUpdateFunPtr) == 0)
+                Log.Warning("[FG] SendMovementUpdate SEH exception for opcode 0x{Opcode:X}", opcode);
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate void SetControlBitDelegate(nint device, int bit, int state, int tickCount);
+        [DllImport("FastCall.dll", EntryPoint = "SetControlBitSafe")]
+        private static extern int SetControlBitSafeFunction(nint device, int bit, int state, int tickCount, nint funcPtr);
 
-        private static readonly SetControlBitDelegate SetControlBitFunction =
-            Marshal.GetDelegateForFunctionPointer<SetControlBitDelegate>(MemoryAddresses.SetControlBitFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public void SetControlBit(int bit, int state, int tickCount)
         {
-            try
-            {
-                var ptr = MemoryManager.ReadIntPtr(MemoryAddresses.SetControlBitDevicePtr);
-                SetControlBitFunction(ptr, bit, state, tickCount);
-            }
-            catch (AccessViolationException)
-            {
+            var ptr = MemoryManager.ReadIntPtr(MemoryAddresses.SetControlBitDevicePtr);
+            if (SetControlBitSafeFunction(ptr, bit, state, tickCount, MemoryAddresses.SetControlBitFunPtr) == 0)
                 Log.Warning("[FG] SetControlBit SEH exception — skipping");
-            }
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate void SetFacingDelegate(nint playerSetFacingPtr, float facing);
+        [DllImport("FastCall.dll", EntryPoint = "SetFacingSafe")]
+        private static extern int SetFacingSafeFunction(nint ptr, float facing, nint funcPtr);
 
-        private static readonly SetFacingDelegate SetFacingFunction =
-            Marshal.GetDelegateForFunctionPointer<SetFacingDelegate>(MemoryAddresses.SetFacingFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public void SetFacing(nint playerSetFacingPtr, float facing)
         {
-            try
-            {
-                SetFacingFunction(playerSetFacingPtr, facing);
-            }
-            catch (AccessViolationException)
-            {
+            if (SetFacingSafeFunction(playerSetFacingPtr, facing, MemoryAddresses.SetFacingFunPtr) == 0)
                 Log.Warning("[FG] SetFacing SEH exception — skipping");
-            }
         }
 
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate void UseItemDelegate(nint itemPtr, ref ulong unused1, int unused2);
+        [DllImport("FastCall.dll", EntryPoint = "UseItemSafe")]
+        private static extern int UseItemSafeFunction(nint itemPtr, ref ulong unused1, int unused2, nint funcPtr);
 
-        private static readonly UseItemDelegate UseItemFunction =
-            Marshal.GetDelegateForFunctionPointer<UseItemDelegate>(MemoryAddresses.UseItemFunPtr);
-
-        [HandleProcessCorruptedStateExceptions]
         static public void UseItem(nint itemPtr)
         {
-            try
-            {
-                ulong unused1 = 0;
-                UseItemFunction(itemPtr, ref unused1, 0);
-            }
-            catch (AccessViolationException)
-            {
-                Log.Warning("[FG] UseItem SEH exception for ptr 0x{Ptr:X} — skipping", itemPtr);
-            }
+            ulong unused1 = 0;
+            if (UseItemSafeFunction(itemPtr, ref unused1, 0, MemoryAddresses.UseItemFunPtr) == 0)
+                Log.Warning("[FG] UseItem SEH exception for ptr 0x{Ptr:X}", itemPtr);
         }
 
         private static string GetRandomLuaVarName()

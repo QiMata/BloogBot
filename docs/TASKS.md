@@ -134,21 +134,22 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 24)
-- **Current work:** All implementation complete. Running LiveValidation suite.
-- **Completed session 24 (2026-03-07):**
-  1. **TASKS.md archival** — Moved 20+ completed items to `docs/ARCHIVE.md`. Cleaned P0, LV failures, audit, FG stability, capability gaps, pathfinding sections.
-  2. **ConnectionStateMachine wired into ThreadSynchronizer** — Primary safety gate uses `_connectionState.IsLuaSafe` (packet-driven). ManagerBase read retained as hard fallback. Legacy heuristic path preserved for pre-registration.
-  3. **TEST-CRASH-001 (fixture fail-fast)** — `BotServiceFixture` background crash monitor polls StateManager + WoW.exe PIDs every 2s. Sets `ClientCrashed`/`CrashMessage`. `AssertClientAlive()` called in `LiveBotFixture.RefreshSnapshotsAsync()`.
-  4. **TEST-TRAM-001 (Deeprun Tram)** — `MapTransitionTests.cs` teleports both bots to Ironforge with `.gm on`, then into map 369 (Deeprun Tram). Verifies client survives server bounce (stays InWorld, position not at origin).
-  5. **PacketLogger opcode fix** — Corrected SMSG_LOGIN_VERIFY_WORLD (0x0236) and SMSG_TRANSFER_ABORT (0x0040) in log filter.
-- **Completed session 23 (2026-03-07):**
-  1. REVERTED session 22 M2 exclusion fix — `ShouldExcludeDoodad` removed entirely. Commit: `78ef7aa`.
-  2. FG packet capture hooks (TEST-FGPACKET-001) — PacketLogger + ConnectionStateMachine. Commit: `00df96f`.
-  3. FG-GHOST-STUCK-001 REOPENED — pathfinding/stuck-recovery issue.
-  4. 97/97 physics replay tests pass.
-- **Next priority:** (1) Wire ConnectionStateMachine into ThreadSynchronizer, (2) TEST-CRASH-001, (3) TEST-TRAM-001, (4) Direct SMSG receive hook.
+- **Last updated:** 2026-03-07 (session 25)
+- **Current work:** FG client stability — crash investigation and hardening.
+- **Completed session 25 (2026-03-07):**
+  1. **Crash cascade elimination** — Crash monitor now prunes dead PIDs when new WoW.exe starts, clears crash flag. `AssertClientAlive()` waits up to 30s for recovery. Result: 0 cascade failures (was 48/50).
+  2. **MemoryManager address validation** — All `ReadXxx` methods reject addresses in null page (<0x10000) and sentinel range (>=0xFFFF0000). Prevents ERROR #132 ACCESS_VIOLATION from stale/freed object pointers reading 0xFFFFFFFF.
+  3. **WoWObject pointer chain hardening** — `GetDescriptorPtr()` validates Pointer and descriptor. `GetPosition()` triple-nested chain validated at each dereference. `WoWPlayer.MapId` checks objectManagerPtr.
+  4. **World entry warmup** — 2s delay after HasEnteredWorld before first `MovementRecorder.Poll()`. Prevents `CreateFrame` crash during UI initialization.
+  5. **Crash investigation findings:**
+     - ERROR #132: ACCESS_VIOLATION at JIT 0x1D2A6862, reading from 0xFFFFFFFF (stale descriptor pointer)
+     - .NET 8 does NOT catch AccessViolationException — `[HandleProcessCorruptedStateExceptions]` is ignored
+     - FG bot now survives ~90s in-world (was ~14s before fixes)
+     - Remaining crash appears to be during normal gameplay after ~90s — possibly Warden anti-cheat detecting hook patches
+- **Completed sessions 23-24:** See above. CSM wired, TEST-CRASH-001, TEST-TRAM-001, opcode fix, archival.
+- **Next priority:** (1) Investigate Warden as cause of ~90s in-world crash, (2) WardenDisabler.cs may need update for VMaNGOS, (3) Direct SMSG receive hook (FG-PKT-005).
 - **LiveValidation baseline:** 40/40 (session 14). 42-46 total tests (sessions 20-21). Known intermittent: Mining (respawn), CombatLoop (timing), StarterQuest (zone loading).
+- **FG crash pattern:** Bot enters world, polls successfully for ~90s, then ACCESS_VIOLATION kills WoW.exe. No .NET exception caught. Crash in JIT-compiled code. Possible Warden scan detecting PacketLogger/SignalEventManager assembly patches.
 - **Remaining plan work:** Phase 6b DotRecast eval (low priority).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
 - **Sessions 1-22:** See `docs/ARCHIVE.md` for full history.

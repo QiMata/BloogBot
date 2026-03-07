@@ -258,6 +258,11 @@ namespace ForegroundBotRunner
                             ObjectManager.PauseNativeCallsDuringWorldEntry = false;
                             DiagLog("RESUMED native calls - now InWorld");
 
+                            // NOTE: WardenDisabler.Initialize() is NOT called — Warden is disabled
+                            // server-side (Warden.WinEnabled=0 in mangosd.conf). The hook at
+                            // 0x006CA22E causes ILLEGAL_INSTRUCTION crashes when enabled.
+                            // Re-enable only when connecting to a Warden-enabled server.
+
                             // Suppress Lua error popups — they block subsequent Lua calls
                             try
                             {
