@@ -29,6 +29,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         Task OpenVendorAsync(ulong vendorGuid, CancellationToken cancellationToken = default);
         Task RequestVendorInventoryAsync(ulong vendorGuid, CancellationToken cancellationToken = default);
         Task BuyItemAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken cancellationToken = default);
+        Task SendBuyItemPacketAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken cancellationToken = default);
         Task BuyItemBySlotAsync(ulong vendorGuid, byte vendorSlot, uint quantity = 1, CancellationToken cancellationToken = default);
         Task BuyItemBulkAsync(ulong vendorGuid, uint itemId, uint totalQuantity, BulkVendorOptions? options = null, CancellationToken cancellationToken = default);
         Task BuyItemInSlotAsync(ulong vendorGuid, uint itemId, ulong bagGuid, byte slot, byte count = 1, CancellationToken cancellationToken = default);
@@ -38,6 +39,8 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         Task RepairItemAsync(ulong vendorGuid, ulong itemGuid, CancellationToken cancellationToken = default);
         Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken cancellationToken = default);
         Task<uint> GetRepairCostAsync(ulong vendorGuid, CancellationToken cancellationToken = default);
+        Task WaitForVendorWindowAsync(CancellationToken cancellationToken = default, int timeoutMs = 3000);
+        Task SellItemByGuidAsync(ulong vendorGuid, ulong itemGuid, byte count = 0, CancellationToken cancellationToken = default);
         Task CloseVendorAsync(CancellationToken cancellationToken = default);
 
         // Queries

@@ -167,6 +167,33 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        public async Task SendBuyItemPacketAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                SetOperationInProgress(true);
+                _logger.LogDebug("Sending raw CMSG_BUY_ITEM for {ItemId} (quantity: {Quantity}) to vendor: {VendorGuid:X}", itemId, quantity, vendorGuid);
+
+                var payload = new byte[14];
+                BitConverter.GetBytes(vendorGuid).CopyTo(payload, 0);
+                BitConverter.GetBytes(itemId).CopyTo(payload, 8);
+                payload[12] = (byte)Math.Min(quantity, 255);
+                payload[13] = 0;
+
+                await _worldClient.SendOpcodeAsync(Opcode.CMSG_BUY_ITEM, payload, cancellationToken);
+                _logger.LogInformation("Raw CMSG_BUY_ITEM sent for item {ItemId} (quantity: {Quantity}) to vendor: {VendorGuid:X}", itemId, quantity, vendorGuid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send raw CMSG_BUY_ITEM for item {ItemId} to vendor: {VendorGuid:X}", itemId, vendorGuid);
+                throw;
+            }
+            finally
+            {
+                SetOperationInProgress(false);
+            }
+        }
+
         public async Task BuyItemBySlotAsync(ulong vendorGuid, byte vendorSlot, uint quantity = 1, CancellationToken cancellationToken = default)
         {
             try
@@ -512,6 +539,19 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
+        public async Task WaitForVendorWindowAsync(CancellationToken cancellationToken = default, int timeoutMs = 3000)
+        {
+            var elapsed = 0;
+            while (_currentVendor == null && elapsed < timeoutMs)
+            {
+                await Task.Delay(50, cancellationToken);
+                elapsed += 50;
+            }
+
+            if (_currentVendor == null)
+                _logger.LogWarning("Vendor window did not open within {TimeoutMs}ms", timeoutMs);
+        }
+
         public async Task CloseVendorAsync(CancellationToken cancellationToken = default)
         {
             try
@@ -639,7 +679,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 await OpenVendorAsync(vendorGuid, cancellationToken);
                 await RequestVendorInventoryAsync(vendorGuid, cancellationToken);
 
-                await Task.Delay(100, cancellationToken);
+                await WaitForVendorWindowAsync(cancellationToken);
 
                 await BuyItemAsync(vendorGuid, itemId, quantity, cancellationToken);
 
@@ -699,7 +739,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
 
-                await Task.Delay(100, cancellationToken);
+                await WaitForVendorWindowAsync(cancellationToken);
 
                 await RepairAllItemsAsync(vendorGuid, cancellationToken);
 
@@ -761,6 +801,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await OpenVendorAsync(vendorGuid, cancellationToken);
                 await RequestVendorInventoryAsync(vendorGuid, cancellationToken);
+
+                await WaitForVendorWindowAsync(cancellationToken);
 
                 if (options.DelayBetweenOperations > TimeSpan.Zero)
                 {

@@ -44,16 +44,16 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 
 | ActionType | BG Bot Issue | FG Bot Status | Priority | Fix Required |
 |------------|-------------|---------------|----------|--------------|
-| UNEQUIP_ITEM | **Empty method** — `UnequipItem(EquipSlot slot) { }` | Working (native) | MEDIUM | Send CMSG_AUTOEQUIP_ITEM to empty slot |
-| BUY_ITEM | **MerchantFrame is null** — never assigned | Working (native) | HIGH | Implement MerchantFrame from SMSG_LIST_INVENTORY |
-| BUYBACK_ITEM | **MerchantFrame is null** | Working (native) | HIGH | Same as BUY_ITEM |
-| SELL_ITEM | **MerchantFrame is null** | Working (native) | HIGH | Implement VendorNetworkClientComponent |
-| REPAIR_ITEM | **MerchantFrame is null** | Working (native) | MEDIUM | Same as BUY_ITEM |
-| REPAIR_ALL_ITEMS | **MerchantFrame is null** | Working (native) | MEDIUM | Same as BUY_ITEM |
-| ACCEPT_QUEST | Depends on QuestFrame | Working (native) | MEDIUM | QuestFrame may work (SMSG_QUESTGIVER_OFFER_REWARD exists) |
+| UNEQUIP_ITEM | **FIXED** — delegates to `EquipmentAgent.UnequipItemAsync()` | Working (native) | ~~MEDIUM~~ | CMSG_AUTOSTORE_BAG_ITEM |
+| BUY_ITEM | **FIXED** — `BuyItemFromVendorAsync` via VendorAgent (with vendorGuid param) | Working (native) | ~~HIGH~~ | Legacy MerchantFrame path still null |
+| BUYBACK_ITEM | **MerchantFrame is null** (no async bypass yet) | Working (native) | LOW | Rarely used |
+| SELL_ITEM | **FIXED** — `SellItemToVendorAsync` via VendorAgent (with vendorGuid param) | Working (native) | ~~HIGH~~ | Legacy MerchantFrame path still null |
+| REPAIR_ITEM | **MerchantFrame is null** (single-slot repair rarely used) | Working (native) | LOW | Use RepairAll instead |
+| REPAIR_ALL_ITEMS | **FIXED** — `RepairAllItemsAsync` via VendorAgent (with vendorGuid param) | Working (native) | ~~MEDIUM~~ | Legacy MerchantFrame path still null |
+| ACCEPT_QUEST | **FIXED** — `AcceptQuestFromNpcAsync` via QuestAgent (with npcGuid param) | Working (native) | ~~MEDIUM~~ | Legacy QuestFrame path still null |
 | DECLINE_QUEST | Depends on QuestFrame | Working (native) | LOW | |
-| SELECT_REWARD | Depends on QuestFrame | Working (native) | MEDIUM | |
-| COMPLETE_QUEST | Depends on QuestFrame | Working (native) | MEDIUM | |
+| SELECT_REWARD | Depends on QuestFrame | Working (native) | LOW | Use TurnInQuestAsync rewardIndex |
+| COMPLETE_QUEST | **FIXED** — `TurnInQuestAsync` via QuestAgent (with npcGuid param) | Working (native) | ~~MEDIUM~~ | Legacy QuestFrame path still null |
 | TRAIN_SKILL | Depends on TrainerFrame | Working (native) | MEDIUM | TrainerFrame needs SMSG_TRAINER_LIST handler |
 | TRAIN_TALENT | Depends on TalentFrame | Working (native) | LOW | |
 | SELECT_TAXI_NODE | Depends on TaxiFrame | Working (native) | LOW | |
@@ -66,20 +66,19 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 | CRAFT | Depends on CraftFrame | Working | LOW | |
 | LOGIN/LOGOUT/CREATE/DELETE/ENTER | Working (login sequence) | Working | LOW | Tested implicitly via fixture |
 
-## Critical Gaps (Must Fix)
+## Critical Gaps (Resolved)
 
-### GAP-1: MerchantFrame (BUY/SELL/REPAIR)
-**Impact:** BG bot cannot buy, sell, or repair items at vendors.
-**Root cause:** `WoWSharpObjectManager.MerchantFrame` is `{ get; private set; }` and never assigned.
-**Fix:** Implement `SMSG_LIST_INVENTORY` handler in WoWSharpClient that populates a `MerchantFrame` object. The `VendorNetworkClientComponent` already exists with `SellItemByGuidAsync` — wire it up.
+### GAP-1: MerchantFrame (BUY/SELL/REPAIR) — FIXED (session 18)
+**Impact:** BG bot can now buy, sell, and repair via packet-based async methods.
+**Fix:** Added `BuyItemFromVendorAsync`, `SellItemToVendorAsync`, `RepairAllItemsAsync` to IObjectManager + WoWSharpObjectManager, routing through `VendorAgent` via `_agentFactoryAccessor`. ActionDispatch routes to async path when vendorGuid param is provided. Legacy MerchantFrame property remains null (FG uses Lua).
 
-### GAP-2: UnequipItem
-**Impact:** BG bot cannot unequip items (empty method body).
-**Fix:** Send `CMSG_AUTOEQUIP_ITEM` targeting an empty backpack slot, or implement as swap to first available bag slot.
+### GAP-2: UnequipItem — FIXED (session 18)
+**Impact:** BG bot can now unequip items.
+**Fix:** `WoWSharpObjectManager.UnequipItem()` delegates to `EquipmentAgent.UnequipItemAsync()` (CMSG_AUTOSTORE_BAG_ITEM). Maps `EquipSlot` → `EquipmentSlot` (offset -1).
 
-### GAP-3: TrainerFrame
-**Impact:** BG bot cannot train spells at NPCs via ActionType.
-**Status:** Need to verify if `SMSG_TRAINER_LIST` handler exists. Currently tests use GM `.learn` commands.
+### GAP-3: TrainerFrame — Low Priority
+**Impact:** BG bot cannot train spells via ActionType.TrainSkill.
+**Status:** `LearnAllAvailableSpellsAsync` already bypasses TrainerFrame via TrainerAgent. ActionType.TrainSkill legacy path still depends on null TrainerFrame. Tests use GM `.learn` commands.
 
 ## Test Coverage Summary
 
@@ -100,12 +99,15 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 | Ground Z | 2 | 2/2 | Orgrimmar elevation analysis |
 | Quest | 1 | 1/1 | Add, complete, remove |
 | Talent | 1 | 1/1 | Learn via GM, spell in snapshot |
-| **Total** | **40** | **39-40/40** | DeathCorpseRun is only intermittent failure |
+| Loot Corpse | 1 | 1/1 | Kill → loot → verify inventory |
+| Navigation | 2 | 2/2 | Short + city path with GOTO |
+| Starter Quest | 1 | 0-1/1 | Accept + turn-in (intermittent in suite) |
+| Vendor Buy/Sell | 2 | 2/2 | Buy Weak Flux + sell Linen Cloth via packets |
+| **Total** | **46** | **43-46/46** | CombatLoop, Mining, StarterQuest intermittent |
 
 ## Recommended New Tests (Priority Order)
 
-1. **LootCorpseTests** — Kill mob → loot → verify inventory change (ActionType.LootCorpse)
-2. **VendorBuySellTests** — Interact with vendor → buy item → verify inventory (needs MerchantFrame fix first)
-3. **SpellCastOnTargetTests** — Cast offensive spell on mob → verify damage
-4. **PathfindingNavigationTests** — Navigate between two distant points → verify arrival
-5. **BuffDismissTests** — Apply buff → dismiss → verify removal
+1. ~~**VendorBuySellTests**~~ — **DONE** (session 19): Buy + Sell via CMSG_LIST_INVENTORY + CMSG_BUY_ITEM + CMSG_SELL_ITEM
+2. **SpellCastOnTargetTests** — Cast offensive spell on mob → verify damage
+3. **UnequipItemTests** — Equip item → unequip → verify slot empty (UnequipItem fix done!)
+4. **BuffDismissTests** — Apply buff → dismiss → verify removal

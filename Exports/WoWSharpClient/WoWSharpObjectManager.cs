@@ -2899,21 +2899,59 @@ namespace WoWSharpClient
         {
             var factory = _agentFactoryAccessor?.Invoke();
             if (factory == null) return;
-            await factory.VendorAgent.BuyItemAsync(vendorGuid, itemId, quantity, ct);
+
+            // Request vendor inventory via CMSG_LIST_INVENTORY (skips gossip)
+            await factory.VendorAgent.RequestVendorInventoryAsync(vendorGuid, ct);
+            await factory.VendorAgent.WaitForVendorWindowAsync(ct);
+
+            // If vendor window opened, use validated buy; otherwise send raw packet
+            if (factory.VendorAgent.IsVendorWindowOpen)
+            {
+                await factory.VendorAgent.BuyItemAsync(vendorGuid, itemId, quantity, ct);
+            }
+            else
+            {
+                await factory.VendorAgent.SendBuyItemPacketAsync(vendorGuid, itemId, quantity, ct);
+            }
+
+            await Task.Delay(100, ct);
+            await factory.VendorAgent.CloseVendorAsync(ct);
         }
 
         public async Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default)
         {
             var factory = _agentFactoryAccessor?.Invoke();
             if (factory == null) return;
-            await factory.VendorAgent.SellItemAsync(vendorGuid, bagId, slotId, quantity, ct);
+
+            // BagContents uses sequential indices from GetContainedItems(), not WoW slot indices.
+            // When bagId=0xFF, slotId is the sequential index into GetContainedItems().
+            ulong itemGuid = 0;
+            if (bagId == 0xFF)
+            {
+                var items = GetContainedItems().ToList();
+                if (slotId < items.Count)
+                    itemGuid = items[slotId].Guid;
+            }
+            else
+            {
+                var item = GetContainedItem(bagId, slotId);
+                itemGuid = item?.Guid ?? 0;
+            }
+
+            if (itemGuid == 0)
+            {
+                Serilog.Log.Warning("[SellItemToVendor] Could not resolve item GUID for bag={BagId} slot={SlotId}", bagId, slotId);
+                return;
+            }
+
+            await factory.VendorAgent.SellItemByGuidAsync(vendorGuid, itemGuid, (byte)Math.Min(quantity, 255), ct);
         }
 
         public async Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default)
         {
             var factory = _agentFactoryAccessor?.Invoke();
             if (factory == null) return;
-            await factory.VendorAgent.RepairAllItemsAsync(vendorGuid, ct);
+            await factory.VendorAgent.QuickRepairAllAsync(vendorGuid, ct);
         }
 
         public async Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default)
