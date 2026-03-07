@@ -196,6 +196,13 @@ public class CombatRangeTests
         var targetGuid = await FindLivingBoarAsync(bgAccount, "BG");
         global::Tests.Infrastructure.Skip.If(targetGuid == 0, "No living boar found for out-of-range test.");
 
+        // Stop any active combat before teleporting — .go xyz fails during combat
+        await _bot.SendActionAsync(bgAccount, new ActionMessage
+        {
+            ActionType = ActionType.StopAttack,
+        });
+        await Task.Delay(500);
+
         // Teleport bot FAR AWAY (200y south)
         _output.WriteLine($"  [BG] Teleporting 200y away from mob 0x{targetGuid:X} for out-of-range test.");
         await _bot.BotTeleportAsync(bgAccount, MapId, FarX, FarY, FarZ);

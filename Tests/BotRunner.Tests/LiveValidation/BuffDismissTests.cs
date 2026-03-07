@@ -35,7 +35,9 @@ public class BuffDismissTests
     private readonly ITestOutputHelper _output;
 
     private const uint ElixirOfLionsStrength = 2454;
-    private const uint LionsStrengthSpellId = 2367;
+    // Elixir of Lion's Strength (item 2454) applies aura spell 2457 (not 2367).
+    // 2367 is the "use effect" spell on the item; 2457 is the actual buff aura.
+    private const uint LionsStrengthSpellId = 2457;
     private const string LionsStrengthBuffName = "Lion's Strength";
 
     public BuffDismissTests(LiveBotFixture bot, ITestOutputHelper output)

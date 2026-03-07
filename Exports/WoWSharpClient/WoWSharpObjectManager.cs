@@ -3193,7 +3193,13 @@ namespace WoWSharpClient
             if (_woWClient == null) return;
             _currentTargetGuid = guid;
             if (Player is Models.WoWLocalPlayer localPlayer)
+            {
                 localPlayer.TargetGuid = guid;
+                // Also update TargetHighGuid so incoming SMSG_UPDATE_OBJECT (UNIT_FIELD_TARGET)
+                // doesn't clobber the locally-set TargetGuid back to the old value.
+                localPlayer.TargetHighGuid.LowGuidValue = BitConverter.GetBytes((uint)(guid & 0xFFFFFFFF));
+                localPlayer.TargetHighGuid.HighGuidValue = BitConverter.GetBytes((uint)(guid >> 32));
+            }
             var payload = BitConverter.GetBytes(guid);
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_SET_SELECTION, payload);
         }

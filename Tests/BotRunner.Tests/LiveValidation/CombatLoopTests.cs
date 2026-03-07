@@ -55,6 +55,11 @@ public class CombatLoopTests
     // Facing tolerance: attack must be within 90° of target direction.
     private const float FacingToleranceRad = (float)(Math.PI / 2.0);
 
+    // Weapon setup: Worn Mace (item 36) + One Hand Maces proficiency (spell 198, skill 54).
+    // Other tests may call .reset items which strips all gear including starter weapons.
+    private const uint WornMace = 36;
+    private const uint OneHandMaceSpell = 198;
+
     public CombatLoopTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -107,6 +112,21 @@ public class CombatLoopTests
         ConcurrentDictionary<ulong, string> claimedTargets, float offsetX = 0, float offsetY = 0)
     {
         await EnsureStrictAliveAsync(account, label);
+
+        // Ensure bot has a weapon equipped — .reset items from other tests may strip starter gear.
+        _output.WriteLine($"  [{label}] Ensuring weapon equipped (Worn Mace).");
+        await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
+        await _bot.BotSetSkillAsync(account, 54, 1, 300); // skill 54 = Maces
+        await _bot.BotAddItemAsync(account, WornMace);
+        await Task.Delay(500);
+        var equipResult = await _bot.SendActionAsync(account, new ActionMessage
+        {
+            ActionType = ActionType.EquipItem,
+            Parameters = { new RequestParameter { IntParam = (int)WornMace } }
+        });
+        _output.WriteLine($"  [{label}] EquipItem result: {equipResult}");
+        await Task.Delay(500);
+
         await EnsureNearMobAreaAsync(account, label, offsetX, offsetY);
 
         await _bot.RefreshSnapshotsAsync();

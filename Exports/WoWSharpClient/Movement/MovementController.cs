@@ -114,7 +114,8 @@ namespace WoWSharpClient.Movement
 
             if (_lastSentFlags == MovementFlags.MOVEFLAG_NONE
                 && _player.MovementFlags == MovementFlags.MOVEFLAG_NONE
-                && !_needsGroundSnap)
+                && !_needsGroundSnap
+                && !_player.IsAutoAttacking)
             {
                 return;
             }
@@ -416,6 +417,12 @@ namespace WoWSharpClient.Movement
 
             // Send periodic heartbeat while moving
             if (_player.MovementFlags != MovementFlags.MOVEFLAG_NONE &&
+                gameTimeMs - _lastPacketTime >= PACKET_INTERVAL_MS)
+                return true;
+
+            // Send periodic heartbeat while auto-attacking (even if stationary).
+            // MaNGOS requires movement updates to process melee swing timer.
+            if (_player.IsAutoAttacking &&
                 gameTimeMs - _lastPacketTime >= PACKET_INTERVAL_MS)
                 return true;
 

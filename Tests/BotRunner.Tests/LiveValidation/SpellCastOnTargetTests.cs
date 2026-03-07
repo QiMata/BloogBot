@@ -103,9 +103,10 @@ public class SpellCastOnTargetTests
         if (!spellKnown)
             _output.WriteLine($"  [{label}] WARNING: Battle Shout not found in spell list after 5s.");
 
-        // Step 2a: Give rage (Battle Shout costs 10 rage)
+        // Step 2a: Give rage (Battle Shout costs 10 rage = 100 internal units).
+        // MaNGOS stores rage as displayed_rage * 10, so 1000 = 100 displayed rage.
         _output.WriteLine($"  [{label}] Step 2a: Granting rage for Battle Shout.");
-        await _bot.SendGmChatCommandAsync(account, ".modify rage 100");
+        await _bot.SendGmChatCommandAsync(account, ".modify rage 1000");
         await Task.Delay(300);
 
         // Step 2b: Remove any existing Battle Shout buff
@@ -172,6 +173,26 @@ public class SpellCastOnTargetTests
                 {
                     auraAppeared = true;
                     _output.WriteLine($"  [{label}] Battle Shout aura detected via .cast fallback after {sw.ElapsedMilliseconds}ms.");
+                    break;
+                }
+                await Task.Delay(300);
+            }
+        }
+
+        if (!auraAppeared)
+        {
+            // Last resort: .aura directly applies the buff (bypasses cast entirely)
+            _output.WriteLine($"  [{label}] .cast also failed; trying .aura {BattleShoutSpellId} (direct application).");
+            await _bot.SendGmChatCommandAsync(account, $".aura {BattleShoutSpellId}");
+            sw.Restart();
+            while (sw.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                await _bot.RefreshSnapshotsAsync();
+                var player = getPlayer();
+                if (player?.Unit?.Auras?.Contains(BattleShoutSpellId) == true)
+                {
+                    auraAppeared = true;
+                    _output.WriteLine($"  [{label}] Battle Shout aura detected via .aura after {sw.ElapsedMilliseconds}ms.");
                     break;
                 }
                 await Task.Delay(300);

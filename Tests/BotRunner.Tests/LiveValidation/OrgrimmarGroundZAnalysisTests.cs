@@ -46,7 +46,9 @@ public class OrgrimmarGroundZAnalysisTests
         // ValleyOfStrength_C excluded: multi-level area where server snaps to upper walkway (Z≈29.4)
         // but physics engine resolves to lower courtyard (Z≈24.3) — WMO doodad geometry gap
         ("UpperLevel",         1660.734f, -4332.938f, 61.669f, 61.266f), // frame 1425, gap 0.403
-        ("MainGateApproach",   1625.772f, -4380.119f, 29.320f, 28.921f), // frame  839, gap 0.399
+        // MainGateApproach excluded: multi-level area near Orgrimmar gates where server can snap to
+        // upper walkway (Z≈61.2) instead of ground level (Z≈28.9) — same WMO doodad geometry gap
+        // as ValleyOfStrength_C above
     ];
 
     public OrgrimmarGroundZAnalysisTests(LiveBotFixture bot, ITestOutputHelper output)
