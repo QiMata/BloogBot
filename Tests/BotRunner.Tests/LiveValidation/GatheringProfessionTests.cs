@@ -83,7 +83,9 @@ public class GatheringProfessionTests
         // --- Find copper vein spawns in the DB (Kalimdor — Durotar low-level zone) ---
         var spawns = await _bot.QueryGameObjectSpawnsAsync(CopperVeinEntry, mapFilter: 1, limit: 25);
         global::Tests.Infrastructure.Skip.If(spawns.Count == 0, "No Copper Vein spawns in gameobject table (entry 1731).");
-        _output.WriteLine($"Found {spawns.Count} Copper Vein spawn locations");
+        // Sort by distance from Orgrimmar so we try nearby spawns first (avoids long-distance teleport failures).
+        spawns.Sort((a, b) => Distance(a.x, a.y, a.z, OrgX, OrgY, OrgZ).CompareTo(Distance(b.x, b.y, b.z, OrgX, OrgY, OrgZ)));
+        _output.WriteLine($"Found {spawns.Count} Copper Vein spawn locations (nearest: {Distance(spawns[0].x, spawns[0].y, spawns[0].z, OrgX, OrgY, OrgZ):F0}y)");
 
         // --- FG FIRST: native WoW right-click interaction (gold standard) ---
         var fgAccount = _bot.FgAccountName;
@@ -190,7 +192,9 @@ public class GatheringProfessionTests
         }
         global::Tests.Infrastructure.Skip.If(allSpawns.Count == 0,
             "No Peacebloom/Silverleaf/Earthroot spawns found in gameobject table (Kalimdor).");
-        _output.WriteLine($"Found {allSpawns.Count} herb spawn locations");
+        // Sort by distance from Orgrimmar so we try nearby spawns first (avoids long-distance teleport failures).
+        allSpawns.Sort((a, b) => Distance(a.x, a.y, a.z, OrgX, OrgY, OrgZ).CompareTo(Distance(b.x, b.y, b.z, OrgX, OrgY, OrgZ)));
+        _output.WriteLine($"Found {allSpawns.Count} herb spawn locations (nearest: {Distance(allSpawns[0].x, allSpawns[0].y, allSpawns[0].z, OrgX, OrgY, OrgZ):F0}y)");
 
         var herbEntries = allSpawns.Select(s => s.entry).Distinct().ToArray();
 

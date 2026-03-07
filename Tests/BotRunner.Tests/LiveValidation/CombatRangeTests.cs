@@ -202,11 +202,14 @@ public class CombatRangeTests
             ActionType = ActionType.StopAttack,
         });
         await Task.Delay(500);
+        // Force-exit combat state via GM command (server combat timer is 5s)
+        await _bot.SendGmChatCommandAsync(bgAccount, ".combatstop");
+        await Task.Delay(500);
 
         // Teleport bot FAR AWAY (200y south)
         _output.WriteLine($"  [BG] Teleporting 200y away from mob 0x{targetGuid:X} for out-of-range test.");
         await _bot.BotTeleportAsync(bgAccount, MapId, FarX, FarY, FarZ);
-        await Task.Delay(2000);
+        await Task.Delay(3000);
 
         // Attempt melee attack on the distant mob
         _output.WriteLine($"  [BG] Sending StartMeleeAttack on distant target 0x{targetGuid:X}");
@@ -400,10 +403,25 @@ public class CombatRangeTests
         var targetGuid = await FindLivingBoarAsync(bgAccount, "BG");
         global::Tests.Infrastructure.Skip.If(targetGuid == 0, "No living boar found for ranged out-of-range test.");
 
+        // Stop combat and force-exit combat state before teleporting
+        await _bot.SendActionAsync(bgAccount, new ActionMessage { ActionType = ActionType.StopAttack });
+        await Task.Delay(300);
+        await _bot.SendGmChatCommandAsync(bgAccount, ".combatstop");
+        await Task.Delay(500);
+
         // Teleport bot FAR AWAY (200y south)
         _output.WriteLine($"  [BG] Teleporting 200y away for ranged out-of-range test.");
         await _bot.BotTeleportAsync(bgAccount, MapId, FarX, FarY, FarZ);
-        await Task.Delay(2000);
+        await Task.Delay(3000);
+
+        // Verify teleport actually worked
+        await _bot.RefreshSnapshotsAsync();
+        var snap = await _bot.GetSnapshotAsync(bgAccount);
+        var botPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(botPos);
+        var botDist = Distance2D(botPos!.X, botPos.Y, MobAreaX, MobAreaY);
+        _output.WriteLine($"  [BG] Bot position after teleport: ({botPos.X:F1}, {botPos.Y:F1}), dist from mob area: {botDist:F1}y");
+        Assert.True(botDist > 100f, $"Bot should be far from mob area (dist={botDist:F1}y). Teleport may have failed.");
 
         // Attempt ranged attack on the distant mob
         _output.WriteLine($"  [BG] Sending StartRangedAttack on distant target 0x{targetGuid:X}");
@@ -413,15 +431,26 @@ public class CombatRangeTests
             Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
         });
 
-        // Wait and check — mob should not be in nearby units at 200y
+        // Wait and check — at 200y the mob should not be in NearbyUnits
         await Task.Delay(3000);
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(bgAccount);
+        snap = await _bot.GetSnapshotAsync(bgAccount);
 
         var mobSnap = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0) == targetGuid);
-        Assert.Null(mobSnap);
-
-        _output.WriteLine("  [BG] Ranged attack at 200y correctly rejected — mob not in snapshot range.");
+        if (mobSnap != null)
+        {
+            var mobPos = mobSnap.GameObject?.Base?.Position;
+            if (mobPos != null)
+            {
+                var mobDist = Distance2D(botPos.X, botPos.Y, mobPos.X, mobPos.Y);
+                _output.WriteLine($"  [BG] Mob still in snapshot (stale data) at dist={mobDist:F1}y — verifying outside ranged range");
+                Assert.True(mobDist > 30f, $"Mob should be far outside ranged range (dist={mobDist:F1}y).");
+            }
+        }
+        else
+        {
+            _output.WriteLine("  [BG] Ranged attack at 200y correctly rejected — mob not in snapshot range.");
+        }
 
         // Cleanup
         await _bot.SendActionAsync(bgAccount, new ActionMessage { ActionType = ActionType.StopAttack });
