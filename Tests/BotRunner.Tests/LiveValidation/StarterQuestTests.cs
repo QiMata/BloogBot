@@ -76,6 +76,14 @@ public class StarterQuestTests
     private async Task RunStarterQuestScenario(string account, string label)
     {
         await _bot.EnsureStrictAliveAsync(account, label);
+
+        // Pre-flight: teleport to Orgrimmar first to stabilize zone state.
+        // In full suite runs, prior tests may leave the bot far away causing
+        // long cross-zone teleport + FG client area loading delays.
+        _output.WriteLine($"  [{label}] Pre-flight: teleporting to Orgrimmar safe zone.");
+        await _bot.BotTeleportAsync(account, MapId, 1629f, -4373f, 12f);
+        await Task.Delay(2000);
+
         await EnsureQuestAbsentAsync(account, label, TestQuestId);
 
         try
@@ -83,7 +91,7 @@ public class StarterQuestTests
             // === Step 1: Teleport near Kaltunk (quest giver) ===
             _output.WriteLine($"  [{label}] Step 1: Teleporting to Valley of Trials near Kaltunk");
             await _bot.BotTeleportAsync(account, MapId, KaltunkX, KaltunkY, KaltunkZ + 3);
-            await Task.Delay(3000);
+            await Task.Delay(4000);
 
             // === Step 2: Find Kaltunk in nearby units ===
             var kaltunkGuid = await FindNpcByEntryAsync(account, label, KaltunkEntry, "Kaltunk");
