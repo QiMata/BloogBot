@@ -3089,6 +3089,8 @@ namespace WoWSharpClient
         {
             if (_woWClient == null) return;
             _currentTargetGuid = guid;
+            if (Player is Models.WoWLocalPlayer localPlayer)
+                localPlayer.TargetGuid = guid;
             var payload = BitConverter.GetBytes(guid);
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_SET_SELECTION, payload);
         }

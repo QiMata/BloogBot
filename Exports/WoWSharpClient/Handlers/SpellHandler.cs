@@ -476,7 +476,10 @@ namespace WoWSharpClient.Handlers
 
                 var player = WoWSharpObjectManager.Instance.Player;
                 if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
+                {
                     localPlayer.IsAutoAttacking = true;
+                    localPlayer.TargetGuid = targetGuid;
+                }
             }
             catch (EndOfStreamException) { }
         }
