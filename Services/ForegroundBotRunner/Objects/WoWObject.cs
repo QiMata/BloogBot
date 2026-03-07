@@ -28,8 +28,8 @@ namespace ForegroundBotRunner.Objects
         private static readonly RightClickGameObjDelegate rightClickGameObjectFunction =
             Marshal.GetDelegateForFunctionPointer<RightClickGameObjDelegate>(0x5F8660);
 
-        public float ScaleX => MemoryManager.ReadFloat(nint.Add(GetDescriptorPtr(), MemoryAddresses.WoWObject_ScaleXOffset));
-        public float Height => MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWObject_HeightOffset));
+        public float ScaleX { get { var d = GetDescriptorPtr(); return d != nint.Zero ? MemoryManager.ReadFloat(nint.Add(d, MemoryAddresses.WoWObject_ScaleXOffset)) : 1.0f; } }
+        public float Height { get { return IsValidPtr(Pointer) ? MemoryManager.ReadFloat(nint.Add(Pointer, MemoryAddresses.WoWObject_HeightOffset)) : 0f; } }
         public Position Position => GetPosition();
 
         private Position GetPosition()
@@ -49,18 +49,22 @@ namespace ForegroundBotRunner.Objects
                     float x;
                     float y;
                     float z;
-                    if (MemoryManager.ReadInt(GetDescriptorPtr() + 0x54) == 3)
+                    var descPtr = GetDescriptorPtr();
+                    if (descPtr != nint.Zero && MemoryManager.ReadInt(descPtr + 0x54) == 3)
                     {
-                        x = MemoryManager.ReadFloat(GetDescriptorPtr() + 0x3C);
-                        y = MemoryManager.ReadFloat(GetDescriptorPtr() + (0x3C + 4));
-                        z = MemoryManager.ReadFloat(GetDescriptorPtr() + (0x3C + 8));
+                        x = MemoryManager.ReadFloat(descPtr + 0x3C);
+                        y = MemoryManager.ReadFloat(descPtr + (0x3C + 4));
+                        z = MemoryManager.ReadFloat(descPtr + (0x3C + 8));
                         return new(x, y, z);
                     }
                     var v2 = MemoryManager.ReadInt(nint.Add(Pointer, 0x210));
                     nint xyzStruct;
-                    if (v2 != 0)
+                    if (v2 != 0 && IsValidPtr(v2))
                     {
-                        var underlyingFuncPtr = MemoryManager.ReadInt(nint.Add(MemoryManager.ReadIntPtr(v2), 0x44));
+                        var vtable = MemoryManager.ReadIntPtr(v2);
+                        if (!IsValidPtr(vtable))
+                            return new(0, 0, 0);
+                        var underlyingFuncPtr = MemoryManager.ReadInt(nint.Add(vtable, 0x44));
                         switch (underlyingFuncPtr)
                         {
                             case 0x005F5C10:
@@ -69,7 +73,13 @@ namespace ForegroundBotRunner.Objects
                                 z = MemoryManager.ReadFloat(v2 + 0x2c + 0x8);
                                 return new(x, y, z);
                             case 0x005F3690:
-                                v2 = (int)nint.Add(MemoryManager.ReadIntPtr(nint.Add(MemoryManager.ReadIntPtr(v2 + 0x4), 0x110)), 0x24);
+                                var inner1 = MemoryManager.ReadIntPtr(v2 + 0x4);
+                                if (!IsValidPtr(inner1))
+                                    return new(0, 0, 0);
+                                var inner2 = MemoryManager.ReadIntPtr(nint.Add(inner1, 0x110));
+                                if (!IsValidPtr(inner2))
+                                    return new(0, 0, 0);
+                                v2 = (int)nint.Add(inner2, 0x24);
                                 x = MemoryManager.ReadFloat(v2);
                                 y = MemoryManager.ReadFloat(v2 + 0x4);
                                 z = MemoryManager.ReadFloat(v2 + 0x8);
@@ -79,7 +89,10 @@ namespace ForegroundBotRunner.Objects
                     }
                     else
                     {
-                        xyzStruct = nint.Add(MemoryManager.ReadIntPtr(nint.Add(Pointer, 0x110)), 0x24);
+                        var movementPtr = MemoryManager.ReadIntPtr(nint.Add(Pointer, 0x110));
+                        if (!IsValidPtr(movementPtr))
+                            return new(0, 0, 0);
+                        xyzStruct = nint.Add(movementPtr, 0x24);
                     }
                     x = MemoryManager.ReadFloat(xyzStruct);
                     y = MemoryManager.ReadFloat(nint.Add(xyzStruct, 0x4));
@@ -245,6 +258,23 @@ namespace ForegroundBotRunner.Objects
                 rightClickUnitFunction(Pointer, 0);     // CGUnit_C::OnRightClick(int autoLoot)
         }
 
-        public nint GetDescriptorPtr() => MemoryManager.ReadIntPtr(nint.Add(Pointer, MemoryAddresses.WoWObject_DescriptorOffset));
+        public nint GetDescriptorPtr()
+        {
+            var ptr = Pointer;
+            if (!IsValidPtr(ptr))
+                return nint.Zero;
+            var desc = MemoryManager.ReadIntPtr(nint.Add(ptr, MemoryAddresses.WoWObject_DescriptorOffset));
+            return IsValidPtr(desc) ? desc : nint.Zero;
+        }
+
+        /// <summary>
+        /// Returns true if <paramref name="ptr"/> looks like a valid user-mode address.
+        /// Rejects 0, -1 (0xFFFFFFFF), and addresses below 0x10000 (low page guard).
+        /// </summary>
+        internal static bool IsValidPtr(nint ptr)
+        {
+            var v = (nuint)(nint)ptr;
+            return v > 0x10000 && v < 0xFFFF0000;
+        }
     }
 }

@@ -48,6 +48,9 @@ namespace ForegroundBotRunner
         // Track whether SignalEventManager hooks have been initialized after entering world
         private bool _hooksInitialized = false;
 
+        // Timestamp of world entry — polls are deferred for 2s to let WoW's UI frame system stabilize
+        private DateTime _worldEntryTime = DateTime.MinValue;
+
         // Packet-driven connection state machine
         private readonly ConnectionStateMachine _connectionState = new();
         private uint _lastObservedContinentId = 0xFFFFFFFF;
@@ -293,6 +296,7 @@ namespace ForegroundBotRunner
                             }
 
                             _hooksInitialized = true;
+                            _worldEntryTime = DateTime.UtcNow;
                         }
 
                         // Poll MovementRecorder and run automated scenarios when in world.
@@ -328,6 +332,15 @@ namespace ForegroundBotRunner
                         }
                         if (_objectManager?.HasEnteredWorld == true && !workerInTransition)
                         {
+                            // Defer polls for 2s after world entry — WoW's UI frame system
+                            // (CreateFrame, FrameXML) needs time to stabilize after the loading screen.
+                            // Without this, the first CreateFrame call in EnsureChatHook can native-crash.
+                            if ((DateTime.UtcNow - _worldEntryTime).TotalSeconds < 2.0)
+                            {
+                                await Task.Delay(500, stoppingToken);
+                                continue;
+                            }
+
                             CrashTrace($"PRE-POLL: contId=0x{workerContId:X} paused={Mem.ThreadSynchronizer.Paused} isRec={_movementRecorder?.IsRecording}");
                             _movementRecorder?.Poll();
 

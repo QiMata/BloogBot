@@ -269,12 +269,29 @@ public class BotServiceFixture : IAsyncLifetime
 
     /// <summary>
     /// Throws <see cref="Xunit.Sdk.XunitException"/> if a client has crashed.
-    /// Call this from test code to fail fast instead of timing out.
+    /// When a crash is detected, waits up to 30 seconds for StateManager to restart
+    /// WoW.exe before failing. The crash flag is cleared when a new healthy PID is
+    /// registered (see OutputDataReceived handler).
     /// </summary>
     public void AssertClientAlive()
     {
-        if (ClientCrashed)
-            Assert.Fail($"Client crashed during test session: {CrashMessage}");
+        if (!ClientCrashed)
+            return;
+
+        // Give StateManager time to restart WoW.exe — it auto-recovers from crashes.
+        // The OutputDataReceived handler clears ClientCrashed when a new PID arrives.
+        var crashMsg = CrashMessage;
+        for (int i = 0; i < 30; i++)
+        {
+            Thread.Sleep(1000);
+            if (!ClientCrashed)
+            {
+                Log($"  [CrashMonitor] Client recovered after {i + 1}s — new WoW.exe launched");
+                return;
+            }
+        }
+
+        Assert.Fail($"Client crashed and did not recover within 30s: {crashMsg}");
     }
 
     /// <summary>Check if a TCP port is currently in use.</summary>
@@ -676,7 +693,21 @@ public class BotServiceFixture : IAsyncLifetime
                     if (match.Success && int.TryParse(match.Groups[1].Value, out var wowPid))
                     {
                         lock (_managedWoWPids)
+                        {
+                            // Prune dead PIDs from previous launch attempts — StateManager
+                            // auto-restarts WoW.exe on crash, so stale PIDs would trigger
+                            // false crash detection.
+                            _managedWoWPids.RemoveAll(p => IsProcessDead(p));
                             _managedWoWPids.Add(wowPid);
+
+                            // Clear sticky crash flag if a healthy replacement has launched
+                            if (ClientCrashed)
+                            {
+                                Log($"  [BotServiceFixture] Clearing crash flag — WoW.exe restarted (new PID {wowPid})");
+                                ClientCrashed = false;
+                                CrashMessage = null;
+                            }
+                        }
                         Log($"  [BotServiceFixture] Tracking WoW.exe PID {wowPid} for cleanup");
                     }
                 }

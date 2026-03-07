@@ -26,6 +26,8 @@ namespace ForegroundBotRunner.Objects
                 try
                 {
                     var objectManagerPtr = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase);
+                    if (!IsValidPtr(objectManagerPtr))
+                        return 0;
                     return MemoryManager.ReadUint(nint.Add(objectManagerPtr, 0xCC));
                 }
                 catch (Exception)

@@ -63,20 +63,24 @@ Master tracker: `MASTER-SUB-016`
 6. [x] `FG-PKT-001` PacketLogger send hook — hooks NetClientSend (0x005379A0) via assembly injection. Captures outbound CMSG opcodes (opcode + size + timestamp). Commit: `00df96f`.
 7. [x] `FG-PKT-002` ConnectionStateMachine — packet-driven lifecycle state machine (DISCONNECTED → AUTHENTICATING → CHAR_SELECT → ENTERING_WORLD → IN_WORLD → TRANSFERRING → LOGGING_OUT). Provides IsLuaSafe, IsObjectManagerValid, IsSendingSafe. Commit: `00df96f`.
 8. [x] `FG-PKT-003` ContinentId-based inbound packet inference — bridges recv gap until direct hook exists. ForegroundBotWorker detects ContinentId transitions and records synthetic SMSG packets. Commit: `00df96f`.
-9. [ ] `FG-PKT-004` Wire ConnectionStateMachine into ThreadSynchronizer — replace ContinentId/ManagerBase heuristic checks with `_connectionState.IsLuaSafe` for deterministic Lua safety decisions. | Open
+9. [x] `FG-PKT-004` Wire ConnectionStateMachine into ThreadSynchronizer — CSM.IsLuaSafe as primary gate, ManagerBase as hard fallback. Commit: `454091d`.
 10. [ ] `FG-PKT-005` Direct SMSG receive hook — needs ProcessMessage vtable offset from disassembly. Will allow ConnectionStateMachine to track all server→client transitions without ContinentId heuristics. | Open (blocked on disassembly)
 
+## P2 — FG Startup Stability (2026-03-07)
+
+11. [x] `FG-WARMUP-001` 2s world entry warmup delay — defer MovementRecorder.Poll() for 2s after HasEnteredWorld to prevent CreateFrame native crash during UI initialization.
+12. [x] `FG-CRASH-RECOVERY-001` Crash monitor PID pruning + recovery — prune dead PIDs when new WoW.exe starts, clear crash flag, AssertClientAlive waits 30s for recovery.
+
 ## Session Handoff
-- Last updated: 2026-03-07
-- Active task: FG-PKT-004 (ConnectionStateMachine → ThreadSynchronizer wiring)
-- Last delta: FG-PKT-001..003 (packet capture + state machine + ContinentId inference)
-- Pass result: `delta shipped`
+- Last updated: 2026-03-07 (session 25)
+- Active task: LiveValidation suite running with crash recovery fixes
+- Last delta: FG-PKT-004 (CSM wired), FG-WARMUP-001 (world entry delay), FG-CRASH-RECOVERY-001 (PID pruning + recovery wait)
+- Pass result: `delta shipped` — crash cascade eliminated (48 → 0 cascade failures)
 - Validation/tests run:
-  - 97/97 physics replay tests pass
+  - 0 crash-cascade failures (previously 48/50)
   - `dotnet build` 0 errors
 - Files changed:
-  - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` — new
-  - `Services/ForegroundBotRunner/Mem/Hooks/ConnectionStateMachine.cs` — new
-  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs` — modified (hook init + ContinentId inference)
-- Next command: wire ConnectionStateMachine into ThreadSynchronizer
+  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs` — world entry warmup delay
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs` — PID pruning, crash flag clearing, recovery wait
+- Next command: await LiveValidation suite results, commit + push
 - Blockers: FG-PKT-005 blocked on ProcessMessage vtable disassembly

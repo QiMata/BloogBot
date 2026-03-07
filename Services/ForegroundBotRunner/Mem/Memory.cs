@@ -37,10 +37,21 @@ namespace ForegroundBotRunner.Mem
         public static readonly nint imageBase = GetModuleHandle(null);
         private static readonly FasmNet fasm = new();
 
+        /// <summary>
+        /// Returns true if address is in the invalid range: null, low page (&lt; 0x10000),
+        /// or sentinel values (&gt;= 0xFFFF0000). In .NET 8, AccessViolationException is NOT
+        /// catchable (CSE), so we MUST validate before dereferencing.
+        /// </summary>
+        private static bool IsInvalidAddress(nint address)
+        {
+            var v = (uint)(int)address;
+            return v < 0x10000u || v >= 0xFFFF0000u;
+        }
+
         [HandleProcessCorruptedStateExceptions]
         static internal byte ReadByte(nint address, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return 0;
 
             if (isRelative)
@@ -65,7 +76,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public short ReadShort(nint address, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return 0;
 
             if (isRelative)
@@ -90,7 +101,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public int ReadInt(nint address, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return 0;
 
             if (isRelative)
@@ -115,7 +126,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public uint ReadUint(nint address, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return 0;
 
             if (isRelative)
@@ -140,7 +151,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public ulong ReadUlong(nint address, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return 0;
 
             if (isRelative)
@@ -165,7 +176,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public nint ReadIntPtr(nint address, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return nint.Zero;
 
             if (isRelative)
@@ -190,7 +201,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public float ReadFloat(nint address, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return 0;
 
             if (isRelative)
@@ -215,7 +226,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public string ReadString(nint address, int size = 512, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return null;
 
             if (isRelative)
@@ -249,7 +260,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public byte[] ReadBytes(nint address, int count, bool isRelative = false)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address) && !isRelative)
                 return null;
 
             if (isRelative)
@@ -283,7 +294,7 @@ namespace ForegroundBotRunner.Mem
         [HandleProcessCorruptedStateExceptions]
         static public ItemCacheEntry ReadItemCacheEntry(nint address)
         {
-            if (address == nint.Zero)
+            if (IsInvalidAddress(address))
                 return null;
 
             try
@@ -312,7 +323,7 @@ namespace ForegroundBotRunner.Mem
         // WriteProcessMemory via OpenProcess fails in .NET 8 injected context — use direct writes instead.
         static internal void WriteBytes(nint address, byte[] bytes)
         {
-            if (address == nint.Zero || bytes.Length == 0)
+            if (IsInvalidAddress(address) || bytes.Length == 0)
                 return;
 
             // Make the target page writable + executable
