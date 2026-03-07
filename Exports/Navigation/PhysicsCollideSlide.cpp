@@ -152,9 +152,8 @@ SlideResult CollideAndSlide(
             if (horizontalOnly) {
                 // In horizontal mode, always accept Side hits. For Bottom/Top hits,
                 // only accept if the hit normal has a significant horizontal component.
-                // This prevents bots from phasing through WMO objects at foot level
-                // (e.g. catapults, barricades) that register as Bottom capsule contacts
-                // but act as horizontal barriers.
+                // This prevents bots from phasing through objects at foot level that
+                // register as Bottom capsule contacts but act as horizontal barriers.
                 if (hit.region != SceneHit::CapsuleRegion::Side) {
                     float hMag = std::sqrt(hit.normal.x * hit.normal.x + hit.normal.y * hit.normal.y);
                     if (hMag < 0.3f) continue;  // Skip purely vertical contacts (floor/ceiling)

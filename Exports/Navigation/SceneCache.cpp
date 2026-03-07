@@ -166,43 +166,6 @@ static G3D::Vector3 QuatRotate(float qx, float qy, float qz, float qw, const G3D
     );
 }
 
-// Decorative doodad exclusion: M2 models that should NOT generate collision geometry.
-// These are non-walkable props that block pathfinding (e.g. catapults, banners, braziers).
-static bool ShouldExcludeDoodad(const char* m2Name)
-{
-    // Lowercase the name for case-insensitive matching.
-    std::string nameLower(m2Name);
-    std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
-
-    // Priority whitelist: walkable structural doodads that must ALWAYS be included,
-    // even if they contain an excluded keyword (e.g., "dock_torch" should keep "dock").
-    static const char* s_walkableKeywords[] = {
-        "plank", "dock", "bridge", "platform", "floor", "ramp",
-        "stair", "walkway", "boardwalk", "pier", "gangway"
-    };
-
-    for (const char* keyword : s_walkableKeywords)
-    {
-        if (nameLower.find(keyword) != std::string::npos)
-            return false;  // Always include walkable geometry
-    }
-
-    // Keywords for decorative / non-blocking M2 doodads
-    static const char* s_excludedKeywords[] = {
-        "catapult", "banner", "torch", "brazier", "fire", "smoke",
-        "dust", "flag", "chain", "rope", "bell", "lamp", "lantern",
-        "candl", "broom", "barrel_burning", "bonfire", "campfire",
-        "emitter", "particle", "steam", "glow"
-    };
-
-    for (const char* keyword : s_excludedKeywords)
-    {
-        if (nameLower.find(keyword) != std::string::npos)
-            return true;
-    }
-    return false;
-}
-
 // Inverse of fixCoordSystem: VMAP internal M2 space → WoW M2 space
 // fixCoordSystem: (x,y,z) → (x,z,-y)
 // inverse:        (x,y,z) → (x,-z,y)
@@ -255,13 +218,6 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
             {
                 const VMAP::ModelInstance& mi = instances[i];
                 if (!mi.iModel) continue;
-
-                // Skip decorative M2 models in the VMAP tree (catapults, banners, etc.)
-                // These are standalone M2 instances that block physics but shouldn't
-                // generate collision geometry (same filter as WMO-nested doodads).
-                if ((mi.flags & VMAP::MOD_M2) && !mi.name.empty()
-                    && ShouldExcludeDoodad(mi.name.c_str()))
-                    continue;
 
                 // Quick AABB filter: transform instance bounds to world space
                 if (hasBounds)
@@ -411,11 +367,6 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
                         continue;
 
                     const char* m2Name = &doodadData.nameTable[spawn.nameOffset];
-
-                    // Skip decorative doodads that shouldn't block pathfinding.
-                    if (ShouldExcludeDoodad(m2Name))
-                        continue;
-
                     std::string m2Key(m2Name);
 
                     // Load M2 model (with caching)

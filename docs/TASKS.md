@@ -85,7 +85,7 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 | ID | Issue | Owner | Status |
 |----|-------|-------|--------|
 | `FG-SEH-001` | FastCall.dll SEH protection — all 9 exports now wrapped with `__try/__except`. Functions.cs native calls all wrapped with `[HandleProcessCorruptedStateExceptions]`. Crash at 0x0064B3FD during rapid teleportation prevented. | `Exports/FastCall/`, `Services/ForegroundBotRunner/Mem/` | **Done** — commit `554b9ba` |
-| `FG-GHOST-STUCK-001` | Ghost form stuck on Orgrimmar catapult geometry at ~(1577, -4394, 6.2) during corpse run. Root cause: `ShouldExcludeDoodad` only filtered WMO-nested M2 doodads, not standalone VMAP M2 instances. Extended filter to VMAP extraction path. | `Exports/Navigation/` | **Done** — commit `a1a04bd` |
+| `FG-GHOST-STUCK-001` | Ghost form stuck on Orgrimmar catapult geometry at ~(1577, -4394, 6.2) during corpse run. Previous fix (`ShouldExcludeDoodad` keyword filter) was incorrect — M2 collision is determined by MPQ flags, not name heuristics. `ShouldExcludeDoodad` removed entirely (commit `a1a04bd` reverted). All M2 models must remain in physics sweeps. Root cause is pathfinding/stuck-recovery not handling dense M2 geometry areas. | `Exports/Navigation/` | **Reopened** — needs pathfinding improvement |
 
 ## Open — Capability Gaps (from CAPABILITY_AUDIT.md)
 
@@ -101,6 +101,14 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 |----|-------|-------|--------|
 | `PATH-DYNOBJ-001` | **Darkmoon Faire dynamic object LOS — FIXED.** `SceneQuery::LineOfSight()` includes `DynamicObjectRegistry` ray-testing (commit `8c0401b`). Phase 3 added `SegmentIntersectsDynamicObjects` C++ export (Möller-Trumbore) + `ValidateSegmentsAgainstDynamicObjects` step in `GetValidatedPath` — path segments through registered dynamic objects now trigger path recalculation. Commit: `d537215`. Remaining: dtTileCache for full dynamic navmesh exclusion (low priority). | `Exports/Navigation/` | **Done** |
 | `PATH-BOT-FORWARD-001` | **Bot runs forward briefly after teleport — NOT a real bug.** Investigated: `MovementController.Reset()` fully clears velocity, movement flags, and path (`_currentPath=null`). Horizontal velocity is rebuilt from MOVEFLAG_FORWARD each frame by `BuildMovementPlan()` — no `_inputVelocity` clobbering. The visual artifact is likely the bot's behavior tree issuing a new navigation command immediately after teleport while WaitForZStabilizationAsync is polling. No code change needed. | `Exports/WoWSharpClient/Movement` | **Closed (not a bug)** |
+
+## Open — Test Infrastructure Hardening
+
+| ID | Issue | Owner | Status |
+|----|-------|-------|--------|
+| `TEST-TRAM-001` | **Deeprun Tram map transition integration test.** Both bots (BG+FG) teleport to Ironforge (map 0) with `.gm on` (Horde safe in Alliance city). Walk toward Deeprun Tram entrance. Verify: (1) cross-map teleport succeeds (SMSG_TRANSFER_PENDING → SMSG_NEW_WORLD → MSG_MOVE_WORLDPORT_ACK), (2) client remains connected, (3) MaNGOS bounces player out of map 369 gracefully. No flight paths — `.go xyz` teleport only. | `Tests/BotRunner.Tests/LiveValidation/` | Open |
+| `TEST-CRASH-001` | **Test fixture fail-fast on client crash.** When WoW.exe crashes during a test, BotServiceFixture should: (1) detect the crash via `Process.HasExited`, (2) immediately kill StateManager + PathfindingService, (3) fail the current test with a descriptive error instead of letting StateManager respawn clients. Currently StateManager removes crashed clients from tracking but the test fixture has no crash callback — tests time out instead of failing fast. | `Tests/Tests.Infrastructure/` | Open |
+| `TEST-FGPACKET-001` | **FG packet send/receive hook for gold-standard protocol capture.** Hook `NetClientSend` (0x005379A0) for outbound CMSG and WoW's packet receive handler for inbound SMSG. Log opcode + size + timestamp (not payload). Purpose: (1) know exactly when Lua is instantiated/hooked, (2) know when to send commands vs. listen/skip during transitions, (3) capture gold-standard packet sequences for BG bot parity. SEH-protected, deferred until after world entry (same pattern as SignalEventManager). | `Services/ForegroundBotRunner/Mem/Hooks/` | Open |
 
 ## Deferred (Unused Services)
 
@@ -150,13 +158,18 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 22)
-- **Current work:** FG-GHOST-STUCK-001 fixed. Full LiveValidation suite pending confirmation.
+- **Last updated:** 2026-03-07 (session 23)
+- **Current work:** Reverted incorrect `ShouldExcludeDoodad` M2 exclusion. Planning Deeprun Tram integration test and test fixture crash hardening.
+- **Completed session 23 (2026-03-07):**
+  1. **REVERTED session 22 M2 exclusion fix** — `ShouldExcludeDoodad` function removed entirely from SceneCache.cpp. M2 collision is determined by MPQ flags, not keyword heuristics. 99% of M2 models have collision and must remain in physics sweeps. Removed: (a) the entire `ShouldExcludeDoodad` function, (b) VMAP M2 filter added in commit `a1a04bd`, (c) WMO doodad filter call site. NPCs do NOT generate collision.
+  2. **PhysicsCollideSlide.cpp** — Removed incorrect catapult/barricade-specific comments from horizontal collision logic.
+  3. **FG-GHOST-STUCK-001 REOPENED** — Ghost stuck is a pathfinding/stuck-recovery issue in dense M2 geometry, not an M2 exclusion issue.
+  4. **New tasks planned:** Deeprun Tram integration test (map transition hardening), test fixture fail-fast on client crash.
+- **Next priority:** Build C++ + run physics tests, implement Deeprun Tram test, harden test fixture crash handling.
 - **Completed session 22 (2026-03-07):**
-  1. **FG-GHOST-STUCK-001 FIXED** — Ghost form stuck on Orgrimmar catapult geometry during corpse run. Root cause: `ShouldExcludeDoodad` filter only applied to WMO-nested M2 doodads in SceneCache extraction, not to standalone VMAP M2 model instances. Catapults, banners, torches etc. in the VMAP tree generated physics collision triangles that blocked ghost movement. Fix: extended the same filter to VMAP extraction path (check `mi.flags & MOD_M2` + `ShouldExcludeDoodad(mi.name)`). Commit: `a1a04bd`.
-  2. **Test results:** 97/97 physics replay, 25/25 PathfindingService, 1/1 DeathCorpseRunTests (ghost navigated cleanly without stuck recoveries). Full LiveValidation suite pending.
+  1. **(REVERTED)** `ShouldExcludeDoodad` VMAP extension was incorrect. See session 23.
+  2. **Test results:** 97/97 physics replay, 25/25 PathfindingService, 1/1 DeathCorpseRunTests.
   3. **Committed session 21 handoff** (`7ce8a5f`).
-- **Next priority:** Phase 6b DotRecast eval (low priority), CAP-GAP-003 (TrainerFrame, low priority), investigate StarterQuestTests FG bot interaction in suite context.
 - **Completed session 21 (2026-03-07):**
   1. **StarterQuestTests pre-flight fix** — Added Orgrimmar pre-flight teleport before Valley of Trials to prevent FG client area loading delays. Increased post-teleport delay 3s→4s.
   2. **Root cause analysis** — StarterQuestTests passes solo when fixture initializes, fails in suite due to FG client zone loading latency after long cross-zone teleport. Also intermittently skips when FG bot fails to launch (fixture timeout).
