@@ -499,6 +499,9 @@ public class LiveBotFixture : IAsyncLifetime
     /// <summary>Refresh all bot snapshots from StateManager. Logs chat/error messages to test output.</summary>
     public async Task RefreshSnapshotsAsync()
     {
+        // Fail fast if a client has crashed — prevents tests from timing out
+        _serviceFixture.AssertClientAlive();
+
         if (_stateManagerClient == null) return;
 
         // Serialize concurrent callers (e.g. parallel corpse-run tasks) to prevent

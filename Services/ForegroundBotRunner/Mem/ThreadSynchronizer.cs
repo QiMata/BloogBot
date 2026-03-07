@@ -6,6 +6,7 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using ForegroundBotRunner.Mem.Hooks;
 using Serilog;
 
 namespace ForegroundBotRunner.Mem
@@ -84,6 +85,22 @@ namespace ForegroundBotRunner.Mem
 
         /// <summary>True once the object manager has been valid at least once (i.e., we entered world).</summary>
         private static volatile bool _objMgrWasValid = false;
+
+        /// <summary>
+        /// Packet-driven connection state machine. When set, provides deterministic
+        /// IsLuaSafe/IsObjectManagerValid checks instead of heuristic ContinentId reads.
+        /// </summary>
+        private static ConnectionStateMachine? _connectionState;
+
+        /// <summary>
+        /// Register the connection state machine for deterministic Lua safety checks.
+        /// Call this from ForegroundBotWorker after initializing the state machine.
+        /// </summary>
+        public static void SetConnectionStateMachine(ConnectionStateMachine stateMachine)
+        {
+            _connectionState = stateMachine;
+            DiagLogStatic($"ConnectionStateMachine registered (state={stateMachine.CurrentState})");
+        }
 
         static ThreadSynchronizer()
         {
@@ -211,20 +228,40 @@ namespace ForegroundBotRunner.Mem
             {
                 if (msg != WM_USER) return CallWindowProc(oldCallback, hWnd, msg, wParam, lParam);
 
-                // Real-time ManagerBase + ContinentId check — catches transitions between ObjectManager polls.
-                // During login, _objMgrWasValid is false so Lua calls proceed (Lua works at charselect).
-                // Once we've been in-world, a null ManagerBase or transitional ContinentId means unsafe state.
-                bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
-                if (managerBaseValid)
-                    _objMgrWasValid = true;
+                // Safety gate: determine if Lua execution is safe on WoW's main thread.
+                // Primary: ConnectionStateMachine (packet-driven, deterministic).
+                // Fallback: heuristic ManagerBase + ContinentId reads (legacy path).
+                bool shouldBlock;
+                var csm = _connectionState;
+                if (csm != null)
+                {
+                    // Packet-driven: trust the state machine's deterministic IsLuaSafe.
+                    // Also respect ManagerBase as a hard safety net (catches edge cases
+                    // where packets haven't arrived yet but memory is already torn down).
+                    bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
+                    if (managerBaseValid)
+                        _objMgrWasValid = true;
 
-                uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
-                bool inTransition = _objMgrWasValid && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+                    shouldBlock = Paused || !csm.IsLuaSafe || (_objMgrWasValid && !managerBaseValid);
+                }
+                else
+                {
+                    // Legacy heuristic path (before ConnectionStateMachine is registered).
+                    // During login, _objMgrWasValid is false so Lua calls proceed (Lua works at charselect).
+                    // Once we've been in-world, a null ManagerBase or transitional ContinentId means unsafe state.
+                    bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
+                    if (managerBaseValid)
+                        _objMgrWasValid = true;
 
-                bool shouldBlock = Paused || (_objMgrWasValid && !managerBaseValid) || inTransition;
+                    uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
+                    bool inTransition = _objMgrWasValid && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+
+                    shouldBlock = Paused || (_objMgrWasValid && !managerBaseValid) || inTransition;
+                }
                 if (shouldBlock)
                 {
-                    DrainQueues($"paused={Paused} objMgrNull={!managerBaseValid} contId=0x{continentId:X}");
+                    var csmState = csm?.CurrentState.ToString() ?? "n/a";
+                    DrainQueues($"paused={Paused} csmState={csmState}");
                     return 0;
                 }
 

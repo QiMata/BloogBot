@@ -292,9 +292,9 @@ namespace ForegroundBotRunner.Mem.Hooks
             bool isMapTransition = opcode is
                 0x003E   // SMSG_NEW_WORLD
                 or 0x003F // SMSG_TRANSFER_PENDING
+                or 0x0040 // SMSG_TRANSFER_ABORT
                 or 0x00DC // MSG_MOVE_WORLDPORT_ACK
-                or 0x01C9 // SMSG_LOGIN_VERIFY_WORLD
-                or 0x0236; // SMSG_TRANSFER_ABORT
+                or 0x0236; // SMSG_LOGIN_VERIFY_WORLD
             bool isAuth = opcode is
                 0x01EE   // SMSG_AUTH_RESPONSE
                 or 0x003B; // SMSG_CHAR_ENUM

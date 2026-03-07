@@ -1785,3 +1785,50 @@ PathingTestDefinitionTests (15).
 
 ### WWoWBot.AI.Tests — +117 tests (121 total, was 4)
 ForbiddenTransitionRuleTests (20), ForbiddenTransitionRegistryTests (17), AdvisoryValidatorTests (13), AdvisoryResolutionTests (8), InMemoryAdvisoryOverrideLogTests (8), StateChangeEventTests (21), BotStateObservableTests (11), MinorStateTests (10), BotActivityTests (2), DecisionInvocationSettingsTests (11).
+
+## Archived from TASKS.md — 2026-03-07 (Session 24)
+
+### P0 Completed
+| ID | Task | Completion |
+|----|------|------------|
+| `PATH-REFACTOR-001` | Pathfinding service + PhysicsEngine refactor (all phases). Fallback reduction, doodad whitelist, penetration tolerance, capsule-radius paths, Z correction, cliff probes/rerouting, width validation, batch GroundZ, navigation metrics. | Done |
+| `TEST-GMMODE-001` | All LiveValidation tests use `.gm on` for setup safety. | Done |
+| `DB-CLEAN-001` | pool_gameobject chance=0 is standard MaNGOS (equal distribution). Command table sanitized (4 legitimate entries). | Done |
+| `TEST-MINING-001` | Mining test optimized: eliminated re-teleport, FG bot positioned 5y from node, reduced wait times. | Done |
+| `TEST-LOG-CLEANUP` | Cleaned 3GB of stale tmp/ contents. | Done |
+| `LV-PARALLEL-001` | Parallelized all LiveValidation FG+BG tests via Task.WhenAll. | Done |
+| `FISH-001` | BG fishing end-to-end fixed. Root cause: MOVEFLAG_FALLINGFAR heartbeats during Z clamp interrupted fishing channel. | Done |
+| `TIER2-001` | Frame-ahead simulator, transport waiting, cross-map routing. 73 tests (54 unit + 19 integration). | Done |
+| `AI-PARITY` | All 3 AI parity gates validated: CORPSE (1/1), COMBAT (1/1), GATHER (2/2). | Done |
+
+### Live Validation Failures — Resolved
+| ID | Test | Resolution |
+|----|------|------------|
+| `LV-EQUIP-001` | EquipmentEquipTests | Fixed assertion to accept mainhandGuidChanged + added `.gm off` guard. |
+| `LV-GROUP-001` | GroupFormationTests | Added LeaderGuid property to IPartyNetworkClientComponent, stored in ParseGroupList/SetLeader. |
+| `LV-GROUNDZ-001` | OrgrimmarGroundZ PostTeleportSnap | Increased GROUND_SNAP_MAX_DROP to 5.0, multi-frame ground snap until FALLINGFAR clears. Commit `537935b`. |
+| `LV-QUEST-001` | QuestInteractionTests | Changed test quest to 786 (kill objectives), added QuestHandler for SMSG_QUESTUPDATE_COMPLETE + SMSG_QUESTUPDATE_ADD_KILL. |
+| `LV-TPCOUNT-001` | Teleport ACK counter | Added `_teleportSequence` counter in WoWSharpObjectManager. |
+
+### LiveValidation Audit — Resolved
+| ID | Resolution |
+|----|------------|
+| `LV-AUDIT-001` | 35 findings across 3 categories. 6 HIGH + 3 MEDIUM fixed. 40/40 tests pass. |
+| `LV-AUDIT-003` | BG bot TargetGuid tracking: SMSG_ATTACKSTART sets localPlayer.TargetGuid. Commit `545d2f3`. |
+
+### FG Client Stability — Resolved
+| ID | Resolution |
+|----|------------|
+| `FG-SEH-001` | FastCall.dll SEH protection — all 9 exports wrapped with `__try/__except`. Functions.cs native calls wrapped with `[HandleProcessCorruptedStateExceptions]`. Commit `554b9ba`. |
+
+### Capability Gaps — Resolved
+| ID | Resolution |
+|----|------------|
+| `CAP-GAP-001` | MerchantFrame bypass: BuyItemFromVendorAsync, SellItemToVendorAsync, RepairAllItemsAsync added via VendorAgent pattern. Legacy MerchantFrame path retained for FG. |
+| `CAP-GAP-002` | UnequipItem: WoWSharpObjectManager.UnequipItem() delegates to EquipmentAgent.UnequipItemAsync(). Maps EquipSlot → EquipmentSlot (offset -1). |
+
+### Pathfinding / Physics — Resolved
+| ID | Resolution |
+|----|------------|
+| `PATH-DYNOBJ-001` | Darkmoon Faire dynamic object LOS + path segment validation. SceneQuery::LineOfSight() includes DynamicObjectRegistry. SegmentIntersectsDynamicObjects C++ export + ValidateSegmentsAgainstDynamicObjects in GetValidatedPath. Commits `8c0401b`, `d537215`. |
+| `PATH-BOT-FORWARD-001` | Closed (not a bug). MovementController.Reset() fully clears velocity/flags/path. Horizontal velocity rebuilt from flags each frame. |

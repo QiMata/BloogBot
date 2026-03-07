@@ -58,15 +58,25 @@ Master tracker: `MASTER-SUB-016`
 3. FG parity slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~Combat|FullyQualifiedName~Gather" --logger "console;verbosity=minimal"`
 4. Repo-scoped cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
+## P1 — Packet Capture & Connection State (2026-03-07)
+
+6. [x] `FG-PKT-001` PacketLogger send hook — hooks NetClientSend (0x005379A0) via assembly injection. Captures outbound CMSG opcodes (opcode + size + timestamp). Commit: `00df96f`.
+7. [x] `FG-PKT-002` ConnectionStateMachine — packet-driven lifecycle state machine (DISCONNECTED → AUTHENTICATING → CHAR_SELECT → ENTERING_WORLD → IN_WORLD → TRANSFERRING → LOGGING_OUT). Provides IsLuaSafe, IsObjectManagerValid, IsSendingSafe. Commit: `00df96f`.
+8. [x] `FG-PKT-003` ContinentId-based inbound packet inference — bridges recv gap until direct hook exists. ForegroundBotWorker detects ContinentId transitions and records synthetic SMSG packets. Commit: `00df96f`.
+9. [ ] `FG-PKT-004` Wire ConnectionStateMachine into ThreadSynchronizer — replace ContinentId/ManagerBase heuristic checks with `_connectionState.IsLuaSafe` for deterministic Lua safety decisions. | Open
+10. [ ] `FG-PKT-005` Direct SMSG receive hook — needs ProcessMessage vtable offset from disassembly. Will allow ConnectionStateMachine to track all server→client transitions without ContinentId heuristics. | Open (blocked on disassembly)
+
 ## Session Handoff
-- Last updated: 2026-02-28
-- Active task: all ForegroundBotRunner tasks complete (FG-MISS-001..005)
-- Last delta: FG-MISS-004 (4 source-scanning regression tests in ForegroundObjectRegressionTests.cs)
+- Last updated: 2026-03-07
+- Active task: FG-PKT-004 (ConnectionStateMachine → ThreadSynchronizer wiring)
+- Last delta: FG-PKT-001..003 (packet capture + state machine + ContinentId inference)
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet test Tests/BotRunner.Tests -c Debug --filter ForegroundObjectRegressionTests` — 4/4 pass
+  - 97/97 physics replay tests pass
+  - `dotnet build` 0 errors
 - Files changed:
-  - `Tests/BotRunner.Tests/ForegroundObjectRegressionTests.cs` — new (4 tests)
-  - `Services/ForegroundBotRunner/TASKS.md`
-- Next command: continue with next queue file
-- Blockers: none
+  - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` — new
+  - `Services/ForegroundBotRunner/Mem/Hooks/ConnectionStateMachine.cs` — new
+  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs` — modified (hook init + ContinentId inference)
+- Next command: wire ConnectionStateMachine into ThreadSynchronizer
+- Blockers: FG-PKT-005 blocked on ProcessMessage vtable disassembly

@@ -284,6 +284,7 @@ namespace ForegroundBotRunner
                                 _connectionState.ForceState(
                                     ConnectionStateMachine.State.InWorld,
                                     "initial world entry detected via HasEnteredWorld");
+                                Mem.ThreadSynchronizer.SetConnectionStateMachine(_connectionState);
                                 DiagLog($"PacketLogger hooks initialized (active={PacketLogger.IsActive})");
                             }
                             catch (Exception ex)

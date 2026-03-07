@@ -51,6 +51,17 @@ public class BotServiceFixture : IAsyncLifetime
     private static Mutex? _globalMutex;
 
     /// <summary>
+    /// Whether a managed client (WoW.exe or StateManager) has crashed during this session.
+    /// When true, tests should fail fast instead of timing out.
+    /// </summary>
+    public bool ClientCrashed { get; private set; }
+
+    /// <summary>Descriptive message about which client crashed and when.</summary>
+    public string? CrashMessage { get; private set; }
+
+    private CancellationTokenSource? _crashMonitorCts;
+
+    /// <summary>
     /// Whether all required services (MaNGOS + StateManager) are healthy and ready.
     /// </summary>
     public bool ServicesReady { get; private set; }
@@ -188,12 +199,82 @@ public class BotServiceFixture : IAsyncLifetime
                 Log("  [PathfindingService] Set WWOW_DATA_DIR to your nav data directory (e.g., D:\\World of Warcraft) and rebuild.");
                 Log("  [PathfindingService] Tests requiring pathfinding will be skipped.");
             }
+
+            // Start background crash monitoring
+            StartCrashMonitor();
         }
         else
         {
             UnavailableReason = "WoWStateManager (port 8088) not available. Start it manually before running integration tests.";
             Log($"SKIP: {UnavailableReason}");
         }
+    }
+
+    /// <summary>
+    /// Starts a background task that polls StateManager and WoW.exe processes for crashes.
+    /// When a crash is detected, sets <see cref="ClientCrashed"/> and <see cref="CrashMessage"/>
+    /// so tests can fail fast instead of timing out.
+    /// </summary>
+    private void StartCrashMonitor()
+    {
+        _crashMonitorCts = new CancellationTokenSource();
+        var ct = _crashMonitorCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    // Check StateManager
+                    if (_stateManagerProcess != null && _stateManagerProcess.HasExited)
+                    {
+                        var msg = $"StateManager crashed (exit code {_stateManagerProcess.ExitCode}) at {DateTime.Now:HH:mm:ss}";
+                        Log($"  [CrashMonitor] {msg}");
+                        ClientCrashed = true;
+                        CrashMessage = msg;
+                        return;
+                    }
+
+                    // Check tracked WoW.exe PIDs
+                    List<int> pids;
+                    lock (_managedWoWPids)
+                        pids = new List<int>(_managedWoWPids);
+
+                    foreach (var pid in pids)
+                    {
+                        if (IsProcessDead(pid))
+                        {
+                            var msg = $"WoW.exe PID {pid} crashed at {DateTime.Now:HH:mm:ss}";
+                            Log($"  [CrashMonitor] {msg}");
+                            ClientCrashed = true;
+                            CrashMessage = msg;
+                            return;
+                        }
+                    }
+
+                    await Task.Delay(2000, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch
+                {
+                    // Best-effort monitoring — don't crash the monitor itself
+                }
+            }
+        }, ct);
+    }
+
+    /// <summary>
+    /// Throws <see cref="Xunit.Sdk.XunitException"/> if a client has crashed.
+    /// Call this from test code to fail fast instead of timing out.
+    /// </summary>
+    public void AssertClientAlive()
+    {
+        if (ClientCrashed)
+            Assert.Fail($"Client crashed during test session: {CrashMessage}");
     }
 
     /// <summary>Check if a TCP port is currently in use.</summary>
@@ -278,6 +359,9 @@ public class BotServiceFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        // Stop crash monitor first
+        try { _crashMonitorCts?.Cancel(); } catch { }
+
         int wowKilled = 0, pfKilled = 0;
 
         // Snapshot PIDs we launched so we can check for orphans after cleanup.
