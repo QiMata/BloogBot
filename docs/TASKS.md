@@ -150,8 +150,14 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 18)
-- **Current work:** Quest protocol + vendor/unequip capability gaps fixed.
+- **Last updated:** 2026-03-07 (session 19)
+- **Current work:** VendorBuySellTests passing, vendor packet flow fixed.
+- **Completed session 19 (2026-03-07):**
+  1. **VendorBuySellTests** — 2 new integration tests: Buy (Weak Flux from Wuark) + Sell (Linen Cloth). Both pass.
+  2. **Vendor packet flow fix** — `BuyItemFromVendorAsync` uses `CMSG_LIST_INVENTORY` directly (skips `CMSG_GOSSIP_HELLO` which triggers `SMSG_GOSSIP_MESSAGE`). `WaitForVendorWindowAsync` polls `_currentVendor` with 3s timeout. `SendBuyItemPacketAsync` fallback sends raw `CMSG_BUY_ITEM`.
+  3. **Sell item GUID resolution** — `SellItemToVendorAsync` resolves item GUID from `GetContainedItems()` sequential index. `BagContents` uses sequential indices, not WoW slot indices.
+  4. **LiveValidation results:** 42/46 (4 known intermittent: CombatLoop, Mining, StarterQuest, NavigationShortPath).
+- **Next priority:** SpellCastOnTargetTests, UnequipItemTests, CAP-GAP-003 (TrainerFrame, low).
 - **Completed session 18 (2026-03-07):**
   1. **Quest protocol infrastructure** — Added `AcceptQuestFromNpcAsync`, `TurnInQuestAsync`, `InteractWithNpcAsync` to `IObjectManager` and `WoWSharpObjectManager` using existing `_agentFactoryAccessor` pattern. BG bot can now accept/complete quests via packets.
   2. **ActionDispatch fixes** — `InteractWith` now falls back to `InteractWithNpcAsync` for NPC Units. `AcceptQuest` and `CompleteQuest` accept optional parameters [npcGuid, questId] for packet-based flow.
@@ -159,7 +165,6 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
   4. **CAP-GAP-001 (MerchantFrame bypass)** — Added `BuyItemFromVendorAsync`, `SellItemToVendorAsync`, `RepairAllItemsAsync` to `IObjectManager` + `WoWSharpObjectManager`, routing through `VendorAgent` via `_agentFactoryAccessor`. Updated ActionDispatch: `BuyItem` (3 params), `SellItem` (4 params), `RepairAllItems` (1 param) now use packet-based paths when vendorGuid is provided. Legacy MerchantFrame path retained for FG compatibility.
   5. **CAP-GAP-002 (UnequipItem)** — `WoWSharpObjectManager.UnequipItem()` now delegates to `EquipmentAgent.UnequipItemAsync()`. Maps `EquipSlot` → `EquipmentSlot` (offset -1). Sends `CMSG_AUTOSTORE_BAG_ITEM`.
   6. **LiveValidation results:** 41/44 (3 known intermittent: CombatLoop, Mining, StarterQuest in full suite).
-- **Next priority:** CAP-GAP-003 (TrainerFrame, low), remaining test improvements, new test coverage for vendor/unequip paths.
 - **Completed session 17 (2026-03-06):**
   1. **BG bot TargetGuid fix (LV-AUDIT-003)** — `SpellHandler.HandleAttackStart` now sets `localPlayer.TargetGuid` on SMSG_ATTACKSTART. `WoWSharpObjectManager.SetTarget()` immediately updates `localPlayer.TargetGuid`. Commit: `545d2f3`.
   2. **FastCall.dll full SEH protection (FG-SEH-001)** — All 9 FastCall exports wrapped with `__try/__except`. C# side: all native function calls in Functions.cs wrapped with `[HandleProcessCorruptedStateExceptions]` + try/catch returning safe defaults. Prevents ERROR #132 crashes at 0x0064B3FD during rapid teleportation. Commit: `554b9ba`.
