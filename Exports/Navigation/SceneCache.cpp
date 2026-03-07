@@ -256,6 +256,13 @@ SceneCache* SceneCache::Extract(uint32_t mapId,
                 const VMAP::ModelInstance& mi = instances[i];
                 if (!mi.iModel) continue;
 
+                // Skip decorative M2 models in the VMAP tree (catapults, banners, etc.)
+                // These are standalone M2 instances that block physics but shouldn't
+                // generate collision geometry (same filter as WMO-nested doodads).
+                if ((mi.flags & VMAP::MOD_M2) && !mi.name.empty()
+                    && ShouldExcludeDoodad(mi.name.c_str()))
+                    continue;
+
                 // Quick AABB filter: transform instance bounds to world space
                 if (hasBounds)
                 {
