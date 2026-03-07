@@ -108,7 +108,7 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 |----|-------|-------|--------|
 | `TEST-TRAM-001` | **Deeprun Tram map transition integration test.** Both bots (BG+FG) teleport to Ironforge (map 0) with `.gm on` (Horde safe in Alliance city). Walk toward Deeprun Tram entrance. Verify: (1) cross-map teleport succeeds (SMSG_TRANSFER_PENDING → SMSG_NEW_WORLD → MSG_MOVE_WORLDPORT_ACK), (2) client remains connected, (3) MaNGOS bounces player out of map 369 gracefully. No flight paths — `.go xyz` teleport only. | `Tests/BotRunner.Tests/LiveValidation/` | Open |
 | `TEST-CRASH-001` | **Test fixture fail-fast on client crash.** When WoW.exe crashes during a test, BotServiceFixture should: (1) detect the crash via `Process.HasExited`, (2) immediately kill StateManager + PathfindingService, (3) fail the current test with a descriptive error instead of letting StateManager respawn clients. Currently StateManager removes crashed clients from tracking but the test fixture has no crash callback — tests time out instead of failing fast. | `Tests/Tests.Infrastructure/` | Open |
-| `TEST-FGPACKET-001` | **FG packet send/receive hook for gold-standard protocol capture.** Hook `NetClientSend` (0x005379A0) for outbound CMSG and WoW's packet receive handler for inbound SMSG. Log opcode + size + timestamp (not payload). Purpose: (1) know exactly when Lua is instantiated/hooked, (2) know when to send commands vs. listen/skip during transitions, (3) capture gold-standard packet sequences for BG bot parity. SEH-protected, deferred until after world entry (same pattern as SignalEventManager). | `Services/ForegroundBotRunner/Mem/Hooks/` | Open |
+| `TEST-FGPACKET-001` | **FG packet send hook + connection state machine — SEND DONE.** PacketLogger hooks `NetClientSend` (0x005379A0) for outbound CMSG capture. ConnectionStateMachine tracks lifecycle via packet events + ContinentId inference. Receive hook deferred — needs ProcessMessage vtable offset from disassembly. RecordInboundPacket() API bridges the gap via ContinentId change detection. Logs to `WWoWLogs/packet_logger.log` and `connection_state.log`. | `Services/ForegroundBotRunner/Mem/Hooks/` | **Partial** — commit `00df96f`, recv hook pending |
 
 ## Deferred (Unused Services)
 
@@ -159,13 +159,13 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 
 ## Session Handoff
 - **Last updated:** 2026-03-07 (session 23)
-- **Current work:** Reverted incorrect `ShouldExcludeDoodad` M2 exclusion. Planning Deeprun Tram integration test and test fixture crash hardening.
+- **Current work:** FG packet capture implemented. Deeprun Tram test and fixture hardening planned.
 - **Completed session 23 (2026-03-07):**
-  1. **REVERTED session 22 M2 exclusion fix** — `ShouldExcludeDoodad` function removed entirely from SceneCache.cpp. M2 collision is determined by MPQ flags, not keyword heuristics. 99% of M2 models have collision and must remain in physics sweeps. Removed: (a) the entire `ShouldExcludeDoodad` function, (b) VMAP M2 filter added in commit `a1a04bd`, (c) WMO doodad filter call site. NPCs do NOT generate collision.
-  2. **PhysicsCollideSlide.cpp** — Removed incorrect catapult/barricade-specific comments from horizontal collision logic.
-  3. **FG-GHOST-STUCK-001 REOPENED** — Ghost stuck is a pathfinding/stuck-recovery issue in dense M2 geometry, not an M2 exclusion issue.
-  4. **New tasks planned:** Deeprun Tram integration test (map transition hardening), test fixture fail-fast on client crash.
-- **Next priority:** Build C++ + run physics tests, implement Deeprun Tram test, harden test fixture crash handling.
+  1. **REVERTED session 22 M2 exclusion fix** — `ShouldExcludeDoodad` function removed entirely from SceneCache.cpp. M2 collision is determined by MPQ flags, not keyword heuristics. 99% of M2 models have collision and must remain in physics sweeps. NPCs do NOT generate collision. Commit: `78ef7aa`.
+  2. **FG packet capture hooks (TEST-FGPACKET-001)** — `PacketLogger.cs` hooks `NetClientSend` (0x005379A0) via assembly injection to capture outbound CMSG opcodes (opcode + size + timestamp, no payload). `ConnectionStateMachine.cs` tracks client lifecycle: DISCONNECTED → AUTHENTICATING → CHAR_SELECT → ENTERING_WORLD → IN_WORLD → TRANSFERRING. Provides `IsLuaSafe`, `IsObjectManagerValid`, `IsSendingSafe` for deterministic state checks. ContinentId changes infer inbound packets as safety net until direct recv hook is added. Commit: `00df96f`.
+  3. **FG-GHOST-STUCK-001 REOPENED** — Ghost stuck is a pathfinding/stuck-recovery issue, not M2 exclusion.
+  4. **97/97 physics replay tests pass** after ShouldExcludeDoodad removal.
+- **Next priority:** (1) TEST-TRAM-001 — implement Deeprun Tram integration test using `.gm on` + `.go xyz` (both bots, no flight paths), (2) TEST-CRASH-001 — test fixture fail-fast on client crash, (3) Direct SMSG receive hook (needs ProcessMessage vtable offset from disassembly).
 - **Completed session 22 (2026-03-07):**
   1. **(REVERTED)** `ShouldExcludeDoodad` VMAP extension was incorrect. See session 23.
   2. **Test results:** 97/97 physics replay, 25/25 PathfindingService, 1/1 DeathCorpseRunTests.
