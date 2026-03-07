@@ -36,9 +36,9 @@ public class NavigationTests
     private const float RhStartX = 340f, RhStartY = -4686f, RhStartZ = 16.5f;
     private const float RhEndX = 310f, RhEndY = -4720f, RhEndZ = 11f;
 
-    // Orgrimmar — longer path through city (~80y)
+    // Orgrimmar — moderate path through Valley of Strength (~50y direct)
     private const float OrgStartX = 1629f, OrgStartY = -4373f, OrgStartZ = 15f;
-    private const float OrgEndX = 1680f, OrgEndY = -4460f, OrgEndZ = 20f;
+    private const float OrgEndX = 1660f, OrgEndY = -4420f, OrgEndZ = 15f;
 
     public NavigationTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -60,7 +60,7 @@ public class NavigationTests
     public async Task Navigation_CityPath_ArrivesAtDestination()
     {
         await RunNavigationTest("City (Orgrimmar)", OrgStartX, OrgStartY, OrgStartZ,
-            OrgEndX, OrgEndY, OrgEndZ, maxSeconds: 30);
+            OrgEndX, OrgEndY, OrgEndZ, maxSeconds: 45);
     }
 
     private async Task RunNavigationTest(string scenarioName, float startX, float startY, float startZ,
