@@ -85,6 +85,7 @@ public class ConsumableUsageTests
         // Record aura state BEFORE
         await _bot.RefreshSnapshotsAsync();
         var playerBefore = getPlayer();
+        Assert.NotNull(playerBefore);
         int aurasBefore = playerBefore?.Unit?.Auras?.Count ?? 0;
         bool hadBuff = playerBefore?.Unit?.Auras?.Contains(LionsStrengthSpellId) == true;
         _output.WriteLine($"  [{label}] Auras before: {aurasBefore}, hasLionsStrength={hadBuff}");

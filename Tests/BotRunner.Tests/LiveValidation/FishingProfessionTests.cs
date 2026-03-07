@@ -101,6 +101,7 @@ public class FishingProfessionTests
         // --- Record initial skill ---
         await _bot.RefreshSnapshotsAsync();
         uint bgSkillBefore = GetFishingSkill("BG");
+        Assert.True(bgSkillBefore > 0, "BG: Initial fishing skill is 0 — setup failed to teach fishing.");
         _output.WriteLine($"Initial fishing skill: BG={bgSkillBefore}");
 
         // --- Find a working fishing position and catch fish ---

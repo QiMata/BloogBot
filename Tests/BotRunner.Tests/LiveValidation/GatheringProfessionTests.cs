@@ -492,7 +492,7 @@ public class GatheringProfessionTests
                     break;
                 }
 
-                await Task.Delay(1500);
+                await Task.Delay(500); // TIM-2: reduced from 1500ms — 3s window ÷ 500ms = 6 polls
             }
 
             if (nodeGuid == 0)
@@ -547,14 +547,19 @@ public class GatheringProfessionTests
 
                 if (navDist > 5f)
                 {
+                    // TIM-5: dump diagnostic state on pathfinding timeout
+                    var diagSnap = GetSnapshot(label);
+                    var moveFlags = diagSnap?.Player?.Unit?.MovementFlags ?? 0;
+                    var health = diagSnap?.Player?.Unit?.Health ?? 0;
+                    var diagPos = diagSnap?.Player?.Unit?.GameObject?.Base?.Position;
                     _output.WriteLine($"  [{label}] Pathfinding timed out (dist={navDist:F1}y after {navSw.Elapsed.TotalSeconds:F0}s)");
-                    // GM-1: A pathfinding timeout when the bot needed to navigate is a real failure —
-                    // silently continuing masks broken pathfinding. Assert failure instead.
-                    Assert.Fail($"[{label}] Pathfinding failed: could not reach node within 30s (startDist={startDist:F1}y, finalDist={navDist:F1}y). This indicates a pathfinding or physics issue.");
+                    _output.WriteLine($"  [{label}] Diagnostic: moveFlags=0x{moveFlags:X}, health={health}, pos=({diagPos?.X:F1},{diagPos?.Y:F1},{diagPos?.Z:F1})");
+                    Assert.Fail($"[{label}] Pathfinding failed: could not reach node within 30s (startDist={startDist:F1}y, finalDist={navDist:F1}y, moveFlags=0x{moveFlags:X}). This indicates a pathfinding or physics issue.");
                 }
 
-                // Brief settle: let movement fully stop before interacting.
-                // Gathering while in motion can fail in WoW 1.12.1.
+                // TIM-1: Brief settle (1.2s) — WoW 1.12.1 rejects gather attempts while
+                // the client is still moving. 1200ms is empirically sufficient for
+                // the server to process the movement stop packet and update state.
                 await Task.Delay(1200);
             }
 
@@ -583,7 +588,11 @@ public class GatheringProfessionTests
                 await _bot.RefreshSnapshotsAsync();
                 skillNow = GetSkill(label, skillId);
                 if (skillNow == 0)
+                {
+                    if (poll % 5 == 0) // TIM-12: log every 5th iteration for reconnect visibility
+                        _output.WriteLine($"  [{label}] Reconnect poll {poll}/20: skill=0, waiting 2s...");
                     await Task.Delay(2000);
+                }
             }
             _output.WriteLine($"  [{label}] Skill after gather: {skillNow}");
 

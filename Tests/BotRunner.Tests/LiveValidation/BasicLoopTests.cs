@@ -174,6 +174,7 @@ public class BasicLoopTests
         var distanceBefore = Distance2D(beforePos!.X, beforePos.Y, RazorHillX, RazorHillY);
 
         var moved = await TeleportAndVerifyAsync(account, label);
+        Assert.True(moved, $"[{label}] TeleportAndVerify returned false — teleport dispatch may have failed.");
 
         var after = await _bot.GetSnapshotAsync(account);
         var afterPos = after?.Player?.Unit?.GameObject?.Base?.Position;
@@ -238,6 +239,7 @@ public class BasicLoopTests
 
         await _bot.RefreshSnapshotsAsync();
         var baseline = await _bot.GetSnapshotAsync(bgAccount);
+        Assert.NotNull(baseline?.Player);
         var baselineLevel = baseline?.Player?.Unit?.GameObject?.Level ?? 0;
         _output.WriteLine($"BG level before setup: {baselineLevel}");
 

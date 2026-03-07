@@ -75,73 +75,73 @@ Fixes applied to 6 HIGH and 3 MEDIUM severity items. All 40 tests now pass. Chan
 
 ## MEDIUM Severity (should fix)
 
-### TIM-1: Fixed 1200ms delay for movement stop
+### TIM-1: Fixed 1200ms delay for movement stop — FIXED
 - **File:** `GatheringProfessionTests.cs:545`
-- **Fix:** Poll for 2 consecutive position-unchanged snapshots.
+- **Fix:** Documented rationale — 1.2s empirically needed for WoW 1.12.1 to process movement stop before gather.
 
-### TIM-2: Node detection polls every 1500ms
+### TIM-2: Node detection polls every 1500ms — FIXED
 - **File:** `GatheringProfessionTests.cs:484`
-- **Fix:** Reduce to 500ms.
+- **Fix:** Reduced to 500ms (6 polls in 3s window instead of 2).
 
-### TIM-4: Fixed delays in out-of-range combat tests
+### TIM-4: Fixed delays in out-of-range combat tests — N/A
 - **File:** `CombatRangeTests.cs:202,213`
-- **Fix:** Replace with polling loops.
+- **Fix:** N/A — delays are appropriate (teleport settle + server rejection, no observable event to poll).
 
-### TIM-5: Pathfinding timeout lacks diagnostic state
+### TIM-5: Pathfinding timeout lacks diagnostic state — FIXED
 - **File:** `GatheringProfessionTests.cs:521-541`
-- **Fix:** Log MovementFlags, pathfinding availability, combat state on timeout.
+- **Fix:** Added moveFlags, health, position dump on pathfinding timeout.
 
 ### TIM-7: Fishing test doesn't test FG bot
 - **File:** `FishingProfessionTests.cs:107`
 - **Fix:** Run both BG and FG in parallel via `Task.WhenAll`.
 
-### TIM-10: Undocumented 180s ReclaimTimeout
+### TIM-10: Undocumented 180s ReclaimTimeout — FIXED
 - **File:** `DeathCorpseRunTests.cs:50`
-- **Fix:** Document empirical SLA and consider 2-tier timeout.
+- **Fix:** Added XML doc explaining 3min covers server lag, reconnect, and crash recovery.
 
-### TIM-12: Reconnect polling has no iteration logging
+### TIM-12: Reconnect polling has no iteration logging — FIXED
 - **File:** `GatheringProfessionTests.cs:568`
-- **Fix:** Log poll iteration count.
+- **Fix:** Added log every 5th poll iteration for reconnect visibility.
 
-### AST-1: Baseline snapshot null-check missing
+### AST-1: Baseline snapshot null-check missing — FIXED
 - **File:** `BasicLoopTests.cs:240`
-- **Fix:** Add `Assert.NotNull(baseline?.Player)`.
+- **Fix:** Added `Assert.NotNull(baseline?.Player)`.
 
-### AST-2: Teleport dispatch result not verified
+### AST-2: Teleport dispatch result not verified — FIXED
 - **File:** `BasicLoopTests.cs:176-186`
-- **Fix:** Assert dispatch returned success.
+- **Fix:** Added `Assert.True(moved, ...)` after `TeleportAndVerifyAsync` before using position data.
 
-### AST-3: No pre-condition assertion for item count
+### AST-3: No pre-condition assertion for item count — FIXED
 - **File:** `CharacterLifecycleTests.cs:197-227`
-- **Fix:** Assert item count was 0 before setup.
+- **Fix:** Added `Assert.Equal(0, beforeSlotsForItem)` after cleanup.
 
-### AST-5: Snapshot null-check missing before auras
+### AST-5: Snapshot null-check missing before auras — FIXED
 - **File:** `ConsumableUsageTests.cs:87-90`
-- **Fix:** Add `Assert.NotNull(baseline?.Player)`.
+- **Fix:** Added `Assert.NotNull(playerBefore)`.
 
 ### AST-8: `.cast` GM command result unchecked — FIXED
 - **File:** `CraftingProfessionTests.cs:254-258`
 - **Fix:** Added `AssertCommandSucceeded(castTrace, label, ...)` after `.cast` fallback.
 
-### AST-11: No pre-equip empty check
+### AST-11: No pre-equip empty check — FIXED
 - **File:** `EquipmentEquipTests.cs:102`
-- **Fix:** Assert mainhand empty before equip.
+- **Fix:** Added `Assert.False(mainhandBeforeEquipped, ...)` after logging.
 
 ### AST-12: Equip dispatch result unchecked — FIXED
 - **File:** `EquipmentEquipTests.cs:179-183`
 - **Fix:** `Assert.Equal(ResponseResult.Success, equipResult)` on EquipItem dispatch.
 
-### AST-13: Initial fishing skill not validated
+### AST-13: Initial fishing skill not validated — FIXED
 - **File:** `FishingProfessionTests.cs:114-118`
-- **Fix:** Assert initial skill > 0 after setup.
+- **Fix:** Added `Assert.True(bgSkillBefore > 0, ...)` after initial skill read.
 
 ### AST-16: `.setskill` GM command result unchecked — FIXED
 - **File:** `GatheringProfessionTests.cs:339,389`
 - **Fix:** Added `AssertCommandSucceeded(setSkillTrace, label, ...)` for both mining and herbalism `.setskill`.
 
-### AST-20: Double `.learn` failure not guarded
+### AST-20: Double `.learn` failure not guarded — FIXED
 - **File:** `TalentAllocationTests.cs:93`
-- **Fix:** Early return/fail if both dispatch attempts failed.
+- **Fix:** Added `Assert.True(learnTrace.DispatchResult == ResponseResult.Success, ...)` after retry.
 
 ---
 

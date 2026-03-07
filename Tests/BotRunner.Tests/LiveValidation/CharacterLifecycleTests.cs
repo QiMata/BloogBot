@@ -208,6 +208,7 @@ public class CharacterLifecycleTests
             if (baseline?.Player == null)
                 return false;
             beforeSlotsForItem = CountBagSlotsForItem(baseline.Player, itemId);
+            Assert.Equal(0, beforeSlotsForItem);
             _output.WriteLine($"  [{label}] {itemName} slots after cleanup: {beforeSlotsForItem}");
         }
 

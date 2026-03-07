@@ -47,6 +47,7 @@ public class DeathCorpseRunTests
     private static readonly TimeSpan GhostSettleMinimumDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan GhostRelocationGuardWindow = TimeSpan.FromSeconds(6);
     private static readonly TimeSpan ReleaseToGhostTimeout = TimeSpan.FromSeconds(15);
+    /// <summary>MaNGOS corpse reclaim delay is 0-30s; 3min buffer covers server lag, reconnect, and FG crash recovery.</summary>
     private static readonly TimeSpan ReclaimTimeout = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan AliveAfterRetrieveTimeout = TimeSpan.FromSeconds(20);
 

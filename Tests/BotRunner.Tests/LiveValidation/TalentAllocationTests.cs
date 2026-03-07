@@ -91,6 +91,8 @@ public class TalentAllocationTests
             await _bot.BotSelectSelfAsync(account);
             await Task.Delay(300);
             learnTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".learn {Deflection1}", captureResponse: true, delayMs: 1000);
+            Assert.True(learnTrace.DispatchResult == ResponseResult.Success,
+                $"[{label}] .learn retry also failed (DispatchResult={learnTrace.DispatchResult}). Bot may be stuck in dead/ghost state.");
         }
 
         AssertCommandSucceeded(learnTrace, label, ".learn");

@@ -60,7 +60,7 @@ All resolved and archived. See `docs/ARCHIVE.md`.
 
 | ID | Task | Status |
 |----|------|--------|
-| `LV-AUDIT-002` | Remaining MEDIUM items (AST-1/2/3/5/11/13/20, TIM-1/2/4/5/7/10/12) — lower risk, not causing false passes. | Open |
+| `LV-AUDIT-002` | Remaining MEDIUM items. **Fixed:** AST-1/2/3/5/11/13/20, TIM-1/2/5/10/12. **Open:** TIM-7 (FG fishing test). | Mostly Done |
 
 ## Open — FG Client Stability (2026-03-06)
 
