@@ -85,7 +85,7 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 | ID | Issue | Owner | Status |
 |----|-------|-------|--------|
 | `FG-SEH-001` | FastCall.dll SEH protection — all 9 exports now wrapped with `__try/__except`. Functions.cs native calls all wrapped with `[HandleProcessCorruptedStateExceptions]`. Crash at 0x0064B3FD during rapid teleportation prevented. | `Exports/FastCall/`, `Services/ForegroundBotRunner/Mem/` | **Done** — commit `554b9ba` |
-| `FG-GHOST-STUCK-001` | Ghost form stuck on Orgrimmar catapult geometry at ~(1577, -4394, 6.2) during corpse run. Pathfinding routes through siege weapon geometry. | `Exports/Navigation/` | Open |
+| `FG-GHOST-STUCK-001` | Ghost form stuck on Orgrimmar catapult geometry at ~(1577, -4394, 6.2) during corpse run. Root cause: `ShouldExcludeDoodad` only filtered WMO-nested M2 doodads, not standalone VMAP M2 instances. Extended filter to VMAP extraction path. | `Exports/Navigation/` | **Done** — commit `a1a04bd` |
 
 ## Open — Capability Gaps (from CAPABILITY_AUDIT.md)
 
@@ -150,15 +150,19 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 21)
-- **Current work:** StarterQuestTests reliability fix. Full suite stable at 42/46.
+- **Last updated:** 2026-03-07 (session 22)
+- **Current work:** FG-GHOST-STUCK-001 fixed. Full LiveValidation suite pending confirmation.
+- **Completed session 22 (2026-03-07):**
+  1. **FG-GHOST-STUCK-001 FIXED** — Ghost form stuck on Orgrimmar catapult geometry during corpse run. Root cause: `ShouldExcludeDoodad` filter only applied to WMO-nested M2 doodads in SceneCache extraction, not to standalone VMAP M2 model instances. Catapults, banners, torches etc. in the VMAP tree generated physics collision triangles that blocked ghost movement. Fix: extended the same filter to VMAP extraction path (check `mi.flags & MOD_M2` + `ShouldExcludeDoodad(mi.name)`). Commit: `a1a04bd`.
+  2. **Test results:** 97/97 physics replay, 25/25 PathfindingService, 1/1 DeathCorpseRunTests (ghost navigated cleanly without stuck recoveries). Full LiveValidation suite pending.
+  3. **Committed session 21 handoff** (`7ce8a5f`).
+- **Next priority:** Phase 6b DotRecast eval (low priority), CAP-GAP-003 (TrainerFrame, low priority), investigate StarterQuestTests FG bot interaction in suite context.
 - **Completed session 21 (2026-03-07):**
   1. **StarterQuestTests pre-flight fix** — Added Orgrimmar pre-flight teleport before Valley of Trials to prevent FG client area loading delays. Increased post-teleport delay 3s→4s.
   2. **Root cause analysis** — StarterQuestTests passes solo when fixture initializes, fails in suite due to FG client zone loading latency after long cross-zone teleport. Also intermittently skips when FG bot fails to launch (fixture timeout).
   3. **ActionType handler research** — Comprehensive audit of 10 handlers (AcceptQuest, CompleteQuest, SelectGossip, SelectTaxiNode, LootCorpse, TrainSkill, BuyItem, SellItem, RepairItem, UnequipItem). Key finding: MerchantFrame null confirmed bypassed by CAP-GAP-001 VendorAgent path.
   4. **LiveValidation results:** 42/46 best run (46 total tests). Median 40-42/46 on healthy runs. Known intermittent: Mining (respawn), Herbalism (respawn), CombatLoop (timing), StarterQuest (zone loading).
   5. **Commit:** `277e5db` — pushed to `cpp_physics_system`.
-- **Next priority:** FG-GHOST-STUCK-001 (ghost stuck on catapult), Phase 6b DotRecast eval (low priority), investigate StarterQuestTests FG bot interaction in suite context.
 - **Completed session 20 (2026-03-07):**
   1. **SpellCastOnTargetTests** — Battle Shout (6673) self-buff via CMSG_CAST_SPELL. Root cause of initial failure: (a) Battle Shout requires rage (10) — added `.modify rage 100`, (b) CastSpell with self-GUID as target used TARGET_FLAG_UNIT instead of TARGET_FLAG_SELF — server rejected. Fixed `WoWSharpObjectManager.CastSpell` to use TARGET_FLAG_SELF when `_currentTargetGuid == PlayerGuid.FullGuid`. FG bot: CastSpell(int) is no-op, uses `.cast` GM command.
   2. **UnequipItemTests** — Equip Worn Mace → UnequipItem(EquipSlot=16) → verify mainhand slot empty. Maps EquipSlot enum (16) to inventory slot key (15). Both BG+FG pass.
