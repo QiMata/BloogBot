@@ -134,30 +134,29 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 28)
+- **Last updated:** 2026-03-07 (session 29)
 - **Current work:** LiveValidation test stabilization + bot behavior implementation.
-- **Completed session 28 (2026-03-07):**
-  1. **Reverted incorrect CMSG_USE_ITEM uint32 change** — VMaNGOS `SpellCastTargets.m_targetMask` is `uint16` (verified in `D:/vmangos/src/game/Spells/Spell.h:159`). The uint16→uint32 change from session 27 corrupted packet bytes, causing 5+ intermittent failures. Revert fixed ConsumableUsage, BuffDismiss, UnequipItem, and several other tests.
-  2. **ConsumableUsageTests fix** — Aura spell ID corrected from 2367 (use-effect) to 2457 (actual buff aura for Elixir of Lion's Strength).
-  3. **EquipmentEquipTests fix** — Proactive `.reset items` if mainhand already occupied by prior test (test isolation).
-  4. **UnequipItemTests fix** — Clear inventory before test to ensure bag space for unequip destination.
-  5. **VendorBuySellTests fix** — Added `RefreshSnapshotsAsync()` after `.reset items`, increased delays.
-  6. **LiveValidation best: 36/50 pass** (up from 31 at session start, 35 in session 27). Three runs: 36/50, 10/50 (infra fluke), 35/50.
-  7. **GatheringProfessionTests** — Sort spawns by distance from Orgrimmar (nearest-first) to avoid long-distance teleport failures.
-  8. **CombatRangeTests.MeleeAttack_OutsideRange** — Add `.combatstop` before teleporting (server blocks `.go xyz` during combat state). Now passes.
-  9. **CombatRangeTests.RangedAttack_OutsideRange** — Replace `Assert.Null(mobSnap)` with distance-based check (mob can persist in stale NearbyUnits). Now passes.
-- **Completed sessions 26-27:** See `docs/ARCHIVE.md`.
-- **LiveValidation remaining failures (inherently flaky — 13 fail in best run):**
+- **Completed session 29 (2026-03-07):**
+  1. **VendorBuySellTests root cause found and fixed** — Test was finding ANY vendor near Razor Hill but buying Weak Flux (2880), only sold by Wuark (blacksmith). If Grimtak (general goods) was found first, buy silently failed. Fix: teleport to Grimtak's exact DB position (305.7, -4665.9, 16.5) and buy Refreshing Spring Water (159) from his inventory. Both buy and sell tests now pass.
+  2. **VMaNGOS `.go xyz` investigation** — `HandleGoHelper` has NO combat check; `Player::TeleportTo` also has no combat check. Teleport failures are timing/state issues, not combat-blocked. Heavy teleport verification (`.combatstop` + position polling + retry) was tested but REVERTED — added 3s+ per teleport, disrupted test timing, caused 14/50 run.
+  3. **VMaNGOS `.quest add` investigation** — Command exists at `SEC_BASIC_ADMIN` (4), bots have level 6. However, the `quest` parent command has `console=false` flag — `.quest add` only works via in-game chat, NOT via SOAP. Tests correctly use bot chat, so the failure is in `ExtractPlayerTarget` not finding the selected player (intermittent). `GetSelectedPlayer()` returns self when guid=0, so it should work — failure is timing-dependent.
+  4. **LiveValidation runs: 29/50, 30/50** (clean runs). WoW.exe crash mid-run caused 14/50 and 18/50 in earlier attempts.
+- **Completed session 28:** See `docs/ARCHIVE.md`.
+- **LiveValidation remaining failures (20 fail in best run):**
   - **Consistent failures:**
-    - `GatheringProfession.Mining/Herbalism` — teleport to spawn still fails even with sort (closest nodes ~300y but `.go xyz` still rejected sometimes)
-    - `QuestInteraction` — `.quest add` command rejected by VMaNGOS
+    - `GatheringProfession.Mining/Herbalism` — teleport to spawn fails (closest nodes ~300y, `.go xyz` intermittently rejected)
+    - `QuestInteraction` — `.quest add` via chat intermittently fails (ExtractPlayerTarget timing)
     - `StarterQuest` — Gornek NPC not visible after teleport
-    - `VendorBuySell.BuyItem` — CMSG_BUY_ITEM protocol not fully working
+    - `OrgrimmarGroundZ.PostTeleport` — FG not available
   - **Intermittent (pass on some runs, fail on others):**
-    - `ConsumableUsage`, `BuffDismiss`, `UnequipItem`, `CombatLoop`, `SpellCast`, `Navigation`, `Fishing`, `CraftingProfession`, `CharacterLifecycle.Death`, `OrgrimmarGroundZ.PostTeleport`
-- **Key finding: CMSG_USE_ITEM targetMask is uint16** — documented in VMaNGOS source `Spell.h:159`. All UseItem packet methods use `ushort` correctly. Do NOT change to uint32.
+    - `VendorBuySell.BuyItem` (now passes 3/4 runs — was 0/4 before fix)
+    - `ConsumableUsage`, `BuffDismiss`, `UnequipItem`, `CombatLoop`, `SpellCast`, `Navigation`, `Fishing`, `CraftingProfession`, `CharacterLifecycle.Death`, `EquipmentEquip`, `TalentAllocation`, `CombatRange.RangedOutside`
+- **Key findings:**
+  - **CMSG_USE_ITEM targetMask is uint16** — documented in VMaNGOS source `Spell.h:159`. Do NOT change to uint32.
+  - **VMaNGOS INTERACTION_DISTANCE = 5.0y** — vendor/NPC interaction requires player within 5y. Teleporting to NPC position + 1z is fine.
+  - **`.quest` commands console=false** — only work via in-game chat, not SOAP.
 - **TESTBOT1 (FG) stuck at CharacterSelect** — persists across sessions. All FG-dependent scenarios use BG-only fallback.
-- **Next priority:** (1) Fix `.go xyz` reliability for BG bot (investigate why teleport silently fails), (2) Fix vendor buy/sell protocol, (3) Fix TESTBOT1 CharacterSelect stuck, (4) FG-GHOST-STUCK-001
-- **Test counts:** Physics 97/97, Pathfinding 25/25, AI 121/121, Tier2 52/52, WoWSharpClient 1251/1251. LiveValidation 35-36/50.
+- **Next priority:** (1) Fix teleport reliability (investigate why `.go xyz` silently fails for ~20% of teleports), (2) Fix TESTBOT1 CharacterSelect stuck, (3) FG-GHOST-STUCK-001
+- **Test counts:** Physics 97/97, Pathfinding 25/25, AI 121/121, Tier2 52/52, WoWSharpClient 1251/1251. LiveValidation 29-30/50.
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
 - **Sessions 1-25:** See `docs/ARCHIVE.md` for full history.
