@@ -8,7 +8,11 @@ namespace ForegroundBotRunner.Frames;
 /// ILoginScreen implementation for the Foreground (DLL-injected) bot.
 /// Wraps FG's memory-based login via Lua calls.
 /// </summary>
-public class FgLoginScreen(Func<WoWScreenState> getScreenState, Action<string, string> defaultServerLogin, Action resetLogin) : ILoginScreen
+public class FgLoginScreen(
+    Func<WoWScreenState> getScreenState,
+    Action<string, string> defaultServerLogin,
+    Action resetLogin,
+    Action dismissGlueDialog) : ILoginScreen
 {
     private DateTime? _loginScreenFirstSeen;
     private static readonly TimeSpan LuaInitGracePeriod = TimeSpan.FromSeconds(3);
@@ -32,6 +36,10 @@ public class FgLoginScreen(Func<WoWScreenState> getScreenState, Action<string, s
         _loginScreenFirstSeen ??= DateTime.Now;
         if (DateTime.Now - _loginScreenFirstSeen.Value < LuaInitGracePeriod)
             return; // BotRunnerService retries every 100ms via behavior tree re-tick
+
+        // Dismiss any open GlueDialog (e.g. "Disconnected from server" Okay button)
+        // before attempting login. The dialog blocks DefaultServerLogin Lua call.
+        dismissGlueDialog();
 
         defaultServerLogin(username, password);
     }

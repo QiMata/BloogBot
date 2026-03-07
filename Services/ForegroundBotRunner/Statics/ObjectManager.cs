@@ -138,7 +138,8 @@ namespace ForegroundBotRunner.Statics
             _fgLoginScreen = new FgLoginScreen(
                 () => GetCurrentScreenState(),
                 (user, pass) => DefaultServerLogin(user, pass),
-                () => ResetLogin());
+                () => ResetLogin(),
+                () => DismissGlueDialog());
             _fgRealmSelectScreen = new FgRealmSelectScreen(
                 () => GetCurrentScreenState(),
                 () => MaxCharacterCount,
@@ -826,6 +827,19 @@ namespace ForegroundBotRunner.Statics
         }
 
         public string GlueDialogText => MainThreadLuaCallWithResult("{0} = GlueDialogText:GetText()")[0];
+
+        /// <summary>
+        /// Dismisses any open GlueDialog (e.g. "Disconnected from server", "Login failed").
+        /// Clicks GlueDialogButton1 if the dialog is visible; no-op if no dialog is open.
+        /// </summary>
+        public static void DismissGlueDialog()
+        {
+            try
+            {
+                MainThreadLuaCall("if GlueDialog and GlueDialog:IsVisible() then GlueDialogButton1:Click() end");
+            }
+            catch { /* GlueDialog may not exist or Lua not ready */ }
+        }
 
         public static int MaxCharacterCount => MemoryManager.ReadInt(0x00B42140);
         public static void ResetLogin()
