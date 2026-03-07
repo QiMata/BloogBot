@@ -2258,9 +2258,10 @@ namespace WoWSharpClient
             using var w = new BinaryWriter(ms);
             w.Write((uint)spellId);
 
-            if (castOnSelf || _currentTargetGuid == 0)
+            if (castOnSelf || _currentTargetGuid == 0 || _currentTargetGuid == PlayerGuid.FullGuid)
             {
                 // TARGET_FLAG_SELF = 0x0000 - server uses caster as target
+                // Also use self-targeting when the current target is the player's own GUID
                 w.Write((ushort)0x0000);
                 Log.Information("[CastSpell] spell={SpellId} targetSelf (guid=0x{Guid:X})", spellId, _currentTargetGuid);
             }

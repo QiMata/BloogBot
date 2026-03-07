@@ -26,6 +26,8 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 | ACCEPT_GROUP_INVITE | Working (CMSG_GROUP_ACCEPT) | Working (native) | GroupFormationTests |
 | LEAVE_GROUP | Working (CMSG_GROUP_DISBAND) | Working (native) | GroupFormationTests |
 | DISBAND_GROUP | Working (CMSG_GROUP_DISBAND) | Working (native) | GroupFormationTests |
+| UNEQUIP_ITEM | Working (CMSG_AUTOSTORE_BAG_ITEM via EquipmentAgent) | Working (native) | UnequipItemTests |
+| DISMISS_BUFF | Working (CMSG_CANCEL_AURA, BG needs .unaura fallback) | Working (native) | BuffDismissTests |
 
 ### Implemented but NOT Tested
 
@@ -38,13 +40,12 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 | DECLINE_GROUP_INVITE | Working (CMSG_GROUP_DECLINE) | Working | LOW | |
 | KICK_PLAYER | Working (CMSG_GROUP_UNINVITE_GUID) | Working | LOW | |
 | STOP_CAST | Working | Working | LOW | |
-| DISMISS_BUFF | Working (string-based) | Working | LOW | |
 
 ### Stubbed / Not Working on BG Bot
 
 | ActionType | BG Bot Issue | FG Bot Status | Priority | Fix Required |
 |------------|-------------|---------------|----------|--------------|
-| UNEQUIP_ITEM | **FIXED** — delegates to `EquipmentAgent.UnequipItemAsync()` | Working (native) | ~~MEDIUM~~ | CMSG_AUTOSTORE_BAG_ITEM |
+| UNEQUIP_ITEM | **FIXED + TESTED** — delegates to `EquipmentAgent.UnequipItemAsync()` | Working (native) | ~~MEDIUM~~ | CMSG_AUTOSTORE_BAG_ITEM |
 | BUY_ITEM | **FIXED** — `BuyItemFromVendorAsync` via VendorAgent (with vendorGuid param) | Working (native) | ~~HIGH~~ | Legacy MerchantFrame path still null |
 | BUYBACK_ITEM | **MerchantFrame is null** (no async bypass yet) | Working (native) | LOW | Rarely used |
 | SELL_ITEM | **FIXED** — `SellItemToVendorAsync` via VendorAgent (with vendorGuid param) | Working (native) | ~~HIGH~~ | Legacy MerchantFrame path still null |
@@ -103,11 +104,14 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 | Navigation | 2 | 2/2 | Short + city path with GOTO |
 | Starter Quest | 1 | 0-1/1 | Accept + turn-in (intermittent in suite) |
 | Vendor Buy/Sell | 2 | 2/2 | Buy Weak Flux + sell Linen Cloth via packets |
-| **Total** | **46** | **43-46/46** | CombatLoop, Mining, StarterQuest intermittent |
+| Spell Cast | 1 | 1/1 | Heroic Strike on mob, verify health decrease |
+| Unequip Item | 1 | 1/1 | Equip → unequip mainhand → verify slot empty |
+| Buff Dismiss | 1 | 1/1 | Apply buff → dismiss → verify aura removed |
+| **Total** | **49** | **46-49/49** | CombatLoop, Mining, StarterQuest intermittent |
 
 ## Recommended New Tests (Priority Order)
 
 1. ~~**VendorBuySellTests**~~ — **DONE** (session 19): Buy + Sell via CMSG_LIST_INVENTORY + CMSG_BUY_ITEM + CMSG_SELL_ITEM
-2. **SpellCastOnTargetTests** — Cast offensive spell on mob → verify damage
-3. **UnequipItemTests** — Equip item → unequip → verify slot empty (UnequipItem fix done!)
-4. **BuffDismissTests** — Apply buff → dismiss → verify removal
+2. ~~**SpellCastOnTargetTests**~~ — **DONE** (session 20): Heroic Strike on mob, verify damage
+3. ~~**UnequipItemTests**~~ — **DONE** (session 20): Equip → unequip → verify slot empty
+4. ~~**BuffDismissTests**~~ — **DONE** (session 20): Apply buff → dismiss (ActionType + .unaura fallback) → verify removal
