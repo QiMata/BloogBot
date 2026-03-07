@@ -3085,6 +3085,39 @@ namespace WoWSharpClient
             try { await ah.CloseAuctionHouseAsync(ct); } catch { }
         }
 
+        public async Task AcceptQuestFromNpcAsync(ulong npcGuid, uint questId, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+
+            var quest = factory.QuestAgent;
+            await quest.HelloQuestGiverAsync(npcGuid, ct);
+            await Task.Delay(500, ct);
+            await quest.AcceptQuestAsync(npcGuid, questId, ct);
+        }
+
+        public async Task TurnInQuestAsync(ulong npcGuid, uint questId, uint rewardIndex = 0, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+
+            var quest = factory.QuestAgent;
+            await quest.HelloQuestGiverAsync(npcGuid, ct);
+            await Task.Delay(500, ct);
+            await quest.CompleteQuestAsync(npcGuid, questId, ct);
+            await Task.Delay(300, ct);
+            await quest.ChooseQuestRewardAsync(npcGuid, questId, rewardIndex, ct);
+        }
+
+        public async Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+
+            var gossip = factory.GossipAgent;
+            await gossip.GreetNpcAsync(npcGuid, ct);
+        }
+
         public void SetTarget(ulong guid)
         {
             if (_woWClient == null) return;

@@ -272,5 +272,21 @@ namespace GameData.Core.Interfaces
 #else
         Task CraftAvailableRecipesAsync(CancellationToken ct = default);
 #endif
+
+        // Quest — FG: Lua quest frame, BG: packet-based via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task AcceptQuestFromNpcAsync(ulong npcGuid, uint questId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task TurnInQuestAsync(ulong npcGuid, uint questId, uint rewardIndex = 0, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task AcceptQuestFromNpcAsync(ulong npcGuid, uint questId, CancellationToken ct = default);
+        Task TurnInQuestAsync(ulong npcGuid, uint questId, uint rewardIndex = 0, CancellationToken ct = default);
+#endif
+
+        // NPC interaction — FG: right-click via native, BG: CMSG_GOSSIP_HELLO / CMSG_QUESTGIVER_HELLO via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default);
+#endif
     }
 }

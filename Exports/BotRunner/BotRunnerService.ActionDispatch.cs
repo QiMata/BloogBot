@@ -3,6 +3,7 @@ using GameData.Core.Enums;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Xas.FluentBehaviourTree;
 
@@ -28,8 +29,25 @@ namespace BotRunner
                         builder.Splice(BuildGoToSequence((float)actionEntry.Item2[0], (float)actionEntry.Item2[1], (float)actionEntry.Item2[2], (float)actionEntry.Item2[3]));
                         break;
                     case CharacterAction.InteractWith:
-                        builder.Splice(BuildInteractWithSequence(UnboxGuid(actionEntry.Item2[0])));
+                    {
+                        var interactGuid = UnboxGuid(actionEntry.Item2[0]);
+                        // Try GameObjects first; fall back to NPC interaction via AgentFactory
+                        var isGameObject = _objectManager.GameObjects.Any(x => x.Guid == interactGuid);
+                        if (isGameObject)
+                        {
+                            builder.Splice(BuildInteractWithSequence(interactGuid));
+                        }
+                        else
+                        {
+                            builder.Do($"Interact With NPC {interactGuid:X}", time =>
+                            {
+                                _objectManager.InteractWithNpcAsync(interactGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
                         break;
+                    }
 
                     case CharacterAction.SelectGossip:
                         builder.Splice(BuildSelectGossipSequence((int)actionEntry.Item2[0]));
@@ -40,7 +58,23 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.AcceptQuest:
-                        builder.Splice(AcceptQuestSequence);
+                        // With params: [0]=npcGuid, [1]=questId — packet-based via AgentFactory
+                        // Without params: legacy QuestFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var questNpcGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var questId = (uint)(int)actionEntry.Item2[1];
+                            builder.Do($"Accept Quest {questId} from NPC {questNpcGuid:X}", time =>
+                            {
+                                _objectManager.AcceptQuestFromNpcAsync(questNpcGuid, questId, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(AcceptQuestSequence);
+                        }
                         break;
                     case CharacterAction.DeclineQuest:
                         builder.Splice(DeclineQuestSequence);
@@ -49,7 +83,24 @@ namespace BotRunner
                         builder.Splice(BuildSelectRewardSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.CompleteQuest:
-                        builder.Splice(CompleteQuestSequence);
+                        // With params: [0]=npcGuid, [1]=questId, optional [2]=rewardIndex
+                        // Without params: legacy QuestFrame path (FG only)
+                        if (actionEntry.Item2.Count >= 2)
+                        {
+                            var turnInNpcGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var turnInQuestId = (uint)(int)actionEntry.Item2[1];
+                            uint turnInReward = actionEntry.Item2.Count >= 3 ? (uint)(int)actionEntry.Item2[2] : 0u;
+                            builder.Do($"Complete Quest {turnInQuestId} at NPC {turnInNpcGuid:X}", time =>
+                            {
+                                _objectManager.TurnInQuestAsync(turnInNpcGuid, turnInQuestId, turnInReward, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(CompleteQuestSequence);
+                        }
                         break;
 
                     case CharacterAction.TrainSkill:
