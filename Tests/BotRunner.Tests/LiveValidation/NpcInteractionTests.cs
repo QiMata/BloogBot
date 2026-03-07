@@ -173,13 +173,25 @@ public class NpcInteractionTests
 
     private async Task<bool> InteractWithNpc(string account, Func<WoWActivitySnapshot?> getSnap, uint npcFlag, string label)
     {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = getSnap();
-        var units = snap?.NearbyUnits?.Where(u => (u.NpcFlags & npcFlag) != 0).ToList() ?? [];
+        // Retry up to 3 times — FG bot's WoW.exe may need time to load area after teleport
+        var units = new System.Collections.Generic.List<Game.WoWUnit>();
+        WoWActivitySnapshot? snap = null;
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            snap = getSnap();
+            units = snap?.NearbyUnits?.Where(u => (u.NpcFlags & npcFlag) != 0).ToList() ?? [];
+            if (units.Count > 0) break;
+            if (attempt < 2)
+            {
+                _output.WriteLine($"  [{label}] No NPC with flag 0x{npcFlag:X} on attempt {attempt + 1}, retrying in 2s...");
+                await Task.Delay(2000);
+            }
+        }
 
         if (units.Count == 0)
         {
-            _output.WriteLine($"  [{label}] No NPC with flag 0x{npcFlag:X} found nearby");
+            _output.WriteLine($"  [{label}] No NPC with flag 0x{npcFlag:X} found nearby after 3 attempts");
             LogAllUnits(snap, label);
             return false;
         }
@@ -227,7 +239,7 @@ public class NpcInteractionTests
 
         _output.WriteLine($"  [{label}] Teleporting to setup location (dist={dist:F1}y).");
         await _bot.BotTeleportAsync(account, mapId, x, y, z);
-        await Task.Delay(1500);
+        await Task.Delay(3000); // FG bot needs time for WoW.exe to load area and populate visible objects
     }
 
     private async Task EnsureBagHasItemAsync(string account, string label, uint itemId, int addCount)

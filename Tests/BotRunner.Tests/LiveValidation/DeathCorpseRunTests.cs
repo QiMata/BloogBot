@@ -146,24 +146,31 @@ public class DeathCorpseRunTests
             var bgEvidence = await bgTask;
             var fgEvidence = await fgTask;
 
-            // Cleanup: revive any bot left dead/ghost so downstream tests aren't affected.
+            // Cleanup: revive any bot left dead/ghost and teleport back to safe location
+            // so downstream tests aren't affected by stale ghost/position state.
             if (!bgEvidence.AlivePhaseObserved && !string.IsNullOrWhiteSpace(bgChar))
                 await _bot.RevivePlayerAsync(bgChar!);
             if (!fgEvidence.AlivePhaseObserved && !string.IsNullOrWhiteSpace(fgChar))
                 await _bot.RevivePlayerAsync(fgChar!);
-            if (!bgEvidence.AlivePhaseObserved || !fgEvidence.AlivePhaseObserved)
+
+            // Wait for revive to take effect
+            var reviveSw = Stopwatch.StartNew();
+            while (reviveSw.Elapsed < TimeSpan.FromSeconds(10))
             {
-                var reviveSw = Stopwatch.StartNew();
-                while (reviveSw.Elapsed < TimeSpan.FromSeconds(5))
-                {
-                    await _bot.RefreshSnapshotsAsync();
-                    var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
-                    var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
-                    if (LiveBotFixture.IsStrictAlive(bgSnap) && LiveBotFixture.IsStrictAlive(fgSnap))
-                        break;
-                    await Task.Delay(500);
-                }
+                await _bot.RefreshSnapshotsAsync();
+                var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
+                var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
+                if (LiveBotFixture.IsStrictAlive(bgSnap) && LiveBotFixture.IsStrictAlive(fgSnap))
+                    break;
+                await Task.Delay(500);
             }
+
+            // Teleport both bots back to Orgrimmar safe zone to prevent position contamination
+            const float safeX = 1629.4f, safeY = -4373.4f, safeZ = 15f;
+            await Task.WhenAll(
+                _bot.BotTeleportAsync(bgAccount!, 1, safeX, safeY, safeZ),
+                _bot.BotTeleportAsync(fgAccount!, 1, safeX, safeY, safeZ));
+            await Task.Delay(2000);
 
             // Both BG and FG must complete the full corpse-run lifecycle.
             AssertScenario(bgEvidence);
