@@ -48,6 +48,10 @@ namespace ForegroundBotRunner
         // Track whether SignalEventManager hooks have been initialized after entering world
         private bool _hooksInitialized = false;
 
+        // Packet-driven connection state machine
+        private readonly ConnectionStateMachine _connectionState = new();
+        private uint _lastObservedContinentId = 0xFFFFFFFF;
+
         // Diagnostic logging to file (for debugging when running inside WoW.exe)
         private static readonly string DiagnosticLogPath;
         private static readonly object DiagnosticLogLock = new();
@@ -234,7 +238,10 @@ namespace ForegroundBotRunner
                             var screenState = _objectManager?.GetCurrentScreenState() ?? WoWScreenState.Unknown;
                             var hasEnteredWorld = _objectManager?.HasEnteredWorld ?? false;
                             var playerName = _objectManager?.Player?.Name ?? "(null)";
-                            DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, HasEnteredWorld={hasEnteredWorld}, Player={playerName}");
+                            var connState = _connectionState.CurrentState;
+                            var pktSend = PacketLogger.SendCount;
+                            var pktRecv = PacketLogger.RecvCount;
+                            DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, HasEnteredWorld={hasEnteredWorld}, Player={playerName}, ConnState={connState}, TX={pktSend}, RX={pktRecv}");
                         }
 
                         // Anti-AFK ALWAYS - prevents disconnect during login/charselect too
@@ -268,6 +275,22 @@ namespace ForegroundBotRunner
                             {
                                 DiagLog($"SignalEventManager hook init error: {ex.Message}");
                             }
+
+                            // Initialize packet capture hooks
+                            try
+                            {
+                                PacketLogger.OnPacketCaptured += _connectionState.ProcessPacket;
+                                PacketLogger.InitializeHooks();
+                                _connectionState.ForceState(
+                                    ConnectionStateMachine.State.InWorld,
+                                    "initial world entry detected via HasEnteredWorld");
+                                DiagLog($"PacketLogger hooks initialized (active={PacketLogger.IsActive})");
+                            }
+                            catch (Exception ex)
+                            {
+                                DiagLog($"PacketLogger hook init error: {ex.Message}");
+                            }
+
                             _hooksInitialized = true;
                         }
 
@@ -277,6 +300,31 @@ namespace ForegroundBotRunner
                         var workerContId = _objectManager?.ContinentId ?? 0xFFFFFFFF;
                         bool workerInTransition = _objectManager?.IsContinentTransition == true
                             || workerContId == 0xFFFFFFFF || workerContId == 0xFF;
+
+                        // Infer inbound packets from ContinentId changes for the state machine.
+                        // This is a safety net until we have a direct receive hook.
+                        if (_hooksInitialized && workerContId != _lastObservedContinentId)
+                        {
+                            if (workerContId == 0xFF)
+                            {
+                                // Loading screen = SMSG_TRANSFER_PENDING received
+                                PacketLogger.RecordInboundPacket(0x003F); // SMSG_TRANSFER_PENDING
+                                DiagLog($"ContinentId→0xFF: inferred SMSG_TRANSFER_PENDING");
+                            }
+                            else if (_lastObservedContinentId == 0xFF && workerContId < 0xFF)
+                            {
+                                // Loading complete, new map = SMSG_LOGIN_VERIFY_WORLD
+                                PacketLogger.RecordInboundPacket(0x0236); // SMSG_LOGIN_VERIFY_WORLD
+                                DiagLog($"ContinentId→0x{workerContId:X}: inferred SMSG_LOGIN_VERIFY_WORLD (map transition complete)");
+                            }
+                            else if (workerContId == 0xFFFFFFFF && _lastObservedContinentId < 0xFF)
+                            {
+                                // Was in world, now at charselect = logout/disconnect
+                                PacketLogger.RecordInboundPacket(0x004D); // SMSG_LOGOUT_COMPLETE
+                                DiagLog($"ContinentId→0xFFFFFFFF: inferred SMSG_LOGOUT_COMPLETE");
+                            }
+                            _lastObservedContinentId = workerContId;
+                        }
                         if (_objectManager?.HasEnteredWorld == true && !workerInTransition)
                         {
                             CrashTrace($"PRE-POLL: contId=0x{workerContId:X} paused={Mem.ThreadSynchronizer.Paused} isRec={_movementRecorder?.IsRecording}");
