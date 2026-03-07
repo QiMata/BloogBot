@@ -270,7 +270,7 @@ public class LootCorpseTests
         foreach (var unit in units)
         {
             var name = unit.GameObject?.Name ?? "";
-            var entry = unit.GameObject?.Base?.Entry ?? 0;
+            var entry = unit.GameObject?.Entry ?? 0;
             var guid = unit.GameObject?.Base?.Guid ?? 0;
             var hp = unit.Health;
 
