@@ -63,12 +63,14 @@ public class VendorBuySellTests
         var setupSnap = await _bot.GetSnapshotAsync(account);
         var charName = setupSnap?.CharacterName ?? "Lokgaka";
         await _bot.ExecuteGMCommandAsync($".reset items {charName}");
-        await Task.Delay(1500);
+        await Task.Delay(2000);
+        await _bot.RefreshSnapshotsAsync();
 
         // Step 1: Teleport to vendor area
         _output.WriteLine($"  [{label}] Step 1: Teleporting to Razor Hill vendor area");
         await _bot.BotTeleportAsync(account, MapId, VendorX, VendorY, VendorZ + 3);
-        await Task.Delay(3000);
+        await Task.Delay(4000);
+        await _bot.RefreshSnapshotsAsync();
 
         // Step 2: Find vendor NPC
         var (vendorGuid, npcX, npcY, npcZ) = await FindNpcByFlagAsync(account, label, (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, "vendor");

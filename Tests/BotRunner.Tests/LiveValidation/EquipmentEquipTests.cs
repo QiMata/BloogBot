@@ -104,7 +104,20 @@ public class EquipmentEquipTests
 
         _output.WriteLine($"  [{label}] Mainhand before: {(mainhandBeforeEquipped ? $"GUID=0x{mainhandBeforeGuid:X}" : "EMPTY")}");
         _output.WriteLine($"  [{label}] Worn Mace count in bags before setup: {maceCountBeforeSetup}");
-        Assert.False(mainhandBeforeEquipped, $"[{label}] Mainhand already equipped (GUID=0x{mainhandBeforeGuid:X}) — .reset items should have cleared it.");
+
+        // Clear mainhand if occupied — other tests may have equipped items.
+        if (mainhandBeforeEquipped)
+        {
+            _output.WriteLine($"  [{label}] Clearing mainhand via .reset items before equip test.");
+            await _bot.ExecuteGMCommandAsync($".reset items {snap.CharacterName}");
+            await Task.Delay(1500);
+            await _bot.RefreshSnapshotsAsync();
+            snap = await _bot.GetSnapshotAsync(account) ?? snap;
+            playerBefore = snap.Player!;
+            mainhandBeforeEquipped = playerBefore.Inventory.TryGetValue(MainhandSlot, out mainhandBeforeGuid) && mainhandBeforeGuid != 0;
+            maceCountBeforeSetup = CountBagItem(playerBefore, WornMace);
+            _output.WriteLine($"  [{label}] Mainhand after reset: {(mainhandBeforeEquipped ? $"GUID=0x{mainhandBeforeGuid:X}" : "EMPTY")}");
+        }
 
         // Grant mace proficiency: .learn adds the spell, .setskill adds the weapon skill.
         // .setskill requires a selected target, so BotSetSkillAsync auto-selects self first.

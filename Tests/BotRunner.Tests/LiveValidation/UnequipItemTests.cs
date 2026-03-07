@@ -80,6 +80,11 @@ public class UnequipItemTests
     {
         await _bot.EnsureStrictAliveAsync(account, label);
 
+        // Step 0: Clear inventory to ensure bag space for unequip destination
+        _output.WriteLine($"  [{label}] Step 0: Clearing inventory for clean unequip test.");
+        await _bot.BotClearInventoryAsync(account, includeExtraBags: false);
+        await Task.Delay(1000);
+
         // Step 1: Learn mace proficiency if needed
         _output.WriteLine($"  [{label}] Step 1: Ensuring mace proficiency.");
         await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);

@@ -73,7 +73,9 @@ public class ConsumableUsageTests
             Assert.True(fgPassed, "FG bot: Expected aura increase after using Elixir of Lion's Strength.");
     }
 
-    private const uint LionsStrengthSpellId = 2367; // Spell applied by Elixir of Lion's Strength
+    // Elixir of Lion's Strength (item 2454) applies aura spell 2457 (not 2367).
+    // 2367 is the "use effect" spell on the item; 2457 is the actual buff aura.
+    private const uint LionsStrengthSpellId = 2457;
 
     private async Task<bool> RunConsumableScenario(string account, Func<Game.WoWPlayer?> getPlayer, string label)
     {
