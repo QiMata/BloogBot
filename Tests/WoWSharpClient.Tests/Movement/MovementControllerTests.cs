@@ -469,13 +469,19 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1000);
             _sentPackets.Clear();
 
-            // Reset
+            // Reset — schedules a stop packet to clear server-side movement flags
             _controller.Reset();
 
-            // After reset, no packet should be sent when standing still
+            // First update after reset sends MSG_MOVE_STOP to inform the server
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
             _controller.Update(0.05f, 2000);
 
+            // Reset with prior movement correctly sends stop packet(s)
+            Assert.All(_sentPackets, p => Assert.Equal(Opcode.MSG_MOVE_STOP, p.opcode));
+
+            // Second update should be clean — no additional packets
+            _sentPackets.Clear();
+            _controller.Update(0.05f, 3000);
             Assert.Empty(_sentPackets);
         }
 
