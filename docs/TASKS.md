@@ -78,7 +78,22 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 |----|------|--------|
 | `LV-AUDIT-001` | LiveValidation test audit: 35 findings across 3 categories. 6 HIGH + 3 MEDIUM fixed. See `docs/LIVEVALIDATION_AUDIT.md`. 40/40 tests pass. | **Done** |
 | `LV-AUDIT-002` | Remaining MEDIUM items (AST-1/2/3/5/11/13/20, TIM-1/2/4/5/7/10/12) — lower risk, not causing false passes. | Open |
-| `LV-AUDIT-003` | BG bot target state tracking: `TargetGuid` stays 0 in snapshot after `CMSG_ATTACKSWING`. Fix in `WoWSharpObjectManager` or `BotRunnerService`. | Open |
+| `LV-AUDIT-003` | BG bot target state tracking: `TargetGuid` stays 0 in snapshot after `CMSG_ATTACKSWING`. Fix in `WoWSharpObjectManager` or `BotRunnerService`. | **Done** — commit `545d2f3` |
+
+## Open — FG Client Stability (2026-03-06)
+
+| ID | Issue | Owner | Status |
+|----|-------|-------|--------|
+| `FG-SEH-001` | FastCall.dll SEH protection — all 9 exports now wrapped with `__try/__except`. Functions.cs native calls all wrapped with `[HandleProcessCorruptedStateExceptions]`. Crash at 0x0064B3FD during rapid teleportation prevented. | `Exports/FastCall/`, `Services/ForegroundBotRunner/Mem/` | **Done** — commit `554b9ba` |
+| `FG-GHOST-STUCK-001` | Ghost form stuck on Orgrimmar catapult geometry at ~(1577, -4394, 6.2) during corpse run. Pathfinding routes through siege weapon geometry. | `Exports/Navigation/` | Open |
+
+## Open — Capability Gaps (from CAPABILITY_AUDIT.md)
+
+| ID | Issue | Owner | Status |
+|----|-------|-------|--------|
+| `CAP-GAP-001` | MerchantFrame never assigned in WoWSharpObjectManager — BuyItem/SellItem/RepairItem all NullRef on BG bot. | `Exports/WoWSharpClient/` | Open |
+| `CAP-GAP-002` | UnequipItem is empty stub in BotRunnerService.ActionDispatch.cs. | `Exports/BotRunner/` | Open |
+| `CAP-GAP-003` | TrainerFrame status unknown — may also be null. | `Exports/WoWSharpClient/` | Open |
 
 ## Open — Pathfinding / Physics (2026-03-03)
 
@@ -135,8 +150,17 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-06 (session 16)
-- **Current work:** Mining test reliability fixed. 40/40 LiveValidation. All known test issues resolved.
+- **Last updated:** 2026-03-06 (session 17)
+- **Current work:** SEH crash protection complete. New integration tests added. Capability audit documented.
+- **Completed session 17 (2026-03-06):**
+  1. **BG bot TargetGuid fix (LV-AUDIT-003)** — `SpellHandler.HandleAttackStart` now sets `localPlayer.TargetGuid` on SMSG_ATTACKSTART. `WoWSharpObjectManager.SetTarget()` immediately updates `localPlayer.TargetGuid`. Commit: `545d2f3`.
+  2. **FastCall.dll full SEH protection (FG-SEH-001)** — All 9 FastCall exports wrapped with `__try/__except`. C# side: all native function calls in Functions.cs wrapped with `[HandleProcessCorruptedStateExceptions]` + try/catch returning safe defaults. Prevents ERROR #132 crashes at 0x0064B3FD during rapid teleportation. Commit: `554b9ba`.
+  3. **DeathCorpseRun cascade contamination fix** — Enhanced cleanup: revives dead bots + teleports back to safe zone after test, preventing ghost state from corrupting downstream tests.
+  4. **NpcInteractionTests retry** — 3-attempt retry for NPC detection after teleport (FG bot needs area load time).
+  5. **New integration tests** — LootCorpseTests (kill→loot→verify inventory) and NavigationTests (pathfinding GOTO→verify arrival at Razor Hill + Orgrimmar).
+  6. **CAPABILITY_AUDIT.md** — Full audit of all 63 ActionTypes: implementation status, test coverage, priority gaps (MerchantFrame, UnequipItem, TrainerFrame).
+  7. **Test results:** 39/40 LiveValidation (CombatLoop intermittent). Commit: `76dcd79`.
+- **Next priority:** FG-GHOST-STUCK-001 (ghost stuck on Orgrimmar catapult), CAP-GAP-001 (MerchantFrame), run full LiveValidation suite.
 - **Completed session 16 (2026-03-06):**
   1. **Mining test reliability FIXED** — Root cause: `QueryGameObjectSpawnsAsync` used `LIMIT 10` with no ordering, returning the first 10 rows by guid — all from the same spawn pool (pool 1024). Only 1 node per pool is spawned at a time, so 9/10 locations were always empty. Fix: (a) added `ORDER BY RAND()` to spread candidates across pools 1024/1028/1075, (b) increased spawn limit 10→25 for both mining and herbalism, (c) added `Skip.If(!gathered, ...)` before `Assert.True` in mining test (matching herbalism pattern) so respawn-timer scenarios skip gracefully. Commit: `c50cbac`.
   2. **Test results:** 40/40 LiveValidation (all green).
