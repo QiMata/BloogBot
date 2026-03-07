@@ -134,22 +134,19 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 25)
-- **Current work:** FG client stability — crash investigation and hardening.
-- **Completed session 25 (2026-03-07):**
-  1. **Crash cascade elimination** — Crash monitor now prunes dead PIDs when new WoW.exe starts, clears crash flag. `AssertClientAlive()` waits up to 30s for recovery. Result: 0 cascade failures (was 48/50).
-  2. **MemoryManager address validation** — All `ReadXxx` methods reject addresses in null page (<0x10000) and sentinel range (>=0xFFFF0000). Prevents ERROR #132 ACCESS_VIOLATION from stale/freed object pointers reading 0xFFFFFFFF.
-  3. **WoWObject pointer chain hardening** — `GetDescriptorPtr()` validates Pointer and descriptor. `GetPosition()` triple-nested chain validated at each dereference. `WoWPlayer.MapId` checks objectManagerPtr.
-  4. **World entry warmup** — 2s delay after HasEnteredWorld before first `MovementRecorder.Poll()`. Prevents `CreateFrame` crash during UI initialization.
-  5. **Crash investigation findings:**
-     - ERROR #132: ACCESS_VIOLATION at JIT 0x1D2A6862, reading from 0xFFFFFFFF (stale descriptor pointer)
-     - .NET 8 does NOT catch AccessViolationException — `[HandleProcessCorruptedStateExceptions]` is ignored
-     - FG bot now survives ~90s in-world (was ~14s before fixes)
-     - Remaining crash appears to be during normal gameplay after ~90s — possibly Warden anti-cheat detecting hook patches
-- **Completed sessions 23-24:** See above. CSM wired, TEST-CRASH-001, TEST-TRAM-001, opcode fix, archival.
-- **Next priority:** (1) Investigate Warden as cause of ~90s in-world crash, (2) WardenDisabler.cs may need update for VMaNGOS, (3) Direct SMSG receive hook (FG-PKT-005).
-- **LiveValidation baseline:** 40/40 (session 14). 42-46 total tests (sessions 20-21). Known intermittent: Mining (respawn), CombatLoop (timing), StarterQuest (zone loading).
-- **FG crash pattern:** Bot enters world, polls successfully for ~90s, then ACCESS_VIOLATION kills WoW.exe. No .NET exception caught. Crash in JIT-compiled code. Possible Warden scan detecting PacketLogger/SignalEventManager assembly patches.
-- **Remaining plan work:** Phase 6b DotRecast eval (low priority).
+- **Last updated:** 2026-03-07 (session 26)
+- **Current work:** FG client stability + test hardening.
+- **Completed session 26 (2026-03-07):**
+  1. **SEH-safe FastCall.dll wrappers** — All 14 WoW native function calls in `Functions.cs` routed through C++ `__try/__except` wrappers in `FastCall.dll`. .NET 8 ignores `[HandleProcessCorruptedStateExceptions]` — `catch(AccessViolationException)` was dead code. Root cause of ~90s in-world crash.
+  2. **WardenDisabler ILLEGAL_INSTRUCTION fix** — `WardenDisabler.Initialize()` assembly injection at 0x006CA22E corrupts WoW code when Warden disabled server-side. Reverted; scan hooks uncommented but not activated.
+  3. **LV-AUDIT-002 MEDIUM items** — Fixed 11/14: AST-1/2/3/5/11/13/20 (null checks, pre-condition asserts), TIM-1/2/5/10/12 (documented delays, reduced poll interval, diagnostic dumps, logging). TIM-4 N/A, TIM-7 open.
+  4. **FG disconnect dialog auto-dismiss** — `FgLoginScreen.Login()` now calls `DismissGlueDialog()` before `DefaultServerLogin` to handle "Disconnected from server" Okay dialog.
+  5. **MovementController test fix** — `Reset_ClearsAllPhysicsState` updated for post-reset stop packet behavior (37/37 pass).
+  6. **Physics+pathfinding plan verified complete** — All 7 phases already implemented (hitWall, corridor position, dynamic segments, corner bisector, headroom, stuck recovery, speed radii).
+- **Completed session 25:** SEH crash investigation, pointer chain hardening, crash cascade elimination. See `docs/ARCHIVE.md`.
+- **Next priority:** (1) Analyze LiveValidation failures (16/50 failed in first run), (2) TIM-7 FG fishing test, (3) FG-GHOST-STUCK-001 pathfinding improvement, (4) SMSG receive hook (FG-PKT-005).
+- **LiveValidation baseline:** Previously 40/40 (session 14). Currently running fresh validation to establish post-SEH baseline.
+- **Test counts:** Physics 97/97, Pathfinding 25/25, AI 121/121, Tier2 52/52, WoWSharpClient 1251/1251.
+- **Remaining plan work:** Plan file complete. DotRecast eval deferred (low priority).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
-- **Sessions 1-22:** See `docs/ARCHIVE.md` for full history.
+- **Sessions 1-24:** See `docs/ARCHIVE.md` for full history.
