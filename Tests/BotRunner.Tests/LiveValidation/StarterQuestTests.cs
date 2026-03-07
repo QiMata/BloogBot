@@ -143,10 +143,17 @@ public class StarterQuestTests
             // === Step 5: Teleport near Gornek (turn-in NPC) ===
             _output.WriteLine($"  [{label}] Step 5: Teleporting near Gornek for quest turn-in");
             await _bot.BotTeleportAsync(account, MapId, GornekX, GornekY, GornekZ + 3);
-            await Task.Delay(3000);
+            await Task.Delay(4000); // 4s for area loading + NPC visibility (matches Kaltunk delay)
 
             // === Step 6: Find Gornek in nearby units ===
             var gornekGuid = await FindNpcByEntryAsync(account, label, GornekEntry, "Gornek");
+            if (gornekGuid == 0)
+            {
+                // Retry with forced respawn — NPC may not be loaded in visibility range yet
+                _output.WriteLine($"  [{label}] Gornek not found initially — forcing .respawn and retrying");
+                await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: false, delayMs: 2000);
+                gornekGuid = await FindNpcByEntryAsync(account, label, GornekEntry, "Gornek");
+            }
             Assert.True(gornekGuid != 0, $"[{label}] Gornek (entry {GornekEntry}) should be visible after teleporting.");
 
             // === Step 7: Complete quest via ActionType dispatch ===

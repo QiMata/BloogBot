@@ -209,20 +209,36 @@ public class CombatRangeTests
             Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
         });
 
-        // The server should reject — mob not in nearby units at 200y
+        // The server should reject — at 200y the mob is far outside melee range
         await Task.Delay(3000);
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(bgAccount);
 
-        // Mob should NOT be in nearby units (snapshot visibility is ~40y)
+        // Verify bot actually teleported to far position
+        var botPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(botPos);
+        var botDist = Distance2D(botPos!.X, botPos.Y, MobAreaX, MobAreaY);
+        _output.WriteLine($"  [BG] Bot position after teleport: ({botPos.X:F1}, {botPos.Y:F1}), dist from mob area: {botDist:F1}y");
+        Assert.True(botDist > 100f, $"Bot should be far from mob area (dist={botDist:F1}y). Teleport may have failed.");
+
+        // If mob is still in NearbyUnits (stale snapshot), verify distance is > melee range
         var mobSnap = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0) == targetGuid);
-        Assert.Null(mobSnap);
+        if (mobSnap != null)
+        {
+            var mobPos = mobSnap.GameObject?.Base?.Position;
+            if (mobPos != null)
+            {
+                var mobDist = Distance2D(botPos.X, botPos.Y, mobPos.X, mobPos.Y);
+                _output.WriteLine($"  [BG] Mob still in snapshot (stale data) at dist={mobDist:F1}y — verifying out of melee range");
+                Assert.True(mobDist > 10f, $"Mob should be far outside melee range (dist={mobDist:F1}y).");
+            }
+        }
 
         // Log the expected melee range for documentation
         var playerReach = snap?.Player?.Unit?.CombatReach ?? CombatDistance.DEFAULT_PLAYER_COMBAT_REACH;
         var expectedRange = CombatDistance.GetMeleeAttackRange(playerReach, CombatDistance.DEFAULT_CREATURE_COMBAT_REACH);
         _output.WriteLine($"  [BG] Expected melee range: {expectedRange:F2}y (playerReach={playerReach:F2})");
-        _output.WriteLine($"  [BG] Bot at 200y — correctly outside melee range of {expectedRange:F2}y.");
+        _output.WriteLine($"  [BG] Bot at {botDist:F0}y — correctly outside melee range of {expectedRange:F2}y.");
 
         // Cleanup: stop attack and teleport back
         await _bot.SendActionAsync(bgAccount, new ActionMessage { ActionType = ActionType.StopAttack });

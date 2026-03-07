@@ -66,7 +66,7 @@ public class QuestInteractionTests
         {
             // Self-selection required — MaNGOS .quest commands need getSelectedPlayer()
             await _bot.BotSelectSelfAsync(account);
-            await Task.Delay(300);
+            await Task.Delay(1000);
 
             _output.WriteLine($"  [{label}] Step 1: Add quest {TestQuestId}");
             var addTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest add {TestQuestId}", captureResponse: true, delayMs: 1000);
@@ -81,7 +81,7 @@ public class QuestInteractionTests
 
             _output.WriteLine($"  [{label}] Step 2: Complete quest {TestQuestId}");
             await _bot.BotSelectSelfAsync(account);
-            await Task.Delay(300);
+            await Task.Delay(1000);
             var completeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest complete {TestQuestId}", captureResponse: true, delayMs: 1000);
             AssertCommandSucceeded(completeTrace, label, ".quest complete");
 
@@ -96,7 +96,7 @@ public class QuestInteractionTests
 
             _output.WriteLine($"  [{label}] Step 3: Remove quest {TestQuestId}");
             await _bot.BotSelectSelfAsync(account);
-            await Task.Delay(300);
+            await Task.Delay(1000);
             var removeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: true, delayMs: 1000);
             AssertCommandSucceeded(removeTrace, label, ".quest remove");
 
@@ -115,7 +115,7 @@ public class QuestInteractionTests
                 {
                     _output.WriteLine($"  [{label}] Cleanup: removing quest {TestQuestId} left over from failed scenario.");
                     await _bot.BotSelectSelfAsync(account);
-                    await Task.Delay(300);
+                    await Task.Delay(1000);
                     await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: false, delayMs: 500);
                 }
             }
