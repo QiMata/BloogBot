@@ -2539,7 +2539,17 @@ namespace WoWSharpClient
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_AUTOEQUIP_ITEM, [srcBag, srcSlot]);
         }
 
-        public void UnequipItem(EquipSlot slot) { }
+        public void UnequipItem(EquipSlot slot)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+
+            // EquipSlot (GameData.Core) is offset by 1 from EquipmentSlot (network layer):
+            // EquipSlot.Head=1 → EquipmentSlot.Head=0, etc.
+            var equipmentSlot = (EquipmentSlot)((int)slot - 1);
+            factory.EquipmentAgent.UnequipItemAsync(equipmentSlot, CancellationToken.None)
+                .GetAwaiter().GetResult();
+        }
 
         public void AcceptResurrect()
         {
@@ -2883,6 +2893,27 @@ namespace WoWSharpClient
             {
                 await factory.VendorAgent.QuickVendorVisitAsync(vendorGuid, itemsToBuy, cancellationToken: ct);
             }
+        }
+
+        public async Task BuyItemFromVendorAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+            await factory.VendorAgent.BuyItemAsync(vendorGuid, itemId, quantity, ct);
+        }
+
+        public async Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+            await factory.VendorAgent.SellItemAsync(vendorGuid, bagId, slotId, quantity, ct);
+        }
+
+        public async Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory == null) return;
+            await factory.VendorAgent.RepairAllItemsAsync(vendorGuid, ct);
         }
 
         public async Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default)

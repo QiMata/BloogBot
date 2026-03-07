@@ -91,9 +91,9 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 
 | ID | Issue | Owner | Status |
 |----|-------|-------|--------|
-| `CAP-GAP-001` | MerchantFrame never assigned in WoWSharpObjectManager — BuyItem/SellItem/RepairItem all NullRef on BG bot. | `Exports/WoWSharpClient/` | Open |
-| `CAP-GAP-002` | UnequipItem is empty stub in BotRunnerService.ActionDispatch.cs. | `Exports/BotRunner/` | Open |
-| `CAP-GAP-003` | TrainerFrame status unknown — may also be null. | `Exports/WoWSharpClient/` | Open |
+| `CAP-GAP-001` | MerchantFrame bypass: added `BuyItemFromVendorAsync`, `SellItemToVendorAsync`, `RepairAllItemsAsync` to IObjectManager + WoWSharpObjectManager. ActionDispatch BuyItem/SellItem/RepairAllItems now route through VendorAgent when vendorGuid param provided. Legacy MerchantFrame path retained for FG. | `Exports/WoWSharpClient/`, `Exports/BotRunner/` | **Done** |
+| `CAP-GAP-002` | UnequipItem implemented: `WoWSharpObjectManager.UnequipItem()` now delegates to `EquipmentAgent.UnequipItemAsync()` via AgentFactory. Maps `EquipSlot` → `EquipmentSlot` (offset -1). | `Exports/WoWSharpClient/` | **Done** |
+| `CAP-GAP-003` | TrainerFrame status unknown — may also be null. LearnAllAvailableSpellsAsync already bypasses Frame. | `Exports/WoWSharpClient/` | Open (low priority) |
 
 ## Open — Pathfinding / Physics (2026-03-03)
 
@@ -150,8 +150,16 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-06 (session 17)
-- **Current work:** SEH crash protection complete. New integration tests added. Capability audit documented.
+- **Last updated:** 2026-03-07 (session 18)
+- **Current work:** Quest protocol + vendor/unequip capability gaps fixed.
+- **Completed session 18 (2026-03-07):**
+  1. **Quest protocol infrastructure** — Added `AcceptQuestFromNpcAsync`, `TurnInQuestAsync`, `InteractWithNpcAsync` to `IObjectManager` and `WoWSharpObjectManager` using existing `_agentFactoryAccessor` pattern. BG bot can now accept/complete quests via packets.
+  2. **ActionDispatch fixes** — `InteractWith` now falls back to `InteractWithNpcAsync` for NPC Units. `AcceptQuest` and `CompleteQuest` accept optional parameters [npcGuid, questId] for packet-based flow.
+  3. **StarterQuestTests** — New integration test: quest 4641 "Your Place In The World" (accept from Kaltunk, turn in at Gornek) in Durotar starter area.
+  4. **CAP-GAP-001 (MerchantFrame bypass)** — Added `BuyItemFromVendorAsync`, `SellItemToVendorAsync`, `RepairAllItemsAsync` to `IObjectManager` + `WoWSharpObjectManager`, routing through `VendorAgent` via `_agentFactoryAccessor`. Updated ActionDispatch: `BuyItem` (3 params), `SellItem` (4 params), `RepairAllItems` (1 param) now use packet-based paths when vendorGuid is provided. Legacy MerchantFrame path retained for FG compatibility.
+  5. **CAP-GAP-002 (UnequipItem)** — `WoWSharpObjectManager.UnequipItem()` now delegates to `EquipmentAgent.UnequipItemAsync()`. Maps `EquipSlot` → `EquipmentSlot` (offset -1). Sends `CMSG_AUTOSTORE_BAG_ITEM`.
+  6. **LiveValidation results:** 41/44 (3 known intermittent: CombatLoop, Mining, StarterQuest in full suite).
+- **Next priority:** CAP-GAP-003 (TrainerFrame, low), remaining test improvements, new test coverage for vendor/unequip paths.
 - **Completed session 17 (2026-03-06):**
   1. **BG bot TargetGuid fix (LV-AUDIT-003)** — `SpellHandler.HandleAttackStart` now sets `localPlayer.TargetGuid` on SMSG_ATTACKSTART. `WoWSharpObjectManager.SetTarget()` immediately updates `localPlayer.TargetGuid`. Commit: `545d2f3`.
   2. **FastCall.dll full SEH protection (FG-SEH-001)** — All 9 FastCall exports wrapped with `__try/__except`. C# side: all native function calls in Functions.cs wrapped with `[HandleProcessCorruptedStateExceptions]` + try/catch returning safe defaults. Prevents ERROR #132 crashes at 0x0064B3FD during rapid teleportation. Commit: `554b9ba`.

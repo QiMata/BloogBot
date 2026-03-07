@@ -228,19 +228,69 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.BuyItem:
-                        builder.Splice(BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                        // With vendorGuid: [0]=vendorGuid, [1]=itemId, [2]=quantity — packet-based
+                        // Without: [0]=slotId, [1]=quantity — legacy MerchantFrame (FG only)
+                        if (actionEntry.Item2.Count >= 3)
+                        {
+                            var buyVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var buyItemId = (uint)(int)actionEntry.Item2[1];
+                            var buyQuantity = (uint)(int)actionEntry.Item2[2];
+                            builder.Do($"Buy Item {buyItemId} x{buyQuantity} from vendor {buyVendorGuid:X}", time =>
+                            {
+                                _objectManager.BuyItemFromVendorAsync(buyVendorGuid, buyItemId, buyQuantity, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildBuyItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
+                        }
                         break;
                     case CharacterAction.BuybackItem:
                         builder.Splice(BuildBuybackItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1]));
                         break;
                     case CharacterAction.SellItem:
-                        builder.Splice(BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
+                        // With vendorGuid: [0]=vendorGuid, [1]=bagId, [2]=slotId, [3]=quantity — packet-based
+                        // Without: [0]=bagId, [1]=slotId, [2]=quantity — legacy MerchantFrame (FG only)
+                        if (actionEntry.Item2.Count >= 4)
+                        {
+                            var sellVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var sellBagId = (byte)(int)actionEntry.Item2[1];
+                            var sellSlotId = (byte)(int)actionEntry.Item2[2];
+                            var sellQuantity = (uint)(int)actionEntry.Item2[3];
+                            builder.Do($"Sell Item bag={sellBagId} slot={sellSlotId} x{sellQuantity} to vendor {sellVendorGuid:X}", time =>
+                            {
+                                _objectManager.SellItemToVendorAsync(sellVendorGuid, sellBagId, sellSlotId, sellQuantity, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(BuildSellItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2]));
+                        }
                         break;
                     case CharacterAction.RepairItem:
                         builder.Splice(BuildRepairItemSequence((int)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.RepairAllItems:
-                        builder.Splice(RepairAllItemsSequence);
+                        // With vendorGuid: [0]=vendorGuid — packet-based
+                        // Without: legacy MerchantFrame (FG only)
+                        if (actionEntry.Item2.Count >= 1)
+                        {
+                            var repairVendorGuid = UnboxGuid(actionEntry.Item2[0]);
+                            builder.Do($"Repair All Items at vendor {repairVendorGuid:X}", time =>
+                            {
+                                _objectManager.RepairAllItemsAsync(repairVendorGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else
+                        {
+                            builder.Splice(RepairAllItemsSequence);
+                        }
                         break;
 
                     case CharacterAction.DismissBuff:

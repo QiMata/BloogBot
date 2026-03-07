@@ -288,5 +288,16 @@ namespace GameData.Core.Interfaces
 #else
         Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default);
 #endif
+
+        // Vendor buy/sell/repair — FG: Lua MerchantFrame, BG: CMSG packets via AgentFactory
+#if NET8_0_OR_GREATER
+        public Task BuyItemFromVendorAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default) => Task.CompletedTask;
+        public Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default) => Task.CompletedTask;
+#else
+        Task BuyItemFromVendorAsync(ulong vendorGuid, uint itemId, uint quantity = 1, CancellationToken ct = default);
+        Task SellItemToVendorAsync(ulong vendorGuid, byte bagId, byte slotId, uint quantity = 1, CancellationToken ct = default);
+        Task RepairAllItemsAsync(ulong vendorGuid, CancellationToken ct = default);
+#endif
     }
 }
