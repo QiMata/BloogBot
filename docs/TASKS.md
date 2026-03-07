@@ -134,25 +134,33 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 27)
+- **Last updated:** 2026-03-07 (session 28)
 - **Current work:** LiveValidation test stabilization + bot behavior implementation.
-- **Completed session 27 (2026-03-07):**
-  1. **LiveValidation baseline established** — 35/50 pass, 11 fail, 4 skip. Improved from 15 fails to 11 via test fixes.
-  2. **OrgrimmarGroundZ fix** — Excluded ValleyOfStrength_C from probe positions (multi-level area: server snaps to upper walkway Z≈29.4, physics engine resolves lower courtyard Z≈24.3 — WMO doodad geometry gap).
-  3. **CombatRangeTests fix** — `MeleeAttack_OutsideRange` now verifies distance from mob instead of `Assert.Null(mobSnap)` — NearbyUnits snapshot can contain stale data after teleport.
-  4. **QuestInteractionTests fix** — Increased all `BotSelectSelfAsync()` delays from 300ms to 1000ms to ensure self-selection propagates before `.quest` GM commands.
-  5. **StarterQuestTests fix** — Increased Gornek teleport delay from 3000ms to 4000ms (matching Kaltunk). Added `.respawn` retry if Gornek not found on first attempt.
-- **Completed session 26:** SEH wrappers, WardenDisabler fix, LV-AUDIT-002, disconnect dialog auto-dismiss, MovementController test fix. See `docs/ARCHIVE.md`.
-- **LiveValidation remaining failures (7 likely, 4 test-logic fixable):**
-  - `Combat_AutoAttacksMob` — BG bot auto-attack doesn't deal damage (core combat loop gap: StartMeleeAttack sends CMSG_ATTACKSWING but server may not accept swings without proper combat state)
-  - `Fishing_CatchFish` — BG bobber detection failure (SMSG_GAMEOBJECT_CUSTOM_ANIM handler or bobber CREATE_OBJECT delivery issue)
-  - `Mining_GatherCopperVein` — Teleport rejected (5380.8y from target). `.go xyz` command may have silently failed.
-  - `BasicLoop.Snapshot_SeesNearbyUnits` — "BG failed to arrive near Razor Hill" — teleport/arrival verification failure
-  - `Death_ReleaseAndRetrieve` — Ghost stuck at (1177.8, -4464.2) with moveFlags=0x0. Known FG-GHOST-STUCK-001 issue (pathfinding doesn't move ghost form).
-  - `FirstAid_LearnAndCraft` — CastSpell action doesn't produce bandage (channel interrupted or spell focus requirement blocking)
-  - `UnequipItem_MainhandWeapon` — UnequipItem dispatch succeeds but mainhand slot not cleared in snapshot
-- **TESTBOT1 (FG) stuck at CharacterSelect** — FG bot never entered world during entire test run. All FG-dependent scenarios used BG-only fallback. Needs investigation (WoW.exe login flow may need manual intervention or EnterWorld Lua timing issue).
-- **Next priority:** (1) Fix TESTBOT1 CharacterSelect stuck, (2) Fix BG combat auto-attack, (3) Fix mining teleport failure, (4) TIM-7 FG fishing test, (5) FG-GHOST-STUCK-001
-- **Test counts:** Physics 97/97, Pathfinding 25/25, AI 121/121, Tier2 52/52, WoWSharpClient 1251/1251. LiveValidation 35/50.
+- **Completed session 28 (2026-03-07):**
+  1. **Reverted incorrect CMSG_USE_ITEM uint32 change** — VMaNGOS `SpellCastTargets.m_targetMask` is `uint16` (verified in `D:/vmangos/src/game/Spells/Spell.h:159`). The uint16→uint32 change from session 27 corrupted packet bytes, causing 5+ intermittent failures. Revert fixed ConsumableUsage, BuffDismiss, UnequipItem, and several other tests.
+  2. **ConsumableUsageTests fix** — Aura spell ID corrected from 2367 (use-effect) to 2457 (actual buff aura for Elixir of Lion's Strength).
+  3. **EquipmentEquipTests fix** — Proactive `.reset items` if mainhand already occupied by prior test (test isolation).
+  4. **UnequipItemTests fix** — Clear inventory before test to ensure bag space for unequip destination.
+  5. **VendorBuySellTests fix** — Added `RefreshSnapshotsAsync()` after `.reset items`, increased delays.
+  6. **LiveValidation improved: 36/50 pass** (up from 31 at session start, 35 in session 27).
+- **Completed sessions 26-27:** See `docs/ARCHIVE.md`.
+- **LiveValidation remaining failures (13 fail, 1 skip):**
+  - `CharacterCreation_InfoAvailable` — null snapshot (timing issue)
+  - `Combat_AutoAttacksMob` — BG auto-attack doesn't deal damage (server may require additional combat state)
+  - `CombatRange.MeleeAttack_OutsideRange` — teleport to FarY=-4585 fails (bot at -4378, only 7.8y from mob)
+  - `CombatRange.RangedAttack_OutsideRange` — mob still in NearbyUnits when expected null
+  - `CraftingProfession.FirstAid` — `.cast 3275` rejection false positive (chat message from prior cmd leaks)
+  - `GatheringProfession.Mining` — cross-map teleport rejected (9420y from target)
+  - `GatheringProfession.Herbalism` — cross-map teleport rejected (6563y from target)
+  - `OrgrimmarGroundZ.PostTeleportSnap` — BG_Z=28.1 vs SimZ=61.3 (multi-level area known issue)
+  - `QuestInteraction` — `.quest add` command rejected
+  - `SpellCastOnTarget.BattleShout` — aura not appearing after CastSpell
+  - `StarterQuest` — Gornek not visible after teleport
+  - `VendorBuySell.BuyItem` — Weak Flux not in inventory after BuyItem
+  - `VendorBuySell.SellItem` — Linen Cloth not removed after SellItem
+- **Key finding: CMSG_USE_ITEM targetMask is uint16** — documented in VMaNGOS source `Spell.h:159`. All UseItem packet methods use `ushort` correctly. Do NOT change to uint32.
+- **TESTBOT1 (FG) stuck at CharacterSelect** — persists across sessions. All FG-dependent scenarios use BG-only fallback.
+- **Next priority:** (1) Fix cross-map teleport failures (gathering tests), (2) Fix BG combat auto-attack, (3) Fix vendor buy/sell protocol, (4) Fix TESTBOT1 CharacterSelect stuck, (5) FG-GHOST-STUCK-001
+- **Test counts:** Physics 97/97, Pathfinding 25/25, AI 121/121, Tier2 52/52, WoWSharpClient 1251/1251. LiveValidation 36/50.
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
 - **Sessions 1-25:** See `docs/ARCHIVE.md` for full history.
