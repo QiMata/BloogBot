@@ -66,6 +66,7 @@ All resolved and archived. See `docs/ARCHIVE.md`.
 
 | ID | Issue | Owner | Status |
 |----|-------|-------|--------|
+| `FG-REALM-STUCK-001` | **FG client stuck on Realm Selection/Language dialog.** TESTBOT1 hits the "Choosing a Realm" first-login screen (language + realm style picker). Login automation moves too fast and doesn't handle this dialog — no code dismisses it or selects a realm. Root cause of TESTBOT1 being permanently stuck at `CharacterSelect`. BG bot unaffected (protocol-based login). Fix: detect and dismiss this dialog in FG login screen handler. | `Services/ForegroundBotRunner/` | **Open** |
 | `FG-GHOST-STUCK-001` | Ghost form stuck on Orgrimmar catapult geometry at ~(1577, -4394, 6.2) during corpse run. Previous fix (`ShouldExcludeDoodad` keyword filter) was incorrect — M2 collision is determined by MPQ flags, not name heuristics. `ShouldExcludeDoodad` removed entirely (commit `a1a04bd` reverted). All M2 models must remain in physics sweeps. Root cause is pathfinding/stuck-recovery not handling dense M2 geometry areas. | `Exports/Navigation/` | **Reopened** — needs pathfinding improvement |
 
 ## Open — Capability Gaps (from CAPABILITY_AUDIT.md)
