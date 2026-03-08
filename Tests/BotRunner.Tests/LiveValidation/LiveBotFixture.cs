@@ -1088,6 +1088,8 @@ public class LiveBotFixture : IAsyncLifetime
                     new RequestParameter { IntParam = -1 }      // quantity = -1 (all)
                 }
             });
+            // Throttle to avoid flooding the action queue and crashing the bot/StateManager
+            if (slot % 4 == 3) await Task.Delay(100);
         }
 
         if (includeExtraBags)
@@ -1107,12 +1109,13 @@ public class LiveBotFixture : IAsyncLifetime
                             new RequestParameter { IntParam = -1 }
                         }
                     });
+                    if (slot % 4 == 3) await Task.Delay(100);
                 }
             }
         }
 
         // Wait for inventory updates to propagate
-        await Task.Delay(3000);
+        await Task.Delay(2000);
         _logger.LogInformation("[CLEANUP] Inventory cleared for {Account}.", accountName);
     }
 
@@ -1760,22 +1763,32 @@ public class LiveBotFixture : IAsyncLifetime
                 return;
             }
 
-            // Lightweight position check: verify teleport took effect
-            if (attempt == 0 && _stateManagerClient != null)
+            // Poll for position update — the snapshot may lag behind the teleport ACK
+            if (_stateManagerClient != null)
             {
-                await RefreshSnapshotsAsync();
-                var snap = await GetSnapshotAsync(accountName);
-                var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-                if (pos != null)
+                var settled = false;
+                for (int poll = 0; poll < 10; poll++)
                 {
-                    var dx = pos.X - x;
-                    var dy = pos.Y - y;
-                    var dist = (float)Math.Sqrt(dx * dx + dy * dy);
-                    if (dist > 80f)
+                    await RefreshSnapshotsAsync();
+                    var snap = await GetSnapshotAsync(accountName);
+                    var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+                    if (pos != null)
                     {
-                        _logger.LogWarning("[TELEPORT] Position check: {Account} is {Dist:F0}y from target after teleport — retrying", accountName, dist);
-                        continue;
+                        var dx = pos.X - x;
+                        var dy = pos.Y - y;
+                        var dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                        if (dist <= 80f)
+                        {
+                            settled = true;
+                            break;
+                        }
                     }
+                    await Task.Delay(500);
+                }
+                if (!settled && attempt == 0)
+                {
+                    _logger.LogWarning("[TELEPORT] Position check: {Account} not near target after 5s — retrying", accountName);
+                    continue;
                 }
             }
 
