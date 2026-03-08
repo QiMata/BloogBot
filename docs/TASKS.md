@@ -25,8 +25,6 @@ All previous P0 items completed and archived. See `docs/ARCHIVE.md`.
 |----|------|---------|
 | `RTS-MISS-001` | S3 ops in RecordedTests.Shared | Requires AWSSDK.S3 |
 | `RTS-MISS-002` | Azure ops in RecordedTests.Shared | Requires Azure.Storage.Blobs |
-| `WRTS-MISS-001` | S3 ops in WWoW.RecordedTests.Shared | Requires AWSSDK.S3 |
-| `WRTS-MISS-002` | Azure ops in WWoW.RecordedTests.Shared | Requires Azure.Storage.Blobs |
 
 ## Open — Test Coverage Gaps (Remaining RPTT/RTS/WRTS TST tasks)
 
@@ -36,8 +34,6 @@ These are incremental coverage expansion tasks. The test projects are healthy; t
 |----|---------|-----------|-------------------|
 | `RPTT-TST-002..006` | RecordedTests.PathingTests.Tests | Program.FilterTests, lifecycle, timeout, disconnect | 115/115 |
 | `RTS-TST-002..006` | RecordedTests.Shared.Tests | S3/Azure storage tests (blocked on NuGet) | 323/323 |
-| `WRTS-TST-001..006` | WWoW.RecordedTests.Shared.Tests | S3/Azure storage tests (blocked on NuGet) | 262/283 (21 pre-existing) |
-| `RPTT-TST-002..006` | WWoW.RecordedTests.PathingTests.Tests | Program.FilterTests, lifecycle, timeout, disconnect | 85/85 |
 
 ## Open — Infrastructure Projects (No Test Projects)
 
@@ -87,13 +83,6 @@ All resolved and archived. See `docs/ARCHIVE.md`.
 | `TEST-CRASH-001` | **Test fixture fail-fast on client crash.** Background crash monitor polls StateManager + WoW.exe PIDs every 2s. `ClientCrashed` + `CrashMessage` properties. `AssertClientAlive()` in `RefreshSnapshotsAsync`. | `Tests/Tests.Infrastructure/` | **Done** |
 | `TEST-FGPACKET-001` | **FG packet capture + connection state machine.** Send hook done. ConnectionStateMachine wired into ThreadSynchronizer (deterministic Lua safety). Receive hook deferred (needs ProcessMessage vtable). | `Services/ForegroundBotRunner/Mem/Hooks/` | **Partial** — recv hook pending |
 
-## Deferred (Unused Services)
-
-| Local file | Status |
-|-----------|--------|
-| `Services/CppCodeIntelligenceMCP/TASKS.md` | CPPMCP-MISS-001 deprioritized |
-| `Services/LoggingMCPServer/TASKS.md` | LMCP-MISS-004..006 deprioritized |
-
 ## Sub-TASKS Execution Queue (Partial — only non-Done rows)
 
 | # | Local file | Status | Next IDs |
@@ -103,13 +92,12 @@ All resolved and archived. See `docs/ARCHIVE.md`.
 | 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | **Partial** | PFS-TST-002 low priority |
 | 26 | `Tests/RecordedTests.PathingTests.Tests/TASKS.md` | **Partial** | RPTT-TST-002..006 remaining |
 | 27 | `Tests/RecordedTests.Shared.Tests/TASKS.md` | **Partial** | RTS-TST-002..006 (storage blocked on NuGet) |
-| 31 | `Tests/WWoW.RecordedTests.PathingTests.Tests/TASKS.md` | **Partial** | RPTT-TST-002..006 remaining |
-| 32 | `Tests/WWoW.RecordedTests.Shared.Tests/TASKS.md` | **Partial** | WRTS-TST-001..006 (storage blocked on NuGet) |
 | 36 | `UI/Systems/Systems.AppHost/TASKS.md` | Pending | SAH-MISS-001..006 |
 | 37 | `UI/Systems/Systems.ServiceDefaults/TASKS.md` | Pending | SSD-MISS-001..006 |
 | 38 | `WWoWBot.AI/TASKS.md` | **Partial** | AI-PARITY-001..GATHER-001 (need live server) |
 
 > All other queue rows (1-10, 12-23, 28-30, 33-35) are **Done** — see `docs/ARCHIVE.md`.
+> Rows 31, 32 (WWoW.RecordedTests.*) and deferred MCP services removed in session 38 cleanup.
 
 ## Canonical Commands
 
@@ -135,30 +123,32 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-08 (session 35)
-- **Current work:** LiveValidation test stabilization — PathfindingService crash fix, FG ObjectManager robustness.
-- **Completed session 35 (2026-03-08):**
-  1. **SceneQuery thread safety FIXED (CRITICAL).** `SceneQuery::m_sceneCaches` (unordered_map) was accessed concurrently by multiple PathfindingService client threads via ProtobufSocketServer's ThreadPool. Caused iterator invalidation / use-after-free crash ~7.5min into test runs, killing PathfindingService and cascading all BG bot operations. Fix: `std::recursive_mutex` protecting Get/Set/Clear. Commit `12dc661`.
-  2. **FG ObjectManager EnumerateVisibleObjects FIXED.** `Functions.GetObjectPtr` returning zero caused `Player = null`, making FG snapshot show `CharacterSelect` intermittently. Fix: (a) `GetObjectPtrFromMemory` fallback in EnumerateVisibleObjects, (b) GUID-based local player detection in callback (replaces fragile pointer comparison). Commit `688e9bd`.
-  3. **NPC flag detection retry logic.** `ObjectManager_DetectsNpcFlags` test added retry loop (3 attempts, 2s delay) for NPC flags arriving in PARTIAL updates. Post-teleport wait increased from 3s to 5s. Commit `688e9bd`.
-  4. **FG bot player detection (sessions 33-34).** `GetObjectPtrFromMemory` walks object manager linked list as fallback. Realm wizard bypass with alternating Lua strategies. Commits `7d728a7`, `73ccd33`, `d38b34a`.
-- **Completed sessions 30-32:** See `docs/ARCHIVE.md`.
-- **Files changed (commits 688e9bd, 12dc661):**
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs` — EnumerateVisibleObjects fallback + GUID comparison
-  - `Exports/Navigation/SceneQuery.h` — added `std::recursive_mutex m_sceneCachesMutex`
-  - `Exports/Navigation/SceneQuery.cpp` — lock_guard on Get/Set/Clear SceneCache
-  - `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs` — retry logic, longer delays
-- **LiveValidation results: 26/28 passed (93%) before test host crash:**
-  - **Test host crash at GatheringProfession.Mining** — not PathfindingService (no connection losses). May be StateManager or test process management issue. 22 tests never ran due to the crash.
-  - **Failed (2):** CombatLoop (mob targeting), DeathCorpseRun (complex multi-phase)
-  - **Skipped: 0** (all ran before crash)
-  - **Newly passing (vs session 32):** Consumable, Equipment, FirstAid, AuctionHouse, EquipItem, Fishing, MeleeAttack_WithinRange, MeleeRange_Formula
+- **Last updated:** 2026-03-08 (session 38)
+- **Current work:** Solution cleanup & refactoring plan execution.
+- **Completed session 38 (2026-03-08):**
+  1. **FG ERROR #134 login crash FIXED.** DefaultServerLogin double-fire during auth handshake. Fix: 15s login attempt cooldown, Connecting state exclusion from IsLoggedIn, smart GlueDialog dismissal (only error dialogs, not "Success!"). Commit `85a679c`.
+  2. **Phase 0: Stale artifact cleanup.** Removed tracked CMake build artifacts (FastCall + Loader cmake_build_* dirs, 40 files), tmp/soap.xml, untracked Loader.dll + mystery unicode file. Updated .gitignore with consolidated cmake_build_*, Loader.dll, tmp/ patterns. Commit `21b926a`.
+  3. **Phase 1: Build stabilization.** Added BotProfiles.csproj to solution. Unified C++ PlatformToolset from v143 to v145 in FastCall + Navigation vcxproj. All C# projects build (dotnet), all 3 C++ projects build (MSBuild v145). Commit `21b926a`.
+  4. **Phase 2: Dead code & orphaned projects.** Removed dead `StartEnumeration()` legacy method from FG ObjectManager. Removed 3 diagnostic `File.AppendAllText` calls from `BuildUseItemByIdSequence`. Replaced hardcoded `D:\World of Warcraft\WWoWLogs` paths with dynamic `Process.MainModule`-based paths in 4 FG crash trace methods. Removed 7 orphaned projects (5 WWoW.* duplicates, 2 unused MCP services). Commit `40971d4`.
+- **Completed sessions 35-37:** See `docs/ARCHIVE.md`.
+- **Files changed (session 38):**
+  - `.gitignore` — consolidated cmake patterns, added Loader.dll + tmp/
+  - `WestworldOfWarcraft.sln` — added BotProfiles.csproj
+  - `Exports/FastCall/FastCall.vcxproj` — PlatformToolset v143→v145
+  - `Exports/Navigation/Navigation.vcxproj` — PlatformToolset v143→v145
+  - `Services/ForegroundBotRunner/Frames/FgLoginScreen.cs` — login cooldown + Connecting guard
+  - `Services/ForegroundBotRunner/Frames/FgRealmSelectScreen.cs` — Connecting guard
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs` — removed StartEnumeration, dynamic crash log paths, DismissGlueDialog safety
+  - `Services/ForegroundBotRunner/Mem/ThreadSynchronizer.cs` — dynamic crash log path
+  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs` — dynamic crash log path
+  - `Services/ForegroundBotRunner/MovementRecorder.cs` — dynamic crash log path
+  - `Exports/BotRunner/BotRunnerService.Sequences.Inventory.cs` — removed diag File.AppendAllText
+  - Removed: 7 orphaned project directories (177 files, ~25K lines deleted)
 - **Known remaining issues:**
-  - **Test host crash:** Happens during GatheringProfession.Mining test — investigate crash dump
-  - **FG WoW.exe crash:** WoW.exe crashes during early world entry (ThreadSynchronizer + charselect timing). Self-recovers via StateManager restart but tests see "FG Bot: NOT AVAILABLE" during recovery window
-  - **DeathCorpseRun:** Complex multi-phase test, timing-sensitive
-  - **CombatLoop:** Mob targeting intermittent failure
-- **Next priority:** (1) Investigate test host crash during Mining test. (2) Run full LiveValidation suite without crash. (3) Fix remaining 2 test failures. (4) Physics+pathfinding plan phases (see plan file).
-- **Test counts:** Physics 97/97, LiveValidation 26/28 (93%, truncated by crash).
+  - **ERROR #132 ACCESS_VIOLATION:** In-world crash at 0x170ED07E, happens after stable login. Deferred to Phase 5 of cleanup plan.
+  - **Test host crash:** During GatheringProfession.Mining test
+  - **DeathCorpseRun / CombatLoop:** Timing-sensitive test failures
+- **Next priority:** Phase 3 (documentation — CLAUDE.md for 6+ services) and Phase 4 (refactoring large files starting with MangosRepository.cs 6952 lines). See plan file.
+- **Test counts:** Physics 97/97, LiveValidation 26/28 (93%).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
 - **Sessions 1-29:** See `docs/ARCHIVE.md` for full history.
