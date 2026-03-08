@@ -108,7 +108,7 @@ namespace ForegroundBotRunner
         {
             try
             {
-                var logPath = System.IO.Path.Combine("D:\\World of Warcraft\\WWoWLogs", "crash_trace.log");
+                var logPath = System.IO.Path.Combine(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? ".") ?? ".", "WWoWLogs"), "crash_trace.log");
                 try { System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath)!); } catch { }
                 using var sw = new System.IO.StreamWriter(logPath, true);
                 sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [Worker] {message}");

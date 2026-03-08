@@ -31,13 +31,10 @@ namespace BotRunner
 
         private IBehaviourTreeNode BuildUseItemByIdSequence(int itemId)
         {
-            var diagPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "botrunner_useitem_diag.txt");
             return new BehaviourTreeBuilder()
                 .Sequence("Use Item By ID")
                     .Do("Find and Use Item", time =>
                     {
-                        try { System.IO.File.AppendAllText(diagPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] BuildUseItemByIdSequence: looking for itemId={itemId}\n"); } catch { }
-
                         // Search all bag slots for the item by ID
                         for (int bag = 0; bag <= 4; bag++)
                         {
@@ -48,7 +45,6 @@ namespace BotRunner
                                 if (contained != null && contained.ItemId == (uint)itemId)
                                 {
                                     Log.Information("[BOT RUNNER] Found item {ItemId} at bag={Bag}, slot={Slot}. Using.", itemId, bag, slot);
-                                    try { System.IO.File.AppendAllText(diagPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] FOUND item {itemId} at bag={bag}, slot={slot}. Calling UseItem.\n"); } catch { }
                                     _objectManager.UseItem(bag, slot, 0);
                                     return BehaviourTreeStatus.Success;
                                 }
@@ -57,7 +53,6 @@ namespace BotRunner
 
                         // Fallback: brute-force use all backpack slots (server ignores invalid)
                         Log.Warning("[BOT RUNNER] Item {ItemId} not found in tracked inventory. Trying brute-force use for all backpack slots.", itemId);
-                        try { System.IO.File.AppendAllText(diagPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] BRUTE-FORCE: item {itemId} not found, trying all 16 backpack slots\n"); } catch { }
                         for (int slot = 0; slot < 16; slot++)
                             _objectManager.UseItem(0, slot, 0);
                         return BehaviourTreeStatus.Success;

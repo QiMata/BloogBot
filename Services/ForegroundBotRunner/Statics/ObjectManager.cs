@@ -45,7 +45,7 @@ namespace ForegroundBotRunner.Statics
         {
             try
             {
-                var logPath = System.IO.Path.Combine("D:\\World of Warcraft\\WWoWLogs", "crash_trace.log");
+                var logPath = System.IO.Path.Combine(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? ".") ?? ".", "WWoWLogs"), "crash_trace.log");
                 try { Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath)!); } catch { }
                 using var sw = new System.IO.StreamWriter(logPath, true);
                 sw.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [ObjMgr] {message}");
@@ -154,12 +154,7 @@ namespace ForegroundBotRunner.Statics
 
             eventHandler.OnEvent += OnEvent;
 
-            // SIMPLIFIED: Disable the EnumerateVisibleObjects callback loop.
-            // We now use static memory addresses only for login detection.
-            // The callback loop is still available but not used for critical state detection.
-            // Task.Factory.StartNew(async () => await StartEnumeration());
-
-            // Instead, start a simple polling loop that only reads static memory addresses
+            // Start a simple polling loop that only reads static memory addresses
             Task.Factory.StartNew(async () => await StartSimplePollingLoop());
         }
 
@@ -1618,26 +1613,6 @@ namespace ForegroundBotRunner.Statics
                     DiagLog($"SimplePolling EXCEPTION: {e.Message}");
                     Log.Error($"[OBJECT MANAGER] SimplePolling: {e}");
                     await Task.Delay(1000);
-                }
-            }
-        }
-
-        /// <summary>
-        /// LEGACY: Original enumeration loop using EnumerateVisibleObjects callback.
-        /// Kept for reference but not used - replaced by StartSimplePollingLoop().
-        /// </summary>
-        internal async Task StartEnumeration()
-        {
-            while (true)
-            {
-                try
-                {
-                    EnumerateVisibleObjects();
-                    await Task.Delay(500);
-                }
-                catch (Exception e)
-                {
-                    Log.Error($"[OBJECT MANAGER] {e}");
                 }
             }
         }
