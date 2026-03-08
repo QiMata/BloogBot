@@ -18,6 +18,13 @@ public class FgCharacterSelectScreen(
     private DateTime? _charSelectFirstSeen;
     private static readonly TimeSpan CharListGracePeriod = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// Snapshot of MaxCharacterCount taken during HasReceivedCharacterList.
+    /// Used by CharacterSelects to prevent TOCTOU race where MaxCharacterCount
+    /// drops between the two reads, causing BotRunnerService to queue CreateCharacter.
+    /// </summary>
+    private int _lastSnapshotCharCount;
+
     public bool IsOpen => getScreenState() == WoWScreenState.CharacterSelect;
 
     public bool HasReceivedCharacterList
@@ -29,17 +36,21 @@ public class FgCharacterSelectScreen(
             if (Statics.ObjectManager.PauseNativeCallsDuringWorldEntry)
                 return true;
 
+            // Snapshot MaxCharacterCount once per check to prevent TOCTOU race.
+            var charCount = getMaxCharacterCount();
+            _lastSnapshotCharCount = charCount;
+
             // When InWorld, IsOpen is false (we're past the charselect screen).
             // Return true so BotRunnerService doesn't think we're waiting for a character list.
             if (!IsOpen)
-                return getMaxCharacterCount() > 0;
+                return charCount > 0;
 
             // Grace period — WoW.exe needs time to populate character list in memory
             _charSelectFirstSeen ??= DateTime.Now;
             if (DateTime.Now - _charSelectFirstSeen.Value < CharListGracePeriod)
                 return false;
 
-            return getMaxCharacterCount() > 0;
+            return charCount > 0;
         }
         set { /* BotRunnerService may set this; FG detects from memory, so ignore */ }
     }
@@ -54,8 +65,11 @@ public class FgCharacterSelectScreen(
     {
         get
         {
-            var count = getMaxCharacterCount();
-            if (count <= 0) return [];
+            // Use the snapshot from HasReceivedCharacterList to prevent TOCTOU race.
+            // If HasReceivedCharacterList returned true (charCount > 0), this must
+            // also see > 0 — otherwise BotRunnerService sees Count==0 and queues
+            // CreateCharacter, crashing WoW with a Lua call to a nil function.
+            if (_lastSnapshotCharCount <= 0) return [];
 
             // FG doesn't have detailed character data from memory — return a minimal entry
             // so BotRunnerService sees at least one character and proceeds to EnterWorld.
@@ -71,7 +85,13 @@ public class FgCharacterSelectScreen(
     public void CreateCharacter(string name, Race race, Gender gender, Class @class,
         byte skinColor, byte face, byte hairStyle, byte hairColor, byte facialHair, byte outfitId)
     {
-        // Lua-based character creation (deferred — not critical path)
+        // Guard: Only execute CreateCharacter Lua if we're actually on the character select screen.
+        // During zone transitions, stale LoginState memory can make BotRunnerService think
+        // we're at charselect when we're in-world. Calling CreateCharacter Lua in-world
+        // causes a nil function error that can destabilize WoW → ERROR #132.
+        if (getScreenState() != WoWScreenState.CharacterSelect)
+            return;
+
         luaCall($"CreateCharacter(\"{name}\")");
     }
 

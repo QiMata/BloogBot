@@ -403,4 +403,53 @@ extern "C"
             return 0;
         }
     }
+
+    // ====================================================================
+    // Generic SEH-protected callback wrappers for .NET 8 managed delegates.
+    //
+    // .NET 8 ignores [HandleProcessCorruptedStateExceptions], so managed
+    // catch(AccessViolationException) is dead code. Hook callbacks
+    // (SignalEventManager, PacketLogger) that read WoW memory can hit
+    // stale pointers during zone transitions. Without SEH protection, the
+    // AV propagates into WoW's native call stack -> ERROR #132.
+    //
+    // Usage: Assembly code caves call these wrappers instead of calling
+    // the managed delegate directly. Returns 1 on success, 0 on SEH.
+    // ====================================================================
+
+    // Wraps a cdecl void callback(arg1) with SEH protection.
+    // Used by PacketLogger (1 arg: CDataStore*) and SignalEventNoArgs (1 arg: eventName).
+    int __declspec(dllexport) __stdcall SafeCallback1(unsigned int parCallbackPtr, unsigned int parArg1)
+    {
+        __try
+        {
+            typedef void (__cdecl *func)(unsigned int);
+            func f = (func)parCallbackPtr;
+            f(parArg1);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
+
+    // Wraps a cdecl void callback(arg1, arg2, arg3) with SEH protection.
+    // Used by SignalEventManager (3 args: eventName, format, firstArgPtr).
+    int __declspec(dllexport) __stdcall SafeCallback3(
+        unsigned int parCallbackPtr,
+        unsigned int parArg1, unsigned int parArg2, unsigned int parArg3)
+    {
+        __try
+        {
+            typedef void (__cdecl *func)(unsigned int, unsigned int, unsigned int);
+            func f = (func)parCallbackPtr;
+            f(parArg1, parArg2, parArg3);
+            return 1;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return 0;
+        }
+    }
 }

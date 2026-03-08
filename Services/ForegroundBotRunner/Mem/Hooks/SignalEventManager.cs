@@ -123,51 +123,74 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void SignalEventHook(string eventName, string typesArg, uint firstArgPtr)
         {
-            _eventCount++;
-            // Log first 20 events unconditionally, then only log interesting events (errors, skills, chat)
-            if (_eventCount <= 20
-                || eventName.StartsWith("UI_ERROR")
-                || eventName.StartsWith("UI_INFO")
-                || eventName.StartsWith("CHAT_MSG_SKILL")
-                || eventName == "CHAT_MSG_SYSTEM"
-                || eventName == "LEARNED_SPELL"
-                || eventName == "UNLEARNED_SPELL")
-                DiagLog($"EVENT[{_eventCount}]: {eventName} format={typesArg}");
-
-            var types = typesArg.TrimStart('%').Split('%');
-            var list = new object[types.Length];
-            for (var i = 0; i < types.Length; i++)
+            // CRITICAL: This runs on WoW's main thread via native assembly detour.
+            // ANY unhandled exception propagates into WoW's native stack → ERROR #132 crash.
+            // .NET 8 ignores [HandleProcessCorruptedStateExceptions] so AV is uncatchable,
+            // but we catch everything else (NullRef, ArrayBounds, subscriber exceptions).
+            try
             {
-                var tmpPtr = firstArgPtr + (uint)i * 4;
-                if (types[i] == "s")
-                {
-                    var ptr = MemoryManager.ReadInt((nint)tmpPtr);
-                    var str = MemoryManager.ReadString(ptr);
-                    list[i] = str;
-                }
-                else if (types[i] == "f")
-                {
-                    var val = MemoryManager.ReadFloat((nint)tmpPtr);
-                    list[i] = val;
-                }
-                else if (types[i] == "u")
-                {
-                    var val = MemoryManager.ReadUint((nint)tmpPtr);
-                    list[i] = val;
-                }
-                else if (types[i] == "d")
-                {
-                    var val = MemoryManager.ReadInt((nint)tmpPtr);
-                    list[i] = val;
-                }
-                else if (types[i] == "b")
-                {
-                    var val = MemoryManager.ReadInt((nint)tmpPtr);
-                    list[i] = Convert.ToBoolean(val);
-                }
-            }
+                _eventCount++;
+                if (_eventCount <= 20
+                    || (eventName != null && (eventName.StartsWith("UI_ERROR")
+                        || eventName.StartsWith("UI_INFO")
+                        || eventName.StartsWith("CHAT_MSG_SKILL")
+                        || eventName == "CHAT_MSG_SYSTEM"
+                        || eventName == "LEARNED_SPELL"
+                        || eventName == "UNLEARNED_SPELL")))
+                    DiagLog($"EVENT[{_eventCount}]: {eventName} format={typesArg}");
 
-            OnNewEventSignalEvent(eventName, list);
+                if (string.IsNullOrEmpty(typesArg) || string.IsNullOrEmpty(eventName))
+                {
+                    if (!string.IsNullOrEmpty(eventName))
+                        OnNewEventSignalEvent(eventName, Array.Empty<object>());
+                    return;
+                }
+
+                if (firstArgPtr == 0)
+                {
+                    OnNewEventSignalEvent(eventName, Array.Empty<object>());
+                    return;
+                }
+
+                var types = typesArg.TrimStart('%').Split('%');
+                var list = new object[types.Length];
+                for (var i = 0; i < types.Length; i++)
+                {
+                    var tmpPtr = firstArgPtr + (uint)i * 4;
+                    if (types[i] == "s")
+                    {
+                        var ptr = MemoryManager.ReadInt((nint)tmpPtr);
+                        list[i] = (ptr != 0 ? MemoryManager.ReadString(ptr) : null) ?? "";
+                    }
+                    else if (types[i] == "f")
+                    {
+                        list[i] = MemoryManager.ReadFloat((nint)tmpPtr);
+                    }
+                    else if (types[i] == "u")
+                    {
+                        list[i] = MemoryManager.ReadUint((nint)tmpPtr);
+                    }
+                    else if (types[i] == "d")
+                    {
+                        list[i] = MemoryManager.ReadInt((nint)tmpPtr);
+                    }
+                    else if (types[i] == "b")
+                    {
+                        list[i] = MemoryManager.ReadInt((nint)tmpPtr) != 0;
+                    }
+                    else
+                    {
+                        list[i] = 0;
+                    }
+                }
+
+                OnNewEventSignalEvent(eventName, list);
+            }
+            catch (Exception ex)
+            {
+                try { DiagLog($"SignalEventHook EXCEPTION (swallowed): {ex.GetType().Name}: {ex.Message}"); }
+                catch { }
+            }
         }
 
         static internal void OnNewEventSignalEvent(string parEvent, params object[] parList) =>
@@ -212,13 +235,21 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void SignalEventNoArgsHook(string eventName)
         {
-            _eventCount++;
-            if (_eventCount <= 20
-                || eventName == "LEARNED_SPELL"
-                || eventName == "UNLEARNED_SPELL")
-                DiagLog($"EVENT_NOARGS[{_eventCount}]: {eventName}");
+            try
+            {
+                _eventCount++;
+                if (_eventCount <= 20
+                    || eventName == "LEARNED_SPELL"
+                    || eventName == "UNLEARNED_SPELL")
+                    DiagLog($"EVENT_NOARGS[{_eventCount}]: {eventName}");
 
-            OnNewSignalEventNoArgs?.Invoke(eventName);
+                OnNewSignalEventNoArgs?.Invoke(eventName);
+            }
+            catch (Exception ex)
+            {
+                try { DiagLog($"SignalEventNoArgsHook EXCEPTION (swallowed): {ex.GetType().Name}: {ex.Message}"); }
+                catch { }
+            }
         }
 
         internal delegate void SignalEventNoArgsEventHandler(string parEvent, params object[] parArgs);
