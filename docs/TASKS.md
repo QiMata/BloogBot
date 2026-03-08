@@ -20,23 +20,23 @@
 ### Phase 3: Documentation (COMPLETE)
 All 9 CLAUDE.md files created. See `docs/ARCHIVE.md`.
 
-### Phase 4: Large File Refactoring
+### Phase 4: Large File Refactoring (COMPLETE)
 
 | ID | Task | File | Lines | Strategy | Status |
 |----|------|------|-------|----------|--------|
-| `REFACTOR-001` | Split MangosRepository into partial classes | `Services/DecisionEngineService/Repository/MangosRepository.cs` | 6,952 | `.Items.cs`, `.Spells.cs`, `.Creatures.cs`, `.Quests.cs`, `.World.cs`, `.Characters.cs` | **Open** |
-| `REFACTOR-002` | Split WoWSharpObjectManager into partial classes | `Exports/WoWSharpClient/Objects/WoWSharpObjectManager.cs` | 3,252 | `.Objects.cs`, `.Movement.cs`, `.Combat.cs`, `.Inventory.cs`, `.Network.cs` | **Open** |
-| `REFACTOR-003` | Split FG ObjectManager into partial classes | `Services/ForegroundBotRunner/Statics/ObjectManager.cs` | ~2,907 | `.ScreenDetection.cs`, `.ObjectEnumeration.cs`, `.PlayerState.cs`, `.LuaCalls.cs`, `.Hooks.cs` | **Open** |
-| `REFACTOR-004` | Split LiveBotFixture into helper classes | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | 2,306 | Extract `GmCommandHelper`, `SnapshotHelper`, `AssertionHelper` | **Open** |
-| `REFACTOR-005` | Split StateManagerWorker into partial classes | `Services/WoWStateManager/StateManagerWorker.cs` | 1,455 | `.BotManagement.cs`, `.SnapshotProcessing.cs`, `.ActionForwarding.cs` | **Open** |
+| `REFACTOR-001` | Split MangosRepository into partial classes | `Services/DecisionEngineService/Repository/MangosRepository.cs` | 6,952→10 files (max 1535) | `.Items.cs`, `.Spells.cs`, `.Creatures.cs`, `.Quests.cs`, `.World.cs`, `.Characters.cs`, `.Npcs.cs`, `.Locales.cs`, `.Utility.cs` | **Done** `7139f6d` |
+| `REFACTOR-002` | Split WoWSharpObjectManager into partial classes | `Exports/WoWSharpClient/Objects/WoWSharpObjectManager.cs` | 3,252→6 files (max 1434) | `.Objects.cs`, `.Movement.cs`, `.Combat.cs`, `.Inventory.cs`, `.Network.cs` | **Done** `492ebd8` |
+| `REFACTOR-003` | Split FG ObjectManager into partial classes | `Services/ForegroundBotRunner/Statics/ObjectManager.cs` | 2,907→9 files (max 1012) | `.ScreenDetection.cs`, `.ObjectEnumeration.cs`, `.Spells.cs`, `.Interaction.cs`, `.Inventory.cs`, `.PlayerState.cs`, `.Movement.cs`, `.Combat.cs` | **Done** `0b94c5a` |
+| `REFACTOR-004` | Split LiveBotFixture into partial classes | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | 2,306→6 files (max 713) | `.Assertions.cs`, `.BotChat.cs`, `.ServerManagement.cs`, `.GmCommands.cs`, `.Snapshots.cs` | **Done** `88b22bb` |
+| `REFACTOR-005` | Split StateManagerWorker into partial classes | `Services/WoWStateManager/StateManagerWorker.cs` | 1,455→3 files (max 1062) | `.BotManagement.cs`, `.SnapshotProcessing.cs` | **Done** `b1d1d27` |
 
-### Phase 5: Command Rate-Limiting & Stability
+### Phase 5: Command Rate-Limiting & Stability (PARTIAL)
 
 | ID | Task | Owner | Status |
 |----|------|-------|--------|
-| `RATELIMIT-001` | Audit all Lua/command call sites in FG bot for rate-limiting gaps | `Services/ForegroundBotRunner/` | **Open** |
-| `RATELIMIT-002` | Add throttle/cooldown guards to prevent command spam during state transitions | `Exports/BotRunner/BotRunnerService.cs` | **Open** |
-| `CRASH-001` | ERROR #132 ACCESS_VIOLATION in-world at 0x170ED07E | `Services/ForegroundBotRunner/` | **Open** — deferred until refactoring complete |
+| `RATELIMIT-001` | Audit all Lua/command call sites in FG bot for rate-limiting gaps | `Services/ForegroundBotRunner/` | **Done** — audit complete, null-safety guards added `b93860e` |
+| `RATELIMIT-002` | Add throttle/cooldown guards to prevent command spam during state transitions | `Exports/BotRunner/BotRunnerService.cs` | **Done** — LogoutSequence + Party sequences guarded `b93860e` |
+| `CRASH-001` | ERROR #132 ACCESS_VIOLATION in-world at 0x170ED07E | `Services/ForegroundBotRunner/` | **Open** — deferred, investigate after integration tests |
 
 ## Open — Storage Stubs (Blocked on NuGet)
 
@@ -142,16 +142,15 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-08 (session 38, continued)
-- **Current work:** Phase 4 — large file refactoring (REFACTOR-001 through REFACTOR-005).
+- **Last updated:** 2026-03-08 (session 39)
+- **Current work:** Integration test validation after Phase 4+5 refactoring.
 - **Completed this session:**
-  1. **Phase 0-2:** Stale artifacts, build stabilization, dead code. Commits `21b926a`, `40971d4`.
-  2. **Phase 3 COMPLETE:** All 9 CLAUDE.md files created (ForegroundBotRunner, BackgroundBotRunner, GameData.Core, BotCommLayer, FastCall, Loader, DecisionEngineService, PromptHandlingService, WoWStateManager). Commit `d95581f`.
-  3. **CreateCharacter Lua spam fix:** `_everEnteredWorld` sticky flag in BotRunnerService prevents login sequence during transient state drops. Commit `d95581f`.
-- **In progress:** REFACTOR-001 (MangosRepository.cs split into partial classes by domain).
+  1. **Phase 4 COMPLETE:** All 5 large file splits done. MangosRepository (6952→10 files `7139f6d`), WoWSharpObjectManager (3252→6 files `492ebd8`), FG ObjectManager (2907→9 files `0b94c5a`), LiveBotFixture (2306→6 files `88b22bb`), StateManagerWorker (1455→3 files `b1d1d27`).
+  2. **Phase 5 PARTIAL:** Rate-limiting audit done, null-safety guards added to LogoutSequence + Party sequences (`b93860e`). CRASH-001 deferred.
+  3. **TASKS.md updated:** All REFACTOR and RATELIMIT items marked Done.
+- **In progress:** Running integration tests to verify refactoring didn't break anything.
 - **Known remaining issues:**
-  - **ERROR #132 ACCESS_VIOLATION:** In-world crash at 0x170ED07E. Deferred to CRASH-001.
-  - **Command spam / rate-limiting:** RATELIMIT-001/002.
+  - **ERROR #132 ACCESS_VIOLATION:** In-world crash at 0x170ED07E. CRASH-001 open.
 - **Test counts:** Physics 97/97, LiveValidation 26/28 (93%).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
-- **Sessions 1-37:** See `docs/ARCHIVE.md` for full history.
+- **Sessions 1-38:** See `docs/ARCHIVE.md` for full history.
