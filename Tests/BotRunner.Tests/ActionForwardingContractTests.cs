@@ -195,8 +195,11 @@ public class ActionForwardingContractTests
     }
 
     [Fact]
-    public void IsDeadOrGhostState_ReturnsTrue_WhenDeadTextInErrors()
+    public void IsDeadOrGhostState_ReturnsFalse_WhenDeadTextInErrors_ButPlayerAlive()
     {
+        // "deadTextSeen" heuristic was intentionally removed — it caused false positives
+        // when stale "You are dead." messages lingered in the 50-message rolling window.
+        // Death detection now relies solely on health=0, ghostFlag, and standState=dead.
         var snap = new WoWActivitySnapshot
         {
             Player = new WoWPlayer
@@ -206,10 +209,9 @@ public class ActionForwardingContractTests
         };
         snap.RecentErrors.Add("You are dead.");
 
-        var isDead = InvokeIsDeadOrGhostState(snap, out var reason);
+        var isDead = InvokeIsDeadOrGhostState(snap, out _);
 
-        Assert.True(isDead);
-        Assert.Contains("deadTextSeen=1", reason);
+        Assert.False(isDead);
     }
 
     [Fact]

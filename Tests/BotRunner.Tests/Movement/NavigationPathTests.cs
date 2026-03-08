@@ -81,17 +81,18 @@ public class NavigationPathTests
             allowDirectFallback: false);
 
         // Bot at (0,0) is 10y from corner → beyond 2y acceptance radius → stays at corner
-        // Corner waypoint X/Y may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Corner waypoint offset by capsule-radius * 3 along bisector (~1.27y per axis for 90° turn)
         Assert.NotNull(waypoint);
-        Assert.InRange(waypoint!.X, 9f, 11f);
-        Assert.InRange(waypoint.Y, -1f, 1f);
+        Assert.InRange(waypoint!.X, 8f, 11f);
+        Assert.InRange(waypoint.Y, -2f, 1f);
     }
 
     [Fact]
-    public void GetNextWaypoint_DoesNotSkipCornerWaypoint_BasedOnLineOfSightAlone()
+    public void GetNextWaypoint_AdvancesPastCorner_WhenWithinAcceptanceRadiusAfterOffset()
     {
         // L-shaped path with 90° corner. LOS blocked through wall shortcut.
-        // Even if the bot is close to the corner, it must not skip past it.
+        // Bot at (5,0) is ~4y from offset corner (~8.73,-1.27) which is within the
+        // 90° speed-scaled acceptance radius (~4.2y), so the bot advances to the next waypoint.
         var pathfinding = new DelegatePathfindingClient(
             getPath: (_, _, _, _) => [new Position(10, 0, 0), new Position(10, 10, 0)],
             isInLineOfSight: (_, from, to) => !(from.Y < 1f && to.Y > 1f));
@@ -103,11 +104,10 @@ public class NavigationPathTests
             mapId: 1,
             allowDirectFallback: false);
 
-        // Corner has 90° turn → speed-scaled acceptance radius (~4.2y). Bot is 5y away → stays at corner.
-        // Corner waypoint X/Y may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Bot within acceptance radius of offset corner → advances to second waypoint (10, 10)
         Assert.NotNull(waypoint);
         Assert.InRange(waypoint!.X, 9f, 11f);
-        Assert.InRange(waypoint.Y, -1f, 1f);
+        Assert.InRange(waypoint.Y, 9f, 11f);
     }
 
     [Fact]
@@ -127,10 +127,10 @@ public class NavigationPathTests
             allowDirectFallback: false);
 
         // LOS throws → StringPull preserves corner. Bot 10y away from corner → stays.
-        // Corner waypoint X/Y may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Corner waypoint offset by capsule-radius * 3 along bisector (~1.27y per axis for 90° turn)
         Assert.NotNull(waypoint);
-        Assert.InRange(waypoint!.X, 9f, 11f);
-        Assert.InRange(waypoint.Y, -1f, 1f);
+        Assert.InRange(waypoint!.X, 8f, 11f);
+        Assert.InRange(waypoint.Y, -2f, 1f);
     }
 
     [Fact]
@@ -234,10 +234,10 @@ public class NavigationPathTests
 
         // Corner at (8,0,0) preserved by StringPull. 90° turn → speed-scaled acceptance (~4.2y).
         // Bot at 8y, effectiveRadius=max(4.2,4)=4.2 → 8 > 4.2 → doesn't enter advance loop.
-        // Corner waypoint X/Y may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Corner waypoint offset by capsule-radius * 3 along bisector (~1.27y per axis for 90° turn)
         Assert.NotNull(waypoint);
-        Assert.InRange(waypoint!.X, 7f, 9f);
-        Assert.InRange(waypoint.Y, -1f, 1f);
+        Assert.InRange(waypoint!.X, 6f, 9f);
+        Assert.InRange(waypoint.Y, -2f, 1f);
     }
 
     [Fact]
@@ -353,18 +353,19 @@ public class NavigationPathTests
         // Corner (10,0,0) has 90° turn → speed-scaled acceptance (~4.2y).
         // Bot at ~6y from offset corner: outside effectiveRadius → can't advance → stalled.
         // After STALLED_SAMPLE_THRESHOLD (6) iterations, recalculation triggers.
-        // Corner waypoint X/Y may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Corner waypoint offset by capsule-radius * 3 along bisector (~1.27y per axis for 90° turn)
         Assert.NotNull(waypoint);
-        Assert.InRange(waypoint!.X, 9f, 11f);
-        Assert.InRange(waypoint.Y, -1f, 1f);
+        Assert.InRange(waypoint!.X, 8f, 11f);
+        Assert.InRange(waypoint.Y, -2f, 1f);
         Assert.True(pathfindingCalls >= 2);
     }
 
     [Fact]
-    public void GetNextWaypoint_DoesNotSkipFirstWaypoint_WhenPathDoesNotIncludeCurrentPosition()
+    public void GetNextWaypoint_AdvancesPastFirstWaypoint_WhenWithinAcceptanceRadiusAfterOffset()
     {
         // Path starts at a waypoint that's not the current position.
         // LOS blocked through corner to prevent StringPull from collapsing the path.
+        // Bot at (0,0), corner at (4,0) offset to ~(2.73,-1.27). Distance ~3y < acceptance ~4.2y.
         var pathfinding = new DelegatePathfindingClient(
             (_, _, _, _) => [new Position(4, 0, 0), new Position(4, 10, 0)],
             isInLineOfSight: (_, from, to) => !(from.Y < 0.5f && to.Y > 0.5f));
@@ -376,11 +377,10 @@ public class NavigationPathTests
             mapId: 1,
             allowDirectFallback: false);
 
-        // Corner at (4,0,0) with 90° turn → 2y radius. Bot 4y away → stays at first waypoint.
-        // Corner waypoint X/Y may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Bot within acceptance radius of offset corner → advances to second waypoint (4, 10)
         Assert.NotNull(waypoint);
         Assert.InRange(waypoint!.X, 3f, 5f);
-        Assert.InRange(waypoint.Y, -1f, 1f);
+        Assert.InRange(waypoint.Y, 9f, 11f);
     }
 
     [Fact]
@@ -597,8 +597,9 @@ public class NavigationPathTests
     public void AdaptiveRadius_StraightPathGetsLargeRadius_CornerGetsSmallRadius()
     {
         // Path: straight segment → 90° corner → straight segment.
-        // LOS blocks both diagonal shortcuts and long horizontal jumps
-        // so StringPull preserves the intermediate waypoints.
+        // Probe heuristics prune collinear intermediate waypoint (10,0) since
+        // (0,0)→(10,0)→(20,0) is a straight line with LOS clear up to 12y.
+        // First returned waypoint is the 90° corner at (20,0) with capsule offset.
         var pathfinding = new DelegatePathfindingClient(
             getPath: (_, _, _, _) =>
             [
@@ -617,29 +618,28 @@ public class NavigationPathTests
 
         var navPath = new NavigationPath(pathfinding, () => 0);
 
-        // Bot at origin — 10y from first waypoint, won't advance through any
+        // Bot at origin — collinear (10,0) pruned by probe heuristics, first target is corner (20,0)
         var waypoint = navPath.GetNextWaypoint(
             new Position(0, 0, 0),
             new Position(20, 20, 0),
             mapId: 1,
             allowDirectFallback: false);
 
-        // First waypoint X may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Corner at (20,0) offset by capsule-radius * 3 along bisector (~1.27y per axis for 90° turn)
         Assert.NotNull(waypoint);
-        Assert.InRange(waypoint!.X, 9f, 11f);
+        Assert.InRange(waypoint!.X, 18f, 21f);
 
-        // Move bot within 6y of first waypoint (straight line → large radius)
+        // Move bot within 6y of corner — should advance to final waypoint
         waypoint = navPath.GetNextWaypoint(
-            new Position(5, 0, 0),
+            new Position(15, 0, 0),
             new Position(20, 20, 0),
             mapId: 1,
             allowDirectFallback: false);
 
-        // Bot at 5y from (10,0,0). Straight-line radius is ~6y. Should advance to corner (20,0,0).
-        // Corner waypoint X/Y may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Bot at 15y from origin, ~4y from offset corner. Within acceptance radius → advances to (20,10).
         Assert.NotNull(waypoint);
         Assert.InRange(waypoint!.X, 19f, 21f);
-        Assert.InRange(waypoint.Y, -1f, 1f);
+        Assert.InRange(waypoint.Y, 9f, 11f);
     }
 
     [Fact]
@@ -664,10 +664,10 @@ public class NavigationPathTests
             allowDirectFallback: false);
 
         // Corner (10,0,0) preserved by StringPull. Bot is 10y away → stays at corner.
-        // Corner waypoint X/Y may be slightly offset by capsule-radius corner offset (Phase 2a)
+        // Corner waypoint offset by capsule-radius * 3 along bisector (~1.27y per axis for 90° turn)
         Assert.NotNull(waypoint);
-        Assert.InRange(waypoint!.X, 9f, 11f);
-        Assert.InRange(waypoint.Y, -1f, 1f);
+        Assert.InRange(waypoint!.X, 8f, 11f);
+        Assert.InRange(waypoint.Y, -2f, 1f);
     }
 
     [Fact]
