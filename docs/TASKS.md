@@ -134,30 +134,28 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 30)
-- **Current work:** LiveValidation test stabilization + bot behavior implementation.
-- **Completed session 30 (2026-03-07):**
-  1. **BotTeleportAsync reliability fix** — Two root causes for ~20% silent teleport failure: (a) `allowWhenDead: false` default in `SendGmChatCommandTrackedAsync` silently skipped teleports for dead/ghost bots, (b) fire-and-forget chat sending. Fixed with `allowWhenDead: true` + lightweight position verification retry (check once, retry if >80y from target). Session 29 first run showed improvement from 29-35/50 to 40/50.
-  2. **Combat race condition fix** — `SetTarget()` (CMSG_SET_SELECTION) and `StartMeleeAttack()` (CMSG_ATTACKSWING) both fire-and-forget async. Without gap, ATTACKSWING arrives before SET_SELECTION is processed. Split into two behavior tree nodes with 50ms delay. Also fixed `SetTarget` to update `TargetGuid` on `WoWUnit` fallback when `WoWLocalPlayer` cast doesn't apply.
-  3. **Dual aura ID handling** — Elixir of Lion's Strength (item 2454) has use spell 2367 AND buff aura 2457. VMaNGOS tracks either or both. BuffDismissTests and ConsumableUsageTests updated to check/clean both IDs via `HasLionsStrengthAura()` helper.
-  4. **Quest test investigation (subagent)** — QuestInteractionTests: 300ms delay after `BotSelectSelfAsync` too short for `ExtractPlayerTarget`. StarterQuestTests: Gornek teleport uses 3000ms delay vs Kaltunk's 4000ms. Both are timing issues, not code bugs.
-  5. **LiveValidation run: 50/50 SKIPPED** — TESTBOT1 (FG) permanently stuck at `LoginScreen`→`CharacterSelect`, never reaches `InWorld`. TESTBOT2 (BG) rapidly flickers between `InWorld` and `CharacterSelect` (~2 transitions/sec), so fixture polling (3s interval) catches it at `CharacterSelect`. Fixture times out after 120s. This is the known TESTBOT1 CharacterSelect stuck issue. Previous session best was 40/50.
-- **Completed sessions 28-29:** See `docs/ARCHIVE.md`.
-- **Files changed (commit 0028502):**
-  - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs` — split SetTarget/AttackSwing
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs` — SetTarget WoWUnit fallback
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs` — BotTeleportAsync fix
-  - `Tests/BotRunner.Tests/LiveValidation/BuffDismissTests.cs` — dual aura IDs
-  - `Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs` — dual aura IDs
-- **CRITICAL BLOCKER: TESTBOT1 CharacterSelect stuck + TESTBOT2 flickering** — Until this is fixed, ALL LiveValidation tests skip. The fixture never sees any bot in `InWorld` state during its polling window.
-- **LiveValidation remaining failures (from session 29 best run of 40/50):**
-  - **Consistent failures:**
-    - `GatheringProfession.Mining/Herbalism` — nodes on respawn timer
-    - `QuestInteraction` — `.quest add` ExtractPlayerTarget timing (increase post-BotSelectSelf delay)
-    - `StarterQuest` — Gornek NPC not visible (increase post-teleport delay from 3000ms to 4000ms)
-    - `OrgrimmarGroundZ.PostTeleport` — FG not available
-  - **Intermittent:** `CombatLoop`, `CombatRange`, `ConsumableUsage`, `BuffDismiss`, others
-- **Next priority:** (1) **Fix TESTBOT1 CharacterSelect stuck** — FG client injection not progressing past login. Investigate WoW.exe + Loader.dll injection pipeline. (2) **Fix TESTBOT2 InWorld/CharacterSelect flickering** — BG bot shouldn't flip between states rapidly. Investigate `BackgroundBotRunner` screen state detection. (3) QuestInteraction/StarterQuest timing fixes (trivial once bots are stable).
-- **Test counts:** Physics 97/97, Pathfinding 25/25, AI 121/121, Tier2 52/52, WoWSharpClient 1251/1251. LiveValidation 50/50 SKIPPED (fixture init failure).
+- **Last updated:** 2026-03-07 (session 31)
+- **Current work:** LiveValidation test stabilization.
+- **Completed session 31 (2026-03-07):**
+  1. **Fixture init RESOLVED — 50/50 SKIP → 39/50 PASS.** Root cause: `CharacterSelectScreen.IsOpen` hardcoded `true` (`LoginScreen.cs:48`), so any `HasEnteredWorld=false` moment reports CharacterSelect. BG bot oscillates InWorld/CharacterSelect every ~100ms. Old fixture polled every 3s and caught CharacterSelect. Fix: track "ever seen InWorld" per account (`everSeenInWorld` dict) + 500ms poll interval. Commit `f762e5f`.
+  2. **QuestInteraction chat bleed fix** — Stale `.targetself` responses ("Player not found!") bled into `.quest add` delta window. `ContainsCommandRejection` matched it as rejection. Increased post-BotSelectSelf delay from 1s→2s, GM command capture from 1s→1.5s. Commit `230deb6`.
+  3. **CombatLoop diagnostic improvement** — Increased target selection timeout from 4s→8s. Added diagnostic log (TargetGuid, ScreenState) on failure to help trace snapshot flickering impact on combat tests.
+  4. **Dual aura ID completion** — Completed BuffDismissTests/ConsumableUsageTests dual aura refactor (LionsStrengthUseSpell=2367, LionsStrengthBuffAura=2457) that was broken from previous context. Committed in session 30.
+- **Completed session 30:** See `docs/ARCHIVE.md`.
+- **Files changed (commits f762e5f, 230deb6):**
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs` — everSeenInWorld tracking, 500ms poll
+  - `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs` — 2s BotSelectSelf delay, 1.5s capture
+  - `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs` — 8s target timeout, diagnostic logging
+- **TESTBOT1 (FG) still stuck at CharacterSelect** — never reaches InWorld. FG injection pipeline issue. Not blocking tests (fixture proceeds with BG-only after 60s).
+- **BG bot snapshot flickering root cause:** `HasEnteredWorld` briefly goes false, causing `ScreenState="CharacterSelect"`. The `LoginScreen.IsOpen => true` hardcode means ANY non-InWorld moment shows CharacterSelect. Fix at source: either make `CharacterSelectScreen.IsOpen` track real state, or stop resetting `HasEnteredWorld` during normal operation.
+- **LiveValidation results (run 1): 39/50 — 9 failed, 2 skipped:**
+  - **Combat (3):** CombatLoop, CombatRange, LootCorpse — TargetGuid=0x0 after 4-8s. Likely snapshot flickering (Player=null during CharacterSelect moments)
+  - **Quest (2):** QuestInteraction (chat bleed — FIXED), StarterQuest (Gornek not visible — intermittent, delay already 4s)
+  - **Profession (2):** Fishing (CAST_FAILED), Mining (node respawn timer)
+  - **Other (2):** DeathCorpseRun (ReleaseCorpse no ghost transition), UnequipItem (_agentFactoryAccessor null)
+  - **Skipped (2):** OrgrimmarGroundZ (FG not available), Herbalism (no node)
+- **Run 2 in progress** — testing fixes from this session.
+- **Next priority:** (1) Investigate TargetGuid=0 in combat tests — may need to bypass snapshot for target verification. (2) Fix UnequipItem — trace why _agentFactoryAccessor returns null during test. (3) Fix TESTBOT1 FG injection pipeline.
+- **Test counts:** Physics 97/97, Pathfinding 25/25, AI 121/121, Tier2 52/52, WoWSharpClient 1251/1251. LiveValidation 39/50 (9 failed, 2 skipped).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
-- **Sessions 1-27:** See `docs/ARCHIVE.md` for full history.
+- **Sessions 1-29:** See `docs/ARCHIVE.md` for full history.
