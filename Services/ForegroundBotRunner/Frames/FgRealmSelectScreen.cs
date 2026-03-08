@@ -51,8 +51,14 @@ public class FgRealmSelectScreen : IRealmSelectScreen
             // During world entry handshake, do NOT report open — prevents Lua calls during handshake
             if (Statics.ObjectManager.PauseNativeCallsDuringWorldEntry) return false;
 
+            var screenState = _getScreenState();
+
+            // During Connecting state, the auth handshake is in progress.
+            // No Lua calls should be issued — m_netState is not ready.
+            if (screenState == WoWScreenState.Connecting) return false;
+
             // At charselect with no character list loaded → realm selection needed
-            return _getScreenState() == WoWScreenState.CharacterSelect
+            return screenState == WoWScreenState.CharacterSelect
                 && _getMaxCharacterCount() == 0;
         }
     }

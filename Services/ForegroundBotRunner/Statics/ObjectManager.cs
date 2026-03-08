@@ -922,14 +922,29 @@ namespace ForegroundBotRunner.Statics
         public string GlueDialogText => MainThreadLuaCallWithResult("{0} = GlueDialogText:GetText()")[0];
 
         /// <summary>
-        /// Dismisses any open GlueDialog (e.g. "Disconnected from server", "Login failed").
-        /// Clicks GlueDialogButton1 if the dialog is visible; no-op if no dialog is open.
+        /// Dismisses error GlueDialogs (e.g. "Disconnected from server", "Login failed").
+        /// Clicks GlueDialogButton1 if the dialog is visible AND contains an error message.
+        /// IMPORTANT: Does NOT dismiss the "Success!" dialog — that's part of the auth handshake.
+        /// Clicking "Cancel" on the Success dialog while m_netState is in a connected state
+        /// causes ERROR #134 (m_netState == NS_INITIALIZED assertion failure).
         /// </summary>
         public static void DismissGlueDialog()
         {
             try
             {
-                MainThreadLuaCall("if GlueDialog and GlueDialog:IsVisible() then GlueDialogButton1:Click() end");
+                // Only dismiss dialogs that contain error/disconnect text.
+                // The "Success!" dialog must NOT be dismissed — the client handles it internally.
+                MainThreadLuaCall(
+                    "if GlueDialog and GlueDialog:IsVisible() then " +
+                    "  local text = GlueDialogText and GlueDialogText:GetText() or '' " +
+                    "  if text and (string.find(text, 'Disconnected') or string.find(text, 'failed') " +
+                    "    or string.find(text, 'error') or string.find(text, 'Error') " +
+                    "    or string.find(text, 'unable') or string.find(text, 'Unable') " +
+                    "    or string.find(text, 'timeout') or string.find(text, 'Timeout') " +
+                    "    or string.find(text, 'closed') or string.find(text, 'Closed')) then " +
+                    "    GlueDialogButton1:Click() " +
+                    "  end " +
+                    "end");
             }
             catch { /* GlueDialog may not exist or Lua not ready */ }
         }
