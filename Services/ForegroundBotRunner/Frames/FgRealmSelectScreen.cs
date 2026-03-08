@@ -88,6 +88,11 @@ public class FgRealmSelectScreen : IRealmSelectScreen
             return;
         }
 
+        // Wait for screen transition animation to complete before issuing Lua calls.
+        // Sending commands during animations causes ACCESS_VIOLATION crashes.
+        if (Statics.ObjectManager.IsInScreenTransitionCooldown)
+            return;
+
         // Rate-limit UI clicks to avoid spamming the client (called every ~100ms by behavior tree)
         if (_lastRealmClickAttempt.HasValue
             && (DateTime.UtcNow - _lastRealmClickAttempt.Value).TotalMilliseconds < 1500)

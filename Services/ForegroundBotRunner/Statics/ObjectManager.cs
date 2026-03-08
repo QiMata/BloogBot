@@ -287,6 +287,29 @@ namespace ForegroundBotRunner.Statics
         public static volatile bool PauseNativeCallsDuringWorldEntry = false;
         private static DateTime? _enterWorldStartedAt;
 
+        /// <summary>
+        /// Tracks the last observed screen state and the timestamp of the last transition.
+        /// When the screen state changes, Lua calls are suppressed for ScreenTransitionCooldown
+        /// to let WoW's UI animations complete before sending commands. Without this, Lua calls
+        /// during screen transitions cause ACCESS_VIOLATION crashes.
+        /// </summary>
+        private static WoWScreenState _lastObservedScreen = WoWScreenState.Unknown;
+        private static DateTime _lastScreenTransitionAt = DateTime.MinValue;
+        private static readonly TimeSpan ScreenTransitionCooldown = TimeSpan.FromSeconds(2);
+
+        /// <summary>
+        /// Returns true if a screen transition recently occurred and Lua calls should be deferred.
+        /// Called by screen handlers before issuing Lua commands.
+        /// </summary>
+        public static bool IsInScreenTransitionCooldown
+        {
+            get
+            {
+                if (_lastScreenTransitionAt == DateTime.MinValue) return false;
+                return DateTime.UtcNow - _lastScreenTransitionAt < ScreenTransitionCooldown;
+            }
+        }
+
         public bool IsLoggedIn
         {
             get
@@ -422,19 +445,19 @@ namespace ForegroundBotRunner.Statics
                 // Check for "connecting" state first
                 if (loginStateStr == "connecting")
                 {
-                    return WoWScreenState.Connecting;
+                    return TrackScreenTransition(WoWScreenState.Connecting);
                 }
 
                 // Check for character create
                 if (loginStateStr == "charcreate")
                 {
-                    return WoWScreenState.CharacterCreate;
+                    return TrackScreenTransition(WoWScreenState.CharacterCreate);
                 }
 
                 // Check for login screen
                 if (loginStateStr == "login")
                 {
-                    return WoWScreenState.LoginScreen;
+                    return TrackScreenTransition(WoWScreenState.LoginScreen);
                 }
 
                 // At this point, loginState should be "charselect"
@@ -443,7 +466,7 @@ namespace ForegroundBotRunner.Statics
                 // Treat these as LoginScreen since they're pre-authentication screens
                 if (loginStateStr == "movie" || loginStateStr == "options" || loginStateStr == "patchdownload" || loginStateStr == "credits")
                 {
-                    return WoWScreenState.LoginScreen;
+                    return TrackScreenTransition(WoWScreenState.LoginScreen);
                 }
 
                 // "realmwizard" is the first-time realm setup screen (choose realm type, language).
@@ -451,7 +474,7 @@ namespace ForegroundBotRunner.Statics
                 // Treat as CharacterSelect so BotRunnerService triggers realm selection logic.
                 if (loginStateStr == "realmwizard")
                 {
-                    return WoWScreenState.CharacterSelect;
+                    return TrackScreenTransition(WoWScreenState.CharacterSelect);
                 }
 
                 if (loginStateStr == "charselect" || string.IsNullOrEmpty(loginStateStr))
@@ -463,15 +486,15 @@ namespace ForegroundBotRunner.Statics
                     {
                         if (HasEnteredWorld)
                         {
-                            return WoWScreenState.LoadingWorld;
+                            return TrackScreenTransition(WoWScreenState.LoadingWorld);
                         }
-                        return WoWScreenState.CharacterSelect;
+                        return TrackScreenTransition(WoWScreenState.CharacterSelect);
                     }
 
                     // ContinentId == 0xFF (255) means loading bar is visible
                     if (continentId == 0xFF)
                     {
-                        return WoWScreenState.LoadingWorld;
+                        return TrackScreenTransition(WoWScreenState.LoadingWorld);
                     }
 
                     // If we haven't entered the world yet, continentId may be stale
@@ -479,23 +502,38 @@ namespace ForegroundBotRunner.Statics
                     // Treat as CharacterSelect until HasEnteredWorld confirms we're actually in-world.
                     if (!HasEnteredWorld)
                     {
-                        return WoWScreenState.CharacterSelect;
+                        return TrackScreenTransition(WoWScreenState.CharacterSelect);
                     }
 
                     // Any other ContinentId value is a valid map ID - we're in world
                     // Map IDs: 0=Eastern Kingdoms, 1=Kalimdor, 36=Deadmines, 329=Stratholme, 533=Naxxramas, etc.
                     // Dungeons/raids can have IDs > 255, so we can't just check < 0xFF
-                    return WoWScreenState.InWorld;
+                    return TrackScreenTransition(WoWScreenState.InWorld);
                 }
 
                 DiagLog($"GetCurrentScreenState UNRECOGNIZED loginState='{loginStateStr}' continentId=0x{continentId:X8}");
-                return WoWScreenState.Unknown;
+                return TrackScreenTransition(WoWScreenState.Unknown);
             }
             catch (Exception ex)
             {
                 DiagLog($"GetCurrentScreenState EXCEPTION: {ex.Message}");
-                return WoWScreenState.Unknown;
+                return TrackScreenTransition(WoWScreenState.Unknown);
             }
+        }
+
+        /// <summary>
+        /// Tracks screen state transitions and records when transitions occur,
+        /// so screen handlers can wait for animations to complete.
+        /// </summary>
+        private static WoWScreenState TrackScreenTransition(WoWScreenState newState)
+        {
+            if (newState != _lastObservedScreen && _lastObservedScreen != WoWScreenState.Unknown)
+            {
+                DiagLog($"[ScreenTransition] {_lastObservedScreen} → {newState} — cooldown {ScreenTransitionCooldown.TotalSeconds:F1}s");
+                _lastScreenTransitionAt = DateTime.UtcNow;
+            }
+            _lastObservedScreen = newState;
+            return newState;
         }
 
         /// <summary>
@@ -762,6 +800,13 @@ namespace ForegroundBotRunner.Statics
             }
 
             _enterWorldStartedAt = DateTime.UtcNow;
+
+            // Wait for screen transition animation to complete before issuing Lua calls.
+            if (IsInScreenTransitionCooldown)
+            {
+                DiagLog("EnterWorld: SKIP — screen transition cooldown active");
+                return;
+            }
 
             // Pause ThreadSynchronizer WM_USER messages during world server handshake
             // to prevent disconnect. Cleared when InWorld state is detected in polling loop.

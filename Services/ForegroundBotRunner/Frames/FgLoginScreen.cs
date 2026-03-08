@@ -32,6 +32,11 @@ public class FgLoginScreen(
         if (state != WoWScreenState.LoginScreen)
             return;
 
+        // Wait for screen transition animation to complete before issuing Lua calls.
+        // Sending commands during animations causes ACCESS_VIOLATION crashes.
+        if (Statics.ObjectManager.IsInScreenTransitionCooldown)
+            return;
+
         // Track when login screen was first seen — Lua needs ~3s to initialize
         _loginScreenFirstSeen ??= DateTime.Now;
         if (DateTime.Now - _loginScreenFirstSeen.Value < LuaInitGracePeriod)
