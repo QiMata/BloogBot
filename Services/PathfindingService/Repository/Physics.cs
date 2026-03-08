@@ -99,11 +99,20 @@ namespace PathfindingService.Repository
         {
             if (_mapsPreloaded) return;
             Console.WriteLine($"[Physics]   Preloading navigation maps...");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Console.WriteLine($"[Physics]   Loading map 0 (Eastern Kingdoms)...");
             PreloadMap(0);
+            Console.WriteLine($"[Physics]   Map 0 loaded in {sw.Elapsed.TotalSeconds:F1}s");
+            sw.Restart();
+            Console.WriteLine($"[Physics]   Loading map 1 (Kalimdor)...");
             PreloadMap(1);
+            Console.WriteLine($"[Physics]   Map 1 loaded in {sw.Elapsed.TotalSeconds:F1}s");
+            sw.Restart();
+            Console.WriteLine($"[Physics]   Loading map 389 (Ragefire Chasm)...");
             PreloadMap(389);
+            Console.WriteLine($"[Physics]   Map 389 loaded in {sw.Elapsed.TotalSeconds:F1}s");
             _mapsPreloaded = true;
-            Console.WriteLine($"[Physics]   Maps preloaded successfully!");
+            Console.WriteLine($"[Physics]   All maps preloaded successfully!");
         }
 
         // ===============================

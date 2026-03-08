@@ -244,7 +244,9 @@ namespace ForegroundBotRunner
                             var connState = _connectionState.CurrentState;
                             var pktSend = PacketLogger.SendCount;
                             var pktRecv = PacketLogger.RecvCount;
-                            DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, HasEnteredWorld={hasEnteredWorld}, Player={playerName}, ConnState={connState}, TX={pktSend}, RX={pktRecv}");
+                            var rawLoginState = ForegroundBotRunner.Mem.MemoryManager.ReadString(ForegroundBotRunner.Mem.Offsets.CharacterScreen.LoginState) ?? "(null)";
+                            var maxChars = ObjectManager.MaxCharacterCount;
+                            DiagLog($"LOOP#{loopCount}: ScreenState={screenState}, LoginState='{rawLoginState}', HasEnteredWorld={hasEnteredWorld}, Player={playerName}, ConnState={connState}, TX={pktSend}, RX={pktRecv}, MaxChars={maxChars}");
                         }
 
                         // Anti-AFK ALWAYS - prevents disconnect during login/charselect too

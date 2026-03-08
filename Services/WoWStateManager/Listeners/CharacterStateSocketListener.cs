@@ -78,7 +78,7 @@ namespace WoWStateManager.Listeners
                 _logger.LogInformation($"SNAPSHOT_RECEIVED: Account='{accountName}', ScreenState='{screenState}'{charInfo}{errSuffix}");
             }
 
-            // Handle "?" account name - assign to first available idle slot
+            // Handle "?" account name - assign to Foreground account (only FG bots send "?")
             if ("?" == accountName)
             {
                 _logger.LogInformation($"Processing '?' assignment. Dictionary has {CurrentActivityMemberList.Count} entries:");
@@ -87,13 +87,46 @@ namespace WoWStateManager.Listeners
                     var slotAccountName = activityKeyValue.Value.AccountName;
                     var isEmpty = string.IsNullOrEmpty(slotAccountName);
                     _logger.LogInformation($"  Slot '{activityKeyValue.Key}': AccountName='{slotAccountName}', isEmpty={isEmpty}");
+                }
 
-                    if (isEmpty)
+                // Only FG bots send "?" - assign them to the Foreground account from settings
+                var fgSettings = _characterSettings.Find(cs => cs.RunnerType == Settings.BotRunnerType.Foreground);
+                if (fgSettings != null)
+                {
+                    var fgSlotSnapshot = CurrentActivityMemberList.GetValueOrDefault(fgSettings.AccountName);
+                    if (fgSlotSnapshot != null && string.IsNullOrEmpty(fgSlotSnapshot.AccountName))
                     {
-                        accountName = activityKeyValue.Key;
+                        accountName = fgSettings.AccountName;
                         request.AccountName = accountName;
-                        _logger.LogInformation($"Assigned account '{accountName}' to idle slot");
-                        break;
+                        _logger.LogInformation($"Assigned '?' to Foreground account '{accountName}'");
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Foreground account '{fgSettings.AccountName}' already assigned, falling back to first empty slot");
+                        foreach (var activityKeyValue in CurrentActivityMemberList)
+                        {
+                            if (string.IsNullOrEmpty(activityKeyValue.Value.AccountName))
+                            {
+                                accountName = activityKeyValue.Key;
+                                request.AccountName = accountName;
+                                _logger.LogInformation($"Assigned account '{accountName}' to idle slot (fallback)");
+                                break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // No Foreground setting found — fall back to first empty slot
+                    foreach (var activityKeyValue in CurrentActivityMemberList)
+                    {
+                        if (string.IsNullOrEmpty(activityKeyValue.Value.AccountName))
+                        {
+                            accountName = activityKeyValue.Key;
+                            request.AccountName = accountName;
+                            _logger.LogInformation($"Assigned account '{accountName}' to idle slot (no FG config)");
+                            break;
+                        }
                     }
                 }
             }

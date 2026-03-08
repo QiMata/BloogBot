@@ -83,9 +83,28 @@ public class FgRealmSelectScreen : IRealmSelectScreen
             return;
         _lastRealmClickAttempt = DateTime.UtcNow;
 
-        // The realm list popup is showing — click the first realm entry and confirm.
-        // In WoW 1.12.1 Glue screen, RealmListButton1..N are the realm entries and
-        // RealmListOkButton confirms the selection.
+        // Try multiple realm selection methods:
+        // 1. Realm Wizard (loginState="realmwizard") — first-time setup screen
+        // 2. Realm List popup (loginState="charselect" with MaxCharacterCount=0)
+
+        // Method 1: Realm Wizard — the "realmwizard" loginState first-time setup.
+        // In WoW 1.12.1 GlueXML, RealmWizard.lua defines:
+        //   - ChangeRealm() — opens the realm list from the wizard
+        //   - RealmWizard_OnOkay() — accepts current wizard selection
+        // Try calling these global functions directly.
+        try
+        {
+            _luaCall("if ChangeRealm then ChangeRealm() end");
+        }
+        catch { /* Function may not exist */ }
+
+        try
+        {
+            _luaCall("if RealmWizard_OnOkay then RealmWizard_OnOkay() end");
+        }
+        catch { /* Function may not exist */ }
+
+        // Method 2: Direct realm list — click first realm entry and OK
         try
         {
             _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
@@ -97,6 +116,13 @@ public class FgRealmSelectScreen : IRealmSelectScreen
             _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
         }
         catch { /* Frame may not exist yet */ }
+
+        // Method 3: Try ChangeRealmButton which opens the realm list from wizard
+        try
+        {
+            _luaCall("if ChangeRealmButton and ChangeRealmButton:IsVisible() then ChangeRealmButton:Click() end");
+        }
+        catch { /* Frame may not exist */ }
 
         // Do NOT set _selectedRealm here — let CurrentRealm detect realm selection
         // via MaxCharacterCount > 0. This ensures the UI actually transitioned.

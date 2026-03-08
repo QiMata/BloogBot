@@ -102,11 +102,15 @@ namespace PathfindingService
                 // Ensure native library is loaded first (with helpful error messages)
                 Physics.EnsureNativeLibraryLoaded();
 
+                var initSw = System.Diagnostics.Stopwatch.StartNew();
                 logger.LogInformation("Loading Navigation data...");
                 _navigation = new Navigation();
+                logger.LogInformation("Navigation loaded in {Elapsed:F1}s", initSw.Elapsed.TotalSeconds);
 
+                initSw.Restart();
                 logger.LogInformation("Loading Physics data and preloading maps...");
                 _physics = new Physics();
+                logger.LogInformation("Physics loaded in {Elapsed:F1}s", initSw.Elapsed.TotalSeconds);
 
                 _isInitialized = true;
 

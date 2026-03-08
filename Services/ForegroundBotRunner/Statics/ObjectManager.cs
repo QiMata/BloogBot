@@ -407,6 +407,21 @@ namespace ForegroundBotRunner.Statics
 
                 // At this point, loginState should be "charselect"
                 // Use ContinentId as the PRIMARY discriminator
+                // WoW 1.12.1 also uses: "movie" (cinematic), "options" (settings), "patchdownload", "credits"
+                // Treat these as LoginScreen since they're pre-authentication screens
+                if (loginStateStr == "movie" || loginStateStr == "options" || loginStateStr == "patchdownload" || loginStateStr == "credits")
+                {
+                    return WoWScreenState.LoginScreen;
+                }
+
+                // "realmwizard" is the first-time realm setup screen (choose realm type, language).
+                // It appears after authentication but before the character list loads.
+                // Treat as CharacterSelect so BotRunnerService triggers realm selection logic.
+                if (loginStateStr == "realmwizard")
+                {
+                    return WoWScreenState.CharacterSelect;
+                }
+
                 if (loginStateStr == "charselect" || string.IsNullOrEmpty(loginStateStr))
                 {
                     // ContinentId == 0xFFFFFFFF means we're NOT in any map.
@@ -441,6 +456,7 @@ namespace ForegroundBotRunner.Statics
                     return WoWScreenState.InWorld;
                 }
 
+                DiagLog($"GetCurrentScreenState UNRECOGNIZED loginState='{loginStateStr}' continentId=0x{continentId:X8}");
                 return WoWScreenState.Unknown;
             }
             catch (Exception ex)
