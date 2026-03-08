@@ -17,9 +17,8 @@ namespace ForegroundBotRunner.Frames;
 ///   - If MaxCharacterCount > 0: realm was already selected (auto or manual), character list loaded.
 ///     Return a non-null CurrentRealm so BotRunnerService skips realm selection.
 ///   - If MaxCharacterCount == 0 and we're at charselect: realm list popup is likely showing.
-///     IsOpen returns true, and SelectRealm() marks the realm as selected.
-///     In 1.12.1, ChangeRealm() is NOT a valid Glue-screen Lua global — the client
-///     auto-selects the last-used realm after login. We just wait for MaxCharacterCount > 0.
+///     IsOpen returns true. SelectRealm() clicks the first realm button and OK via Lua.
+///     The behavior tree retries every tick (rate-limited to 2s) until MaxCharacterCount > 0.
 /// </summary>
 public class FgRealmSelectScreen : IRealmSelectScreen
 {
@@ -29,6 +28,7 @@ public class FgRealmSelectScreen : IRealmSelectScreen
     private readonly Func<int> _getMaxCharacterCount;
     private readonly Action<string> _luaCall;
     private Realm? _selectedRealm;
+    private DateTime? _lastRealmClickAttempt;
 
     public FgRealmSelectScreen(
         Func<WoWScreenState> getScreenState,
@@ -70,11 +70,36 @@ public class FgRealmSelectScreen : IRealmSelectScreen
 
     public void SelectRealm(Realm realm)
     {
-        // In WoW 1.12.1, the client auto-selects the last-used realm after login.
-        // ChangeRealm() is NOT a valid Glue-screen Lua global in 1.12.1.
-        // Just mark the realm as selected — BotRunnerService proceeds when
-        // MaxCharacterCount > 0 (CurrentRealm becomes non-null).
-        _selectedRealm = realm;
+        // If MaxCharacterCount > 0, the realm was already auto-selected by the client.
+        if (_getMaxCharacterCount() > 0)
+        {
+            _selectedRealm = realm;
+            return;
+        }
+
+        // Rate-limit UI clicks to avoid spamming the client (called every ~100ms by behavior tree)
+        if (_lastRealmClickAttempt.HasValue
+            && (DateTime.UtcNow - _lastRealmClickAttempt.Value).TotalMilliseconds < 2000)
+            return;
+        _lastRealmClickAttempt = DateTime.UtcNow;
+
+        // The realm list popup is showing — click the first realm entry and confirm.
+        // In WoW 1.12.1 Glue screen, RealmListButton1..N are the realm entries and
+        // RealmListOkButton confirms the selection.
+        try
+        {
+            _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
+        }
+        catch { /* Frame may not exist yet */ }
+
+        try
+        {
+            _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
+        }
+        catch { /* Frame may not exist yet */ }
+
+        // Do NOT set _selectedRealm here — let CurrentRealm detect realm selection
+        // via MaxCharacterCount > 0. This ensures the UI actually transitioned.
     }
 
     public void SelectRealmType(RealmType realmType) { }
