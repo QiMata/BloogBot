@@ -688,7 +688,11 @@ public class BotServiceFixture : IAsyncLifetime
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
-                    Log($"  [StateManager-OUT] {e.Data}");
+                    // Throttle verbose repetitive lines to reduce test host memory pressure.
+                    // StateManager emits snapshot queries, equipment dumps, and skill snapshots
+                    // at 350ms intervals — thousands of lines per minute. Only log important lines.
+                    if (!IsVerboseStateManagerLine(e.Data))
+                        Log($"  [StateManager-OUT] {e.Data}");
                     var match = WoWPidRegex.Match(e.Data);
                     if (match.Success && int.TryParse(match.Groups[1].Value, out var wowPid))
                     {
@@ -976,6 +980,33 @@ public class BotServiceFixture : IAsyncLifetime
         {
             return true; // no process with this PID — it's dead
         }
+    }
+
+    /// <summary>
+    /// Filters out high-frequency StateManager output lines that flood test output.
+    /// These lines are emitted every ~350ms per bot and accumulate thousands of entries
+    /// during a full test run, consuming significant memory in the test host process.
+    /// </summary>
+    private static bool IsVerboseStateManagerLine(string line)
+    {
+        // These patterns appear hundreds/thousands of times per test run
+        if (line.Contains("Snapshot query:")
+            || line.Contains("[SkillSnapshot]")
+            || line.Contains("[BOT RUNNER] Equipment:")
+            || line.Contains("[BOT RUNNER] Protobuf Inventory")
+            || line.Contains("SMSG_MONSTER_MOVE")
+            || line.Contains("SNAPSHOT_RECEIVED:")
+            || line.Contains("[BOT RUNNER] Equipment slot")
+            || line.Contains("Received world state update message"))
+            return true;
+
+        // Filter orphaned .NET logger prefix lines (no content, just the logger category)
+        // e.g. "info: WoWStateManager.StateManagerWorker[0]" with no trailing content
+        var trimmed = line.TrimEnd();
+        if (trimmed.EndsWith("[0]") && trimmed.StartsWith("info:"))
+            return true;
+
+        return false;
     }
 
     private void Log(string message)
