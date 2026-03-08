@@ -364,22 +364,50 @@ namespace WoWSharpClient
         }
 
 
-        public IWoWPlayer PartyLeader => null;
+        public IWoWPlayer PartyLeader
+        {
+            get
+            {
+                var leaderGuid = PartyLeaderGuid;
+                if (leaderGuid == 0) return null;
+                lock (_objectsLock)
+                {
+                    return _objects.OfType<IWoWPlayer>().FirstOrDefault(p => p.Guid == leaderGuid);
+                }
+            }
+        }
 
 
-        public ulong PartyLeaderGuid { get; set; }
+        public ulong PartyLeaderGuid
+        {
+            get
+            {
+                var factory = _agentFactoryAccessor?.Invoke();
+                return factory?.PartyAgent?.LeaderGuid ?? _partyLeaderGuidOverride;
+            }
+            set => _partyLeaderGuidOverride = value;
+        }
+        private ulong _partyLeaderGuidOverride;
 
 
-        public ulong Party1Guid => 0;
+        public ulong Party1Guid => GetPartyMemberGuid(0);
 
 
-        public ulong Party2Guid => 0;
+        public ulong Party2Guid => GetPartyMemberGuid(1);
 
 
-        public ulong Party3Guid => 0;
+        public ulong Party3Guid => GetPartyMemberGuid(2);
 
 
-        public ulong Party4Guid => 0;
+        public ulong Party4Guid => GetPartyMemberGuid(3);
+
+        private ulong GetPartyMemberGuid(int index)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            var members = factory?.PartyAgent?.GetGroupMembers();
+            if (members == null || index >= members.Count) return 0;
+            return members[index].Guid;
+        }
 
 
         public ulong StarTargetGuid => 0;
@@ -465,33 +493,75 @@ namespace WoWSharpClient
         public void PlaceAction(uint v) { }
 
 
-        public void InviteToGroup(ulong guid) { }
+        public void InviteToGroup(ulong guid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            var member = factory?.PartyAgent?.GetGroupMember(guid);
+            if (member != null)
+                _ = factory!.PartyAgent.InvitePlayerAsync(member.Name);
+        }
 
 
-        public void InviteByName(string characterName) { }
+        public void InviteByName(string characterName)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.InvitePlayerAsync(characterName);
+        }
 
 
-        public void KickPlayer(ulong guid) { }
+        public void KickPlayer(ulong guid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.KickPlayerAsync(guid);
+        }
 
 
-        public void AcceptGroupInvite() { }
+        public void AcceptGroupInvite()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.AcceptInviteAsync();
+        }
 
 
-        public void DeclineGroupInvite() { }
+        public void DeclineGroupInvite()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.DeclineInviteAsync();
+        }
 
 
-        public void LeaveGroup() { }
+        public void LeaveGroup()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.LeaveGroupAsync();
+        }
 
 
-        public void DisbandGroup() { }
+        public void DisbandGroup()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.DisbandGroupAsync();
+        }
 
 
-        public void ConvertToRaid() { }
+        public void ConvertToRaid()
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.ConvertToRaidAsync();
+        }
 
 
         public bool HasPendingGroupInvite()
         {
-            return false;
+            var factory = _agentFactoryAccessor?.Invoke();
+            return factory?.PartyAgent?.HasPendingInvite ?? false;
         }
 
 
@@ -513,16 +583,49 @@ namespace WoWSharpClient
         public void AssignLoot(int itemId, ulong playerGuid) { }
 
 
-        public void SetGroupLoot(GroupLootSetting setting) { }
+        public void SetGroupLoot(GroupLootSetting setting)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+            {
+                // GroupLootSetting maps to master loot quality thresholds
+                var threshold = setting switch
+                {
+                    GroupLootSetting.MasterLooterCommon => ItemQuality.Common,
+                    GroupLootSetting.MasterLooterRare => ItemQuality.Rare,
+                    GroupLootSetting.MasterLooterEpic => ItemQuality.Epic,
+                    GroupLootSetting.MasterLooterLegendary => ItemQuality.Legendary,
+                    _ => ItemQuality.Uncommon
+                };
+                _ = factory.PartyAgent.SetLootMethodAsync(LootMethod.MasterLooter, lootThreshold: threshold);
+            }
+        }
 
 
-        public void PromoteLootManager(ulong playerGuid) { }
+        public void PromoteLootManager(ulong playerGuid)
+        {
+            // Loot manager is set via SetLootMethodAsync with MasterLoot + lootMasterGuid
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.SetLootMethodAsync(LootMethod.MasterLooter, playerGuid);
+        }
 
 
-        public void PromoteAssistant(ulong playerGuid) { }
+        public void PromoteAssistant(ulong playerGuid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            var member = factory?.PartyAgent?.GetGroupMember(playerGuid);
+            if (member != null)
+                _ = factory!.PartyAgent.PromoteToAssistantAsync(member.Name);
+        }
 
 
-        public void PromoteLeader(ulong playerGuid) { }
+        public void PromoteLeader(ulong playerGuid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.PartyAgent != null)
+                _ = factory.PartyAgent.PromoteToLeaderAsync(playerGuid);
+        }
 
 
         public void DoEmote(Emote emote)

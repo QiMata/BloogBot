@@ -79,6 +79,23 @@ namespace BotRunner
                     case CharacterAction.DeclineQuest:
                         builder.Splice(DeclineQuestSequence);
                         break;
+                    case CharacterAction.AbandonQuest:
+                        // Params: [0]=questLogSlot (byte index in quest log)
+                        if (actionEntry.Item2.Count >= 1)
+                        {
+                            var questSlot = (byte)(int)actionEntry.Item2[0];
+                            builder.Do("Abandon Quest", time =>
+                            {
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory != null)
+                                {
+                                    _ = factory.QuestAgent.RemoveQuestFromLogAsync(questSlot);
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                return BehaviourTreeStatus.Failure;
+                            });
+                        }
+                        break;
                     case CharacterAction.SelectReward:
                         builder.Splice(BuildSelectRewardSequence((int)actionEntry.Item2[0]));
                         break;
