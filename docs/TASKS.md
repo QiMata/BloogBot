@@ -15,9 +15,28 @@
 7. If two consecutive passes produce no delta, record the blocker and advance to the next queued file.
 8. **The MaNGOS server is ALWAYS live.** Never defer live validation tests — run them every session. FISH-001, BBR-PAR-001, AI-PARITY, and all LiveValidation tests should be executed, not deferred.
 
-## P0 — Active Priorities
+## P0 — Active Priorities: Solution Cleanup & Refactoring
 
-All previous P0 items completed and archived. See `docs/ARCHIVE.md`.
+### Phase 3: Documentation (COMPLETE)
+All 9 CLAUDE.md files created. See `docs/ARCHIVE.md`.
+
+### Phase 4: Large File Refactoring
+
+| ID | Task | File | Lines | Strategy | Status |
+|----|------|------|-------|----------|--------|
+| `REFACTOR-001` | Split MangosRepository into partial classes | `Services/DecisionEngineService/Repository/MangosRepository.cs` | 6,952 | `.Items.cs`, `.Spells.cs`, `.Creatures.cs`, `.Quests.cs`, `.World.cs`, `.Characters.cs` | **Open** |
+| `REFACTOR-002` | Split WoWSharpObjectManager into partial classes | `Exports/WoWSharpClient/Objects/WoWSharpObjectManager.cs` | 3,252 | `.Objects.cs`, `.Movement.cs`, `.Combat.cs`, `.Inventory.cs`, `.Network.cs` | **Open** |
+| `REFACTOR-003` | Split FG ObjectManager into partial classes | `Services/ForegroundBotRunner/Statics/ObjectManager.cs` | ~2,907 | `.ScreenDetection.cs`, `.ObjectEnumeration.cs`, `.PlayerState.cs`, `.LuaCalls.cs`, `.Hooks.cs` | **Open** |
+| `REFACTOR-004` | Split LiveBotFixture into helper classes | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | 2,306 | Extract `GmCommandHelper`, `SnapshotHelper`, `AssertionHelper` | **Open** |
+| `REFACTOR-005` | Split StateManagerWorker into partial classes | `Services/WoWStateManager/StateManagerWorker.cs` | 1,455 | `.BotManagement.cs`, `.SnapshotProcessing.cs`, `.ActionForwarding.cs` | **Open** |
+
+### Phase 5: Command Rate-Limiting & Stability
+
+| ID | Task | Owner | Status |
+|----|------|-------|--------|
+| `RATELIMIT-001` | Audit all Lua/command call sites in FG bot for rate-limiting gaps | `Services/ForegroundBotRunner/` | **Open** |
+| `RATELIMIT-002` | Add throttle/cooldown guards to prevent command spam during state transitions | `Exports/BotRunner/BotRunnerService.cs` | **Open** |
+| `CRASH-001` | ERROR #132 ACCESS_VIOLATION in-world at 0x170ED07E | `Services/ForegroundBotRunner/` | **Open** — deferred until refactoring complete |
 
 ## Open — Storage Stubs (Blocked on NuGet)
 
@@ -123,32 +142,16 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-08 (session 38)
-- **Current work:** Solution cleanup & refactoring plan execution.
-- **Completed session 38 (2026-03-08):**
-  1. **FG ERROR #134 login crash FIXED.** DefaultServerLogin double-fire during auth handshake. Fix: 15s login attempt cooldown, Connecting state exclusion from IsLoggedIn, smart GlueDialog dismissal (only error dialogs, not "Success!"). Commit `85a679c`.
-  2. **Phase 0: Stale artifact cleanup.** Removed tracked CMake build artifacts (FastCall + Loader cmake_build_* dirs, 40 files), tmp/soap.xml, untracked Loader.dll + mystery unicode file. Updated .gitignore with consolidated cmake_build_*, Loader.dll, tmp/ patterns. Commit `21b926a`.
-  3. **Phase 1: Build stabilization.** Added BotProfiles.csproj to solution. Unified C++ PlatformToolset from v143 to v145 in FastCall + Navigation vcxproj. All C# projects build (dotnet), all 3 C++ projects build (MSBuild v145). Commit `21b926a`.
-  4. **Phase 2: Dead code & orphaned projects.** Removed dead `StartEnumeration()` legacy method from FG ObjectManager. Removed 3 diagnostic `File.AppendAllText` calls from `BuildUseItemByIdSequence`. Replaced hardcoded `D:\World of Warcraft\WWoWLogs` paths with dynamic `Process.MainModule`-based paths in 4 FG crash trace methods. Removed 7 orphaned projects (5 WWoW.* duplicates, 2 unused MCP services). Commit `40971d4`.
-- **Completed sessions 35-37:** See `docs/ARCHIVE.md`.
-- **Files changed (session 38):**
-  - `.gitignore` — consolidated cmake patterns, added Loader.dll + tmp/
-  - `WestworldOfWarcraft.sln` — added BotProfiles.csproj
-  - `Exports/FastCall/FastCall.vcxproj` — PlatformToolset v143→v145
-  - `Exports/Navigation/Navigation.vcxproj` — PlatformToolset v143→v145
-  - `Services/ForegroundBotRunner/Frames/FgLoginScreen.cs` — login cooldown + Connecting guard
-  - `Services/ForegroundBotRunner/Frames/FgRealmSelectScreen.cs` — Connecting guard
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs` — removed StartEnumeration, dynamic crash log paths, DismissGlueDialog safety
-  - `Services/ForegroundBotRunner/Mem/ThreadSynchronizer.cs` — dynamic crash log path
-  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs` — dynamic crash log path
-  - `Services/ForegroundBotRunner/MovementRecorder.cs` — dynamic crash log path
-  - `Exports/BotRunner/BotRunnerService.Sequences.Inventory.cs` — removed diag File.AppendAllText
-  - Removed: 7 orphaned project directories (177 files, ~25K lines deleted)
+- **Last updated:** 2026-03-08 (session 38, continued)
+- **Current work:** Phase 4 — large file refactoring (REFACTOR-001 through REFACTOR-005).
+- **Completed this session:**
+  1. **Phase 0-2:** Stale artifacts, build stabilization, dead code. Commits `21b926a`, `40971d4`.
+  2. **Phase 3 COMPLETE:** All 9 CLAUDE.md files created (ForegroundBotRunner, BackgroundBotRunner, GameData.Core, BotCommLayer, FastCall, Loader, DecisionEngineService, PromptHandlingService, WoWStateManager). Commit `d95581f`.
+  3. **CreateCharacter Lua spam fix:** `_everEnteredWorld` sticky flag in BotRunnerService prevents login sequence during transient state drops. Commit `d95581f`.
+- **In progress:** REFACTOR-001 (MangosRepository.cs split into partial classes by domain).
 - **Known remaining issues:**
-  - **ERROR #132 ACCESS_VIOLATION:** In-world crash at 0x170ED07E, happens after stable login. Deferred to Phase 5 of cleanup plan.
-  - **Test host crash:** During GatheringProfession.Mining test
-  - **DeathCorpseRun / CombatLoop:** Timing-sensitive test failures
-- **Next priority:** Phase 3 (documentation — CLAUDE.md for 6+ services) and Phase 4 (refactoring large files starting with MangosRepository.cs 6952 lines). See plan file.
+  - **ERROR #132 ACCESS_VIOLATION:** In-world crash at 0x170ED07E. Deferred to CRASH-001.
+  - **Command spam / rate-limiting:** RATELIMIT-001/002.
 - **Test counts:** Physics 97/97, LiveValidation 26/28 (93%).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
-- **Sessions 1-29:** See `docs/ARCHIVE.md` for full history.
+- **Sessions 1-37:** See `docs/ARCHIVE.md` for full history.
