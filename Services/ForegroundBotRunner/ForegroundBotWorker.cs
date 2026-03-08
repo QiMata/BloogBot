@@ -430,6 +430,7 @@ namespace ForegroundBotRunner
                 DiagLog("EVENT: OnDisconnect - resetting state");
                 _logger.LogWarning("Disconnected from server");
                 ObjectManager.PauseNativeCallsDuringWorldEntry = false;
+                Mem.ThreadSynchronizer.ResetObjMgrValidState();
                 _hooksInitialized = false;
                 if (_objectManager != null)
                 {
@@ -442,6 +443,7 @@ namespace ForegroundBotRunner
             {
                 DiagLog("EVENT: OnLogout - resetting world state");
                 _logger.LogInformation("Player logout detected");
+                Mem.ThreadSynchronizer.ResetObjMgrValidState();
                 _hooksInitialized = false;
                 if (_objectManager != null)
                 {

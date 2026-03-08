@@ -1344,6 +1344,7 @@ namespace ForegroundBotRunner.Statics
                             Pet = null;
                             lock (_objectsLock) { ObjectsBuffer.Clear(); }
                             ClearCachedGuid(); // Clear the cached GUID on logout
+                            Mem.ThreadSynchronizer.ResetObjMgrValidState(); // Allow Lua calls at charselect
                             _consecutiveLoggedOutCount = 0;
                         }
                         else if (_consecutiveLoggedOutCount == 1)

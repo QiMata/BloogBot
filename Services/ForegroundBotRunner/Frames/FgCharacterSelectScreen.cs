@@ -24,6 +24,11 @@ public class FgCharacterSelectScreen(
     {
         get
         {
+            // During world entry handshake, report true to prevent BotRunnerService
+            // from triggering any UI interactions (Lua calls) during the critical phase.
+            if (Statics.ObjectManager.PauseNativeCallsDuringWorldEntry)
+                return true;
+
             // When InWorld, IsOpen is false (we're past the charselect screen).
             // Return true so BotRunnerService doesn't think we're waiting for a character list.
             if (!IsOpen)

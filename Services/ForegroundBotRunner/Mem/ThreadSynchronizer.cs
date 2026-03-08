@@ -83,8 +83,29 @@ namespace ForegroundBotRunner.Mem
         /// </summary>
         public static volatile bool Paused = false;
 
-        /// <summary>True once the object manager has been valid at least once (i.e., we entered world).</summary>
+        /// <summary>True once the object manager has been valid at least once (i.e., we connected to world server).</summary>
         private static volatile bool _objMgrWasValid = false;
+
+        /// <summary>
+        /// True once we've actually been in a valid map (continentId less than 0xFF).
+        /// Distinguished from _objMgrWasValid which is set when ManagerBase is non-zero
+        /// (happens at charselect too). inTransition blocking only applies after we've
+        /// been in a real map — otherwise charselect Lua calls are permanently blocked.
+        /// </summary>
+        private static volatile bool _hasEnteredWorldOnce = false;
+
+        /// <summary>
+        /// Reset the world-entry tracking flags. Call this when the bot detects a full disconnect
+        /// (back at login/charselect). Without this reset, the inTransition heuristic
+        /// permanently blocks all WM_USER processing after a disconnect because
+        /// _hasEnteredWorldOnce=true + continentId=0xFFFFFFFF = inTransition=true forever.
+        /// </summary>
+        public static void ResetObjMgrValidState()
+        {
+            _objMgrWasValid = false;
+            _hasEnteredWorldOnce = false;
+            DiagLogStatic("ResetObjMgrValidState: _objMgrWasValid=false, _hasEnteredWorldOnce=false (full disconnect recovery)");
+        }
 
         /// <summary>
         /// Packet-driven connection state machine. When set, provides deterministic
@@ -247,14 +268,23 @@ namespace ForegroundBotRunner.Mem
                 else
                 {
                     // Legacy heuristic path (before ConnectionStateMachine is registered).
-                    // During login, _objMgrWasValid is false so Lua calls proceed (Lua works at charselect).
-                    // Once we've been in-world, a null ManagerBase or transitional ContinentId means unsafe state.
+                    // _objMgrWasValid tracks if ManagerBase was ever non-zero (world server connected).
+                    // _hasEnteredWorldOnce tracks if we've actually been in a valid map.
+                    // Transition blocking only applies after _hasEnteredWorldOnce — otherwise
+                    // Lua calls at charselect (needed for login, realm selection) are blocked.
                     bool managerBaseValid = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase) != nint.Zero;
                     if (managerBaseValid)
                         _objMgrWasValid = true;
 
                     uint continentId = MemoryManager.ReadUint(Offsets.Map.ContinentId);
-                    bool inTransition = _objMgrWasValid && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+
+                    // Track when we've actually been in a valid map (continentId < 0xFF)
+                    if (managerBaseValid && continentId < 0xFF)
+                        _hasEnteredWorldOnce = true;
+
+                    // Only block for transitions AFTER we've been in a real map.
+                    // At initial charselect, _hasEnteredWorldOnce is false → Lua calls proceed.
+                    bool inTransition = _hasEnteredWorldOnce && (continentId == 0xFFFFFFFF || continentId == 0xFF);
 
                     shouldBlock = Paused || (_objMgrWasValid && !managerBaseValid) || inTransition;
                 }

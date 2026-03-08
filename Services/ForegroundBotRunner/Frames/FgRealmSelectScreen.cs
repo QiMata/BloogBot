@@ -46,6 +46,9 @@ public class FgRealmSelectScreen : IRealmSelectScreen
         {
             if (_selectedRealm != null) return false;
 
+            // During world entry handshake, do NOT report open — prevents Lua calls during handshake
+            if (Statics.ObjectManager.PauseNativeCallsDuringWorldEntry) return false;
+
             // At charselect with no character list loaded → realm selection needed
             return _getScreenState() == WoWScreenState.CharacterSelect
                 && _getMaxCharacterCount() == 0;
@@ -57,6 +60,12 @@ public class FgRealmSelectScreen : IRealmSelectScreen
         get
         {
             if (_selectedRealm != null) return _selectedRealm;
+
+            // During world entry handshake, report as selected — prevents BotRunnerService
+            // from triggering realm selection Lua calls during the critical handshake phase.
+            // MaxCharacterCount can temporarily drop to 0 during world entry transition.
+            if (Statics.ObjectManager.PauseNativeCallsDuringWorldEntry)
+                return AutoSelectedRealm;
 
             // If character list has loaded (MaxCharacterCount > 0), realm was already selected
             if (_getMaxCharacterCount() > 0)
