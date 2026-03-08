@@ -30,6 +30,7 @@ public class FgRealmSelectScreen : IRealmSelectScreen
     private readonly Action<string> _luaCall;
     private Realm? _selectedRealm;
     private DateTime? _lastRealmClickAttempt;
+    private int _realmClickAttemptCount;
 
     public FgRealmSelectScreen(
         Func<WoWScreenState> getScreenState,
@@ -89,51 +90,39 @@ public class FgRealmSelectScreen : IRealmSelectScreen
 
         // Rate-limit UI clicks to avoid spamming the client (called every ~100ms by behavior tree)
         if (_lastRealmClickAttempt.HasValue
-            && (DateTime.UtcNow - _lastRealmClickAttempt.Value).TotalMilliseconds < 2000)
+            && (DateTime.UtcNow - _lastRealmClickAttempt.Value).TotalMilliseconds < 1500)
             return;
         _lastRealmClickAttempt = DateTime.UtcNow;
 
-        // Try multiple realm selection methods in priority order
-        Log.Information("[FG-REALM] SelectRealm called, attempting Lua methods...");
+        _realmClickAttemptCount++;
+        Log.Information("[FG-REALM] SelectRealm attempt #{Count}", _realmClickAttemptCount);
 
-        // Method 1: Accept wizard default directly via global function
+        // Alternate between different strategies each attempt since some require
+        // multiple frames (ChangeRealm opens list, then next attempt clicks the button)
         try
         {
-            _luaCall("if RealmWizard_OnOkay then RealmWizard_OnOkay() end");
-            Log.Information("[FG-REALM] Method 1 (RealmWizard_OnOkay) executed");
+            if (_realmClickAttemptCount % 3 == 1)
+            {
+                // Strategy A: Open the realm list from the wizard (takes effect next frame)
+                _luaCall("if ChangeRealm then ChangeRealm() end");
+                Log.Information("[FG-REALM] Strategy A: ChangeRealm() called");
+            }
+            else if (_realmClickAttemptCount % 3 == 2)
+            {
+                // Strategy B: Click the first realm in the list and OK (after ChangeRealm opened it)
+                _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
+                _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
+                Log.Information("[FG-REALM] Strategy B: RealmListButton1 + RealmListOkButton clicked");
+            }
+            else
+            {
+                // Strategy C: Try wizard accept/OK buttons directly
+                _luaCall("if RealmWizard_OnOkay then RealmWizard_OnOkay() end");
+                _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
+                Log.Information("[FG-REALM] Strategy C: RealmWizard_OnOkay + RealmWizardOkayButton");
+            }
         }
-        catch (Exception ex) { Log.Warning("[FG-REALM] Method 1 failed: {Error}", ex.Message); }
-
-        // Method 2: Click the wizard OK button directly
-        try
-        {
-            _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
-            Log.Information("[FG-REALM] Method 2 (RealmWizardOkayButton) executed");
-        }
-        catch (Exception ex) { Log.Warning("[FG-REALM] Method 2 failed: {Error}", ex.Message); }
-
-        // Method 3: Direct realm list — click first realm entry and OK
-        try
-        {
-            _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
-            Log.Information("[FG-REALM] Method 3a (RealmListButton1) executed");
-        }
-        catch (Exception ex) { Log.Warning("[FG-REALM] Method 3a failed: {Error}", ex.Message); }
-
-        try
-        {
-            _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
-            Log.Information("[FG-REALM] Method 3b (RealmListOkButton) executed");
-        }
-        catch (Exception ex) { Log.Warning("[FG-REALM] Method 3b failed: {Error}", ex.Message); }
-
-        // Method 4: Open realm list from wizard, then click
-        try
-        {
-            _luaCall("if ChangeRealm then ChangeRealm() end");
-            Log.Information("[FG-REALM] Method 4 (ChangeRealm) executed");
-        }
-        catch (Exception ex) { Log.Warning("[FG-REALM] Method 4 failed: {Error}", ex.Message); }
+        catch (Exception ex) { Log.Warning("[FG-REALM] Strategy failed: {Error}", ex.Message); }
 
         // Do NOT set _selectedRealm here — let CurrentRealm detect realm selection
         // via MaxCharacterCount > 0. This ensures the UI actually transitioned.
