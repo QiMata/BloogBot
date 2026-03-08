@@ -153,11 +153,15 @@ public class LiveBotFixture : IAsyncLifetime
             _logger.LogInformation("[FIXTURE] Waiting for bots to enter world...");
             using var worldCts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
 
-            // Poll until we see at least one bot in-world
-            // (If only BG is configured, we still proceed — dual-client config is recommended but not hard-required)
+            // Poll until we see at least one bot in-world.
+            // BG bot snapshots can oscillate between InWorld and CharacterSelect due to
+            // timing (CharacterSelectScreen.IsOpen is always true, so any snapshot taken
+            // while HasEnteredWorld is transiently false reports CharacterSelect).
+            // Track "ever seen InWorld" per account to handle this flickering.
             var sw = Stopwatch.StartNew();
             WoWActivitySnapshot? bgSnap = null;
             WoWActivitySnapshot? fgSnap = null;
+            var everSeenInWorld = new Dictionary<string, WoWActivitySnapshot>();
 
             while (sw.Elapsed < TimeSpan.FromSeconds(120) && !worldCts.Token.IsCancellationRequested)
             {
@@ -167,22 +171,22 @@ public class LiveBotFixture : IAsyncLifetime
                 {
                     if (snap.ScreenState == "InWorld" && !string.IsNullOrEmpty(snap.CharacterName))
                     {
-                        _logger.LogInformation("[FIXTURE] Bot in-world: Account='{Account}', Character='{Name}'",
-                            snap.AccountName, snap.CharacterName);
+                        if (!everSeenInWorld.ContainsKey(snap.AccountName))
+                        {
+                            _logger.LogInformation("[FIXTURE] Bot in-world: Account='{Account}', Character='{Name}'",
+                                snap.AccountName, snap.CharacterName);
+                        }
+                        everSeenInWorld[snap.AccountName] = snap;
                     }
                 }
 
-                var inWorld = snapshots
-                    .Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName))
-                    .ToList();
-
-                if (inWorld.Count >= 1)
+                if (everSeenInWorld.Count >= 1)
                 {
-                    // Identify BG vs FG from account names and log
-                    AllBots = inWorld;
-                    IdentifyBots(inWorld);
+                    // Use the "ever seen" list — these bots have confirmed InWorld at least once
+                    AllBots = everSeenInWorld.Values.ToList();
+                    IdentifyBots(AllBots);
 
-                    if (inWorld.Count >= 2)
+                    if (everSeenInWorld.Count >= 2)
                     {
                         _logger.LogInformation("[FIXTURE] Both bots in-world after {Elapsed:F1}s.", sw.Elapsed.TotalSeconds);
                         break;
@@ -191,9 +195,9 @@ public class LiveBotFixture : IAsyncLifetime
                     // If we've waited a while and only have 1, log stuck bots and proceed
                     if (sw.Elapsed > TimeSpan.FromSeconds(60))
                     {
-                        // Log any bots that are NOT in-world (stuck in LoadingWorld, etc.)
+                        // Log any bots that have never been seen in-world
                         var stuckBots = snapshots
-                            .Where(s => s.ScreenState != "InWorld" && !string.IsNullOrEmpty(s.AccountName))
+                            .Where(s => !everSeenInWorld.ContainsKey(s.AccountName) && !string.IsNullOrEmpty(s.AccountName))
                             .ToList();
                         foreach (var stuck in stuckBots)
                         {
@@ -202,7 +206,7 @@ public class LiveBotFixture : IAsyncLifetime
                         }
 
                         _logger.LogWarning("[FIXTURE] Only {Count} bot(s) in-world after {Elapsed:F1}s. Proceeding with available bot(s).",
-                            inWorld.Count, sw.Elapsed.TotalSeconds);
+                            everSeenInWorld.Count, sw.Elapsed.TotalSeconds);
                         break;
                     }
                 }
@@ -210,7 +214,9 @@ public class LiveBotFixture : IAsyncLifetime
                 if ((int)sw.Elapsed.TotalSeconds % 10 == 0 && sw.Elapsed.TotalSeconds > 0)
                     _logger.LogInformation("[FIXTURE] Still waiting for bots... ({Elapsed:F0}s)", sw.Elapsed.TotalSeconds);
 
-                await Task.Delay(3000, worldCts.Token);
+                // Poll frequently to catch InWorld windows (BG bot can flicker between
+                // InWorld and CharacterSelect every ~100ms due to snapshot timing)
+                await Task.Delay(500, worldCts.Token);
             }
 
             if (AllBots.Count == 0)
