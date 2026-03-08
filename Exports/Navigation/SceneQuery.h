@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <mutex>
 #include <unordered_map>
 #include "Vector3.h"
 #include "AABox.h"
@@ -254,6 +255,8 @@ class SceneQuery
         inline static std::string m_scenesDir;
 
         // Per-map scene caches (pre-processed collision geometry)
+        // Protected by m_sceneCachesMutex — accessed concurrently by ProtobufSocketServer client threads
+        inline static std::recursive_mutex m_sceneCachesMutex;
         inline static std::unordered_map<uint32_t, SceneCache*> m_sceneCaches;
 
         // Dynamic object ground Z: vertical ray against DynamicObjectRegistry triangles

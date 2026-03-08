@@ -476,6 +476,7 @@ void SceneQuery::EnsureMapLoaded(uint32_t mapId)
 // --- SceneCache management ---
 void SceneQuery::SetSceneCache(uint32_t mapId, SceneCache* cache)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
     auto it = m_sceneCaches.find(mapId);
     if (it != m_sceneCaches.end())
     {
@@ -490,12 +491,14 @@ void SceneQuery::SetSceneCache(uint32_t mapId, SceneCache* cache)
 
 SceneCache* SceneQuery::GetSceneCache(uint32_t mapId)
 {
+    std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
     auto it = m_sceneCaches.find(mapId);
     return (it != m_sceneCaches.end()) ? it->second : nullptr;
 }
 
 void SceneQuery::ClearSceneCaches()
 {
+    std::lock_guard<std::recursive_mutex> lock(m_sceneCachesMutex);
     for (auto& [id, cache] : m_sceneCaches)
         delete cache;
     m_sceneCaches.clear();
