@@ -237,12 +237,44 @@ namespace ForegroundBotRunner.Statics
                 return 0;
             }
         }
-        // CRITICAL: Use Functions.GetPlayerGuid() instead of memory reads!
-        // GetPlayerGuidFromMemory() returns 0 most of the time because ManagerBase pointer is null.
-        // Functions.GetPlayerGuid() calls the WoW function which works correctly.
-        // Note: The returned value (e.g., 5) is an object manager index, but non-zero means logged in.
-        // IMPORTANT: GetPlayerGuid() only works reliably from the main WoW thread!
-        // We cache the result to avoid synchronization overhead on every check.
+        /// <summary>
+        /// Walk the WoW object manager linked list in memory to find an object by GUID.
+        /// Does NOT require ThreadSynchronizer — pure memory reads, safe from any thread.
+        /// Used as a fallback when Functions.GetObjectPtr() via ThreadSynchronizer fails
+        /// (e.g., during world entry when WoW's message loop isn't processing WM_USER yet).
+        /// </summary>
+        private nint GetObjectPtrFromMemory(ulong targetGuid)
+        {
+            try
+            {
+                var managerPtr = MemoryManager.ReadIntPtr(Offsets.ObjectManager.ManagerBase);
+                if (managerPtr == nint.Zero) return nint.Zero;
+
+                var currentObj = MemoryManager.ReadIntPtr(nint.Add(managerPtr, (int)Offsets.ObjectManager.FirstObj));
+                int maxIterations = 5000; // Safety guard against infinite loop
+
+                while (currentObj != nint.Zero && maxIterations-- > 0)
+                {
+                    // Check if this looks like a valid pointer (> 0x10000, even aligned)
+                    if ((long)currentObj < 0x10000 || ((long)currentObj & 1) != 0)
+                        break;
+
+                    ulong objGuid = MemoryManager.ReadUlong(nint.Add(currentObj, (int)Offsets.ObjectManager.CurObjGuid));
+                    if (objGuid == targetGuid)
+                        return currentObj;
+
+                    currentObj = MemoryManager.ReadIntPtr(nint.Add(currentObj, (int)Offsets.ObjectManager.NextObj));
+                }
+
+                return nint.Zero;
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"GetObjectPtrFromMemory EXCEPTION: {ex.Message}");
+                return nint.Zero;
+            }
+        }
+
         // Counter for IsLoggedIn calls to limit logging
         private static int _isLoggedInCallCount = 0;
 
@@ -1388,12 +1420,18 @@ namespace ForegroundBotRunner.Statics
                     // Skip native calls during world entry phase to avoid ThreadSynchronizer interference
                     else if (isLoggedIn && !isLoadingWorld && !PauseNativeCallsDuringWorldEntry)
                     {
-                        // Get player GUID via ThreadSynchronizer to ensure main thread context
-                        // Functions.GetPlayerGuid() only works reliably from the main WoW thread
                         try
                         {
-                            // Get player GUID using ThreadSynchronizer for thread-safe access
-                            ulong playerGuid = ThreadSynchronizer.RunOnMainThread(() => Functions.GetPlayerGuid());
+                            // Try memory-first path: if we already have a GUID from memory reads
+                            // (set during PauseNativeCallsDuringWorldEntry phase), use it directly.
+                            // The ThreadSynchronizer path can fail if WoW's message loop is busy
+                            // during world entry transition.
+                            ulong playerGuid = GetPlayerGuidFromMemory();
+                            if (playerGuid == 0)
+                            {
+                                // Fallback: try via ThreadSynchronizer (main thread native call)
+                                playerGuid = ThreadSynchronizer.RunOnMainThread(() => Functions.GetPlayerGuid());
+                            }
                             if (playerGuid == 0)
                             {
                                 Player = null;
@@ -1406,10 +1444,19 @@ namespace ForegroundBotRunner.Statics
                             byte[] playerGuidParts = BitConverter.GetBytes(playerGuid);
                             PlayerGuid = new HighGuid(playerGuidParts[0..4], playerGuidParts[4..8]);
 
-                            // Get player object pointer using Functions.GetObjectPtr
-                            // IMPORTANT: GetObjectPtr calls a WoW native function, NOT a memory read!
-                            // It MUST be called from the main thread via ThreadSynchronizer.
+                            // Try to get the player object pointer.
+                            // First attempt via ThreadSynchronizer (native function call).
+                            // If that fails, try walking the object list in memory directly.
                             var playerObject = ThreadSynchronizer.RunOnMainThread(() => Functions.GetObjectPtr(PlayerGuid.FullGuid));
+                            if (playerObject == nint.Zero)
+                            {
+                                // Memory fallback: walk the object manager linked list to find the player
+                                playerObject = GetObjectPtrFromMemory(playerGuid);
+                                if (playerObject != nint.Zero && (loopCount <= 100 || loopCount % 50 == 0))
+                                {
+                                    DiagLog($"SimplePolling[{loopCount}]: GetObjectPtrFromMemory(GUID={playerGuid}) fallback returned 0x{playerObject:X}");
+                                }
+                            }
 
                             // Log the pointer lookup on first few attempts
                             if (loopCount <= 100 || loopCount % 50 == 0)
