@@ -36,7 +36,7 @@ All 9 CLAUDE.md files created. See `docs/ARCHIVE.md`.
 |----|------|-------|--------|
 | `RATELIMIT-001` | Audit all Lua/command call sites in FG bot for rate-limiting gaps | `Services/ForegroundBotRunner/` | **Done** — audit complete, null-safety guards added `b93860e` |
 | `RATELIMIT-002` | Add throttle/cooldown guards to prevent command spam during state transitions | `Exports/BotRunner/BotRunnerService.cs` | **Done** — LogoutSequence + Party sequences guarded `b93860e` |
-| `CRASH-001` | ERROR #132 ACCESS_VIOLATION in-world at 0x170ED07E | `Services/ForegroundBotRunner/` | **Open** — deferred, investigate after integration tests |
+| `CRASH-001` | ERROR #132 ACCESS_VIOLATION in-world at 0x170ED07E | `Services/ForegroundBotRunner/` | **Partial** — hook callbacks hardened (`49f8c51`), AV protection via FastCall SafeCallback pending |
 
 ## Open — Storage Stubs (Blocked on NuGet)
 
@@ -142,21 +142,20 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-08 (session 39)
-- **Current work:** BG bot behavior gap closure + integration test validation.
+- **Last updated:** 2026-03-08 (session 41)
+- **Current work:** CRASH-001 FG bot ERROR #132 crash investigation and fix.
 - **Completed this session:**
-  1. **Phase 4+5 COMPLETE:** All refactoring and rate-limiting done (prior context).
-  2. **Test fix: 12 stale assertions aligned** — NavigationPath corner offset tests widened for capsule radius, IsDeadOrGhostState deadText test inverted, WoWSharpClient array/ghost/resurrect tests fixed (`030ed4e`, `cc192c0`).
-  3. **Full unit test suite: 2919 pass, 0 fail** across 8 test projects.
-  4. **LiveValidation: 38/49 pass, 10 fail** (all FG-related — CRASH-001), 2 skip. BG bot passes all its tests.
-  5. **BG group management wired:** All 15 group IObjectManager methods now delegate to `PartyNetworkClientComponent` via `AgentFactory`. Party1-4Guid, PartyLeaderGuid, HasPendingGroupInvite all live (`41ccd26`).
-  6. **AbandonQuest added to ActionDispatch** — was the only missing CharacterAction case (`41ccd26`).
+  1. **CRASH-001 root cause identified and fixed (`49f8c51`):**
+     - **Root cause 1:** SignalEventManager hook callbacks (`SignalEventHook`, `SignalEventNoArgsHook`) had ZERO try/catch. Any managed exception (NullRef from null typesArg, subscriber exceptions) propagated into WoW's native call stack → ERROR #132 at random addresses. .NET 8 ignores `[HandleProcessCorruptedStateExceptions]`, so AV catching in ThreadSynchronizer WndProc was dead code.
+     - **Root cause 2:** TOCTOU race in `FgCharacterSelectScreen` — `HasReceivedCharacterList` and `CharacterSelects` each read `MaxCharacterCount` from live memory independently. Between checks, the value could drop to 0 during zone transitions, causing BotRunnerService to queue `CreateCharacter` Lua while in-world → `attempt to call global 'CreateCharacter' (a nil value)`.
+     - **Fix:** Wrapped both SignalEventManager callbacks with try/catch + null/pointer guards. Snapshot MaxCharacterCount in FgCharacterSelectScreen to prevent TOCTOU. Added screen state guard to `CreateCharacter()`. Added `SafeCallback1`/`SafeCallback3` SEH wrappers to FastCall.dll for future use by hook assembly code caves.
+  2. **Unit tests:** WoWSharpClient 1254/1254, Physics 97/97, AI 119/121 (2 pre-existing NuGet failures).
+  3. **FastCall.dll rebuilt** with new SafeCallback SEH exports.
 - **Known remaining issues:**
-  - **ERROR #132 ACCESS_VIOLATION:** In-world crash at 0x170ED07E. CRASH-001 open.
-  - **BG loot rolling:** No-ops — needs CMSG_LOOT_ROLL packet implementation.
-  - **BG item cursor ops:** PickupContainedItem, PlaceItemInContainer, SplitStack are no-ops.
-  - **BG talent data:** GetTalentRank returns 0.
-  - **BG pet support:** Pet returns null.
-- **Test counts:** Unit 2919/2919, Physics 97/97, LiveValidation 38/49 (78%).
+  - **CRASH-001 partial:** The managed try/catch in hook callbacks catches NullRef/ArrayBounds/subscriber exceptions. However, AccessViolationException from stale WoW memory pointers is still UNCATCHABLE on .NET 8. The SafeCallback wrappers in FastCall.dll are ready but the assembly code caves in SignalEventManager/PacketLogger need to be updated to route through them (requires modifying the FASM injection code). This is the next step for full AV protection.
+  - **BG pet support:** Pet returns null — Hunter/Warlock won't work.
+  - **BG combat auto-attack:** CombatLoopTests fails — auto-attack mechanics need investigation.
+  - **SMSG_UPDATE_AURA_DURATION:** "No handler registered" — duration data not parsed yet (cosmetic).
+- **Test counts:** WoWSharpClient 1254, Physics 97, AI 119 (+2 pre-existing failures).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
-- **Sessions 1-38:** See `docs/ARCHIVE.md` for full history.
+- **Sessions 1-39:** See `docs/ARCHIVE.md` for full history.
