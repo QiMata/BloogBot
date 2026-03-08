@@ -4,6 +4,8 @@ using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Serilog;
 
+// ReSharper disable InconsistentNaming
+
 namespace ForegroundBotRunner.Mem.Hooks
 {
     /// <summary>
@@ -55,6 +57,12 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         // Delegate for the detour callback — receives CDataStore pointer
         private delegate void SendHookDelegate(nint dataStorePtr);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        private static extern nint GetModuleHandle(string lpModuleName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        private static extern nint GetProcAddress(nint hModule, string procName);
 
         // Store the original bytes for cleanup
         private static byte[]? _originalSendBytes;
@@ -197,18 +205,47 @@ namespace ForegroundBotRunner.Mem.Hooks
             var dbLine = "db " + string.Join(",", Array.ConvertAll(_originalSendBytes, b => $"0x{b:X2}"));
             uint returnAddr = sendAddr + 5;
 
-            var fullInstructions = new[]
+            // Get SafeCallback1 from FastCall.dll for SEH protection.
+            // .NET 8 can't catch AccessViolationException — only C++ __try/__except can.
+            var fastCallHandle = GetModuleHandle("FastCall.dll");
+            var safeCallback1Addr = fastCallHandle != nint.Zero
+                ? GetProcAddress(fastCallHandle, "SafeCallback1")
+                : nint.Zero;
+
+            string[] fullInstructions;
+            if (safeCallback1Addr != nint.Zero)
             {
-                "pushfd",
-                "pushad",
-                "mov eax, [esp+0x28]",
-                "push eax",
-                $"call 0x{managedAddr:X}",
-                "popad",
-                "popfd",
-                dbLine,                          // original 5 bytes of NetClientSend
-                $"jmp 0x{returnAddr:X}"          // jump back to NetClientSend+5
-            };
+                DiagLog($"SafeCallback1 found at 0x{(uint)safeCallback1Addr:X8} — using SEH-protected send hook");
+                fullInstructions =
+                [
+                    "pushfd",
+                    "pushad",
+                    "mov eax, [esp+0x28]",
+                    "push eax",                              // arg1: CDataStore*
+                    $"push 0x{managedAddr:X}",               // parCallbackPtr (managed delegate)
+                    $"call 0x{(uint)safeCallback1Addr:X}",   // SafeCallback1 — SEH-protected
+                    "popad",
+                    "popfd",
+                    dbLine,
+                    $"jmp 0x{returnAddr:X}"
+                ];
+            }
+            else
+            {
+                DiagLog("WARNING: SafeCallback1 NOT found — falling back to unprotected send hook");
+                fullInstructions =
+                [
+                    "pushfd",
+                    "pushad",
+                    "mov eax, [esp+0x28]",
+                    "push eax",
+                    $"call 0x{managedAddr:X}",
+                    "popad",
+                    "popfd",
+                    dbLine,
+                    $"jmp 0x{returnAddr:X}"
+                ];
+            }
 
             // Re-allocate with full instructions (the first allocation was wasted, but
             // HackManager tracks it and it'll be small — acceptable leak)

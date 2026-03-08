@@ -417,13 +417,14 @@ extern "C"
     // the managed delegate directly. Returns 1 on success, 0 on SEH.
     // ====================================================================
 
-    // Wraps a cdecl void callback(arg1) with SEH protection.
+    // Wraps a stdcall void callback(arg1) with SEH protection.
     // Used by PacketLogger (1 arg: CDataStore*) and SignalEventNoArgs (1 arg: eventName).
+    // .NET delegates default to __stdcall on x86 Windows (no [UnmanagedFunctionPointer]).
     int __declspec(dllexport) __stdcall SafeCallback1(unsigned int parCallbackPtr, unsigned int parArg1)
     {
         __try
         {
-            typedef void (__cdecl *func)(unsigned int);
+            typedef void (__stdcall *func)(unsigned int);
             func f = (func)parCallbackPtr;
             f(parArg1);
             return 1;
@@ -434,15 +435,16 @@ extern "C"
         }
     }
 
-    // Wraps a cdecl void callback(arg1, arg2, arg3) with SEH protection.
+    // Wraps a stdcall void callback(arg1, arg2, arg3) with SEH protection.
     // Used by SignalEventManager (3 args: eventName, format, firstArgPtr).
+    // .NET delegates default to __stdcall on x86 Windows (no [UnmanagedFunctionPointer]).
     int __declspec(dllexport) __stdcall SafeCallback3(
         unsigned int parCallbackPtr,
         unsigned int parArg1, unsigned int parArg2, unsigned int parArg3)
     {
         __try
         {
-            typedef void (__cdecl *func)(unsigned int, unsigned int, unsigned int);
+            typedef void (__stdcall *func)(unsigned int, unsigned int, unsigned int);
             func f = (func)parCallbackPtr;
             f(parArg1, parArg2, parArg3);
             return 1;

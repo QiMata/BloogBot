@@ -352,6 +352,11 @@ namespace ForegroundBotRunner.Mem
             }
 
             var start = Marshal.AllocHGlobal(byteCode.Length);
+
+            // Mark code cave memory as executable. Marshal.AllocHGlobal allocates from
+            // the process heap which may not be executable with DEP enabled.
+            VirtualProtect(start, byteCode.Length, (uint)Protection.PAGE_EXECUTE_READWRITE, out _);
+
             fasm.Clear();
             fasm.AddLine("use32");
             foreach (var x in instructions)

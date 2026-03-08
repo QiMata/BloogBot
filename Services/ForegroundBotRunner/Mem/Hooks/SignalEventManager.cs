@@ -10,6 +10,12 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private delegate void SignalEventNoArgsDelegate(string eventName);
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        private static extern nint GetModuleHandle(string lpModuleName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        private static extern nint GetProcAddress(nint hModule, string procName);
+
         // Diagnostic logging path
         private static readonly string DiagnosticLogPath;
         private static readonly object DiagnosticLogLock = new();
@@ -91,25 +97,64 @@ namespace ForegroundBotRunner.Mem.Hooks
             signalEventDelegate = new SignalEventDelegate(SignalEventHook);
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(signalEventDelegate);
 
-            var instructions = new[]
+            // Get SafeCallback3 from FastCall.dll for SEH protection.
+            // .NET 8 can't catch AccessViolationException — only C++ __try/__except can.
+            // SafeCallback3 wraps the managed delegate call with SEH so AVs from stale
+            // WoW memory pointers are caught instead of crashing the process.
+            var fastCallHandle = GetModuleHandle("FastCall.dll");
+            var safeCallback3Addr = fastCallHandle != nint.Zero
+                ? GetProcAddress(fastCallHandle, "SafeCallback3")
+                : nint.Zero;
+
+            string[] instructions;
+            if (safeCallback3Addr != nint.Zero)
             {
-                "push ebx",
-                "push esi",
-                "call 0x007040D0",
-                "pushfd",
-                "pushad",
-                "mov eax, ebp",
-                "add eax, 0x10",
-                "push eax",
-                "mov eax, [ebp + 0xC]",
-                "push eax",
-                "mov edi, [edi]",
-                "push edi",
-                $"call 0x{(uint) addrToDetour:X}",
-                "popad",
-                "popfd",
-                $"jmp 0x{(uint) (MemoryAddresses.SignalEventFunPtr + 7):X}"
-            };
+                DiagLog($"SafeCallback3 found at 0x{(uint)safeCallback3Addr:X8} — using SEH-protected detour");
+                instructions =
+                [
+                    "push ebx",
+                    "push esi",
+                    "call 0x007040D0",
+                    "pushfd",
+                    "pushad",
+                    "mov eax, ebp",
+                    "add eax, 0x10",
+                    "push eax",                                    // arg3: firstArgPtr
+                    "mov eax, [ebp + 0xC]",
+                    "push eax",                                    // arg2: format
+                    "mov edi, [edi]",
+                    "push edi",                                    // arg1: eventName
+                    $"push 0x{(uint)addrToDetour:X}",              // parCallbackPtr (managed delegate)
+                    $"call 0x{(uint)safeCallback3Addr:X}",         // SafeCallback3 — SEH-protected
+                    "popad",
+                    "popfd",
+                    $"jmp 0x{(uint)(MemoryAddresses.SignalEventFunPtr + 7):X}"
+                ];
+            }
+            else
+            {
+                DiagLog("WARNING: SafeCallback3 NOT found — falling back to unprotected detour");
+                instructions =
+                [
+                    "push ebx",
+                    "push esi",
+                    "call 0x007040D0",
+                    "pushfd",
+                    "pushad",
+                    "mov eax, ebp",
+                    "add eax, 0x10",
+                    "push eax",
+                    "mov eax, [ebp + 0xC]",
+                    "push eax",
+                    "mov edi, [edi]",
+                    "push edi",
+                    $"call 0x{(uint)addrToDetour:X}",
+                    "popad",
+                    "popfd",
+                    $"jmp 0x{(uint)(MemoryAddresses.SignalEventFunPtr + 7):X}"
+                ];
+            }
+
             var signalEventDetour = MemoryManager.InjectAssembly("SignalEventDetour", instructions);
             MemoryManager.InjectAssembly("SignalEventHook", (uint)MemoryAddresses.SignalEventFunPtr, "jmp " + signalEventDetour);
 
@@ -209,19 +254,49 @@ namespace ForegroundBotRunner.Mem.Hooks
             signalEventNoArgsDelegate = new SignalEventNoArgsDelegate(SignalEventNoArgsHook);
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(signalEventNoArgsDelegate);
 
-            var instructions = new[]
+            // Get SafeCallback1 from FastCall.dll for SEH protection
+            var fastCallHandle = GetModuleHandle("FastCall.dll");
+            var safeCallback1Addr = fastCallHandle != nint.Zero
+                ? GetProcAddress(fastCallHandle, "SafeCallback1")
+                : nint.Zero;
+
+            string[] instructions;
+            if (safeCallback1Addr != nint.Zero)
             {
-                "push esi",
-                "call 0x007040D0",
-                "pushfd",
-                "pushad",
-                "mov edi, [edi]",
-                "push edi",
-                $"call 0x{(uint) addrToDetour:X}",
-                "popad",
-                "popfd",
-                $"jmp 0x{(uint) MemoryAddresses.SignalEventNoParamsFunPtr + 6:X}"
-            };
+                DiagLog($"SafeCallback1 found at 0x{(uint)safeCallback1Addr:X8} — using SEH-protected detour");
+                instructions =
+                [
+                    "push esi",
+                    "call 0x007040D0",
+                    "pushfd",
+                    "pushad",
+                    "mov edi, [edi]",
+                    "push edi",                                    // arg1: eventName
+                    $"push 0x{(uint)addrToDetour:X}",              // parCallbackPtr (managed delegate)
+                    $"call 0x{(uint)safeCallback1Addr:X}",         // SafeCallback1 — SEH-protected
+                    "popad",
+                    "popfd",
+                    $"jmp 0x{(uint)MemoryAddresses.SignalEventNoParamsFunPtr + 6:X}"
+                ];
+            }
+            else
+            {
+                DiagLog("WARNING: SafeCallback1 NOT found — falling back to unprotected detour");
+                instructions =
+                [
+                    "push esi",
+                    "call 0x007040D0",
+                    "pushfd",
+                    "pushad",
+                    "mov edi, [edi]",
+                    "push edi",
+                    $"call 0x{(uint)addrToDetour:X}",
+                    "popad",
+                    "popfd",
+                    $"jmp 0x{(uint)MemoryAddresses.SignalEventNoParamsFunPtr + 6:X}"
+                ];
+            }
+
             var signalEventNoArgsDetour = MemoryManager.InjectAssembly("SignalEventNoArgsDetour", instructions);
             MemoryManager.InjectAssembly("SignalEventNoArgsHook", (uint)MemoryAddresses.SignalEventNoParamsFunPtr, "jmp " + signalEventNoArgsDetour);
 
