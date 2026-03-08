@@ -62,7 +62,7 @@ namespace BotRunner
         private IBehaviourTreeNode LogoutSequence => new BehaviourTreeBuilder()
             .Sequence("Logout Sequence")
                 // Ensure the bot can log out (not in combat, etc.)
-                .Condition("Can Log Out", time => !_objectManager.LoginScreen.IsOpen)
+                .Condition("Can Log Out", time => _objectManager.HasEnteredWorld && _objectManager.LoginScreen?.IsOpen == false)
 
                 // Perform the logout action
                 .Do("Log Out", time =>
