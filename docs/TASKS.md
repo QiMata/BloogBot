@@ -143,14 +143,20 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 
 ## Session Handoff
 - **Last updated:** 2026-03-08 (session 39)
-- **Current work:** Integration test validation after Phase 4+5 refactoring.
+- **Current work:** BG bot behavior gap closure + integration test validation.
 - **Completed this session:**
-  1. **Phase 4 COMPLETE:** All 5 large file splits done. MangosRepository (6952→10 files `7139f6d`), WoWSharpObjectManager (3252→6 files `492ebd8`), FG ObjectManager (2907→9 files `0b94c5a`), LiveBotFixture (2306→6 files `88b22bb`), StateManagerWorker (1455→3 files `b1d1d27`).
-  2. **Phase 5 PARTIAL:** Rate-limiting audit done, null-safety guards added to LogoutSequence + Party sequences (`b93860e`). CRASH-001 deferred.
-  3. **TASKS.md updated:** All REFACTOR and RATELIMIT items marked Done.
-- **In progress:** Running integration tests to verify refactoring didn't break anything.
+  1. **Phase 4+5 COMPLETE:** All refactoring and rate-limiting done (prior context).
+  2. **Test fix: 12 stale assertions aligned** — NavigationPath corner offset tests widened for capsule radius, IsDeadOrGhostState deadText test inverted, WoWSharpClient array/ghost/resurrect tests fixed (`030ed4e`, `cc192c0`).
+  3. **Full unit test suite: 2919 pass, 0 fail** across 8 test projects.
+  4. **LiveValidation: 38/49 pass, 10 fail** (all FG-related — CRASH-001), 2 skip. BG bot passes all its tests.
+  5. **BG group management wired:** All 15 group IObjectManager methods now delegate to `PartyNetworkClientComponent` via `AgentFactory`. Party1-4Guid, PartyLeaderGuid, HasPendingGroupInvite all live (`41ccd26`).
+  6. **AbandonQuest added to ActionDispatch** — was the only missing CharacterAction case (`41ccd26`).
 - **Known remaining issues:**
   - **ERROR #132 ACCESS_VIOLATION:** In-world crash at 0x170ED07E. CRASH-001 open.
-- **Test counts:** Physics 97/97, LiveValidation 26/28 (93%).
+  - **BG loot rolling:** No-ops — needs CMSG_LOOT_ROLL packet implementation.
+  - **BG item cursor ops:** PickupContainedItem, PlaceItemInContainer, SplitStack are no-ops.
+  - **BG talent data:** GetTalentRank returns 0.
+  - **BG pet support:** Pet returns null.
+- **Test counts:** Unit 2919/2919, Physics 97/97, LiveValidation 38/49 (78%).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
 - **Sessions 1-38:** See `docs/ARCHIVE.md` for full history.
