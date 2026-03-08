@@ -1327,11 +1327,14 @@ public class LiveBotFixture : IAsyncLifetime
         if (string.IsNullOrWhiteSpace(text))
             return false;
 
+        // Note: "player not found" is intentionally NOT matched here — it's a
+        // .targetself response that can bleed into subsequent command capture windows
+        // due to async chat message delivery. Real command rejections use specific
+        // messages like "Quest not found", "Spell not known", etc.
         return text.Contains("no such command", StringComparison.OrdinalIgnoreCase)
             || text.Contains("no such subcommand", StringComparison.OrdinalIgnoreCase)
             || text.Contains("unknown command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("player not found", StringComparison.OrdinalIgnoreCase);
+            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ToEvidenceSnippet(string? text, int maxLength = 120)
