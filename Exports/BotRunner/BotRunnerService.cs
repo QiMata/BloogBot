@@ -79,6 +79,10 @@ namespace BotRunner
 
         private readonly Stack<IBotTask> _botTasks = new();
         private bool _tasksInitialized;
+        // Sticky flag: once we've entered the world, never fall back to login/charselect
+        // sequences until an explicit logout is detected. Prevents CreateCharacter spam
+        // during transient state drops (teleports, zone transitions).
+        private bool _everEnteredWorld;
         private DateTime _lastDeathRecoveryPush = DateTime.MinValue;
         private DateTime _lastReleaseSpiritCommandUtc = DateTime.MinValue;
         private static readonly TimeSpan ReleaseSpiritCommandCooldown = TimeSpan.FromSeconds(2);
@@ -248,6 +252,7 @@ namespace BotRunner
             // when InWorld (e.g., FG's FgCharacterSelectScreen) cause an early return before InitializeTaskSequence.
             if (_objectManager.HasEnteredWorld)
             {
+                _everEnteredWorld = true;
                 if (!_tasksInitialized)
                 {
                     _tasksInitialized = true;
@@ -256,6 +261,27 @@ namespace BotRunner
 
                 _behaviorTree = null;
                 return;
+            }
+
+            // CRITICAL: If we were ever in-world but HasEnteredWorld dropped transiently
+            // (teleport, zone transition, continent crossing), do NOT fall through to the
+            // login/charselect flow. That causes CreateCharacter/EnterWorld Lua spam while in-world.
+            // Only reset when LoginScreen explicitly shows (real logout).
+            if (_everEnteredWorld)
+            {
+                var loginScreen = _objectManager.LoginScreen;
+                if (loginScreen != null && loginScreen.IsOpen)
+                {
+                    // Explicit logout detected — allow re-login
+                    Log.Information("[BOT RUNNER] Explicit logout detected, resetting world entry state");
+                    _everEnteredWorld = false;
+                    _tasksInitialized = false;
+                }
+                else
+                {
+                    // Transient state drop — wait for HasEnteredWorld to recover
+                    return;
+                }
             }
 
             if (_objectManager.LoginScreen?.IsLoggedIn != true)
