@@ -418,10 +418,10 @@ public class BotServiceFixture : IAsyncLifetime
             // 2. Brief delay for the process tree to finish dying
             await Task.Delay(1000);
 
-            // 3. Kill ALL WoW.exe processes using ForceKillProcessAsync (tries Process.Kill,
-            //    then taskkill /F, then CloseMainWindow). WoW.exe is created via native
-            //    CreateProcess by StateManager, so .NET's Process.Kill() often gets
-            //    "Access is denied" — the taskkill fallback handles this.
+            // 3. Kill ALL WoW.exe processes spawned by this fixture.
+            //    WoW.exe is created via native CreateProcess by StateManager, so
+            //    .NET's Process.Kill() often gets "Access is denied" — the
+            //    taskkill fallback in ForceKillProcessAsync handles this.
             foreach (var proc in Process.GetProcessesByName("WoW"))
             {
                 try
@@ -436,16 +436,36 @@ public class BotServiceFixture : IAsyncLifetime
             // 4. Kill orphaned PathfindingService (supports both self-hosted exe and dotnet-hosted dll)
             pfKilled += await KillPathfindingServiceProcessesAsync("PF");
 
+            // 5. Kill orphaned BackgroundBotRunner processes (dotnet-hosted).
+            //    BackgroundBotRunner runs as "dotnet BackgroundBotRunner.dll" — we find it
+            //    by querying wmic for command lines containing "BackgroundBotRunner".
+            int bgKilled = 0;
+            foreach (var bgPid in FindDotnetProcessesByDll("BackgroundBotRunner"))
+            {
+                try
+                {
+                    var proc = Process.GetProcessById(bgPid);
+                    try
+                    {
+                        Log($"Cleanup: killing BackgroundBotRunner PID {bgPid}");
+                        if (await ForceKillProcessAsync(proc, "BGBot"))
+                            bgKilled++;
+                    }
+                    finally { proc.Dispose(); }
+                }
+                catch (ArgumentException) { /* already dead */ }
+            }
+
             lock (_managedWoWPids)
                 _managedWoWPids.Clear();
 
-            if (wowKilled + pfKilled > 0)
-                Log($"Dispose cleanup summary: {wowKilled} WoW.exe, {pfKilled} PathfindingService killed.");
+            if (wowKilled + pfKilled + bgKilled > 0)
+                Log($"Dispose cleanup summary: {wowKilled} WoW.exe, {pfKilled} PathfindingService, {bgKilled} BackgroundBotRunner killed.");
 
-            // 5. PC1: Orphan detection — wait, then check if any PIDs we launched are still alive.
-            //    We only CHECK PIDs from _managedWoWPids and _stateManagerProcess — never blanket-kill.
-            //    Log warnings only; do not force-kill (process safety rules).
-            await CheckForOrphanedProcessesAsync(stateManagerPid, launchedPids);
+            // 6. Orphan detection — wait briefly, then force-kill any tracked PIDs still alive.
+            //    Previous behavior was to log-only, but orphaned processes caused runaway resource
+            //    consumption (endless WoW.exe relaunch loops) that crashed the test host overnight.
+            await ForceKillOrphanedProcessesAsync(stateManagerPid, launchedPids);
         }
         finally
         {
@@ -464,14 +484,16 @@ public class BotServiceFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// PC1: Post-cleanup orphan detection. Waits 10 seconds after normal cleanup,
-    /// then checks if any PIDs that THIS fixture launched are still alive.
-    /// Logs warnings only — does NOT force-kill (per project process safety rules).
-    /// Only checks PIDs from <see cref="_managedWoWPids"/> and the StateManager process.
+    /// Post-cleanup orphan detection and force-kill. Waits briefly after normal cleanup,
+    /// then checks if any PIDs that THIS fixture launched are still alive. If found,
+    /// force-kills them to prevent runaway resource consumption (e.g., WoW.exe relaunch
+    /// loops that exhaust Windows handles overnight).
+    ///
+    /// Safe: Only kills PIDs from <see cref="_managedWoWPids"/> and the StateManager process —
+    /// never blanket-kills by process name.
     /// </summary>
-    private async Task CheckForOrphanedProcessesAsync(int? stateManagerPid, List<int> wowPids)
+    private async Task ForceKillOrphanedProcessesAsync(int? stateManagerPid, List<int> wowPids)
     {
-        // Build the full list of PIDs this fixture is responsible for
         var allTrackedPids = new List<(int pid, string source)>();
         if (stateManagerPid.HasValue)
             allTrackedPids.Add((stateManagerPid.Value, "StateManager"));
@@ -487,49 +509,26 @@ public class BotServiceFixture : IAsyncLifetime
         Log($"[OrphanCheck] Waiting 10s before checking {allTrackedPids.Count} tracked PIDs for orphans...");
         await Task.Delay(10_000);
 
-        var orphans = new List<string>();
+        var orphanCount = 0;
         foreach (var (pid, source) in allTrackedPids)
         {
+            if (IsProcessDead(pid))
+                continue;
+
+            orphanCount++;
+            Log($"[OrphanCheck] Orphan detected: PID {pid} ({source}) — force-killing.");
             try
             {
                 var proc = Process.GetProcessById(pid);
-                // Process exists — check if it's truly the same process (not a recycled PID)
-                try
-                {
-                    var name = proc.ProcessName;
-                    orphans.Add($"PID {pid} ({source}, ProcessName='{name}')");
-                }
-                catch
-                {
-                    orphans.Add($"PID {pid} ({source}, could not read ProcessName)");
-                }
-                finally
-                {
-                    proc.Dispose();
-                }
+                try { await ForceKillProcessAsync(proc, $"OrphanKill-{source}"); }
+                finally { proc.Dispose(); }
             }
-            catch (ArgumentException)
-            {
-                // Process no longer exists — this is the expected/happy path
-            }
-            catch (InvalidOperationException)
-            {
-                // Process has exited between GetProcessById and property access
-            }
+            catch (ArgumentException) { /* exited between check and kill — fine */ }
         }
 
-        if (orphans.Count > 0)
-        {
-            Log($"[OrphanCheck] WARNING: {orphans.Count} process(es) launched by this fixture are STILL ALIVE after cleanup:");
-            foreach (var orphan in orphans)
-                Log($"  [OrphanCheck]   - {orphan}");
-            Log("[OrphanCheck] These may be orphaned processes. Manual cleanup may be required.");
-            Log("[OrphanCheck] NOT force-killing per process safety rules — only the session owner should kill specific PIDs.");
-        }
-        else
-        {
-            Log($"[OrphanCheck] All {allTrackedPids.Count} tracked PIDs confirmed dead. No orphans detected.");
-        }
+        Log(orphanCount > 0
+            ? $"[OrphanCheck] Force-killed {orphanCount} orphaned process(es)."
+            : $"[OrphanCheck] All {allTrackedPids.Count} tracked PIDs confirmed dead. No orphans detected.");
     }
 
     /// <summary>
@@ -968,6 +967,52 @@ public class BotServiceFixture : IAsyncLifetime
         return pids;
     }
 
+    /// <summary>
+    /// Find dotnet.exe processes hosting a specific DLL by querying wmic for command lines.
+    /// Returns PIDs of matching processes.
+    /// </summary>
+    private static List<int> FindDotnetProcessesByDll(string dllNameFragment)
+    {
+        var pids = new List<int>();
+        try
+        {
+            using var wmic = Process.Start(new ProcessStartInfo
+            {
+                FileName = "wmic",
+                Arguments = "process where \"name='dotnet.exe'\" get ProcessId,CommandLine /FORMAT:LIST",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            });
+            if (wmic == null) return pids;
+            var output = wmic.StandardOutput.ReadToEnd();
+            wmic.WaitForExit(5000);
+
+            // wmic LIST format: "CommandLine=...\nProcessId=...\n"
+            string? currentCmdLine = null;
+            foreach (var rawLine in output.Split('\n'))
+            {
+                var line = rawLine.Trim();
+                if (line.StartsWith("CommandLine=", StringComparison.OrdinalIgnoreCase))
+                    currentCmdLine = line["CommandLine=".Length..];
+                else if (line.StartsWith("ProcessId=", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (currentCmdLine != null
+                        && currentCmdLine.Contains(dllNameFragment, StringComparison.OrdinalIgnoreCase)
+                        && int.TryParse(line["ProcessId=".Length..].Trim(), out var pid)
+                        && pid > 0)
+                    {
+                        pids.Add(pid);
+                    }
+                    currentCmdLine = null;
+                }
+            }
+        }
+        catch { /* best-effort */ }
+        return pids;
+    }
+
     /// <summary>Check if a process has actually terminated (by PID).</summary>
     private static bool IsProcessDead(int pid)
     {
@@ -989,7 +1034,8 @@ public class BotServiceFixture : IAsyncLifetime
     /// </summary>
     private static bool IsVerboseStateManagerLine(string line)
     {
-        // These patterns appear hundreds/thousands of times per test run
+        // These patterns appear hundreds/thousands of times per test run.
+        // Suppressing them prevents ITestOutputHelper memory pressure crash.
         if (line.Contains("Snapshot query:")
             || line.Contains("[SkillSnapshot]")
             || line.Contains("[BOT RUNNER] Equipment:")
@@ -997,7 +1043,18 @@ public class BotServiceFixture : IAsyncLifetime
             || line.Contains("SMSG_MONSTER_MOVE")
             || line.Contains("SNAPSHOT_RECEIVED:")
             || line.Contains("[BOT RUNNER] Equipment slot")
-            || line.Contains("Received world state update message"))
+            || line.Contains("Received world state update message")
+            || line.Contains("[ReadValuesUpdateBlock]")
+            || line.Contains("GAMEOBJ CREATED")
+            || line.Contains("INVENTORY_CHANGE_FAILURE")
+            || line.Contains("[WorldClient] INVENTORY_CHANGE_FAILURE")
+            || line.Contains("[BOT RUNNER] Inventory changed:")
+            || line.Contains("QUEUED ACTION for")
+            || line.Contains("Action forward: queued")
+            || line.Contains("INJECTING PENDING ACTION")
+            || line.Contains("DELIVERING ACTION")
+            || line.Contains("Detected terminated bot process")
+            || line.Contains("attempting re-launch"))
             return true;
 
         // Filter orphaned .NET logger prefix lines (no content, just the logger category)
