@@ -545,10 +545,15 @@ namespace WoWSharpClient
 
         private static void ApplyFieldDiffs(WoWObject obj, Dictionary<uint, object?> updatedFields)
         {
+            bool auraFieldsModified = false;
             foreach (var (key, value) in updatedFields)
             {
                 if (value == null)
                     continue;
+
+                // Track if any aura fields were modified so we can rebuild Buffs/Debuffs after
+                if (key >= (uint)EUnitFields.UNIT_FIELD_AURA && key <= (uint)EUnitFields.UNIT_FIELD_AURAFLAGS_05)
+                    auraFieldsModified = true;
 
                 bool fieldHandled = false;
 
@@ -640,6 +645,10 @@ namespace WoWSharpClient
                     ApplyObjectFieldDiffs(obj, key, value);
                 }
             }
+
+            // Rebuild Buffs/Debuffs lists from raw aura field data after all fields are applied
+            if (auraFieldsModified && obj is WoWUnit auraUnit)
+                auraUnit.RebuildBuffsFromAuraFields();
         }
 
 

@@ -265,6 +265,42 @@ namespace WoWSharpClient.Models
 
         public bool HasBuff(string name) => Buffs.Any(a => a.Name == name);
         public bool HasDebuff(string name) => Debuffs.Any(a => a.Name == name);
+
+        /// <summary>
+        /// Rebuilds Buffs/Debuffs lists from raw AuraFields + AuraFlags (object update data).
+        /// Called after SMSG_UPDATE_OBJECT processes aura field changes for BG bot.
+        /// In Vanilla 1.12.1: AuraFlags has 6 uint32s, each covering 8 slots (4 bits per slot).
+        /// Bit 0 (0x1) = active, bit 2 (0x4) = harmful (debuff).
+        /// </summary>
+        public void RebuildBuffsFromAuraFields()
+        {
+            Buffs.Clear();
+            Debuffs.Clear();
+            for (int slot = 0; slot < AuraFields.Length; slot++)
+            {
+                uint spellId = AuraFields[slot];
+                if (spellId == 0) continue;
+
+                // Read 4-bit flags for this slot from AuraFlags
+                int flagsIndex = slot / 8;
+                int bitOffset = (slot % 8) * 4;
+                uint slotFlags = (flagsIndex < AuraFlags.Length)
+                    ? (AuraFlags[flagsIndex] >> bitOffset) & 0xF
+                    : 0;
+
+                // Bit 0 = active; skip inactive slots
+                if ((slotFlags & 0x1) == 0) continue;
+
+                string name = GameData.Core.Constants.SpellData.GetSpellName(spellId) ?? $"Spell#{spellId}";
+                var spell = new Spell(spellId, 0, name, "", "");
+
+                bool isHarmful = (slotFlags & 0x4) != 0;
+                if (isHarmful)
+                    Debuffs.Add(spell);
+                else
+                    Buffs.Add(spell);
+            }
+        }
         public bool DismissBuff(string buffName)
         {
             var buff = Buffs.FirstOrDefault(b => b.Name == buffName);
