@@ -177,7 +177,12 @@ namespace WoWSharpClient
 
         public sbyte GetTalentRank(uint tabIndex, uint talentIndex)
         {
-            return 0;
+            var factory = _agentFactoryAccessor?.Invoke();
+            var tree = factory?.TalentAgent?.GetTalentTreeInfo(tabIndex);
+            if (tree?.Talents == null) return -1;
+            var talent = tree.Talents.FirstOrDefault(t => t.TalentIndex == talentIndex);
+            if (talent == null) return -1;
+            return (sbyte)talent.CurrentRank;
         }
 
 

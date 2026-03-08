@@ -19,6 +19,7 @@ using WoWSharpClient.Client;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
 using WoWSharpClient.Networking.ClientComponents.I;
+using WoWSharpClient.Networking.ClientComponents.Models;
 using WoWSharpClient.Parsers;
 using WoWSharpClient.Screens;
 using WoWSharpClient.Utils;
@@ -461,13 +462,47 @@ namespace WoWSharpClient
         }
 
 
-        public void PickupInventoryItem(uint inventorySlot) { }
+        // Cursor state for inventory item pickup (equipment slots)
+        private (byte Bag, byte Slot)? _cursorInventoryItem;
+
+        public void PickupInventoryItem(uint inventorySlot)
+        {
+            // inventorySlot is the absolute equipment slot index (0=Head, 17=Ranged, etc.)
+            _cursorInventoryItem = (0xFF, (byte)inventorySlot);
+        }
 
 
-        public void DeleteCursorItem() { }
+        public void DeleteCursorItem()
+        {
+            // Delete whatever is currently on the cursor
+            if (_cursorItem != null)
+            {
+                var src = _cursorItem.Value;
+                _cursorItem = null;
+                var factory = _agentFactoryAccessor?.Invoke();
+                _ = factory?.InventoryAgent?.DestroyItemAsync(src.Bag, src.Slot, (uint)src.Quantity);
+            }
+            else if (_cursorInventoryItem != null)
+            {
+                var src = _cursorInventoryItem.Value;
+                _cursorInventoryItem = null;
+                var factory = _agentFactoryAccessor?.Invoke();
+                _ = factory?.InventoryAgent?.DestroyItemAsync(src.Bag, src.Slot);
+            }
+        }
 
 
-        public void EquipCursorItem() { }
+        public void EquipCursorItem()
+        {
+            // Equip whatever is on the cursor from a bag slot
+            if (_cursorItem != null)
+            {
+                var src = _cursorItem.Value;
+                _cursorItem = null;
+                if (_woWClient != null)
+                    _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_AUTOEQUIP_ITEM, [src.Bag, src.Slot]);
+            }
+        }
 
 
         public void ConfirmItemEquip() { }
@@ -567,20 +602,60 @@ namespace WoWSharpClient
 
         public bool HasLootRollWindow(int itemId)
         {
-            return false;
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.LootingAgent == null) return false;
+            var availableLoot = factory.LootingAgent.GetAvailableLoot();
+            return availableLoot.Any(s => s.ItemId == (uint)itemId && s.RequiresRoll);
         }
 
 
-        public void LootPass(int itemId) { }
+        public void LootPass(int itemId)
+        {
+            var (lootGuid, slot) = FindPendingRollSlot(itemId);
+            if (lootGuid == 0) return;
+            var factory = _agentFactoryAccessor?.Invoke();
+            _ = factory?.LootingAgent?.RollForLootAsync(lootGuid, slot, LootRollType.Pass);
+        }
 
 
-        public void LootRollGreed(int itemId) { }
+        public void LootRollGreed(int itemId)
+        {
+            var (lootGuid, slot) = FindPendingRollSlot(itemId);
+            if (lootGuid == 0) return;
+            var factory = _agentFactoryAccessor?.Invoke();
+            _ = factory?.LootingAgent?.RollForLootAsync(lootGuid, slot, LootRollType.Greed);
+        }
 
 
-        public void LootRollNeed(int itemId) { }
+        public void LootRollNeed(int itemId)
+        {
+            var (lootGuid, slot) = FindPendingRollSlot(itemId);
+            if (lootGuid == 0) return;
+            var factory = _agentFactoryAccessor?.Invoke();
+            _ = factory?.LootingAgent?.RollForLootAsync(lootGuid, slot, LootRollType.Need);
+        }
 
 
-        public void AssignLoot(int itemId, ulong playerGuid) { }
+        public void AssignLoot(int itemId, ulong playerGuid)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.LootingAgent == null) return;
+            var slot = factory.LootingAgent.GetAvailableLoot()
+                .FirstOrDefault(s => s.ItemId == (uint)itemId);
+            if (slot != null)
+                _ = factory.LootingAgent.AssignMasterLootAsync(slot.SlotIndex, playerGuid);
+        }
+
+
+        private (ulong LootGuid, byte Slot) FindPendingRollSlot(int itemId)
+        {
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.LootingAgent == null) return (0, 0);
+            var slot = factory.LootingAgent.GetAvailableLoot()
+                .FirstOrDefault(s => s.ItemId == (uint)itemId && s.RequiresRoll && s.RollGuid.HasValue);
+            if (slot == null) return (0, 0);
+            return (slot.RollGuid!.Value, slot.SlotIndex);
+        }
 
 
         public void SetGroupLoot(GroupLootSetting setting)

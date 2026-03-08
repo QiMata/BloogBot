@@ -218,10 +218,30 @@ namespace WoWSharpClient
         }
 
 
-        public void PickupContainedItem(int bagSlot, int slotId, int quantity) { }
+        // Two-phase cursor emulation: PickupContainedItem stores source, PlaceItemInContainer sends CMSG_SWAP_ITEM
+        private (byte Bag, byte Slot, int Quantity)? _cursorItem;
+
+        public void PickupContainedItem(int bagSlot, int slotId, int quantity)
+        {
+            byte srcBag = bagSlot == 0 ? (byte)0xFF : (byte)(18 + bagSlot);
+            byte srcSlot = bagSlot == 0 ? (byte)(23 + slotId) : (byte)slotId;
+            _cursorItem = (srcBag, srcSlot, quantity);
+        }
 
 
-        public void PlaceItemInContainer(int bagSlot, int slotId) { }
+        public void PlaceItemInContainer(int bagSlot, int slotId)
+        {
+            if (_cursorItem == null) return;
+            var src = _cursorItem.Value;
+            _cursorItem = null;
+
+            byte dstBag = bagSlot == 0 ? (byte)0xFF : (byte)(18 + bagSlot);
+            byte dstSlot = bagSlot == 0 ? (byte)(23 + slotId) : (byte)slotId;
+
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.InventoryAgent != null)
+                _ = factory.InventoryAgent.MoveItemAsync(src.Bag, src.Slot, dstBag, dstSlot);
+        }
 
 
         public void DestroyItemInContainer(int bagSlot, int slotId, int quantity = -1)
@@ -238,7 +258,17 @@ namespace WoWSharpClient
         }
 
 
-        public void SplitStack(int bag, int slot, int quantity, int destinationBag, int destinationSlot) { }
+        public void SplitStack(int bag, int slot, int quantity, int destinationBag, int destinationSlot)
+        {
+            byte srcBag = bag == 0 ? (byte)0xFF : (byte)(18 + bag);
+            byte srcSlot = bag == 0 ? (byte)(23 + slot) : (byte)slot;
+            byte dstBag = destinationBag == 0 ? (byte)0xFF : (byte)(18 + destinationBag);
+            byte dstSlot = destinationBag == 0 ? (byte)(23 + destinationSlot) : (byte)destinationSlot;
+
+            var factory = _agentFactoryAccessor?.Invoke();
+            if (factory?.InventoryAgent != null)
+                _ = factory.InventoryAgent.SplitItemAsync(srcBag, srcSlot, dstBag, dstSlot, (uint)quantity);
+        }
 
 
         public void EquipItem(int bagSlot, int slotId, EquipSlot? equipSlot = null)
