@@ -1605,6 +1605,12 @@ namespace ForegroundBotRunner.Statics
                     var playerObject = Functions.GetObjectPtr(PlayerGuid.FullGuid);
                     if (playerObject == nint.Zero)
                     {
+                        // Memory fallback: walk the object manager linked list directly
+                        playerObject = GetObjectPtrFromMemory(PlayerGuid.FullGuid);
+                    }
+                    if (playerObject == nint.Zero)
+                    {
+                        // Truly can't find player — null it out
                         Player = null;
                         return;
                     }
@@ -2012,10 +2018,8 @@ namespace ForegroundBotRunner.Statics
                         ObjectsBuffer.Add(new WoWItem(pointer, highGuid, objectType));
                         break;
                     case WoWObjectType.Player:
-                        // GetPlayerGuid() returns the low GUID (e.g., 5) which is valid on private servers
-                        var ourPlayerGuid = Functions.GetPlayerGuid();
-                        var ourPlayerPtr = Functions.GetObjectPtr(ourPlayerGuid);
-                        var isLocalPlayer = (pointer == ourPlayerPtr);
+                        // Compare by GUID (more reliable than pointer comparison when GetObjectPtr fails)
+                        var isLocalPlayer = (guid == PlayerGuid.FullGuid);
                         if (isLocalPlayer)
                         {
                             var player = new LocalPlayer(pointer, highGuid, objectType);

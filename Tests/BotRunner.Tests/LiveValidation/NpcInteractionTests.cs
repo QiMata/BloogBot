@@ -108,12 +108,24 @@ public class NpcInteractionTests
             setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ));
         await Task.WhenAll(setupTasks);
 
-        await _bot.RefreshSnapshotsAsync();
+        // Retry up to 3 times — NPC flags may arrive in PARTIAL updates after CREATE_OBJECT
+        System.Collections.Generic.List<Game.WoWUnit> bgWithFlags = [];
+        System.Collections.Generic.List<Game.WoWUnit> bgUnits = [];
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            bgUnits = _bot.BackgroundBot?.NearbyUnits?.ToList() ?? [];
+            bgWithFlags = bgUnits.Where(u => u.NpcFlags != (uint)NPCFlags.UNIT_NPC_FLAG_NONE).ToList();
+            if (bgWithFlags.Count > 0) break;
+            if (attempt < 2)
+            {
+                _output.WriteLine($"  [BG] No NPC flags on attempt {attempt + 1}, retrying in 2s...");
+                await Task.Delay(2000);
+            }
+        }
 
         // BG bot NPC detection — must find at least one NPC with non-zero flags
         LogNpcFlags("BG", _bot.BackgroundBot);
-        var bgUnits = _bot.BackgroundBot?.NearbyUnits?.ToList() ?? [];
-        var bgWithFlags = bgUnits.Where(u => u.NpcFlags != (uint)NPCFlags.UNIT_NPC_FLAG_NONE).ToList();
         Assert.True(bgUnits.Count > 0, "[BG] ObjectManager should detect nearby units at Razor Hill vendor area.");
         Assert.True(bgWithFlags.Count > 0, "[BG] At least one nearby unit should have non-zero NPC flags at Razor Hill vendor area.");
 
@@ -239,7 +251,7 @@ public class NpcInteractionTests
 
         _output.WriteLine($"  [{label}] Teleporting to setup location (dist={dist:F1}y).");
         await _bot.BotTeleportAsync(account, mapId, x, y, z);
-        await Task.Delay(3000); // FG bot needs time for WoW.exe to load area and populate visible objects
+        await Task.Delay(5000); // Wait for WoW.exe area load + SMSG_UPDATE_OBJECT with NPC flags
     }
 
     private async Task EnsureBagHasItemAsync(string account, string label, uint itemId, int addCount)
