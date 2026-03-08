@@ -66,10 +66,10 @@ public class QuestInteractionTests
         {
             // Self-selection required — MaNGOS .quest commands need getSelectedPlayer()
             await _bot.BotSelectSelfAsync(account);
-            await Task.Delay(1000);
+            await Task.Delay(2000); // 2s: let stale .targetself responses drain before quest command baseline capture
 
             _output.WriteLine($"  [{label}] Step 1: Add quest {TestQuestId}");
-            var addTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest add {TestQuestId}", captureResponse: true, delayMs: 1000);
+            var addTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest add {TestQuestId}", captureResponse: true, delayMs: 1500);
             AssertCommandSucceeded(addTrace, label, ".quest add");
 
             var added = await WaitForQuestPresenceAsync(account, TestQuestId, shouldExist: true, TimeSpan.FromSeconds(12));
@@ -81,8 +81,8 @@ public class QuestInteractionTests
 
             _output.WriteLine($"  [{label}] Step 2: Complete quest {TestQuestId}");
             await _bot.BotSelectSelfAsync(account);
-            await Task.Delay(1000);
-            var completeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest complete {TestQuestId}", captureResponse: true, delayMs: 1000);
+            await Task.Delay(2000);
+            var completeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest complete {TestQuestId}", captureResponse: true, delayMs: 1500);
             AssertCommandSucceeded(completeTrace, label, ".quest complete");
 
             var completedOrChanged = await WaitForQuestCompletedChangedOrRemovedAsync(
@@ -96,8 +96,8 @@ public class QuestInteractionTests
 
             _output.WriteLine($"  [{label}] Step 3: Remove quest {TestQuestId}");
             await _bot.BotSelectSelfAsync(account);
-            await Task.Delay(1000);
-            var removeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: true, delayMs: 1000);
+            await Task.Delay(2000);
+            var removeTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".quest remove {TestQuestId}", captureResponse: true, delayMs: 1500);
             AssertCommandSucceeded(removeTrace, label, ".quest remove");
 
             var removed = await WaitForQuestPresenceAsync(account, TestQuestId, shouldExist: false, TimeSpan.FromSeconds(12));

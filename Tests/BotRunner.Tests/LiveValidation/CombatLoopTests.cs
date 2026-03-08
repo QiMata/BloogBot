@@ -191,13 +191,20 @@ public class CombatLoopTests
         }
 
         // STEP 1: Verify bot targeted the mob.
-        var targeted = await WaitForSelectedTargetAsync(account, targetGuid, TimeSpan.FromSeconds(4));
-        _output.WriteLine($"  [{label}] Target selected in snapshot: {targeted}");
+        // Allow 8s — BG bot snapshots can flicker between InWorld/CharacterSelect,
+        // so some polls may miss Player data entirely.
+        var targeted = await WaitForSelectedTargetAsync(account, targetGuid, TimeSpan.FromSeconds(8));
         if (!targeted)
         {
-            _output.WriteLine($"  [{label}] FAIL: Bot did not select target GUID in snapshot within 4s.");
+            // Diagnostic: show what TargetGuid is
+            await _bot.RefreshSnapshotsAsync();
+            var diagSnap = await _bot.GetSnapshotAsync(account);
+            var currentTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
+            var screenState = diagSnap?.ScreenState ?? "null";
+            _output.WriteLine($"  [{label}] FAIL: Bot did not select target GUID within 8s. Current TargetGuid=0x{currentTarget:X}, expected=0x{targetGuid:X}, screen={screenState}");
             return false;
         }
+        _output.WriteLine($"  [{label}] Target selected in snapshot: {targeted}");
 
         // STEP 3: Verify facing — bot orientation must be within 90° of direction to target.
         // Bot was teleported adjacent to target so it should face it when attacking.
