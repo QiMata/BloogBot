@@ -1,6 +1,7 @@
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Models;
+using Serilog;
 using System;
 using System.Collections.Generic;
 
@@ -92,46 +93,47 @@ public class FgRealmSelectScreen : IRealmSelectScreen
             return;
         _lastRealmClickAttempt = DateTime.UtcNow;
 
-        // Try multiple realm selection methods:
-        // 1. Realm Wizard (loginState="realmwizard") — first-time setup screen
-        // 2. Realm List popup (loginState="charselect" with MaxCharacterCount=0)
+        // Try multiple realm selection methods in priority order
+        Log.Information("[FG-REALM] SelectRealm called, attempting Lua methods...");
 
-        // Method 1: Realm Wizard — the "realmwizard" loginState first-time setup.
-        // In WoW 1.12.1 GlueXML, RealmWizard.lua defines:
-        //   - ChangeRealm() — opens the realm list from the wizard
-        //   - RealmWizard_OnOkay() — accepts current wizard selection
-        // Try calling these global functions directly.
-        try
-        {
-            _luaCall("if ChangeRealm then ChangeRealm() end");
-        }
-        catch { /* Function may not exist */ }
-
+        // Method 1: Accept wizard default directly via global function
         try
         {
             _luaCall("if RealmWizard_OnOkay then RealmWizard_OnOkay() end");
+            Log.Information("[FG-REALM] Method 1 (RealmWizard_OnOkay) executed");
         }
-        catch { /* Function may not exist */ }
+        catch (Exception ex) { Log.Warning("[FG-REALM] Method 1 failed: {Error}", ex.Message); }
 
-        // Method 2: Direct realm list — click first realm entry and OK
+        // Method 2: Click the wizard OK button directly
+        try
+        {
+            _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
+            Log.Information("[FG-REALM] Method 2 (RealmWizardOkayButton) executed");
+        }
+        catch (Exception ex) { Log.Warning("[FG-REALM] Method 2 failed: {Error}", ex.Message); }
+
+        // Method 3: Direct realm list — click first realm entry and OK
         try
         {
             _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
+            Log.Information("[FG-REALM] Method 3a (RealmListButton1) executed");
         }
-        catch { /* Frame may not exist yet */ }
+        catch (Exception ex) { Log.Warning("[FG-REALM] Method 3a failed: {Error}", ex.Message); }
 
         try
         {
             _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
+            Log.Information("[FG-REALM] Method 3b (RealmListOkButton) executed");
         }
-        catch { /* Frame may not exist yet */ }
+        catch (Exception ex) { Log.Warning("[FG-REALM] Method 3b failed: {Error}", ex.Message); }
 
-        // Method 3: Try ChangeRealmButton which opens the realm list from wizard
+        // Method 4: Open realm list from wizard, then click
         try
         {
-            _luaCall("if ChangeRealmButton and ChangeRealmButton:IsVisible() then ChangeRealmButton:Click() end");
+            _luaCall("if ChangeRealm then ChangeRealm() end");
+            Log.Information("[FG-REALM] Method 4 (ChangeRealm) executed");
         }
-        catch { /* Frame may not exist */ }
+        catch (Exception ex) { Log.Warning("[FG-REALM] Method 4 failed: {Error}", ex.Message); }
 
         // Do NOT set _selectedRealm here — let CurrentRealm detect realm selection
         // via MaxCharacterCount > 0. This ensures the UI actually transitioned.
