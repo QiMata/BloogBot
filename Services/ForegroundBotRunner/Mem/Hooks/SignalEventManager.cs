@@ -102,9 +102,17 @@ namespace ForegroundBotRunner.Mem.Hooks
             // SafeCallback3 wraps the managed delegate call with SEH so AVs from stale
             // WoW memory pointers are caught instead of crashing the process.
             var fastCallHandle = GetModuleHandle("FastCall.dll");
-            var safeCallback3Addr = fastCallHandle != nint.Zero
-                ? GetProcAddress(fastCallHandle, "_SafeCallback3@16")
-                : nint.Zero;
+            DiagLog($"GetModuleHandle('FastCall.dll') = 0x{(uint)fastCallHandle:X8}");
+
+            // Try both decorated and undecorated names — MSVC behavior varies
+            var safeCallback3Addr = nint.Zero;
+            if (fastCallHandle != nint.Zero)
+            {
+                safeCallback3Addr = GetProcAddress(fastCallHandle, "_SafeCallback3@16");
+                if (safeCallback3Addr == nint.Zero)
+                    safeCallback3Addr = GetProcAddress(fastCallHandle, "SafeCallback3");
+                DiagLog($"GetProcAddress SafeCallback3 = 0x{(uint)safeCallback3Addr:X8}");
+            }
 
             string[] instructions;
             if (safeCallback3Addr != nint.Zero)
@@ -256,9 +264,13 @@ namespace ForegroundBotRunner.Mem.Hooks
 
             // Get SafeCallback1 from FastCall.dll for SEH protection
             var fastCallHandle = GetModuleHandle("FastCall.dll");
-            var safeCallback1Addr = fastCallHandle != nint.Zero
-                ? GetProcAddress(fastCallHandle, "_SafeCallback1@8")
-                : nint.Zero;
+            var safeCallback1Addr = nint.Zero;
+            if (fastCallHandle != nint.Zero)
+            {
+                safeCallback1Addr = GetProcAddress(fastCallHandle, "_SafeCallback1@8");
+                if (safeCallback1Addr == nint.Zero)
+                    safeCallback1Addr = GetProcAddress(fastCallHandle, "SafeCallback1");
+            }
 
             string[] instructions;
             if (safeCallback1Addr != nint.Zero)
