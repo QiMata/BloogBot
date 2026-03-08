@@ -209,7 +209,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             // .NET 8 can't catch AccessViolationException — only C++ __try/__except can.
             var fastCallHandle = GetModuleHandle("FastCall.dll");
             var safeCallback1Addr = fastCallHandle != nint.Zero
-                ? GetProcAddress(fastCallHandle, "SafeCallback1")
+                ? GetProcAddress(fastCallHandle, "_SafeCallback1@8")
                 : nint.Zero;
 
             string[] fullInstructions;

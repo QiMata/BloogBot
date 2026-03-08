@@ -103,7 +103,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             // WoW memory pointers are caught instead of crashing the process.
             var fastCallHandle = GetModuleHandle("FastCall.dll");
             var safeCallback3Addr = fastCallHandle != nint.Zero
-                ? GetProcAddress(fastCallHandle, "SafeCallback3")
+                ? GetProcAddress(fastCallHandle, "_SafeCallback3@16")
                 : nint.Zero;
 
             string[] instructions;
@@ -257,7 +257,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             // Get SafeCallback1 from FastCall.dll for SEH protection
             var fastCallHandle = GetModuleHandle("FastCall.dll");
             var safeCallback1Addr = fastCallHandle != nint.Zero
-                ? GetProcAddress(fastCallHandle, "SafeCallback1")
+                ? GetProcAddress(fastCallHandle, "_SafeCallback1@8")
                 : nint.Zero;
 
             string[] instructions;
