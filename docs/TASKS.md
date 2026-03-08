@@ -135,27 +135,30 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-07 (session 32)
-- **Current work:** LiveValidation test stabilization — disconnection root causes.
-- **Completed session 32 (2026-03-07):**
-  1. **Teleport Z corruption FIXED.** `EventEmitter_OnTeleport` called `ResetMovementStateForTeleport("teleport-opcode")` without Z, clobbering the correct Z already set by `NotifyTeleportIncoming()`. Fix: removed duplicate reset call. Run 2 regression (13/50) was entirely caused by this. After fix: **37/50 pass**. Commit `2e8b1d7`.
-  2. **Forbidden skills FIXED.** Character 9 (Lokgaka/TESTBOT2) had 7 forbidden racial riding skills (148,150,152,533,553,554,713) causing server ERROR logs on every login. Cleaned via MySQL (bootstrapping exception — character couldn't stay online). Server error `Character 9 has forbidden skill 553` eliminated.
-  3. **ContainsCommandRejection false positive FIXED.** Removed "player not found" from `ContainsCommandRejection` — it's a `.targetself` bleed-through, not a command rejection. Was causing QuestInteraction and TalentAllocation false failures. Commit `826a1de`.
-  4. **MaxSessionDuration FIXED.** `D:\vmangos-server\realmd.conf` had `MaxSessionDuration=300` (5 min). Realmd was killing BG bot auth sessions during the 14-min test run, causing `ScreenState='LoginScreen'` flickering and cascading test failures. Changed to 3600 (1 hour). **Needs realmd restart to take effect.**
-  5. **Server log analysis:** Identified additional server-side errors: `Player 9 casts spell 2575 which he shouldn't have` (mining in test — harmless), `GameObject::Use unhandled type 19` (data issue), `Gameobject invalid faction` (data issue).
-- **Completed sessions 30-31:** See `docs/ARCHIVE.md`.
-- **Files changed (commits 2e8b1d7, 826a1de):**
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs` — removed duplicate ResetMovementStateForTeleport in EventEmitter_OnTeleport
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs` — removed "player not found" from ContainsCommandRejection
-  - `D:\vmangos-server\realmd.conf` — MaxSessionDuration 300→3600
-- **LiveValidation results (run 3): 37/50 — 10 failed, 3 skipped:**
-  - **Chat bleed (2):** QuestInteraction, TalentAllocation — "was rejected" false positive (FIXED by commit 826a1de)
-  - **Snapshot flickering (4):** BuffDismiss, ConsumableUsage, CombatLoop, EquipmentEquip — BG bot losing InWorld during MaxSessionDuration disconnect (FIXED by realmd config)
-  - **Death/quest (3):** DeathCorpseRun, StarterQuest, CharacterLifecycle — likely also MaxSessionDuration related
-  - **Vendor (1):** VendorBuySell — item not in inventory after BuyItem
-  - **Skipped (3):** Teleport (FG not available), Mining (no node), GroupFormation (needs 2 bots)
-- **TESTBOT1 (FG) still stuck at CharacterSelect** — FG-REALM-STUCK-001 (realm selection dialog). Not blocking BG-only tests.
-- **Next priority:** (1) Restart realmd and re-run LiveValidation. (2) Investigate remaining failures after disconnect fix. (3) Fix UnequipItem (_agentFactoryAccessor null). (4) Fix TESTBOT1 FG injection pipeline.
-- **Test counts:** Physics 97/97, LiveValidation 37/50 (expect improvement after realmd restart).
+- **Last updated:** 2026-03-08 (session 35)
+- **Current work:** LiveValidation test stabilization — PathfindingService crash fix, FG ObjectManager robustness.
+- **Completed session 35 (2026-03-08):**
+  1. **SceneQuery thread safety FIXED (CRITICAL).** `SceneQuery::m_sceneCaches` (unordered_map) was accessed concurrently by multiple PathfindingService client threads via ProtobufSocketServer's ThreadPool. Caused iterator invalidation / use-after-free crash ~7.5min into test runs, killing PathfindingService and cascading all BG bot operations. Fix: `std::recursive_mutex` protecting Get/Set/Clear. Commit `12dc661`.
+  2. **FG ObjectManager EnumerateVisibleObjects FIXED.** `Functions.GetObjectPtr` returning zero caused `Player = null`, making FG snapshot show `CharacterSelect` intermittently. Fix: (a) `GetObjectPtrFromMemory` fallback in EnumerateVisibleObjects, (b) GUID-based local player detection in callback (replaces fragile pointer comparison). Commit `688e9bd`.
+  3. **NPC flag detection retry logic.** `ObjectManager_DetectsNpcFlags` test added retry loop (3 attempts, 2s delay) for NPC flags arriving in PARTIAL updates. Post-teleport wait increased from 3s to 5s. Commit `688e9bd`.
+  4. **FG bot player detection (sessions 33-34).** `GetObjectPtrFromMemory` walks object manager linked list as fallback. Realm wizard bypass with alternating Lua strategies. Commits `7d728a7`, `73ccd33`, `d38b34a`.
+- **Completed sessions 30-32:** See `docs/ARCHIVE.md`.
+- **Files changed (commits 688e9bd, 12dc661):**
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs` — EnumerateVisibleObjects fallback + GUID comparison
+  - `Exports/Navigation/SceneQuery.h` — added `std::recursive_mutex m_sceneCachesMutex`
+  - `Exports/Navigation/SceneQuery.cpp` — lock_guard on Get/Set/Clear SceneCache
+  - `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs` — retry logic, longer delays
+- **LiveValidation results: 26/28 passed (93%) before test host crash:**
+  - **Test host crash at GatheringProfession.Mining** — not PathfindingService (no connection losses). May be StateManager or test process management issue. 22 tests never ran due to the crash.
+  - **Failed (2):** CombatLoop (mob targeting), DeathCorpseRun (complex multi-phase)
+  - **Skipped: 0** (all ran before crash)
+  - **Newly passing (vs session 32):** Consumable, Equipment, FirstAid, AuctionHouse, EquipItem, Fishing, MeleeAttack_WithinRange, MeleeRange_Formula
+- **Known remaining issues:**
+  - **Test host crash:** Happens during GatheringProfession.Mining test — investigate crash dump
+  - **FG WoW.exe crash:** WoW.exe crashes during early world entry (ThreadSynchronizer + charselect timing). Self-recovers via StateManager restart but tests see "FG Bot: NOT AVAILABLE" during recovery window
+  - **DeathCorpseRun:** Complex multi-phase test, timing-sensitive
+  - **CombatLoop:** Mob targeting intermittent failure
+- **Next priority:** (1) Investigate test host crash during Mining test. (2) Run full LiveValidation suite without crash. (3) Fix remaining 2 test failures. (4) Physics+pathfinding plan phases (see plan file).
+- **Test counts:** Physics 97/97, LiveValidation 26/28 (93%, truncated by crash).
 - **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
 - **Sessions 1-29:** See `docs/ARCHIVE.md` for full history.
