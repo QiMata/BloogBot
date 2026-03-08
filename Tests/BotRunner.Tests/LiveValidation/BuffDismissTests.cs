@@ -35,9 +35,10 @@ public class BuffDismissTests
     private readonly ITestOutputHelper _output;
 
     private const uint ElixirOfLionsStrength = 2454;
-    // Elixir of Lion's Strength (item 2454) applies aura spell 2457 (not 2367).
-    // 2367 is the "use effect" spell on the item; 2457 is the actual buff aura.
-    private const uint LionsStrengthSpellId = 2457;
+    // Elixir of Lion's Strength (item 2454): spell 2367 is the "use effect" and 2457 is the buff aura.
+    // VMaNGOS may track either or both as auras. Check for both, clean up both.
+    private const uint LionsStrengthUseSpell = 2367;
+    private const uint LionsStrengthBuffAura = 2457;
     private const string LionsStrengthBuffName = "Lion's Strength";
 
     public BuffDismissTests(LiveBotFixture bot, ITestOutputHelper output)
@@ -88,14 +89,15 @@ public class BuffDismissTests
 
         // Step 1: Clean state — remove stale buff and clear inventory
         _output.WriteLine($"  [{label}] Step 1: Removing stale buffs + clearing inventory.");
-        await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthSpellId}");
+        await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthUseSpell}");
+        await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthBuffAura}");
         await _bot.BotClearInventoryAsync(account, includeExtraBags: false);
         await Task.Delay(500);
 
         // Verify buff is gone
         await _bot.RefreshSnapshotsAsync();
         var playerClean = getPlayer();
-        bool hadBuffAfterClean = playerClean?.Unit?.Auras?.Contains(LionsStrengthSpellId) == true;
+        bool hadBuffAfterClean = HasLionsStrengthAura(playerClean);
         _output.WriteLine($"  [{label}] After cleanup: hasLionsStrength={hadBuffAfterClean}");
 
         // Step 2: Add and use elixir to apply buff
@@ -118,7 +120,7 @@ public class BuffDismissTests
         {
             await _bot.RefreshSnapshotsAsync();
             var player = getPlayer();
-            if (player?.Unit?.Auras?.Contains(LionsStrengthSpellId) == true)
+            if (HasLionsStrengthAura(player))
             {
                 buffApplied = true;
                 _output.WriteLine($"  [{label}] Buff applied after {sw.ElapsedMilliseconds}ms.");
@@ -155,7 +157,7 @@ public class BuffDismissTests
         {
             await _bot.RefreshSnapshotsAsync();
             var player = getPlayer();
-            if (player?.Unit?.Auras?.Contains(LionsStrengthSpellId) != true)
+            if (!HasLionsStrengthAura(player))
             {
                 buffRemoved = true;
                 _output.WriteLine($"  [{label}] Buff removed via ActionType after {sw.ElapsedMilliseconds}ms.");
@@ -169,7 +171,8 @@ public class BuffDismissTests
         if (!buffRemoved)
         {
             _output.WriteLine($"  [{label}] ActionType did not remove buff (BG: WoWUnit.Buffs empty). Using .unaura fallback.");
-            await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthSpellId}");
+            await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthUseSpell}");
+            await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthBuffAura}");
             await Task.Delay(500);
 
             sw = Stopwatch.StartNew();
@@ -177,7 +180,7 @@ public class BuffDismissTests
             {
                 await _bot.RefreshSnapshotsAsync();
                 var player = getPlayer();
-                if (player?.Unit?.Auras?.Contains(LionsStrengthSpellId) != true)
+                if (!HasLionsStrengthAura(player))
                 {
                     buffRemoved = true;
                     _output.WriteLine($"  [{label}] Buff removed via .unaura after {sw.ElapsedMilliseconds}ms.");
@@ -194,6 +197,13 @@ public class BuffDismissTests
         }
 
         return buffRemoved;
+    }
+
+    private static bool HasLionsStrengthAura(Game.WoWPlayer? player)
+    {
+        var auras = player?.Unit?.Auras;
+        if (auras == null) return false;
+        return auras.Contains(LionsStrengthUseSpell) || auras.Contains(LionsStrengthBuffAura);
     }
 
     private async Task<bool> WaitForBagItemAsync(string account, Func<Game.WoWPlayer?> getPlayer, uint itemId, TimeSpan timeout)

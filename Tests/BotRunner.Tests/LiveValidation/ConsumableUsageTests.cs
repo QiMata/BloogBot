@@ -73,15 +73,24 @@ public class ConsumableUsageTests
             Assert.True(fgPassed, "FG bot: Expected aura increase after using Elixir of Lion's Strength.");
     }
 
-    // Elixir of Lion's Strength (item 2454) applies aura spell 2457 (not 2367).
-    // 2367 is the "use effect" spell on the item; 2457 is the actual buff aura.
-    private const uint LionsStrengthSpellId = 2457;
+    // Elixir of Lion's Strength (item 2454): spell 2367 is the "use effect" and 2457 is the buff aura.
+    // VMaNGOS may track either or both as auras. Check for both.
+    private const uint LionsStrengthUseSpell = 2367;
+    private const uint LionsStrengthBuffAura = 2457;
+
+    private static bool HasLionsStrengthAura(Game.WoWPlayer? player)
+    {
+        var auras = player?.Unit?.Auras;
+        if (auras == null) return false;
+        return auras.Contains(LionsStrengthUseSpell) || auras.Contains(LionsStrengthBuffAura);
+    }
 
     private async Task<bool> RunConsumableScenario(string account, Func<Game.WoWPlayer?> getPlayer, string label)
     {
         // --- Step 0: Remove stale Lion's Strength buff and clear inventory ---
         _output.WriteLine($"  [{label}] Step 0: Remove stale buffs + clear inventory");
-        await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthSpellId}");
+        await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthUseSpell}");
+        await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthBuffAura}");
         await _bot.BotClearInventoryAsync(account, includeExtraBags: false);
 
         // Record aura state BEFORE
@@ -89,7 +98,7 @@ public class ConsumableUsageTests
         var playerBefore = getPlayer();
         Assert.NotNull(playerBefore);
         int aurasBefore = playerBefore?.Unit?.Auras?.Count ?? 0;
-        bool hadBuff = playerBefore?.Unit?.Auras?.Contains(LionsStrengthSpellId) == true;
+        bool hadBuff = HasLionsStrengthAura(playerBefore);
         _output.WriteLine($"  [{label}] Auras before: {aurasBefore}, hasLionsStrength={hadBuff}");
 
         // --- Step 1: Add elixir via GM chat ---
@@ -135,7 +144,7 @@ public class ConsumableUsageTests
         await Task.Delay(500);
 
         // --- Step 3: Poll for buff (buff application is near-instant after item use) ---
-        _output.WriteLine($"  [{label}] Step 3: Polling for Lion's Strength buff (spell {LionsStrengthSpellId})");
+        _output.WriteLine($"  [{label}] Step 3: Polling for Lion's Strength buff (spells {LionsStrengthUseSpell}/{LionsStrengthBuffAura})");
         bool hasBuff = false;
         Game.WoWPlayer? player = null;
         var buffSw = Stopwatch.StartNew();
@@ -143,7 +152,7 @@ public class ConsumableUsageTests
         {
             await _bot.RefreshSnapshotsAsync();
             player = getPlayer();
-            if (player?.Unit?.Auras?.Contains(LionsStrengthSpellId) == true)
+            if (HasLionsStrengthAura(player))
             {
                 hasBuff = true;
                 _output.WriteLine($"  [{label}] Buff detected after {buffSw.ElapsedMilliseconds}ms");
@@ -164,7 +173,7 @@ public class ConsumableUsageTests
         if (player.Unit?.Auras != null)
         {
             foreach (var aura in player.Unit.Auras)
-                _output.WriteLine($"    Aura: {aura}{(aura == LionsStrengthSpellId ? " <-- LION'S STRENGTH" : "")}");
+                _output.WriteLine($"    Aura: {aura}{(aura == LionsStrengthUseSpell || aura == LionsStrengthBuffAura ? " <-- LION'S STRENGTH" : "")}");
         }
 
         return hasBuff;

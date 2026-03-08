@@ -3200,6 +3200,12 @@ namespace WoWSharpClient
                 localPlayer.TargetHighGuid.LowGuidValue = BitConverter.GetBytes((uint)(guid & 0xFFFFFFFF));
                 localPlayer.TargetHighGuid.HighGuidValue = BitConverter.GetBytes((uint)(guid >> 32));
             }
+            else if (Player is Models.WoWUnit unit)
+            {
+                // Fallback: set TargetGuid on the model directly so snapshots reflect
+                // the target immediately (before the server echoes via SMSG_UPDATE_OBJECT).
+                unit.TargetGuid = guid;
+            }
             var payload = BitConverter.GetBytes(guid);
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_SET_SELECTION, payload);
         }

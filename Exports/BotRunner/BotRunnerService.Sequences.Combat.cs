@@ -14,7 +14,7 @@ namespace BotRunner
         private IBehaviourTreeNode BuildStartMeleeAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
             .Sequence("Start Melee Attack Sequence")
                 .Splice(CheckForTarget(targetGuid))
-                .Do("Start Melee Attack", time =>
+                .Do("Ensure Target Selected", time =>
                 {
                     if (targetGuid == 0)
                     {
@@ -23,6 +23,13 @@ namespace BotRunner
                     }
 
                     _objectManager.SetTarget(targetGuid);
+                    // Small delay ensures CMSG_SET_SELECTION is flushed before CMSG_ATTACKSWING.
+                    // Both are fire-and-forget async; without this the TCP stack may reorder them.
+                    System.Threading.Thread.Sleep(50);
+                    return BehaviourTreeStatus.Success;
+                })
+                .Do("Start Melee Attack", time =>
+                {
                     _objectManager.StartMeleeAttack();
                     Log.Information($"[BOT RUNNER] Started melee attack on target {targetGuid:X}");
                     return BehaviourTreeStatus.Success;

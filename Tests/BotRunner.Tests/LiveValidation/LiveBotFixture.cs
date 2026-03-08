@@ -1706,6 +1706,8 @@ public class LiveBotFixture : IAsyncLifetime
     /// <summary>
     /// Teleport a bot by having it type .go xyz in chat (self-teleport).
     /// Tries map-form syntax first and falls back to map-less syntax when rejected.
+    /// Uses allowWhenDead: true because .go xyz is a GM command that works in any state.
+    /// If the teleport silently fails (position didn't change), retries once.
     /// </summary>
     public async Task BotTeleportAsync(string accountName, int mapId, float x, float y, float z)
     {
@@ -1714,28 +1716,62 @@ public class LiveBotFixture : IAsyncLifetime
         var zText = z.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
         var commandWithMap = $".go xyz {xText} {yText} {zText} {mapId}";
-        var withMapTrace = await SendGmChatCommandTrackedAsync(
-            accountName,
-            commandWithMap,
-            captureResponse: true,
-            delayMs: 1000,
-            allowWhenDead: false);
 
-        var rejectedWithMap =
-            withMapTrace.ChatMessages.Any(ContainsCommandRejection)
-            || withMapTrace.ErrorMessages.Any(ContainsCommandRejection)
-            || withMapTrace.ChatMessages.Any(m => m.Contains("subcommand", StringComparison.OrdinalIgnoreCase));
-        if (!rejectedWithMap)
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            var withMapTrace = await SendGmChatCommandTrackedAsync(
+                accountName,
+                commandWithMap,
+                captureResponse: true,
+                delayMs: 1000,
+                allowWhenDead: true);
+
+            // Check if the dispatch itself failed (e.g. client not connected)
+            if (withMapTrace.DispatchResult != ResponseResult.Success)
+            {
+                _logger.LogWarning("[TELEPORT] Dispatch failed for {Account}: {Result}", accountName, withMapTrace.DispatchResult);
+                if (attempt == 0) continue;
+                return;
+            }
+
+            var rejectedWithMap =
+                withMapTrace.ChatMessages.Any(ContainsCommandRejection)
+                || withMapTrace.ErrorMessages.Any(ContainsCommandRejection)
+                || withMapTrace.ChatMessages.Any(m => m.Contains("subcommand", StringComparison.OrdinalIgnoreCase));
+            if (rejectedWithMap)
+            {
+                var commandWithoutMap = $".go xyz {xText} {yText} {zText}";
+                _logger.LogInformation("[TELEPORT] Retrying map-less syntax: {Command}", commandWithoutMap);
+                await SendGmChatCommandTrackedAsync(
+                    accountName,
+                    commandWithoutMap,
+                    captureResponse: true,
+                    delayMs: 1000,
+                    allowWhenDead: true);
+                return;
+            }
+
+            // Lightweight position check: verify teleport took effect
+            if (attempt == 0 && _stateManagerClient != null)
+            {
+                await RefreshSnapshotsAsync();
+                var snap = await GetSnapshotAsync(accountName);
+                var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+                if (pos != null)
+                {
+                    var dx = pos.X - x;
+                    var dy = pos.Y - y;
+                    var dist = (float)Math.Sqrt(dx * dx + dy * dy);
+                    if (dist > 80f)
+                    {
+                        _logger.LogWarning("[TELEPORT] Position check: {Account} is {Dist:F0}y from target after teleport — retrying", accountName, dist);
+                        continue;
+                    }
+                }
+            }
+
             return;
-
-        var commandWithoutMap = $".go xyz {xText} {yText} {zText}";
-        _logger.LogInformation("[TELEPORT] Retrying map-less syntax: {Command}", commandWithoutMap);
-        await SendGmChatCommandTrackedAsync(
-            accountName,
-            commandWithoutMap,
-            captureResponse: true,
-            delayMs: 1000,
-            allowWhenDead: false);
+        }
     }
 
     /// <summary>
