@@ -574,9 +574,11 @@ namespace WoWSharpClient
         private void EventEmitter_OnTeleport(object? sender, RequiresAcknowledgementArgs e)
         {
             // _isBeingTeleported is already set by NotifyTeleportIncoming() before the update was queued.
+            // Movement state was ALREADY reset by NotifyTeleportIncoming() with the correct teleportDestZ.
+            // Do NOT call ResetMovementStateForTeleport here — it would clobber the good Z with NaN,
+            // causing teleportDestZ=NaN → float.MinValue Z corruption in MovementController.
             _isBeingTeleported = true;
             _teleportFlagSetTicks = System.Diagnostics.Stopwatch.GetTimestamp();
-            ResetMovementStateForTeleport("teleport-opcode");
 
             var player = (WoWLocalPlayer)Player;
             var ackPayload = MovementPacketHandler.BuildMoveTeleportAckPayload(
