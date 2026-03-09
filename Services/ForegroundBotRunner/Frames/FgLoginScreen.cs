@@ -16,7 +16,7 @@ public class FgLoginScreen(
     Action dismissGlueDialog) : ILoginScreen
 {
     private DateTime? _loginScreenFirstSeen;
-    private static readonly TimeSpan LuaInitGracePeriod = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan LuaInitGracePeriod = TimeSpan.FromSeconds(8);
 
     /// <summary>
     /// Tracks when DefaultServerLogin was last called. After firing, we must NOT call it again
@@ -82,11 +82,13 @@ public class FgLoginScreen(
             // Connecting means the auth handshake is in progress — NOT yet logged in.
             // Reporting true during Connecting causes the behavior tree to advance to
             // realm selection, which issues Lua calls that crash the client (m_netState assertion).
-            return state != WoWScreenState.LoginScreen
+            var result = state != WoWScreenState.LoginScreen
                 && state != WoWScreenState.Connecting
                 && state != WoWScreenState.Disconnected
                 && state != WoWScreenState.Unknown
                 && state != WoWScreenState.ProcessNotAvailable;
+
+            return result;
         }
     }
 

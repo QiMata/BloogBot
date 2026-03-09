@@ -57,9 +57,11 @@ public class FgRealmSelectScreen : IRealmSelectScreen
             // No Lua calls should be issued — m_netState is not ready.
             if (screenState == WoWScreenState.Connecting) return false;
 
+            var maxChar = _getMaxCharacterCount();
+            var result = screenState == WoWScreenState.CharacterSelect && maxChar == 0;
+
             // At charselect with no character list loaded → realm selection needed
-            return screenState == WoWScreenState.CharacterSelect
-                && _getMaxCharacterCount() == 0;
+            return result;
         }
     }
 
@@ -76,7 +78,8 @@ public class FgRealmSelectScreen : IRealmSelectScreen
                 return AutoSelectedRealm;
 
             // If character list has loaded (MaxCharacterCount > 0), realm was already selected
-            if (_getMaxCharacterCount() > 0)
+            var maxChar = _getMaxCharacterCount();
+            if (maxChar > 0)
                 return AutoSelectedRealm;
 
             return null;

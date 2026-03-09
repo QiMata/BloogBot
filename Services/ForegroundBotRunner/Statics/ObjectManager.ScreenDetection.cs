@@ -278,7 +278,15 @@ namespace ForegroundBotRunner.Statics
                     return TrackScreenTransition(WoWScreenState.CharacterSelect);
                 }
 
-                if (loginStateStr == "charselect" || string.IsNullOrEmpty(loginStateStr))
+                // Empty loginState means WoW.exe just launched and memory isn't initialized yet.
+                // This is the login screen — NOT charselect. Without this guard, the bot thinks
+                // it's past login and never sends credentials.
+                if (string.IsNullOrEmpty(loginStateStr))
+                {
+                    return TrackScreenTransition(WoWScreenState.LoginScreen);
+                }
+
+                if (loginStateStr == "charselect")
                 {
                     // ContinentId == 0xFFFFFFFF means we're NOT in any map.
                     // This can mean charselect OR continent transition (e.g. zeppelin crossing).
@@ -559,7 +567,15 @@ namespace ForegroundBotRunner.Statics
         public void DefaultServerLogin(string accountName, string password)
         {
             if (LoginState != LoginStates.login) return;
-            MainThreadLuaCall($"DefaultServerLogin('{accountName}', '{password}');");
+            // Use UI-based login: set text fields + click Login button.
+            // The C++ DefaultServerLogin() function silently fails when called via
+            // injected Lua at startup — the client's UI state prerequisites aren't met.
+            // Setting the text fields and clicking the button simulates manual user input
+            // and reliably initiates the SRP6 auth handshake.
+            MainThreadLuaCall(
+                $"AccountLoginAccountEdit:SetText('{accountName}');" +
+                $"AccountLoginPasswordEdit:SetText('{password}');" +
+                "AccountLogin_Login();");
         }
 
 
