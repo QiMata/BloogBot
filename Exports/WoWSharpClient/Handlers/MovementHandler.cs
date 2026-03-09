@@ -50,12 +50,24 @@ namespace WoWSharpClient.Handlers
                                 "[MovementHandler] MSG_MOVE_TELEPORT: guid={Guid:X} pos=({X:F1},{Y:F1},{Z:F1})",
                                 teleportGuid, teleportData.X, teleportData.Y, teleportData.Z);
 
-                            WoWSharpObjectManager.Instance.NotifyTeleportIncoming(teleportData.Z);
+                            // Only process as a player teleport if the GUID matches our player.
+                            // MSG_MOVE_TELEPORT can also be sent for creatures (MaNGOS sends these
+                            // when mobs are moved). Processing creature teleports as player teleports
+                            // triggers NotifyTeleportIncoming → _isBeingTeleported=true → movement
+                            // state reset → auto-attack heartbeat disruption → mob evades.
+                            var teleportPlayer = WoWSharpObjectManager.Instance.Player;
+                            bool isPlayerTeleport = teleportPlayer != null && teleportPlayer.Guid == teleportGuid;
+
+                            if (isPlayerTeleport)
+                            {
+                                WoWSharpObjectManager.Instance.NotifyTeleportIncoming(teleportData.Z);
+                            }
+
                             WoWSharpObjectManager.Instance.QueueUpdate(
                                 new WoWSharpObjectManager.ObjectStateUpdate(
                                     teleportGuid,
                                     WoWSharpObjectManager.ObjectUpdateOperation.Update,
-                                    WoWObjectType.Player,
+                                    isPlayerTeleport ? WoWObjectType.Player : WoWObjectType.Unit,
                                     teleportData,
                                     []
                                 )
@@ -63,17 +75,14 @@ namespace WoWSharpClient.Handlers
 
                             // Directly update player position so MovementController uses the
                             // teleported position in its very next heartbeat/stop packet.
+                            if (isPlayerTeleport)
                             {
-                                var player = WoWSharpObjectManager.Instance.Player;
-                                if (player != null && player.Guid == teleportGuid)
-                                {
-                                    player.Position.X = teleportData.X;
-                                    player.Position.Y = teleportData.Y;
-                                    player.Position.Z = teleportData.Z;
-                                    Log.Information(
-                                        "[MovementHandler] Teleport: directly updated player position to ({X:F1},{Y:F1},{Z:F1})",
-                                        teleportData.X, teleportData.Y, teleportData.Z);
-                                }
+                                teleportPlayer!.Position.X = teleportData.X;
+                                teleportPlayer.Position.Y = teleportData.Y;
+                                teleportPlayer.Position.Z = teleportData.Z;
+                                Log.Information(
+                                    "[MovementHandler] Teleport: directly updated player position to ({X:F1},{Y:F1},{Z:F1})",
+                                    teleportData.X, teleportData.Y, teleportData.Z);
                             }
 
                             // MSG_MOVE_TELEPORT has no counter field, but the server tracks
