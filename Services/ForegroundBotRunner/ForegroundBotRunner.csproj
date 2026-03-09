@@ -45,8 +45,8 @@
        Link flattens the output path so DLLs land at the output root
        (not in a Resources/ subdirectory) where DllImport can find them. -->
   <ItemGroup>
-    <None Include="Resources\Fasm.NET.dll" Link="Fasm.NET.dll" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Resources\FastCall.dll" Link="FastCall.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Resources\Fasm.NET.dll" Link="Fasm.NET.dll" CopyToOutputDirectory="Always" />
+    <None Include="Resources\FastCall.dll" Link="FastCall.dll" CopyToOutputDirectory="Always" />
   </ItemGroup>
 
   <!-- Mem, Objects, Statics, Frames are the core direct memory implementation - all auto-included by SDK -->
