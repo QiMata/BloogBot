@@ -252,6 +252,7 @@ Tests/PathfindingService.Tests/Data/terrain.MPQ
 # Session handoff loop
 .session-history/
 next-session-prompt.md
+docs/next-session-prompt.md
 
 # Root artifact files (accidental output)
 nul
@@ -290,3 +291,15 @@ temp-physics*.log
 physics_replay*.log
 diag_output.txt
 Exports/Navigation/cmake_ninja_x64/
+
+# Stale root scripts (kept locally, not tracked)
+Build-ArchitectureCompatibleComponents.ps1
+build-injection-dlls.bat
+copy_nav_dll.ps1
+create_account.ps1
+install-protoc.ps1
+run-loop.bat
+run-loop.ps1
+run-tests.ps1
+setup.ps1
+tools/scan_durotar_*.ps1

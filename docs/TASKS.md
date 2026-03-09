@@ -13,152 +13,104 @@
 5. Move completed items to `docs/ARCHIVE.md`.
 6. Before session handoff, update `Session Handoff` in both this file and the active local file.
 7. If two consecutive passes produce no delta, record the blocker and advance to the next queued file.
-8. **The MaNGOS server is ALWAYS live.** Never defer live validation tests — run them every session. FISH-001, BBR-PAR-001, AI-PARITY, and all LiveValidation tests should be executed, not deferred.
+8. **The MaNGOS server is ALWAYS live.** Never defer live validation tests — run them every session.
 
-## P0 — Active Priorities: Solution Cleanup & Refactoring
+---
 
-### Phase 3: Documentation (COMPLETE)
-All 9 CLAUDE.md files created. See `docs/ARCHIVE.md`.
+## P0 — Test Fixture & Harness Hardening (FOUNDATION)
 
-### Phase 4: Large File Refactoring (COMPLETE)
+**Rationale:** Test infrastructure must be solid before implementing more bot behavior. Flaky tests, fixture contamination, and client crashes waste more time than they save. Fix the foundation first.
 
-| ID | Task | File | Lines | Strategy | Status |
-|----|------|------|-------|----------|--------|
-| `REFACTOR-001` | Split MangosRepository into partial classes | `Services/DecisionEngineService/Repository/MangosRepository.cs` | 6,952→10 files (max 1535) | `.Items.cs`, `.Spells.cs`, `.Creatures.cs`, `.Quests.cs`, `.World.cs`, `.Characters.cs`, `.Npcs.cs`, `.Locales.cs`, `.Utility.cs` | **Done** `7139f6d` |
-| `REFACTOR-002` | Split WoWSharpObjectManager into partial classes | `Exports/WoWSharpClient/Objects/WoWSharpObjectManager.cs` | 3,252→6 files (max 1434) | `.Objects.cs`, `.Movement.cs`, `.Combat.cs`, `.Inventory.cs`, `.Network.cs` | **Done** `492ebd8` |
-| `REFACTOR-003` | Split FG ObjectManager into partial classes | `Services/ForegroundBotRunner/Statics/ObjectManager.cs` | 2,907→9 files (max 1012) | `.ScreenDetection.cs`, `.ObjectEnumeration.cs`, `.Spells.cs`, `.Interaction.cs`, `.Inventory.cs`, `.PlayerState.cs`, `.Movement.cs`, `.Combat.cs` | **Done** `0b94c5a` |
-| `REFACTOR-004` | Split LiveBotFixture into partial classes | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | 2,306→6 files (max 713) | `.Assertions.cs`, `.BotChat.cs`, `.ServerManagement.cs`, `.GmCommands.cs`, `.Snapshots.cs` | **Done** `88b22bb` |
-| `REFACTOR-005` | Split StateManagerWorker into partial classes | `Services/WoWStateManager/StateManagerWorker.cs` | 1,455→3 files (max 1062) | `.BotManagement.cs`, `.SnapshotProcessing.cs` | **Done** `b1d1d27` |
+See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 
-### Phase 5: Command Rate-Limiting & Stability (PARTIAL)
+| ID | Task | Owner | Severity | Status |
+|----|------|-------|----------|--------|
+| `BT-COMBAT-002` | **Fix creature teleport ACK bug.** BG sends teleport ACK for creature MSG_MOVE_TELEPORT — disrupts heartbeat → combat fails. ACK path must only ACK player teleports. | `Exports/WoWSharpClient/Handlers/MovementHandler.cs` | Critical | Open |
+| `BT-COMBAT-001` | **Implement proper auto-attack toggle.** BG sends single CMSG_ATTACKSWING without verifying SMSG_ATTACKSTART. Should verify server accepted attack, retry if rejected, match BloogBot toggle pattern. | `Exports/WoWSharpClient/` | High | Open |
+| `BT-SETUP-001` | **Standardized test cleanup pattern.** Create `EnsureCleanSlateAsync(account)`: `.reset items` + revive + teleport to safe zone. Call at start of every test. | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | High | Open |
+| `BT-DEATH-001` | **Move death test to Orgrimmar.** Current Durotar road location causes 80+y corpse runs, FG crashes. Orgrimmar graveyard = <30y run. | `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` | High | Open |
+| `BT-LOGIC-002` | **Make FG failures hard failures.** Stop silently downgrading FG test failures to warnings. FG should fail same as BG, or use `Skip.If` with documented reason. | All LiveValidation tests | High | Open |
+| `BT-TELE-001` | **Safe teleport helper for FG.** Limit FG teleports to pre-validated coordinates. Wait for terrain load. Catch crash and mark as skipped. | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | Critical | Open |
+| `BT-ITEM-001` | **Centralize item/spell setup.** Shared `TestItems`/`TestSpells` constants. `EnsureItemAsync`/`EnsureSpellAsync` helpers that check before adding. | `Tests/Tests.Infrastructure/` | Medium | Open |
+| `BT-LOGIC-001` | **Consolidate distance helpers.** Move `Distance2D`/`Distance3D` to LiveBotFixture shared helpers. | `Tests/BotRunner.Tests/LiveValidation/` | Low | Open |
+
+## P1 — Open Bug Fixes
 
 | ID | Task | Owner | Status |
 |----|------|-------|--------|
-| `RATELIMIT-001` | Audit all Lua/command call sites in FG bot for rate-limiting gaps | `Services/ForegroundBotRunner/` | **Done** — audit complete, null-safety guards added `b93860e` |
-| `RATELIMIT-002` | Add throttle/cooldown guards to prevent command spam during state transitions | `Exports/BotRunner/BotRunnerService.cs` | **Done** — LogoutSequence + Party sequences guarded `b93860e` |
-| `CRASH-001` | ERROR #132 ACCESS_VIOLATION in-world | `Services/ForegroundBotRunner/` | **Done** — hook callbacks hardened (`49f8c51`), SafeCallback SEH wrappers routed through assembly code caves (`a2d1a9d`), NativeLibraryHelper 4-strategy export resolution (`29beb30`), FastCall.dll rebuilt with 25 exports |
+| `BB-COMBAT-006` | **UnitReaction unreliable in snapshots.** BG defaults to Hated(0), FG returns Friendly(4) for hostile mobs. Need FactionTemplate→Reaction mapping for BG using DBC data. Workaround: entry-based filter in place. | `Exports/WoWSharpClient/` | Open (workaround in place) |
+| `FG-GHOST-STUCK-001` | **Ghost form stuck on Orgrimmar catapult geometry.** Pathfinding/stuck-recovery doesn't handle dense M2 geometry. | `Exports/Navigation/` | Open |
+| `LV-AUDIT-002` | **FG fishing test (TIM-7).** BG fishing CMSG_CAST_SPELL channel not starting. | `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs` | Open |
 
-## Open — Storage Stubs (Blocked on NuGet)
+## P2 — FG Client Stability
+
+| ID | Issue | Owner | Status |
+|----|-------|-------|--------|
+| `FG-REALM-STUCK-001` | FG client stuck on Realm Selection/Language dialog. | `Services/ForegroundBotRunner/` | **Fixed** `2301f0a` |
+| `TEST-FGPACKET-001` | FG packet capture — recv hook pending (needs ProcessMessage vtable). | `Services/ForegroundBotRunner/Mem/Hooks/` | **Partial** |
+| `FG-CRASH-TELE` | FG ERROR #132 during teleport to mining locations. ACCESS_VIOLATION at 0x006FA780 referencing 0x00000005. Terrain tile not loaded before ObjectManager access. | `Services/ForegroundBotRunner/` | Open |
+
+## P3 — Capability Gaps (Low Priority)
+
+| ID | Issue | Owner | Status |
+|----|-------|-------|--------|
+| `CAP-GAP-003` | TrainerFrame status unknown — may also be null. | `Exports/WoWSharpClient/` | Open (low priority) |
+| `BG-PET-001` | BG pet support — Pet returns null. Hunter/Warlock won't work. | `Exports/WoWSharpClient/` | Open |
+
+## Blocked — Storage Stubs (Needs NuGet)
 
 | ID | Task | Blocker |
 |----|------|---------|
 | `RTS-MISS-001` | S3 ops in RecordedTests.Shared | Requires AWSSDK.S3 |
 | `RTS-MISS-002` | Azure ops in RecordedTests.Shared | Requires Azure.Storage.Blobs |
 
-## Open — Test Coverage Gaps (Remaining RPTT/RTS/WRTS TST tasks)
+## Completed Phases (See `docs/ARCHIVE.md`)
 
-These are incremental coverage expansion tasks. The test projects are healthy; these are additional test surfaces.
-
-| ID | Project | Remaining | Current Pass Count |
-|----|---------|-----------|-------------------|
-| `RPTT-TST-002..006` | RecordedTests.PathingTests.Tests | Program.FilterTests, lifecycle, timeout, disconnect | 115/115 |
-| `RTS-TST-002..006` | RecordedTests.Shared.Tests | S3/Azure storage tests (blocked on NuGet) | 323/323 |
-
-## Open — Infrastructure Projects (No Test Projects)
-
-| # | Local file | Task IDs | Notes |
-|---|-----------|----------|-------|
-| 1 | `UI/Systems/Systems.AppHost/TASKS.md` | SAH-MISS-001..006 | 2 source files, .NET Aspire orchestration |
-| 2 | `UI/Systems/Systems.ServiceDefaults/TASKS.md` | SSD-MISS-001..006 | 1 source file, OpenTelemetry/health config |
-
-## Open — AI Parity (Needs Live Server)
-
-| # | Local file | Task IDs | Notes |
-|---|-----------|----------|-------|
-| 1 | `WWoWBot.AI/TASKS.md` | AI-PARITY-001..GATHER-001 | **Done** — all 3 parity gates pass live (2026-02-28) |
-
-## Open — Live Validation Failures (Discovered 2026-02-28)
-
-All resolved and archived. See `docs/ARCHIVE.md`.
-
-## Open — LiveValidation Audit (2026-03-06)
-
-| ID | Task | Status |
-|----|------|--------|
-| `LV-AUDIT-002` | Remaining MEDIUM items. **Fixed:** AST-1/2/3/5/11/13/20, TIM-1/2/5/10/12. **Open:** TIM-7 (FG fishing test). | Mostly Done |
-
-## Open — FG Client Stability (2026-03-06)
-
-| ID | Issue | Owner | Status |
-|----|-------|-------|--------|
-| `FG-REALM-STUCK-001` | **FG client stuck on Realm Selection/Language dialog.** TESTBOT1 hits the "Choosing a Realm" first-login screen. **FIXED:** `SelectRealm()` now clicks `RealmListButton1` + `RealmListOkButton` via Lua (rate-limited 2s). `CurrentRealm` only transitions when `MaxCharacterCount > 0`. Commit `2301f0a`. | `Services/ForegroundBotRunner/` | **Fixed** |
-| `FG-GHOST-STUCK-001` | Ghost form stuck on Orgrimmar catapult geometry at ~(1577, -4394, 6.2) during corpse run. Previous fix (`ShouldExcludeDoodad` keyword filter) was incorrect — M2 collision is determined by MPQ flags, not name heuristics. `ShouldExcludeDoodad` removed entirely (commit `a1a04bd` reverted). All M2 models must remain in physics sweeps. Root cause is pathfinding/stuck-recovery not handling dense M2 geometry areas. | `Exports/Navigation/` | **Reopened** — needs pathfinding improvement |
-
-## Open — Capability Gaps (from CAPABILITY_AUDIT.md)
-
-| ID | Issue | Owner | Status |
-|----|-------|-------|--------|
-| `CAP-GAP-003` | TrainerFrame status unknown — may also be null. LearnAllAvailableSpellsAsync already bypasses Frame. | `Exports/WoWSharpClient/` | Open (low priority) |
-
-## Open — Pathfinding / Physics (2026-03-03)
-
-All resolved and archived. See `docs/ARCHIVE.md`.
-
-## Open — Test Infrastructure Hardening
-
-| ID | Issue | Owner | Status |
-|----|-------|-------|--------|
-| `TEST-TRAM-001` | **Deeprun Tram map transition integration test.** Both bots teleport to IF with `.gm on`, then into map 369. Verifies client survives server bounce. | `Tests/BotRunner.Tests/LiveValidation/` | **Done** |
-| `TEST-CRASH-001` | **Test fixture fail-fast on client crash.** Background crash monitor polls StateManager + WoW.exe PIDs every 2s. `ClientCrashed` + `CrashMessage` properties. `AssertClientAlive()` in `RefreshSnapshotsAsync`. | `Tests/Tests.Infrastructure/` | **Done** |
-| `TEST-FGPACKET-001` | **FG packet capture + connection state machine.** Send hook done. ConnectionStateMachine wired into ThreadSynchronizer (deterministic Lua safety). Receive hook deferred (needs ProcessMessage vtable). | `Services/ForegroundBotRunner/Mem/Hooks/` | **Partial** — recv hook pending |
-
-## Sub-TASKS Execution Queue (Partial — only non-Done rows)
-
-| # | Local file | Status | Next IDs |
-|---|-----------|--------|----------|
-| 11 | `RecordedTests.Shared/TASKS.md` | Pending | RTS-MISS-001..004 (blocked on NuGet) |
-| 24 | `Tests/PathfindingService.Tests/TASKS.md` | **Partial** | PFS-TST-002/003/005 need nav data |
-| 25 | `Tests/PromptHandlingService.Tests/TASKS.md` | **Partial** | PFS-TST-002 low priority |
-| 26 | `Tests/RecordedTests.PathingTests.Tests/TASKS.md` | **Partial** | RPTT-TST-002..006 remaining |
-| 27 | `Tests/RecordedTests.Shared.Tests/TASKS.md` | **Partial** | RTS-TST-002..006 (storage blocked on NuGet) |
-| 36 | `UI/Systems/Systems.AppHost/TASKS.md` | Pending | SAH-MISS-001..006 |
-| 37 | `UI/Systems/Systems.ServiceDefaults/TASKS.md` | Pending | SSD-MISS-001..006 |
-| 38 | `WWoWBot.AI/TASKS.md` | **Partial** | AI-PARITY-001..GATHER-001 (need live server) |
-
-> All other queue rows (1-10, 12-23, 28-30, 33-35) are **Done** — see `docs/ARCHIVE.md`.
-> Rows 31, 32 (WWoW.RecordedTests.*) and deferred MCP services removed in session 38 cleanup.
+- Phase 3: Documentation (9 CLAUDE.md files)
+- Phase 4: Large File Refactoring (5 monolith files split)
+- Phase 5: Command Rate-Limiting & Stability (RATELIMIT-001/002, CRASH-001)
+- AI Parity (all 3 gates pass live)
+- Live Validation Failures (2026-02-28 batch)
+- Pathfinding / Physics (all resolved)
+- Test Infrastructure: TEST-TRAM-001, TEST-CRASH-001
 
 ## Canonical Commands
 
 ```bash
-# Corpse-run validation
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m
+# Full LiveValidation suite
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m
 
-# Pathfinding service tests
-dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore
+# Corpse-run only
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m
+
+# Combat tests only
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~CombatRangeTests"
 
 # Physics calibration
-dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings
-
-# Combined live validation (crafting + corpse)
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~CraftingProfessionTests"
-
-# Tier 2: Frame-ahead + transport + cross-map
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --filter "FullyQualifiedName~FrameAheadSimulator|FullyQualifiedName~TransportWaiting|FullyQualifiedName~CrossMapRouter"
-dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~FrameAhead|FullyQualifiedName~ElevatorScenario"
+dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --settings Tests/Navigation.Physics.Tests/test.runsettings
 
 # AI tests
 dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"
+
+# Full solution (all test projects)
+dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-09 (session 44, continued)
-- **Current work:** Combat auto-attack — both BG and FG now pass reliably.
+- **Last updated:** 2026-03-09 (session 45)
+- **Current work:** Solution cleanup, test bad behavior audit, documentation overhaul.
 - **Completed this session:**
-  1. **BG mob evade root cause fix (`c18e99a`):** Guard `NotifyTeleportIncoming` for player GUIDs only — creature MSG_MOVE_TELEPORT was resetting movement state mid-combat.
-  2. **UnitReaction proto field (`384ccfd`):** Added `unitReaction` (field 33) to WoWUnit protobuf. Discovery: BG defaults to Hated(0), FG returns Friendly(4) for all mobs. UnitReaction is NOT reliable for target selection.
-  3. **Entry-based mob filter:** Filter by creature entry ID (3098/3124/3108) instead of UnitReaction. Prevents targeting friendly NPCs like Lazy Peons.
-  4. **3-attempt evade retry:** When mob evades (HP resets, target lost), bot re-walks and re-engages. Early evade detection cuts wait from 15s to ~3s.
-  5. **FG area fix:** FG now uses same coordinates as BG. Previous FG areas had only friendly NPCs or invalid terrain (fell underground).
-  6. **BAD_BEHAVIORS.md:** BB-COMBAT-003/005/006 updated.
-- **LiveValidation results: 48 passed, 1 failed, 1 skipped (50 total)**
-  - CombatLoop passes reliably with both BG AND FG dealing damage (3/3 runs).
-  - **Failed (1):** FishingProfessionTests — CMSG_CAST_SPELL fishing channel not starting.
-  - **Skipped (1):** Mining (no copper nodes spawned).
-- **Known remaining issues:**
-  - **UnitReaction reliability (BB-COMBAT-006):** BG UnitReaction is never populated from server packets (defaults to 0). FG UnitReaction reports Friendly(4) for hostile mobs when GM mode effects linger. Need FactionTemplate→Reaction mapping for BG.
-  - **BG fishing CMSG_CAST_SPELL:** Packet-based fishing cast doesn't start channel.
-  - **BG pet support:** Pet returns null — Hunter/Warlock won't work.
-  - **Intermittent mob evade:** Still happens ~20% of runs but retry loop handles it. Root cause: Z mismatch between bot physics engine and MaNGOS terrain resolution at specific mob spawn positions.
-- **Test counts:** LiveValidation 48/50, WoWSharpClient 1254, Physics 97, AI 119.
-- **Sessions 1-43:** See `docs/ARCHIVE.md` for full history.
+  1. **BAD_TEST_BEHAVIORS.md created:** 8 categories, 18 anti-patterns documented across all 24 LiveValidation test classes. See `docs/BAD_TEST_BEHAVIORS.md`.
+  2. **Stale files removed from git:** 13 files untracked (scripts, FastCall.dll, next-session-prompt.md). `.gitignore` updated.
+  3. **TASKS.md rewritten:** Archived completed phases. Reprioritized: test fixture/harness hardening (P0) before capabilities (P3). Open items verified accurate.
+  4. **BAD_BEHAVIORS.md:** Updated with combat findings from session 44.
+- **LiveValidation results (this session): 47 passed, 2 failed, 1 skipped (50 total)**
+  - **Failed (2):** CombatRangeTests.MeleeAttack (creature teleport ACK bug), GatheringProfessionTests.Mining (FG crash ERROR #132 during Barrens teleport).
+  - **Skipped (1):** CombatRangeTests.RangedAttack (no ranged weapon equipped).
+- **Known issues documented:**
+  - BT-COMBAT-002: Creature teleport ACK still sent for non-player GUIDs — disrupts BG melee combat
+  - BT-DEATH-001: Death test should use Orgrimmar, not remote Durotar road
+  - BT-COMBAT-001: Auto-attack doesn't match BloogBot toggle pattern
+  - FG-CRASH-TELE: FG crashes during multi-location teleport sequences (mining test)
+- **Test counts:** LiveValidation 47/50, WoWSharpClient 1254, Physics 97, AI 119.
+- **Sessions 1-44:** See `docs/ARCHIVE.md` for full history.
