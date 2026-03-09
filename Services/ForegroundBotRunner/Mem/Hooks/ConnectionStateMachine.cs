@@ -123,12 +123,18 @@ namespace ForegroundBotRunner.Mem.Hooks
         public TimeSpan TimeInCurrentState => DateTime.UtcNow - _lastStateChange;
 
         /// <summary>Whether Lua calls can be safely dispatched.</summary>
+        /// <remarks>
+        /// Authenticating is included because the realm wizard dialog (loginState="realmwizard")
+        /// appears BEFORE SMSG_CHAR_ENUM — Lua calls on Glue screens are safe.
+        /// Without this, ThreadSynchronizer blocks all WM_USER processing during realm selection,
+        /// preventing FgRealmSelectScreen strategies from executing.
+        /// </remarks>
         public bool IsLuaSafe
         {
             get
             {
                 var s = CurrentState;
-                return s == State.CharSelect || s == State.InWorld;
+                return s == State.Authenticating || s == State.CharSelect || s == State.InWorld;
             }
         }
 
