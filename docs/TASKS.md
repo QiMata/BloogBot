@@ -36,7 +36,7 @@ All 9 CLAUDE.md files created. See `docs/ARCHIVE.md`.
 |----|------|-------|--------|
 | `RATELIMIT-001` | Audit all Lua/command call sites in FG bot for rate-limiting gaps | `Services/ForegroundBotRunner/` | **Done** — audit complete, null-safety guards added `b93860e` |
 | `RATELIMIT-002` | Add throttle/cooldown guards to prevent command spam during state transitions | `Exports/BotRunner/BotRunnerService.cs` | **Done** — LogoutSequence + Party sequences guarded `b93860e` |
-| `CRASH-001` | ERROR #132 ACCESS_VIOLATION in-world at 0x170ED07E | `Services/ForegroundBotRunner/` | **Partial** — hook callbacks hardened (`49f8c51`), AV protection via FastCall SafeCallback pending |
+| `CRASH-001` | ERROR #132 ACCESS_VIOLATION in-world | `Services/ForegroundBotRunner/` | **Done** — hook callbacks hardened (`49f8c51`), SafeCallback SEH wrappers routed through assembly code caves (`a2d1a9d`), NativeLibraryHelper 4-strategy export resolution (`29beb30`), FastCall.dll rebuilt with 25 exports |
 
 ## Open — Storage Stubs (Blocked on NuGet)
 
@@ -142,20 +142,17 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-08 (session 41)
-- **Current work:** CRASH-001 FG bot ERROR #132 crash investigation and fix.
+- **Last updated:** 2026-03-08 (session 42)
+- **Current work:** Build system cleanup, FastCall/Loader .NET 8 integration, FG BotRunner stabilization.
 - **Completed this session:**
-  1. **CRASH-001 root cause identified and fixed (`49f8c51`):**
-     - **Root cause 1:** SignalEventManager hook callbacks (`SignalEventHook`, `SignalEventNoArgsHook`) had ZERO try/catch. Any managed exception (NullRef from null typesArg, subscriber exceptions) propagated into WoW's native call stack → ERROR #132 at random addresses. .NET 8 ignores `[HandleProcessCorruptedStateExceptions]`, so AV catching in ThreadSynchronizer WndProc was dead code.
-     - **Root cause 2:** TOCTOU race in `FgCharacterSelectScreen` — `HasReceivedCharacterList` and `CharacterSelects` each read `MaxCharacterCount` from live memory independently. Between checks, the value could drop to 0 during zone transitions, causing BotRunnerService to queue `CreateCharacter` Lua while in-world → `attempt to call global 'CreateCharacter' (a nil value)`.
-     - **Fix:** Wrapped both SignalEventManager callbacks with try/catch + null/pointer guards. Snapshot MaxCharacterCount in FgCharacterSelectScreen to prevent TOCTOU. Added screen state guard to `CreateCharacter()`. Added `SafeCallback1`/`SafeCallback3` SEH wrappers to FastCall.dll for future use by hook assembly code caves.
-  2. **Unit tests:** WoWSharpClient 1254/1254, Physics 97/97, AI 119/121 (2 pre-existing NuGet failures).
-  3. **FastCall.dll rebuilt** with new SafeCallback SEH exports.
+  1. **CRASH-001 SafeCallback deployment FIXED (`29beb30`):**
+     - Root cause: `Bot/Release/net8.0/FastCall.dll` was the OLD 40KB version (9 exports, Feb 9) while `Resources/FastCall.dll` had the NEW 13KB version (25 exports including SafeCallback). Assembly code caves called SafeCallback but the loaded DLL didn't have them → unprotected AV → ERROR #132.
+     - Fix: Created `NativeLibraryHelper.cs` with 4-strategy export resolution (NativeLibrary, kernel32 GetProcAddress, PE export table parsing). Rebuilt FastCall.dll via MSBuild. Synced Resources/ copy. Migrated SignalEventManager + PacketLogger to use NativeLibraryHelper.
+  2. **Build pipeline verified:** `dotnet build` (all 19 .NET projects) + MSBuild (FastCall + Loader) both output to `Bot/Release/net8.0/`. C++ vcxproj errors in `dotnet build` are expected (NU1503/MSB4278).
 - **Known remaining issues:**
-  - **CRASH-001 partial:** The managed try/catch in hook callbacks catches NullRef/ArrayBounds/subscriber exceptions. However, AccessViolationException from stale WoW memory pointers is still UNCATCHABLE on .NET 8. The SafeCallback wrappers in FastCall.dll are ready but the assembly code caves in SignalEventManager/PacketLogger need to be updated to route through them (requires modifying the FASM injection code). This is the next step for full AV protection.
   - **BG pet support:** Pet returns null — Hunter/Warlock won't work.
   - **BG combat auto-attack:** CombatLoopTests fails — auto-attack mechanics need investigation.
   - **SMSG_UPDATE_AURA_DURATION:** "No handler registered" — duration data not parsed yet (cosmetic).
+  - **FG stability:** SafeCallback SEH wrappers now deployed — needs live validation to confirm ERROR #132 is resolved.
 - **Test counts:** WoWSharpClient 1254, Physics 97, AI 119 (+2 pre-existing failures).
-- **Plan file:** `C:\Users\lrhod\.claude\plans\federated-wandering-brooks.md`
-- **Sessions 1-39:** See `docs/ARCHIVE.md` for full history.
+- **Sessions 1-41:** See `docs/ARCHIVE.md` for full history.
