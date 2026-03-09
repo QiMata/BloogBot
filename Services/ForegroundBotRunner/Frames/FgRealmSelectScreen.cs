@@ -108,29 +108,47 @@ public class FgRealmSelectScreen : IRealmSelectScreen
         _realmClickAttemptCount++;
         Log.Information("[FG-REALM] SelectRealm attempt #{Count}", _realmClickAttemptCount);
 
-        // Alternate between different strategies each attempt since some require
-        // multiple frames (ChangeRealm opens list, then next attempt clicks the button)
+        // The RealmWizard is a multi-step dialog (step 1: realm type, step 2: language,
+        // step 3: confirm). Need "Next" clicks to advance through steps, then "OK" on
+        // the final step. Also need ChangeRealm → realm list click for the standard
+        // realm selection path. Rotate through all strategies.
         try
         {
-            if (_realmClickAttemptCount % 3 == 1)
+            int strategy = _realmClickAttemptCount % 5;
+            if (strategy == 1)
             {
-                // Strategy A: Open the realm list from the wizard (takes effect next frame)
-                _luaCall("if ChangeRealm then ChangeRealm() end");
-                Log.Information("[FG-REALM] Strategy A: ChangeRealm() called");
+                // Strategy A: Click RealmWizard "Next" to advance through wizard steps
+                _luaCall("if RealmWizardNextButton and RealmWizardNextButton:IsVisible() then RealmWizardNextButton:Click() end");
+                Log.Information("[FG-REALM] Strategy A: RealmWizardNextButton clicked");
             }
-            else if (_realmClickAttemptCount % 3 == 2)
+            else if (strategy == 2)
             {
-                // Strategy B: Click the first realm in the list and OK (after ChangeRealm opened it)
+                // Strategy B: Click wizard OK/accept (works on final wizard step)
+                _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
+                _luaCall("if RealmWizard_OnOkay then RealmWizard_OnOkay() end");
+                Log.Information("[FG-REALM] Strategy B: RealmWizardOkayButton + RealmWizard_OnOkay");
+            }
+            else if (strategy == 3)
+            {
+                // Strategy C: Open realm list via ChangeRealm, click first realm + OK
+                _luaCall("if ChangeRealm then ChangeRealm() end");
+                Log.Information("[FG-REALM] Strategy C: ChangeRealm() called");
+            }
+            else if (strategy == 4)
+            {
+                // Strategy D: Click the first realm in the list and OK (after ChangeRealm opened it)
                 _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
                 _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
-                Log.Information("[FG-REALM] Strategy B: RealmListButton1 + RealmListOkButton clicked");
+                Log.Information("[FG-REALM] Strategy D: RealmListButton1 + RealmListOkButton clicked");
             }
             else
             {
-                // Strategy C: Try wizard accept/OK buttons directly
-                _luaCall("if RealmWizard_OnOkay then RealmWizard_OnOkay() end");
+                // Strategy E: Brute-force — click Next multiple times then OK to skip wizard
+                _luaCall("if RealmWizardNextButton then for i=1,5 do if RealmWizardNextButton:IsVisible() then RealmWizardNextButton:Click() end end end");
                 _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
-                Log.Information("[FG-REALM] Strategy C: RealmWizard_OnOkay + RealmWizardOkayButton");
+                _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
+                _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
+                Log.Information("[FG-REALM] Strategy E: Multi-Next + OK + RealmList brute-force");
             }
         }
         catch (Exception ex) { Log.Warning("[FG-REALM] Strategy failed: {Error}", ex.Message); }
