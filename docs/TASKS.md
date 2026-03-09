@@ -142,17 +142,26 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-08 (session 42)
-- **Current work:** Build system cleanup, FastCall/Loader .NET 8 integration, FG BotRunner stabilization.
+- **Last updated:** 2026-03-09 (session 43)
+- **Current work:** LiveValidation test stabilization, dual-bot behavior implementation.
 - **Completed this session:**
-  1. **CRASH-001 SafeCallback deployment FIXED (`29beb30`):**
-     - Root cause: `Bot/Release/net8.0/FastCall.dll` was the OLD 40KB version (9 exports, Feb 9) while `Resources/FastCall.dll` had the NEW 13KB version (25 exports including SafeCallback). Assembly code caves called SafeCallback but the loaded DLL didn't have them → unprotected AV → ERROR #132.
-     - Fix: Created `NativeLibraryHelper.cs` with 4-strategy export resolution (NativeLibrary, kernel32 GetProcAddress, PE export table parsing). Rebuilt FastCall.dll via MSBuild. Synced Resources/ copy. Migrated SignalEventManager + PacketLogger to use NativeLibraryHelper.
-  2. **Build pipeline verified:** `dotnet build` (all 19 .NET projects) + MSBuild (FastCall + Loader) both output to `Bot/Release/net8.0/`. C++ vcxproj errors in `dotnet build` are expected (NU1503/MSB4278).
+  1. **BG auto-attack heartbeat fix (`46f1be0`):**
+     - Root cause: MaNGOS requires a recent movement packet to process CMSG_ATTACKSWING. After teleport + settle, the bot is stationary with MOVEFLAG_NONE and IsAutoAttacking=false → no heartbeats → CMSG_ATTACKSWING silently ignored.
+     - Fix: `WoWSharpObjectManager.StartMeleeAttack()` now sends MSG_MOVE_HEARTBEAT before CMSG_ATTACKSWING and sets IsAutoAttacking=true. `StopAttack()` clears IsAutoAttacking.
+  2. **Corpse run death location fix (`46f1be0`):**
+     - Root cause: Orgrimmar graveyard is within retrieve range (39y) of the test death position → ghost spawns inside retrieve range → test skips runback entirely.
+     - Fix: Changed death location from Orgrimmar to southern Durotar road (-830, -4910, 24) where nearest graveyard is >80y away.
+  3. **FG RealmWizard navigation fix (`80f6172`):**
+     - Root cause: FG bot stuck on "Choosing a Realm" first-login dialog because existing strategies only tried ChangeRealm/RealmListButton. The RealmWizard is a multi-step dialog needing "Next" clicks.
+     - Fix: Added RealmWizardNextButton (Strategy A), OK/accept (Strategy B), and brute-force multi-Next + OK + RealmList (Strategy E) strategies. Rotation expanded from 3 to 5 strategies.
+- **LiveValidation results: 47 passed, 1 failed, 2 skipped (50 total)**
+  - **Passing (47):** All BasicLoop, BuffDismiss, CharacterLifecycle (3), CombatLoop, CombatRange (7), ConsumableUsage, CraftingProfession, DeathCorpseRun, EconomyInteraction (3), EquipmentEquip, Herbalism, LootCorpse, MapTransition, Navigation (2), NpcInteraction (5), OrgrimmarGroundZ (2), QuestInteraction, SpellCastOnTarget, StarterQuest, TalentAllocation, UnequipItem, VendorBuy, VendorSell
+  - **Failed (1):** FishingProfessionTests — bobber appears and fish bites fire correctly via `.cast` GM command, but skill doesn't increase. Root cause: GMcasted spells don't trigger skill gains on VMaNGOS. CMSG_CAST_SPELL packet path doesn't start the channel (needs investigation — may need SOURCE_LOCATION target flag).
+  - **Skipped (2):** Mining (no copper nodes spawned), GroupFormation (needs both FG+BG online)
 - **Known remaining issues:**
+  - **BG fishing CMSG_CAST_SPELL:** Packet-based fishing cast doesn't start channel. `.cast` GM command works but doesn't trigger skill gains. Need to investigate target flags.
+  - **FG bot connection:** FG bot reports CharacterSelect but doesn't enter world. RealmWizard fix pushed but untested (needs live run).
   - **BG pet support:** Pet returns null — Hunter/Warlock won't work.
-  - **BG combat auto-attack:** CombatLoopTests fails — auto-attack mechanics need investigation.
   - **SMSG_UPDATE_AURA_DURATION:** "No handler registered" — duration data not parsed yet (cosmetic).
-  - **FG stability:** SafeCallback SEH wrappers now deployed — needs live validation to confirm ERROR #132 is resolved.
-- **Test counts:** WoWSharpClient 1254, Physics 97, AI 119 (+2 pre-existing failures).
-- **Sessions 1-41:** See `docs/ARCHIVE.md` for full history.
+- **Test counts:** LiveValidation 47/50, WoWSharpClient 1254, Physics 97, AI 119.
+- **Sessions 1-42:** See `docs/ARCHIVE.md` for full history.
