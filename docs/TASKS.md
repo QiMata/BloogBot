@@ -25,12 +25,16 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 
 | ID | Task | Owner | Severity | Status |
 |----|------|-------|----------|--------|
+| `BT-PARK-001` | **Stop parking bots idle.** Tests park one bot at Orgrimmar bank while only testing the other. Both bots should exercise every test together. Add `PauseCoordinatorAsync()` to suppress AI GOTO actions instead of parking. | All LiveValidation tests | High | Open |
+| `BT-FEEDBACK-003` | **FG error-out must be hard failure.** FG failures are caught and emitted as warnings — test "passes" while FG is broken. FG crash/error should fail the test or use `Skip.If` with reason. | All LiveValidation tests | High | Open |
 | `BT-COMBAT-002` | **Fix creature teleport ACK bug.** BG sends teleport ACK for creature MSG_MOVE_TELEPORT — disrupts heartbeat → combat fails. ACK path must only ACK player teleports. | `Exports/WoWSharpClient/Handlers/MovementHandler.cs` | Critical | Open |
+| `BT-TELE-001` | **Safe teleport helper for FG.** Limit FG teleports to pre-validated coordinates. Wait for terrain load. Catch crash and mark as skipped. | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | Critical | Open |
+| `BT-PARK-003` | **Teleport both bots together by default.** Tests should teleport both BG and FG to the test area so behavior can be observed and compared. Parking should be the documented exception. | All LiveValidation tests | High | Open |
 | `BT-COMBAT-001` | **Implement proper auto-attack toggle.** BG sends single CMSG_ATTACKSWING without verifying SMSG_ATTACKSTART. Should verify server accepted attack, retry if rejected, match BloogBot toggle pattern. | `Exports/WoWSharpClient/` | High | Open |
 | `BT-SETUP-001` | **Standardized test cleanup pattern.** Create `EnsureCleanSlateAsync(account)`: `.reset items` + revive + teleport to safe zone. Call at start of every test. | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | High | Open |
 | `BT-DEATH-001` | **Move death test to Orgrimmar.** Current Durotar road location causes 80+y corpse runs, FG crashes. Orgrimmar graveyard = <30y run. | `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` | High | Open |
 | `BT-LOGIC-002` | **Make FG failures hard failures.** Stop silently downgrading FG test failures to warnings. FG should fail same as BG, or use `Skip.If` with documented reason. | All LiveValidation tests | High | Open |
-| `BT-TELE-001` | **Safe teleport helper for FG.** Limit FG teleports to pre-validated coordinates. Wait for terrain load. Catch crash and mark as skipped. | `Tests/Tests.Infrastructure/LiveBotFixture.cs` | Critical | Open |
+| `BT-FEEDBACK-001` | **Add periodic progress logging.** Long tests (3min corpse run, 1min gather) show no output during polling loops — indistinguishable from hung test. Log every 10s. | All long-running tests | Medium | Open |
 | `BT-ITEM-001` | **Centralize item/spell setup.** Shared `TestItems`/`TestSpells` constants. `EnsureItemAsync`/`EnsureSpellAsync` helpers that check before adding. | `Tests/Tests.Infrastructure/` | Medium | Open |
 | `BT-LOGIC-001` | **Consolidate distance helpers.** Move `Distance2D`/`Distance3D` to LiveBotFixture shared helpers. | `Tests/BotRunner.Tests/LiveValidation/` | Low | Open |
 

@@ -277,18 +277,85 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 
 ---
 
+## 10. Bot Coordination & Idle Parking
+
+### BT-PARK-001: Tests Park One Bot Idle While Only Testing the Other
+- **Observed**: Multiple tests teleport one bot to Orgrimmar bank and leave it idle for the entire test duration while only the other bot is exercised. This defeats the purpose of having a dual-client test harness.
+- **Tests**:
+  - **FishingProfessionTests**: Parks FG at Orgrimmar, only tests BG fishing. "Park FG bot at Orgrimmar to reduce coordinator interference."
+  - **GatheringProfessionTests**: Parks non-active bot at Orgrimmar 4+ times. Mining test parks BG; Herbalism test parks FG. Each gather scenario parks the idle bot separately.
+  - **DeathCorpseRunTests**: Parks FG at Orgrimmar during BG corpse run scenario.
+- **Impact**: FG bot sits visibly idle on Orgrimmar bank for minutes. No assertions on the idle bot. No validation that the idle bot is even alive or responsive. If the idle bot errors out, nobody notices. Wastes test time — both bots should be doing meaningful work.
+- **Root Cause**: Tests use parking as a workaround for CombatCoordinator sending competing GOTO actions. The real fix is pausing the coordinator during tests, not parking bots.
+- **Fix**: (1) Both bots should execute the same test in the same area (fish together, mine different nodes, die together). (2) If truly only one bot can be active, assert on the idle bot's state at test end. (3) Add `PauseCoordinatorAsync()` to suppress AI GOTO actions during focused tests instead of parking.
+- **Status**: OPEN
+- **Severity**: High
+
+### BT-PARK-002: No Assertion on Idle Bot Health/State
+- **Observed**: When a bot is parked idle, there is zero verification at test end that the parked bot is still alive, responsive, and in a valid state. The parked bot could have been killed by mobs, crashed, disconnected, or fallen through the world.
+- **Tests**: All tests that park (FishingProfessionTests, GatheringProfessionTests, DeathCorpseRunTests).
+- **Impact**: Silent failures accumulate. If the parked FG bot crashes, all subsequent FG tests fail with no clear root cause traced back to the parking test.
+- **Fix**: At minimum, assert parked bot is still alive and in the expected position at test end.
+- **Status**: OPEN
+- **Severity**: Medium
+
+### BT-PARK-003: Bots Not Teleported Together
+- **Observed**: When a test requires a specific location, only the active bot is teleported there. The other bot stays wherever the last test left it. This means:
+  - The user can't observe both bots reacting in the same environment
+  - BG bot behavior near the test area is never validated
+  - Snapshot comparisons between FG and BG at the same location are impossible
+- **Tests**: Most tests except CombatRangeTests, BasicLoopTests, and OrgrimmarGroundZAnalysisTests (which do teleport both).
+- **Fix**: Default pattern should be: teleport BOTH bots to the test area, run test on both, compare results. Parking should be the exception with documented justification.
+- **Status**: OPEN
+- **Severity**: High
+
+---
+
+## 11. Feedback & Observability Gaps
+
+### BT-FEEDBACK-001: Silent Test Timeouts With No Progress Indication
+- **Observed**: Long-running tests (DeathCorpseRunTests 3min, GatheringProfessionTests 1min) have polling loops with no progress output until completion or timeout. From the outside, the test appears frozen.
+- **Impact**: User can't distinguish between "test running normally" and "test hung/errored". No way to know if FG is sitting idle because it's parked or because it crashed.
+- **Fix**: Add periodic progress logging every 10s in polling loops: "Still waiting for corpse run... BG pos=(x,y,z) FG pos=(x,y,z)".
+- **Status**: OPEN
+- **Severity**: Medium
+
+### BT-FEEDBACK-002: No Aggregate Test Summary at End of Suite
+- **Observed**: When running the full LiveValidation suite, individual test output is interleaved and hard to parse. There's no summary showing which bots participated in which tests, which bots errored, or cumulative state drift.
+- **Impact**: User sees "47 passed, 2 failed" but can't tell which tests exercised FG vs BG, or if FG was idle for 80% of the suite.
+- **Fix**: Add a test summary that logs per-test: bot(s) exercised, duration, location, and any warnings.
+- **Status**: OPEN
+- **Severity**: Low
+
+### BT-FEEDBACK-003: Error-Out Without Assertion — Test "Passes" on Silent Failure
+- **Observed**: Some tests catch exceptions in FG paths and emit warnings instead of failing. If the FG bot errors out during a test, the test continues with BG only and reports "passed" — the user has no idea FG failed unless they read the verbose output.
+- **Tests**: CombatLoopTests ("FG WARN: FG auto-attack failed"), DeathCorpseRunTests (FG failure → warning), GatheringProfessionTests (FG crash → continues with BG).
+- **Cross-reference**: BT-LOGIC-002 (FG failures silently downgraded to warnings).
+- **Impact**: FG could be completely non-functional and the suite shows green. The user sees FG sitting idle and doesn't know why.
+- **Fix**: FG failure should be a test failure with clear output: "FG FAILED: [reason]. BG continued alone." Or use `Skip.If` with explicit message.
+- **Status**: OPEN
+- **Severity**: High
+
+---
+
 ## Priority Fix Order
 
-1. **BT-COMBAT-002** — Fix creature teleport ACK bug (Critical — causes combat test failures)
-2. **BT-TELE-001** — Safe teleport helper for FG (Critical — prevents client crashes)
-3. **BT-COMBAT-001** — Implement proper auto-attack toggle pattern (High — fundamental combat reliability)
-4. **BT-SETUP-001** — Standardized test cleanup pattern (High — reduces all fixture contamination)
-5. **BT-VERIFY-006** — Fix GM mode toggle corruption with try/finally (High — prevents state leak cascade)
-6. **BT-VERIFY-002** — Use BotClearInventoryAsync instead of .reset items (High — stops cross-test contamination)
-7. **BT-VERIFY-005** — Always pair cleanup revive with teleport (High — prevents position contamination)
-8. **BT-DEATH-001** — Move death test to Orgrimmar (High — reduces crash risk + test time)
-9. **BT-LOGIC-002** — Make FG failures hard failures (High — stops hiding FG bugs)
-10. **BT-VERIFY-001** — Fix dead-state guard silent command blocking (High — stops hidden command failures)
-11. **BT-ITEM-001** — Centralize item setup (Medium — reduces duplication)
-12. **BT-VERIFY-003/004** — Verify item add and spell learn in snapshot (Medium — stops silent setup failures)
-13. **BT-LOGIC-001** — Consolidate distance helpers (Low — code quality)
+1. **BT-PARK-001** — Stop parking bots idle; both bots exercise every test (High — the #1 visible problem)
+2. **BT-FEEDBACK-003** — FG error-out must be a hard failure, not silent warning (High — stops hiding FG bugs)
+3. **BT-COMBAT-002** — Fix creature teleport ACK bug (Critical — causes combat test failures)
+4. **BT-TELE-001** — Safe teleport helper for FG (Critical — prevents client crashes)
+5. **BT-PARK-003** — Teleport both bots together by default (High — enables observation & comparison)
+6. **BT-COMBAT-001** — Implement proper auto-attack toggle pattern (High — fundamental combat reliability)
+7. **BT-SETUP-001** — Standardized test cleanup pattern (High — reduces all fixture contamination)
+8. **BT-VERIFY-006** — Fix GM mode toggle corruption with try/finally (High — prevents state leak cascade)
+9. **BT-VERIFY-002** — Use BotClearInventoryAsync instead of .reset items (High — stops cross-test contamination)
+10. **BT-VERIFY-005** — Always pair cleanup revive with teleport (High — prevents position contamination)
+11. **BT-DEATH-001** — Move death test to Orgrimmar (High — reduces crash risk + test time)
+12. **BT-LOGIC-002** — Make FG failures hard failures (High — stops hiding FG bugs)
+13. **BT-VERIFY-001** — Fix dead-state guard silent command blocking (High — stops hidden command failures)
+14. **BT-FEEDBACK-001** — Add periodic progress logging to long tests (Medium — observability)
+15. **BT-PARK-002** — Assert on idle bot state at test end (Medium — catch silent failures)
+16. **BT-ITEM-001** — Centralize item setup (Medium — reduces duplication)
+17. **BT-VERIFY-003/004** — Verify item add and spell learn in snapshot (Medium — stops silent setup failures)
+18. **BT-LOGIC-001** — Consolidate distance helpers (Low — code quality)
+19. **BT-FEEDBACK-002** — Add aggregate test summary (Low — nice to have)
