@@ -34,11 +34,18 @@ public class StateManagerTestClient : IDisposable
 
     /// <summary>
     /// Connect to StateManager. Call once before using query/forward methods.
+    /// Enables TCP keepalive to prevent the OS from silently dropping an idle connection.
     /// </summary>
     public async Task ConnectAsync(CancellationToken ct = default)
     {
         _tcp = new TcpClient();
         await _tcp.ConnectAsync(_host, _port, ct);
+
+        // Enable TCP keepalive so the connection survives long idle periods
+        _tcp.Client.SetSocketOption(
+            SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+        _tcp.NoDelay = true;
+
         _stream = _tcp.GetStream();
     }
 
@@ -131,36 +138,65 @@ public class StateManagerTestClient : IDisposable
         await _requestGate.WaitAsync(ct);
         try
         {
-            byte[] requestBytes;
-            lock (_lock)
-            {
-                requestBytes = request.ToByteArray();
-            }
-
-            var lengthPrefix = BitConverter.GetBytes(requestBytes.Length);
-
-            // Send length + payload
-            await _stream.WriteAsync(lengthPrefix, ct);
-            await _stream.WriteAsync(requestBytes, ct);
-            await _stream.FlushAsync(ct);
-
-            // Read response length
-            var responseLengthBuf = new byte[4];
-            await ReadExactAsync(_stream, responseLengthBuf, 4, ct);
-            var responseLength = BitConverter.ToInt32(responseLengthBuf, 0);
-
-            // Read response payload
-            var responsePayload = new byte[responseLength];
-            await ReadExactAsync(_stream, responsePayload, responseLength, ct);
-
-            var response = new StateChangeResponse();
-            response.MergeFrom(responsePayload);
-            return response;
+            return await SendRequestCoreAsync(request, ct);
+        }
+        catch (IOException) when (!ct.IsCancellationRequested)
+        {
+            // Connection was lost — attempt a single reconnect
+            await ReconnectAsync(ct);
+            return await SendRequestCoreAsync(request, ct);
+        }
+        catch (SocketException) when (!ct.IsCancellationRequested)
+        {
+            await ReconnectAsync(ct);
+            return await SendRequestCoreAsync(request, ct);
         }
         finally
         {
             _requestGate.Release();
         }
+    }
+
+    private async Task<StateChangeResponse> SendRequestCoreAsync(AsyncRequest request, CancellationToken ct)
+    {
+        byte[] requestBytes;
+        lock (_lock)
+        {
+            requestBytes = request.ToByteArray();
+        }
+
+        var lengthPrefix = BitConverter.GetBytes(requestBytes.Length);
+
+        // Send length + payload
+        await _stream!.WriteAsync(lengthPrefix, ct);
+        await _stream.WriteAsync(requestBytes, ct);
+        await _stream.FlushAsync(ct);
+
+        // Read response length
+        var responseLengthBuf = new byte[4];
+        await ReadExactAsync(_stream, responseLengthBuf, 4, ct);
+        var responseLength = BitConverter.ToInt32(responseLengthBuf, 0);
+
+        // Read response payload
+        var responsePayload = new byte[responseLength];
+        await ReadExactAsync(_stream, responsePayload, responseLength, ct);
+
+        var response = new StateChangeResponse();
+        response.MergeFrom(responsePayload);
+        return response;
+    }
+
+    private async Task ReconnectAsync(CancellationToken ct)
+    {
+        _stream?.Dispose();
+        _tcp?.Dispose();
+
+        _tcp = new TcpClient();
+        await _tcp.ConnectAsync(_host, _port, ct);
+        _tcp.Client.SetSocketOption(
+            SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+        _tcp.NoDelay = true;
+        _stream = _tcp.GetStream();
     }
 
     private static async Task ReadExactAsync(NetworkStream stream, byte[] buffer, int count, CancellationToken ct)

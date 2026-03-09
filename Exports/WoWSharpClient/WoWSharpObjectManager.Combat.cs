@@ -234,6 +234,26 @@ namespace WoWSharpClient
         public void StartMeleeAttack()
         {
             if (_woWClient == null) return;
+
+            // Ensure the player model's TargetGuid is consistent with _currentTargetGuid
+            // so snapshots immediately reflect the attack target.  SetTarget() normally
+            // does this, but callers (e.g. BotProfile rotation tasks) may invoke
+            // StartMeleeAttack() after SetTarget was already called, and an intervening
+            // SMSG_UPDATE_OBJECT could have clobbered TargetGuid back to 0.
+            if (_currentTargetGuid != 0)
+            {
+                if (Player is Models.WoWLocalPlayer localPlayer)
+                {
+                    localPlayer.TargetGuid = _currentTargetGuid;
+                    localPlayer.TargetHighGuid.LowGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid & 0xFFFFFFFF));
+                    localPlayer.TargetHighGuid.HighGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid >> 32));
+                }
+                else if (Player is Models.WoWUnit unit)
+                {
+                    unit.TargetGuid = _currentTargetGuid;
+                }
+            }
+
             // CMSG_ATTACKSWING requires the target's full 8-byte GUID
             var payload = BitConverter.GetBytes(_currentTargetGuid);
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSWING, payload);
