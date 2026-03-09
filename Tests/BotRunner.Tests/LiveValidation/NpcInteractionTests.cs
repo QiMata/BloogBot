@@ -52,7 +52,7 @@ public class NpcInteractionTests
         {
             EnsureBagHasItemAsync(_bot.BgAccountName!, "BG", LinenCloth, 5)
         };
-        if (_bot.ForegroundBot != null)
+        if (_bot.IsFgActionable)
             setupTasks.Add(EnsureBagHasItemAsync(_bot.FgAccountName!, "FG", LinenCloth, 5));
         await Task.WhenAll(setupTasks);
 
@@ -73,7 +73,7 @@ public class NpcInteractionTests
         var bgSetup = Task.WhenAll(
             EnsureMoneyAtLeastAsync(_bot.BgAccountName!, "BG", 10000),
             EnsureLevelAtLeastAsync(_bot.BgAccountName!, "BG", 10));
-        if (_bot.ForegroundBot != null)
+        if (_bot.IsFgActionable)
         {
             var fgSetup = Task.WhenAll(
                 EnsureMoneyAtLeastAsync(_bot.FgAccountName!, "FG", 10000),
@@ -178,7 +178,7 @@ public class NpcInteractionTests
         }
         else
         {
-            if (_bot.ForegroundBot != null)
+            if (_bot.IsFgActionable)
                 _output.WriteLine("[WARN] FG bot present but not actionable (dead/ghost/actions dropped). Running BG-only.");
             var bgOk = await InteractWithNpc(_bot.BgAccountName!, () => _bot.BackgroundBot, npcFlag, "BG");
             if (requireNpcInteraction)

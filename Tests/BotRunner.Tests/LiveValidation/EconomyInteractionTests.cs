@@ -42,7 +42,7 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Bank_OpenAndDeposit()
     {
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
 
         // Setup both bots in parallel (items + location).
         var setupTasks = new System.Collections.Generic.List<Task>
@@ -82,7 +82,7 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task AuctionHouse_OpenAndList()
     {
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
 
         // Setup both bots at AH location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
@@ -116,7 +116,7 @@ public class EconomyInteractionTests
     [SkippableFact]
     public async Task Mail_OpenMailbox()
     {
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
 
         // Send mail and setup location in parallel for both bots.
         var setupTasks = new System.Collections.Generic.List<Task>

@@ -60,7 +60,7 @@ public class BasicLoopTests
         _output.WriteLine($"  Position: ({bgPos.X:F2}, {bgPos.Y:F2}, {bgPos.Z:F2})");
         _output.WriteLine($"  HP: {bg.Player.Unit.Health}/{bg.Player.Unit.MaxHealth}");
 
-        if (_bot.ForegroundBot != null)
+        if (_bot.IsFgActionable)
         {
             var fg = _bot.ForegroundBot;
             Assert.Equal("InWorld", fg.ScreenState);
@@ -84,7 +84,7 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Physics_PlayerNotFallingThroughWorld()
     {
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
 
         // Setup both bots in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
@@ -134,7 +134,7 @@ public class BasicLoopTests
 
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
 
         // Setup both bots in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>

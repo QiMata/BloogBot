@@ -50,7 +50,7 @@ public class SpellCastOnTargetTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
 
         if (hasFg)
         {

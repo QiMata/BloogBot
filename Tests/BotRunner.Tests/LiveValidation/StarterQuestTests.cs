@@ -59,7 +59,7 @@ public class StarterQuestTests
     [SkippableFact]
     public async Task Quest_AcceptAndTurnIn_StarterQuest()
     {
-        if (_bot.ForegroundBot != null)
+        if (_bot.IsFgActionable)
         {
             _output.WriteLine("[PARITY] Running BG and FG starter quest scenarios in parallel.");
             var bgTask = RunStarterQuestScenario(_bot.BgAccountName!, "BG");

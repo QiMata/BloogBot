@@ -56,7 +56,7 @@ public class LootCorpseTests
     {
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
 
         var claimedTargets = new ConcurrentDictionary<ulong, string>();
 

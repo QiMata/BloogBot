@@ -89,7 +89,7 @@ public class GatheringProfessionTests
 
         // --- FG FIRST: native WoW right-click interaction (gold standard) ---
         var fgAccount = _bot.FgAccountName;
-        if (fgAccount != null && _bot.ForegroundBot != null)
+        if (fgAccount != null && _bot.IsFgActionable)
         {
             // Park BG bot nearby so CombatCoordinator doesn't send
             // competing GOTO actions that overwrite the test's navigation.
@@ -200,7 +200,7 @@ public class GatheringProfessionTests
 
         // --- FG FIRST: native WoW right-click interaction (gold standard) ---
         var fgAccount = _bot.FgAccountName;
-        if (fgAccount != null && _bot.ForegroundBot != null)
+        if (fgAccount != null && _bot.IsFgActionable)
         {
             // Park BG bot nearby so CombatCoordinator doesn't send
             // competing GOTO actions that overwrite the test's navigation.

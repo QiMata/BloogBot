@@ -41,7 +41,7 @@ public class QuestInteractionTests
     {
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
 
-        if (_bot.ForegroundBot != null)
+        if (_bot.IsFgActionable)
         {
             _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ===");
             _output.WriteLine("[PARITY] Running BG and FG quest scenarios in parallel.");

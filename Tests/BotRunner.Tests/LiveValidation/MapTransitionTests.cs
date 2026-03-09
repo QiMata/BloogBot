@@ -83,7 +83,7 @@ public class MapTransitionTests
         }
         else
         {
-            if (_bot.ForegroundBot != null)
+            if (_bot.IsFgActionable)
                 _output.WriteLine("[WARN] FG bot present but not actionable — running BG-only.");
             await RunSingleMapTransitionTest(bgAccount, "BG");
         }

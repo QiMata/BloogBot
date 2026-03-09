@@ -47,7 +47,7 @@ public class CharacterLifecycleTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
         if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
@@ -82,7 +82,7 @@ public class CharacterLifecycleTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
         if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
@@ -123,7 +123,7 @@ public class CharacterLifecycleTests
         _output.WriteLine($"=== BG Bot: {bgCharacter} ({bgAccount}) ===");
 
         bool bgPassed, fgPassed = false;
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
         if (hasFg)
         {
             var fgAccount = _bot.FgAccountName!;
@@ -168,7 +168,7 @@ public class CharacterLifecycleTests
         _output.WriteLine($"[BG] Character={bgSnap.CharacterName}, Account={bgSnap.AccountName}, GUID=0x{bgSnap.Player.Unit.GameObject.Base.Guid:X}");
         _output.WriteLine($"[BG] Position=({bgPos.X:F1}, {bgPos.Y:F1}, {bgPos.Z:F1}), Level={bgSnap.Player.Unit.GameObject.Level}");
 
-        if (_bot.ForegroundBot != null)
+        if (_bot.IsFgActionable)
         {
             var fgSnap = _bot.ForegroundBot;
             Assert.Equal("InWorld", fgSnap.ScreenState);

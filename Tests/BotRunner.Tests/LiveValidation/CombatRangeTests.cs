@@ -101,7 +101,7 @@ public class CombatRangeTests
         _output.WriteLine($"  [BG] Mobs with CombatReach > 0: {mobsWithReach}/{mobs.Count}");
 
         // FG parity — ensure FG bot also gets CombatReach data
-        if (_bot.ForegroundBot != null)
+        if (_bot.IsFgActionable)
         {
             var fgAccount = _bot.FgAccountName!;
             await EnsureAliveAndNearMobsAsync(fgAccount, "FG");
@@ -154,7 +154,7 @@ public class CombatRangeTests
         await _bot.SendGmChatCommandTrackedAsync(bgAccount, ".damage 5000", captureResponse: true, delayMs: 500);
 
         // FG parity — teleport FG to mob area first, then find and attack
-        if (_bot.ForegroundBot != null)
+        if (_bot.IsFgActionable)
         {
             var fgAccount = _bot.FgAccountName!;
             await EnsureAliveAndNearMobsAsync(fgAccount, "FG");

@@ -43,7 +43,7 @@ public class TalentAllocationTests
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ===");
 
         bool bgLearned, fgLearned = false;
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
         if (hasFg)
         {
             _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ===");

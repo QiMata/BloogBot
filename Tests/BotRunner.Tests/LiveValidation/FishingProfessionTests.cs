@@ -82,7 +82,7 @@ public class FishingProfessionTests
         Assert.NotNull(bgAccount);
         _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
 
-        string? fgAccount = _bot.ForegroundBot != null ? _bot.FgAccountName : null;
+        string? fgAccount = _bot.IsFgActionable ? _bot.FgAccountName : null;
         if (fgAccount != null)
             _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccount})");
 
