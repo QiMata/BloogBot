@@ -311,9 +311,10 @@ public class BotServiceFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Verifies that FastCall.dll exists in the Bot output directory.
-    /// The correct version (13KB, 25 exports including Safe* SEH wrappers) is deployed
-    /// by ForegroundBotRunner.csproj CopyToOutputDirectory="Always" from Resources/.
+    /// Verifies that FastCall.dll in Bot output is the correct version (13KB, 25 exports
+    /// including Safe* SEH wrappers). If a stale >20KB version is found, replaces it from
+    /// ForegroundBotRunner/Resources/. This prevents ERROR #132 crashes caused by missing
+    /// Safe* entry points (EntryPointNotFoundException on WoW's main thread every second).
     /// </summary>
     private void VerifyFastCallDll()
     {
@@ -328,11 +329,52 @@ public class BotServiceFixture : IAsyncLifetime
 
             var fileInfo = new FileInfo(fastCallPath);
             Log($"  [FastCall] {fastCallPath}: {fileInfo.Length} bytes, modified {fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
+
+            // The correct FastCall.dll is ~14KB (25 exports with Safe* SEH wrappers).
+            // The OLD version is ~40KB (9 exports, no Safe* functions).
+            // If we detect a stale version, replace it from the canonical source.
+            if (fileInfo.Length > 20_000)
+            {
+                Log($"  [FastCall] STALE DLL DETECTED ({fileInfo.Length} bytes > 20KB). Replacing from Resources/...");
+                var sourcePath = FindCanonicalFastCallDll();
+                if (sourcePath != null)
+                {
+                    File.Copy(sourcePath, fastCallPath, overwrite: true);
+                    var newInfo = new FileInfo(fastCallPath);
+                    Log($"  [FastCall] Replaced with {sourcePath}: {newInfo.Length} bytes");
+                }
+                else
+                {
+                    Log($"  [FastCall] ERROR: Cannot find canonical FastCall.dll in Resources/. Build will likely crash.");
+                }
+            }
         }
         catch (Exception ex)
         {
             Log($"  [FastCall] Error verifying FastCall.dll: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Finds the canonical FastCall.dll from ForegroundBotRunner/Resources/.
+    /// Walks up from test output dir to solution root, then checks the known path.
+    /// </summary>
+    private static string? FindCanonicalFastCallDll()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "Services", "ForegroundBotRunner", "Resources", "FastCall.dll");
+            if (File.Exists(candidate))
+            {
+                var info = new FileInfo(candidate);
+                // Sanity check: canonical version should be <20KB
+                if (info.Length < 20_000)
+                    return candidate;
+            }
+            dir = dir.Parent;
+        }
+        return null;
     }
 
     public async Task DisposeAsync()

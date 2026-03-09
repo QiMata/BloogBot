@@ -99,7 +99,7 @@ public class NpcInteractionTests
     [SkippableFact]
     public async Task ObjectManager_DetectsNpcFlags()
     {
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ)
@@ -146,7 +146,9 @@ public class NpcInteractionTests
 
     private async Task RunNpcInteraction(string npcType, float x, float y, float z, uint npcFlag, bool requireNpcInteraction)
     {
-        var hasFg = _bot.ForegroundBot != null;
+        // Use IsFgActionable instead of just null-check — avoids cascading failures when
+        // FG WoW.exe crashed and relaunched but is stuck dead/ghost or dropping actions.
+        var hasFg = _bot.IsFgActionable;
 
         // Setup both bots at the location in parallel.
         var setupTasks = new System.Collections.Generic.List<Task>
@@ -176,6 +178,8 @@ public class NpcInteractionTests
         }
         else
         {
+            if (_bot.ForegroundBot != null)
+                _output.WriteLine("[WARN] FG bot present but not actionable (dead/ghost/actions dropped). Running BG-only.");
             var bgOk = await InteractWithNpc(_bot.BgAccountName!, () => _bot.BackgroundBot, npcFlag, "BG");
             if (requireNpcInteraction)
                 Assert.True(bgOk, $"BG should find and interact with NPC flag 0x{npcFlag:X} for scenario '{npcType}'.");

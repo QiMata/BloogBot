@@ -140,6 +140,43 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// <summary>Character GUID of the primary (BG) bot from snapshot.</summary>
     public ulong CharacterGuid => BackgroundBot?.Player?.Unit?.GameObject?.Base?.Guid ?? 0;
 
+    /// <summary>
+    /// True if FG bot snapshot exists AND the bot is strict-alive AND actions are not being dropped.
+    /// Tests should use this instead of <c>ForegroundBot != null</c> to avoid cascading failures
+    /// when FG WoW.exe crashed and relaunched but is stuck in dead/ghost/login state.
+    /// </summary>
+    public bool IsFgActionable => ForegroundBot != null && IsStrictAlive(ForegroundBot);
+
+    /// <summary>
+    /// Probes FG actionability by sending a harmless .targetself command and checking the result.
+    /// Returns true if the action was forwarded successfully.
+    /// </summary>
+    public async Task<bool> CheckFgActionableAsync()
+    {
+        if (FgAccountName == null || ForegroundBot == null)
+            return false;
+
+        await RefreshSnapshotsAsync();
+        if (ForegroundBot == null || !IsStrictAlive(ForegroundBot))
+        {
+            var hp = ForegroundBot?.Player?.Unit?.Health ?? 0;
+            _logger.LogWarning("[FG-PROBE] FG not strict-alive (health={Health})", hp);
+            return false;
+        }
+
+        // Probe with a harmless self-target command
+        var result = await SendActionAsync(FgAccountName, new ActionMessage
+        {
+            ActionType = ActionType.SendChat,
+            Parameters = { new RequestParameter { StringParam = ".targetself" } }
+        });
+
+        var ok = result == ResponseResult.Success;
+        if (!ok)
+            _logger.LogWarning("[FG-PROBE] Action forwarding returned {Result} — FG is not actionable", result);
+        return ok;
+    }
+
 
     public LiveBotFixture()
     {

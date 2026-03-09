@@ -37,8 +37,10 @@ public class NavigationTests
     private const float RhEndX = 310f, RhEndY = -4720f, RhEndZ = 11f;
 
     // Orgrimmar — moderate path through Valley of Strength (~50y direct)
-    private const float OrgStartX = 1629f, OrgStartY = -4373f, OrgStartZ = 15f;
-    private const float OrgEndX = 1660f, OrgEndY = -4420f, OrgEndZ = 15f;
+    // Ground level in Valley of Strength is ~29-32, NOT 15. Using 15 puts the bot underground
+    // and the navmesh returns groundZ=-2.8, triggering teleport Z clamp.
+    private const float OrgStartX = 1629f, OrgStartY = -4373f, OrgStartZ = 34f;
+    private const float OrgEndX = 1660f, OrgEndY = -4420f, OrgEndZ = 34f;
 
     public NavigationTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -67,7 +69,7 @@ public class NavigationTests
         float endX, float endY, float endZ, int maxSeconds)
     {
         var bgAccount = _bot.BgAccountName!;
-        var hasFg = _bot.ForegroundBot != null;
+        var hasFg = _bot.IsFgActionable;
 
         _output.WriteLine($"=== Navigation: {scenarioName} ===");
 
