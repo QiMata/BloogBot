@@ -311,8 +311,9 @@ public class BotServiceFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Verifies that FastCall.dll in the Bot output directory contains the LuaCall export.
-    /// If the file is suspiciously small (< 20KB), attempts to copy the correct version.
+    /// Verifies that FastCall.dll exists in the Bot output directory.
+    /// The correct version (13KB, 25 exports including Safe* SEH wrappers) is deployed
+    /// by ForegroundBotRunner.csproj CopyToOutputDirectory="Always" from Resources/.
     /// </summary>
     private void VerifyFastCallDll()
     {
@@ -322,55 +323,15 @@ public class BotServiceFixture : IAsyncLifetime
             if (!File.Exists(fastCallPath))
             {
                 Log($"  [FastCall] WARNING: FastCall.dll not found at {fastCallPath}");
-                TryCopyCorrectFastCall(fastCallPath);
                 return;
             }
 
             var fileInfo = new FileInfo(fastCallPath);
             Log($"  [FastCall] {fastCallPath}: {fileInfo.Length} bytes, modified {fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
-
-            // The correct FastCall.dll with LuaCall is ~62KB. The stale version is ~12KB.
-            if (fileInfo.Length < 20_000)
-            {
-                Log($"  [FastCall] WARNING: FastCall.dll is only {fileInfo.Length} bytes — likely missing LuaCall export!");
-                TryCopyCorrectFastCall(fastCallPath);
-            }
         }
         catch (Exception ex)
         {
             Log($"  [FastCall] Error verifying FastCall.dll: {ex.Message}");
-        }
-    }
-
-    private void TryCopyCorrectFastCall(string targetPath)
-    {
-        try
-        {
-            var botDir = Path.GetDirectoryName(Path.GetDirectoryName(targetPath));
-            if (botDir == null) return;
-            var sourcePath = Path.Combine(Path.GetDirectoryName(botDir)!, "net8.0", "FastCall.dll");
-
-            if (File.Exists(sourcePath))
-            {
-                var sourceInfo = new FileInfo(sourcePath);
-                if (sourceInfo.Length > 20_000)
-                {
-                    File.Copy(sourcePath, targetPath, overwrite: true);
-                    Log($"  [FastCall] Copied correct FastCall.dll ({sourceInfo.Length} bytes) from {sourcePath}");
-                }
-                else
-                {
-                    Log($"  [FastCall] Source FastCall.dll is also small ({sourceInfo.Length} bytes) — cannot auto-fix");
-                }
-            }
-            else
-            {
-                Log($"  [FastCall] Source not found at {sourcePath} — cannot auto-fix");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"  [FastCall] Error copying FastCall.dll: {ex.Message}");
         }
     }
 
