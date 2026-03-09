@@ -230,13 +230,65 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 
 ---
 
+## 9. Command & Verification Gaps
+
+### BT-VERIFY-001: Dead-State Guard Silently Blocks Commands
+- **Observed**: `LiveBotFixture.BotChat.cs` `SendGmChatCommandTrackedAsync` has a dead-state guard that blocks commands when the bot is dead/ghost. It returns `ResponseResult.Failure` but some callers ignore the return value.
+- **Impact**: Commands like `.gm off` in CombatLoopTests are silently skipped if bot is dead, but the test assumes they ran. GM mode state leaks.
+- **Fix**: Callers must check return value, or dead-state guard should throw/skip rather than silently fail.
+- **Status**: OPEN
+- **Severity**: High
+
+### BT-VERIFY-002: .reset items Too Broad — Strips Equipment
+- **Observed**: Tests call `.reset items` to clear inventory but this also strips ALL equipped gear. CombatLoopTests equips Worn Mace, then a later test calls `.reset items`, stripping the weapon.
+- **Tests**: GatheringProfessionTests, FishingProfessionTests, EquipmentEquipTests.
+- **Impact**: Cross-test contamination. Combat tests fail because weapon was stripped by gathering test cleanup.
+- **Fix**: Use `BotClearInventoryAsync()` (bags only) instead of `.reset items` when only inventory needs clearing.
+- **Status**: OPEN
+- **Severity**: High
+
+### BT-VERIFY-003: Item Addition Without Inventory Verification
+- **Observed**: `.additem` calls don't verify the item actually appeared in the bag snapshot. If bags are full or server rejects, test proceeds with wrong state.
+- **Tests**: VendorBuySellTests, LootCorpseTests, CraftingProfessionTests.
+- **Fix**: After `.additem`, poll snapshot until item appears in `BagContents` (like GatheringProfessionTests does for fishing pole).
+- **Status**: OPEN
+- **Severity**: Medium
+
+### BT-VERIFY-004: Spell Learning Without Verification
+- **Observed**: `.learn` calls don't verify spell appears in `SpellList` snapshot. If `.learn` fails silently (permissions, server error), test continues with wrong setup.
+- **Tests**: FishingProfessionTests (7 spell learns with no verification), CraftingProfessionTests.
+- **Fix**: After `.learn`, verify spell in snapshot. Use `AssertCommandSucceeded` on the trace.
+- **Status**: OPEN
+- **Severity**: Medium
+
+### BT-VERIFY-005: Cleanup Revive Without Teleport
+- **Observed**: `DeathCorpseRunTests` revives bot after failed corpse run but doesn't teleport back to safe zone. Bot left at remote Durotar death location.
+- **Impact**: Downstream tests find bot in unexpected position.
+- **Fix**: Always pair revive with teleport to Orgrimmar safe zone in cleanup.
+- **Status**: OPEN
+- **Severity**: High
+
+### BT-VERIFY-006: GM Mode Toggle Corruption on FG Failure
+- **Observed**: `CombatLoopTests` turns `.gm off` for FG combat (line 133) and restores `.gm on` at cleanup (line 409). If test fails between those lines, FG remains in `.gm off` state.
+- **Impact**: All subsequent FG tests see GM mode off — teleports fail, `.learn`/`.damage` fail.
+- **Fix**: Use try/finally to guarantee `.gm on` restoration. Or don't toggle GM mode at all.
+- **Status**: OPEN
+- **Severity**: High
+
+---
+
 ## Priority Fix Order
 
 1. **BT-COMBAT-002** — Fix creature teleport ACK bug (Critical — causes combat test failures)
-2. **BT-COMBAT-001** — Implement proper auto-attack toggle pattern (High — fundamental combat reliability)
-3. **BT-SETUP-001** — Standardized test cleanup pattern (High — reduces all fixture contamination)
-4. **BT-DEATH-001** — Move death test to Orgrimmar (High — reduces crash risk + test time)
-5. **BT-LOGIC-002** — Make FG failures hard failures (High — stops hiding FG bugs)
-6. **BT-TELE-001** — Safe teleport helper for FG (Critical — prevents client crashes)
-7. **BT-ITEM-001** — Centralize item setup (Medium — reduces duplication)
-8. **BT-LOGIC-001** — Consolidate distance helpers (Low — code quality)
+2. **BT-TELE-001** — Safe teleport helper for FG (Critical — prevents client crashes)
+3. **BT-COMBAT-001** — Implement proper auto-attack toggle pattern (High — fundamental combat reliability)
+4. **BT-SETUP-001** — Standardized test cleanup pattern (High — reduces all fixture contamination)
+5. **BT-VERIFY-006** — Fix GM mode toggle corruption with try/finally (High — prevents state leak cascade)
+6. **BT-VERIFY-002** — Use BotClearInventoryAsync instead of .reset items (High — stops cross-test contamination)
+7. **BT-VERIFY-005** — Always pair cleanup revive with teleport (High — prevents position contamination)
+8. **BT-DEATH-001** — Move death test to Orgrimmar (High — reduces crash risk + test time)
+9. **BT-LOGIC-002** — Make FG failures hard failures (High — stops hiding FG bugs)
+10. **BT-VERIFY-001** — Fix dead-state guard silent command blocking (High — stops hidden command failures)
+11. **BT-ITEM-001** — Centralize item setup (Medium — reduces duplication)
+12. **BT-VERIFY-003/004** — Verify item add and spell learn in snapshot (Medium — stops silent setup failures)
+13. **BT-LOGIC-001** — Consolidate distance helpers (Low — code quality)
