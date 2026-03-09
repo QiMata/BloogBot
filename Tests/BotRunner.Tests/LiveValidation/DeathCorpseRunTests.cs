@@ -167,7 +167,7 @@ public class DeathCorpseRunTests
             }
 
             // Teleport both bots back to Orgrimmar safe zone to prevent position contamination
-            const float safeX = 1629.4f, safeY = -4373.4f, safeZ = 15f;
+            const float safeX = 1629.4f, safeY = -4373.4f, safeZ = 34f;
             await Task.WhenAll(
                 _bot.BotTeleportAsync(bgAccount!, 1, safeX, safeY, safeZ),
                 _bot.BotTeleportAsync(fgAccount!, 1, safeX, safeY, safeZ));
@@ -330,19 +330,13 @@ public class DeathCorpseRunTests
         if (!IsStrictAlive(setupState))
             return await FailAsync("unable to establish strict-alive setup state before death test");
 
-        // Step 2: force deterministic setup in Orgrimmar before kill.
-        // Orgrimmar has multi-level terrain (Z delta 20+y between graveyard and corpse)
-        // which stress-tests the dynamic 2D approach range in RetrieveCorpseTask.
-        _output.WriteLine($"  [{label}] Step 2: Teleport to Orgrimmar setup before kill");
-        var teleportResult = await _bot.TeleportToNamedAsync(characterName, "Orgrimmar");
-        _output.WriteLine($"  [{label}] Teleport result: {teleportResult}");
-        if (string.IsNullOrWhiteSpace(teleportResult)
-            || teleportResult.StartsWith("FAULT", StringComparison.OrdinalIgnoreCase)
-            || teleportResult.Contains("not found", StringComparison.OrdinalIgnoreCase)
-            || teleportResult.Contains("syntax", StringComparison.OrdinalIgnoreCase))
-        {
-            return await FailAsync("unable to execute Orgrimmar named teleport setup");
-        }
+        // Step 2: force deterministic setup at a location in Durotar far from graveyards.
+        // Orgrimmar graveyard is too close to the named teleport point, causing ghost to
+        // spawn within retrieve range and skip the runback entirely. Use southern Durotar
+        // road between Razor Hill and Sen'jin Village — nearest graveyard is >80y away.
+        const float deathX = -830f, deathY = -4910f, deathZ = 24f;
+        _output.WriteLine($"  [{label}] Step 2: Teleport to Durotar death position ({deathX},{deathY},{deathZ})");
+        await _bot.BotTeleportAsync(account, 1, deathX, deathY, deathZ);
 
         // Poll for position to stabilize after teleport instead of fixed delay.
         var tpSw = Stopwatch.StartNew();
@@ -357,7 +351,7 @@ public class DeathCorpseRunTests
         }
         var setupPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         if (!IsStrictAlive(setupState) || setupPos == null)
-            return await FailAsync("invalid setup after Orgrimmar teleport");
+            return await FailAsync("invalid setup after Durotar teleport");
 
         _output.WriteLine($"  [{label}] Setup position: ({setupPos.X:F1}, {setupPos.Y:F1}, {setupPos.Z:F1})");
         _output.WriteLine($"  [{label}] Setup life-state: HP={setupState.Health}, Ghost={setupState.Ghost}, StandDead={setupState.StandDead}");

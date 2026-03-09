@@ -227,6 +227,8 @@ namespace WoWSharpClient
         public void StopAttack()
         {
             if (_woWClient == null) return;
+            if (Player is Models.WoWLocalPlayer lp)
+                lp.IsAutoAttacking = false;
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSTOP, []);
         }
 
@@ -247,6 +249,18 @@ namespace WoWSharpClient
                     localPlayer.TargetGuid = _currentTargetGuid;
                     localPlayer.TargetHighGuid.LowGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid & 0xFFFFFFFF));
                     localPlayer.TargetHighGuid.HighGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid >> 32));
+
+                    // MaNGOS requires a recent movement packet to process CMSG_ATTACKSWING.
+                    // After teleport + settle, the bot is stationary with MOVEFLAG_NONE and
+                    // IsAutoAttacking=false, so MovementController sends no heartbeats.
+                    // Force a MSG_MOVE_HEARTBEAT here so the server has fresh movement data,
+                    // then set IsAutoAttacking so the controller keeps sending periodic heartbeats.
+                    var gameTimeMs = (uint)_worldTimeTracker.NowMS.TotalMilliseconds;
+                    var heartbeat = Parsers.MovementPacketHandler.BuildMovementInfoBuffer(localPlayer, gameTimeMs, 0);
+                    _ = _woWClient.SendMovementOpcodeAsync(Opcode.MSG_MOVE_HEARTBEAT, heartbeat);
+                    localPlayer.IsAutoAttacking = true;
+                    Log.Information("[StartMeleeAttack] Sent pre-attack heartbeat at ({X:F1},{Y:F1},{Z:F1}), IsAutoAttacking=true",
+                        localPlayer.Position.X, localPlayer.Position.Y, localPlayer.Position.Z);
                 }
                 else if (Player is Models.WoWUnit unit)
                 {
