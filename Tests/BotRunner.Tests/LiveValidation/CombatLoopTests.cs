@@ -44,13 +44,21 @@ public class CombatLoopTests
     private const float BgMobAreaX = -284f;
     private const float BgMobAreaY = -4383f;
     private const float BgMobAreaZ = 57f;
-    // FG area: Different Valley of Trials scorpid cluster.
-    private const float FgMobAreaX = -354f;
-    private const float FgMobAreaY = -4421f;
-    private const float FgMobAreaZ = 51f;
+    // FG area: Same scorpid field as BG. Sequential execution means no contention.
+    // BG kills one mob; FG attacks a different one from the same cluster.
+    // Previous separate coords (-354, -4421) only had Lazy Peons (Friendly, react=4),
+    // and (-290, -4395) had no valid terrain for FG (fell underground).
+    private const float FgMobAreaX = BgMobAreaX;
+    private const float FgMobAreaY = BgMobAreaY;
+    private const float FgMobAreaZ = BgMobAreaZ;
     private const float MobAreaRadius = 80f;
     private const ulong CreatureGuidHighMask = 0xF000000000000000UL;
     private const ulong CreatureGuidHighPrefix = 0xF000000000000000UL;
+
+    // Known hostile creature template entries for Valley of Trials combat testing.
+    // UnitReaction is NOT reliable in snapshots: BG defaults to Hated(0), FG may report Friendly(4)
+    // even for hostile mobs (GM mode side-effect). Filter by entry instead.
+    private static readonly HashSet<uint> HostileCreatureEntries = [3098, 3124, 3108]; // Mottled Boar, Scorpid Worker, Vile Familiar
 
     // Melee range: WoW melee reach = weapon range (~2y) + both capsule radii (~0.4y each) + sampling margin.
     // Snapshot is sampled at 350ms intervals; at run speed ~7m/s the bot moves ~2.45m between samples,
@@ -257,80 +265,130 @@ public class CombatLoopTests
         await FaceTargetAsync(account, label, targetGuid);
         await Task.Delay(500);
 
-        // Re-sample health before attack. Retry a few times — FG snapshot may be stale after teleport.
-        initialHealth = await GetTargetHealthAsync(account, targetGuid);
-        if (initialHealth == 0)
+        // ATTACK LOOP: Attempt up to 3 attack cycles. Mob may evade on first hit if
+        // MaNGOS pathfinding fails at the mob's specific spawn position. Re-engaging after
+        // evade (HP resets to max, SMSG_ATTACKSTOP clears IsAutoAttacking) usually succeeds
+        // on the second attempt once the mob returns to a pathable position.
+        var damagedByBot = false;
+        for (int attackAttempt = 0; attackAttempt < 3 && !damagedByBot; attackAttempt++)
         {
-            _output.WriteLine($"  [{label}] Target HP=0; retrying snapshot refresh...");
-            for (int retryHp = 0; retryHp < 5 && initialHealth == 0; retryHp++)
+            if (attackAttempt > 0)
             {
-                await Task.Delay(1000);
+                _output.WriteLine($"  [{label}] Mob evaded — re-engaging (attempt {attackAttempt + 1}/3)...");
+                // Re-sample mob position (it may have teleported back to spawn)
                 await _bot.RefreshSnapshotsAsync();
-                initialHealth = await GetTargetHealthAsync(account, targetGuid);
+                var snap = await _bot.GetSnapshotAsync(account);
+                var mob = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+                var mPos = mob?.GameObject?.Base?.Position;
+                if (mob == null || mob.Health == 0)
+                {
+                    _output.WriteLine($"  [{label}] Mob dead or despawned after evade.");
+                    return false;
+                }
+                // Walk back to mob's new position
+                if (mPos != null)
+                {
+                    mobX = mPos.X; mobY = mPos.Y; mobZ = mPos.Z;
+                    _output.WriteLine($"  [{label}] Re-walking to mob at ({mobX:F1},{mobY:F1},{mobZ:F1})");
+                    await _bot.SendActionAsync(account, new ActionMessage
+                    {
+                        ActionType = ActionType.Goto,
+                        Parameters =
+                        {
+                            new RequestParameter { FloatParam = mobX },
+                            new RequestParameter { FloatParam = mobY },
+                            new RequestParameter { FloatParam = mobZ },
+                            new RequestParameter { FloatParam = 0 },
+                        }
+                    });
+                    await WaitForMeleeRangeAsync(account, targetGuid, MeleeRange, TimeSpan.FromSeconds(10));
+                }
+                await Task.Delay(1000);
+                await FaceTargetAsync(account, label, targetGuid);
+                await Task.Delay(500);
+            }
+
+            // Re-sample health before attack.
+            initialHealth = await GetTargetHealthAsync(account, targetGuid);
+            if (initialHealth == 0)
+            {
+                _output.WriteLine($"  [{label}] Target HP=0; retrying snapshot refresh...");
+                for (int retryHp = 0; retryHp < 5 && initialHealth == 0; retryHp++)
+                {
+                    await Task.Delay(1000);
+                    await _bot.RefreshSnapshotsAsync();
+                    initialHealth = await GetTargetHealthAsync(account, targetGuid);
+                }
+            }
+            if (initialHealth == 0)
+            {
+                _output.WriteLine($"  [{label}] Target died before attack (HP=0).");
+                return false;
+            }
+
+            var preAttackDist = await GetDistanceToTargetAsync(account, targetGuid);
+            _output.WriteLine($"  [{label}] Pre-attack: dist={preAttackDist:F1}y, HP={initialHealth} (attempt {attackAttempt + 1}/3)");
+
+            _output.WriteLine($"  [{label}] Sending StartMeleeAttack on 0x{targetGuid:X} (HP={initialHealth})");
+            var selectResult = await _bot.SendActionAsync(account, new ActionMessage
+            {
+                ActionType = ActionType.StartMeleeAttack,
+                Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
+            });
+            if (selectResult != ResponseResult.Success)
+            {
+                _output.WriteLine($"  [{label}] StartMeleeAttack dispatch failed: {selectResult}");
+                continue;
+            }
+
+            // Verify bot targeted the mob.
+            var targeted = await WaitForSelectedTargetAsync(account, targetGuid, TimeSpan.FromSeconds(8));
+            if (!targeted)
+            {
+                await _bot.RefreshSnapshotsAsync();
+                var diagSnap = await _bot.GetSnapshotAsync(account);
+                var currentTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
+                _output.WriteLine($"  [{label}] WARN: TargetGuid=0x{currentTarget:X} (expected 0x{targetGuid:X}). Continuing to damage check...");
+            }
+            else
+            {
+                _output.WriteLine($"  [{label}] Target selected in snapshot.");
+            }
+
+            // Verify facing.
+            var mobAlreadyDead = (await GetTargetHealthAsync(account, targetGuid)) == 0;
+            var facingOk = mobAlreadyDead;
+            for (int facingAttempt = 0; facingAttempt < 3 && !facingOk; facingAttempt++)
+            {
+                if (facingAttempt > 0)
+                    await Task.Delay(1000);
+                facingOk = await AssertBotFacingTargetAsync(account, targetGuid, label);
+            }
+            if (!facingOk)
+            {
+                _output.WriteLine($"  [{label}] WARN: Bot not facing target. Continuing anyway.");
+            }
+
+            // Re-sample health — mob may have taken damage during approach/target poll.
+            var currentHp = await GetTargetHealthAsync(account, targetGuid);
+            if (currentHp > 0 && currentHp < initialHealth)
+                initialHealth = currentHp;
+
+            // Wait for auto-attack damage.
+            _output.WriteLine($"  [{label}] Waiting for auto-attack damage on target (HP={initialHealth})...");
+            damagedByBot = await WaitForHealthDecreaseWithDiagAsync(account, label, targetGuid, initialHealth, TimeSpan.FromSeconds(15));
+            if (!damagedByBot)
+            {
+                var currentHealth = await GetTargetHealthAsync(account, targetGuid);
+                var postDist = await GetDistanceToTargetAsync(account, targetGuid);
+                var evaded = currentHealth >= initialHealth && currentHealth > 0;
+                _output.WriteLine($"  [{label}] Attack attempt {attackAttempt + 1} failed: HP {initialHealth}→{currentHealth}, dist={postDist:F1}y, evaded={evaded}");
             }
         }
-        if (initialHealth == 0)
-        {
-            _output.WriteLine($"  [{label}] Target died or despawned before attack (HP=0 after retries).");
-            return false;
-        }
 
-        var preAttackDist = await GetDistanceToTargetAsync(account, targetGuid);
-        _output.WriteLine($"  [{label}] Pre-attack: dist={preAttackDist:F1}y, HP={initialHealth}");
-
-        _output.WriteLine($"  [{label}] Sending StartMeleeAttack on 0x{targetGuid:X} (HP={initialHealth})");
-        var selectResult = await _bot.SendActionAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.StartMeleeAttack,
-            Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
-        });
-        if (selectResult != ResponseResult.Success)
-        {
-            _output.WriteLine($"  [{label}] StartMeleeAttack dispatch failed: {selectResult}");
-            return false;
-        }
-
-        // STEP 3: Verify bot targeted the mob.
-        var targeted = await WaitForSelectedTargetAsync(account, targetGuid, TimeSpan.FromSeconds(8));
-        if (!targeted)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var diagSnap = await _bot.GetSnapshotAsync(account);
-            var currentTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
-            _output.WriteLine($"  [{label}] WARN: TargetGuid=0x{currentTarget:X} (expected 0x{targetGuid:X}). Continuing to damage check...");
-        }
-        else
-        {
-            _output.WriteLine($"  [{label}] Target selected in snapshot.");
-        }
-
-        // STEP 4: Verify facing.
-        var mobAlreadyDead = (await GetTargetHealthAsync(account, targetGuid)) == 0;
-        var facingOk = mobAlreadyDead;
-        for (int facingAttempt = 0; facingAttempt < 3 && !facingOk; facingAttempt++)
-        {
-            if (facingAttempt > 0)
-                await Task.Delay(1000);
-            facingOk = await AssertBotFacingTargetAsync(account, targetGuid, label);
-        }
-        if (!facingOk)
-        {
-            _output.WriteLine($"  [{label}] WARN: Bot not facing target. Continuing anyway (auto-attack may still work).");
-        }
-
-        // Re-sample health — mob may have taken damage during approach/target poll.
-        var currentHp = await GetTargetHealthAsync(account, targetGuid);
-        if (currentHp > 0 && currentHp < initialHealth)
-            initialHealth = currentHp;
-
-        // STEP 5: Verify bot auto-attacks — target health must decrease from bot hits (no GM help).
-        _output.WriteLine($"  [{label}] Waiting for auto-attack damage on target (HP={initialHealth})...");
-        var damagedByBot = await WaitForHealthDecreaseWithDiagAsync(account, label, targetGuid, initialHealth, TimeSpan.FromSeconds(15));
         if (!damagedByBot)
         {
-            var currentHealth = await GetTargetHealthAsync(account, targetGuid);
-            var postDist = await GetDistanceToTargetAsync(account, targetGuid);
-            _output.WriteLine($"  [{label}] FAIL: Target health did not decrease from bot auto-attacks within 15s. HP: {initialHealth}→{currentHealth}, dist={postDist:F1}y");
+            _output.WriteLine($"  [{label}] FAIL: Target health did not decrease after 3 attack attempts.");
             return false;
         }
 
@@ -414,6 +472,13 @@ public class CombatLoopTests
                     if (u.NpcFlags != 0)
                         return false;
 
+                    // Only attack known hostile creature types by entry ID.
+                    // UnitReaction is unreliable in snapshots (BG defaults to 0, FG may report
+                    // Friendly(4) for hostile mobs due to GM mode side-effects).
+                    var entry = u.GameObject?.Entry ?? 0;
+                    if (!HostileCreatureEntries.Contains(entry))
+                        return false;
+
                     // Skip targets already claimed by the other bot.
                     return claimedTargets == null || !claimedTargets.ContainsKey(guid);
                 })
@@ -451,7 +516,7 @@ public class CombatLoopTests
                     var n = u.GameObject?.Name ?? "?";
                     var isCre = (g & CreatureGuidHighMask) == CreatureGuidHighPrefix;
                     var claimed = claimedTargets?.ContainsKey(g) ?? false;
-                    _output.WriteLine($"      0x{g:X} '{n}' L{u.GameObject?.Level} HP={u.Health}/{u.MaxHealth} npc={u.NpcFlags} creature={isCre} claimed={claimed} at ({p?.X:F1},{p?.Y:F1},{p?.Z:F1})");
+                    _output.WriteLine($"      0x{g:X} '{n}' L{u.GameObject?.Level} HP={u.Health}/{u.MaxHealth} npc={u.NpcFlags} react={u.UnitReaction} creature={isCre} claimed={claimed} at ({p?.X:F1},{p?.Y:F1},{p?.Z:F1})");
                 }
             }
 
@@ -562,14 +627,21 @@ public class CombatLoopTests
             if (currentHealth == 0)
                 return true;
 
-            // Diagnostic: log health + distance every 3s
+            // Diagnostic + early evade detection every 3s
             if (sw.Elapsed - lastDiagTime > TimeSpan.FromSeconds(3))
             {
                 var dist = await GetDistanceToTargetAsync(account, targetGuid);
-                var snap = await _bot.GetSnapshotAsync(account);
-                var currentSnapTarget = snap?.Player?.Unit?.TargetGuid ?? 0UL;
-                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F0}s: HP={currentHealth}/{initialHealth}, dist={dist:F1}y, target=0x{currentSnapTarget:X}");
+                var diagSnap = await _bot.GetSnapshotAsync(account);
+                var diagTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
+                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F0}s: HP={currentHealth}/{initialHealth}, dist={dist:F1}y, target=0x{diagTarget:X}");
                 lastDiagTime = sw.Elapsed;
+
+                // Early evade detection: target lost + HP back to max = mob evaded
+                if (diagTarget == 0 && currentHealth >= initialHealth)
+                {
+                    _output.WriteLine($"    [{label}] Early evade detected: target lost, HP={currentHealth}>={initialHealth}");
+                    return false;
+                }
             }
 
             await Task.Delay(400);

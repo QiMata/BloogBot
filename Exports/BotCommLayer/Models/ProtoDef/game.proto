@@ -76,6 +76,7 @@ message WoWUnit {
     uint32 petNumber = 30;
     float boundingRadius = 31;     // UNIT_FIELD_BOUNDINGRADIUS — collision radius
     float combatReach = 32;        // UNIT_FIELD_COMBATREACH — melee attack range component
+    uint32 unitReaction = 33;      // UnitReaction enum (0=Hated..7=Exalted) — from IWoWUnit.UnitReaction
 }
 
 // Definition for WoWPlayer, extending WoWUnit
