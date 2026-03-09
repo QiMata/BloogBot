@@ -85,13 +85,23 @@ namespace WoWSharpClient.Handlers
                                     teleportData.X, teleportData.Y, teleportData.Z);
                             }
 
-                            // MSG_MOVE_TELEPORT has no counter field, but the server tracks
-                            // m_sequenceIndex internally. Use a local counter that increments
-                            // on each teleport so the ACK echoes the expected value.
-                            var teleportCounter = WoWSharpObjectManager.Instance.IncrementTeleportSequence();
-                            WoWSharpEventEmitter.Instance.FireOnTeleport(
-                                new RequiresAcknowledgementArgs(teleportGuid, teleportCounter)
-                            );
+                            // Only ACK player teleports. Creature MSG_MOVE_TELEPORT packets
+                            // must NOT be ACKed — doing so sets _isBeingTeleported=true in
+                            // EventEmitter_OnTeleport, which blocks MovementController updates
+                            // and disrupts auto-attack heartbeats → mob evades. (BT-COMBAT-002)
+                            if (isPlayerTeleport)
+                            {
+                                var teleportCounter = WoWSharpObjectManager.Instance.IncrementTeleportSequence();
+                                WoWSharpEventEmitter.Instance.FireOnTeleport(
+                                    new RequiresAcknowledgementArgs(teleportGuid, teleportCounter)
+                                );
+                            }
+                            else
+                            {
+                                Log.Debug(
+                                    "[MovementHandler] Skipping teleport ACK for non-player GUID {Guid:X}",
+                                    teleportGuid);
+                            }
                             break;
                         }
                         case Opcode.MSG_MOVE_TELEPORT_ACK:
