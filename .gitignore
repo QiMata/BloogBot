@@ -292,7 +292,10 @@ physics_replay*.log
 diag_output.txt
 Exports/Navigation/cmake_ninja_x64/
 
-# Stale root scripts (kept locally, not tracked)
+# AI CLI wrapper scripts
+.ai/
+
+# Stale root scripts (deleted, prevent re-creation)
 Build-ArchitectureCompatibleComponents.ps1
 build-injection-dlls.bat
 copy_nav_dll.ps1
