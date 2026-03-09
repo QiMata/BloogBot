@@ -42,7 +42,7 @@ public class GroupFormationTests
         var fgAccount = _bot.FgAccountName;
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG account not available.");
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG account not available.");
-        global::Tests.Infrastructure.Skip.If(_bot.ForegroundBot == null, "FG snapshot not available; requires dual-client run.");
+        global::Tests.Infrastructure.Skip.If(!_bot.IsFgActionable, "FG bot not actionable; requires dual-client run with stable FG.");
 
         // Step 1: deterministic clean start from snapshot state (no GM chat disband).
         await EnsureNotGroupedAsync(bgAccount!, "BG");
