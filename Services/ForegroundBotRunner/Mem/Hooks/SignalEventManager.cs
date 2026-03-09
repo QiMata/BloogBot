@@ -10,12 +10,6 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private delegate void SignalEventNoArgsDelegate(string eventName);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-        private static extern nint GetModuleHandle(string lpModuleName);
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
-        private static extern nint GetProcAddress(nint hModule, string procName);
-
         // Diagnostic logging path
         private static readonly string DiagnosticLogPath;
         private static readonly object DiagnosticLogLock = new();
@@ -101,18 +95,12 @@ namespace ForegroundBotRunner.Mem.Hooks
             // .NET 8 can't catch AccessViolationException — only C++ __try/__except can.
             // SafeCallback3 wraps the managed delegate call with SEH so AVs from stale
             // WoW memory pointers are caught instead of crashing the process.
-            var fastCallHandle = GetModuleHandle("FastCall.dll");
-            DiagLog($"GetModuleHandle('FastCall.dll') = 0x{(uint)fastCallHandle:X8}");
-
-            // Try both decorated and undecorated names — MSVC behavior varies
-            var safeCallback3Addr = nint.Zero;
-            if (fastCallHandle != nint.Zero)
-            {
-                safeCallback3Addr = GetProcAddress(fastCallHandle, "_SafeCallback3@16");
-                if (safeCallback3Addr == nint.Zero)
-                    safeCallback3Addr = GetProcAddress(fastCallHandle, "SafeCallback3");
-                DiagLog($"GetProcAddress SafeCallback3 = 0x{(uint)safeCallback3Addr:X8}");
-            }
+            //
+            // Use NativeLibrary (not GetModuleHandle/GetProcAddress) — the .NET 8
+            // hosting layer may load FastCall.dll from a different path than the OS
+            // module table reports, causing GetProcAddress to fail on the wrong handle.
+            var safeCallback3Addr = NativeLibraryHelper.GetFastCallExport("_SafeCallback3@16", "SafeCallback3");
+            DiagLog($"NativeLibrary SafeCallback3 = 0x{(uint)safeCallback3Addr:X8}");
 
             string[] instructions;
             if (safeCallback3Addr != nint.Zero)
@@ -263,14 +251,7 @@ namespace ForegroundBotRunner.Mem.Hooks
             var addrToDetour = Marshal.GetFunctionPointerForDelegate(signalEventNoArgsDelegate);
 
             // Get SafeCallback1 from FastCall.dll for SEH protection
-            var fastCallHandle = GetModuleHandle("FastCall.dll");
-            var safeCallback1Addr = nint.Zero;
-            if (fastCallHandle != nint.Zero)
-            {
-                safeCallback1Addr = GetProcAddress(fastCallHandle, "_SafeCallback1@8");
-                if (safeCallback1Addr == nint.Zero)
-                    safeCallback1Addr = GetProcAddress(fastCallHandle, "SafeCallback1");
-            }
+            var safeCallback1Addr = NativeLibraryHelper.GetFastCallExport("_SafeCallback1@8", "SafeCallback1");
 
             string[] instructions;
             if (safeCallback1Addr != nint.Zero)

@@ -58,12 +58,6 @@ namespace ForegroundBotRunner.Mem.Hooks
         // Delegate for the detour callback — receives CDataStore pointer
         private delegate void SendHookDelegate(nint dataStorePtr);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-        private static extern nint GetModuleHandle(string lpModuleName);
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
-        private static extern nint GetProcAddress(nint hModule, string procName);
-
         // Store the original bytes for cleanup
         private static byte[]? _originalSendBytes;
         private static nint _sendHookAddress;
@@ -207,10 +201,7 @@ namespace ForegroundBotRunner.Mem.Hooks
 
             // Get SafeCallback1 from FastCall.dll for SEH protection.
             // .NET 8 can't catch AccessViolationException — only C++ __try/__except can.
-            var fastCallHandle = GetModuleHandle("FastCall.dll");
-            var safeCallback1Addr = fastCallHandle != nint.Zero
-                ? GetProcAddress(fastCallHandle, "_SafeCallback1@8")
-                : nint.Zero;
+            var safeCallback1Addr = NativeLibraryHelper.GetFastCallExport("_SafeCallback1@8", "SafeCallback1");
 
             string[] fullInstructions;
             if (safeCallback1Addr != nint.Zero)
