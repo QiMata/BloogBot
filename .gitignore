@@ -295,6 +295,20 @@ Exports/Navigation/cmake_ninja_x64/
 # AI CLI wrapper scripts
 .ai/
 
+# .NET SDK local sentinels and telemetry
+.dotnet/
+
+# JetBrains / IDE run configurations
+.run/
+
+# C++ module/IFC intermediates (MSVC C++20 modules)
+*.iobj
+*.ipdb
+*.ifc
+*.ifc.dt
+*.ifc.dt.*
+*.lib.recipe
+
 # Stale root scripts (deleted, prevent re-creation)
 Build-ArchitectureCompatibleComponents.ps1
 build-injection-dlls.bat
