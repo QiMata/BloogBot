@@ -121,8 +121,7 @@ namespace ForegroundBotRunner.Mem.Hooks
                     "push eax",                                    // arg3: firstArgPtr
                     "mov eax, [ebp + 0xC]",
                     "push eax",                                    // arg2: format
-                    "mov edi, [edi]",
-                    "push edi",                                    // arg1: eventName
+                    "push edi",                                    // arg1: eventName ptr-to-ptr (deref in managed code)
                     $"push 0x{(uint)addrToDetour:X}",              // parCallbackPtr (managed delegate)
                     $"call 0x{(uint)safeCallback3Addr:X}",         // SafeCallback3 — SEH-protected
                     "popad",
@@ -145,8 +144,7 @@ namespace ForegroundBotRunner.Mem.Hooks
                     "push eax",
                     "mov eax, [ebp + 0xC]",
                     "push eax",
-                    "mov edi, [edi]",
-                    "push edi",
+                    "push edi",                                    // eventName ptr-to-ptr
                     $"call 0x{(uint)addrToDetour:X}",
                     "popad",
                     "popfd",
@@ -165,7 +163,7 @@ namespace ForegroundBotRunner.Mem.Hooks
                 DiagLog($"SignalEvent hook FAILED at 0x{MemoryAddresses.SignalEventFunPtr:X8}: first byte=0x{(hookBytes?[0] ?? 0):X2}");
         }
 
-        private static void SignalEventHook(nint eventNamePtr, nint formatPtr, uint firstArgPtr)
+        private static void SignalEventHook(nint eventNamePtrPtr, nint formatPtr, uint firstArgPtr)
         {
             // CRITICAL: This runs on WoW's main thread via native assembly detour.
             // ANY unhandled exception propagates into WoW's native stack → ERROR #132 crash.
@@ -175,7 +173,12 @@ namespace ForegroundBotRunner.Mem.Hooks
             {
                 _eventCount++;
 
-                // Manual string marshaling — safe inside try/catch
+                // eventNamePtrPtr is a ptr-to-ptr: dereference to get actual string pointer.
+                // This dereference was moved here from the code cave ('mov edi, [edi]')
+                // so it's inside try/catch for SEH safety.
+                nint eventNamePtr = eventNamePtrPtr != nint.Zero
+                    ? Marshal.ReadIntPtr(eventNamePtrPtr)
+                    : nint.Zero;
                 string? eventName = eventNamePtr != nint.Zero
                     ? Marshal.PtrToStringAnsi(eventNamePtr)
                     : null;
@@ -275,8 +278,7 @@ namespace ForegroundBotRunner.Mem.Hooks
                     "call 0x007040D0",
                     "pushfd",
                     "pushad",
-                    "mov edi, [edi]",
-                    "push edi",                                    // arg1: eventName
+                    "push edi",                                    // arg1: eventName ptr-to-ptr (deref in managed code)
                     $"push 0x{(uint)addrToDetour:X}",              // parCallbackPtr (managed delegate)
                     $"call 0x{(uint)safeCallback1Addr:X}",         // SafeCallback1 — SEH-protected
                     "popad",
@@ -293,8 +295,7 @@ namespace ForegroundBotRunner.Mem.Hooks
                     "call 0x007040D0",
                     "pushfd",
                     "pushad",
-                    "mov edi, [edi]",
-                    "push edi",
+                    "push edi",                                    // eventName ptr-to-ptr
                     $"call 0x{(uint)addrToDetour:X}",
                     "popad",
                     "popfd",
@@ -313,13 +314,16 @@ namespace ForegroundBotRunner.Mem.Hooks
                 DiagLog($"SignalEventNoArgs hook FAILED at 0x{MemoryAddresses.SignalEventNoParamsFunPtr:X8}: first byte=0x{(hookBytes?[0] ?? 0):X2}");
         }
 
-        private static void SignalEventNoArgsHook(nint eventNamePtr)
+        private static void SignalEventNoArgsHook(nint eventNamePtrPtr)
         {
             try
             {
                 _eventCount++;
 
-                // Manual string marshaling — safe inside try/catch
+                // eventNamePtrPtr is a ptr-to-ptr: dereference inside try/catch for SEH safety.
+                nint eventNamePtr = eventNamePtrPtr != nint.Zero
+                    ? Marshal.ReadIntPtr(eventNamePtrPtr)
+                    : nint.Zero;
                 string? eventName = eventNamePtr != nint.Zero
                     ? Marshal.PtrToStringAnsi(eventNamePtr)
                     : null;

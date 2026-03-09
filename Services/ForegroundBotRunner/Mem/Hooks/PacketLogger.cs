@@ -150,54 +150,23 @@ namespace ForegroundBotRunner.Mem.Hooks
             uint sendAddr = (uint)(nint)Offsets.Functions.NetClientSend;
             _sendHookAddress = (nint)sendAddr;
 
-            // Read original first 5 bytes
-            _originalSendBytes = MemoryManager.ReadBytes((nint)sendAddr, 5);
-            if (_originalSendBytes == null || _originalSendBytes.Length < 5)
+            // Read original first 6 bytes (must end on instruction boundary).
+            // NetClient::Send prologue: push ebp(1) + mov ebp,esp(2) + push esi(1) + mov esi,ecx(2) = 6 bytes.
+            // Reading only 5 splits the last instruction — the code cave's db would consume the JMP opcode.
+            _originalSendBytes = MemoryManager.ReadBytes((nint)sendAddr, 6);
+            if (_originalSendBytes == null || _originalSendBytes.Length < 6)
             {
                 DiagLog($"InstallSendHook: Failed to read original bytes at 0x{sendAddr:X8}");
                 return;
             }
             DiagLog($"InstallSendHook: Original bytes at 0x{sendAddr:X8}: {BitConverter.ToString(_originalSendBytes)}");
 
-            // Build the detour code cave using raw byte emission.
-            // We can't use FASM to emit the original bytes directly, so we build
-            // the code cave in two parts:
-            //   Part 1: pushfd/pushad, read stack arg, call managed, popad/popfd (via FASM)
-            //   Part 2: original bytes + jmp back (raw bytes appended)
-
-            // Part 1: FASM-assembled pre-call and post-call wrapper
-            // After pushfd (4 bytes) + pushad (32 bytes) = 36 bytes pushed onto stack
-            // Original stack at entry had: [esp+0] = ret addr, [esp+4] = CDataStore*
-            // After our pushes: CDataStore* is at [esp + 36 + 4] = [esp + 0x28]
-            var asmInstructions = new[]
-            {
-                "pushfd",
-                "pushad",
-                "mov eax, [esp+0x28]",    // CDataStore* (first __thiscall stack arg)
-                "push eax",               // arg for our cdecl callback
-                $"call 0x{managedAddr:X}", // call OnSendPacket(dataStorePtr)
-                "popad",
-                "popfd"
-                // Original bytes + jmp back will be appended as raw bytes
-            };
-
-            // Allocate the detour
-            var detourAddr = MemoryManager.InjectAssembly("PacketSendDetour", asmInstructions);
-
-            // Now we need to append the original 5 bytes + a JMP back.
-            // Calculate where the FASM code ends: we need to find the length.
-            // InjectAssembly returns the start address. The FASM code is compiled
-            // to a fixed location. We'll write the original bytes after it.
-            //
-            // However, InjectAssembly allocates exactly the FASM output size.
-            // We need a different approach: allocate a larger buffer manually.
-
-            // Let's use a different strategy: build everything including the
-            // original instruction bytes as DB directives in FASM.
-            // FASM supports "db 0x55, 0x8B, ..." for raw byte emission.
-
+            // Build the detour code cave with raw byte emission for the original prologue.
+            // After pushfd (4 bytes) + pushad (32 bytes) = 36 bytes pushed onto stack.
+            // Original stack: [esp+0] = ret addr, [esp+4] = CDataStore* (__thiscall).
+            // After pushes: CDataStore* is at [esp + 36 + 4] = [esp + 0x28].
             var dbLine = "db " + string.Join(",", Array.ConvertAll(_originalSendBytes, b => $"0x{b:X2}"));
-            uint returnAddr = sendAddr + 5;
+            uint returnAddr = sendAddr + 6; // +6 to land on the next complete instruction
 
             // Get SafeCallback1 from FastCall.dll for SEH protection.
             // .NET 8 can't catch AccessViolationException — only C++ __try/__except can.
@@ -238,12 +207,11 @@ namespace ForegroundBotRunner.Mem.Hooks
                 ];
             }
 
-            // Re-allocate with full instructions (the first allocation was wasted, but
-            // HackManager tracks it and it'll be small — acceptable leak)
-            var fullDetourAddr = MemoryManager.InjectAssembly("PacketSendDetourFull", fullInstructions);
+            var fullDetourAddr = MemoryManager.InjectAssembly("PacketSendDetour", fullInstructions);
 
-            // Install the hook: overwrite first 5 bytes of NetClientSend with JMP to detour
-            MemoryManager.InjectAssembly("PacketSendHook", sendAddr, $"jmp 0x{(uint)fullDetourAddr:X}");
+            // Install the hook: overwrite first 6 bytes of NetClientSend with JMP + NOP.
+            // The original prologue is 6 bytes; we replicate all 6 in the code cave.
+            MemoryManager.InjectAssembly("PacketSendHook", sendAddr, $"jmp 0x{(uint)fullDetourAddr:X}\nnop");
 
             // Verify
             var hookBytes = MemoryManager.ReadBytes((nint)sendAddr, 5);
