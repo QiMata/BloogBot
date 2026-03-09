@@ -183,6 +183,13 @@ namespace ForegroundBotRunner.Statics
 
 
 
+        public void CastSpellAtLocation(int spellId, float x, float y, float z)
+        {
+            // FG bot: Lua CastSpellByName handles targeting natively; the client calculates
+            // the bobber/AOE position from the player's facing. This is a no-op because
+            // FG CastSpell(string) routes through Lua which handles location targeting.
+        }
+
         public void CastSpellOnGameObject(int spellId, ulong gameObjectGuid)
         {
             // FG bot: CGGameObject_C::OnRightClick sends both CMSG_GAMEOBJ_USE + CMSG_CAST_SPELL

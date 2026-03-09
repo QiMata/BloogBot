@@ -176,6 +176,7 @@ namespace GameData.Core.Interfaces
         void StopCasting();
         void CastSpell(string spellName, int rank = -1, bool castOnSelf = false);
         void CastSpell(int spellId, int rank = -1, bool castOnSelf = false);
+        void CastSpellAtLocation(int spellId, float x, float y, float z);
         void CastSpellOnGameObject(int spellId, ulong gameObjectGuid);
         void InteractWithGameObject(ulong gameObjectGuid);
         bool CanCastSpell(int spellId, ulong targetGuid);

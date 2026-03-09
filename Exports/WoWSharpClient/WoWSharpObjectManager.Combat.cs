@@ -93,9 +93,28 @@ namespace WoWSharpClient
         }
 
 
+        // Fishing spell IDs that require TARGET_FLAG_DEST_LOCATION instead of TARGET_FLAG_SELF.
+        // Fishing casts a bobber at a location in front of the player — self-targeting causes NOT_FISHABLE.
+        private static readonly HashSet<int> _fishingSpellIds = [7620, 7731, 7732, 18248, 33095];
+        private const float FishingBobberDistance = 18f; // yards in front of player
+
         public void CastSpell(int spellId, int rank = -1, bool castOnSelf = false)
         {
             if (_woWClient == null) return;
+
+            // Fishing spells need location-based targeting — calculate bobber position from facing
+            if (!castOnSelf && _fishingSpellIds.Contains(spellId) && Player?.Position != null)
+            {
+                var facing = Player.Facing;
+                var pos = Player.Position;
+                float targetX = pos.X + (float)(FishingBobberDistance * Math.Cos(facing));
+                float targetY = pos.Y + (float)(FishingBobberDistance * Math.Sin(facing));
+                float targetZ = pos.Z; // bobber lands at water surface; server adjusts Z
+                Log.Information("[CastSpell] Fishing spell {SpellId} — using location target ({X:F1}, {Y:F1}, {Z:F1}) from facing {Facing:F2}",
+                    spellId, targetX, targetY, targetZ, facing);
+                CastSpellAtLocation(spellId, targetX, targetY, targetZ);
+                return;
+            }
 
             using var ms = new MemoryStream();
             using var w = new BinaryWriter(ms);
@@ -127,6 +146,31 @@ namespace WoWSharpClient
                         Log.Error(t.Exception, "[CastSpell] SEND FAILED for spell {SpellId}", spellId);
                     else
                         Log.Information("[CastSpell] SEND OK for spell {SpellId}", spellId);
+                });
+        }
+
+        public void CastSpellAtLocation(int spellId, float x, float y, float z)
+        {
+            if (_woWClient == null) return;
+
+            using var ms = new MemoryStream();
+            using var w = new BinaryWriter(ms);
+            w.Write((uint)spellId);
+            w.Write((ushort)0x0040); // TARGET_FLAG_DEST_LOCATION
+            w.Write(x);
+            w.Write(y);
+            w.Write(z);
+
+            var payload = ms.ToArray();
+            Log.Information("[CastSpellAtLocation] spell={SpellId} loc=({X:F1},{Y:F1},{Z:F1}) ({Len} bytes): {Hex}",
+                spellId, x, y, z, payload.Length, BitConverter.ToString(payload));
+            _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, payload)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                        Log.Error(t.Exception, "[CastSpellAtLocation] SEND FAILED for spell {SpellId}", spellId);
+                    else
+                        Log.Information("[CastSpellAtLocation] SEND OK for spell {SpellId}", spellId);
                 });
         }
 

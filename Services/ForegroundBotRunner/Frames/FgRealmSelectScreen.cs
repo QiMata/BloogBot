@@ -101,54 +101,69 @@ public class FgRealmSelectScreen : IRealmSelectScreen
 
         // Rate-limit UI clicks to avoid spamming the client (called every ~100ms by behavior tree)
         if (_lastRealmClickAttempt.HasValue
-            && (DateTime.UtcNow - _lastRealmClickAttempt.Value).TotalMilliseconds < 1500)
+            && (DateTime.UtcNow - _lastRealmClickAttempt.Value).TotalMilliseconds < 1000)
             return;
         _lastRealmClickAttempt = DateTime.UtcNow;
 
         _realmClickAttemptCount++;
         Log.Information("[FG-REALM] SelectRealm attempt #{Count}", _realmClickAttemptCount);
 
-        // The RealmWizard is a multi-step dialog (step 1: realm type, step 2: language,
-        // step 3: confirm). Need "Next" clicks to advance through steps, then "OK" on
-        // the final step. Also need ChangeRealm → realm list click for the standard
-        // realm selection path. Rotate through all strategies.
+        // The RealmWizard is a multi-step dialog that appears on first login.
+        // On private servers with one realm, dismissing the wizard should auto-select it.
+        // Rotate through multiple approaches: cancel, hide, advance, and realm list clicks.
         try
         {
-            int strategy = _realmClickAttemptCount % 5;
-            if (strategy == 1)
+            int strategy = _realmClickAttemptCount % 8;
+            switch (strategy)
             {
-                // Strategy A: Click RealmWizard "Next" to advance through wizard steps
-                _luaCall("if RealmWizardNextButton and RealmWizardNextButton:IsVisible() then RealmWizardNextButton:Click() end");
-                Log.Information("[FG-REALM] Strategy A: RealmWizardNextButton clicked");
-            }
-            else if (strategy == 2)
-            {
-                // Strategy B: Click wizard OK/accept (works on final wizard step)
-                _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
-                _luaCall("if RealmWizard_OnOkay then RealmWizard_OnOkay() end");
-                Log.Information("[FG-REALM] Strategy B: RealmWizardOkayButton + RealmWizard_OnOkay");
-            }
-            else if (strategy == 3)
-            {
-                // Strategy C: Open realm list via ChangeRealm, click first realm + OK
-                _luaCall("if ChangeRealm then ChangeRealm() end");
-                Log.Information("[FG-REALM] Strategy C: ChangeRealm() called");
-            }
-            else if (strategy == 4)
-            {
-                // Strategy D: Click the first realm in the list and OK (after ChangeRealm opened it)
-                _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
-                _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
-                Log.Information("[FG-REALM] Strategy D: RealmListButton1 + RealmListOkButton clicked");
-            }
-            else
-            {
-                // Strategy E: Brute-force — click Next multiple times then OK to skip wizard
-                _luaCall("if RealmWizardNextButton then for i=1,5 do if RealmWizardNextButton:IsVisible() then RealmWizardNextButton:Click() end end end");
-                _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
-                _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
-                _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
-                Log.Information("[FG-REALM] Strategy E: Multi-Next + OK + RealmList brute-force");
+                case 1:
+                    // Strategy A: Cancel the wizard — on single-realm servers, this auto-selects
+                    _luaCall("if RealmWizard_OnCancel then RealmWizard_OnCancel() end");
+                    Log.Information("[FG-REALM] Strategy A: RealmWizard_OnCancel()");
+                    break;
+                case 2:
+                    // Strategy B: Hide the wizard frame directly
+                    _luaCall("if RealmWizard and RealmWizard.Hide then RealmWizard:Hide() end");
+                    _luaCall("if ChangeRealm then ChangeRealm() end");
+                    Log.Information("[FG-REALM] Strategy B: Hide wizard + ChangeRealm");
+                    break;
+                case 3:
+                    // Strategy C: Click Next to advance through wizard steps
+                    _luaCall("if RealmWizardNextButton and RealmWizardNextButton:IsVisible() then RealmWizardNextButton:Click() end");
+                    Log.Information("[FG-REALM] Strategy C: RealmWizardNextButton clicked");
+                    break;
+                case 4:
+                    // Strategy D: Click wizard OK/accept (final wizard step)
+                    _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
+                    _luaCall("if RealmWizard_OnOkay then RealmWizard_OnOkay() end");
+                    Log.Information("[FG-REALM] Strategy D: RealmWizardOkayButton + OnOkay");
+                    break;
+                case 5:
+                    // Strategy E: Open realm list directly
+                    _luaCall("if ChangeRealm then ChangeRealm() end");
+                    Log.Information("[FG-REALM] Strategy E: ChangeRealm()");
+                    break;
+                case 6:
+                    // Strategy F: Click first realm in list + OK
+                    _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
+                    _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
+                    Log.Information("[FG-REALM] Strategy F: RealmListButton1 + OK");
+                    break;
+                case 7:
+                    // Strategy G: Dismiss any GlueDialog that may be blocking
+                    _luaCall("if GlueDialogButton1 and GlueDialogButton1:IsVisible() then GlueDialogButton1:Click() end");
+                    _luaCall("if GlueDialogButton2 and GlueDialogButton2:IsVisible() then GlueDialogButton2:Click() end");
+                    Log.Information("[FG-REALM] Strategy G: GlueDialog dismiss");
+                    break;
+                default:
+                    // Strategy H: Brute-force — advance wizard + cancel + realm list all at once
+                    _luaCall("if RealmWizardNextButton and RealmWizardNextButton:IsVisible() then for i=1,5 do RealmWizardNextButton:Click() end end");
+                    _luaCall("if RealmWizardOkayButton and RealmWizardOkayButton:IsVisible() then RealmWizardOkayButton:Click() end");
+                    _luaCall("if RealmWizard_OnCancel then RealmWizard_OnCancel() end");
+                    _luaCall("if RealmListButton1 and RealmListButton1:IsVisible() then RealmListButton1:Click() end");
+                    _luaCall("if RealmListOkButton and RealmListOkButton:IsVisible() then RealmListOkButton:Click() end");
+                    Log.Information("[FG-REALM] Strategy H: Full brute-force");
+                    break;
             }
         }
         catch (Exception ex) { Log.Warning("[FG-REALM] Strategy failed: {Error}", ex.Message); }
