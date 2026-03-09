@@ -113,12 +113,12 @@ Tracks observed bad behavior patterns from live integration test runs. Each entr
 - **Status**: OPEN — Low risk on private servers with no addons.
 - **Severity**: Low
 
-### BB-COMBAT-003: Real Mob Combat — BG Fixed, FG Soft Warning
-- **Observed**: `CombatLoopTests.Combat_AutoAttacksMob_DealsDamageInMeleeRange` now validates real auto-attack damage on live mobs for both bots.
-- **BG**: Passes reliably (3/3 runs). Root cause of prior evade issue was BB-COMBAT-005.
-- **FG**: Intermittent mob evade after initial hit. GM mode is turned off (`gm off` + `gm visible on`) but mob still evades after 1-2 swings. Likely WoW.exe position desync after GM teleport — server expects different coordinates than client. Marked as soft warning (not assertion failure).
-- **Status**: BG FIXED, FG KNOWN ISSUE (soft warning)
-- **Severity**: Medium (was Critical)
+### BB-COMBAT-003: Real Mob Combat — Both BG and FG Pass
+- **Observed**: `CombatLoopTests.Combat_AutoAttacksMob_DealsDamageInMeleeRange` validates real auto-attack damage on live mobs for both bots.
+- **BG**: Passes reliably with 3-attempt retry loop. Intermittent evade (~20%) handled by re-engaging after mob returns to spawn.
+- **FG**: Now also passes — both bots target Scorpid Workers in the same Valley of Trials area. FG was previously targeting Lazy Peons (Friendly NPCs) — see BB-COMBAT-006.
+- **Status**: FIXED (both BG and FG, 3/3 runs)
+- **Severity**: Low (was Critical)
 
 ### BB-COMBAT-005: MSG_MOVE_TELEPORT Processed for Creatures as Player Teleport
 - **Observed**: BG bot's `MovementHandler` called `NotifyTeleportIncoming()` for ALL `MSG_MOVE_TELEPORT` packets, including creature position updates. When MaNGOS sends a creature teleport (mob position correction), the BG bot's movement state was reset: `_isBeingTeleported=true` → heartbeat disrupted → mob can't maintain combat → evade.
@@ -126,6 +126,14 @@ Tracks observed bad behavior patterns from live integration test runs. Each entr
 - **Fix**: Guard `NotifyTeleportIncoming` to only fire when `teleportGuid == Player.Guid`. Creature teleports are still processed as position updates via `QueueUpdate` with `WoWObjectType.Unit`.
 - **Status**: FIXED (MovementHandler.cs)
 - **Severity**: Critical — was the root cause of intermittent BG mob evade
+
+### BB-COMBAT-006: UnitReaction Unreliable in Snapshots
+- **Observed**: BG bot's `WoWUnit.UnitReaction` is never populated from server packets — always defaults to `Hated(0)`. FG bot returns `Friendly(4)` for hostile mobs after GM mode (`.gm off` doesn't fully clear the reaction override).
+- **Impact**: Cannot use UnitReaction to distinguish hostile from friendly creatures. Combat test was targeting Lazy Peons (Friendly) on FG because the UnitReaction filter excluded hostile mobs incorrectly.
+- **Workaround**: Filter by creature entry ID (known hostile entries: 3098/3124/3108). Added `unitReaction` field (33) to WoWUnit protobuf for visibility/diagnostics.
+- **Fix needed**: BG needs FactionTemplate→UnitReaction mapping using DBC faction data. FG needs to verify `.gm off` clears the reaction override.
+- **Status**: OPEN (workaround in place)
+- **Severity**: Medium
 
 ### BB-COMBAT-004: CastSpell(int) is No-Op on FG
 - **Observed**: `ObjectManager.CastSpell(int spellId)` does nothing on FG bot. Only `CastSpell(string spellName)` via Lua works.

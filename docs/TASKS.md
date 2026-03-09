@@ -142,28 +142,23 @@ dotnet test Tests/WWoWBot.AI.Tests/WWoWBot.AI.Tests.csproj --configuration Relea
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-09 (session 44)
-- **Current work:** Combat auto-attack fix — BG mob evade root cause resolved.
+- **Last updated:** 2026-03-09 (session 44, continued)
+- **Current work:** Combat auto-attack — both BG and FG now pass reliably.
 - **Completed this session:**
-  1. **BG mob evade root cause fix (`c18e99a`):**
-     - Root cause: `MovementHandler.cs` called `NotifyTeleportIncoming()` for ALL `MSG_MOVE_TELEPORT` packets, including creature position updates (GUID high nibble `F1xx`). When MaNGOS sent a creature teleport during combat, the BG bot's movement state was reset → auto-attack heartbeats disrupted → mob evades.
-     - Fix: Guard `NotifyTeleportIncoming` to only fire when `teleportGuid == Player.Guid`. Creature teleports are still processed as `QueueUpdate` with `WoWObjectType.Unit`.
-     - Verified: 3/3 consecutive test passes, ~70s each.
-  2. **Combat test improvements:**
-     - Separate mob areas for BG/FG (avoid contention).
-     - Walk-to-mob via Goto for position sync after GM teleport.
-     - Re-teleport 20y away if mob too close (ensures movement packets generated).
-     - FG mob evade is a soft warning, not assertion failure (known WoW.exe position desync after GM teleport).
-     - Dead code removed (unused `WaitForHealthDecreaseAsync`, `WaitForNearbyUnitsAsync`, `ContainsCombatCommandFailure`).
-  3. **BAD_BEHAVIORS.md updated:** BB-COMBAT-003 status changed from OPEN to BG FIXED/FG KNOWN ISSUE. New BB-COMBAT-005 entry for MSG_MOVE_TELEPORT creature GUID root cause.
+  1. **BG mob evade root cause fix (`c18e99a`):** Guard `NotifyTeleportIncoming` for player GUIDs only — creature MSG_MOVE_TELEPORT was resetting movement state mid-combat.
+  2. **UnitReaction proto field (`384ccfd`):** Added `unitReaction` (field 33) to WoWUnit protobuf. Discovery: BG defaults to Hated(0), FG returns Friendly(4) for all mobs. UnitReaction is NOT reliable for target selection.
+  3. **Entry-based mob filter:** Filter by creature entry ID (3098/3124/3108) instead of UnitReaction. Prevents targeting friendly NPCs like Lazy Peons.
+  4. **3-attempt evade retry:** When mob evades (HP resets, target lost), bot re-walks and re-engages. Early evade detection cuts wait from 15s to ~3s.
+  5. **FG area fix:** FG now uses same coordinates as BG. Previous FG areas had only friendly NPCs or invalid terrain (fell underground).
+  6. **BAD_BEHAVIORS.md:** BB-COMBAT-003/005/006 updated.
 - **LiveValidation results: 48 passed, 1 failed, 1 skipped (50 total)**
-  - CombatLoop now passes reliably (was intermittent).
+  - CombatLoop passes reliably with both BG AND FG dealing damage (3/3 runs).
   - **Failed (1):** FishingProfessionTests — CMSG_CAST_SPELL fishing channel not starting.
   - **Skipped (1):** Mining (no copper nodes spawned).
 - **Known remaining issues:**
-  - **FG mob evade:** FG auto-attack connects initially but mob evades after 1-2 swings. GM teleport position desync (server vs client Z mismatch). Soft warning in test.
+  - **UnitReaction reliability (BB-COMBAT-006):** BG UnitReaction is never populated from server packets (defaults to 0). FG UnitReaction reports Friendly(4) for hostile mobs when GM mode effects linger. Need FactionTemplate→Reaction mapping for BG.
   - **BG fishing CMSG_CAST_SPELL:** Packet-based fishing cast doesn't start channel.
   - **BG pet support:** Pet returns null — Hunter/Warlock won't work.
-  - **SMSG_UPDATE_AURA_DURATION:** "No handler registered" — duration data not parsed yet (cosmetic).
+  - **Intermittent mob evade:** Still happens ~20% of runs but retry loop handles it. Root cause: Z mismatch between bot physics engine and MaNGOS terrain resolution at specific mob spawn positions.
 - **Test counts:** LiveValidation 48/50, WoWSharpClient 1254, Physics 97, AI 119.
 - **Sessions 1-43:** See `docs/ARCHIVE.md` for full history.
