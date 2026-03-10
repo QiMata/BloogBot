@@ -28,7 +28,6 @@ public class EquipmentEquipTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const uint WornMace = 36;
     private const uint MainhandSlot = 15;
     private const uint OneHandMaceSpell = 198;
 
@@ -85,7 +84,7 @@ public class EquipmentEquipTests
 
         var playerBefore = snap.Player;
         bool mainhandBeforeEquipped = playerBefore.Inventory.TryGetValue(MainhandSlot, out ulong mainhandBeforeGuid) && mainhandBeforeGuid != 0;
-        int maceCountBeforeSetup = CountBagItem(playerBefore, WornMace);
+        int maceCountBeforeSetup = CountBagItem(playerBefore, LiveBotFixture.TestItems.WornMace);
 
         _output.WriteLine($"  [{label}] Mainhand before: {(mainhandBeforeEquipped ? $"GUID=0x{mainhandBeforeGuid:X}" : "EMPTY")}");
         _output.WriteLine($"  [{label}] Worn Mace count in bags before setup: {maceCountBeforeSetup}");
@@ -100,7 +99,7 @@ public class EquipmentEquipTests
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
             playerBefore = snap.Player!;
             mainhandBeforeEquipped = playerBefore.Inventory.TryGetValue(MainhandSlot, out mainhandBeforeGuid) && mainhandBeforeGuid != 0;
-            maceCountBeforeSetup = CountBagItem(playerBefore, WornMace);
+            maceCountBeforeSetup = CountBagItem(playerBefore, LiveBotFixture.TestItems.WornMace);
             _output.WriteLine($"  [{label}] Mainhand after reset: {(mainhandBeforeEquipped ? $"GUID=0x{mainhandBeforeGuid:X}" : "EMPTY")}");
         }
 
@@ -127,7 +126,7 @@ public class EquipmentEquipTests
         }
 
         // Ensure at least one Worn Mace is present in bags.
-        int maceCountBeforeEquip = CountBagItem(playerBefore, WornMace);
+        int maceCountBeforeEquip = CountBagItem(playerBefore, LiveBotFixture.TestItems.WornMace);
         if (maceCountBeforeEquip == 0)
         {
             var bagItemCount = playerBefore.BagContents.Count;
@@ -146,21 +145,21 @@ public class EquipmentEquipTests
                 }
             }
 
-            _output.WriteLine($"  [{label}] Adding Worn Mace (item {WornMace}).");
-            await _bot.BotAddItemAsync(account, WornMace);
+            _output.WriteLine($"  [{label}] Adding Worn Mace (item {LiveBotFixture.TestItems.WornMace}).");
+            await _bot.BotAddItemAsync(account, LiveBotFixture.TestItems.WornMace);
             var addItemSw = Stopwatch.StartNew();
             while (addItemSw.Elapsed < TimeSpan.FromSeconds(5))
             {
                 await Task.Delay(200);
                 await _bot.RefreshSnapshotsAsync();
                 snap = await _bot.GetSnapshotAsync(account) ?? snap;
-                if (snap.Player != null && CountBagItem(snap.Player, WornMace) > 0)
+                if (snap.Player != null && CountBagItem(snap.Player, LiveBotFixture.TestItems.WornMace) > 0)
                     break;
             }
             if (snap.Player == null)
                 return false;
             playerBefore = snap.Player;
-            maceCountBeforeEquip = CountBagItem(playerBefore, WornMace);
+            maceCountBeforeEquip = CountBagItem(playerBefore, LiveBotFixture.TestItems.WornMace);
         }
 
         if (maceCountBeforeEquip == 0)
@@ -178,7 +177,7 @@ public class EquipmentEquipTests
         var equipResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
-            Parameters = { new RequestParameter { IntParam = (int)WornMace } }
+            Parameters = { new RequestParameter { IntParam = (int)LiveBotFixture.TestItems.WornMace } }
         });
         Assert.Equal(ResponseResult.Success, equipResult);
         await Task.Delay(500);
@@ -195,7 +194,7 @@ public class EquipmentEquipTests
             {
                 bool slotFilled = playerAfter.Inventory.TryGetValue(MainhandSlot, out ulong mhGuid) && mhGuid != 0;
                 bool guidDiffers = mhGuid != mainhandBeforeGuid;
-                bool bagCountDropped = CountBagItem(playerAfter, WornMace) < maceCountBeforeEquip;
+                bool bagCountDropped = CountBagItem(playerAfter, LiveBotFixture.TestItems.WornMace) < maceCountBeforeEquip;
                 if (slotFilled && (guidDiffers || bagCountDropped))
                 {
                     _output.WriteLine($"  [{label}] Equip detected after {equipSw.ElapsedMilliseconds}ms");
@@ -209,7 +208,7 @@ public class EquipmentEquipTests
             return false;
 
         bool mainhandEquipped = playerAfter.Inventory.TryGetValue(MainhandSlot, out ulong mainhandAfterGuid) && mainhandAfterGuid != 0;
-        int maceCountAfterEquip = CountBagItem(playerAfter, WornMace);
+        int maceCountAfterEquip = CountBagItem(playerAfter, LiveBotFixture.TestItems.WornMace);
         bool maceMovedFromBags = maceCountAfterEquip < maceCountBeforeEquip;
         // If mainhand already had a Worn Mace (item 36), equipping another one swaps them —
         // bag count stays the same but mainhand GUID changes. Accept this as a pass.

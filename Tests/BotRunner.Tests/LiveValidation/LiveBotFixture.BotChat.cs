@@ -181,7 +181,15 @@ public partial class LiveBotFixture
     /// </summary>
     public async Task SendGmChatCommandAsync(string accountName, string command, bool captureResponse)
     {
-        _ = await SendGmChatCommandTrackedAsync(accountName, command, captureResponse);
+        var trace = await SendGmChatCommandTrackedAsync(accountName, command, captureResponse);
+        // BT-VERIFY-001: Surface dead-state guard blocks clearly in test output.
+        // Previously callers silently continued with half-configured state.
+        if (trace.DispatchResult != ResponseResult.Success &&
+            trace.ErrorMessages.Any(e => e.Contains("dead-state guard", StringComparison.OrdinalIgnoreCase)))
+        {
+            _testOutput?.WriteLine($"[DEAD-GUARD] [{accountName}] Command '{command}' blocked — bot is dead/ghost. " +
+                "This usually means EnsureCleanSlateAsync failed or a prior test leaked dead state.");
+        }
     }
 
 

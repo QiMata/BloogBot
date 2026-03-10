@@ -69,7 +69,6 @@ public class CombatLoopTests
 
     // Weapon setup: Worn Mace (item 36) + One Hand Maces proficiency (spell 198, skill 54).
     // Other tests may call .reset items which strips all gear including starter weapons.
-    private const uint WornMace = 36;
     private const uint OneHandMaceSpell = 198;
 
     public CombatLoopTests(LiveBotFixture bot, ITestOutputHelper output)
@@ -153,12 +152,12 @@ public class CombatLoopTests
         _output.WriteLine($"  [{label}] Ensuring weapon equipped (Worn Mace).");
         await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
         await _bot.BotSetSkillAsync(account, 54, 1, 300); // skill 54 = Maces
-        await _bot.BotAddItemAsync(account, WornMace);
+        await _bot.BotAddItemAsync(account, LiveBotFixture.TestItems.WornMace);
         await Task.Delay(500);
         var equipResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
-            Parameters = { new RequestParameter { IntParam = (int)WornMace } }
+            Parameters = { new RequestParameter { IntParam = (int)LiveBotFixture.TestItems.WornMace } }
         });
         _output.WriteLine($"  [{label}] EquipItem result: {equipResult}");
         await Task.Delay(500);

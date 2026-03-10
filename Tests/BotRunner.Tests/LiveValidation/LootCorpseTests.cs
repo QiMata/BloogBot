@@ -93,10 +93,9 @@ public class LootCorpseTests
         await _bot.RefreshSnapshotsAsync();
         var snap = getSnap();
 
-        // Step 2: Clear inventory
-        _output.WriteLine($"  [{label}] Step 2: Clear inventory (.reset items)");
-        await _bot.ExecuteGMCommandAsync($".reset items {snap!.CharacterName}");
-        await _bot.WaitForSnapshotConditionAsync(account, s => (s.Player?.BagContents?.Count ?? 99) == 0, TimeSpan.FromSeconds(5));
+        // Step 2: Clear bag contents (preserves equipped gear — BT-VERIFY-002)
+        _output.WriteLine($"  [{label}] Step 2: Clear inventory");
+        await _bot.BotClearInventoryAsync(account);
 
         // Record baseline bag count
         await _bot.RefreshSnapshotsAsync();

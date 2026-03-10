@@ -61,11 +61,8 @@ public class VendorBuySellTests
         var label = "BG";
         await _bot.EnsureCleanSlateAsync(account, label);
 
-        // Step 0: Clean inventory to ensure a known starting state
-        var setupSnap = await _bot.GetSnapshotAsync(account);
-        var charName = setupSnap?.CharacterName ?? "Lokgaka";
-        await _bot.ExecuteGMCommandAsync($".reset items {charName}");
-        await _bot.WaitForSnapshotConditionAsync(account, s => (s.Player?.BagContents?.Count ?? 99) == 0, TimeSpan.FromSeconds(5));
+        // Step 0: Clean bag contents (preserves equipped gear — BT-VERIFY-002)
+        await _bot.BotClearInventoryAsync(account);
 
         // Step 1: Teleport directly to Grimtak's position (within interaction range)
         _output.WriteLine($"  [{label}] Step 1: Teleporting to Grimtak (Razor Hill vendor)");

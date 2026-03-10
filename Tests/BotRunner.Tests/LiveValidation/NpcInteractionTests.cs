@@ -28,7 +28,7 @@ public class NpcInteractionTests
     private const float RazorHillVendorX = 340.36f, RazorHillVendorY = -4686.29f, RazorHillVendorZ = 16.54f;
     private const float RazorHillTrainerX = 311.35f, RazorHillTrainerY = -4827.79f, RazorHillTrainerZ = 9.66f;
     private const float OrgrimmarFmX = 1676.25f, OrgrimmarFmY = -4313.45f, OrgrimmarFmZ = 61.72f;
-    private const uint LinenCloth = 2589;
+
 
     public NpcInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -50,10 +50,10 @@ public class NpcInteractionTests
     {
         var setupTasks = new System.Collections.Generic.List<Task>
         {
-            EnsureBagHasItemAsync(_bot.BgAccountName!, "BG", LinenCloth, 5)
+            EnsureBagHasItemAsync(_bot.BgAccountName!, "BG", LiveBotFixture.TestItems.LinenCloth, 5)
         };
         if (_bot.IsFgActionable)
-            setupTasks.Add(EnsureBagHasItemAsync(_bot.FgAccountName!, "FG", LinenCloth, 5));
+            setupTasks.Add(EnsureBagHasItemAsync(_bot.FgAccountName!, "FG", LiveBotFixture.TestItems.LinenCloth, 5));
         await Task.WhenAll(setupTasks);
 
         await RunNpcInteraction("Vendor (sell)", RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ,

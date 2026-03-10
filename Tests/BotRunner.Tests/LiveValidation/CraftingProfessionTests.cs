@@ -29,7 +29,6 @@ public class CraftingProfessionTests
 
     private const uint FirstAidApprentice = 3273;
     private const uint LinenBandageRecipe = 3275;
-    private const uint LinenCloth = 2589;
     private const uint LinenBandageItem = 1251;
 
     // Orgrimmar (safe zone) for setup/casting.
@@ -128,7 +127,7 @@ public class CraftingProfessionTests
         // Bag snapshot has item IDs only (not stack quantities). For deterministic verification,
         // clear bags only when preexisting bandages or near-full inventory would mask outcome.
         var bagItems = snap.Player?.BagContents?.Values ?? Enumerable.Empty<uint>();
-        var linenClothSlotsBefore = bagItems.Count(itemId => itemId == LinenCloth);
+        var linenClothSlotsBefore = bagItems.Count(itemId => itemId == LiveBotFixture.TestItems.LinenCloth);
         var bandageSlotsBefore = bagItems.Count(itemId => itemId == LinenBandageItem);
         var bagItemCount = snap.Player?.BagContents?.Count ?? 0;
         if (bandageSlotsBefore > 0 || (linenClothSlotsBefore == 0 && bagItemCount >= 15))
@@ -148,14 +147,14 @@ public class CraftingProfessionTests
                     break;
             }
             bagItems = snap.Player?.BagContents?.Values ?? Enumerable.Empty<uint>();
-            linenClothSlotsBefore = bagItems.Count(itemId => itemId == LinenCloth);
+            linenClothSlotsBefore = bagItems.Count(itemId => itemId == LiveBotFixture.TestItems.LinenCloth);
             bandageSlotsBefore = bagItems.Count(itemId => itemId == LinenBandageItem);
         }
 
         if (linenClothSlotsBefore == 0)
         {
             _output.WriteLine($"  [{label}] Adding Linen Cloth for craft input.");
-            await _bot.BotAddItemAsync(account, LinenCloth, 1);
+            await _bot.BotAddItemAsync(account, LiveBotFixture.TestItems.LinenCloth, 1);
             // Poll for linen cloth to appear in bags instead of fixed 1500ms delay.
             var addClothSw = Stopwatch.StartNew();
             while (addClothSw.Elapsed < TimeSpan.FromSeconds(3))
@@ -164,7 +163,7 @@ public class CraftingProfessionTests
                 await _bot.RefreshSnapshotsAsync();
                 snap = await _bot.GetSnapshotAsync(account) ?? snap;
                 bagItems = snap.Player?.BagContents?.Values ?? Enumerable.Empty<uint>();
-                linenClothSlotsBefore = bagItems.Count(itemId => itemId == LinenCloth);
+                linenClothSlotsBefore = bagItems.Count(itemId => itemId == LiveBotFixture.TestItems.LinenCloth);
                 if (linenClothSlotsBefore > 0)
                     break;
             }

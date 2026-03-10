@@ -649,6 +649,24 @@ public partial class LiveBotFixture
     /// the server's compiled 1.12.1 command hierarchy and produce misleading runtime warnings.
     /// </summary>
 
+    // ---- Shared Test Constants (BT-ITEM-001) ----
+
+    /// <summary>Common test item IDs — avoids duplication across test classes.</summary>
+    public static class TestItems
+    {
+        public const uint LinenCloth = 2589;
+        public const uint WornMace = 36;
+        public const uint RefreshingSpringWater = 159;
+    }
+
+    /// <summary>Common test spell/skill IDs.</summary>
+    public static class TestSpells
+    {
+        public const uint OneHandMaces = 198;        // 1H Mace weapon skill spell
+        public const uint MiningApprentice = 2575;
+        public const uint HerbalismApprentice = 2366;
+    }
+
     // ---- Shared Distance Helpers (BT-LOGIC-001) ----
 
     /// <summary>2D distance (XY plane only).</summary>

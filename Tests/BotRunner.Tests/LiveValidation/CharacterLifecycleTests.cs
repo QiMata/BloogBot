@@ -24,7 +24,6 @@ public class CharacterLifecycleTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const uint LinenCloth = 2589;
     private const uint MinorHealingPotion = 118;
 
     private const uint PlayerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
@@ -55,15 +54,15 @@ public class CharacterLifecycleTests
             _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
             _output.WriteLine("[PARITY] Running BG and FG add-item scenarios in parallel.");
 
-            var bgTask = RunAddItemScenarioAsync(bgAccount, "BG", LinenCloth, 1, "Linen Cloth");
-            var fgTask = RunAddItemScenarioAsync(fgAccount, "FG", LinenCloth, 1, "Linen Cloth");
+            var bgTask = RunAddItemScenarioAsync(bgAccount, "BG", LiveBotFixture.TestItems.LinenCloth, 1, "Linen Cloth");
+            var fgTask = RunAddItemScenarioAsync(fgAccount, "FG", LiveBotFixture.TestItems.LinenCloth, 1, "Linen Cloth");
             await Task.WhenAll(bgTask, fgTask);
             bgPassed = await bgTask;
             fgPassed = await fgTask;
         }
         else
         {
-            bgPassed = await RunAddItemScenarioAsync(bgAccount, "BG", LinenCloth, 1, "Linen Cloth");
+            bgPassed = await RunAddItemScenarioAsync(bgAccount, "BG", LiveBotFixture.TestItems.LinenCloth, 1, "Linen Cloth");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 
