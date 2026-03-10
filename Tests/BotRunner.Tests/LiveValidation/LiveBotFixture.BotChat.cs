@@ -287,15 +287,22 @@ public partial class LiveBotFixture
     public Task BotSelectSelfAsync(string accountName)
         => SendGmChatCommandAsync(accountName, ".targetself");
 
-    /// <summary>Learn a spell for a specific bot. Automatically selects self first (required by .learn).</summary>
-
-
-    /// <summary>Learn a spell for a specific bot. Automatically selects self first (required by .learn).</summary>
+    /// <summary>
+    /// Learn a spell for a specific bot. Automatically selects self first (required by .learn).
+    /// Polls snapshot to verify spell appeared in SpellList (BT-VERIFY-004).
+    /// </summary>
     public async Task BotLearnSpellAsync(string accountName, uint spellId)
     {
         await BotSelectSelfAsync(accountName);
         await Task.Delay(300);
         await SendGmChatCommandAsync(accountName, $".learn {spellId}");
+
+        // BT-VERIFY-004: Verify spell appeared in snapshot
+        var verified = await WaitForSnapshotConditionAsync(accountName,
+            s => s.Player?.SpellList?.Contains(spellId) == true,
+            TimeSpan.FromSeconds(3), pollIntervalMs: 300);
+        if (!verified)
+            _testOutput?.WriteLine($"[WARN] [{accountName}] Spell {spellId} not confirmed in SpellList after .learn");
     }
 
     /// <summary>Unlearn a spell for a specific bot. Automatically selects self first (required by .unlearn).</summary>
@@ -324,12 +331,21 @@ public partial class LiveBotFixture
         await SendGmChatCommandAsync(accountName, $".setskill {skillId} {currentValue} {maxValue}");
     }
 
-    /// <summary>Add an item to a bot's own bags by having it type .additem in chat.</summary>
+    /// <summary>
+    /// Add an item to a bot's own bags by having it type .additem in chat.
+    /// Polls snapshot to verify item appeared in BagContents (BT-VERIFY-003).
+    /// </summary>
+    public async Task BotAddItemAsync(string accountName, uint itemId, int count = 1)
+    {
+        await SendGmChatCommandAsync(accountName, $".additem {itemId} {count}");
 
-
-    /// <summary>Add an item to a bot's own bags by having it type .additem in chat.</summary>
-    public Task BotAddItemAsync(string accountName, uint itemId, int count = 1)
-        => SendGmChatCommandAsync(accountName, $".additem {itemId} {count}");
+        // BT-VERIFY-003: Verify item appeared in bag snapshot
+        var verified = await WaitForSnapshotConditionAsync(accountName,
+            s => s.Player?.BagContents?.Values.Any(v => v == itemId) == true,
+            TimeSpan.FromSeconds(3), pollIntervalMs: 300);
+        if (!verified)
+            _testOutput?.WriteLine($"[WARN] [{accountName}] Item {itemId} not confirmed in bags after .additem");
+    }
 
     /// <summary>
     /// Teleport a bot by having it type .go xyz in chat (self-teleport).

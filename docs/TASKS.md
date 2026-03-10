@@ -50,8 +50,8 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 | `BT-LOGIC-001` | **Consolidate distance helpers.** Move `Distance2D`/`Distance3D` to LiveBotFixture shared helpers. | `Tests/BotRunner.Tests/LiveValidation/` | Low | **Fixed** `18cb049` |
 | `BT-ITEM-001` | **Centralize item/spell setup.** Shared `TestItems`/`TestSpells` constants added to LiveBotFixture. Local duplicates replaced in 6 files. | `LiveBotFixture.Assertions.cs` | Medium | **Fixed** |
 | `BT-VERIFY-002` | **Use BotClearInventoryAsync instead of .reset items.** Replaced in VendorBuySellTests and LootCorpseTests (bag-only cleanup). EquipmentEquipTests/FishingProfessionTests keep .reset items (need gear stripped). | All LiveValidation tests | High | **Fixed** |
-| `BT-VERIFY-003` | **Item addition without inventory verification.** `.additem` calls don't verify item appeared in bag snapshot. | Multiple tests | Medium | Open |
-| `BT-VERIFY-004` | **Spell learning without verification.** `.learn` calls don't verify spell appears in SpellList snapshot. | Multiple tests | Medium | Open |
+| `BT-VERIFY-003` | **BotAddItemAsync now polls for item in BagContents after .additem.** Warns if item not confirmed within 3s. | `LiveBotFixture.BotChat.cs` | Medium | **Fixed** |
+| `BT-VERIFY-004` | **BotLearnSpellAsync now polls for spell in SpellList after .learn.** Warns if spell not confirmed within 3s. | `LiveBotFixture.BotChat.cs` | Medium | **Fixed** |
 | `BT-SETUP-003` | **Missing teardown mitigated by EnsureCleanSlateAsync.** 16/24 test files use EnsureCleanSlateAsync which revives+teleports at start. Remaining 8 have equivalent setup patterns. | Multiple tests | Medium | **Mitigated** |
 
 ### P0.5 — Bot Coordination (Deferred — Requires P0.1-P0.4 First)
