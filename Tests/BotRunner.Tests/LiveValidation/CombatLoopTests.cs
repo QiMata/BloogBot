@@ -122,21 +122,29 @@ public class CombatLoopTests
     {
         await EnsureStrictAliveAsync(account, label);
 
-        // CRITICAL: Turn GM mode OFF for combat (FG only).
-        // GM mode makes the character invisible to NPCs → mob evades after initial swing.
-        // BG never has .gm on (it's filtered in LiveBotFixture — .gm commands disconnect BG client).
+        // CRITICAL: Turn GM mode OFF for combat. GM mode makes the character invisible
+        // to NPCs → mob evades after initial swing. Must be off for BOTH bots.
+        // FG: toggled via chat (.gm off). BG: toggled via SOAP (chat .gm disconnects BG).
         // Use try/finally to GUARANTEE .gm on restoration (BT-VERIFY-006 fix).
         bool gmTurnedOff = false;
+        _output.WriteLine($"  [{label}] Turning GM mode OFF for combat.");
         if (label == "FG")
         {
-            _output.WriteLine($"  [{label}] Turning GM mode OFF for combat.");
             var gmOffTrace = await _bot.SendGmChatCommandTrackedAsync(account, ".gm off", captureResponse: true, delayMs: 1000);
             var gmOffMsg = gmOffTrace?.ChatMessages.Count > 0 ? string.Join("; ", gmOffTrace.ChatMessages) : "(no response)";
             _output.WriteLine($"  [{label}] .gm off result={gmOffTrace?.DispatchResult}, response: {gmOffMsg}");
             await _bot.SendGmChatCommandTrackedAsync(account, ".gm visible on", captureResponse: true, delayMs: 500);
-            gmTurnedOff = true;
-            await Task.Delay(2000);
         }
+        else
+        {
+            // BG: use SOAP to toggle GM off — chat .gm commands disconnect the headless client.
+            var soapResult = await _bot.SetGMOffAsync();
+            _output.WriteLine($"  [{label}] SOAP .gm off result: {soapResult}");
+            var visResult = await _bot.ExecuteGMCommandAsync(".gm visible on");
+            _output.WriteLine($"  [{label}] SOAP .gm visible on result: {visResult}");
+        }
+        gmTurnedOff = true;
+        await Task.Delay(2000);
 
         try
         {
@@ -418,7 +426,10 @@ public class CombatLoopTests
             if (gmTurnedOff)
             {
                 _output.WriteLine($"  [{label}] Restoring .gm on (finally block).");
-                await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: false, delayMs: 500);
+                if (label == "FG")
+                    await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: false, delayMs: 500);
+                else
+                    await _bot.ExecuteGMCommandAsync(".gm on"); // BG: SOAP to avoid disconnect
             }
         }
     }
