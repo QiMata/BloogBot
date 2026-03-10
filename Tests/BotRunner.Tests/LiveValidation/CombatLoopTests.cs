@@ -195,6 +195,39 @@ public class CombatLoopTests
                 }
             }
 
+            // ── DIAGNOSTIC: Verify GM mode is OFF ──────────────────────────
+            // VMaNGOS ThreatManager::addThreat() silently drops ALL threat from
+            // IsGameMaster() players. If PLAYER_FLAGS_GM (0x08) is still set,
+            // the mob takes damage but has empty threat list → evades immediately.
+            {
+                await _bot.RefreshSnapshotsAsync();
+                var gmSnap = await _bot.GetSnapshotAsync(account);
+                var playerFlags = gmSnap?.Player?.PlayerFlags ?? 0;
+                var isGmFlagSet = (playerFlags & 0x08) != 0; // PLAYER_FLAGS_GM
+                _output.WriteLine($"  [{label}] GM FLAG CHECK: playerFlags=0x{playerFlags:X8}, PLAYER_FLAGS_GM={(isGmFlagSet ? "SET (BAD!)" : "CLEAR (OK)")}");
+
+                if (isGmFlagSet)
+                {
+                    // GM flag is still set — .gm off didn't work. Try again via chat.
+                    _output.WriteLine($"  [{label}] WARNING: GM flag still set! Re-sending .gm off...");
+                    await _bot.SendGmChatCommandTrackedAsync(account, ".gm off", captureResponse: true, delayMs: 1500);
+                    await Task.Delay(500);
+
+                    await _bot.RefreshSnapshotsAsync();
+                    gmSnap = await _bot.GetSnapshotAsync(account);
+                    playerFlags = gmSnap?.Player?.PlayerFlags ?? 0;
+                    isGmFlagSet = (playerFlags & 0x08) != 0;
+                    _output.WriteLine($"  [{label}] GM FLAG RECHECK: playerFlags=0x{playerFlags:X8}, PLAYER_FLAGS_GM={(isGmFlagSet ? "STILL SET!" : "CLEAR NOW")}");
+                }
+
+                // Also check mob reaction — does the mob see us as hostile?
+                var targetMob = gmSnap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+                if (targetMob != null)
+                {
+                    _output.WriteLine($"  [{label}] MOB REACTION CHECK: reaction={targetMob.UnitReaction}, entry={targetMob.GameObject?.Entry}");
+                }
+            }
+
             // ── ACTION: Send StartMeleeAttack ──────────────────────────────
             // BotRunner's combat sequence handles everything: chase to melee range,
             // face the target, toggle auto-attack on, keep chasing if mob moves.
@@ -424,7 +457,9 @@ public class CombatLoopTests
             if (sw.Elapsed - lastDiagTime > TimeSpan.FromSeconds(5))
             {
                 var dist = await GetDistanceToTargetAsync(account, targetGuid);
-                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F0}s: HP={currentHealth}/{initialHealth}, dist={dist:F1}y, target=0x{diagTarget:X}, firstHit={firstDamageConfirmed}");
+                var pflags = snap?.Player?.PlayerFlags ?? 0;
+                var gmBit = (pflags & 0x08) != 0 ? " GM=ON!" : "";
+                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F0}s: HP={currentHealth}/{initialHealth}, dist={dist:F1}y, target=0x{diagTarget:X}, flags=0x{pflags:X}{gmBit}, firstHit={firstDamageConfirmed}");
                 lastDiagTime = sw.Elapsed;
 
                 // Early evade detection: target lost + HP back to max = mob evaded.
