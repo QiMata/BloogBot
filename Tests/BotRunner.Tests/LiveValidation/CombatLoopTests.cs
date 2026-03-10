@@ -110,12 +110,10 @@ public class CombatLoopTests
         }
 
         Assert.True(bgPassed, "BG bot must approach, face, and auto-attack a boar — .damage shortcut is NOT a pass.");
-        if (hasFg && !fgPassed)
+        if (hasFg)
         {
-            // FG combat: mob evades after initial hit. Known issue — WoW.exe position desync
-            // after GM teleport causes the server to lose track of the player's position,
-            // leading to mob pathfinding failure → evade. BG combat is the primary validation.
-            _output.WriteLine("[FG] WARN: FG auto-attack failed (mob evade). Known issue — see BAD_BEHAVIORS.md.");
+            Assert.True(fgPassed, "FG bot must approach, face, and auto-attack a boar without mob evade. " +
+                "Any evasion means auto-attack flow is broken (GM mode still on, position desync, or AttackTarget() failed).");
         }
     }
 
@@ -127,13 +125,21 @@ public class CombatLoopTests
         // CRITICAL: Turn GM mode OFF for combat (FG only).
         // GM mode makes the character invisible to NPCs → mob evades after initial swing.
         // BG never has .gm on (it's filtered in LiveBotFixture — .gm commands disconnect BG client).
+        // Use try/finally to GUARANTEE .gm on restoration (BT-VERIFY-006 fix).
+        bool gmTurnedOff = false;
         if (label == "FG")
         {
             _output.WriteLine($"  [{label}] Turning GM mode OFF for combat.");
-            await _bot.SendGmChatCommandTrackedAsync(account, ".gm off", captureResponse: true, delayMs: 1000);
+            var gmOffTrace = await _bot.SendGmChatCommandTrackedAsync(account, ".gm off", captureResponse: true, delayMs: 1000);
+            var gmOffMsg = gmOffTrace?.ChatMessages.Count > 0 ? string.Join("; ", gmOffTrace.ChatMessages) : "(no response)";
+            _output.WriteLine($"  [{label}] .gm off result={gmOffTrace?.DispatchResult}, response: {gmOffMsg}");
             await _bot.SendGmChatCommandTrackedAsync(account, ".gm visible on", captureResponse: true, delayMs: 500);
+            gmTurnedOff = true;
             await Task.Delay(2000);
         }
+
+        try
+        {
 
         // Ensure bot has a weapon equipped — .reset items from other tests may strip starter gear.
         _output.WriteLine($"  [{label}] Ensuring weapon equipped (Worn Mace).");
@@ -404,11 +410,17 @@ public class CombatLoopTests
         var deadOrGone = await WaitForMobDeadOrGoneAsync(account, targetGuid, TimeSpan.FromSeconds(8));
         _output.WriteLine($"  [{label}] Target dead/removed after cleanup: {deadOrGone}");
 
-        // Restore GM mode for other tests (FG only — BG never had it on).
-        if (label == "FG")
-            await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: false, delayMs: 500);
-
         return true; // Real combat was validated — cleanup result is informational.
+        }
+        finally
+        {
+            // ALWAYS restore GM mode (BT-VERIFY-006 fix) — even if test failed mid-combat.
+            if (gmTurnedOff)
+            {
+                _output.WriteLine($"  [{label}] Restoring .gm on (finally block).");
+                await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: false, delayMs: 500);
+            }
+        }
     }
 
     private async Task EnsureNearMobAreaAsync(string account, string label, float targetX, float targetY, float targetZ)

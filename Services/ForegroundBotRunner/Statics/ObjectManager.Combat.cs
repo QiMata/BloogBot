@@ -18,20 +18,19 @@ namespace ForegroundBotRunner.Statics
     public partial class ObjectManager
     {
 
-        // LUA SCRIPTS
-
-
-        // LUA SCRIPTS
+        // LUA SCRIPTS — Auto-attack toggle
+        //
+        // AttackTarget() is the most reliable 1.12.1 API for starting melee auto-attack.
+        // It doesn't depend on action bar slot configuration (IsCurrentAction(72) assumes
+        // Attack is in slot 72, which may not be true after .reset items or respec).
+        //
+        // CastSpellByName('Attack') is a toggle — calling it while already attacking STOPS
+        // the attack. The IsCurrentAction(72) guard prevents accidental toggle-off, but
+        // AttackTarget() is idempotent: calling it when already attacking is a no-op.
+        private const string AutoAttackLuaScript = "AttackTarget()";
         private const string WandLuaScript = "if IsCurrentAction(72) == nil then CastSpellByName('Shoot') end";
-
-
-        private const string TurnOffWandLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Shoot') end";
-
-
-        private const string AutoAttackLuaScript = "if IsCurrentAction(72) == nil then CastSpellByName('Attack') end";
-
-
         private const string TurnOffAutoAttackLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Attack') end";
+        private const string TurnOffWandLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Shoot') end";
 
 
 
@@ -97,8 +96,10 @@ namespace ForegroundBotRunner.Statics
             {
                 MainThreadLuaCall(WandLuaScript);
             }
-            else if (Player.Class != Class.Hunter)
+            else
             {
+                // AttackTarget() works for all classes including Hunter.
+                // It's idempotent — safe to call even if already attacking.
                 MainThreadLuaCall(AutoAttackLuaScript);
             }
         }
