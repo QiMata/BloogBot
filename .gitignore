@@ -320,3 +320,7 @@ run-loop.ps1
 run-tests.ps1
 setup.ps1
 tools/scan_durotar_*.ps1
+
+# Test output logs
+TestResults/
+**/LiveLogs/

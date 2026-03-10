@@ -32,16 +32,8 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 |---|------|-------|--------|
 | 1.1 | **Complete FG recv hook (SMSG).** Runtime pattern scanner finds ProcessMessage by scanning for `[this+0x74]` m_handlers access near NetClientSend. Assembly detour captures all inbound SMSG opcodes. | `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` | **Done** (`087085e`) |
 | 1.2 | **Structured packet log format.** C→S / S→C direction, opcode name lookup (~60 opcodes), size, timestamp. Logs first 500 packets + all important opcodes. | `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` | **Done** (`087085e`) |
-| 1.3 | **Packet capture test.** LiveValidation test that triggers known actions (teleport, cast spell, buy item) on FG and verifies expected CMSG/SMSG pairs appear in the packet log. | `Tests/BotRunner.Tests/LiveValidation/` | Open |
-| 1.4 | **Live validation of recv hook.** Run FG bot, verify `packet_logger.log` shows SMSG packets with valid opcodes. Confirm pattern scanner found the correct ProcessMessage address. | Manual verification | **Next** |
 
-**Implementation notes:**
-- Send hook: `NetClientSend` (0x005379A0) assembly injection — captures CMSG
-- Recv hook: `ProcessMessage` found via pattern scan (m_handlers at `this+0x74`) — captures SMSG
-- Sanity check rejects opcodes > 0x0500 (WoW 1.12.1 max ~0x033B)
-- Falls back to ContinentId inference if pattern scan fails
-- Compare captured packets against VMaNGOS server handler code to verify correctness
-- Packet log enables side-by-side FG vs BG comparison for all subsequent tasks
+**Packet capture is a diagnostic tool, not a standalone test.** Use it during all LiveValidation tests to observe FG/BG packet sequences. Compare against VMaNGOS server code to validate correct behavior. Analyze `packet_logger.log` for hidden error messages and timing issues.
 
 ---
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -191,8 +192,15 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     public void SetOutput(ITestOutputHelper output)
     {
-        _testOutput = output;
-        _serviceFixture.SetOutput(output);
+        // Wrap with DualOutputHelper to also write to a per-test-class log file.
+        // StackFrame(1) gets the calling test class constructor.
+        var callerType = new StackFrame(1).GetMethod()?.DeclaringType?.Name ?? "UnknownTest";
+        var logDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "TestResults", "LiveLogs");
+        var logPath = Path.Combine(logDir, $"{callerType}.log");
+
+        (_testOutput as IDisposable)?.Dispose(); // close previous log if any
+        _testOutput = new DualOutputHelper(output, logPath);
+        _serviceFixture.SetOutput(_testOutput);
     }
 
 
