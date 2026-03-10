@@ -67,18 +67,7 @@ public class MapTransitionTests
         {
             _output.WriteLine("[PARITY] Running BG and FG map transition tests in parallel.");
             var bgTask = RunSingleMapTransitionTest(bgAccount, "BG");
-            var fgTask = Task.Run(async () =>
-            {
-                try
-                {
-                    await RunSingleMapTransitionTest(_bot.FgAccountName!, "FG");
-                }
-                catch (Exception ex)
-                {
-                    // FG crash during map transition is a known issue — log but don't fail the test
-                    _output.WriteLine($"[WARN] FG map transition test failed (known FG crash risk): {ex.Message}");
-                }
-            });
+            var fgTask = RunSingleMapTransitionTest(_bot.FgAccountName!, "FG");
             await Task.WhenAll(bgTask, fgTask);
         }
         else

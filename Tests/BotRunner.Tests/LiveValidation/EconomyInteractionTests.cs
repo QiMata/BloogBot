@@ -135,8 +135,7 @@ public class EconomyInteractionTests
             await Task.WhenAll(bgTask, fgTask);
 
             Assert.True(await bgTask, "BG should find/interact with a mailbox-like game object.");
-            if (!await fgTask)
-                _output.WriteLine("WARNING: FG mailbox interaction not observed in this run; BG path remains authoritative.");
+            Assert.True(await fgTask, "FG should find/interact with a mailbox-like game object.");
         }
         else
         {

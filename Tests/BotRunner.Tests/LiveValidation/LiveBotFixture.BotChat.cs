@@ -417,8 +417,12 @@ public partial class LiveBotFixture
     /// </summary>
 
 
+    /// <summary>Teleport a bot to a named location via SOAP (.tele name charName location).</summary>
+    public Task BotTeleportToNamedAsync(string accountName, string characterName, string locationName)
+        => ExecuteGMCommandAsync($".tele name {characterName} {locationName}");
+
     /// <summary>Teleport a bot to a named location by having it type .tele in chat (self-teleport).</summary>
-    public Task BotTeleportToNamedAsync(string accountName, string locationName)
+    public Task BotTeleportToNamedViaChatAsync(string accountName, string locationName)
         => SendGmChatCommandAsync(accountName, $".tele {locationName}");
 
     // ---- MySQL direct helpers (bypass disabled GM commands in some repacks) ----

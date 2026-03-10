@@ -81,7 +81,7 @@ public class DeathCorpseRunTests
 
         // Step 2: Teleport to Orgrimmar (named location — on top of bank)
         _output.WriteLine($"  [{label}] Step 2: Teleport to Orgrimmar");
-        await _bot.BotTeleportToNamedAsync(account, "Orgrimmar");
+        await _bot.BotTeleportToNamedAsync(account, charName, "Orgrimmar");
         await Task.Delay(2000); // Let position settle after named teleport
 
         await _bot.RefreshSnapshotsAsync();
@@ -206,9 +206,9 @@ public class DeathCorpseRunTests
         await Task.Delay(1000);
 
         // Teleport back to safe zone
-        await _bot.BotTeleportToNamedAsync(bgAccount, "Orgrimmar");
-        if (!string.IsNullOrWhiteSpace(fgAccount))
-            await _bot.BotTeleportToNamedAsync(fgAccount!, "Orgrimmar");
+        await _bot.BotTeleportToNamedAsync(bgAccount, bgChar, "Orgrimmar");
+        if (!string.IsNullOrWhiteSpace(fgAccount) && !string.IsNullOrWhiteSpace(fgChar))
+            await _bot.BotTeleportToNamedAsync(fgAccount!, fgChar!, "Orgrimmar");
         await Task.Delay(1000);
     }
 }

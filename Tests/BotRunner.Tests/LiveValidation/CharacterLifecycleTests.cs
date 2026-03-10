@@ -68,10 +68,9 @@ public class CharacterLifecycleTests
         }
 
         Assert.True(bgPassed, "BG bot: expected Linen Cloth to appear in bag snapshot after .additem.");
-        if (hasFg && !fgPassed)
-        {
-            _output.WriteLine("[FG] WARNING: FG inventory read returned empty — known FG ObjectManager Item enumeration gap.");
-        }
+        if (hasFg)
+            Assert.True(fgPassed, "FG bot: expected Linen Cloth to appear in bag snapshot after .additem. " +
+                "If FG ObjectManager Item enumeration is broken, fix it — don't hide failures.");
     }
 
     [SkippableFact]
@@ -103,13 +102,9 @@ public class CharacterLifecycleTests
         }
 
         Assert.True(bgPassed, "BG bot: expected Minor Healing Potion to appear in bag snapshot after .additem.");
-        if (hasFg && !fgPassed)
-        {
-            // FG ObjectManager's EnumerateVisibleObjects callback may not enumerate Item objects,
-            // causing GetContainedItems() to return empty. This is a known FG snapshot pipeline
-            // limitation — warn instead of fail so BG-only validation still passes.
-            _output.WriteLine("[FG] WARNING: FG inventory read returned empty — known FG ObjectManager Item enumeration gap.");
-        }
+        if (hasFg)
+            Assert.True(fgPassed, "FG bot: expected Minor Healing Potion to appear in bag snapshot after .additem. " +
+                "If FG ObjectManager Item enumeration is broken, fix it — don't hide failures.");
     }
 
     [SkippableFact]
