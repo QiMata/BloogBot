@@ -311,9 +311,7 @@ public class FishingProfessionTests
             _output.WriteLine($"[{label}] Cast {attempt}/{MaxFishingAttempts} — " +
                 $"pos=({prePos?.X:F1}, {prePos?.Y:F1}, {prePos?.Z:F1})");
 
-            // Step 1: Try CastSpell action (CMSG_CAST_SPELL). This is the correct
-            // client packet path. With the MOVEFLAG_FALLINGFAR fix in MovementController,
-            // the server should accept the cast without interrupting the channel.
+            // Cast fishing via player action (CMSG_CAST_SPELL) — no GM shortcuts.
             await _bot.SendActionAndWaitAsync(account, new ActionMessage
             {
                 ActionType = ActionType.CastSpell,
@@ -326,22 +324,6 @@ public class FishingProfessionTests
             var channelId = snap?.Player?.Unit?.ChannelSpellId ?? 0;
             var bobber = FindBobber(snap);
             _output.WriteLine($"  [{label}] After CastSpell: channel={channelId}, bobber={bobber != null}");
-
-            // Step 2: If channel didn't start, try .cast as GM fallback
-            if (channelId == 0 && bobber == null)
-            {
-                _output.WriteLine($"  [{label}] CastSpell failed, trying .cast fallback...");
-                await _bot.SendGmChatCommandAsync(account, $".cast {FishingData.FishingRank1}");
-
-                // Wait for CREATE packet to arrive and snapshot to update
-                await Task.Delay(2000);
-                await _bot.RefreshSnapshotsAsync();
-
-                snap = GetSnapshot(label);
-                channelId = snap?.Player?.Unit?.ChannelSpellId ?? 0;
-                bobber = FindBobber(snap);
-                _output.WriteLine($"  [{label}] After .cast: channel={channelId}, bobber={bobber != null}");
-            }
 
             // Log diagnostics
             if (bobber != null)

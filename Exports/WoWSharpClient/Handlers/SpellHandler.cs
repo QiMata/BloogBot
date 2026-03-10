@@ -565,5 +565,63 @@ namespace WoWSharpClient.Handlers
             }
             catch (EndOfStreamException) { }
         }
+
+
+
+        /// <summary>
+        /// Parses MSG_CHANNEL_START (0x139).
+        /// Format: uint32 spellId, int32 duration (ms)
+        /// Sets ChannelingId on the local player so IsChanneling becomes true.
+        /// </summary>
+        public static void HandleChannelStart(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint spellId = reader.ReadUInt32();
+                int durationMs = reader.ReadInt32();
+
+                var om = WoWSharpObjectManager.Instance;
+                if (om.Player is Models.WoWUnit player)
+                {
+                    player.ChannelingId = spellId;
+                    Log.Information("[SpellHandler] CHANNEL_START: spell={SpellId} duration={Duration}ms",
+                        spellId, durationMs);
+                }
+            }
+            catch (EndOfStreamException) { }
+            catch (Exception ex)
+            {
+                Log.Warning("[SpellHandler] Error parsing MSG_CHANNEL_START: {Message}", ex.Message);
+            }
+        }
+
+
+
+        /// <summary>
+        /// Parses MSG_CHANNEL_UPDATE (0x13A).
+        /// Format: int32 remainingTime (ms). When 0, channel ended.
+        /// </summary>
+        public static void HandleChannelUpdate(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                int remainingTimeMs = reader.ReadInt32();
+
+                var om = WoWSharpObjectManager.Instance;
+                if (om.Player is Models.WoWUnit player && remainingTimeMs <= 0)
+                {
+                    Log.Information("[SpellHandler] CHANNEL_UPDATE: channel ended (remaining={Remaining}ms, was channeling spell={SpellId})",
+                        remainingTimeMs, player.ChannelingId);
+                    player.ChannelingId = 0;
+                }
+            }
+            catch (EndOfStreamException) { }
+            catch (Exception ex)
+            {
+                Log.Warning("[SpellHandler] Error parsing MSG_CHANNEL_UPDATE: {Message}", ex.Message);
+            }
+        }
     }
 }

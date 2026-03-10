@@ -252,6 +252,8 @@ namespace WoWSharpClient.Client
             BridgeToLegacy(Opcode.SMSG_ATTACKSTART, Handlers.SpellHandler.HandleAttackStart);
             BridgeToLegacy(Opcode.SMSG_ATTACKSTOP, Handlers.SpellHandler.HandleAttackStop);
             BridgeToLegacy(Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM, Handlers.SpellHandler.HandleGameObjectCustomAnim);
+            BridgeToLegacy(Opcode.MSG_CHANNEL_START, Handlers.SpellHandler.HandleChannelStart);
+            BridgeToLegacy(Opcode.MSG_CHANNEL_UPDATE, Handlers.SpellHandler.HandleChannelUpdate);
 
             // Quests
             BridgeToLegacy(Opcode.SMSG_QUESTUPDATE_COMPLETE, Handlers.QuestHandler.HandleQuestUpdateComplete);

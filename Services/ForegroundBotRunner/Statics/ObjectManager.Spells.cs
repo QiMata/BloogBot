@@ -458,6 +458,31 @@ namespace ForegroundBotRunner.Statics
 
 
 
+        /// <summary>
+        /// Reads the spell name directly from the client spell DB (0x00C0D788 pointer chain).
+        /// Returns null if the DB isn't loaded or the spell ID doesn't exist.
+        /// </summary>
+        internal string? GetSpellNameFromDb(int spellId)
+        {
+            try
+            {
+                var spellsBasePtr = MemoryManager.ReadIntPtr(0x00C0D788);
+                if (spellsBasePtr == nint.Zero) return null;
+                var spellPtr = MemoryManager.ReadIntPtr(spellsBasePtr + spellId * 4);
+                if (spellPtr == nint.Zero) return null;
+                var spellNamePtr = MemoryManager.ReadIntPtr(spellPtr + 0x1E0);
+                if (spellNamePtr == nint.Zero) return null;
+                var name = MemoryManager.ReadString(spellNamePtr);
+                return string.IsNullOrEmpty(name) || name.Length > 100 ? null : name;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+
+
         public void RefreshSkills()
         {
             if (Player is not LocalPlayer localPlayer) return;

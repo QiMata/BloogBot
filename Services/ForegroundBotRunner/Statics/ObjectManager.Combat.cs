@@ -179,16 +179,34 @@ namespace ForegroundBotRunner.Statics
 
         public void CastSpell(int spellId, int rank = -1, bool castOnSelf = false)
         {
-            // Foreground uses LuaCall by name; int overload is a no-op
+            // Look up spell name from the client spell DB and delegate to string overload.
+            var spellName = GetSpellNameFromDb(spellId);
+            if (string.IsNullOrEmpty(spellName))
+            {
+                Log.Warning("[CastSpell(int)] No spell name found for ID {SpellId} in client spell DB", spellId);
+                return;
+            }
+            Log.Information("[CastSpell(int)] Resolved spell {SpellId} → '{SpellName}'", spellId, spellName);
+            CastSpell(spellName, rank, castOnSelf);
         }
 
 
 
         public void CastSpellAtLocation(int spellId, float x, float y, float z)
         {
-            // FG bot: Lua CastSpellByName handles targeting natively; the client calculates
-            // the bobber/AOE position from the player's facing. This is a no-op because
-            // FG CastSpell(string) routes through Lua which handles location targeting.
+            // FG bot: Lua CastSpellByName handles location targeting natively —
+            // the client calculates the bobber/AOE position from player facing.
+            // Just resolve the spell name and cast it.
+            var spellName = GetSpellNameFromDb(spellId);
+            if (!string.IsNullOrEmpty(spellName))
+            {
+                Log.Information("[CastSpellAtLocation] Resolved spell {SpellId} → '{SpellName}', casting via Lua", spellId, spellName);
+                CastSpell(spellName);
+            }
+            else
+            {
+                Log.Warning("[CastSpellAtLocation] No spell name found for ID {SpellId}", spellId);
+            }
         }
 
         public void CastSpellOnGameObject(int spellId, ulong gameObjectGuid)

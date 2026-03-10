@@ -120,33 +120,24 @@ public class SpellCastOnTargetTests
         bool hadAura = playerBefore?.Unit?.Auras?.Contains(BattleShoutSpellId) == true;
         _output.WriteLine($"  [{label}] Before cast: hasBattleShout={hadAura}");
 
-        // Step 3: Cast Battle Shout
-        // BG bot: ActionType.CastSpell → CMSG_CAST_SPELL (tests packet pipeline)
-        // FG bot: CastSpell(int) is a no-op in ForegroundBotRunner — use .cast GM command
-        _output.WriteLine($"  [{label}] Step 3: Casting Battle Shout.");
-        if (label == "BG")
+        // Step 3: Cast Battle Shout via player action (no GM shortcuts).
+        // Both FG and BG use ActionType.CastSpell. FG resolves spell ID → name via spell DB.
+        _output.WriteLine($"  [{label}] Step 3: Casting Battle Shout via player action.");
+        var castResult = await _bot.SendActionAsync(account, new ActionMessage
         {
-            var castResult = await _bot.SendActionAsync(account, new ActionMessage
+            ActionType = ActionType.CastSpell,
+            Parameters =
             {
-                ActionType = ActionType.CastSpell,
-                Parameters =
-                {
-                    new RequestParameter { IntParam = (int)BattleShoutSpellId }
-                }
-            });
-            _output.WriteLine($"  [{label}] CastSpell action dispatch result: {castResult}");
-        }
-        else
-        {
-            _output.WriteLine($"  [{label}] Using .cast GM command (FG CastSpell(int) is no-op).");
-            await _bot.SendGmChatCommandAsync(account, $".cast {BattleShoutSpellId}");
-        }
+                new RequestParameter { IntParam = (int)BattleShoutSpellId }
+            }
+        });
+        _output.WriteLine($"  [{label}] CastSpell action dispatch result: {castResult}");
 
         // Step 4: Wait for aura to appear
         _output.WriteLine($"  [{label}] Step 4: Waiting for Battle Shout aura to appear.");
         var auraAppeared = false;
         var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(5))
+        while (sw.Elapsed < TimeSpan.FromSeconds(8))
         {
             await _bot.RefreshSnapshotsAsync();
             var player = getPlayer();
@@ -157,46 +148,6 @@ public class SpellCastOnTargetTests
                 break;
             }
             await Task.Delay(300);
-        }
-
-        if (!auraAppeared && label == "BG")
-        {
-            // BG fallback: CMSG_CAST_SPELL may fail; retry via .cast GM command
-            _output.WriteLine($"  [{label}] CMSG_CAST_SPELL did not produce aura; retrying via .cast.");
-            await _bot.SendGmChatCommandAsync(account, $".cast {BattleShoutSpellId}");
-            sw.Restart();
-            while (sw.Elapsed < TimeSpan.FromSeconds(5))
-            {
-                await _bot.RefreshSnapshotsAsync();
-                var player = getPlayer();
-                if (player?.Unit?.Auras?.Contains(BattleShoutSpellId) == true)
-                {
-                    auraAppeared = true;
-                    _output.WriteLine($"  [{label}] Battle Shout aura detected via .cast fallback after {sw.ElapsedMilliseconds}ms.");
-                    break;
-                }
-                await Task.Delay(300);
-            }
-        }
-
-        if (!auraAppeared)
-        {
-            // Last resort: .aura directly applies the buff (bypasses cast entirely)
-            _output.WriteLine($"  [{label}] .cast also failed; trying .aura {BattleShoutSpellId} (direct application).");
-            await _bot.SendGmChatCommandAsync(account, $".aura {BattleShoutSpellId}");
-            sw.Restart();
-            while (sw.Elapsed < TimeSpan.FromSeconds(3))
-            {
-                await _bot.RefreshSnapshotsAsync();
-                var player = getPlayer();
-                if (player?.Unit?.Auras?.Contains(BattleShoutSpellId) == true)
-                {
-                    auraAppeared = true;
-                    _output.WriteLine($"  [{label}] Battle Shout aura detected via .aura after {sw.ElapsedMilliseconds}ms.");
-                    break;
-                }
-                await Task.Delay(300);
-            }
         }
 
         if (!auraAppeared)
