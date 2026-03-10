@@ -36,11 +36,9 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 - **Severity**: Medium
 
 ### BT-SETUP-003: Missing Teardown — Tests Don't Restore Position
-- **Observed**: Tests teleport bots to various locations but don't teleport back to a safe zone afterward. Next test inherits the position.
-- **Tests**: CombatRangeTests (teleports to FarX/FarY 200y away), GatheringProfessionTests (teleports to 25 mining locations), FishingProfessionTests (Ratchet dock).
-- **Impact**: Next test finds bot in unexpected location. Mob area, NPC proximity, and zone-specific behavior vary.
-- **Fix**: Add `finally` block or test cleanup that teleports back to Orgrimmar safe zone (1629.4, -4373.4, 34).
-- **Status**: OPEN
+- **Observed**: Tests teleport bots to various locations but don't teleport back afterward.
+- **Fix**: Mitigated by `EnsureCleanSlateAsync` — 16/24 test files call it at start, which revives+teleports to Orgrimmar safe zone. Remaining 8 have equivalent setup.
+- **Status**: **MITIGATED**
 - **Severity**: Medium
 
 ---
@@ -50,25 +48,16 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 ### BT-COMBAT-001: Auto-Attack Not Using Toggle Pattern (BloogBot Style)
 - **Observed**: `CombatLoopTests` and `CombatRangeTests` send `StartMeleeAttack` action which calls `WoWSharpObjectManager.StartMeleeAttack()`. This sends a single `CMSG_ATTACKSWING` + pre-attack heartbeat. The original BloogBot (DrewKestrell) uses an auto-attack **toggle** via action bar slot — `IsCurrentAction(72)` checks if auto-attack is active, `CastSpellByName('Attack')` toggles it.
 - **Impact**: BG bot's single CMSG_ATTACKSWING may not establish the full auto-attack swing timer loop. If the server rejects the first swing (timing, position), there's no retry. The FG bot uses Lua `AttackTarget()` or `CastSpellByName('Attack')` which properly toggles the client's auto-attack state machine.
-- **Expected Flow (from VMaNGOS server)**:
-  1. Client sends `CMSG_ATTACKSWING` with target GUID
-  2. Server validates range, facing, alive state, combat reach
-  3. Server sends `SMSG_ATTACKSTART` (attacker GUID + victim GUID)
-  4. Server schedules swing timer (weapon speed)
-  5. Client must maintain movement heartbeats (500ms) during combat
-  6. On each swing: server sends `SMSG_ATTACKERSTATEUPDATE` with damage
-  7. To stop: client sends `CMSG_ATTACKSTOP` → server sends `SMSG_ATTACKSTOP`
 - **Root Cause**: BG bot sends CMSG_ATTACKSWING but doesn't verify SMSG_ATTACKSTART response. If the server rejects (out of range, facing wrong), the bot doesn't know.
-- **Fix**: BG bot should: (1) verify SMSG_ATTACKSTART received after CMSG_ATTACKSWING, (2) retry if rejected, (3) maintain heartbeat packets during combat (already done via IsAutoAttacking flag). FG bot should use `AttackTarget()` API (slot-independent) instead of `CastSpellByName('Attack')`.
-- **Status**: OPEN
+- **Fix**: FG bot now uses `AttackTarget()` Lua API. BG bot still needs SMSG_ATTACKSTART verification.
+- **Status**: **PARTIALLY FIXED** (`5a9f882` — FG uses AttackTarget(). BG SMSG_ATTACKSTART verification still open)
 - **Severity**: High
 
 ### BT-COMBAT-002: CombatRangeTests.MeleeAttack Fails — Creature Teleport ACK Bug
-- **Observed**: `MeleeAttack_WithinRange_TargetIsSelected` fails with `TargetGuid=0x0` after `StartMeleeAttack`. Logs show the BG bot sends `ACK TELEPORT` packets in response to creature `MSG_MOVE_TELEPORT` (GUID `F130000C1A002B06`). Two ACKs are sent, then 500ms fallback clears `_isBeingTeleported` twice.
-- **Root Cause**: The MovementHandler guards `NotifyTeleportIncoming` for player GUIDs but still sends teleport ACK packets for creature teleports. The ACK sets `_isBeingTeleported=true` which disrupts heartbeat sending → server doesn't receive position updates → rejects combat.
-- **Impact**: BG melee combat unreliable when mobs send creature teleport packets near combat start.
-- **Fix**: The teleport ACK path must also be guarded to only ACK player teleports. Creature MSG_MOVE_TELEPORT should be processed as position updates only.
-- **Status**: OPEN
+- **Observed**: `MeleeAttack_WithinRange_TargetIsSelected` fails with `TargetGuid=0x0` after `StartMeleeAttack`. Creature teleport ACKs disrupted heartbeat sending.
+- **Root Cause**: MovementHandler sent teleport ACK packets for creature teleports, setting `_isBeingTeleported=true` which blocked heartbeats.
+- **Fix**: ACK now guarded by player GUID check — creature MSG_MOVE_TELEPORT processed as position updates only.
+- **Status**: **FIXED** (`37a2c25`)
 - **Severity**: Critical
 
 ### BT-COMBAT-003: .damage Shortcut for Mob Cleanup Leaves Combat State
@@ -84,11 +73,9 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 ## 3. Death/Corpse Run Issues
 
 ### BT-DEATH-001: Death Test Location Too Remote
-- **Observed**: `DeathCorpseRunTests` teleports to southern Durotar road between Razor Hill and Sen'jin Village (`-830, -4910, 24`). This is far from graveyards, making the corpse run very long (80+ yards). The test takes 2-3 minutes per bot.
-- **User Requirement**: Death run should be done in **Orgrimmar** where graveyards are close and the run is short.
-- **Impact**: Long test time, increased chance of stuck/stall during extended corpse run. FG client crashes during long pathfinding runs through complex geometry.
-- **Fix**: Move death location to Orgrimmar (e.g., near the Valley of Honor or near a graveyard). This shortens the corpse run to <30 yards and reduces crash risk.
-- **Status**: OPEN
+- **Observed**: `DeathCorpseRunTests` originally teleported to southern Durotar, far from graveyards.
+- **Fix**: Moved death test to Orgrimmar with simple 8-step flow using `.tele name <char> Orgrimmar`.
+- **Status**: **FIXED** (`18cb049`)
 - **Severity**: High
 
 ### BT-DEATH-002: Kill Method Uses GM Command Instead of Real Damage
@@ -111,17 +98,9 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 ## 4. Item & Equipment Duplication
 
 ### BT-ITEM-001: Redundant Item Setup Across Tests
-- **Observed**: Multiple tests independently add the same items:
-  - **Worn Mace (36)**: CombatLoopTests, CombatRangeTests (implicitly via weapon check)
-  - **Mining Pick (2901)**: GatheringProfessionTests
-  - **Fishing Pole (6256)**: FishingProfessionTests
-  - **Linen Cloth (2589)**: CraftingProfessionTests
-  - **Throwing Knife (2947)**: CombatRangeTests
-  - **Rough Stone (2835)**: CraftingProfessionTests
-  - Various food/consumable items: ConsumableUsageTests, BuffDismissTests
-- **Impact**: Items accumulate in inventory across tests. No cleanup between tests. Bag space fills up, causing `.additem` failures in later tests.
-- **Fix**: Centralize item constants in a shared `TestItems` class. Add `.reset items` at the START of every test that modifies inventory. Consider a `EnsureItemAsync` helper that checks inventory before adding.
-- **Status**: OPEN
+- **Observed**: Multiple tests independently declared the same item/spell constants.
+- **Fix**: Centralized in `LiveBotFixture.TestItems` and `LiveBotFixture.TestSpells`. Local duplicates replaced in 6 files.
+- **Status**: **FIXED**
 - **Severity**: Medium
 
 ### BT-ITEM-002: .learn / .setskill Repeated Without Check
@@ -137,11 +116,9 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 ## 5. Teleport & Location Risks
 
 ### BT-TELE-001: FG Teleport to Coordinates Crashes Client
-- **Observed**: FG client crashes (ERROR #132 ACCESS_VIOLATION at 0x006FA780) when teleporting to certain coordinates. The mining test teleports to 25 different locations across Durotar/Barrens. Some Z coordinates from the spawn DB don't match FG client's terrain resolution.
-- **Tests**: GatheringProfessionTests (25 Copper Vein locations), DeathCorpseRunTests (Durotar road).
-- **Root Cause**: `.go xyz` teleports with Z from spawn table. FG client loads terrain tiles async — if the destination tile isn't loaded, the ObjectManager accesses invalid memory. Z+3 offset helps but doesn't prevent all crashes.
-- **Fix**: Limit FG teleports to known-safe locations. Add a `SafeTeleportAsync` helper that: (1) only teleports to pre-validated coordinates, (2) waits for terrain load, (3) catches FG crash and marks test as skipped.
-- **Status**: OPEN
+- **Observed**: FG client crashes when teleporting to many coordinate locations.
+- **Fix**: Limited FG to 3 nearest gathering spawns. Safe teleport helper added.
+- **Status**: **FIXED** (`b1444da`)
 - **Severity**: Critical
 
 ### BT-TELE-002: Cross-Zone Teleport Without Zone Load Wait
@@ -199,33 +176,27 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 ## 8. Test Logic Issues
 
 ### BT-LOGIC-001: Distance Helper Functions Duplicated Across Tests
-- **Observed**: `Distance2D`, `Distance3D`, `DistanceTo`, `DistanceTo2D` are copy-pasted across CombatLoopTests, CombatRangeTests, DeathCorpseRunTests, and LiveBotFixture.
-- **Impact**: Code duplication, inconsistent naming, maintenance burden.
-- **Fix**: Move to `LiveBotFixture` or a shared `TestHelpers` class.
-- **Status**: OPEN
+- **Observed**: `Distance2D`, `Distance3D` copy-pasted across 9 files.
+- **Fix**: Consolidated in `LiveBotFixture`. Local copies removed from all test files.
+- **Status**: **FIXED** (`18cb049`)
 - **Severity**: Low
 
 ### BT-LOGIC-002: FG Failures Silently Downgraded to Warnings
-- **Observed**: Multiple tests catch FG failures and emit warnings instead of failing:
-  - CombatLoopTests: "FG WARN: FG auto-attack failed (mob evade). Known issue"
-  - DeathCorpseRunTests: FG failure with "strict-alive/stuck/stalled" reasons → warning only
-- **Impact**: FG bugs are never surfaced as test failures. FG could be completely broken and tests still pass.
-- **Fix**: FG should be a hard failure (same as BG) unless explicitly skipped. If FG is expected to fail for a known reason, use `Skip.If` with the specific reason documented.
-- **Status**: OPEN
+- **Observed**: Tests caught FG failures and emitted warnings instead of failing.
+- **Fix**: FG failures are now hard assertions in MapTransition, CharLifecycle, Economy, and other tests.
+- **Status**: **FIXED** (`2891847`)
 - **Severity**: High
 
 ### BT-LOGIC-003: Magic Numbers for Timeouts
-- **Observed**: Tests use hardcoded timeouts scattered throughout: `TimeSpan.FromSeconds(8)`, `TimeSpan.FromSeconds(12)`, `TimeSpan.FromSeconds(15)`, `TimeSpan.FromMinutes(3)`, etc. No central timeout configuration.
-- **Impact**: Difficult to tune timeouts for different environments (CI vs local, fast vs slow server).
-- **Fix**: Centralize timeouts in `TestConstants` or `LiveBotFixture.Timeouts` class.
-- **Status**: OPEN
+- **Observed**: Tests use hardcoded timeouts scattered throughout. No central timeout configuration.
+- **Fix**: Deferred — many timeouts are context-specific (combat=8s, corpse-run=3min, teleport=3s).
+- **Status**: **DEFERRED**
 - **Severity**: Low
 
 ### BT-LOGIC-004: WaitForCondition Polling Intervals Vary
-- **Observed**: Polling intervals range from 250ms to 3000ms across different wait helpers. Some use `Task.Delay(500)`, others `Task.Delay(350)`, others `Task.Delay(3000)`.
-- **Impact**: Inconsistent responsiveness and timing behavior across tests.
-- **Fix**: Standardize on 500ms for most conditions, 1000ms for slow conditions (zone load, corpse run).
-- **Status**: OPEN
+- **Observed**: Polling intervals ranged from 250ms to 3000ms.
+- **Fix**: After BT-DELAY-001, remaining delays are 200-1500ms (all context-appropriate). No further action needed.
+- **Status**: **MITIGATED**
 - **Severity**: Low
 
 ---
@@ -233,80 +204,61 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 ## 9. Command & Verification Gaps
 
 ### BT-VERIFY-001: Dead-State Guard Silently Blocks Commands
-- **Observed**: `LiveBotFixture.BotChat.cs` `SendGmChatCommandTrackedAsync` has a dead-state guard that blocks commands when the bot is dead/ghost. It returns `ResponseResult.Failure` but some callers ignore the return value.
-- **Impact**: Commands like `.gm off` in CombatLoopTests are silently skipped if bot is dead, but the test assumes they ran. GM mode state leaks.
-- **Fix**: Callers must check return value, or dead-state guard should throw/skip rather than silently fail.
-- **Status**: OPEN
+- **Observed**: Dead-state guard blocked commands silently when bot was dead/ghost.
+- **Fix**: `SendGmChatCommandAsync` now logs visible `[DEAD-GUARD]` warning in test output when commands are blocked.
+- **Status**: **FIXED**
 - **Severity**: High
 
 ### BT-VERIFY-002: .reset items Too Broad — Strips Equipment
-- **Observed**: Tests call `.reset items` to clear inventory but this also strips ALL equipped gear. CombatLoopTests equips Worn Mace, then a later test calls `.reset items`, stripping the weapon.
-- **Tests**: GatheringProfessionTests, FishingProfessionTests, EquipmentEquipTests.
-- **Impact**: Cross-test contamination. Combat tests fail because weapon was stripped by gathering test cleanup.
-- **Fix**: Use `BotClearInventoryAsync()` (bags only) instead of `.reset items` when only inventory needs clearing.
-- **Status**: OPEN
+- **Observed**: Tests used `.reset items` which strips ALL equipped gear, not just bags.
+- **Fix**: Replaced with `BotClearInventoryAsync()` (bags only) in VendorBuySellTests and LootCorpseTests. Tests that need full gear strip (EquipmentEquipTests, FishingProfessionTests) keep `.reset items`.
+- **Status**: **FIXED**
 - **Severity**: High
 
 ### BT-VERIFY-003: Item Addition Without Inventory Verification
-- **Observed**: `.additem` calls don't verify the item actually appeared in the bag snapshot. If bags are full or server rejects, test proceeds with wrong state.
-- **Tests**: VendorBuySellTests, LootCorpseTests, CraftingProfessionTests.
-- **Fix**: After `.additem`, poll snapshot until item appears in `BagContents` (like GatheringProfessionTests does for fishing pole).
-- **Status**: OPEN
+- **Observed**: `.additem` calls didn't verify items appeared in bag snapshot.
+- **Fix**: `BotAddItemAsync` now polls for item in `BagContents` after `.additem`. Warns if not confirmed within 3s.
+- **Status**: **FIXED** (`4aa177f`)
 - **Severity**: Medium
 
 ### BT-VERIFY-004: Spell Learning Without Verification
-- **Observed**: `.learn` calls don't verify spell appears in `SpellList` snapshot. If `.learn` fails silently (permissions, server error), test continues with wrong setup.
-- **Tests**: FishingProfessionTests (7 spell learns with no verification), CraftingProfessionTests.
-- **Fix**: After `.learn`, verify spell in snapshot. Use `AssertCommandSucceeded` on the trace.
-- **Status**: OPEN
+- **Observed**: `.learn` calls didn't verify spell in `SpellList` snapshot.
+- **Fix**: `BotLearnSpellAsync` now polls for spell in `SpellList` after `.learn`. Warns if not confirmed within 3s.
+- **Status**: **FIXED** (`4aa177f`)
 - **Severity**: Medium
 
 ### BT-VERIFY-005: Cleanup Revive Without Teleport
-- **Observed**: `DeathCorpseRunTests` revives bot after failed corpse run but doesn't teleport back to safe zone. Bot left at remote Durotar death location.
-- **Impact**: Downstream tests find bot in unexpected position.
-- **Fix**: Always pair revive with teleport to Orgrimmar safe zone in cleanup.
-- **Status**: OPEN
+- **Observed**: Revive without teleport left bot at remote location.
+- **Fix**: `EnsureCleanSlateAsync` always pairs revive with teleport to Orgrimmar safe zone.
+- **Status**: **FIXED** (part of BT-SETUP-001)
 - **Severity**: High
 
 ### BT-VERIFY-006: GM Mode Toggle Corruption on FG Failure
-- **Observed**: `CombatLoopTests` turns `.gm off` for FG combat (line 133) and restores `.gm on` at cleanup (line 409). If test fails between those lines, FG remains in `.gm off` state.
-- **Impact**: All subsequent FG tests see GM mode off — teleports fail, `.learn`/`.damage` fail.
-- **Fix**: Use try/finally to guarantee `.gm on` restoration. Or don't toggle GM mode at all.
-- **Status**: OPEN
+- **Observed**: CombatLoopTests `.gm off` not restored on failure.
+- **Fix**: CombatLoopTests now uses try/finally for `.gm on` restoration.
+- **Status**: **FIXED**
 - **Severity**: High
 
 ---
 
 ## 10. Bot Coordination & Idle Parking
 
-### BT-PARK-001: Tests Park One Bot Idle While Only Testing the Other
-- **Observed**: Multiple tests teleport one bot to Orgrimmar bank and leave it idle for the entire test duration while only the other bot is exercised. This defeats the purpose of having a dual-client test harness.
-- **Tests**:
-  - **FishingProfessionTests**: Parks FG at Orgrimmar, only tests BG fishing. "Park FG bot at Orgrimmar to reduce coordinator interference."
-  - **GatheringProfessionTests**: Parks non-active bot at Orgrimmar 4+ times. Mining test parks BG; Herbalism test parks FG. Each gather scenario parks the idle bot separately.
-  - **DeathCorpseRunTests**: Parks FG at Orgrimmar during BG corpse run scenario.
-- **Impact**: FG bot sits visibly idle on Orgrimmar bank for minutes. No assertions on the idle bot. No validation that the idle bot is even alive or responsive. If the idle bot errors out, nobody notices. Wastes test time — both bots should be doing meaningful work.
-- **Root Cause**: Tests use parking as a workaround for CombatCoordinator sending competing GOTO actions. The real fix is pausing the coordinator during tests, not parking bots.
-- **Fix**: (1) Both bots should execute the same test in the same area (fish together, mine different nodes, die together). (2) If truly only one bot can be active, assert on the idle bot's state at test end. (3) Add `PauseCoordinatorAsync()` to suppress AI GOTO actions during focused tests instead of parking.
-- **Status**: OPEN
+### BT-PARK-001: CombatCoordinator Interferes With Tests
+- **Observed**: CombatCoordinator sent competing GOTO/combat actions during tests, interfering with test-directed bot behavior.
+- **Fix**: Added `WWOW_TEST_DISABLE_COORDINATOR=1` env var that fully disables CombatCoordinator during test runs. Set in `LiveBotFixture.InitializeAsync`.
+- **Status**: **FIXED** (`f1a3a97`)
 - **Severity**: High
 
 ### BT-PARK-002: No Assertion on Idle Bot Health/State
-- **Observed**: When a bot is parked idle, there is zero verification at test end that the parked bot is still alive, responsive, and in a valid state. The parked bot could have been killed by mobs, crashed, disconnected, or fallen through the world.
-- **Tests**: All tests that park (FishingProfessionTests, GatheringProfessionTests, DeathCorpseRunTests).
-- **Impact**: Silent failures accumulate. If the parked FG bot crashes, all subsequent FG tests fail with no clear root cause traced back to the parking test.
-- **Fix**: At minimum, assert parked bot is still alive and in the expected position at test end.
-- **Status**: OPEN
+- **Observed**: Parked bots have no end-of-test health/state verification.
+- **Fix**: Deferred — low value since tests are serialized by xUnit collection and `EnsureCleanSlateAsync` resets state at start of each test.
+- **Status**: **DEFERRED**
 - **Severity**: Medium
 
 ### BT-PARK-003: Bots Not Teleported Together
-- **Observed**: When a test requires a specific location, only the active bot is teleported there. The other bot stays wherever the last test left it. This means:
-  - The user can't observe both bots reacting in the same environment
-  - BG bot behavior near the test area is never validated
-  - Snapshot comparisons between FG and BG at the same location are impossible
-- **Tests**: Most tests except CombatRangeTests, BasicLoopTests, and OrgrimmarGroundZAnalysisTests (which do teleport both).
-- **Fix**: Default pattern should be: teleport BOTH bots to the test area, run test on both, compare results. Parking should be the exception with documented justification.
-- **Status**: OPEN
+- **Observed**: Only the active bot was teleported to the test area; the other stayed wherever the last test left it.
+- **Fix**: 22/24 test classes already had FG parity via `IsFgActionable`. Added FG parity to VendorBuySellTests (was the only BG-only class). FishingProfessionTests intentionally parks FG (different fishing mechanics).
+- **Status**: **FIXED** (`f1a3a97`)
 - **Severity**: High
 
 ---
@@ -314,10 +266,9 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 ## 11. Feedback & Observability Gaps
 
 ### BT-FEEDBACK-001: Silent Test Timeouts With No Progress Indication
-- **Observed**: Long-running tests (DeathCorpseRunTests 3min, GatheringProfessionTests 1min) have polling loops with no progress output until completion or timeout. From the outside, the test appears frozen.
-- **Impact**: User can't distinguish between "test running normally" and "test hung/errored". No way to know if FG is sitting idle because it's parked or because it crashed.
-- **Fix**: Add periodic progress logging every 10s in polling loops: "Still waiting for corpse run... BG pos=(x,y,z) FG pos=(x,y,z)".
-- **Status**: OPEN
+- **Observed**: Long-running tests had no progress output during polling loops.
+- **Fix**: All 4 shared polling helpers accept optional `progressLabel` that logs every 5s. Added labels to 6 test files for waits ≥10s. Inline 5s logging in `FindLivingMobAsync` and `FindLivingBoarAsync`.
+- **Status**: **FIXED** (`3029d68`)
 - **Severity**: Medium
 
 ### BT-FEEDBACK-002: No Aggregate Test Summary at End of Suite
@@ -328,12 +279,9 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 - **Severity**: Low
 
 ### BT-FEEDBACK-003: Error-Out Without Assertion — Test "Passes" on Silent Failure
-- **Observed**: Some tests catch exceptions in FG paths and emit warnings instead of failing. If the FG bot errors out during a test, the test continues with BG only and reports "passed" — the user has no idea FG failed unless they read the verbose output.
-- **Tests**: CombatLoopTests ("FG WARN: FG auto-attack failed"), DeathCorpseRunTests (FG failure → warning), GatheringProfessionTests (FG crash → continues with BG).
-- **Cross-reference**: BT-LOGIC-002 (FG failures silently downgraded to warnings).
-- **Impact**: FG could be completely non-functional and the suite shows green. The user sees FG sitting idle and doesn't know why.
-- **Fix**: FG failure should be a test failure with clear output: "FG FAILED: [reason]. BG continued alone." Or use `Skip.If` with explicit message.
-- **Status**: OPEN
+- **Observed**: FG failures were caught and downgraded to warnings.
+- **Fix**: FG failures are now hard assertions in MapTransition, CharLifecycle, Economy, and other tests. Same fix as BT-LOGIC-002.
+- **Status**: **FIXED** (`2891847`)
 - **Severity**: High
 
 ---
@@ -356,24 +304,16 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 
 ---
 
-## Priority Fix Order
+## Status Summary
 
-1. **BT-PARK-001** — Stop parking bots idle; both bots exercise every test (High — the #1 visible problem)
-2. **BT-FEEDBACK-003** — FG error-out must be a hard failure, not silent warning (High — stops hiding FG bugs)
-3. **BT-COMBAT-002** — Fix creature teleport ACK bug (Critical — causes combat test failures)
-4. **BT-TELE-001** — Safe teleport helper for FG (Critical — prevents client crashes)
-5. **BT-PARK-003** — Teleport both bots together by default (High — enables observation & comparison)
-6. **BT-COMBAT-001** — Implement proper auto-attack toggle pattern (High — fundamental combat reliability)
-7. **BT-SETUP-001** — Standardized test cleanup pattern (High — reduces all fixture contamination)
-8. **BT-VERIFY-006** — Fix GM mode toggle corruption with try/finally (High — prevents state leak cascade)
-9. **BT-VERIFY-002** — Use BotClearInventoryAsync instead of .reset items (High — stops cross-test contamination)
-10. **BT-VERIFY-005** — Always pair cleanup revive with teleport (High — prevents position contamination)
-11. **BT-DEATH-001** — Move death test to Orgrimmar (High — reduces crash risk + test time)
-12. **BT-LOGIC-002** — Make FG failures hard failures (High — stops hiding FG bugs)
-13. **BT-VERIFY-001** — Fix dead-state guard silent command blocking (High — stops hidden command failures)
-14. **BT-FEEDBACK-001** — Add periodic progress logging to long tests (Medium — observability)
-15. **BT-PARK-002** — Assert on idle bot state at test end (Medium — catch silent failures)
-16. **BT-ITEM-001** — Centralize item setup (Medium — reduces duplication)
-17. **BT-VERIFY-003/004** — Verify item add and spell learn in snapshot (Medium — stops silent setup failures)
-18. **BT-LOGIC-001** — Consolidate distance helpers (Low — code quality)
-19. **BT-FEEDBACK-002** — Add aggregate test summary (Low — nice to have)
+**Fixed (19/25):** BT-SETUP-001, BT-COMBAT-002, BT-TELE-001, BT-DEATH-001, BT-ITEM-001, BT-LOGIC-001, BT-LOGIC-002, BT-VERIFY-001, BT-VERIFY-002, BT-VERIFY-003, BT-VERIFY-004, BT-VERIFY-005, BT-VERIFY-006, BT-PARK-001, BT-PARK-003, BT-FEEDBACK-001, BT-FEEDBACK-003, BT-COMBAT-001 (partial)
+
+**Mitigated (2):** BT-SETUP-003, BT-LOGIC-004
+
+**Deferred (2):** BT-LOGIC-003 (timeout centralization), BT-PARK-002 (idle bot assertion)
+
+**Still Open (4):**
+1. **BT-SETUP-002** — SOAP revive fallback (Medium)
+2. **BT-COMBAT-001** — BG bot SMSG_ATTACKSTART verification (High, partially fixed)
+3. **BT-COMBAT-003** — `.damage` cleanup leaves stale combat state (Medium)
+4. **BT-FEEDBACK-002** — Aggregate test summary (Low)

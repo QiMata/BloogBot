@@ -31,9 +31,9 @@ Already in code (do not regress):
 - Live fixture sets:
   - WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1
   - WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK=1
-  - WWOW_TEST_COORD_SUPPRESS_SECONDS=300
+  - WWOW_TEST_DISABLE_COORDINATOR=1
 - BotRunnerService supports env toggles for auto release/retrieve behavior.
-- CharacterStateSocketListener supports configurable coordinator suppression seconds.
+- CharacterStateSocketListener fully disables CombatCoordinator when WWOW_TEST_DISABLE_COORDINATOR=1.
 - DeathCorpseRunTests already:
   - Enforces client ReleaseCorpse/RetrieveCorpse flow
   - Tracks no post-death GM command delta
