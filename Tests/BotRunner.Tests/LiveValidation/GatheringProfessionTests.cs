@@ -421,7 +421,13 @@ public class GatheringProfessionTests
         uint initialSkill,
         uint gatherSpellId = 0, string? parkAccount = null)
     {
-        int maxLocations = spawns.Count;
+        // BT-TELE-001: FG teleports to remote coordinates crash WoW.exe (ERROR #132).
+        // Limit FG to the 3 nearest spawns (already sorted by distance from Orgrimmar).
+        // BG can teleport to all locations since it's headless and crash-proof.
+        const int FG_MAX_LOCATIONS = 3;
+        int maxLocations = label == "FG"
+            ? Math.Min(spawns.Count, FG_MAX_LOCATIONS)
+            : spawns.Count;
 
         // Park the other bot once to reduce coordinator interference.
         if (parkAccount != null)
