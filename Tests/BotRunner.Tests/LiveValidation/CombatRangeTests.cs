@@ -124,10 +124,31 @@ public class CombatRangeTests
     {
         // BG test
         var bgAccount = _bot.BgAccountName!;
-        await EnsureAliveAndNearMobsAsync(bgAccount, "BG");
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        await _bot.BotTeleportAsync(bgAccount, MapId, MobAreaX, MobAreaY, MobAreaZ);
+        await Task.Delay(3000);
+        await _bot.SendGmChatCommandTrackedAsync(bgAccount, ".respawn", captureResponse: true, delayMs: 500);
 
         var targetGuid = await FindLivingBoarAsync(bgAccount, "BG");
         global::Tests.Infrastructure.Skip.If(targetGuid == 0, "No living boar found for melee range test.");
+
+        // Walk to mob via Goto to sync position (prevents mob evade from teleport Z desync)
+        var mobPos = await GetMobPositionAsync(bgAccount, targetGuid);
+        if (mobPos != null)
+        {
+            await _bot.SendActionAsync(bgAccount, new ActionMessage
+            {
+                ActionType = ActionType.Goto,
+                Parameters =
+                {
+                    new RequestParameter { FloatParam = mobPos.Value.x },
+                    new RequestParameter { FloatParam = mobPos.Value.y },
+                    new RequestParameter { FloatParam = mobPos.Value.z },
+                    new RequestParameter { FloatParam = 0 },
+                }
+            });
+            await Task.Delay(3000);
+        }
 
         _output.WriteLine($"  [BG] Attacking boar 0x{targetGuid:X} (within melee range)");
         var result = await _bot.SendActionAsync(bgAccount, new ActionMessage
@@ -137,11 +158,20 @@ public class CombatRangeTests
         });
         Assert.Equal(ResponseResult.Success, result);
 
+        // Check for target selection: accept either TargetGuid match OR mob HP decrease.
+        // BG bot's TargetGuid can be clobbered by SMSG_UPDATE_OBJECT (UNIT_FIELD_TARGET=0)
+        // before the snapshot is captured. Mob HP decrease proves the attack connected.
+        var initialHp = await GetMobHealthAsync(bgAccount, targetGuid);
         var selected = await WaitForConditionAsync(bgAccount, TimeSpan.FromSeconds(8), snap =>
-            (snap.Player?.Unit?.TargetGuid ?? 0UL) == targetGuid);
+        {
+            if ((snap.Player?.Unit?.TargetGuid ?? 0UL) == targetGuid) return true;
+            var mob = snap.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+            if (mob != null && mob.Health < initialHp) return true;
+            if (mob != null && mob.Health == 0) return true;
+            return false;
+        });
         if (!selected)
         {
-            // Log diagnostic: what is the current target GUID?
             await _bot.RefreshSnapshotsAsync();
             var diagSnap = await _bot.GetSnapshotAsync(bgAccount);
             var currentTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
@@ -311,20 +341,49 @@ public class CombatRangeTests
     public async Task AutoAttack_StartAndStop_StopsCorrectly()
     {
         var bgAccount = _bot.BgAccountName!;
-        await EnsureAliveAndNearMobsAsync(bgAccount, "BG");
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        await _bot.BotTeleportAsync(bgAccount, MapId, MobAreaX, MobAreaY, MobAreaZ);
+        await Task.Delay(3000);
+        await _bot.SendGmChatCommandTrackedAsync(bgAccount, ".respawn", captureResponse: true, delayMs: 500);
 
         var targetGuid = await FindLivingBoarAsync(bgAccount, "BG");
         global::Tests.Infrastructure.Skip.If(targetGuid == 0, "No living boar found.");
 
+        // Walk to mob via Goto to sync position
+        var mobPos = await GetMobPositionAsync(bgAccount, targetGuid);
+        if (mobPos != null)
+        {
+            await _bot.SendActionAsync(bgAccount, new ActionMessage
+            {
+                ActionType = ActionType.Goto,
+                Parameters =
+                {
+                    new RequestParameter { FloatParam = mobPos.Value.x },
+                    new RequestParameter { FloatParam = mobPos.Value.y },
+                    new RequestParameter { FloatParam = mobPos.Value.z },
+                    new RequestParameter { FloatParam = 0 },
+                }
+            });
+            await Task.Delay(3000);
+        }
+
         // Start attack
+        var initialHp = await GetMobHealthAsync(bgAccount, targetGuid);
         await _bot.SendActionAsync(bgAccount, new ActionMessage
         {
             ActionType = ActionType.StartMeleeAttack,
             Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
         });
 
+        // Accept TargetGuid match OR mob HP decrease (TargetGuid can be clobbered by SMSG_UPDATE_OBJECT)
         var attacking = await WaitForConditionAsync(bgAccount, TimeSpan.FromSeconds(8), snap =>
-            (snap.Player?.Unit?.TargetGuid ?? 0UL) == targetGuid);
+        {
+            if ((snap.Player?.Unit?.TargetGuid ?? 0UL) == targetGuid) return true;
+            var mob = snap.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+            if (mob != null && mob.Health < initialHp) return true;
+            if (mob != null && mob.Health == 0) return true;
+            return false;
+        });
         _output.WriteLine($"  [BG] Attack started: {attacking}");
         if (!attacking)
         {
@@ -579,6 +638,23 @@ public class CombatRangeTests
 
         _output.WriteLine($"  [{label}] No living boar found within {maxDistance:F0}y after 12s.");
         return 0UL;
+    }
+
+    private async Task<(float x, float y, float z)?> GetMobPositionAsync(string account, ulong targetGuid)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var snap = await _bot.GetSnapshotAsync(account);
+        var mob = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+        var pos = mob?.GameObject?.Base?.Position;
+        return pos != null ? (pos.X, pos.Y, pos.Z) : null;
+    }
+
+    private async Task<uint> GetMobHealthAsync(string account, ulong targetGuid)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var snap = await _bot.GetSnapshotAsync(account);
+        var mob = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+        return mob?.Health ?? 0;
     }
 
     private Task<bool> WaitForConditionAsync(string account, TimeSpan timeout, Func<WoWActivitySnapshot, bool> condition)
