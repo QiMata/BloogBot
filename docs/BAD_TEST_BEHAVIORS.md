@@ -23,8 +23,8 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 - **Observed**: Some tests call `.reset items`, others call `.additem` without cleanup, others do nothing. No consistent entry/exit state.
 - **Tests**: All 24 test classes share `LiveBotFixture`. State leaks across tests.
 - **Impact**: Test N's leftover items/buffs/position affect Test N+1. Results depend on execution order.
-- **Fix**: Create `EnsureCleanSlateAsync(account)` helper: `.reset items` + revive + teleport to safe zone. Call at start of every test.
-- **Status**: OPEN
+- **Fix**: Created `EnsureCleanSlateAsync(account, label)`: logs entry state, revives if dead (with reason), teleports to Orgrimmar safe zone, ensures GM mode on. Deployed to 13 test files.
+- **Status**: **FIXED** (`42100fc`)
 - **Severity**: High
 
 ### BT-SETUP-002: EnsureStrictAlive Uses SOAP Revive Fallback
