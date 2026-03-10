@@ -113,9 +113,14 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
   5. **BAD_TEST_BEHAVIORS.md expanded**: Added §10 (Bot Coordination & Idle Parking), §11 (Feedback & Observability Gaps), §12 (BG Movement State). 12 categories, 27 anti-patterns total.
   6. **TASKS.md updated**: BT-COMBAT-002 and BT-COMBAT-001 marked fixed. BT-MOVE-001/002 added. Priorities updated.
 - **Combat test results: CombatLoopTests 1/1 ✓, CombatRangeTests 8/8 ✓**
+- **LiveValidation results: 35 passed, 14 failed, 1 skipped (50 total)**
+  - **All 14 failures are FG cascade crashes** — WoW.exe crashed 3× (PIDs: 7020→36148→26496). FG-dependent tests fail while client re-injects.
+  - **Root cause:** GatheringProfessionTests teleports FG to remote coordinates → ERROR #132 → cascade.
+  - **BG tests all pass.** Skipped: LootCorpseTests (precondition).
 - **Next priorities:**
+  - BT-TELE-001: Limit FG teleports to safe locations (prevents cascade crashes)
   - BT-PARK-001: Both bots exercise every test (stop idle parking)
+  - BT-SETUP-001: Standardized cleanup at test start (EnsureCleanSlateAsync)
   - BT-MOVE-002: Falling detection broken when teleported mid-air
-  - Run full LiveValidation suite and iterate on all failures
   - BT-DEATH-001: Move death test to Orgrimmar
 - **Sessions 1-45:** See `docs/ARCHIVE.md` for full history.
