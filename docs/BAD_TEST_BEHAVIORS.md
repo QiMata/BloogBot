@@ -338,6 +338,24 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 
 ---
 
+## 12. BG Bot Movement State Issues
+
+### BT-MOVE-001: MovementFlags Not Resetting After Teleport
+- **Observed**: After BG bot is teleported (`.go xyz`), MovementFlags may retain stale values from the pre-teleport state. `ResetMovementStateForTeleport` clears flags to `MOVEFLAG_NONE`, but the physics engine may re-apply flags (e.g., `MOVEFLAG_FORWARD`) from the input state before the ground snap completes.
+- **Impact**: Stale movement flags cause incorrect heartbeat packets to the server. If MOVEFLAG_FORWARD persists after a teleport-to-stationary, the server sees the player as moving when they're standing still.
+- **Fix**: Verify MovementFlags are `MOVEFLAG_NONE` after teleport completion (after ground snap). Add assertion in tests.
+- **Status**: OPEN
+- **Severity**: Medium
+
+### BT-MOVE-002: Falling Detection Broken When Teleported Mid-Air
+- **Observed**: When BG bot is teleported to a position above ground level (e.g., Z+3 offset for undermap safety), the physics engine should detect freefall and set `MOVEFLAG_FALLINGFAR`. The ground snap mechanism (`_needsGroundSnap`) runs physics frames to settle, but if the terrain query returns no ground (navmesh gap or unloaded tile), the bot may stay floating with `MOVEFLAG_NONE` instead of falling.
+- **Impact**: Bot hovers in air instead of falling to ground. Server sees stationary player at incorrect Z → position desync → mob evade, gathering fail, etc.
+- **Fix**: After ground snap timeout (`GROUND_SNAP_MAX_FRAMES`), if Z hasn't converged to ground, force `MOVEFLAG_FALLINGFAR` and apply gravity until a ground contact is detected.
+- **Status**: OPEN
+- **Severity**: High
+
+---
+
 ## Priority Fix Order
 
 1. **BT-PARK-001** — Stop parking bots idle; both bots exercise every test (High — the #1 visible problem)
