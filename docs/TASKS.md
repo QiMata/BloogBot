@@ -14,95 +14,115 @@
 6. Before session handoff, update `Session Handoff` in both this file and the active local file.
 7. If two consecutive passes produce no delta, record the blocker and advance to the next queued file.
 8. **The MaNGOS server is ALWAYS live.** Never defer live validation tests — run them every session.
+9. **Compare to VMaNGOS server code** when implementing packet-based functionality. The server is the authority for correct behavior.
 
 ---
 
-## P0 — Test Infrastructure Hardening (CURRENT FOCUS)
+## P0 — Test Infrastructure Hardening (COMPLETE)
 
-**Rationale:** All non-bot-behavior items must be resolved before iterating on bot capabilities. Flaky infrastructure, silent failures, and crash-prone tests waste more time than they save. Fix the foundation first.
-
-See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
-
-### P0.1 — Crash Detection & Resilience (HIGHEST PRIORITY)
-
-*All items completed — see P0 Completed table.*
-
-### P0.2 — FG Failure Visibility (Stop Hiding Bugs)
-
-| ID | Task | Owner | Severity | Status |
-|----|------|-------|----------|--------|
-| `BT-VERIFY-006` | **Fix GM mode toggle corruption with try/finally.** CombatLoopTests uses try/finally for .gm on restoration. | `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs` | High | **Fixed** (already implemented) |
-| `BT-VERIFY-001` | **Dead-state guard now surfaces [DEAD-GUARD] warning in test output.** `SendGmChatCommandAsync` logs visible warning when commands blocked. | `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs` | High | **Fixed** |
-
-### P0.3 — Reduce Test Runtime (Speed Up Iteration)
-
-| ID | Task | Owner | Severity | Status |
-|----|------|-------|----------|--------|
-| `BT-DELAY-001` | **Replace excessive Task.Delay with polling.** Replaced 41 hardcoded delays (2s-8s) with WaitForTeleportSettledAsync/WaitForSnapshotConditionAsync/WaitForPositionChangeAsync. Long delays reduced from 46 to 5 (all justified). | All LiveValidation tests | High | **Fixed** |
-| `BT-LOGIC-003` | **Centralize timeouts.** Scattered magic numbers (8s, 12s, 15s, 3min). Create `TestTimeouts` class with configurable defaults. | `Tests/BotRunner.Tests/LiveValidation/` | Medium | Open |
-| `BT-LOGIC-004` | **Standardize polling intervals.** After BT-DELAY-001, remaining delays are 200-1500ms (context-appropriate). No further action needed. | All LiveValidation tests | Medium | **Mitigated** |
-| `BT-FEEDBACK-001` | **Add periodic progress logging.** All 4 shared polling helpers now accept optional `progressLabel` that logs every 5s. Added labels to 6 test files for waits ≥10s. Inline 5s logging added to CombatLoopTests.FindLivingMobAsync and CombatRangeTests.FindLivingBoarAsync. | All long-running tests | Medium | **Fixed** `3029d68` |
-
-### P0.4 — Code Quality & Deduplication
-
-| ID | Task | Owner | Severity | Status |
-|----|------|-------|----------|--------|
-| `BT-LOGIC-001` | **Consolidate distance helpers.** Move `Distance2D`/`Distance3D` to LiveBotFixture shared helpers. | `Tests/BotRunner.Tests/LiveValidation/` | Low | **Fixed** `18cb049` |
-| `BT-ITEM-001` | **Centralize item/spell setup.** Shared `TestItems`/`TestSpells` constants added to LiveBotFixture. Local duplicates replaced in 6 files. | `LiveBotFixture.Assertions.cs` | Medium | **Fixed** |
-| `BT-VERIFY-002` | **Use BotClearInventoryAsync instead of .reset items.** Replaced in VendorBuySellTests and LootCorpseTests (bag-only cleanup). EquipmentEquipTests/FishingProfessionTests keep .reset items (need gear stripped). | All LiveValidation tests | High | **Fixed** |
-| `BT-VERIFY-003` | **BotAddItemAsync now polls for item in BagContents after .additem.** Warns if item not confirmed within 3s. | `LiveBotFixture.BotChat.cs` | Medium | **Fixed** |
-| `BT-VERIFY-004` | **BotLearnSpellAsync now polls for spell in SpellList after .learn.** Warns if spell not confirmed within 3s. | `LiveBotFixture.BotChat.cs` | Medium | **Fixed** |
-| `BT-SETUP-003` | **Missing teardown mitigated by EnsureCleanSlateAsync.** 16/24 test files use EnsureCleanSlateAsync which revives+teleports at start. Remaining 8 have equivalent setup patterns. | Multiple tests | Medium | **Mitigated** |
-
-### P0.5 — Bot Coordination
-
-| ID | Task | Owner | Severity | Status |
-|----|------|-------|----------|--------|
-| `BT-PARK-001` | **Disable CombatCoordinator during tests.** Added `WWOW_TEST_DISABLE_COORDINATOR=1` env var — fully skips `InjectCoordinatedActions` in CharacterStateSocketListener. Replaces the 300s per-action suppression hack. | `CharacterStateSocketListener.cs`, `LiveBotFixture.cs` | High | **Fixed** |
-| `BT-PARK-003` | **All test classes now support dual-bot.** 22/24 already had FG parity via `IsFgActionable`. Added FG parity to VendorBuySellTests (was the only BG-only class). FishingProfessionTests intentionally parks FG (different fishing mechanics). | `VendorBuySellTests.cs` | High | **Fixed** |
-| `BT-PARK-002` | **Assert on idle bot state at test end.** Low value — tests are serialized by xUnit collection and `EnsureCleanSlateAsync` resets state at start. | All parking tests | Medium | **Deferred** |
-
-### P0 — Completed
-
-| ID | Task | Status |
-|----|------|--------|
-| `BT-COMBAT-002` | Fix creature teleport ACK bug. ACK now guarded by player GUID check. | **Fixed** `37a2c25` |
-| `BT-TELE-001` | Safe teleport helper for FG. Limited FG to 3 nearest gathering spawns. | **Fixed** `b1444da` |
-| `BT-COMBAT-001` | FG auto-attack uses AttackTarget() Lua API. Evasion is now hard failure. | **Fixed** `5a9f882` |
-| `BT-SETUP-001` | Standardized test cleanup pattern (EnsureCleanSlateAsync). | **Fixed** `42100fc` |
-| `BT-CRASH-001` | Crash monitor continues loop after WoW.exe crash (no longer returns). | **Fixed** `18cb049` |
-| `BT-CRASH-002` | Corpse run test detects crash and fails gracefully. | **Fixed** `18cb049` |
-| `BT-DEATH-001` | Death test uses `.tele name <char> Orgrimmar` — simple 8-step flow. | **Fixed** `18cb049` |
-| `BT-FEEDBACK-003` | FG failures are hard assertions (MapTransition, CharLifecycle, Economy). | **Fixed** `2891847` |
-| `BT-LOGIC-002` | FG failures propagated — no more silent warning downgrade. | **Fixed** `2891847` |
-| `BT-LOGIC-001` | Distance2D/Distance3D centralized in LiveBotFixture, removed from 9 files. | **Fixed** `18cb049` |
+All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for full catalog (19/25 fixed, 2 mitigated, 2 deferred, 4 open).
 
 ---
 
-## P1 — Open Bug Fixes (After P0 Complete)
+## P1 — FG Packet Capture: Send + Recv Hooks (CURRENT FOCUS)
 
-| ID | Task | Owner | Status |
-|----|------|-------|--------|
-| `BB-COMBAT-006` | **UnitReaction unreliable in snapshots.** BG defaults to Hated(0), FG returns Friendly(4) for hostile mobs. Workaround: entry-based filter in place. | `Exports/WoWSharpClient/` | Open (workaround) |
-| `FG-GHOST-STUCK-001` | **Ghost form stuck on Orgrimmar catapult geometry.** | `Exports/Navigation/` | Open |
-| `LV-AUDIT-002` | **FG fishing test (TIM-7).** BG fishing CMSG_CAST_SPELL channel not starting. | `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs` | Open |
-| `BT-MOVE-001` | **MovementFlags not resetting after teleport.** BG bot retains stale movement flags. | `Exports/WoWSharpClient/Movement/MovementController.cs` | Open |
-| `BT-MOVE-002` | **Falling detection broken when teleported mid-air.** BG bot hovers instead of falling. | `Exports/WoWSharpClient/Movement/MovementController.cs` | Open |
+**Rationale:** FG packet capture is the foundation for fixing all BG bot issues. By observing what the real WoW client sends and receives, we can reconstruct correct behavior in the headless BG bot. This unblocks fishing (FISH-001), movement flags (BT-MOVE-001/002), and combat reliability.
 
-## P2 — FG Client Stability
+| # | Task | Owner | Status |
+|---|------|-------|--------|
+| 1.1 | **Complete FG recv hook (SMSG).** Current send hook captures CMSG opcodes. Need recv hook via ProcessMessage vtable to capture SMSG packets. Log opcode + size + timestamp + payload to `WWoWLogs/packet_logger.log`. | `Services/ForegroundBotRunner/Mem/Hooks/` | **Partial** (send done, recv pending) |
+| 1.2 | **Structured packet log format.** Both send and recv packets logged with direction (C→S / S→C), opcode name, size, timestamp, hex payload. Format must be parseable for automated analysis. | `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` | Open |
+| 1.3 | **Packet capture test.** LiveValidation test that triggers known actions (teleport, cast spell, buy item) on FG and verifies expected CMSG/SMSG pairs appear in the packet log. | `Tests/BotRunner.Tests/LiveValidation/` | Open |
 
-| ID | Issue | Owner | Status |
-|----|-------|-------|--------|
-| `FG-REALM-STUCK-001` | FG client stuck on Realm Selection/Language dialog. | `Services/ForegroundBotRunner/` | **Fixed** `2301f0a` |
-| `TEST-FGPACKET-001` | FG packet capture — recv hook pending (needs ProcessMessage vtable). | `Services/ForegroundBotRunner/Mem/Hooks/` | **Partial** |
-| `FG-CRASH-TELE` | FG ERROR #132 during teleport to mining locations. ACCESS_VIOLATION at 0x006FA780. | `Services/ForegroundBotRunner/` | Open |
+**Implementation notes:**
+- Send hook already exists via `NetClientSend` (0x005379A0) assembly injection
+- Recv hook needs ProcessMessage vtable offset — investigate WoW 1.12.1 client binary
+- Compare captured packets against VMaNGOS server handler code to verify correctness
+- Packet log enables side-by-side FG vs BG comparison for all subsequent tasks
 
-## P3 — Capability Gaps (Low Priority)
+---
 
-| ID | Issue | Owner | Status |
-|----|-------|-------|--------|
-| `CAP-GAP-003` | TrainerFrame status unknown — may also be null. | `Exports/WoWSharpClient/` | Open (low priority) |
-| `BG-PET-001` | BG pet support — Pet returns null. Hunter/Warlock won't work. | `Exports/WoWSharpClient/` | Open |
+## P2 — CraftingProfessionTests.FirstAid Fix
+
+**Approach:** Diagnostic-first. Add 10 Linen Cloth (not 1), craft, and check for ANY new item in bags. This reveals whether the issue is item ID mismatch, craft failure, or snapshot timing.
+
+| # | Task | Owner | Status |
+|---|------|-------|--------|
+| 2.1 | **Diagnostic run:** Add 10 Linen Cloth, cast recipe, dump full BagContents before/after. Identify if bandage appears under different item ID or if craft silently fails. | `CraftingProfessionTests.cs` | Open |
+| 2.2 | **Fix based on diagnostic results.** | `CraftingProfessionTests.cs` | Open |
+
+---
+
+## P3 — Fishing FISH-001: BG Cast Channel Not Starting
+
+**Approach:** Use FG packet capture (P1) to observe a successful FG fishing session. Analyze the exact CMSG/SMSG sequence and timestamps, then replicate in BG bot.
+
+| # | Task | Owner | Status |
+|---|------|-------|--------|
+| 3.1 | **Capture FG fishing packets.** Run FG fishing at Ratchet dock, capture full CMSG_CAST_SPELL → SMSG_SPELL_START → SMSG_CHANNEL_START → bobber interaction sequence. | Packet log analysis | Blocked on P1 |
+| 3.2 | **Compare BG fishing packets** against FG capture. Identify missing/incorrect packets. | `Exports/WoWSharpClient/` | Blocked on P1 |
+| 3.3 | **Fix BG fishing** to match FG packet sequence. | `Exports/WoWSharpClient/` | Blocked on 3.2 |
+
+---
+
+## P4 — Movement Flags After Teleport (BT-MOVE-001/002)
+
+**Approach:** Use FG packet capture to observe correct movement flag transitions during teleport. Compare FG heartbeat packets (flags, position, timing) against BG output.
+
+| # | Task | Owner | Status |
+|---|------|-------|--------|
+| 4.1 | **Capture FG teleport packets.** Observe MSG_MOVE_TELEPORT_ACK → subsequent heartbeats. Record flag transitions and timing. | Packet log analysis | Blocked on P1 |
+| 4.2 | **Compare BG teleport behavior.** Identify where BG diverges (stale flags, missing heartbeats). | `Exports/WoWSharpClient/Movement/MovementController.cs` | Blocked on 4.1 |
+| 4.3 | **Fix MovementController** to reset flags correctly and match FG behavior. | `Exports/WoWSharpClient/Movement/MovementController.cs` | Blocked on 4.2 |
+
+---
+
+## P5 — UnitReaction Reliability (BB-COMBAT-006)
+
+**Approach:** Read creature faction/reaction from MangosRepository (DB) and cache while the creature exists in the object manager. Do NOT rely on snapshot-only UnitReaction field.
+
+| # | Task | Owner | Status |
+|---|------|-------|--------|
+| 5.1 | **Add MangosRepository.GetCreatureFaction(entryId)** that returns faction template from `creature_template` table. Cache by entry ID. | `Services/DecisionEngineService/MangosRepository.cs` | Open |
+| 5.2 | **Compute reaction from faction template** using the same algorithm as VMaNGOS `GetReactionTo()`. Map faction → hostile/neutral/friendly. | `Exports/WoWSharpClient/` or `BotRunner/` | Open |
+| 5.3 | **Wire into snapshot pipeline.** Replace unreliable runtime UnitReaction with DB-backed reaction for NPC targets. | Snapshot pipeline | Open |
+
+---
+
+## P6 — FG Crash During Teleport (FG-CRASH-TELE)
+
+**Approach:** Use test assertions and FG logs to identify the exact crash trigger. Correlate with ThreadSynchronizer state, ObjectManager polling, and Lua call timing.
+
+| # | Task | Owner | Status |
+|---|------|-------|--------|
+| 6.1 | **Add crash-context logging.** Log ThreadSynchronizer state + last Lua call + ConnectionStateMachine state before each teleport. | `Services/ForegroundBotRunner/` | Open |
+| 6.2 | **Reproduce and capture.** Run GatheringProfessionTests mining (triggers FG teleport to multiple locations). Capture crash context from logs. | LiveValidation tests | Open |
+| 6.3 | **Fix based on crash context.** | `Services/ForegroundBotRunner/` | Open |
+
+---
+
+## P7 — Ghost Form Stuck on Geometry (FG-GHOST-STUCK-001)
+
+**Approach:** Compare PathfindingService-provided path vs the path the bot actually executes. The gap reveals where the corridor collision / collide-and-slide code fails to accommodate WoW's movement controls. Fix the pathfinding code to navigate with precision and avoid terrain/object snags.
+
+| # | Task | Owner | Status |
+|---|------|-------|--------|
+| 7.1 | **Log planned vs executed path.** Record PathfindingService waypoints AND actual bot positions at each movement tick during ghost corpse run. | `Exports/Navigation/`, `Services/PathfindingService/` | Open |
+| 7.2 | **Identify divergence points.** Find where the bot gets stuck — which waypoint, which geometry (catapult, wall, ramp). | Analysis | Open |
+| 7.3 | **Fix corridor collision code.** Update collide-and-slide in PhysicsCollideSlide.cpp to handle the stuck geometry. Test with replay frames. | `Exports/Navigation/PhysicsCollideSlide.cpp` | Open |
+
+---
+
+## Completed Phases (See `docs/ARCHIVE.md`)
+
+- P0: Test Infrastructure Hardening (sessions 48-52)
+- Phase 3: Documentation (9 CLAUDE.md files)
+- Phase 4: Large File Refactoring (5 monolith files split)
+- Phase 5: Command Rate-Limiting & Stability (RATELIMIT-001/002, CRASH-001)
+- AI Parity (all 3 gates pass live)
+- Live Validation Failures (2026-02-28 batch)
+- Pathfinding / Physics (all resolved)
+- Test Infrastructure: TEST-TRAM-001, TEST-CRASH-001
 
 ## Blocked — Storage Stubs (Needs NuGet)
 
@@ -111,15 +131,12 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 | `RTS-MISS-001` | S3 ops in RecordedTests.Shared | Requires AWSSDK.S3 |
 | `RTS-MISS-002` | Azure ops in RecordedTests.Shared | Requires Azure.Storage.Blobs |
 
-## Completed Phases (See `docs/ARCHIVE.md`)
+## Capability Gaps (Low Priority)
 
-- Phase 3: Documentation (9 CLAUDE.md files)
-- Phase 4: Large File Refactoring (5 monolith files split)
-- Phase 5: Command Rate-Limiting & Stability (RATELIMIT-001/002, CRASH-001)
-- AI Parity (all 3 gates pass live)
-- Live Validation Failures (2026-02-28 batch)
-- Pathfinding / Physics (all resolved)
-- Test Infrastructure: TEST-TRAM-001, TEST-CRASH-001
+| ID | Issue | Owner | Status |
+|----|-------|-------|--------|
+| `CAP-GAP-003` | TrainerFrame status unknown — may also be null. | `Exports/WoWSharpClient/` | Open (low priority) |
+| `BG-PET-001` | BG pet support — Pet returns null. Hunter/Warlock won't work. | `Exports/WoWSharpClient/` | Open |
 
 ## Canonical Commands
 
@@ -145,14 +162,12 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 
 ## Session Handoff
 - **Last updated:** 2026-03-10 (session 52)
-- **Current work:** P0 infrastructure hardening COMPLETE. All P0 phases done.
+- **Current work:** P1 — FG Packet Capture (send + recv hooks). P0 COMPLETE.
 - **Completed this session:**
-  1. **BT-PARK-001**: Added `WWOW_TEST_DISABLE_COORDINATOR=1` env var to fully disable CombatCoordinator during tests. Replaces 300s per-action suppression hack.
-  2. **BT-PARK-003**: Added FG parity to VendorBuySellTests (was the only BG-only test class). All 24 test classes now support dual-bot.
-  3. **BT-PARK-002**: Evaluated — deferred as low value (xUnit collection serialization + EnsureCleanSlateAsync already handle state).
-- **P0 Status:** P0.1 COMPLETE. P0.2 COMPLETE. P0.3 COMPLETE. P0.4 COMPLETE. P0.5 COMPLETE.
-- **Remaining deferred items:**
-  - BT-LOGIC-003: Centralize timeouts (medium priority, many are context-specific)
-  - BT-PARK-002: Idle bot assertion (low priority)
-- **Next:** Advance to P1 — Open Bug Fixes (BB-COMBAT-006, fishing FISH-001, movement flags).
+  1. **BT-PARK-001** (`f1a3a97`): Disable CombatCoordinator during tests via env var.
+  2. **BT-PARK-003** (`f1a3a97`): VendorBuySellTests FG parity. All 24 test classes dual-bot.
+  3. **Documentation cleanup** (`62120f1`): BAD_TEST_BEHAVIORS.md — 19/25 fixed.
+  4. **TASKS.md rewrite**: New priority order per user guidance. P1-P7 with implementation approach for each.
+- **Test results:** 46 passed, 2 failed (FirstAid + Fishing), 2 skipped out of 50.
+- **Next:** Start P1.1 — FG recv hook implementation. Investigate ProcessMessage vtable in WoW 1.12.1 binary.
 - **Sessions 1-51:** See `docs/ARCHIVE.md` for full history.
