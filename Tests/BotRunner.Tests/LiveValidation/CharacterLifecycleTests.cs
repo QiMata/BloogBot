@@ -263,7 +263,8 @@ public class CharacterLifecycleTests
 
         // FG descriptor memory may lag behind server state after SOAP revive;
         // allow up to 20s for the WoW client to process the update packet.
-        var aliveAgain = await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(20));
+        var aliveAgain = await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(20),
+            progressLabel: $"{label} revive-alive");
         if (!aliveAgain)
         {
             var debugSnap = await _bot.GetSnapshotAsync(account);

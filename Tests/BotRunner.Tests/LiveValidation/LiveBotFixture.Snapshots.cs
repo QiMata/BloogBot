@@ -180,15 +180,25 @@ public partial class LiveBotFixture
         string accountName,
         Func<WoWActivitySnapshot, bool> predicate,
         TimeSpan timeout,
-        int pollIntervalMs = 400)
+        int pollIntervalMs = 400,
+        string? progressLabel = null)
     {
         var sw = Stopwatch.StartNew();
+        var lastProgressLog = TimeSpan.Zero;
         while (sw.Elapsed < timeout)
         {
             await RefreshSnapshotsAsync();
             var snap = await GetSnapshotAsync(accountName);
             if (snap != null && predicate(snap))
                 return true;
+
+            // BT-FEEDBACK-001: Log progress every 5s for long-running waits
+            if (progressLabel != null && sw.Elapsed - lastProgressLog >= TimeSpan.FromSeconds(5))
+            {
+                lastProgressLog = sw.Elapsed;
+                _testOutput?.WriteLine($"  [{progressLabel}] Still waiting... {sw.Elapsed.TotalSeconds:F0}s / {timeout.TotalSeconds:F0}s elapsed");
+            }
+
             await Task.Delay(pollIntervalMs);
         }
         return false;
@@ -210,12 +220,13 @@ public partial class LiveBotFixture
     /// Wait for player position to change (via snapshot polling).
     /// Returns true if position changed by more than 1 unit on X or Y axis.
     /// </summary>
-    public async Task<bool> WaitForPositionChangeAsync(string? accountName, float startX, float startY, float startZ, int timeoutMs = 10000)
+    public async Task<bool> WaitForPositionChangeAsync(string? accountName, float startX, float startY, float startZ, int timeoutMs = 10000, string? progressLabel = null)
     {
         var acct = accountName ?? BgAccountName;
         if (acct == null || _stateManagerClient == null) return false;
 
         var sw = Stopwatch.StartNew();
+        var lastProgressLog = 0L;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             var snap = await GetSnapshotAsync(acct);
@@ -225,6 +236,15 @@ public partial class LiveBotFixture
                 if (Math.Abs(pos.X - startX) > 1 || Math.Abs(pos.Y - startY) > 1)
                     return true;
             }
+
+            // BT-FEEDBACK-001: Log progress every 5s for long-running waits
+            if (progressLabel != null && sw.ElapsedMilliseconds - lastProgressLog >= 5000)
+            {
+                lastProgressLog = sw.ElapsedMilliseconds;
+                var posStr = pos != null ? $"({pos.X:F0},{pos.Y:F0})" : "null";
+                _testOutput?.WriteLine($"  [{progressLabel}] Waiting for position change from ({startX:F0},{startY:F0})... current={posStr} {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
+            }
+
             await Task.Delay(1000);
         }
         return false;
@@ -243,12 +263,13 @@ public partial class LiveBotFixture
     /// <summary>
     /// Wait for a nearby unit with specified NPC flags to appear in the bot's snapshot.
     /// </summary>
-    public async Task<Game.WoWUnit?> WaitForNearbyUnitAsync(string? accountName, uint npcFlags, int timeoutMs = 10000)
+    public async Task<Game.WoWUnit?> WaitForNearbyUnitAsync(string? accountName, uint npcFlags, int timeoutMs = 10000, string? progressLabel = null)
     {
         var acct = accountName ?? BgAccountName;
         if (acct == null || _stateManagerClient == null) return null;
 
         var sw = Stopwatch.StartNew();
+        var lastProgressLog = 0L;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             var snap = await GetSnapshotAsync(acct);
@@ -256,6 +277,13 @@ public partial class LiveBotFixture
             {
                 var unit = snap.NearbyUnits.FirstOrDefault(u => (u.NpcFlags & npcFlags) != 0);
                 if (unit != null) return unit;
+
+                // BT-FEEDBACK-001: Log progress every 5s for long-running waits
+                if (progressLabel != null && sw.ElapsedMilliseconds - lastProgressLog >= 5000)
+                {
+                    lastProgressLog = sw.ElapsedMilliseconds;
+                    _testOutput?.WriteLine($"  [{progressLabel}] Waiting for unit with NpcFlags=0x{npcFlags:X}... {snap.NearbyUnits.Count} nearby units, {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
+                }
             }
             await Task.Delay(1000);
         }
@@ -279,10 +307,11 @@ public partial class LiveBotFixture
     /// Wait for a bot to settle at the expected position after a teleport.
     /// Polls snapshots until XY is within 50y of target and Z is stable (2 consecutive samples within 1y).
     /// </summary>
-    public async Task<bool> WaitForTeleportSettledAsync(string accountName, float expectedX, float expectedY, int timeoutMs = 3000)
+    public async Task<bool> WaitForTeleportSettledAsync(string accountName, float expectedX, float expectedY, int timeoutMs = 3000, string? progressLabel = null)
     {
         float? lastZ = null;
         var sw = Stopwatch.StartNew();
+        var lastProgressLog = 0L;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             var snap = await GetSnapshotAsync(accountName);
@@ -295,6 +324,14 @@ public partial class LiveBotFixture
                 if (dist2D < 50f && lastZ.HasValue && MathF.Abs(pos.Z - lastZ.Value) < 1f)
                     return true;
                 lastZ = pos.Z;
+            }
+
+            // BT-FEEDBACK-001: Log progress every 5s for long-running teleport waits
+            if (progressLabel != null && sw.ElapsedMilliseconds - lastProgressLog >= 5000)
+            {
+                lastProgressLog = sw.ElapsedMilliseconds;
+                var posStr = pos != null ? $"({pos.X:F0},{pos.Y:F0},{pos.Z:F0})" : "null";
+                _testOutput?.WriteLine($"  [{progressLabel}] Waiting for teleport to ({expectedX:F0},{expectedY:F0})... current={posStr} {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
             }
 
             await Task.Delay(500);

@@ -163,7 +163,8 @@ public partial class LiveBotFixture
         var restored = await WaitForSnapshotConditionAsync(
             account,
             IsStrictAlive,
-            TimeSpan.FromSeconds(timeoutSeconds));
+            TimeSpan.FromSeconds(timeoutSeconds),
+            progressLabel: $"{label} strict-alive");
 
         global::Tests.Infrastructure.Skip.If(!restored,
             $"{label}: failed to restore strict-alive setup state.");
@@ -211,7 +212,8 @@ public partial class LiveBotFixture
             {
                 await RevivePlayerAsync(characterName);
                 var revived = await WaitForSnapshotConditionAsync(
-                    account, IsStrictAlive, TimeSpan.FromSeconds(10));
+                    account, IsStrictAlive, TimeSpan.FromSeconds(10),
+                    progressLabel: $"{label} revive-alive");
                 if (!revived)
                 {
                     _logger.LogWarning("[{Label}] Revive failed after 10s. Skipping test.", label);

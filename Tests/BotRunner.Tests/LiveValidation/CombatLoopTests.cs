@@ -544,6 +544,12 @@ public class CombatLoopTests
                     _output.WriteLine($"      0x{g:X} '{n}' L{u.GameObject?.Level} HP={u.Health}/{u.MaxHealth} npc={u.NpcFlags} react={u.UnitReaction} creature={isCre} claimed={claimed} at ({p?.X:F1},{p?.Y:F1},{p?.Z:F1})");
                 }
             }
+            // BT-FEEDBACK-001: Log progress every 5s when no candidates found
+            else if ((int)sw.Elapsed.TotalSeconds % 5 == 0 && sw.Elapsed.TotalSeconds >= 5)
+            {
+                var unitCount = snap?.NearbyUnits?.Count ?? 0;
+                _output.WriteLine($"    [FindMob] Still searching... {sw.Elapsed.TotalSeconds:F0}s / {timeout.TotalSeconds:F0}s, {unitCount} nearby units");
+            }
 
             await Task.Delay(500);
         }

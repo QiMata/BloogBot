@@ -633,6 +633,13 @@ public class CombatRangeTests
                 await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: true, delayMs: 500);
             }
 
+            // BT-FEEDBACK-001: Log progress every 5s
+            if ((int)sw.Elapsed.TotalSeconds % 5 == 0 && sw.Elapsed.TotalSeconds >= 5)
+            {
+                var unitCount = snap?.NearbyUnits?.Count ?? 0;
+                _output.WriteLine($"  [{label}] FindBoar: still searching... {sw.Elapsed.TotalSeconds:F0}s / 12s, {unitCount} nearby units");
+            }
+
             await Task.Delay(500);
         }
 

@@ -110,7 +110,8 @@ public class MapTransitionTests
         // Cross-map bounce — poll for InWorld state (server may bounce us to hearthstone)
         await _bot.WaitForSnapshotConditionAsync(account,
             s => s.ScreenState == "InWorld" && s.Player?.Unit?.GameObject?.Base?.Position != null,
-            TimeSpan.FromSeconds(10));
+            TimeSpan.FromSeconds(10),
+            progressLabel: $"{label} tram-bounce-InWorld");
 
         // Verify client is still alive and in-world after the bounce
         await _bot.RefreshSnapshotsAsync();

@@ -114,7 +114,8 @@ public class DeathCorpseRunTests
 
         // Wait for ghost state
         var ghostConfirmed = await _bot.WaitForSnapshotConditionAsync(account,
-            s => (s.Player?.PlayerFlags & 0x10) != 0, TimeSpan.FromSeconds(10));
+            s => (s.Player?.PlayerFlags & 0x10) != 0, TimeSpan.FromSeconds(10),
+            progressLabel: $"{label} ghost-state");
         if (!ghostConfirmed)
             return (false, "Never transitioned to ghost state");
         _output.WriteLine($"  [{label}] Ghost confirmed");
@@ -178,7 +179,8 @@ public class DeathCorpseRunTests
         _output.WriteLine($"  [{label}] Step 6: Wait for reclaim delay");
         var reclaimReady = await _bot.WaitForSnapshotConditionAsync(account,
             s => (s.Player?.CorpseRecoveryDelaySeconds ?? 99) <= 0,
-            TimeSpan.FromSeconds(MaxReclaimWaitSeconds));
+            TimeSpan.FromSeconds(MaxReclaimWaitSeconds),
+            progressLabel: $"{label} reclaim-delay");
         if (!reclaimReady)
             return (false, "Reclaim delay never reached 0");
 
@@ -191,7 +193,8 @@ public class DeathCorpseRunTests
         // Step 8: Confirm alive
         _output.WriteLine($"  [{label}] Step 8: Confirm alive");
         var alive = await _bot.WaitForSnapshotConditionAsync(account,
-            LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(15));
+            LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(15),
+            progressLabel: $"{label} alive-after-retrieve");
         if (!alive)
             return (false, "Not alive after corpse retrieval");
 
