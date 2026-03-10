@@ -43,11 +43,15 @@ namespace WoWStateManager.Listeners
 
         private readonly List<CharacterSettings> _characterSettings;
         private CombatCoordinator? _combatCoordinator;
+        private readonly bool _coordinatorDisabled;
 
         public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
         {
             _characterSettings = characterSettings;
             _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
+            _coordinatorDisabled = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") == "1";
+            if (_coordinatorDisabled)
+                logger.LogInformation("COMBAT_COORD: Coordinator DISABLED via WWOW_TEST_DISABLE_COORDINATOR=1");
             characterSettings.ForEach(settings => CurrentActivityMemberList.TryAdd(settings.AccountName, new()));
         }
 
@@ -271,6 +275,10 @@ namespace WoWStateManager.Listeners
 
         private void InjectCoordinatedActions(string accountName, WoWActivitySnapshot response)
         {
+            // Fully disabled during test runs (WWOW_TEST_DISABLE_COORDINATOR=1)
+            if (_coordinatorDisabled)
+                return;
+
             // Skip if a forwarded action was recently delivered — let it complete without interference
             if (_coordinatorSuppressedUntil.TryGetValue(accountName, out var until) && DateTime.UtcNow < until)
                 return;

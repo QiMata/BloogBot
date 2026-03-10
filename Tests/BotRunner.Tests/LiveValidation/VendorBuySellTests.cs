@@ -57,8 +57,35 @@ public class VendorBuySellTests
     [SkippableFact]
     public async Task Vendor_BuyItem_AppearsInInventory()
     {
-        var account = _bot.BgAccountName!;
-        var label = "BG";
+        var bgTask = RunBuyScenarioAsync(_bot.BgAccountName!, "BG");
+        if (_bot.IsFgActionable)
+        {
+            var fgTask = RunBuyScenarioAsync(_bot.FgAccountName!, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+        }
+        else
+        {
+            await bgTask;
+        }
+    }
+
+    [SkippableFact]
+    public async Task Vendor_SellItem_RemovedFromInventory()
+    {
+        var bgTask = RunSellScenarioAsync(_bot.BgAccountName!, "BG");
+        if (_bot.IsFgActionable)
+        {
+            var fgTask = RunSellScenarioAsync(_bot.FgAccountName!, "FG");
+            await Task.WhenAll(bgTask, fgTask);
+        }
+        else
+        {
+            await bgTask;
+        }
+    }
+
+    private async Task RunBuyScenarioAsync(string account, string label)
+    {
         await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 0: Clean bag contents (preserves equipped gear — BT-VERIFY-002)
@@ -107,11 +134,8 @@ public class VendorBuySellTests
         await DestroyItemByIdAsync(account, label, BuyTestItemId);
     }
 
-    [SkippableFact]
-    public async Task Vendor_SellItem_RemovedFromInventory()
+    private async Task RunSellScenarioAsync(string account, string label)
     {
-        var account = _bot.BgAccountName!;
-        var label = "BG";
         await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 1: Teleport directly to Grimtak's position (within interaction range)

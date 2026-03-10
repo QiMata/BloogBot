@@ -204,8 +204,8 @@ public partial class LiveBotFixture : IAsyncLifetime
             // Disable BotRunner auto-release so death setup remains deterministic.
             Environment.SetEnvironmentVariable("WWOW_DISABLE_AUTORELEASE_CORPSE_TASK", "1");
             Environment.SetEnvironmentVariable("WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK", "1");
-            Environment.SetEnvironmentVariable("WWOW_TEST_COORD_SUPPRESS_SECONDS", "300");
-            _logger.LogInformation("[FIXTURE] Set WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1, WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK=1, WWOW_TEST_COORD_SUPPRESS_SECONDS=300 for live validation run.");
+            Environment.SetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR", "1");
+            _logger.LogInformation("[FIXTURE] Set WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1, WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK=1, WWOW_TEST_DISABLE_COORDINATOR=1 for live validation run.");
 
             // 1. Start StateManager (which launches all configured bots)
             _logger.LogInformation("[FIXTURE] Starting BotServiceFixture (StateManager)...");

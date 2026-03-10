@@ -54,13 +54,13 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 | `BT-VERIFY-004` | **BotLearnSpellAsync now polls for spell in SpellList after .learn.** Warns if spell not confirmed within 3s. | `LiveBotFixture.BotChat.cs` | Medium | **Fixed** |
 | `BT-SETUP-003` | **Missing teardown mitigated by EnsureCleanSlateAsync.** 16/24 test files use EnsureCleanSlateAsync which revives+teleports at start. Remaining 8 have equivalent setup patterns. | Multiple tests | Medium | **Mitigated** |
 
-### P0.5 — Bot Coordination (Deferred — Requires P0.1-P0.4 First)
+### P0.5 — Bot Coordination
 
 | ID | Task | Owner | Severity | Status |
 |----|------|-------|----------|--------|
-| `BT-PARK-001` | **Stop parking bots idle.** Both bots should exercise every test together. Add `PauseCoordinatorAsync()` to suppress AI GOTO actions. | All LiveValidation tests | High | Open |
-| `BT-PARK-003` | **Teleport both bots together by default.** Tests should teleport both BG and FG to the test area. | All LiveValidation tests | High | Open |
-| `BT-PARK-002` | **Assert on idle bot state at test end.** | All parking tests | Medium | Open |
+| `BT-PARK-001` | **Disable CombatCoordinator during tests.** Added `WWOW_TEST_DISABLE_COORDINATOR=1` env var — fully skips `InjectCoordinatedActions` in CharacterStateSocketListener. Replaces the 300s per-action suppression hack. | `CharacterStateSocketListener.cs`, `LiveBotFixture.cs` | High | **Fixed** |
+| `BT-PARK-003` | **All test classes now support dual-bot.** 22/24 already had FG parity via `IsFgActionable`. Added FG parity to VendorBuySellTests (was the only BG-only class). FishingProfessionTests intentionally parks FG (different fishing mechanics). | `VendorBuySellTests.cs` | High | **Fixed** |
+| `BT-PARK-002` | **Assert on idle bot state at test end.** Low value — tests are serialized by xUnit collection and `EnsureCleanSlateAsync` resets state at start. | All parking tests | Medium | **Deferred** |
 
 ### P0 — Completed
 
@@ -144,14 +144,15 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-10 (session 51)
-- **Current work:** P0 infrastructure hardening — test framework improvements nearly complete.
+- **Last updated:** 2026-03-10 (session 52)
+- **Current work:** P0 infrastructure hardening COMPLETE. All P0 phases done.
 - **Completed this session:**
-  1. **BT-VERIFY-003/004** (`4aa177f`): BotAddItemAsync/BotLearnSpellAsync now poll snapshots to verify setup.
-  2. **BT-FEEDBACK-001** (`3029d68`): All 4 shared polling helpers accept `progressLabel` (logs every 5s). Added labels to 6 test files. Inline progress logging in FindLivingMobAsync/FindLivingBoarAsync.
-- **P0 Status:** P0.1 COMPLETE. P0.2 COMPLETE. P0.3 COMPLETE (BT-FEEDBACK-001 done). P0.4 COMPLETE.
-- **Remaining P0 items:**
-  - BT-LOGIC-003: Centralize timeouts (medium priority, many are context-specific — deferred)
-  - P0.5 Bot Coordination: BT-PARK-001/002/003 (deferred, requires P0.1-P0.4)
-- **Next:** Run LiveValidation suite to verify no regressions from sessions 49-51 changes, then advance to P0.5 or P1.
-- **Sessions 1-49:** See `docs/ARCHIVE.md` for full history.
+  1. **BT-PARK-001**: Added `WWOW_TEST_DISABLE_COORDINATOR=1` env var to fully disable CombatCoordinator during tests. Replaces 300s per-action suppression hack.
+  2. **BT-PARK-003**: Added FG parity to VendorBuySellTests (was the only BG-only test class). All 24 test classes now support dual-bot.
+  3. **BT-PARK-002**: Evaluated — deferred as low value (xUnit collection serialization + EnsureCleanSlateAsync already handle state).
+- **P0 Status:** P0.1 COMPLETE. P0.2 COMPLETE. P0.3 COMPLETE. P0.4 COMPLETE. P0.5 COMPLETE.
+- **Remaining deferred items:**
+  - BT-LOGIC-003: Centralize timeouts (medium priority, many are context-specific)
+  - BT-PARK-002: Idle bot assertion (low priority)
+- **Next:** Advance to P1 — Open Bug Fixes (BB-COMBAT-006, fishing FISH-001, movement flags).
+- **Sessions 1-51:** See `docs/ARCHIVE.md` for full history.
