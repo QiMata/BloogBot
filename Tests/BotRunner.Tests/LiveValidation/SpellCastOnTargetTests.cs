@@ -16,7 +16,6 @@ namespace BotRunner.Tests.LiveValidation;
 ///   1) Learn Battle Shout (spell 6673, warrior self-buff).
 ///   2) Remove any existing Battle Shout aura via .unaura.
 ///   3) Cast Battle Shout via ActionType.CastSpell (no target needed).
-///      If CMSG_CAST_SPELL is rejected by the server, falls back to .cast GM command.
 ///   4) Verify Battle Shout aura (6673) appears in snapshot auras.
 ///
 /// Why Battle Shout: Instant cast, no target required, self-buff that appears

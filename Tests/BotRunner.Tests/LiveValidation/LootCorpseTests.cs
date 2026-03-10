@@ -161,7 +161,11 @@ public class LootCorpseTests
         _output.WriteLine($"  [{label}] StartMeleeAttack result: {attackResult}");
         await Task.Delay(1500);
 
-        // Wait for the boar to die (auto-attacks + GM damage if needed)
+        // GM setup: weaken mob so auto-attack finishes quickly (this test validates looting, not combat)
+        await _bot.SendGmChatCommandAsync(account, ".damage 500");
+        await Task.Delay(500);
+
+        // Wait for the boar to die from auto-attacks
         var killSw = Stopwatch.StartNew();
         var boarDead = false;
         while (killSw.Elapsed < TimeSpan.FromSeconds(20))
@@ -176,13 +180,6 @@ public class LootCorpseTests
                 boarDead = true;
                 _output.WriteLine($"  [{label}] Boar dead after {killSw.Elapsed.TotalSeconds:F1}s");
                 break;
-            }
-
-            // If boar hasn't died after 5s of auto-attack, help with .damage
-            if (killSw.Elapsed > TimeSpan.FromSeconds(5))
-            {
-                await _bot.SendGmChatCommandAsync(account, ".damage 500");
-                await Task.Delay(500);
             }
 
             _output.WriteLine($"  [{label}] Boar HP: {currentBoar.Health}/{currentBoar.MaxHealth}");
