@@ -120,6 +120,15 @@ namespace WoWSharpClient.Movement
                 return;
             }
 
+            // Suppress all movement during channeling or casting. MaNGOS interprets
+            // any movement packet (including idle heartbeats) as a channel interrupt.
+            // This prevents crafting, fishing, and other channeled spells from being
+            // cancelled by physics-generated position updates.
+            if (_player.IsChanneling || _player.IsCasting)
+            {
+                return;
+            }
+
             Log.Verbose("[MovementController] Frame {Frame} dt={Delta:F4}s Pos=({X:F1},{Y:F1},{Z:F1}) Flags={Flags}",
                 _frameCounter, deltaSec, _player.Position.X, _player.Position.Y, _player.Position.Z, _player.MovementFlags);
 
