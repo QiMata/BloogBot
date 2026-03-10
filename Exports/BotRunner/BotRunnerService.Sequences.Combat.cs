@@ -1,5 +1,9 @@
+using BotRunner.Movement;
+using GameData.Core.Constants;
 using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using Serilog;
+using System;
 using System.Linq;
 using Xas.FluentBehaviourTree;
 
@@ -7,35 +11,126 @@ namespace BotRunner
 {
     public partial class BotRunnerService
     {
-        /// <summary>
-        /// Sequence to stop any active auto-attacks, including melee, ranged, and wand.
-        /// </summary>
-        /// <returns>IBehaviourTreeNode that manages stopping auto-attacks.</returns>
-        private IBehaviourTreeNode BuildStartMeleeAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
-            .Sequence("Start Melee Attack Sequence")
-                .Splice(CheckForTarget(targetGuid))
-                .Do("Ensure Target Selected", time =>
-                {
-                    if (targetGuid == 0)
-                    {
-                        Log.Warning("[BOT RUNNER] StartMeleeAttack requested with targetGuid=0; ignoring.");
-                        return BehaviourTreeStatus.Failure;
-                    }
+        // Melee reach: weapon range (~2y) + both capsule radii (~0.4y each) + margin.
+        private const float MeleeChaseArrivalDist = 3.5f;
+        // Re-chase threshold: if target moves beyond this, start chasing again.
+        private const float MeleeChaseLeashDist = 8f;
 
-                    _objectManager.SetTarget(targetGuid);
-                    // Small delay ensures CMSG_SET_SELECTION is flushed before CMSG_ATTACKSWING.
-                    // Both are fire-and-forget async; without this the TCP stack may reorder them.
-                    System.Threading.Thread.Sleep(50);
-                    return BehaviourTreeStatus.Success;
-                })
-                .Do("Start Melee Attack", time =>
-                {
-                    _objectManager.StartMeleeAttack();
-                    Log.Information($"[BOT RUNNER] Started melee attack on target {targetGuid:X}");
-                    return BehaviourTreeStatus.Success;
-                })
-            .End()
-            .Build();
+        /// <summary>
+        /// Melee combat sequence: select target → chase to melee range → auto-attack.
+        /// Keeps running (returning Running) while the target is alive, chasing the
+        /// mob if it moves out of melee range. Returns Success when the target dies.
+        ///
+        /// Auto-attack in WoW does NOT move the character — the bot must explicitly
+        /// chase via pathfinding to stay in melee range. This matches real player
+        /// behavior: click mob → character runs to it → swings when in range.
+        /// </summary>
+        private IBehaviourTreeNode BuildStartMeleeAttackSequence(ulong targetGuid)
+        {
+            NavigationPath? navPath = null;
+            bool targetSelected = false;
+            bool attackStarted = false;
+            DateTime lastChaseLogUtc = DateTime.MinValue;
+
+            return new BehaviourTreeBuilder()
+                .Sequence("Start Melee Attack Sequence")
+                    .Splice(CheckForTarget(targetGuid))
+                    .Do("Chase and Melee Attack", time =>
+                    {
+                        if (targetGuid == 0)
+                        {
+                            Log.Warning("[BOT RUNNER] StartMeleeAttack requested with targetGuid=0; ignoring.");
+                            return BehaviourTreeStatus.Failure;
+                        }
+
+                        // Ensure target is selected (once).
+                        if (!targetSelected)
+                        {
+                            _objectManager.SetTarget(targetGuid);
+                            // Small delay ensures CMSG_SET_SELECTION is flushed before CMSG_ATTACKSWING.
+                            System.Threading.Thread.Sleep(50);
+                            targetSelected = true;
+                            Log.Information("[BOT RUNNER] Target selected: 0x{Guid:X}", targetGuid);
+                        }
+
+                        var player = _objectManager.Player;
+                        if (player?.Position == null)
+                            return BehaviourTreeStatus.Running;
+
+                        // Find the target unit.
+                        var target = _objectManager.Units.FirstOrDefault(u => u.Guid == targetGuid);
+                        if (target == null || target.Health == 0)
+                        {
+                            // Target dead or despawned — combat complete.
+                            _objectManager.StopAllMovement();
+                            navPath?.Clear();
+                            Log.Information("[BOT RUNNER] Target 0x{Guid:X} dead or gone — combat complete.", targetGuid);
+                            return BehaviourTreeStatus.Success;
+                        }
+
+                        if (target.Position == null)
+                            return BehaviourTreeStatus.Running;
+
+                        var dist = player.Position.DistanceTo(target.Position);
+
+                        if (dist > MeleeChaseArrivalDist)
+                        {
+                            // Out of melee range — chase the target.
+                            if (navPath == null)
+                            {
+                                var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
+                                navPath = new NavigationPath(_container.PathfindingClient,
+                                    capsuleRadius: radius, capsuleHeight: height);
+                            }
+
+                            if (player.RunSpeed > 0)
+                                navPath.UpdateCharacterSpeed(player.RunSpeed);
+
+                            bool hitWall = _objectManager is WoWSharpClient.WoWSharpObjectManager wsOm && wsOm.PhysicsHitWall;
+                            var waypoint = navPath.GetNextWaypoint(player.Position, target.Position,
+                                player.MapId, allowDirectFallback: true, physicsHitWall: hitWall);
+
+                            if (waypoint != null)
+                            {
+                                var dx = waypoint.X - player.Position.X;
+                                var dy = waypoint.Y - player.Position.Y;
+                                var facing = MathF.Atan2(dy, dx);
+                                _objectManager.MoveToward(waypoint, facing);
+                            }
+
+                            if (DateTime.UtcNow - lastChaseLogUtc > TimeSpan.FromSeconds(3))
+                            {
+                                Log.Information("[BOT RUNNER] Chasing target 0x{Guid:X}, dist={Dist:F1}y", targetGuid, dist);
+                                lastChaseLogUtc = DateTime.UtcNow;
+                            }
+
+                            // If attack was started but we drifted out of range, keep Running.
+                            // Auto-attack will resume swinging when back in range.
+                            return BehaviourTreeStatus.Running;
+                        }
+
+                        // In melee range — stop movement and ensure auto-attack is on.
+                        if (!attackStarted || dist <= MeleeChaseArrivalDist)
+                        {
+                            _objectManager.StopAllMovement();
+                            navPath?.Clear();
+                            _objectManager.Face(target.Position);
+                            _objectManager.StartMeleeAttack();
+
+                            if (!attackStarted)
+                            {
+                                Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y) — started auto-attack on 0x{Guid:X}",
+                                    dist, targetGuid);
+                                attackStarted = true;
+                            }
+                        }
+
+                        // Stay in Running — mob is alive, keep monitoring.
+                        return BehaviourTreeStatus.Running;
+                    })
+                .End()
+                .Build();
+        }
 
         /// <summary>
         /// Sequence to start ranged auto-attack (bow/gun/thrown) on a target.
