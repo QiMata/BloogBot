@@ -30,13 +30,16 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 
 | # | Task | Owner | Status |
 |---|------|-------|--------|
-| 1.1 | **Complete FG recv hook (SMSG).** Current send hook captures CMSG opcodes. Need recv hook via ProcessMessage vtable to capture SMSG packets. Log opcode + size + timestamp + payload to `WWoWLogs/packet_logger.log`. | `Services/ForegroundBotRunner/Mem/Hooks/` | **Partial** (send done, recv pending) |
-| 1.2 | **Structured packet log format.** Both send and recv packets logged with direction (C→S / S→C), opcode name, size, timestamp, hex payload. Format must be parseable for automated analysis. | `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` | Open |
+| 1.1 | **Complete FG recv hook (SMSG).** Runtime pattern scanner finds ProcessMessage by scanning for `[this+0x74]` m_handlers access near NetClientSend. Assembly detour captures all inbound SMSG opcodes. | `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` | **Done** (`087085e`) |
+| 1.2 | **Structured packet log format.** C→S / S→C direction, opcode name lookup (~60 opcodes), size, timestamp. Logs first 500 packets + all important opcodes. | `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs` | **Done** (`087085e`) |
 | 1.3 | **Packet capture test.** LiveValidation test that triggers known actions (teleport, cast spell, buy item) on FG and verifies expected CMSG/SMSG pairs appear in the packet log. | `Tests/BotRunner.Tests/LiveValidation/` | Open |
+| 1.4 | **Live validation of recv hook.** Run FG bot, verify `packet_logger.log` shows SMSG packets with valid opcodes. Confirm pattern scanner found the correct ProcessMessage address. | Manual verification | **Next** |
 
 **Implementation notes:**
-- Send hook already exists via `NetClientSend` (0x005379A0) assembly injection
-- Recv hook needs ProcessMessage vtable offset — investigate WoW 1.12.1 client binary
+- Send hook: `NetClientSend` (0x005379A0) assembly injection — captures CMSG
+- Recv hook: `ProcessMessage` found via pattern scan (m_handlers at `this+0x74`) — captures SMSG
+- Sanity check rejects opcodes > 0x0500 (WoW 1.12.1 max ~0x033B)
+- Falls back to ContinentId inference if pattern scan fails
 - Compare captured packets against VMaNGOS server handler code to verify correctness
 - Packet log enables side-by-side FG vs BG comparison for all subsequent tasks
 
@@ -161,13 +164,12 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-10 (session 52)
-- **Current work:** P1 — FG Packet Capture (send + recv hooks). P0 COMPLETE.
+- **Last updated:** 2026-03-10 (session 53)
+- **Current work:** P1 — FG Packet Capture. P1.1 + P1.2 DONE. P0 COMPLETE.
 - **Completed this session:**
-  1. **BT-PARK-001** (`f1a3a97`): Disable CombatCoordinator during tests via env var.
-  2. **BT-PARK-003** (`f1a3a97`): VendorBuySellTests FG parity. All 24 test classes dual-bot.
-  3. **Documentation cleanup** (`62120f1`): BAD_TEST_BEHAVIORS.md — 19/25 fixed.
-  4. **TASKS.md rewrite**: New priority order per user guidance. P1-P7 with implementation approach for each.
+  1. **P1.1 recv hook** (`087085e`): Runtime pattern scanner finds ProcessMessage via m_handlers[+0x74] signature. Assembly detour captures all inbound SMSG packets.
+  2. **P1.2 structured log** (`087085e`): C→S / S→C direction, opcode name table (~60 opcodes), first 500 packets logged.
+  3. **TASKS.md priorities** (`962862b`): P1-P7 priority rewrite per user guidance.
 - **Test results:** 46 passed, 2 failed (FirstAid + Fishing), 2 skipped out of 50.
-- **Next:** Start P1.1 — FG recv hook implementation. Investigate ProcessMessage vtable in WoW 1.12.1 binary.
-- **Sessions 1-51:** See `docs/ARCHIVE.md` for full history.
+- **Next:** P1.4 — Live validate recv hook (run FG bot, check packet_logger.log for SMSG opcodes). Then P1.3 (LiveValidation test). Then P2 (FirstAid diagnostic).
+- **Sessions 1-52:** See `docs/ARCHIVE.md` for full history.
