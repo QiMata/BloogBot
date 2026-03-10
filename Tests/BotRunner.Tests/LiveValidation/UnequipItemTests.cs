@@ -78,7 +78,7 @@ public class UnequipItemTests
 
     private async Task<bool> RunUnequipScenario(string account, string label)
     {
-        await _bot.EnsureStrictAliveAsync(account, label);
+        await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 0: Clear inventory to ensure bag space for unequip destination
         _output.WriteLine($"  [{label}] Step 0: Clearing inventory for clean unequip test.");

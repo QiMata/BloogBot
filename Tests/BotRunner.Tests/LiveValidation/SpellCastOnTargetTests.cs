@@ -78,7 +78,7 @@ public class SpellCastOnTargetTests
 
     private async Task<bool> RunCastSpellScenario(string account, Func<Game.WoWPlayer?> getPlayer, string label)
     {
-        await _bot.EnsureStrictAliveAsync(account, label);
+        await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 1: Learn Battle Shout
         _output.WriteLine($"  [{label}] Step 1: Learning Battle Shout (spell {BattleShoutSpellId}).");

@@ -86,13 +86,13 @@ public class BasicLoopTests
     {
         var hasFg = _bot.IsFgActionable;
 
-        // Setup both bots in parallel.
+        // Setup both bots to known-good state (BT-SETUP-001).
         var setupTasks = new System.Collections.Generic.List<Task>
         {
-            EnsureStrictAliveAsync(_bot.BgAccountName!, "BG")
+            _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG")
         };
         if (hasFg)
-            setupTasks.Add(EnsureStrictAliveAsync(_bot.FgAccountName!, "FG"));
+            setupTasks.Add(_bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG"));
         await Task.WhenAll(setupTasks);
 
         await _bot.RefreshSnapshotsAsync();
@@ -136,13 +136,13 @@ public class BasicLoopTests
         Assert.NotNull(bgAccount);
         var hasFg = _bot.IsFgActionable;
 
-        // Setup both bots in parallel.
+        // Setup both bots to known-good state (BT-SETUP-001).
         var setupTasks = new System.Collections.Generic.List<Task>
         {
-            EnsureStrictAliveAsync(bgAccount, "BG")
+            _bot.EnsureCleanSlateAsync(bgAccount, "BG")
         };
         if (hasFg)
-            setupTasks.Add(EnsureStrictAliveAsync(_bot.FgAccountName!, "FG"));
+            setupTasks.Add(_bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG"));
         await Task.WhenAll(setupTasks);
 
         if (hasFg)
@@ -193,7 +193,7 @@ public class BasicLoopTests
 
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
-        await EnsureStrictAliveAsync(bgAccount, "BG");
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
         await EnsureNearRazorHillAsync(bgAccount, "BG");
 
         var units = await WaitForNearbyUnitsAsync(bgAccount, TimeSpan.FromSeconds(10));
@@ -214,7 +214,7 @@ public class BasicLoopTests
 
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
-        await EnsureStrictAliveAsync(bgAccount, "BG");
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
         await EnsureNearRazorHillAsync(bgAccount, "BG");
 
         var objects = await WaitForNearbyObjectsAsync(bgAccount, TimeSpan.FromSeconds(10));
@@ -235,7 +235,7 @@ public class BasicLoopTests
 
         var bgAccount = _bot.BgAccountName!;
         Assert.NotNull(bgAccount);
-        await EnsureStrictAliveAsync(bgAccount, "BG");
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         await _bot.RefreshSnapshotsAsync();
         var baseline = await _bot.GetSnapshotAsync(bgAccount);

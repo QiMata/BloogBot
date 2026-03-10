@@ -95,13 +95,8 @@ public class NavigationTests
         float endX, float endY, float endZ, int maxSeconds)
     {
         // Step 1: Ensure alive
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (!LiveBotFixture.IsStrictAlive(snap))
-        {
-            await _bot.EnsureStrictAliveAsync(account, label, 15);
-            await _bot.RefreshSnapshotsAsync();
-        }
+        // Standardized setup (BT-SETUP-001): revive + safe zone + GM on
+        await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 2: Teleport to start
         _output.WriteLine($"  [{label}] Teleporting to start ({startX:F0}, {startY:F0}, {startZ:F0})");
@@ -139,7 +134,7 @@ public class NavigationTests
         {
             await Task.Delay(1500);
             await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account);
+            var snap = await _bot.GetSnapshotAsync(account);
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos == null) continue;
 

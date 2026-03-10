@@ -59,7 +59,7 @@ public class VendorBuySellTests
     {
         var account = _bot.BgAccountName!;
         var label = "BG";
-        await _bot.EnsureStrictAliveAsync(account, label);
+        await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 0: Clean inventory to ensure a known starting state
         var setupSnap = await _bot.GetSnapshotAsync(account);
@@ -117,7 +117,7 @@ public class VendorBuySellTests
     {
         var account = _bot.BgAccountName!;
         var label = "BG";
-        await _bot.EnsureStrictAliveAsync(account, label);
+        await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 1: Teleport directly to Grimtak's position (within interaction range)
         _output.WriteLine($"  [{label}] Step 1: Teleporting to Grimtak (Razor Hill vendor)");

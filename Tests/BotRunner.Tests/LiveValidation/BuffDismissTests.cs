@@ -85,7 +85,7 @@ public class BuffDismissTests
 
     private async Task<bool> RunDismissBuffScenario(string account, Func<Game.WoWPlayer?> getPlayer, string label)
     {
-        await _bot.EnsureStrictAliveAsync(account, label);
+        await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 1: Clean state — remove stale buff and clear inventory
         _output.WriteLine($"  [{label}] Step 1: Removing stale buffs + clearing inventory.");

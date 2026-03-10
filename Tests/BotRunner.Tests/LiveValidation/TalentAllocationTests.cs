@@ -70,7 +70,7 @@ public class TalentAllocationTests
 
     private async Task<bool> RunTalentScenario(string account, string label)
     {
-        await EnsureStrictAliveAsync(account, label);
+        await _bot.EnsureCleanSlateAsync(account, label);
         await EnsureLevelAtLeastAsync(account, label, MinTalentLevel);
         var spellCleared = await TryEnsureSpellAbsentAsync(account, label, Deflection1);
         Assert.True(spellCleared,
@@ -87,7 +87,7 @@ public class TalentAllocationTests
         if (learnTrace.DispatchResult == ResponseResult.Failure)
         {
             _output.WriteLine($"  [{label}] .learn was dropped (dead/ghost state at dispatch); ensuring alive and retrying...");
-            await EnsureStrictAliveAsync(account, label);
+            await _bot.EnsureCleanSlateAsync(account, label);
             await _bot.BotSelectSelfAsync(account);
             await Task.Delay(300);
             learnTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".learn {Deflection1}", captureResponse: true, delayMs: 1000);
@@ -147,7 +147,7 @@ public class TalentAllocationTests
         if (unlearn.DispatchResult == ResponseResult.Failure)
         {
             _output.WriteLine($"  [{label}] WARNING: .unlearn {spellId} was DROPPED (bot in dead/ghost state at dispatch); ensuring alive and retrying.");
-            await EnsureStrictAliveAsync(account, label);
+            await _bot.EnsureCleanSlateAsync(account, label);
             await _bot.BotSelectSelfAsync(account);
             await Task.Delay(300);
             unlearn = await _bot.SendGmChatCommandTrackedAsync(account, $".unlearn {spellId}", captureResponse: false, delayMs: 1000);

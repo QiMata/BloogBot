@@ -75,28 +75,13 @@ public class EquipmentEquipTests
 
     private async Task<bool> RunEquipScenario(string account, string label)
     {
+        // Standardized setup (BT-SETUP-001): revive + safe zone + GM on
+        await _bot.EnsureCleanSlateAsync(account, label);
+
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
         if (snap?.Player == null)
             return false;
-
-        // Strict-alive guard to avoid dead-state GM command rejections.
-        if (!LiveBotFixture.IsStrictAlive(snap))
-        {
-            _output.WriteLine($"  [{label}] Not strict-alive; reviving before equipment setup.");
-            await _bot.RevivePlayerAsync(snap.CharacterName);
-            var reviveSw = Stopwatch.StartNew();
-            while (reviveSw.Elapsed < TimeSpan.FromSeconds(10))
-            {
-                await Task.Delay(200);
-                await _bot.RefreshSnapshotsAsync();
-                snap = await _bot.GetSnapshotAsync(account) ?? snap;
-                if (LiveBotFixture.IsStrictAlive(snap))
-                    break;
-            }
-            if (snap.Player == null)
-                return false;
-        }
 
         var playerBefore = snap.Player;
         bool mainhandBeforeEquipped = playerBefore.Inventory.TryGetValue(MainhandSlot, out ulong mainhandBeforeGuid) && mainhandBeforeGuid != 0;

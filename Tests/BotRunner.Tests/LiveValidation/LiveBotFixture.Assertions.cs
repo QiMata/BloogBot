@@ -169,6 +169,72 @@ public partial class LiveBotFixture
             $"{label}: failed to restore strict-alive setup state.");
     }
 
+    // ---- Shared Safe Zone Constants ----
+
+    /// <summary>Orgrimmar safe zone (no hostile mobs) for test setup/teardown.</summary>
+    public const int SafeZoneMap = 1;
+    public const float SafeZoneX = 1629f;
+    public const float SafeZoneY = -4373f;
+    public const float SafeZoneZ = 34f;
+
+    /// <summary>
+    /// Standardized test setup: ensures the bot is in a known-good state before any test.
+    /// 1) Logs the bot's current state (position, health, flags) for debugging.
+    /// 2) If dead/ghost, logs WHY (previous test state leak) and revives.
+    /// 3) Teleports to Orgrimmar safe zone.
+    /// 4) Ensures GM mode is ON.
+    /// This replaces ad-hoc EnsureStrictAlive + manual teleport patterns (BT-SETUP-001).
+    /// </summary>
+    public async Task EnsureCleanSlateAsync(string account, string label)
+    {
+        await RefreshSnapshotsAsync();
+        var snap = await GetSnapshotAsync(account);
+        var characterName = snap?.CharacterName;
+
+        // Log initial state so we can debug cross-test contamination
+        var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+        var health = snap?.Player?.Unit?.Health ?? 0;
+        var maxHealth = snap?.Player?.Unit?.MaxHealth ?? 0;
+        var moveFlags = snap?.Player?.Unit?.MovementFlags ?? 0;
+        _logger.LogInformation("[{Label}] CleanSlate entry: char={Char}, hp={HP}/{MaxHP}, " +
+            "pos=({X:F0},{Y:F0},{Z:F0}), moveFlags=0x{Flags:X}",
+            label, characterName ?? "?", health, maxHealth,
+            pos?.X ?? 0, pos?.Y ?? 0, pos?.Z ?? 0, moveFlags);
+
+        // Step 1: Revive if dead — but log the reason (state leak from previous test)
+        if (!IsStrictAlive(snap))
+        {
+            IsDeadOrGhostState(snap, out var deathReason);
+            _logger.LogWarning("[{Label}] Bot NOT alive at test start (state leak from previous test). " +
+                "Reason: {Reason}. Reviving.", label, deathReason);
+            if (!string.IsNullOrWhiteSpace(characterName))
+            {
+                await RevivePlayerAsync(characterName);
+                var revived = await WaitForSnapshotConditionAsync(
+                    account, IsStrictAlive, TimeSpan.FromSeconds(10));
+                if (!revived)
+                {
+                    _logger.LogWarning("[{Label}] Revive failed after 10s. Skipping test.", label);
+                    global::Tests.Infrastructure.Skip.If(true,
+                        $"{label}: failed to revive bot at test start (death reason: {deathReason}).");
+                }
+            }
+            else
+            {
+                global::Tests.Infrastructure.Skip.If(true,
+                    $"{label}: missing character name for clean slate setup.");
+            }
+        }
+
+        // Step 2: Teleport to safe zone (prevents position contamination from previous test)
+        await BotTeleportAsync(account, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
+        await WaitForZStabilizationAsync(account, waitMs: 2000);
+
+        // Step 3: Ensure GM mode is on (prevents state leak if previous test toggled it off)
+        await SendGmChatCommandAsync(account, ".gm on");
+        await Task.Delay(300);
+    }
+
     // ---- GM Command Helpers (via SOAP — independent of bots) ----
 
     /// <summary>Execute any GM command via SOAP.</summary>

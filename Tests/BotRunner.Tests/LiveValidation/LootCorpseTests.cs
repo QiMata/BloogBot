@@ -87,22 +87,11 @@ public class LootCorpseTests
         string label,
         ConcurrentDictionary<ulong, string> claimedTargets)
     {
-        // Step 1: Ensure strict-alive
-        _output.WriteLine($"  [{label}] Step 1: Ensure strict-alive");
+        // Step 1: Ensure clean slate (revive + safe zone + GM on) (BT-SETUP-001)
+        _output.WriteLine($"  [{label}] Step 1: Ensure clean slate");
+        await _bot.EnsureCleanSlateAsync(account, label);
         await _bot.RefreshSnapshotsAsync();
         var snap = getSnap();
-        if (!LiveBotFixture.IsStrictAlive(snap))
-        {
-            _output.WriteLine($"  [{label}] Not strict-alive, reviving...");
-            await _bot.EnsureStrictAliveAsync(account, label, 15);
-            await _bot.RefreshSnapshotsAsync();
-            snap = getSnap();
-            if (!LiveBotFixture.IsStrictAlive(snap))
-            {
-                _output.WriteLine($"  [{label}] FAILED: Could not restore strict-alive state.");
-                return false;
-            }
-        }
 
         // Step 2: Clear inventory
         _output.WriteLine($"  [{label}] Step 2: Clear inventory (.reset items)");

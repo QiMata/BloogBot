@@ -80,50 +80,11 @@ public class CraftingProfessionTests
 
     private async Task<bool> RunCraftingScenario(string account, string label)
     {
+        // Standardized setup: revive if dead, teleport to Orgrimmar, GM on (BT-SETUP-001).
+        await _bot.EnsureCleanSlateAsync(account, label);
+
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
-        if (snap == null)
-            return false;
-
-        // Step 0: Strict-alive guard (avoid dead-state GM command rejection).
-        if (!LiveBotFixture.IsStrictAlive(snap))
-        {
-            _output.WriteLine($"  [{label}] Not strict-alive; reviving before setup.");
-            await _bot.RevivePlayerAsync(snap.CharacterName);
-            // Poll for alive state instead of fixed delay (same ~1200ms budget)
-            var reviveSw = Stopwatch.StartNew();
-            while (reviveSw.ElapsedMilliseconds < 3000)
-            {
-                await Task.Delay(200);
-                await _bot.RefreshSnapshotsAsync();
-                snap = await _bot.GetSnapshotAsync(account) ?? snap;
-                if (LiveBotFixture.IsStrictAlive(snap))
-                    break;
-            }
-        }
-
-        // Step 1: Teleport only when not already near setup location.
-        var teleported = await EnsureNearSetupLocationAsync(account, label);
-        if (teleported)
-        {
-            // Poll for position to update near the setup location instead of fixed 2000ms delay.
-            var teleSw = Stopwatch.StartNew();
-            while (teleSw.Elapsed < TimeSpan.FromSeconds(3))
-            {
-                await Task.Delay(200);
-                await _bot.RefreshSnapshotsAsync();
-                snap = await _bot.GetSnapshotAsync(account) ?? snap;
-                var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-                if (pos != null && DistanceTo(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ) <= SetupArrivalDistance)
-                {
-                    _output.WriteLine($"  [{label}] Teleport confirmed after {teleSw.ElapsedMilliseconds}ms");
-                    break;
-                }
-            }
-        }
-
-        await _bot.RefreshSnapshotsAsync();
-        snap = await _bot.GetSnapshotAsync(account);
         if (snap == null)
             return false;
 

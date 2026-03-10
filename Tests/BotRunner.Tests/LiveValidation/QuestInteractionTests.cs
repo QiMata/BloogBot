@@ -59,7 +59,7 @@ public class QuestInteractionTests
 
     private async Task RunQuestScenario(string account, string label)
     {
-        await EnsureStrictAliveAsync(account, label);
+        await _bot.EnsureCleanSlateAsync(account, label);
         await EnsureQuestAbsentAsync(account, label, TestQuestId);
 
         try

@@ -85,7 +85,7 @@ public class StarterQuestTests
 
     private async Task RunStarterQuestScenario(string account, string label)
     {
-        await _bot.EnsureStrictAliveAsync(account, label);
+        await _bot.EnsureCleanSlateAsync(account, label);
 
         // Pre-flight: teleport to Orgrimmar first to stabilize zone state.
         // In full suite runs, prior tests may leave the bot far away causing
