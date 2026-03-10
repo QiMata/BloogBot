@@ -200,17 +200,6 @@ public partial class LiveBotFixture
         int delayMs = 2000,
         bool allowWhenDead = false)
     {
-        // CRITICAL: .gm on / .gm off via chat disconnects the BG headless client.
-        // MaNGOS responds with a packet that kills the connection, breaking all
-        // subsequent commands and position tracking. Skip for BG bots silently.
-        if (accountName == BgAccountName &&
-            command.StartsWith(".gm ", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("[CMD-SKIP] [{Account}] Skipping '{Command}' — .gm commands disconnect BG headless client",
-                accountName, command);
-            return new GmChatCommandTrace(0, ResponseResult.Success, Array.Empty<string>(), Array.Empty<string>());
-        }
-
         var attemptCount = TrackChatCommand(accountName, command);
         LogDuplicateCommand("CHAT", command, attemptCount, accountName);
 

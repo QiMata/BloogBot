@@ -281,36 +281,43 @@ namespace ForegroundBotRunner.Mem.Hooks
 
         private static void InstallRecvHook()
         {
-            var processMessageAddr = FindProcessMessageByPattern();
+            // Known address: NetClient::ProcessMessage = 0x00537AA0 (1.12.1 build 5875)
+            // Confirmed via community reverse engineering (WowDevs/Fishbot, OwnedCore info dump).
+            // 0x100 bytes after NetClient::Send (0x005379A0).
+            var processMessageAddr = Offsets.Functions.NetClientProcessMessage;
             if (processMessageAddr == nint.Zero)
             {
-                DiagLog("InstallRecvHook: ProcessMessage address not found — recv hook NOT installed");
-                DiagLog("InstallRecvHook: Falling back to ContinentId-based inbound inference");
+                DiagLog("InstallRecvHook: ProcessMessage address is zero — recv hook NOT installed");
                 return;
             }
+            DiagLog($"InstallRecvHook: Using known ProcessMessage address 0x{(uint)processMessageAddr:X8}");
 
             _recvHookDelegate = new RecvHookDelegate(OnRecvPacket);
             var managedAddr = (uint)(nint)Marshal.GetFunctionPointerForDelegate(_recvHookDelegate);
             uint recvAddr = (uint)processMessageAddr;
 
-            // Read original prologue bytes (6 bytes — typical __thiscall prologue).
-            _originalRecvBytes = MemoryManager.ReadBytes(processMessageAddr, 6);
-            if (_originalRecvBytes == null || _originalRecvBytes.Length < 6)
+            // Read enough bytes to find instruction boundary >= 5 bytes.
+            // Must decode x86 instructions to avoid splitting one in the middle.
+            _originalRecvBytes = MemoryManager.ReadBytes(processMessageAddr, 16);
+            if (_originalRecvBytes == null || _originalRecvBytes.Length < 8)
             {
                 DiagLog($"InstallRecvHook: Failed to read original bytes at 0x{recvAddr:X8}");
                 return;
             }
             DiagLog($"InstallRecvHook: Original bytes at 0x{recvAddr:X8}: {BitConverter.ToString(_originalRecvBytes)}");
 
-            // Verify prologue starts with push ebp (0x55) — sanity check
-            if (_originalRecvBytes[0] != 0x55)
+            // Walk instructions to find the first boundary at or past 5 bytes (JMP rel32 size).
+            int prologueSize = GetInstructionBoundary(_originalRecvBytes, 5);
+            if (prologueSize < 5 || prologueSize > 15)
             {
-                DiagLog($"InstallRecvHook: Unexpected prologue byte 0x{_originalRecvBytes[0]:X2} (expected 0x55 push ebp) — aborting");
+                DiagLog($"InstallRecvHook: Could not determine safe prologue size (got {prologueSize}) — aborting");
                 return;
             }
+            DiagLog($"InstallRecvHook: Prologue size = {prologueSize} bytes (instruction boundary)");
+            _originalRecvBytes = _originalRecvBytes[..prologueSize];
 
             var dbLine = "db " + string.Join(",", Array.ConvertAll(_originalRecvBytes, b => $"0x{b:X2}"));
-            uint returnAddr = recvAddr + 6;
+            uint returnAddr = recvAddr + (uint)prologueSize;
 
             // ProcessMessage has 2 params after this: tickCount + CDataStore*.
             // After pushfd(4) + pushad(32) = 36 bytes pushed.
@@ -355,8 +362,9 @@ namespace ForegroundBotRunner.Mem.Hooks
 
             var fullDetourAddr = MemoryManager.InjectAssembly("PacketRecvDetour", fullInstructions);
 
-            // Install: overwrite first 6 bytes with JMP + NOP (same as send hook)
-            MemoryManager.InjectAssembly("PacketRecvHook", recvAddr, $"jmp 0x{(uint)fullDetourAddr:X}\nnop");
+            // Install: overwrite prologue bytes with JMP rel32 (5 bytes) + NOP padding to prologueSize.
+            var nopPad = string.Concat(Enumerable.Repeat("\nnop", prologueSize - 5));
+            MemoryManager.InjectAssembly("PacketRecvHook", recvAddr, $"jmp 0x{(uint)fullDetourAddr:X}{nopPad}");
 
             // Verify
             var hookBytes = MemoryManager.ReadBytes(processMessageAddr, 5);
@@ -405,6 +413,155 @@ namespace ForegroundBotRunner.Mem.Hooks
             }
             catch (AccessViolationException) { /* stale pointer — skip */ }
             catch (Exception ex) { DiagLog($"OnRecvPacket error: {ex.Message}"); }
+        }
+
+        // ===================================================================
+        // x86 instruction length decoder (prologue-focused)
+        // ===================================================================
+
+        /// <summary>
+        /// Walks x86 instructions from the start of the byte array and returns the
+        /// first instruction boundary offset >= minBytes. Used to avoid splitting
+        /// instructions when overwriting a function prologue with a JMP rel32 (5 bytes).
+        /// Only handles common x86 prologue/early-function instructions.
+        /// </summary>
+        private static int GetInstructionBoundary(byte[] code, int minBytes)
+        {
+            int offset = 0;
+            while (offset < minBytes && offset < code.Length - 1)
+            {
+                int len = GetInstructionLength(code, offset);
+                if (len <= 0)
+                {
+                    DiagLog($"  InsnLen: unknown opcode 0x{code[offset]:X2} at offset {offset}");
+                    return -1;
+                }
+                DiagLog($"  InsnLen: offset={offset} len={len} bytes={BitConverter.ToString(code, offset, Math.Min(len, code.Length - offset))}");
+                offset += len;
+            }
+            return offset;
+        }
+
+        /// <summary>
+        /// Returns the length of a single x86 instruction at the given offset.
+        /// Covers common function prologue patterns. Returns -1 for unknown opcodes.
+        /// </summary>
+        private static int GetInstructionLength(byte[] code, int offset)
+        {
+            if (offset >= code.Length) return -1;
+            byte op = code[offset];
+
+            // Single-byte instructions
+            // 50-57 = push eax..edi, 58-5F = pop eax..edi
+            if (op is >= 0x50 and <= 0x5F) return 1;
+            // 90 = nop, 9C = pushfd, 9D = popfd, C3 = ret, CC = int3
+            if (op is 0x90 or 0x9C or 0x9D or 0xC3 or 0xCC) return 1;
+
+            // Two-byte with ModR/M (no immediate, no SIB for simple cases)
+            // 8B = mov r32, r/m32; 89 = mov r/m32, r32; 85 = test r/m32, r32
+            // 3B = cmp r32, r/m32; 33 = xor r32, r/m32; 2B = sub r32, r/m32
+            // 03 = add r32, r/m32; 0B = or r32, r/m32; 23 = and r32, r/m32
+            if (op is 0x89 or 0x8B or 0x85 or 0x3B or 0x33 or 0x2B or 0x03 or 0x0B or 0x23)
+            {
+                return 2 + ModRMExtraBytes(code, offset + 1);
+            }
+
+            // 83 = arith r/m32, imm8 (sub esp, XX / cmp reg, XX / add reg, XX)
+            if (op == 0x83)
+            {
+                return 3 + ModRMExtraBytes(code, offset + 1); // ModR/M + imm8
+            }
+
+            // 81 = arith r/m32, imm32 (sub esp, XXXX)
+            if (op == 0x81)
+            {
+                return 6 + ModRMExtraBytes(code, offset + 1); // ModR/M + imm32
+            }
+
+            // A1 = mov eax, [imm32]; A3 = mov [imm32], eax
+            if (op is 0xA1 or 0xA3) return 5;
+
+            // B8-BF = mov r32, imm32
+            if (op is >= 0xB8 and <= 0xBF) return 5;
+
+            // 68 = push imm32
+            if (op == 0x68) return 5;
+            // 6A = push imm8
+            if (op == 0x6A) return 2;
+
+            // E8 = call rel32, E9 = jmp rel32
+            if (op is 0xE8 or 0xE9) return 5;
+
+            // EB = jmp rel8
+            if (op == 0xEB) return 2;
+
+            // 0F xx = two-byte opcode prefix
+            if (op == 0x0F && offset + 1 < code.Length)
+            {
+                byte op2 = code[offset + 1];
+                // 0F B6 = movzx r32, r/m8; 0F B7 = movzx r32, r/m16
+                // 0F BE = movsx r32, r/m8; 0F BF = movsx r32, r/m16
+                if (op2 is 0xB6 or 0xB7 or 0xBE or 0xBF)
+                {
+                    return 3 + ModRMExtraBytes(code, offset + 2); // prefix + opcode + ModR/M
+                }
+                // 0F 80-8F = Jcc rel32 (conditional jumps)
+                if (op2 is >= 0x80 and <= 0x8F) return 6;
+            }
+
+            // FF = group5 (inc/dec/call/jmp/push r/m32) — ModR/M
+            if (op == 0xFF)
+            {
+                return 2 + ModRMExtraBytes(code, offset + 1);
+            }
+
+            // C7 = mov r/m32, imm32 — ModR/M + imm32
+            if (op == 0xC7)
+            {
+                return 6 + ModRMExtraBytes(code, offset + 1);
+            }
+
+            return -1; // Unknown
+        }
+
+        /// <summary>
+        /// Returns extra bytes consumed by a ModR/M byte (SIB + displacement),
+        /// NOT counting the ModR/M byte itself (already counted by caller).
+        /// </summary>
+        private static int ModRMExtraBytes(byte[] code, int modrmOffset)
+        {
+            if (modrmOffset >= code.Length) return 0;
+            byte modrm = code[modrmOffset];
+            byte mod = (byte)((modrm >> 6) & 3);
+            byte rm = (byte)(modrm & 7);
+
+            int extra = 0;
+
+            // SIB byte present when rm == 4 and mod != 3
+            bool hasSib = (rm == 4 && mod != 3);
+            if (hasSib) extra++;
+
+            switch (mod)
+            {
+                case 0:
+                    // [reg] or [disp32] when rm == 5, or [SIB] when rm == 4
+                    if (rm == 5) extra += 4; // disp32
+                    else if (hasSib && modrmOffset + 1 < code.Length)
+                    {
+                        byte sib = code[modrmOffset + 1];
+                        if ((sib & 7) == 5) extra += 4; // SIB base == 5 with mod=0 → disp32
+                    }
+                    break;
+                case 1:
+                    extra += 1; // disp8
+                    break;
+                case 2:
+                    extra += 4; // disp32
+                    break;
+                // case 3: register-register, no displacement
+            }
+
+            return extra;
         }
 
         // ===================================================================
@@ -556,7 +713,16 @@ namespace ForegroundBotRunner.Mem.Hooks
                 or 0x013E // SMSG_CHANNEL_START
                 or 0x0160 // SMSG_CHANNEL_UPDATE
                 or 0x01EE // SMSG_AUTH_RESPONSE
-                or 0x0236; // SMSG_LOGIN_VERIFY_WORLD
+                or 0x0236 // SMSG_LOGIN_VERIFY_WORLD
+                // Combat opcodes — always log
+                or 0x0141 // CMSG_ATTACKSWING
+                or 0x0143 // SMSG_ATTACKSTART
+                or 0x0144 // SMSG_ATTACKSTOP
+                or 0x014A // SMSG_ATTACKERSTATEUPDATE
+                or 0x014E // SMSG_CANCEL_COMBAT
+                or 0x0145 // SMSG_ATTACKSWING_NOTINRANGE
+                or 0x0146 // SMSG_ATTACKSWING_BADFACING
+                or 0x013D; // CMSG_SET_SELECTION
 
             if (total <= 500 || isImportant)
             {
@@ -609,14 +775,20 @@ namespace ForegroundBotRunner.Mem.Hooks
             0x013E => "SMSG_CHANNEL_START",
             0x0160 => "SMSG_CHANNEL_UPDATE",
             0x013F => "SMSG_CHANNEL_NOTIFY",
-            0x01A1 => "SMSG_ATTACKSTART",
-            0x01A2 => "SMSG_ATTACKSTOP",
-            0x01A3 => "CMSG_ATTACKSWING",
-            0x01A4 => "CMSG_ATTACKSTOP",
-            0x033B => "SMSG_ATTACKERSTATEUPDATE",
 
-            // Target
+            // Target & combat (values from GameData.Core/Enums/Opcode.cs)
             0x013D => "CMSG_SET_SELECTION",
+            0x0141 => "CMSG_ATTACKSWING",
+            0x0142 => "CMSG_ATTACKSTOP",
+            0x0143 => "SMSG_ATTACKSTART",
+            0x0144 => "SMSG_ATTACKSTOP",
+            0x0145 => "SMSG_ATTACKSWING_NOTINRANGE",
+            0x0146 => "SMSG_ATTACKSWING_BADFACING",
+            0x0147 => "SMSG_ATTACKSWING_NOTSTANDING",
+            0x0148 => "SMSG_ATTACKSWING_DEADTARGET",
+            0x0149 => "SMSG_ATTACKSWING_CANT_ATTACK",
+            0x014A => "SMSG_ATTACKERSTATEUPDATE",
+            0x014E => "SMSG_CANCEL_COMBAT",
 
             // Interaction & vendors
             0x01B2 => "CMSG_GOSSIP_HELLO",

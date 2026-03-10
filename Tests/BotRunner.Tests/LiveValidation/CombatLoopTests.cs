@@ -21,14 +21,13 @@ namespace BotRunner.Tests.LiveValidation;
 /// 5) Send StartMeleeAttack action.
 /// 6) Assert bot selects the target (TargetGuid in snapshot).
 /// 7) Assert bot is facing the target (within 90°).
-/// 8) Assert target health decreases from bot auto-attacks (not from GM .damage).
-/// 9) Clean up with .damage only after real combat is validated.
+/// 8) Auto-attack the mob to death — validates full combat lifecycle
+///    (CMSG_ATTACKSWING → server swing timer → SMSG_ATTACKERSTATEUPDATE → mob HP=0).
+///    GM character won't die to level 1-3 mobs due to high stats.
 ///
 /// NOTE: Bot approach automation (combat loop pathfinding toward target) is tested separately
 /// once BotRunner movement-in-combat is confirmed working. This test validates the attack
-/// mechanics — facing, targeting, and damage — independently of approach.
-///
-/// The test DOES NOT pass by GM shortcuts — real auto-attack damage is required.
+/// mechanics — facing, targeting, and full kill — independently of approach.
 /// </summary>
 [RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
@@ -108,7 +107,7 @@ public class CombatLoopTests
             fgPassed = await RunCombatScenarioAsync(fgAccount, "FG", null, FgMobAreaX, FgMobAreaY, FgMobAreaZ);
         }
 
-        Assert.True(bgPassed, "BG bot must approach, face, and auto-attack a boar — .damage shortcut is NOT a pass.");
+        Assert.True(bgPassed, "BG bot must approach, face, and auto-attack a boar — real auto-attack damage required.");
         if (hasFg)
         {
             Assert.True(fgPassed, "FG bot must approach, face, and auto-attack a boar without mob evade. " +
@@ -123,25 +122,16 @@ public class CombatLoopTests
 
         // CRITICAL: Turn GM mode OFF for combat. GM mode makes the character invisible
         // to NPCs → mob evades after initial swing. Must be off for BOTH bots.
-        // FG: toggled via chat (.gm off). BG: toggled via SOAP (chat .gm disconnects BG).
+        // SOAP `.gm off` fails — requires player session context (returns "not available to you").
+        // Both FG and BG must use chat. BG chat `.gm` was previously blocked on disconnect fear —
+        // if BG disconnects, that's a WoWSharpClient bug to fix, not a reason to skip GM toggle.
         // Use try/finally to GUARANTEE .gm on restoration (BT-VERIFY-006 fix).
         bool gmTurnedOff = false;
-        _output.WriteLine($"  [{label}] Turning GM mode OFF for combat.");
-        if (label == "FG")
-        {
-            var gmOffTrace = await _bot.SendGmChatCommandTrackedAsync(account, ".gm off", captureResponse: true, delayMs: 1000);
-            var gmOffMsg = gmOffTrace?.ChatMessages.Count > 0 ? string.Join("; ", gmOffTrace.ChatMessages) : "(no response)";
-            _output.WriteLine($"  [{label}] .gm off result={gmOffTrace?.DispatchResult}, response: {gmOffMsg}");
-            await _bot.SendGmChatCommandTrackedAsync(account, ".gm visible on", captureResponse: true, delayMs: 500);
-        }
-        else
-        {
-            // BG: use SOAP to toggle GM off — chat .gm commands disconnect the headless client.
-            var soapResult = await _bot.SetGMOffAsync();
-            _output.WriteLine($"  [{label}] SOAP .gm off result: {soapResult}");
-            var visResult = await _bot.ExecuteGMCommandAsync(".gm visible on");
-            _output.WriteLine($"  [{label}] SOAP .gm visible on result: {visResult}");
-        }
+        _output.WriteLine($"  [{label}] Turning GM mode OFF for combat via chat.");
+        var gmOffTrace = await _bot.SendGmChatCommandTrackedAsync(account, ".gm off", captureResponse: true, delayMs: 1000);
+        var gmOffMsg = gmOffTrace?.ChatMessages.Count > 0 ? string.Join("; ", gmOffTrace.ChatMessages) : "(no response)";
+        _output.WriteLine($"  [{label}] .gm off result={gmOffTrace?.DispatchResult}, response: {gmOffMsg}");
+        await _bot.SendGmChatCommandTrackedAsync(account, ".gm visible on", captureResponse: true, delayMs: 500);
         gmTurnedOff = true;
         await Task.Delay(500); // Brief settle after GM mode change
 
@@ -262,7 +252,7 @@ public class CombatLoopTests
             // Continue anyway — the attack might still work at close range
         }
 
-        // Diagnostic: verify bot position and mob visibility
+        // Diagnostic: verify bot position and mob visibility.
         {
             await _bot.RefreshSnapshotsAsync();
             var diagSnap = await _bot.GetSnapshotAsync(account);
@@ -272,6 +262,19 @@ public class CombatLoopTests
             var mobVisible = diagSnap?.NearbyUnits?.Any(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid) ?? false;
             _output.WriteLine($"  [{label}] Pre-attack diag: selfPos=({selfPos?.X:F1},{selfPos?.Y:F1},{selfPos?.Z:F1}), " +
                 $"nearbyUnits={nearbyCount}, alive={aliveCount}, targetVisible={mobVisible}");
+
+            if (!mobVisible || (await GetTargetHealthAsync(account, targetGuid)) == 0)
+            {
+                // Target died or despawned during approach — find another living mob nearby.
+                _output.WriteLine($"  [{label}] Target lost during approach — finding another living mob.");
+                (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(8), claimedTargets);
+                if (targetGuid == 0)
+                {
+                    _output.WriteLine($"  [{label}] No living mob found nearby.");
+                    return false;
+                }
+                _output.WriteLine($"  [{label}] Retargeted to 0x{targetGuid:X} at ({mobX:F1},{mobY:F1},{mobZ:F1})");
+            }
         }
 
         // Settle after movement
@@ -281,44 +284,58 @@ public class CombatLoopTests
         await FaceTargetAsync(account, label, targetGuid);
         await Task.Delay(500);
 
-        // ATTACK LOOP: Attempt up to 3 attack cycles. Mob may evade on first hit if
-        // MaNGOS pathfinding fails at the mob's specific spawn position. Re-engaging after
-        // evade (HP resets to max, SMSG_ATTACKSTOP clears IsAutoAttacking) usually succeeds
-        // on the second attempt once the mob returns to a pathable position.
-        var damagedByBot = false;
-        for (int attackAttempt = 0; attackAttempt < 3 && !damagedByBot; attackAttempt++)
+        // FULL COMBAT LIFECYCLE: Auto-attack the mob to death.
+        // Server manages auto-attack via internal swing timer after CMSG_ATTACKSWING.
+        // BG sends periodic MSG_MOVE_HEARTBEAT (500ms) to keep server position fresh.
+        // FG Lua AttackTarget() lets the real WoW client handle heartbeats natively.
+        // GM character has high stats — won't die to a level 1-3 mob.
+        //
+        // ATTACK LOOP: Up to 3 engagement attempts. Mob may evade on first hit if
+        // server pathfinding fails at the mob's spawn position (24s unreachable timeout).
+        var mobKilled = false;
+        for (int attackAttempt = 0; attackAttempt < 3 && !mobKilled; attackAttempt++)
         {
             if (attackAttempt > 0)
             {
-                _output.WriteLine($"  [{label}] Mob evaded — re-engaging (attempt {attackAttempt + 1}/3)...");
-                // Re-sample mob position (it may have teleported back to spawn)
+                _output.WriteLine($"  [{label}] Mob evaded or no damage — re-engaging (attempt {attackAttempt + 1}/3)...");
                 await _bot.RefreshSnapshotsAsync();
                 var snap = await _bot.GetSnapshotAsync(account);
                 var mob = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
-                var mPos = mob?.GameObject?.Base?.Position;
                 if (mob == null || mob.Health == 0)
                 {
-                    _output.WriteLine($"  [{label}] Mob dead or despawned after evade.");
-                    return false;
-                }
-                // Walk back to mob's new position
-                if (mPos != null)
-                {
-                    mobX = mPos.X; mobY = mPos.Y; mobZ = mPos.Z;
-                    _output.WriteLine($"  [{label}] Re-walking to mob at ({mobX:F1},{mobY:F1},{mobZ:F1})");
-                    await _bot.SendActionAsync(account, new ActionMessage
+                    // Original target is gone — find another mob nearby.
+                    _output.WriteLine($"  [{label}] Original target gone — finding another mob.");
+                    (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(8), claimedTargets);
+                    if (targetGuid == 0)
                     {
-                        ActionType = ActionType.Goto,
-                        Parameters =
-                        {
-                            new RequestParameter { FloatParam = mobX },
-                            new RequestParameter { FloatParam = mobY },
-                            new RequestParameter { FloatParam = mobZ },
-                            new RequestParameter { FloatParam = 0 },
-                        }
-                    });
-                    await WaitForMeleeRangeAsync(account, targetGuid, MeleeRange, TimeSpan.FromSeconds(10));
+                        _output.WriteLine($"  [{label}] No living mob found for re-engage.");
+                        return false;
+                    }
+                    _output.WriteLine($"  [{label}] Retargeted to 0x{targetGuid:X}");
                 }
+                else
+                {
+                    var mPos = mob.GameObject?.Base?.Position;
+                    if (mPos != null)
+                    {
+                        mobX = mPos.X; mobY = mPos.Y; mobZ = mPos.Z;
+                    }
+                }
+
+                // Walk to the mob again
+                _output.WriteLine($"  [{label}] Re-walking to mob at ({mobX:F1},{mobY:F1},{mobZ:F1})");
+                await _bot.SendActionAsync(account, new ActionMessage
+                {
+                    ActionType = ActionType.Goto,
+                    Parameters =
+                    {
+                        new RequestParameter { FloatParam = mobX },
+                        new RequestParameter { FloatParam = mobY },
+                        new RequestParameter { FloatParam = mobZ },
+                        new RequestParameter { FloatParam = 0 },
+                    }
+                });
+                await WaitForMeleeRangeAsync(account, targetGuid, MeleeRange, TimeSpan.FromSeconds(10));
                 await Task.Delay(1000);
                 await FaceTargetAsync(account, label, targetGuid);
                 await Task.Delay(500);
@@ -338,8 +355,8 @@ public class CombatLoopTests
             }
             if (initialHealth == 0)
             {
-                _output.WriteLine($"  [{label}] Target died before attack (HP=0).");
-                return false;
+                _output.WriteLine($"  [{label}] Target dead before attack — may have been killed by another mob/player.");
+                continue;
             }
 
             var preAttackDist = await GetDistanceToTargetAsync(account, targetGuid);
@@ -364,7 +381,7 @@ public class CombatLoopTests
                 await _bot.RefreshSnapshotsAsync();
                 var diagSnap = await _bot.GetSnapshotAsync(account);
                 var currentTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
-                _output.WriteLine($"  [{label}] WARN: TargetGuid=0x{currentTarget:X} (expected 0x{targetGuid:X}). Continuing to damage check...");
+                _output.WriteLine($"  [{label}] WARN: TargetGuid=0x{currentTarget:X} (expected 0x{targetGuid:X}). Continuing...");
             }
             else
             {
@@ -372,55 +389,33 @@ public class CombatLoopTests
             }
 
             // Verify facing.
-            var mobAlreadyDead = (await GetTargetHealthAsync(account, targetGuid)) == 0;
-            var facingOk = mobAlreadyDead;
-            for (int facingAttempt = 0; facingAttempt < 3 && !facingOk; facingAttempt++)
-            {
-                if (facingAttempt > 0)
-                    await Task.Delay(1000);
-                facingOk = await AssertBotFacingTargetAsync(account, targetGuid, label);
-            }
+            var facingOk = await AssertBotFacingTargetAsync(account, targetGuid, label);
             if (!facingOk)
             {
                 _output.WriteLine($"  [{label}] WARN: Bot not facing target. Continuing anyway.");
             }
 
-            // Re-sample health — mob may have taken damage during approach/target poll.
-            var currentHp = await GetTargetHealthAsync(account, targetGuid);
-            if (currentHp > 0 && currentHp < initialHealth)
-                initialHealth = currentHp;
-
-            // Wait for auto-attack damage.
-            _output.WriteLine($"  [{label}] Waiting for auto-attack damage on target (HP={initialHealth})...");
-            damagedByBot = await WaitForHealthDecreaseWithDiagAsync(account, label, targetGuid, initialHealth, TimeSpan.FromSeconds(15));
-            if (!damagedByBot)
+            // Wait for mob death via auto-attacks. Level 1-3 mob with ~100 HP should die
+            // within ~30s of auto-attacking (weapon speed ~2.0s, damage ~10-20 per swing).
+            _output.WriteLine($"  [{label}] Auto-attacking target to death (HP={initialHealth})...");
+            mobKilled = await WaitForMobDeathAsync(account, label, targetGuid, initialHealth, TimeSpan.FromSeconds(45));
+            if (!mobKilled)
             {
                 var currentHealth = await GetTargetHealthAsync(account, targetGuid);
                 var postDist = await GetDistanceToTargetAsync(account, targetGuid);
                 var evaded = currentHealth >= initialHealth && currentHealth > 0;
-                _output.WriteLine($"  [{label}] Attack attempt {attackAttempt + 1} failed: HP {initialHealth}→{currentHealth}, dist={postDist:F1}y, evaded={evaded}");
+                _output.WriteLine($"  [{label}] Attack attempt {attackAttempt + 1} result: HP {initialHealth}→{currentHealth}, dist={postDist:F1}y, evaded={evaded}");
             }
         }
 
-        if (!damagedByBot)
+        if (!mobKilled)
         {
-            _output.WriteLine($"  [{label}] FAIL: Target health did not decrease after 3 attack attempts.");
+            _output.WriteLine($"  [{label}] FAIL: Could not kill target after 3 attack attempts.");
             return false;
         }
 
-        var healthAfterAttack = await GetTargetHealthAsync(account, targetGuid);
-        _output.WriteLine($"  [{label}] Auto-attack confirmed: HP dropped {initialHealth}→{healthAfterAttack} from bot attacks.");
-
-        // CLEANUP: Use .damage to finish the mob quickly (keeping the area tidy for other tests).
-        // This is cleanup only — the real validation above already passed.
-        _output.WriteLine($"  [{label}] Cleanup: finishing target 0x{targetGuid:X} with .damage.");
-        var damageTrace = await _bot.SendGmChatCommandTrackedAsync(account, ".damage 5000", captureResponse: true, delayMs: 900);
-        AssertCommandSucceeded(damageTrace, label, ".damage 5000 (cleanup)");
-
-        var deadOrGone = await WaitForMobDeadOrGoneAsync(account, targetGuid, TimeSpan.FromSeconds(8));
-        _output.WriteLine($"  [{label}] Target dead/removed after cleanup: {deadOrGone}");
-
-        return true; // Real combat was validated — cleanup result is informational.
+        _output.WriteLine($"  [{label}] COMBAT COMPLETE: Mob killed via auto-attacks (full lifecycle validated).");
+        return true;
         }
         finally
         {
@@ -428,10 +423,7 @@ public class CombatLoopTests
             if (gmTurnedOff)
             {
                 _output.WriteLine($"  [{label}] Restoring .gm on (finally block).");
-                if (label == "FG")
-                    await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: false, delayMs: 500);
-                else
-                    await _bot.ExecuteGMCommandAsync(".gm on"); // BG: SOAP to avoid disconnect
+                await _bot.SendGmChatCommandTrackedAsync(account, ".gm on", captureResponse: false, delayMs: 500);
             }
         }
     }
@@ -638,39 +630,62 @@ public class CombatLoopTests
     }
 
     /// <summary>
-    /// Waits until the target's health drops below its initial recorded health value.
-    /// Returns true if health decreased (bot dealt at least one hit), false on timeout.
-    /// Logs diagnostics every 3s.
+    /// Waits until the target mob dies (HP reaches 0) from auto-attacks.
+    /// Logs HP progression to track the full combat lifecycle.
+    /// Returns false on timeout or evade (HP resets to max with TargetGuid cleared).
     /// </summary>
-    private async Task<bool> WaitForHealthDecreaseWithDiagAsync(string account, string label, ulong targetGuid, uint initialHealth, TimeSpan timeout)
+    private async Task<bool> WaitForMobDeathAsync(string account, string label, ulong targetGuid, uint initialHealth, TimeSpan timeout)
     {
         if (initialHealth == 0)
-            return false;
+            return true; // Already dead
 
         var sw = Stopwatch.StartNew();
         var lastDiagTime = TimeSpan.Zero;
+        uint lastLoggedHp = initialHealth;
+        bool firstDamageConfirmed = false;
+
         while (sw.Elapsed < timeout)
         {
             await _bot.RefreshSnapshotsAsync();
-            var currentHealth = await GetTargetHealthAsync(account, targetGuid);
-            if (currentHealth < initialHealth)
-                return true;
-            if (currentHealth == 0)
-                return true;
+            var snap = await _bot.GetSnapshotAsync(account);
+            var target = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+            var currentHealth = target?.Health ?? 0;
+            var diagTarget = snap?.Player?.Unit?.TargetGuid ?? 0UL;
 
-            // Diagnostic + early evade detection every 3s
-            if (sw.Elapsed - lastDiagTime > TimeSpan.FromSeconds(3))
+            // Mob died — full combat lifecycle complete.
+            if (target == null || currentHealth == 0)
+            {
+                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: MOB KILLED (HP {initialHealth}→0) after {sw.Elapsed.TotalSeconds:F1}s");
+                return true;
+            }
+
+            // Log each HP change to track swing-by-swing damage.
+            if (currentHealth != lastLoggedHp)
+            {
+                if (!firstDamageConfirmed)
+                {
+                    _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: FIRST HIT — HP {lastLoggedHp}→{currentHealth} (damage={lastLoggedHp - currentHealth})");
+                    firstDamageConfirmed = true;
+                }
+                else
+                {
+                    _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: HP {lastLoggedHp}→{currentHealth} (damage={lastLoggedHp - currentHealth})");
+                }
+                lastLoggedHp = currentHealth;
+            }
+
+            // Periodic diagnostic every 5s
+            if (sw.Elapsed - lastDiagTime > TimeSpan.FromSeconds(5))
             {
                 var dist = await GetDistanceToTargetAsync(account, targetGuid);
-                var diagSnap = await _bot.GetSnapshotAsync(account);
-                var diagTarget = diagSnap?.Player?.Unit?.TargetGuid ?? 0UL;
-                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F0}s: HP={currentHealth}/{initialHealth}, dist={dist:F1}y, target=0x{diagTarget:X}");
+                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F0}s: HP={currentHealth}/{initialHealth}, dist={dist:F1}y, target=0x{diagTarget:X}, firstHit={firstDamageConfirmed}");
                 lastDiagTime = sw.Elapsed;
 
-                // Early evade detection: target lost + HP back to max = mob evaded
+                // Early evade detection: target lost + HP back to max = mob evaded.
+                // Server clears TargetGuid and mob resets HP when it returns home.
                 if (diagTarget == 0 && currentHealth >= initialHealth)
                 {
-                    _output.WriteLine($"    [{label}] Early evade detected: target lost, HP={currentHealth}>={initialHealth}");
+                    _output.WriteLine($"    [{label}] EVADE detected: target cleared, HP={currentHealth}>={initialHealth}");
                     return false;
                 }
             }
@@ -678,6 +693,7 @@ public class CombatLoopTests
             await Task.Delay(400);
         }
 
+        _output.WriteLine($"    [{label}] TIMEOUT after {timeout.TotalSeconds}s. HP={lastLoggedHp}/{initialHealth}, firstHit={firstDamageConfirmed}");
         return false;
     }
 
@@ -686,22 +702,6 @@ public class CombatLoopTests
         var snap = await _bot.GetSnapshotAsync(account);
         var target = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
         return target?.Health ?? 0;
-    }
-
-    private async Task<bool> WaitForMobDeadOrGoneAsync(string account, ulong targetGuid, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var target = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
-            if (target == null || target.Health == 0)
-                return true;
-            await Task.Delay(300);
-        }
-
-        return false;
     }
 
     /// <summary>
@@ -733,14 +733,6 @@ public class CombatLoopTests
         while (angle > Math.PI) angle -= (float)(2 * Math.PI);
         while (angle < -Math.PI) angle += (float)(2 * Math.PI);
         return angle;
-    }
-
-    private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
-    {
-        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
-
-        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
-        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
     }
 
     /// <summary>
