@@ -41,7 +41,7 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 | `BT-DELAY-001` | **Replace excessive Task.Delay with polling.** Replaced 41 hardcoded delays (2s-8s) with WaitForTeleportSettledAsync/WaitForSnapshotConditionAsync/WaitForPositionChangeAsync. Long delays reduced from 46 to 5 (all justified). | All LiveValidation tests | High | **Fixed** |
 | `BT-LOGIC-003` | **Centralize timeouts.** Scattered magic numbers (8s, 12s, 15s, 3min). Create `TestTimeouts` class with configurable defaults. | `Tests/BotRunner.Tests/LiveValidation/` | Medium | Open |
 | `BT-LOGIC-004` | **Standardize polling intervals.** After BT-DELAY-001, remaining delays are 200-1500ms (context-appropriate). No further action needed. | All LiveValidation tests | Medium | **Mitigated** |
-| `BT-FEEDBACK-001` | **Add periodic progress logging.** Long tests (3min corpse run, 1min gather) show no output during polling loops — indistinguishable from hung test. Log every 10s. | All long-running tests | Medium | Open |
+| `BT-FEEDBACK-001` | **Add periodic progress logging.** All 4 shared polling helpers now accept optional `progressLabel` that logs every 5s. Added labels to 6 test files for waits ≥10s. Inline 5s logging added to CombatLoopTests.FindLivingMobAsync and CombatRangeTests.FindLivingBoarAsync. | All long-running tests | Medium | **Fixed** `3029d68` |
 
 ### P0.4 — Code Quality & Deduplication
 
@@ -144,21 +144,14 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-10 (session 50)
-- **Current work:** P0 infrastructure hardening — massive test framework improvements.
+- **Last updated:** 2026-03-10 (session 51)
+- **Current work:** P0 infrastructure hardening — test framework improvements nearly complete.
 - **Completed this session:**
-  1. **BT-DELAY-001** (`05539f0`): Replaced 41 excessive Task.Delay calls (2s-8s) with polling helpers. Long delays 46→5.
-  2. **BT-VERIFY-001**: Dead-state guard surfaces [DEAD-GUARD] warnings in test output.
-  3. **BT-VERIFY-002**: VendorBuySellTests + LootCorpseTests use BotClearInventoryAsync instead of .reset items.
-  4. **BT-ITEM-001**: Centralized TestItems/TestSpells constants, removed duplicates from 6 files.
-  5. **BT-VERIFY-006**: Already implemented (try/finally in CombatLoopTests).
-  6. **BT-SETUP-003**: Mitigated — 16/24 test files use EnsureCleanSlateAsync.
-  7. **BT-LOGIC-004**: Mitigated — remaining delays are 200-1500ms (context-appropriate).
-  8. TASKS.md updated to reflect all completed items from sessions 49-50.
-- **P0 Status:** P0.1 (crash detection) COMPLETE. P0.2 (FG visibility) mostly complete (BT-VERIFY-006 done). P0.3 (runtime) COMPLETE. P0.4 (code quality) mostly complete — BT-VERIFY-003/004 remaining.
+  1. **BT-VERIFY-003/004** (`4aa177f`): BotAddItemAsync/BotLearnSpellAsync now poll snapshots to verify setup.
+  2. **BT-FEEDBACK-001** (`3029d68`): All 4 shared polling helpers accept `progressLabel` (logs every 5s). Added labels to 6 test files. Inline progress logging in FindLivingMobAsync/FindLivingBoarAsync.
+- **P0 Status:** P0.1 COMPLETE. P0.2 COMPLETE. P0.3 COMPLETE (BT-FEEDBACK-001 done). P0.4 COMPLETE.
 - **Remaining P0 items:**
-  - BT-LOGIC-003: Centralize timeouts (medium priority, many are context-specific)
-  - BT-FEEDBACK-001: Add periodic progress logging to long tests
-  - BT-VERIFY-003/004: Verify item add / spell learn in snapshot after setup
-- **Next:** Run LiveValidation suite to verify no regressions, then review tests for bad behavior patterns.
+  - BT-LOGIC-003: Centralize timeouts (medium priority, many are context-specific — deferred)
+  - P0.5 Bot Coordination: BT-PARK-001/002/003 (deferred, requires P0.1-P0.4)
+- **Next:** Run LiveValidation suite to verify no regressions from sessions 49-51 changes, then advance to P0.5 or P1.
 - **Sessions 1-49:** See `docs/ARCHIVE.md` for full history.
