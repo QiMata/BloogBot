@@ -20,17 +20,22 @@ namespace ForegroundBotRunner.Statics
 
         // LUA SCRIPTS — Auto-attack toggle
         //
-        // AttackTarget() is the most reliable 1.12.1 API for starting melee auto-attack.
-        // It doesn't depend on action bar slot configuration (IsCurrentAction(72) assumes
-        // Attack is in slot 72, which may not be true after .reset items or respec).
+        // CastSpellByName('Attack') toggles auto-attack via the action bar system — the same
+        // code path as a player clicking the Attack button on their action bar. This generates
+        // authentic CMSG_ATTACKSWING packets through the WoW client's normal spell-cast pipeline.
         //
-        // CastSpellByName('Attack') is a toggle — calling it while already attacking STOPS
-        // the attack. The IsCurrentAction(72) guard prevents accidental toggle-off, but
-        // AttackTarget() is idempotent: calling it when already attacking is a no-op.
-        private const string AutoAttackLuaScript = "AttackTarget()";
-        private const string WandLuaScript = "if IsCurrentAction(72) == nil then CastSpellByName('Shoot') end";
-        private const string TurnOffAutoAttackLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Attack') end";
-        private const string TurnOffWandLuaScript = "if IsCurrentAction(72) ~= nil then CastSpellByName('Shoot') end";
+        // Attack is in action bar slot 1 (button 1 on the main action bar).
+        // IsCurrentAction(1) returns 1 when auto-attack is active (slot 1 is highlighted).
+        // The guard prevents accidental toggle-off: CastSpellByName('Attack') is a toggle,
+        // so calling it when already attacking would STOP the attack.
+        //
+        // Note: AttackTarget() is a lower-level API that bypasses the action bar system.
+        // Using CastSpellByName('Attack') is preferred because it exercises the same client
+        // code path as a real player, producing identical packet sequences.
+        private const string AutoAttackLuaScript = "if IsCurrentAction(1) == nil then CastSpellByName('Attack') end";
+        private const string WandLuaScript = "if IsCurrentAction(1) == nil then CastSpellByName('Shoot') end";
+        private const string TurnOffAutoAttackLuaScript = "if IsCurrentAction(1) ~= nil then CastSpellByName('Attack') end";
+        private const string TurnOffWandLuaScript = "if IsCurrentAction(1) ~= nil then CastSpellByName('Shoot') end";
 
 
 
@@ -98,8 +103,8 @@ namespace ForegroundBotRunner.Statics
             }
             else
             {
-                // AttackTarget() works for all classes including Hunter.
-                // It's idempotent — safe to call even if already attacking.
+                // Toggle auto-attack ON via CastSpellByName('Attack') — action bar path.
+                // Guarded by IsCurrentAction(1) to prevent accidental toggle-off.
                 MainThreadLuaCall(AutoAttackLuaScript);
             }
         }

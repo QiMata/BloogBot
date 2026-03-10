@@ -102,9 +102,12 @@ public class CombatLoopTests
             _output.WriteLine("[PARITY] Running BG then FG sequentially — each targets a different boar.");
 
             // Run sequentially: BG first, then FG.
-            // Each bot teleports to a different mob area so they never compete for the same mob.
-            bgPassed = await RunCombatScenarioAsync(bgAccount, "BG", null, BgMobAreaX, BgMobAreaY, BgMobAreaZ);
-            fgPassed = await RunCombatScenarioAsync(fgAccount, "FG", null, FgMobAreaX, FgMobAreaY, FgMobAreaZ);
+            // Share claimedTargets so FG won't pick up a mob that BG already attacked and evaded from.
+            // A mob that evaded from BG has corrupted server-side AI state (evade timer accumulated)
+            // and will immediately re-evade if FG attacks it.
+            var claimedTargets = new ConcurrentDictionary<ulong, string>();
+            bgPassed = await RunCombatScenarioAsync(bgAccount, "BG", claimedTargets, BgMobAreaX, BgMobAreaY, BgMobAreaZ);
+            fgPassed = await RunCombatScenarioAsync(fgAccount, "FG", claimedTargets, FgMobAreaX, FgMobAreaY, FgMobAreaZ);
         }
 
         Assert.True(bgPassed, "BG bot must approach, face, and auto-attack a boar — real auto-attack damage required.");
