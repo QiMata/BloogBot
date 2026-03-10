@@ -226,30 +226,38 @@ public class BotServiceFixture : IAsyncLifetime
             {
                 try
                 {
-                    // Check StateManager
+                    // Check StateManager — if it exits, nothing can recover it
                     if (_stateManagerProcess != null && _stateManagerProcess.HasExited)
                     {
                         var msg = $"StateManager crashed (exit code {_stateManagerProcess.ExitCode}) at {DateTime.Now:HH:mm:ss}";
                         Log($"  [CrashMonitor] {msg}");
                         ClientCrashed = true;
                         CrashMessage = msg;
-                        return;
+                        return; // StateManager is unrecoverable — stop monitoring
                     }
 
-                    // Check tracked WoW.exe PIDs
-                    List<int> pids;
-                    lock (_managedWoWPids)
-                        pids = new List<int>(_managedWoWPids);
-
-                    foreach (var pid in pids)
+                    // Check tracked WoW.exe PIDs — StateManager auto-restarts WoW.exe,
+                    // so set crash flag but keep monitoring. OutputDataReceived handler
+                    // clears the flag when a new healthy PID is registered.
+                    if (!ClientCrashed)
                     {
-                        if (IsProcessDead(pid))
+                        List<int> pids;
+                        lock (_managedWoWPids)
+                            pids = new List<int>(_managedWoWPids);
+
+                        foreach (var pid in pids)
                         {
-                            var msg = $"WoW.exe PID {pid} crashed at {DateTime.Now:HH:mm:ss}";
-                            Log($"  [CrashMonitor] {msg}");
-                            ClientCrashed = true;
-                            CrashMessage = msg;
-                            return;
+                            if (IsProcessDead(pid))
+                            {
+                                var msg = $"WoW.exe PID {pid} crashed at {DateTime.Now:HH:mm:ss}";
+                                Log($"  [CrashMonitor] {msg}");
+                                ClientCrashed = true;
+                                CrashMessage = msg;
+                                // Remove dead PID so we don't re-detect the same crash
+                                lock (_managedWoWPids)
+                                    _managedWoWPids.Remove(pid);
+                                break; // Continue loop — will detect recovery via OutputDataReceived
+                            }
                         }
                     }
 

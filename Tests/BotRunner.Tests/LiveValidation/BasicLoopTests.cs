@@ -171,7 +171,7 @@ public class BasicLoopTests
         var before = await _bot.GetSnapshotAsync(account);
         var beforePos = before?.Player?.Unit?.GameObject?.Base?.Position;
         Assert.NotNull(beforePos);
-        var distanceBefore = Distance2D(beforePos!.X, beforePos.Y, RazorHillX, RazorHillY);
+        var distanceBefore = LiveBotFixture.Distance2D(beforePos!.X, beforePos.Y, RazorHillX, RazorHillY);
 
         var moved = await TeleportAndVerifyAsync(account, label);
         Assert.True(moved, $"[{label}] TeleportAndVerify returned false — teleport dispatch may have failed.");
@@ -179,7 +179,7 @@ public class BasicLoopTests
         var after = await _bot.GetSnapshotAsync(account);
         var afterPos = after?.Player?.Unit?.GameObject?.Base?.Position;
         Assert.NotNull(afterPos);
-        var step = Distance2D(beforePos.X, beforePos.Y, afterPos!.X, afterPos.Y);
+        var step = LiveBotFixture.Distance2D(beforePos.X, beforePos.Y, afterPos!.X, afterPos.Y);
         _output.WriteLine($"[{label}] Teleport displacement: {step:F1}y (distanceBefore={distanceBefore:F1}y)");
         if (distanceBefore > RazorHillArrivalRadius)
             Assert.True(step > 5f, $"{label} teleport should move position by more than a trivial amount when not already near target.");
@@ -293,7 +293,7 @@ public class BasicLoopTests
         if (pos == null)
             return;
 
-        var distance = Distance2D(pos.X, pos.Y, RazorHillX, RazorHillY);
+        var distance = LiveBotFixture.Distance2D(pos.X, pos.Y, RazorHillX, RazorHillY);
         if (distance <= RazorHillArrivalRadius)
         {
             _output.WriteLine($"[{label}] Already near Razor Hill (distance={distance:F1}y); skipping teleport.");
@@ -332,7 +332,7 @@ public class BasicLoopTests
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-            if (pos != null && Distance2D(pos.X, pos.Y, x, y) <= radius)
+            if (pos != null && LiveBotFixture.Distance2D(pos.X, pos.Y, x, y) <= radius)
                 return true;
             await Task.Delay(400);
         }
@@ -370,13 +370,6 @@ public class BasicLoopTests
         }
 
         return Array.Empty<Game.WoWGameObject>();
-    }
-
-    private static float Distance2D(float x1, float y1, float x2, float y2)
-    {
-        var dx = x2 - x1;
-        var dy = y2 - y1;
-        return (float)Math.Sqrt(dx * dx + dy * dy);
     }
 
 }

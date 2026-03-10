@@ -245,7 +245,7 @@ public class NpcInteractionTests
         var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
         var dist = pos == null
             ? float.MaxValue
-            : DistanceTo(pos.X, pos.Y, pos.Z, x, y, z);
+            : LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, x, y, z);
 
         if (dist <= SetupArrivalDistance)
         {
@@ -330,11 +330,4 @@ public class NpcInteractionTests
         }
     }
 
-    private static float DistanceTo(float x1, float y1, float z1, float x2, float y2, float z2)
-    {
-        var dx = x1 - x2;
-        var dy = y1 - y2;
-        var dz = z1 - z2;
-        return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
-    }
 }

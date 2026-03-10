@@ -222,7 +222,7 @@ public class CraftingProfessionTests
         var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         if (pos != null)
         {
-            var dist = DistanceTo(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
+            var dist = LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
             if (dist <= SetupArrivalDistance)
             {
                 _output.WriteLine($"  [{label}] Already near setup location (dist={dist:F1}y); skipping teleport.");
@@ -233,14 +233,6 @@ public class CraftingProfessionTests
         _output.WriteLine($"  [{label}] Teleporting to setup location.");
         await _bot.BotTeleportAsync(account, OrgrimmarMap, OrgX, OrgY, OrgZ);
         return true;
-    }
-
-    private static float DistanceTo(float x1, float y1, float z1, float x2, float y2, float z2)
-    {
-        var dx = x1 - x2;
-        var dy = y1 - y2;
-        var dz = z1 - z2;
-        return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)

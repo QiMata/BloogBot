@@ -257,7 +257,7 @@ public class CombatRangeTests
         // Verify bot actually teleported to far position
         var botPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         Assert.NotNull(botPos);
-        var botDist = Distance2D(botPos!.X, botPos.Y, MobAreaX, MobAreaY);
+        var botDist = LiveBotFixture.Distance2D(botPos!.X, botPos.Y, MobAreaX, MobAreaY);
         _output.WriteLine($"  [BG] Bot position after teleport: ({botPos.X:F1}, {botPos.Y:F1}), dist from mob area: {botDist:F1}y");
         Assert.True(botDist > 100f, $"Bot should be far from mob area (dist={botDist:F1}y). Teleport may have failed.");
 
@@ -268,7 +268,7 @@ public class CombatRangeTests
             var mobPos = mobSnap.GameObject?.Base?.Position;
             if (mobPos != null)
             {
-                var mobDist = Distance2D(botPos.X, botPos.Y, mobPos.X, mobPos.Y);
+                var mobDist = LiveBotFixture.Distance2D(botPos.X, botPos.Y, mobPos.X, mobPos.Y);
                 _output.WriteLine($"  [BG] Mob still in snapshot (stale data) at dist={mobDist:F1}y — verifying out of melee range");
                 Assert.True(mobDist > 10f, $"Mob should be far outside melee range (dist={mobDist:F1}y).");
             }
@@ -478,7 +478,7 @@ public class CombatRangeTests
         var snap = await _bot.GetSnapshotAsync(bgAccount);
         var botPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         Assert.NotNull(botPos);
-        var botDist = Distance2D(botPos!.X, botPos.Y, MobAreaX, MobAreaY);
+        var botDist = LiveBotFixture.Distance2D(botPos!.X, botPos.Y, MobAreaX, MobAreaY);
         _output.WriteLine($"  [BG] Bot position after teleport: ({botPos.X:F1}, {botPos.Y:F1}), dist from mob area: {botDist:F1}y");
         Assert.True(botDist > 100f, $"Bot should be far from mob area (dist={botDist:F1}y). Teleport may have failed.");
 
@@ -501,7 +501,7 @@ public class CombatRangeTests
             var mobPos = mobSnap.GameObject?.Base?.Position;
             if (mobPos != null)
             {
-                var mobDist = Distance2D(botPos.X, botPos.Y, mobPos.X, mobPos.Y);
+                var mobDist = LiveBotFixture.Distance2D(botPos.X, botPos.Y, mobPos.X, mobPos.Y);
                 _output.WriteLine($"  [BG] Mob still in snapshot (stale data) at dist={mobDist:F1}y — verifying outside ranged range");
                 Assert.True(mobDist > 30f, $"Mob should be far outside ranged range (dist={mobDist:F1}y).");
             }
@@ -560,7 +560,7 @@ public class CombatRangeTests
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
         var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-        var dist = pos == null ? float.MaxValue : Distance2D(pos.X, pos.Y, MobAreaX, MobAreaY);
+        var dist = pos == null ? float.MaxValue : LiveBotFixture.Distance2D(pos.X, pos.Y, MobAreaX, MobAreaY);
 
         if (dist > MobAreaRadius)
         {
@@ -571,7 +571,7 @@ public class CombatRangeTests
             var arrived = await WaitForConditionAsync(account, TimeSpan.FromSeconds(12), s =>
             {
                 var p = s.Player?.Unit?.GameObject?.Base?.Position;
-                return p != null && Distance2D(p.X, p.Y, MobAreaX, MobAreaY) <= MobAreaRadius;
+                return p != null && LiveBotFixture.Distance2D(p.X, p.Y, MobAreaX, MobAreaY) <= MobAreaRadius;
             });
             global::Tests.Infrastructure.Skip.If(!arrived, $"{label}: Failed to arrive near mob area after teleport.");
         }
@@ -604,7 +604,7 @@ public class CombatRangeTests
                     if (playerPos != null)
                     {
                         var mobPos = u.GameObject?.Base?.Position;
-                        if (mobPos != null && Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y) > maxDistance)
+                        if (mobPos != null && LiveBotFixture.Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y) > maxDistance)
                             return false;
                     }
                     return true;
@@ -613,7 +613,7 @@ public class CombatRangeTests
                 {
                     if (playerPos == null) return 0f;
                     var mobPos = u.GameObject?.Base?.Position;
-                    return mobPos == null ? float.MaxValue : Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y);
+                    return mobPos == null ? float.MaxValue : LiveBotFixture.Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y);
                 })
                 .FirstOrDefault();
 
@@ -622,7 +622,7 @@ public class CombatRangeTests
                 var guid = boar.GameObject?.Base?.Guid ?? 0UL;
                 var mobPos = boar.GameObject?.Base?.Position;
                 var dist = playerPos != null && mobPos != null
-                    ? Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y) : -1f;
+                    ? LiveBotFixture.Distance2D(playerPos.X, playerPos.Y, mobPos.X, mobPos.Y) : -1f;
                 _output.WriteLine($"  [{label}] Found boar 0x{guid:X}: {boar.GameObject?.Name} HP={boar.Health}/{boar.MaxHealth} dist={dist:F1}y");
                 return guid;
             }
@@ -660,18 +660,4 @@ public class CombatRangeTests
     private Task<bool> WaitForConditionAsync(string account, TimeSpan timeout, Func<WoWActivitySnapshot, bool> condition)
         => _bot.WaitForSnapshotConditionAsync(account, condition, timeout, pollIntervalMs: 300);
 
-    private static float Distance2D(float x1, float y1, float x2, float y2)
-    {
-        var dx = x2 - x1;
-        var dy = y2 - y1;
-        return MathF.Sqrt(dx * dx + dy * dy);
-    }
-
-    private static float Distance3D(float x1, float y1, float z1, float x2, float y2, float z2)
-    {
-        var dx = x2 - x1;
-        var dy = y2 - y1;
-        var dz = z2 - z1;
-        return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
-    }
 }

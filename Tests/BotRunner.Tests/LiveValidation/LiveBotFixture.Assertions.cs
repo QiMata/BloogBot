@@ -648,4 +648,23 @@ public partial class LiveBotFixture
     /// command table. We avoid inserting/overwriting command definitions because that can drift from
     /// the server's compiled 1.12.1 command hierarchy and produce misleading runtime warnings.
     /// </summary>
+
+    // ---- Shared Distance Helpers (BT-LOGIC-001) ----
+
+    /// <summary>2D distance (XY plane only).</summary>
+    public static float Distance2D(float x1, float y1, float x2, float y2)
+    {
+        var dx = x1 - x2;
+        var dy = y1 - y2;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    /// <summary>3D distance.</summary>
+    public static float Distance3D(float x1, float y1, float z1, float x2, float y2, float z2)
+    {
+        var dx = x1 - x2;
+        var dy = y1 - y2;
+        var dz = z1 - z2;
+        return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
 }

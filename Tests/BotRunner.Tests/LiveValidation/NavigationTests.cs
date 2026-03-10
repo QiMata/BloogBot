@@ -138,8 +138,8 @@ public class NavigationTests
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos == null) continue;
 
-            var dist2D = Distance2D(pos.X, pos.Y, endX, endY);
-            var stepDist = Distance2D(pos.X, pos.Y, lastX, lastY);
+            var dist2D = LiveBotFixture.Distance2D(pos.X, pos.Y, endX, endY);
+            var stepDist = LiveBotFixture.Distance2D(pos.X, pos.Y, lastX, lastY);
             totalTravel += stepDist;
             lastX = pos.X;
             lastY = pos.Y;
@@ -159,10 +159,4 @@ public class NavigationTests
         return false;
     }
 
-    private static float Distance2D(float x1, float y1, float x2, float y2)
-    {
-        var dx = x1 - x2;
-        var dy = y1 - y2;
-        return MathF.Sqrt(dx * dx + dy * dy);
-    }
 }

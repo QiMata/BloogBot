@@ -84,8 +84,8 @@ public class GatheringProfessionTests
         var spawns = await _bot.QueryGameObjectSpawnsAsync(CopperVeinEntry, mapFilter: 1, limit: 25);
         global::Tests.Infrastructure.Skip.If(spawns.Count == 0, "No Copper Vein spawns in gameobject table (entry 1731).");
         // Sort by distance from Orgrimmar so we try nearby spawns first (avoids long-distance teleport failures).
-        spawns.Sort((a, b) => Distance(a.x, a.y, a.z, OrgX, OrgY, OrgZ).CompareTo(Distance(b.x, b.y, b.z, OrgX, OrgY, OrgZ)));
-        _output.WriteLine($"Found {spawns.Count} Copper Vein spawn locations (nearest: {Distance(spawns[0].x, spawns[0].y, spawns[0].z, OrgX, OrgY, OrgZ):F0}y)");
+        spawns.Sort((a, b) => LiveBotFixture.Distance3D(a.x, a.y, a.z, OrgX, OrgY, OrgZ).CompareTo(LiveBotFixture.Distance3D(b.x, b.y, b.z, OrgX, OrgY, OrgZ)));
+        _output.WriteLine($"Found {spawns.Count} Copper Vein spawn locations (nearest: {LiveBotFixture.Distance3D(spawns[0].x, spawns[0].y, spawns[0].z, OrgX, OrgY, OrgZ):F0}y)");
 
         // --- FG FIRST: native WoW right-click interaction (gold standard) ---
         var fgAccount = _bot.FgAccountName;
@@ -198,8 +198,8 @@ public class GatheringProfessionTests
         global::Tests.Infrastructure.Skip.If(allSpawns.Count == 0,
             "No Peacebloom/Silverleaf/Earthroot spawns found in gameobject table (Kalimdor).");
         // Sort by distance from Orgrimmar so we try nearby spawns first (avoids long-distance teleport failures).
-        allSpawns.Sort((a, b) => Distance(a.x, a.y, a.z, OrgX, OrgY, OrgZ).CompareTo(Distance(b.x, b.y, b.z, OrgX, OrgY, OrgZ)));
-        _output.WriteLine($"Found {allSpawns.Count} herb spawn locations (nearest: {Distance(allSpawns[0].x, allSpawns[0].y, allSpawns[0].z, OrgX, OrgY, OrgZ):F0}y)");
+        allSpawns.Sort((a, b) => LiveBotFixture.Distance3D(a.x, a.y, a.z, OrgX, OrgY, OrgZ).CompareTo(LiveBotFixture.Distance3D(b.x, b.y, b.z, OrgX, OrgY, OrgZ)));
+        _output.WriteLine($"Found {allSpawns.Count} herb spawn locations (nearest: {LiveBotFixture.Distance3D(allSpawns[0].x, allSpawns[0].y, allSpawns[0].z, OrgX, OrgY, OrgZ):F0}y)");
 
         var herbEntries = allSpawns.Select(s => s.entry).Distinct().ToArray();
 
@@ -461,7 +461,7 @@ public class GatheringProfessionTests
             var teleportSnap = GetSnapshot(label);
             var teleportPos = teleportSnap?.Player?.Unit?.GameObject?.Base?.Position;
             Assert.NotNull(teleportPos);
-            float teleportDist = Distance(teleportPos!.X, teleportPos.Y, teleportPos.Z, spawnX + offsetX, spawnY, safeZ);
+            float teleportDist = LiveBotFixture.Distance3D(teleportPos!.X, teleportPos.Y, teleportPos.Z, spawnX + offsetX, spawnY, safeZ);
             Assert.True(teleportDist <= 50f, $"[{label}] Teleport verification failed: bot is {teleportDist:F1}y from target ({spawnX + offsetX:F1}, {spawnY:F1}, {safeZ:F1}). Teleport may have been rejected.");
 
             // --- Scan for the node in NearbyObjects ---
@@ -492,7 +492,7 @@ public class GatheringProfessionTests
                     var candidatePos = node.Base?.Position;
                     if (candidatePos != null)
                     {
-                        float distFromSpawn = Distance(candidatePos.X, candidatePos.Y, candidatePos.Z, spawnX, spawnY, spawnZ);
+                        float distFromSpawn = LiveBotFixture.Distance3D(candidatePos.X, candidatePos.Y, candidatePos.Z, spawnX, spawnY, spawnZ);
                         if (distFromSpawn > 100f)
                         {
                             _output.WriteLine($"  [{label}] Stale object: entry {nodeEntry} at ({candidatePos.X:F1}, {candidatePos.Y:F1}, {candidatePos.Z:F1}) is {distFromSpawn:F0}y from spawn — skipping");
@@ -525,7 +525,7 @@ public class GatheringProfessionTests
             var playerPos = preSnap?.Player?.Unit?.GameObject?.Base?.Position;
             float startDist = 0;
             if (playerPos != null)
-                startDist = Distance(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
+                startDist = LiveBotFixture.Distance3D(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
             _output.WriteLine($"  [{label}] Found {nodeName}: 0x{nodeGuid:X} at ({nodeX:F1}, {nodeY:F1}, {nodeZ:F1}), dist={startDist:F1}y");
 
             // --- Pathfind to the node using GoTo action ---
@@ -555,7 +555,7 @@ public class GatheringProfessionTests
                     playerPos = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Position;
                     if (playerPos != null)
                     {
-                        navDist = Distance(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
+                        navDist = LiveBotFixture.Distance3D(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
                         if (navDist <= 5f)
                         {
                             _output.WriteLine($"  [{label}] Arrived at node after {navSw.Elapsed.TotalSeconds:F1}s (dist={navDist:F1}y)");
@@ -664,7 +664,7 @@ public class GatheringProfessionTests
         var needsTeleport = true;
         if (pos != null)
         {
-            var distToOrg = Distance(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
+            var distToOrg = LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
             needsTeleport = distToOrg > 80f;
         }
 
@@ -709,7 +709,7 @@ public class GatheringProfessionTests
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos != null)
             {
-                var distToOrg = Distance(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
+                var distToOrg = LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, OrgX, OrgY, OrgZ);
                 if (distToOrg > 80f)
                 {
                     _output.WriteLine($"[{label}] Cleanup: returning to Orgrimmar (dist={distToOrg:F0}y)");
@@ -722,9 +722,6 @@ public class GatheringProfessionTests
             _output.WriteLine($"[{label}] Cleanup warning: safe zone return failed — {ex.Message}");
         }
     }
-
-    private static float Distance(float x1, float y1, float z1, float x2, float y2, float z2)
-        => (float)Math.Sqrt(Math.Pow(x1 - x2, 2) + Math.Pow(y1 - y2, 2) + Math.Pow(z1 - z2, 2));
 
     private uint GetSkill(string label, uint skillId)
     {

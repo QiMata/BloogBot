@@ -209,7 +209,7 @@ public class EconomyInteractionTests
             .OrderBy(go =>
             {
                 var p = go.Base?.Position;
-                return p == null ? float.MaxValue : DistanceTo(p.X, p.Y, p.Z, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
+                return p == null ? float.MaxValue : LiveBotFixture.Distance3D(p.X, p.Y, p.Z, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
             })
             .FirstOrDefault();
 
@@ -259,7 +259,7 @@ public class EconomyInteractionTests
         }
 
         var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-        var dist = pos == null ? float.MaxValue : DistanceTo(pos.X, pos.Y, pos.Z, x, y, z);
+        var dist = pos == null ? float.MaxValue : LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, x, y, z);
         if (dist <= SetupArrivalDistance)
         {
             _output.WriteLine($"  [{label}] Already near setup location (dist={dist:F1}y); skipping teleport.");
@@ -276,7 +276,7 @@ public class EconomyInteractionTests
             await _bot.RefreshSnapshotsAsync();
             var teleSnap = await _bot.GetSnapshotAsync(account);
             var telePos = teleSnap?.Player?.Unit?.GameObject?.Base?.Position;
-            if (telePos != null && DistanceTo(telePos.X, telePos.Y, telePos.Z, x, y, z) <= SetupArrivalDistance)
+            if (telePos != null && LiveBotFixture.Distance3D(telePos.X, telePos.Y, telePos.Z, x, y, z) <= SetupArrivalDistance)
             {
                 _output.WriteLine($"  [{label}] Teleport confirmed after {teleSw.ElapsedMilliseconds}ms");
                 break;
@@ -324,11 +324,4 @@ public class EconomyInteractionTests
         }
     }
 
-    private static float DistanceTo(float x1, float y1, float z1, float x2, float y2, float z2)
-    {
-        var dx = x1 - x2;
-        var dy = y1 - y2;
-        var dz = z1 - z2;
-        return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
-    }
 }

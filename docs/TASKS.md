@@ -17,36 +17,77 @@
 
 ---
 
-## P0 — Test Fixture & Harness Hardening (FOUNDATION)
+## P0 — Test Infrastructure Hardening (CURRENT FOCUS)
 
-**Rationale:** Test infrastructure must be solid before implementing more bot behavior. Flaky tests, fixture contamination, and client crashes waste more time than they save. Fix the foundation first.
+**Rationale:** All non-bot-behavior items must be resolved before iterating on bot capabilities. Flaky infrastructure, silent failures, and crash-prone tests waste more time than they save. Fix the foundation first.
 
 See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 
+### P0.1 — Crash Detection & Resilience (HIGHEST PRIORITY)
+
 | ID | Task | Owner | Severity | Status |
 |----|------|-------|----------|--------|
-| `BT-PARK-001` | **Stop parking bots idle.** Tests park one bot at Orgrimmar bank while only testing the other. Both bots should exercise every test together. Add `PauseCoordinatorAsync()` to suppress AI GOTO actions instead of parking. | All LiveValidation tests | High | Open |
-| `BT-FEEDBACK-003` | **FG error-out must be hard failure.** FG failures are caught and emitted as warnings — test "passes" while FG is broken. FG crash/error should fail the test or use `Skip.If` with reason. | All LiveValidation tests | High | Open |
-| `BT-COMBAT-002` | **Fix creature teleport ACK bug.** ~~BG sends teleport ACK for creature MSG_MOVE_TELEPORT.~~ Fixed: ACK now guarded by player GUID check. | `Exports/WoWSharpClient/Handlers/MovementHandler.cs` | Critical | **Fixed** `37a2c25` |
-| `BT-TELE-001` | **Safe teleport helper for FG.** Limit FG to 3 nearest gathering spawns (sorted by distance from Orgrimmar). BG unlimited. Eliminated all 14 FG cascade crashes. | `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs` | Critical | **Fixed** `b1444da` |
-| `BT-PARK-003` | **Teleport both bots together by default.** Tests should teleport both BG and FG to the test area so behavior can be observed and compared. Parking should be the documented exception. | All LiveValidation tests | High | Open |
-| `BT-COMBAT-001` | **FG auto-attack uses AttackTarget().** FG switched from `CastSpellByName('Attack')` to `AttackTarget()` Lua API. Evasion is now hard failure. BG heartbeat already works (IsAutoAttacking + MovementController). | `Services/ForegroundBotRunner/Statics/ObjectManager.Combat.cs` | High | **Fixed** `5a9f882` |
-| `BT-MOVE-001` | **MovementFlags not resetting after teleport.** BG bot may retain stale movement flags after teleport. | `Exports/WoWSharpClient/Movement/MovementController.cs` | Medium | Open |
-| `BT-MOVE-002` | **Falling detection broken when teleported mid-air.** BG bot hovers instead of falling when teleported above ground. | `Exports/WoWSharpClient/Movement/MovementController.cs` | High | Open |
-| `BT-SETUP-001` | **Standardized test cleanup pattern.** Created `EnsureCleanSlateAsync`: state logging + revive + safe zone teleport + GM on. Deployed to 13 test files. | `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Assertions.cs` | High | **Fixed** `42100fc` |
-| `BT-DEATH-001` | **Move death test to Orgrimmar.** Current Durotar road location causes 80+y corpse runs, FG crashes. Orgrimmar graveyard = <30y run. | `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` | High | Open |
-| `BT-LOGIC-002` | **Make FG failures hard failures.** Stop silently downgrading FG test failures to warnings. FG should fail same as BG, or use `Skip.If` with documented reason. | All LiveValidation tests | High | Open |
-| `BT-FEEDBACK-001` | **Add periodic progress logging.** Long tests (3min corpse run, 1min gather) show no output during polling loops — indistinguishable from hung test. Log every 10s. | All long-running tests | Medium | Open |
-| `BT-ITEM-001` | **Centralize item/spell setup.** Shared `TestItems`/`TestSpells` constants. `EnsureItemAsync`/`EnsureSpellAsync` helpers that check before adding. | `Tests/Tests.Infrastructure/` | Medium | Open |
-| `BT-LOGIC-001` | **Consolidate distance helpers.** Move `Distance2D`/`Distance3D` to LiveBotFixture shared helpers. | `Tests/BotRunner.Tests/LiveValidation/` | Low | Open |
+| `BT-CRASH-001` | **Crash monitor must resume after recovery.** `StartCrashMonitor()` returns after first crash detection — subsequent crashes go undetected. Fix: continue monitoring loop after recovery instead of returning. | `Tests/Tests.Infrastructure/BotServiceFixture.cs` | Critical | Open |
+| `BT-CRASH-002` | **Corpse run test crashes WoW.exe — must fail gracefully.** DeathCorpseRunTests teleports to remote Durotar, FG crashes during ghost pathfinding. Test must detect crash and Assert.Fail immediately instead of timing out for 3+ minutes. | `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` | Critical | Open |
+| `BT-DEATH-001` | **Move death test to Orgrimmar.** Current Durotar road location causes 80+y corpse runs, FG crashes. Orgrimmar graveyard = <30y run, simpler geometry. | `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` | High | Open |
 
-## P1 — Open Bug Fixes
+### P0.2 — FG Failure Visibility (Stop Hiding Bugs)
+
+| ID | Task | Owner | Severity | Status |
+|----|------|-------|----------|--------|
+| `BT-FEEDBACK-003` | **FG error-out must be hard failure.** FG failures are caught and emitted as warnings — test "passes" while FG is broken. FG crash/error should fail the test or use `Skip.If` with reason. | All LiveValidation tests | High | Open |
+| `BT-LOGIC-002` | **Make FG failures hard failures.** Stop silently downgrading FG test failures to warnings. FG should fail same as BG, or use `Skip.If` with documented reason. | All LiveValidation tests | High | Open |
+| `BT-VERIFY-006` | **Fix GM mode toggle corruption with try/finally.** CombatLoopTests turns `.gm off` for FG combat but no guarantee of `.gm on` restoration on failure. Use try/finally. | `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs` | High | Open |
+| `BT-VERIFY-001` | **Dead-state guard silently blocks commands.** `SendGmChatCommandTrackedAsync` returns Failure when bot is dead but callers ignore the return value. | `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs` | High | Open |
+
+### P0.3 — Reduce Test Runtime (Speed Up Iteration)
+
+| ID | Task | Owner | Severity | Status |
+|----|------|-------|----------|--------|
+| `BT-DELAY-001` | **Replace excessive Task.Delay with polling.** 198 hardcoded Task.Delay calls across 30 files. Replace with WaitForSnapshotConditionAsync or WaitForTeleportSettledAsync where applicable. | All LiveValidation tests | High | Open |
+| `BT-LOGIC-003` | **Centralize timeouts.** Scattered magic numbers (8s, 12s, 15s, 3min). Create `TestTimeouts` class with configurable defaults. | `Tests/BotRunner.Tests/LiveValidation/` | Medium | Open |
+| `BT-LOGIC-004` | **Standardize polling intervals.** Polling ranges from 250ms to 3000ms. Standardize: 500ms for most conditions, 1000ms for slow conditions. | All LiveValidation tests | Medium | Open |
+| `BT-FEEDBACK-001` | **Add periodic progress logging.** Long tests (3min corpse run, 1min gather) show no output during polling loops — indistinguishable from hung test. Log every 10s. | All long-running tests | Medium | Open |
+
+### P0.4 — Code Quality & Deduplication
+
+| ID | Task | Owner | Severity | Status |
+|----|------|-------|----------|--------|
+| `BT-LOGIC-001` | **Consolidate distance helpers.** Move `Distance2D`/`Distance3D` to LiveBotFixture shared helpers. Currently duplicated in 4+ test files. | `Tests/BotRunner.Tests/LiveValidation/` | Low | Open |
+| `BT-ITEM-001` | **Centralize item/spell setup.** Shared `TestItems`/`TestSpells` constants. `EnsureItemAsync`/`EnsureSpellAsync` helpers that check before adding. | `Tests/Tests.Infrastructure/` | Medium | Open |
+| `BT-VERIFY-002` | **Use BotClearInventoryAsync instead of .reset items.** `.reset items` strips equipped gear — causes cross-test contamination. | All LiveValidation tests | High | Open |
+| `BT-VERIFY-003` | **Item addition without inventory verification.** `.additem` calls don't verify item appeared in bag snapshot. | Multiple tests | Medium | Open |
+| `BT-VERIFY-004` | **Spell learning without verification.** `.learn` calls don't verify spell appears in SpellList snapshot. | Multiple tests | Medium | Open |
+| `BT-SETUP-003` | **Missing teardown — tests don't restore position.** Add finally block that teleports back to Orgrimmar safe zone. | Multiple tests | Medium | Open |
+
+### P0.5 — Bot Coordination (Deferred — Requires P0.1-P0.4 First)
+
+| ID | Task | Owner | Severity | Status |
+|----|------|-------|----------|--------|
+| `BT-PARK-001` | **Stop parking bots idle.** Both bots should exercise every test together. Add `PauseCoordinatorAsync()` to suppress AI GOTO actions. | All LiveValidation tests | High | Open |
+| `BT-PARK-003` | **Teleport both bots together by default.** Tests should teleport both BG and FG to the test area. | All LiveValidation tests | High | Open |
+| `BT-PARK-002` | **Assert on idle bot state at test end.** | All parking tests | Medium | Open |
+
+### P0 — Completed
+
+| ID | Task | Status |
+|----|------|--------|
+| `BT-COMBAT-002` | Fix creature teleport ACK bug. ACK now guarded by player GUID check. | **Fixed** `37a2c25` |
+| `BT-TELE-001` | Safe teleport helper for FG. Limited FG to 3 nearest gathering spawns. | **Fixed** `b1444da` |
+| `BT-COMBAT-001` | FG auto-attack uses AttackTarget() Lua API. Evasion is now hard failure. | **Fixed** `5a9f882` |
+| `BT-SETUP-001` | Standardized test cleanup pattern (EnsureCleanSlateAsync). | **Fixed** `42100fc` |
+
+---
+
+## P1 — Open Bug Fixes (After P0 Complete)
 
 | ID | Task | Owner | Status |
 |----|------|-------|--------|
-| `BB-COMBAT-006` | **UnitReaction unreliable in snapshots.** BG defaults to Hated(0), FG returns Friendly(4) for hostile mobs. Need FactionTemplate→Reaction mapping for BG using DBC data. Workaround: entry-based filter in place. | `Exports/WoWSharpClient/` | Open (workaround in place) |
-| `FG-GHOST-STUCK-001` | **Ghost form stuck on Orgrimmar catapult geometry.** Pathfinding/stuck-recovery doesn't handle dense M2 geometry. | `Exports/Navigation/` | Open |
+| `BB-COMBAT-006` | **UnitReaction unreliable in snapshots.** BG defaults to Hated(0), FG returns Friendly(4) for hostile mobs. Workaround: entry-based filter in place. | `Exports/WoWSharpClient/` | Open (workaround) |
+| `FG-GHOST-STUCK-001` | **Ghost form stuck on Orgrimmar catapult geometry.** | `Exports/Navigation/` | Open |
 | `LV-AUDIT-002` | **FG fishing test (TIM-7).** BG fishing CMSG_CAST_SPELL channel not starting. | `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs` | Open |
+| `BT-MOVE-001` | **MovementFlags not resetting after teleport.** BG bot retains stale movement flags. | `Exports/WoWSharpClient/Movement/MovementController.cs` | Open |
+| `BT-MOVE-002` | **Falling detection broken when teleported mid-air.** BG bot hovers instead of falling. | `Exports/WoWSharpClient/Movement/MovementController.cs` | Open |
 
 ## P2 — FG Client Stability
 
@@ -54,7 +95,7 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 |----|-------|-------|--------|
 | `FG-REALM-STUCK-001` | FG client stuck on Realm Selection/Language dialog. | `Services/ForegroundBotRunner/` | **Fixed** `2301f0a` |
 | `TEST-FGPACKET-001` | FG packet capture — recv hook pending (needs ProcessMessage vtable). | `Services/ForegroundBotRunner/Mem/Hooks/` | **Partial** |
-| `FG-CRASH-TELE` | FG ERROR #132 during teleport to mining locations. ACCESS_VIOLATION at 0x006FA780 referencing 0x00000005. Terrain tile not loaded before ObjectManager access. | `Services/ForegroundBotRunner/` | Open |
+| `FG-CRASH-TELE` | FG ERROR #132 during teleport to mining locations. ACCESS_VIOLATION at 0x006FA780. | `Services/ForegroundBotRunner/` | Open |
 
 ## P3 — Capability Gaps (Low Priority)
 
@@ -103,22 +144,18 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-09 (session 48)
-- **Current work:** P0 test harness hardening + bad behavior fixes — continued from session 47.
+- **Last updated:** 2026-03-10 (session 49)
+- **Current work:** P0 infrastructure hardening — reorganized TASKS.md to prioritize non-bot-behavior items.
 - **Completed this session:**
-  1. **BT-TELE-001 FIXED** (`b1444da`): Limited FG gathering tests to 3 nearest spawns. Eliminated all 14 FG cascade crashes.
-  2. **LV-AUDIT-002 partial** (`d4c5f27`): Registered MSG_CHANNEL_START/UPDATE opcodes in WorldClient. BG bot now processes channeled spells. Removed `.cast` GM fallbacks from Fishing/SpellCast/Crafting tests.
-  3. **FG CastSpell(int) FIXED** (`d4c5f27`): FG bot resolves spell name from client spell DB (0x00C0D788 pointer chain) for `CastSpell(int)` — was a no-op.
-  4. **MovementController channel suppression** (`ef9af3a`): Suppress all movement packets during IsChanneling/IsCasting. Prevents MaNGOS from interpreting heartbeats as channel interrupts.
-  5. **RNG skill-up assertions FIXED** (`ef9af3a`): Fishing/Mining/Herbalism tests no longer Assert on skill increase (RNG in vanilla WoW). Gathering tests detect node despawn as alternative success indicator.
-  6. **BT-SETUP-001 IMPLEMENTED** (`42100fc`): New `EnsureCleanSlateAsync` — standardized test setup with state logging, revive with reason tracking, safe zone teleport, GM mode guarantee. Deployed to 13 test files. Shared SafeZone constants.
-- **LiveValidation results:** Test run in progress (awaiting results with all fixes)
-- **Prior baseline:** 45 passed, 2 failed, 3 skipped (50 total)
-- **Next priorities:**
-  - BT-PARK-001: Both bots exercise every test (stop idle parking)
-  - BT-MOVE-002: Falling detection broken when teleported mid-air
+  1. **CombatRangeTests FIXED** (`609191c`): Added Goto walk + lenient targeting for position desync. All 8 tests pass.
+  2. **TASKS.md reorganized**: Split P0 into P0.1-P0.5 sub-priorities. Added BT-CRASH-001/002 for crash monitor gaps.
+- **LiveValidation baseline:** 46 passed, 2 failed, 2 skipped (50 total)
+- **Next priorities (in order):**
+  - BT-CRASH-001: Fix crash monitor resume-after-recovery
+  - BT-CRASH-002: Corpse run crash detection + graceful failure
   - BT-DEATH-001: Move death test to Orgrimmar
-  - BT-VERIFY-006: Fix GM mode toggle corruption with try/finally
-  - BT-COMBAT-001: Implement proper auto-attack toggle pattern
-  - LV-AUDIT-002: Complete fishing fix (bobber detection still needed)
-- **Sessions 1-46:** See `docs/ARCHIVE.md` for full history.
+  - BT-FEEDBACK-003/BT-LOGIC-002: FG failures as hard failures
+  - BT-LOGIC-001: Consolidate distance helpers
+  - BT-LOGIC-003: Centralize timeouts
+  - BT-DELAY-001: Replace excessive Task.Delay calls
+- **Sessions 1-48:** See `docs/ARCHIVE.md` for full history.

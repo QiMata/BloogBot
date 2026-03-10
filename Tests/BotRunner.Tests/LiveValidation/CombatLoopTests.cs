@@ -442,7 +442,7 @@ public class CombatLoopTests
         if (pos == null)
             return;
 
-        var distance = Distance2D(pos.X, pos.Y, targetX, targetY);
+        var distance = LiveBotFixture.Distance2D(pos.X, pos.Y, targetX, targetY);
         if (distance <= MobAreaRadius)
         {
             _output.WriteLine($"  [{label}] Already near mob area (distance={distance:F1}y); skipping teleport.");
@@ -510,7 +510,7 @@ public class CombatLoopTests
                 {
                     if (selfPos == null) return float.MaxValue;
                     var p = u.GameObject?.Base?.Position;
-                    return p == null ? float.MaxValue : Distance2D(selfPos.X, selfPos.Y, p.X, p.Y);
+                    return p == null ? float.MaxValue : LiveBotFixture.Distance2D(selfPos.X, selfPos.Y, p.X, p.Y);
                 })
                 .ToList() ?? [];
 
@@ -521,7 +521,7 @@ public class CombatLoopTests
                 var pos = mob.GameObject?.Base?.Position;
                 var name = string.IsNullOrWhiteSpace(mob.GameObject?.Name) ? "<unknown>" : mob.GameObject.Name;
                 var entry = mob.GameObject?.Entry ?? 0;
-                var dist = selfPos != null && pos != null ? Distance2D(selfPos.X, selfPos.Y, pos.X, pos.Y) : -1f;
+                var dist = selfPos != null && pos != null ? LiveBotFixture.Distance2D(selfPos.X, selfPos.Y, pos.X, pos.Y) : -1f;
                 _output.WriteLine($"    Candidate: 0x{guid:X} '{name}' entry={entry} HP={mob.Health}/{mob.MaxHealth} dist={dist:F1}y at ({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F1})");
                 if (guid != 0 && (claimedTargets == null || claimedTargets.TryAdd(guid, account)))
                 {
@@ -600,7 +600,7 @@ public class CombatLoopTests
         var targetPos = target?.GameObject?.Base?.Position;
         if (selfPos == null || targetPos == null)
             return float.MaxValue;
-        return Distance2D(selfPos.X, selfPos.Y, targetPos.X, targetPos.Y);
+        return LiveBotFixture.Distance2D(selfPos.X, selfPos.Y, targetPos.X, targetPos.Y);
     }
 
     /// <summary>
@@ -711,19 +711,12 @@ public class CombatLoopTests
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-            if (pos != null && Distance2D(pos.X, pos.Y, x, y) <= radius)
+            if (pos != null && LiveBotFixture.Distance2D(pos.X, pos.Y, x, y) <= radius)
                 return true;
             await Task.Delay(350);
         }
 
         return false;
-    }
-
-    private static float Distance2D(float x1, float y1, float x2, float y2)
-    {
-        var dx = x2 - x1;
-        var dy = y2 - y1;
-        return (float)Math.Sqrt(dx * dx + dy * dy);
     }
 
     /// <summary>Normalizes an angle to [-π, π].</summary>
