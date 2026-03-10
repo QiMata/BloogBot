@@ -101,7 +101,7 @@ public class NavigationTests
         // Step 2: Teleport to start
         _output.WriteLine($"  [{label}] Teleporting to start ({startX:F0}, {startY:F0}, {startZ:F0})");
         await _bot.BotTeleportAsync(account, MapId, startX, startY, startZ);
-        await Task.Delay(2000);
+        await _bot.WaitForTeleportSettledAsync(account, startX, startY);
 
         // Step 3: Issue GOTO
         _output.WriteLine($"  [{label}] Sending GOTO to ({endX:F0}, {endY:F0}, {endZ:F0})");

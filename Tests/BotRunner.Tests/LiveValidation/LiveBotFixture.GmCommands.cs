@@ -305,7 +305,7 @@ public partial class LiveBotFixture
 
         // Use bot chat .go xyz - SOAP .teleport name with coordinates does not exist on MaNGOS.
         await BotTeleportAsync(accountName, mapId, x, y, z);
-        await Task.Delay(3000); // Let physics settle
+        await WaitForTeleportSettledAsync(accountName, x, y);
 
         var firstWindowMs = Math.Max(3000, timeoutMs / 2);
         if (await WaitForPositionAsync(firstWindowMs))
@@ -323,7 +323,7 @@ public partial class LiveBotFixture
             captureResponse: true,
             delayMs: 1000,
             allowWhenDead: false);
-        await Task.Delay(2000);
+        await WaitForTeleportSettledAsync(accountName, x, y);
 
         var secondWindowMs = Math.Max(2000, timeoutMs - firstWindowMs);
         if (await WaitForPositionAsync(secondWindowMs))

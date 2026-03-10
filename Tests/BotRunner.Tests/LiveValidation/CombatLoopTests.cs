@@ -144,7 +144,7 @@ public class CombatLoopTests
             _output.WriteLine($"  [{label}] SOAP .gm visible on result: {visResult}");
         }
         gmTurnedOff = true;
-        await Task.Delay(2000);
+        await Task.Delay(500); // Brief settle after GM mode change
 
         try
         {
@@ -166,8 +166,9 @@ public class CombatLoopTests
         // STEP 1b: Teleport to mob area to enumerate available mobs.
         await EnsureNearMobAreaAsync(account, label, areaX, areaY, areaZ);
 
-        // Wait for area loading — FG's ObjectManager needs time to populate objects.
-        await Task.Delay(3000);
+        // Wait for nearby units to appear (area loading for FG ObjectManager)
+        await _bot.WaitForSnapshotConditionAsync(account,
+            s => s.NearbyUnits?.Count > 0, TimeSpan.FromSeconds(5), pollIntervalMs: 500);
 
         await _bot.RefreshSnapshotsAsync();
         var selfSnap = await _bot.GetSnapshotAsync(account);
@@ -185,8 +186,10 @@ public class CombatLoopTests
             // No living mob nearby — spawn a temporary Mottled Boar (entry 3098, level 3-4).
             // .npc add temp creates a temp creature at the player's position (removed on server restart).
             _output.WriteLine($"  [{label}] No mob found; spawning temp Mottled Boar (entry 3098).");
-            await _bot.SendGmChatCommandTrackedAsync(account, ".npc add temp 3098", captureResponse: true, delayMs: 2000);
-            await Task.Delay(2000); // Wait for creature to appear in snapshots
+            await _bot.SendGmChatCommandTrackedAsync(account, ".npc add temp 3098", captureResponse: true, delayMs: 1000);
+            // Poll for creature to appear in snapshots
+            await _bot.WaitForSnapshotConditionAsync(account,
+                s => s.NearbyUnits?.Count > 0, TimeSpan.FromSeconds(5), pollIntervalMs: 500);
             await _bot.RefreshSnapshotsAsync();
 
             (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(12), claimedTargets);
@@ -222,7 +225,7 @@ public class CombatLoopTests
                     float tpY = curDist > 0.1f ? mobY - (dy2 / curDist) * od : mobY;
                     _output.WriteLine($"  [{label}] Too close ({curDist:F1}y); re-teleporting 20y away for approach walk.");
                     await _bot.BotTeleportAsync(account, MapId, tpX, tpY, areaZ);
-                    await Task.Delay(2000);
+                    await _bot.WaitForTeleportSettledAsync(account, tpX, tpY);
                 }
             }
         }
@@ -234,7 +237,7 @@ public class CombatLoopTests
             if (gotoAttempt > 0)
             {
                 _output.WriteLine($"  [{label}] Goto retry #{gotoAttempt}...");
-                await Task.Delay(2000); // Let pathfinding service settle
+                await Task.Delay(500); // Brief pause before pathfinding retry
             }
 
             var gotoResult = await _bot.SendActionAsync(account, new ActionMessage

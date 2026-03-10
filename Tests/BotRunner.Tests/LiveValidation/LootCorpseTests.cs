@@ -96,7 +96,7 @@ public class LootCorpseTests
         // Step 2: Clear inventory
         _output.WriteLine($"  [{label}] Step 2: Clear inventory (.reset items)");
         await _bot.ExecuteGMCommandAsync($".reset items {snap!.CharacterName}");
-        await Task.Delay(1500);
+        await _bot.WaitForSnapshotConditionAsync(account, s => (s.Player?.BagContents?.Count ?? 99) == 0, TimeSpan.FromSeconds(5));
 
         // Record baseline bag count
         await _bot.RefreshSnapshotsAsync();
@@ -107,7 +107,7 @@ public class LootCorpseTests
         // Step 3: Teleport to mob area
         _output.WriteLine($"  [{label}] Step 3: Teleport to Valley of Trials boar area");
         await _bot.BotTeleportAsync(account, MapId, MobAreaX, MobAreaY, MobAreaZ);
-        await Task.Delay(2000);
+        await _bot.WaitForTeleportSettledAsync(account, MobAreaX, MobAreaY);
 
         // Step 4: Find a living boar
         _output.WriteLine($"  [{label}] Step 4: Find a living Mottled Boar");
@@ -119,7 +119,7 @@ public class LootCorpseTests
             // Try respawning and retrying
             _output.WriteLine($"  [{label}] No living boar found, trying .respawn...");
             await _bot.SendGmChatCommandAsync(account, ".respawn");
-            await Task.Delay(3000);
+            await Task.Delay(1000);
             await _bot.RefreshSnapshotsAsync();
             snap = getSnap();
             boar = FindLivingBoar(snap, claimedTargets, label);
@@ -209,7 +209,7 @@ public class LootCorpseTests
         });
         _output.WriteLine($"  [{label}] LootCorpse dispatch result: {lootResult}");
         Assert.Equal(ResponseResult.Success, lootResult);
-        await Task.Delay(2000); // Wait for loot to process
+        await Task.Delay(500); // Wait for loot to process
 
         // Step 8: Verify inventory changed
         _output.WriteLine($"  [{label}] Step 8: Verify inventory changed");

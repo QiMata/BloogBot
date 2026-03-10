@@ -65,14 +65,12 @@ public class VendorBuySellTests
         var setupSnap = await _bot.GetSnapshotAsync(account);
         var charName = setupSnap?.CharacterName ?? "Lokgaka";
         await _bot.ExecuteGMCommandAsync($".reset items {charName}");
-        await Task.Delay(2000);
-        await _bot.RefreshSnapshotsAsync();
+        await _bot.WaitForSnapshotConditionAsync(account, s => (s.Player?.BagContents?.Count ?? 99) == 0, TimeSpan.FromSeconds(5));
 
         // Step 1: Teleport directly to Grimtak's position (within interaction range)
         _output.WriteLine($"  [{label}] Step 1: Teleporting to Grimtak (Razor Hill vendor)");
         await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ + 1);
-        await Task.Delay(3000);
-        await _bot.RefreshSnapshotsAsync();
+        await _bot.WaitForTeleportSettledAsync(account, GrimtakX, GrimtakY);
 
         // Step 2: Find Grimtak in NearbyUnits
         var (vendorGuid, npcX, npcY, npcZ) = await FindNpcByFlagAsync(account, label, (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, "vendor");
@@ -122,7 +120,7 @@ public class VendorBuySellTests
         // Step 1: Teleport directly to Grimtak's position (within interaction range)
         _output.WriteLine($"  [{label}] Step 1: Teleporting to Grimtak (Razor Hill vendor)");
         await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ + 1);
-        await Task.Delay(3000);
+        await _bot.WaitForTeleportSettledAsync(account, GrimtakX, GrimtakY);
 
         // Step 2: Find vendor NPC
         var (vendorGuid, npcX, npcY, npcZ) = await FindNpcByFlagAsync(account, label, (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, "vendor");
@@ -187,8 +185,8 @@ public class VendorBuySellTests
 
             if (attempt < 2)
             {
-                _output.WriteLine($"  [{label}] No {npcType} found on attempt {attempt + 1}, retrying in 2s...");
-                await Task.Delay(2000);
+                _output.WriteLine($"  [{label}] No {npcType} found on attempt {attempt + 1}, retrying in 1s...");
+                await Task.Delay(1000);
             }
         }
 

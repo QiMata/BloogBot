@@ -25,26 +25,20 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 
 ### P0.1 — Crash Detection & Resilience (HIGHEST PRIORITY)
 
-| ID | Task | Owner | Severity | Status |
-|----|------|-------|----------|--------|
-| `BT-CRASH-001` | **Crash monitor must resume after recovery.** `StartCrashMonitor()` returns after first crash detection — subsequent crashes go undetected. Fix: continue monitoring loop after recovery instead of returning. | `Tests/Tests.Infrastructure/BotServiceFixture.cs` | Critical | Open |
-| `BT-CRASH-002` | **Corpse run test crashes WoW.exe — must fail gracefully.** DeathCorpseRunTests teleports to remote Durotar, FG crashes during ghost pathfinding. Test must detect crash and Assert.Fail immediately instead of timing out for 3+ minutes. | `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` | Critical | Open |
-| `BT-DEATH-001` | **Move death test to Orgrimmar.** Current Durotar road location causes 80+y corpse runs, FG crashes. Orgrimmar graveyard = <30y run, simpler geometry. | `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` | High | Open |
+*All items completed — see P0 Completed table.*
 
 ### P0.2 — FG Failure Visibility (Stop Hiding Bugs)
 
 | ID | Task | Owner | Severity | Status |
 |----|------|-------|----------|--------|
-| `BT-FEEDBACK-003` | **FG error-out must be hard failure.** FG failures are caught and emitted as warnings — test "passes" while FG is broken. FG crash/error should fail the test or use `Skip.If` with reason. | All LiveValidation tests | High | Open |
-| `BT-LOGIC-002` | **Make FG failures hard failures.** Stop silently downgrading FG test failures to warnings. FG should fail same as BG, or use `Skip.If` with documented reason. | All LiveValidation tests | High | Open |
-| `BT-VERIFY-006` | **Fix GM mode toggle corruption with try/finally.** CombatLoopTests turns `.gm off` for FG combat but no guarantee of `.gm on` restoration on failure. Use try/finally. | `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs` | High | Open |
+| `BT-VERIFY-006` | **Fix GM mode toggle corruption with try/finally.** CombatLoopTests uses try/finally for .gm on restoration. | `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs` | High | **Fixed** (already implemented) |
 | `BT-VERIFY-001` | **Dead-state guard silently blocks commands.** `SendGmChatCommandTrackedAsync` returns Failure when bot is dead but callers ignore the return value. | `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs` | High | Open |
 
 ### P0.3 — Reduce Test Runtime (Speed Up Iteration)
 
 | ID | Task | Owner | Severity | Status |
 |----|------|-------|----------|--------|
-| `BT-DELAY-001` | **Replace excessive Task.Delay with polling.** 198 hardcoded Task.Delay calls across 30 files. Replace with WaitForSnapshotConditionAsync or WaitForTeleportSettledAsync where applicable. | All LiveValidation tests | High | Open |
+| `BT-DELAY-001` | **Replace excessive Task.Delay with polling.** Replaced 41 hardcoded delays (2s-8s) with WaitForTeleportSettledAsync/WaitForSnapshotConditionAsync/WaitForPositionChangeAsync. Long delays reduced from 46 to 5 (all justified). | All LiveValidation tests | High | **Fixed** |
 | `BT-LOGIC-003` | **Centralize timeouts.** Scattered magic numbers (8s, 12s, 15s, 3min). Create `TestTimeouts` class with configurable defaults. | `Tests/BotRunner.Tests/LiveValidation/` | Medium | Open |
 | `BT-LOGIC-004` | **Standardize polling intervals.** Polling ranges from 250ms to 3000ms. Standardize: 500ms for most conditions, 1000ms for slow conditions. | All LiveValidation tests | Medium | Open |
 | `BT-FEEDBACK-001` | **Add periodic progress logging.** Long tests (3min corpse run, 1min gather) show no output during polling loops — indistinguishable from hung test. Log every 10s. | All long-running tests | Medium | Open |
@@ -53,7 +47,7 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 
 | ID | Task | Owner | Severity | Status |
 |----|------|-------|----------|--------|
-| `BT-LOGIC-001` | **Consolidate distance helpers.** Move `Distance2D`/`Distance3D` to LiveBotFixture shared helpers. Currently duplicated in 4+ test files. | `Tests/BotRunner.Tests/LiveValidation/` | Low | Open |
+| `BT-LOGIC-001` | **Consolidate distance helpers.** Move `Distance2D`/`Distance3D` to LiveBotFixture shared helpers. | `Tests/BotRunner.Tests/LiveValidation/` | Low | **Fixed** `18cb049` |
 | `BT-ITEM-001` | **Centralize item/spell setup.** Shared `TestItems`/`TestSpells` constants. `EnsureItemAsync`/`EnsureSpellAsync` helpers that check before adding. | `Tests/Tests.Infrastructure/` | Medium | Open |
 | `BT-VERIFY-002` | **Use BotClearInventoryAsync instead of .reset items.** `.reset items` strips equipped gear — causes cross-test contamination. | All LiveValidation tests | High | Open |
 | `BT-VERIFY-003` | **Item addition without inventory verification.** `.additem` calls don't verify item appeared in bag snapshot. | Multiple tests | Medium | Open |
@@ -76,6 +70,12 @@ See `docs/BAD_TEST_BEHAVIORS.md` for full anti-pattern catalog.
 | `BT-TELE-001` | Safe teleport helper for FG. Limited FG to 3 nearest gathering spawns. | **Fixed** `b1444da` |
 | `BT-COMBAT-001` | FG auto-attack uses AttackTarget() Lua API. Evasion is now hard failure. | **Fixed** `5a9f882` |
 | `BT-SETUP-001` | Standardized test cleanup pattern (EnsureCleanSlateAsync). | **Fixed** `42100fc` |
+| `BT-CRASH-001` | Crash monitor continues loop after WoW.exe crash (no longer returns). | **Fixed** `18cb049` |
+| `BT-CRASH-002` | Corpse run test detects crash and fails gracefully. | **Fixed** `18cb049` |
+| `BT-DEATH-001` | Death test uses `.tele name <char> Orgrimmar` — simple 8-step flow. | **Fixed** `18cb049` |
+| `BT-FEEDBACK-003` | FG failures are hard assertions (MapTransition, CharLifecycle, Economy). | **Fixed** `2891847` |
+| `BT-LOGIC-002` | FG failures propagated — no more silent warning downgrade. | **Fixed** `2891847` |
+| `BT-LOGIC-001` | Distance2D/Distance3D centralized in LiveBotFixture, removed from 9 files. | **Fixed** `18cb049` |
 
 ---
 

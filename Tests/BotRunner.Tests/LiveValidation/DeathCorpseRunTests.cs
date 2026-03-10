@@ -82,7 +82,9 @@ public class DeathCorpseRunTests
         // Step 2: Teleport to Orgrimmar (named location — on top of bank)
         _output.WriteLine($"  [{label}] Step 2: Teleport to Orgrimmar");
         await _bot.BotTeleportToNamedAsync(account, charName, "Orgrimmar");
-        await Task.Delay(2000); // Let position settle after named teleport
+        // Poll for position to appear (named teleport doesn't have target coords for WaitForTeleportSettledAsync)
+        await _bot.WaitForSnapshotConditionAsync(account,
+            s => s.Player?.Unit?.GameObject?.Base?.Position != null, TimeSpan.FromSeconds(5));
 
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
@@ -117,8 +119,9 @@ public class DeathCorpseRunTests
             return (false, "Never transitioned to ghost state");
         _output.WriteLine($"  [{label}] Ghost confirmed");
 
-        // Let graveyard teleport settle
-        await Task.Delay(3000);
+        // Wait for graveyard teleport to settle (position changes after ghost release)
+        await _bot.WaitForSnapshotConditionAsync(account,
+            s => s.Player?.Unit?.GameObject?.Base?.Position != null, TimeSpan.FromSeconds(5));
         await _bot.RefreshSnapshotsAsync();
         snap = await _bot.GetSnapshotAsync(account);
         var ghostPos = snap?.Player?.Unit?.GameObject?.Base?.Position;

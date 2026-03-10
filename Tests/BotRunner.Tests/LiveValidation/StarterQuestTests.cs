@@ -82,7 +82,7 @@ public class StarterQuestTests
         // long cross-zone teleport + FG client area loading delays.
         _output.WriteLine($"  [{label}] Pre-flight: teleporting to Orgrimmar safe zone.");
         await _bot.BotTeleportAsync(account, MapId, 1629f, -4373f, 12f);
-        await Task.Delay(2000);
+        await _bot.WaitForTeleportSettledAsync(account, 1629f, -4373f);
 
         await EnsureQuestAbsentAsync(account, label, TestQuestId);
 
@@ -91,7 +91,7 @@ public class StarterQuestTests
             // === Step 1: Teleport near Kaltunk (quest giver) ===
             _output.WriteLine($"  [{label}] Step 1: Teleporting to Valley of Trials near Kaltunk");
             await _bot.BotTeleportAsync(account, MapId, KaltunkX, KaltunkY, KaltunkZ + 3);
-            await Task.Delay(4000);
+            await _bot.WaitForTeleportSettledAsync(account, KaltunkX, KaltunkY);
 
             // === Step 2: Find Kaltunk in nearby units ===
             var kaltunkGuid = await FindNpcByEntryAsync(account, label, KaltunkEntry, "Kaltunk");
@@ -143,7 +143,7 @@ public class StarterQuestTests
             // === Step 5: Teleport near Gornek (turn-in NPC) ===
             _output.WriteLine($"  [{label}] Step 5: Teleporting near Gornek for quest turn-in");
             await _bot.BotTeleportAsync(account, MapId, GornekX, GornekY, GornekZ + 3);
-            await Task.Delay(4000); // 4s for area loading + NPC visibility (matches Kaltunk delay)
+            await _bot.WaitForTeleportSettledAsync(account, GornekX, GornekY);
 
             // === Step 6: Find Gornek in nearby units ===
             var gornekGuid = await FindNpcByEntryAsync(account, label, GornekEntry, "Gornek");
@@ -206,8 +206,8 @@ public class StarterQuestTests
 
             if (attempt < 2)
             {
-                _output.WriteLine($"  [{label}] {npcName} not found on attempt {attempt + 1}, retrying in 2s...");
-                await Task.Delay(2000);
+                _output.WriteLine($"  [{label}] {npcName} not found on attempt {attempt + 1}, retrying in 1s...");
+                await Task.Delay(1000);
             }
         }
 

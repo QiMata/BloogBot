@@ -89,7 +89,7 @@ public class OrgrimmarGroundZAnalysisTests
             await Task.WhenAll(teleportTasks);
 
             // Wait for clients to settle (gravity + ground snap)
-            await Task.Delay(3000);
+            await _bot.WaitForTeleportSettledAsync(bgAccount!, px, py);
 
             // Read both positions from snapshots
             float bgZ = float.NaN;
@@ -187,7 +187,7 @@ public class OrgrimmarGroundZAnalysisTests
             await _bot.BotTeleportAsync(fgAccount!, MapId, px, py, teleZ);
 
         // Let them settle from the 3y drop
-        await Task.Delay(2000);
+        await _bot.WaitForTeleportSettledAsync(bgAccount!, px, py);
 
         _output.WriteLine($"{"Time",6} {"BG_X",10} {"BG_Y",12} {"BG_Z",10} {"FG_X",10} {"FG_Y",12} {"FG_Z",10} {"Z_Delta",8}");
         _output.WriteLine(new string('-', 90));

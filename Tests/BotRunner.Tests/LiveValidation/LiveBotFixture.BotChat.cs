@@ -145,8 +145,9 @@ public partial class LiveBotFixture
             }
         }
 
-        // Wait for inventory updates to propagate
-        await Task.Delay(2000);
+        // Poll for inventory to clear (bags should be empty after destroy)
+        await WaitForSnapshotConditionAsync(accountName,
+            s => (s.Player?.BagContents?.Count ?? 99) == 0, TimeSpan.FromSeconds(5));
         _logger.LogInformation("[CLEANUP] Inventory cleared for {Account}.", accountName);
     }
 

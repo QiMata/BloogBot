@@ -86,7 +86,7 @@ public class MapTransitionTests
 
         // Teleport to Ironforge Tinker Town
         await _bot.SendGmChatCommandAsync(account, $".go xyz {IfTramX} {IfTramY} {IfTramZ} {EasternKingdomsMap}");
-        await Task.Delay(4000); // Wait for teleport + area load
+        await _bot.WaitForTeleportSettledAsync(account, IfTramX, IfTramY, timeoutMs: 5000);
 
         // Verify bot arrived in Ironforge
         await _bot.RefreshSnapshotsAsync();
@@ -107,7 +107,10 @@ public class MapTransitionTests
         // MaNGOS should bounce us back to hearthstone (Orgrimmar for Horde chars)
         _output.WriteLine($"[{label}] Teleporting into Deeprun Tram (map 369) — expecting server bounce...");
         await _bot.SendGmChatCommandAsync(account, ".go xyz -4838 -1317 502 369");
-        await Task.Delay(8000); // Wait for bounce to complete (cross-map teleport + server anti-farm delay)
+        // Cross-map bounce — poll for InWorld state (server may bounce us to hearthstone)
+        await _bot.WaitForSnapshotConditionAsync(account,
+            s => s.ScreenState == "InWorld" && s.Player?.Unit?.GameObject?.Base?.Position != null,
+            TimeSpan.FromSeconds(10));
 
         // Verify client is still alive and in-world after the bounce
         await _bot.RefreshSnapshotsAsync();
@@ -137,6 +140,6 @@ public class MapTransitionTests
 
         // Return to Orgrimmar for subsequent tests
         await _bot.SendGmChatCommandAsync(account, ".go xyz 1629 -4373 18 1");
-        await Task.Delay(3000);
+        await _bot.WaitForTeleportSettledAsync(account, 1629f, -4373f);
     }
 }

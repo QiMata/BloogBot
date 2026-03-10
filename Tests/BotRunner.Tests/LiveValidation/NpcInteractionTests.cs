@@ -119,8 +119,8 @@ public class NpcInteractionTests
             if (bgWithFlags.Count > 0) break;
             if (attempt < 2)
             {
-                _output.WriteLine($"  [BG] No NPC flags on attempt {attempt + 1}, retrying in 2s...");
-                await Task.Delay(2000);
+                _output.WriteLine($"  [BG] No NPC flags on attempt {attempt + 1}, retrying in 1s...");
+                await Task.Delay(1000);
             }
         }
 
@@ -200,8 +200,8 @@ public class NpcInteractionTests
             if (units.Count > 0) break;
             if (attempt < 2)
             {
-                _output.WriteLine($"  [{label}] No NPC with flag 0x{npcFlag:X} on attempt {attempt + 1}, retrying in 2s...");
-                await Task.Delay(2000);
+                _output.WriteLine($"  [{label}] No NPC with flag 0x{npcFlag:X} on attempt {attempt + 1}, retrying in 1s...");
+                await Task.Delay(1000);
             }
         }
 
@@ -237,7 +237,7 @@ public class NpcInteractionTests
         {
             _output.WriteLine($"  [{label}] Not strict-alive; reviving before NPC setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
-            await Task.Delay(1200);
+            await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(5));
             await _bot.RefreshSnapshotsAsync();
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
         }
@@ -255,7 +255,7 @@ public class NpcInteractionTests
 
         _output.WriteLine($"  [{label}] Teleporting to setup location (dist={dist:F1}y).");
         await _bot.BotTeleportAsync(account, mapId, x, y, z);
-        await Task.Delay(5000); // Wait for WoW.exe area load + SMSG_UPDATE_OBJECT with NPC flags
+        await _bot.WaitForTeleportSettledAsync(account, x, y);
     }
 
     private async Task EnsureBagHasItemAsync(string account, string label, uint itemId, int addCount)
