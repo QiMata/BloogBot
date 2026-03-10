@@ -288,10 +288,9 @@ public class CombatLoopTests
         await Task.Delay(500);
 
         // FULL COMBAT LIFECYCLE: Auto-attack the mob to death.
-        // Server manages auto-attack via internal swing timer after CMSG_ATTACKSWING.
-        // BG sends periodic MSG_MOVE_HEARTBEAT (500ms) to keep server position fresh.
-        // FG Lua AttackTarget() lets the real WoW client handle heartbeats natively.
-        // GM character has high stats — won't die to a level 1-3 mob.
+        // Auto-attack ONLY swings when in melee range — it does NOT make the character move.
+        // The bot must explicitly Goto the mob to get in range, and keep chasing during combat
+        // as the mob moves around. WaitForMobDeathAsync handles the chase loop.
         //
         // ATTACK LOOP: Up to 3 engagement attempts. Mob may evade on first hit if
         // server pathfinding fails at the mob's spawn position (24s unreachable timeout).
@@ -634,6 +633,7 @@ public class CombatLoopTests
 
     /// <summary>
     /// Waits until the target mob dies (HP reaches 0) from auto-attacks.
+    /// Chases the mob by sending Goto commands when distance exceeds melee range.
     /// Logs HP progression to track the full combat lifecycle.
     /// Returns false on timeout or evade (HP resets to max with TargetGuid cleared).
     /// </summary>
@@ -644,6 +644,7 @@ public class CombatLoopTests
 
         var sw = Stopwatch.StartNew();
         var lastDiagTime = TimeSpan.Zero;
+        var lastChaseTime = TimeSpan.Zero;
         uint lastLoggedHp = initialHealth;
         bool firstDamageConfirmed = false;
 
@@ -660,6 +661,39 @@ public class CombatLoopTests
             {
                 _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: MOB KILLED (HP {initialHealth}→0) after {sw.Elapsed.TotalSeconds:F1}s");
                 return true;
+            }
+
+            // CHASE: Keep the bot in melee range. Auto-attack does NOT move the character —
+            // the bot must explicitly Goto the mob. Send Goto toward mob's current position
+            // every 2s if distance > 3y. After chasing, re-send StartMeleeAttack since the
+            // server may have cancelled the attack when the bot was out of range.
+            var mobPos = target?.GameObject?.Base?.Position;
+            var selfPos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+            if (mobPos != null && selfPos != null && sw.Elapsed - lastChaseTime > TimeSpan.FromSeconds(2))
+            {
+                var chaseDist = LiveBotFixture.Distance2D(selfPos.X, selfPos.Y, mobPos.X, mobPos.Y);
+                if (chaseDist > 3f)
+                {
+                    _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: CHASE — dist={chaseDist:F1}y, moving to ({mobPos.X:F1},{mobPos.Y:F1},{mobPos.Z:F1})");
+                    await _bot.SendActionAsync(account, new ActionMessage
+                    {
+                        ActionType = ActionType.Goto,
+                        Parameters =
+                        {
+                            new RequestParameter { FloatParam = mobPos.X },
+                            new RequestParameter { FloatParam = mobPos.Y },
+                            new RequestParameter { FloatParam = mobPos.Z },
+                            new RequestParameter { FloatParam = 0 },
+                        }
+                    });
+                    // Re-engage auto-attack after chase (server may have sent SMSG_ATTACKSTOP).
+                    await _bot.SendActionAsync(account, new ActionMessage
+                    {
+                        ActionType = ActionType.StartMeleeAttack,
+                        Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
+                    });
+                    lastChaseTime = sw.Elapsed;
+                }
             }
 
             // Log each HP change to track swing-by-swing damage.
