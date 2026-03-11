@@ -29,6 +29,7 @@ Tests party invite/accept flow and group state tracking between FG and BG bots.
 - **AcceptGroupInvite:** `AcceptGroupInviteSequence` -> `_objectManager.AcceptGroupInvite()` -> `CMSG_GROUP_ACCEPT`
 - **DisbandGroup:** `DisbandGroupSequence` -> `_objectManager.DisbandGroup()` -> `CMSG_GROUP_DISBAND`
 - **LeaveGroup:** `LeaveGroupSequence` -> `_objectManager.LeaveGroup()` -> `CMSG_GROUP_DISBAND` (same opcode, different context)
+- **FG readiness gate:** `LiveBotFixture.CheckFgActionableAsync()` now requires both a successful `.targetself` dispatch and a teleport/snapshot round-trip via `BotTeleportAsync(...)` + `WaitForSnapshotConditionAsync(...)` before FG-dependent assertions continue.
 
 **Snapshot Fields:**
 - `Player.PartyLeaderGuid` - `0` if not in group, else the leader GUID
@@ -41,6 +42,8 @@ Tests party invite/accept flow and group state tracking between FG and BG bots.
 ## Current Status
 
 - `2026-03-11` hardening added clean-slate recovery plus an explicit FG action probe so post-herbalism FG restarts skip early instead of cascading into a misleading timeout.
+- `2026-03-11` the FG probe was strengthened further to verify snapshot responsiveness after teleport, which cleared the later `GroupFormationTests`/`NpcInteractionTests`/`SpellCastOnTargetTests` stale-FG cascade.
 - Validation after the change:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed, 1 skipped`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `33 passed, 0 failed, 2 skipped`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~NpcInteractionTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~UnequipItemTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `10 passed, 2 skipped`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `32 passed, 0 failed, 3 skipped`

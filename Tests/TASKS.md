@@ -70,15 +70,15 @@ Master tracker: `MASTER-SUB-021`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-11
-- Active task: `MASTER-SUB-022` live integration test overhaul tranche, now carrying the fishing hardening follow-up and the FG spell-cast blocker.
-- Last delta: `Tests/BotRunner.Tests` hardened fishing with clean-slate setup plus shorter/safer bobber interaction timing, reran the focused fishing slices successfully, and advanced the observed broad-suite boundary past the old fishing failure.
+- Active task: `MASTER-SUB-022` live integration test overhaul tranche, now back on fishing task ownership and the BG trainer handoff after closing the stale-FG spell-cast blocker.
+- Last delta: `Tests/BotRunner.Tests` strengthened the FG responsiveness probe in `LiveBotFixture`, reran the focused late-suite slice plus `SpellCastOnTargetTests`, and restored a green broad `LiveValidation` run.
 - Pass result: `delta shipped`
 - Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
   - `Tests/TASKS.md`
   - `Tests/BotRunner.Tests/TASKS.md`
-  - `Tests/BotRunner.Tests/LiveValidation/`
   - `Tests/BotRunner.Tests/LiveValidation/docs/`
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~TalentAllocationTests|FullyQualifiedName~UnequipItemTests|FullyQualifiedName~VendorBuySellTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

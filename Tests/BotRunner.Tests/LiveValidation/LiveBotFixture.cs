@@ -56,6 +56,8 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     private readonly Dictionary<string, int> _lastPrintedErrorCountByAccount = new(StringComparer.OrdinalIgnoreCase);
 
+    private bool _fgResponsive = true;
+
 
     public bool IsReady { get; private set; }
 
@@ -151,7 +153,7 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// Tests should use this instead of <c>ForegroundBot != null</c> to avoid cascading failures
     /// when FG WoW.exe crashed and relaunched but is stuck in dead/ghost/login state.
     /// </summary>
-    public bool IsFgActionable => ForegroundBot != null && IsStrictAlive(ForegroundBot);
+    public bool IsFgActionable => _fgResponsive && ForegroundBot != null && IsStrictAlive(ForegroundBot);
 
     /// <summary>
     /// Probes FG actionability by sending a harmless .targetself command and checking the result.
@@ -160,11 +162,15 @@ public partial class LiveBotFixture : IAsyncLifetime
     public async Task<bool> CheckFgActionableAsync()
     {
         if (FgAccountName == null || ForegroundBot == null)
+        {
+            _fgResponsive = false;
             return false;
+        }
 
         await RefreshSnapshotsAsync();
         if (ForegroundBot == null || !IsStrictAlive(ForegroundBot))
         {
+            _fgResponsive = false;
             var hp = ForegroundBot?.Player?.Unit?.Health ?? 0;
             _logger.LogWarning("[FG-PROBE] FG not strict-alive (health={Health})", hp);
             return false;
@@ -177,10 +183,68 @@ public partial class LiveBotFixture : IAsyncLifetime
             Parameters = { new RequestParameter { StringParam = ".targetself" } }
         });
 
-        var ok = result == ResponseResult.Success;
-        if (!ok)
-            _logger.LogWarning("[FG-PROBE] Action forwarding returned {Result} — FG is not actionable", result);
-        return ok;
+        if (result != ResponseResult.Success)
+        {
+            _fgResponsive = false;
+            _logger.LogWarning("[FG-PROBE] Action forwarding returned {Result}; FG is not actionable", result);
+            return false;
+        }
+
+        var currentPos = ForegroundBot.Player?.Unit?.GameObject?.Base?.Position;
+        var probeZ = currentPos != null && Math.Abs(currentPos.Z - SafeZoneZ) <= 5f ? 15f : SafeZoneZ;
+
+        await BotTeleportAsync(FgAccountName, SafeZoneMap, SafeZoneX, SafeZoneY, probeZ);
+        var probeSettled = await WaitForSnapshotConditionAsync(
+            FgAccountName,
+            snap =>
+            {
+                if (!IsStrictAlive(snap))
+                    return false;
+
+                var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+                return pos != null && Distance3D(pos.X, pos.Y, pos.Z, SafeZoneX, SafeZoneY, probeZ) <= 8f;
+            },
+            TimeSpan.FromSeconds(6),
+            pollIntervalMs: 500,
+            progressLabel: "FG teleport probe");
+
+        if (!probeSettled)
+        {
+            _fgResponsive = false;
+            var fgSnap = await GetSnapshotAsync(FgAccountName);
+            var pos = fgSnap?.Player?.Unit?.GameObject?.Base?.Position;
+            _logger.LogWarning("[FG-PROBE] FG failed teleport responsiveness probe. pos=({X:F1},{Y:F1},{Z:F1}) target=({TargetX:F1},{TargetY:F1},{TargetZ:F1})",
+                pos?.X ?? 0, pos?.Y ?? 0, pos?.Z ?? 0, SafeZoneX, SafeZoneY, probeZ);
+            return false;
+        }
+
+        if (Math.Abs(probeZ - SafeZoneZ) > 0.1f)
+        {
+            await BotTeleportAsync(FgAccountName, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
+            var restored = await WaitForSnapshotConditionAsync(
+                FgAccountName,
+                snap =>
+                {
+                    if (!IsStrictAlive(snap))
+                        return false;
+
+                    var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+                    return pos != null && Distance3D(pos.X, pos.Y, pos.Z, SafeZoneX, SafeZoneY, SafeZoneZ) <= 8f;
+                },
+                TimeSpan.FromSeconds(6),
+                pollIntervalMs: 500,
+                progressLabel: "FG teleport probe restore");
+
+            if (!restored)
+            {
+                _fgResponsive = false;
+                _logger.LogWarning("[FG-PROBE] FG failed restore leg of teleport responsiveness probe.");
+                return false;
+            }
+        }
+
+        _fgResponsive = true;
+        return true;
     }
 
 

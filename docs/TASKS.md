@@ -37,7 +37,7 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 | 0A.3 | **Consumable/buff consolidation.** Replace `ConsumableUsageTests.cs` + `BuffDismissTests.cs` with `BuffAndConsumableTests.cs` and assert add-item, use-item, aura, and dismissal metrics. | `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs` | **Done** (2026-03-10 session 54) |
 | 0A.4 | **Move range coverage to deterministic tests.** Keep combat range formulas in `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs`; remove the live `CombatRangeTests.cs` suite. | `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs` | **Done** (2026-03-10 session 54) |
 | 0A.5 | **Remove remaining direct `.gm on` / `.respawn` usage** from `GatheringProfessionTests.cs`, `MapTransitionTests.cs`, `LootCorpseTests.cs`, and `StarterQuestTests.cs`, then update their docs. | `Tests/BotRunner.Tests/LiveValidation/` | **Done** (2026-03-11 session 55) |
-| 0A.6 | **Task-drive the major behavior suites.** Replace combat, corpse recovery, navigation, questing, gathering, and economy live coverage with BotTask-based tests that link directly to owning task logic. | `Tests/BotRunner.Tests/LiveValidation/`, `Exports/BotRunner/Tasks/` | In progress - combat/quest/navigation slices are green, the NPC contract now includes task-owned visit actions, fishing now reaches a real catch in the latest broad-run log after clean-slate hardening, trainer learning remains isolated as `BRT-OVR-006`, and the next concrete blocker is FG Battle Shout / late-suite completion |
+| 0A.6 | **Task-drive the major behavior suites.** Replace combat, corpse recovery, navigation, questing, gathering, and economy live coverage with BotTask-based tests that link directly to owning task logic. | `Tests/BotRunner.Tests/LiveValidation/`, `Exports/BotRunner/Tasks/` | In progress - combat/quest/navigation slices are green, the NPC contract now includes task-owned visit actions, the broad `LiveValidation` suite is green again after strengthening FG responsiveness probes, and the active blockers are fishing task ownership/packet timing plus the BG trainer handoff under `BRT-OVR-006` |
 
 ---
 
@@ -70,9 +70,9 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 **Approach:** Use FG packet capture to observe a successful FG fishing session, then compare the exact cast/channel/bobber timing against BG. The cast gate is fixed; the remaining work is parity hardening and eventual task ownership.
 
 Current observed boundary from the 2026-03-11 live suite:
-- `FishingProfessionTests` still proves the old cast gate is fixed in focused runs, but it failed again in the latest broad `LiveValidation` rerun.
+- `FishingProfessionTests` still proves the old cast gate is fixed in focused runs and now stays green inside the current broad `LiveValidation` pass as well.
 - BG now resolves the castable fishing rank from the known-spell list and handles server rank replacement via `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`.
-- The remaining fishing work is parity/timing hardening, broad-suite stability, and a future `FishingTask` conversion, not the old `_objectManager.CanCastSpell(7620, 0)` cast gate.
+- The remaining fishing work is parity/timing hardening and a future `FishingTask` conversion, not the old `_objectManager.CanCastSpell(7620, 0)` cast gate.
 
 | # | Task | Owner | Status |
 |---|------|-------|--------|
@@ -184,20 +184,18 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-11 (session 57)
-- **Current work:** P0A - Live Integration Test Overhaul. The current pass hardened fishing setup/runtime behavior, moved the latest broad-run evidence past the old fishing failure, and left FG self-buff / late-suite completion as the next concrete blocker.
+- **Last updated:** 2026-03-11 (session 58)
+- **Current work:** P0A - Live Integration Test Overhaul. The current pass hardened FG responsiveness probing in the live fixture, cleared the stale-FG late-suite cascade, and returned the suite focus to fishing task ownership and the BG trainer handoff.
 - **Completed this session:**
-  1. **Fishing runtime hardening landed:** BG fishing now starts from `EnsureCleanSlateAsync()`, fishing casts land closer (`14y`), and bobber auto-use now forces a stop packet before `CMSG_GAMEOBJ_USE`.
-  2. **Focused fishing validation is green:** the isolated fishing slice passed, and the paired `FishingProfessionTests|SpellCastOnTargetTests` slice passed after the runtime changes.
-  3. **Broad fishing evidence improved:** the latest broad rerun still exited nonzero, but the refreshed `FishingProfessionTests.log` shows a successful Ratchet catch (`CustomAnim -> GAMEOBJ_USE -> loot response -> item 20708 pushed`), so the current blocker has moved forward to the late-suite/FG self-buff path.
+  1. **FG actionability probe strengthened:** `LiveBotFixture.CheckFgActionableAsync()` now requires both successful `.targetself` forwarding and a teleport/snapshot round-trip before FG-sensitive suites proceed.
+  2. **Late-suite regression slice is green:** the focused `GatheringProfessionTests|GroupFormationTests|NpcInteractionTests|QuestInteractionTests|SpellCastOnTargetTests|UnequipItemTests` slice passed.
+  3. **Broad suite is green again:** the full `LiveValidation` run passed `32` with `3` expected skips, so the old Battle Shout blocker is closed as a stale-fixture issue rather than a spell-cast logic bug.
 - **Commands run + outcomes:**
   1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded.
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
-  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 2 passed.
-  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 2 passed, 1 skipped.
-  5. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~CombatLoopTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> fishing stayed green; `CombatLoopTests` failed separately.
-  6. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> command exited nonzero; fresh logs show fishing succeeded and the remaining late-suite failure still needs isolation.
-- **Next:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~TalentAllocationTests|FullyQualifiedName~UnequipItemTests|FullyQualifiedName~VendorBuySellTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~NpcInteractionTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~UnequipItemTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 10 passed, 2 skipped.
+  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
+  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 32 passed, 0 failed, 3 skipped.
+- **Next:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (Session 53 Archive)
 - **Last updated:** 2026-03-10 (session 53)

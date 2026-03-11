@@ -8,7 +8,7 @@ Tests spell casting via ActionType dispatch: learn spell, grant resources, cast,
 
 **Bots:** BG (TESTBOT2) + FG (TESTBOT1)
 
-**Fixture Setup:** `EnsureCleanSlateAsync()`.
+**Fixture Setup:** `EnsureCleanSlateAsync()`. FG coverage only runs while `LiveBotFixture.IsFgActionable` remains true after the suite's earlier FG probes.
 
 **Test Flow (per bot):**
 
@@ -44,13 +44,11 @@ Tests spell casting via ActionType dispatch: learn spell, grant resources, cast,
 
 ## Current Status
 
-`2026-03-11` focused parity still works well enough for the baseline design, but the broad suite exposed an FG-only stability gap:
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `30 passed, 2 failed, 3 skipped`
-- one of the two failures is `SpellCastOnTargetTests.CastSpell_BattleShout_AuraApplied`
-- in that failure, BG cast Battle Shout and detected aura `6673` after `310ms`
-- FG dispatched `CastSpell` successfully, but the 8-second aura poll never observed `6673`; the final FG aura list only contained `[2367]`
+`2026-03-11` the late-suite Battle Shout failure was resolved as a fixture responsiveness issue rather than a `CastSpell` logic regression:
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `1 passed`
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `32 passed, 0 failed, 3 skipped`
+- root cause: earlier suites could leave FG action forwarding alive while snapshot/world-state updates were stale; strengthening `LiveBotFixture.CheckFgActionableAsync()` to require `.targetself` plus a teleport/snapshot round-trip removed that stale-FG state before `CastSpell_BattleShout_AuraApplied`
 
 Current boundary:
-- the BG packet path still looks healthy for this test
-- the unstable leg is the FG `CastSpellByName("Battle Shout")` plus snapshot-aura observation path during the broad suite order
-- this is now tracked under `BRT-OVR-007`
+- the BG packet path and the FG Lua `CastSpellByName("Battle Shout")` path are currently green for this baseline
+- remaining overhaul work is in fishing task ownership/packet timing and the BG trainer handoff, not in the Battle Shout baseline
