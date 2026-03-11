@@ -620,6 +620,8 @@ namespace WoWSharpClient.Handlers
                 if (anim == 0 && (isPlayerCreated || isFallbackBobber))
                 {
                     Log.Information("[FishBite] Bobber 0x{Guid:X} — auto-interacting", guid);
+                    // Bobber use is server-side sensitive to stale movement state after teleports.
+                    ((GameData.Core.Interfaces.IObjectManager)om).ForceStopImmediate();
                     om.InteractWithGameObject(guid);
 
                     // Auto-loot the catch after server processes interaction

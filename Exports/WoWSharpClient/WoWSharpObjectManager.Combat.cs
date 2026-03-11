@@ -96,7 +96,9 @@ namespace WoWSharpClient
         // Fishing spell IDs that require TARGET_FLAG_DEST_LOCATION instead of TARGET_FLAG_SELF.
         // Fishing casts a bobber at a location in front of the player — self-targeting causes NOT_FISHABLE.
         private static readonly HashSet<int> _fishingSpellIds = [7620, 7731, 7732, 18248, 33095];
-        private const float FishingBobberDistance = 18f; // yards in front of player
+        // Ratchet's known-good shoreline casts land the bobber around 14y out.
+        // Pushing it closer keeps GAMEOBJ_USE comfortably inside interaction range.
+        private const float FishingBobberDistance = 14f; // yards in front of player
 
         public void CastSpell(int spellId, int rank = -1, bool castOnSelf = false)
         {

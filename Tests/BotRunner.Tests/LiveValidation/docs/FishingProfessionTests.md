@@ -47,21 +47,27 @@ The live diagnostics record:
 - `ResolveCastableFishingSpellId(...)` correctly prefers the highest currently-known fishing rank
 - the live run reaches `CastSpellAtLocation()`, channel start, bobber creation, and auto-loot/catch detection
 - the focused fishing slice still passes in isolation
+- BG fishing setup now starts with `EnsureCleanSlateAsync(...)`, which aligns it with the other live suites and removes prior-test position/death leakage before fishing gear and spell sync are applied
 
 The pass condition no longer depends only on RNG skill-up. A run now succeeds if BG either:
 - catches loot and the bag contents change
 - or gains fishing skill during the cast/catch cycle
 
 Latest broad-suite boundary:
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `30 passed, 2 failed, 3 skipped`
-- one of the two failures is `Fishing_CatchFish_SkillIncreases`
-- in that full-suite run, BG exhausted all four shoreline positions without a catch and finished at skill `1 -> 1`
-- the final logged cast showed `SMSG_SPELL_START`, `SMSG_SPELL_GO`, `MSG_CHANNEL_START`, then immediate channel loss with no sustained bobber/catch signal
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `1 passed`
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed`
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` still exited nonzero, but the fresh `TestResults/LiveLogs/FishingProfessionTests.log` no longer shows a fishing failure:
+  - Ratchet dock cast started a real channel
+  - bobber custom anim fired
+  - BG sent `CMSG_GAMEOBJ_USE` after `ForceStopImmediate()`
+  - MaNGOS returned `SMSG_LOOT_RESPONSE`
+  - item `20708` was pushed into bags and the bobber was released
 
-That means `BRT-OVR-004` is now both a task-ownership follow-up and a broad-suite stability issue.
+That means the current slice moved the observed broad-suite boundary forward: fishing is no longer the failing symptom in the latest live logs, but `BRT-OVR-004` is still open until the full suite finishes green and the test is converted to task-owned coverage.
 
 ## Overhaul Notes
 
 - This suite still needs to become the planned `FishingTaskTests` coverage so the behavior is driven through a dedicated `FishingTask`.
-- The next fishing-focused pass should compare the isolated pass against the broad-suite failure to explain why BG loses channel/bobber state after earlier live tests.
+- The next fishing-focused pass should capture the same successful Ratchet packet/timing sequence from FG and compare it to the current BG log rather than re-debugging the old cast gate.
 - FG/BG packet-timing capture around bobber spawn, custom anim, and auto-interact timing is still the required reference path instead of re-debugging the old cast gate.

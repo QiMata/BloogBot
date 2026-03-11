@@ -40,6 +40,12 @@ Verification runs on the current pass:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 33 passed, 0 failed, 2 skipped.
 - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 30 passed, 2 failed, 3 skipped.
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 2 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 2 passed, 1 skipped.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~CombatLoopTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> fishing stayed green; `CombatLoopTests` failed separately.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> command still exited nonzero, but the refreshed `FishingProfessionTests.log` shows a successful Ratchet catch (`CustomAnim -> ForceStopImmediate -> CMSG_GAMEOBJ_USE -> SMSG_LOOT_RESPONSE -> item 20708 pushed`), so the suite now progresses beyond the fishing failure.
 
 Current live-suite boundary:
 - The major behavior slice reran green (`12 passed`) after tightening melee stick distance in `BuildStartMeleeAttackSequence(...)`.
@@ -49,11 +55,11 @@ Current live-suite boundary:
 - `GroupFormationTests` now starts from `EnsureCleanSlateAsync()` plus `CheckFgActionableAsync()` so prior FG restarts skip early instead of cascading into timeout noise.
 - The root FG remote-teleport instability remains tracked under `FG-CRASH-TELE`; it is no longer misattributed to test-spawned game objects or allowed to cascade into unrelated live suites.
 - `Trainer_LearnAvailableSpells` now takes the task-owned `VisitTrainer -> TrainerVisitTask -> LearnAllAvailableSpellsAsync(...)` path, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`; that gap is tracked under `BRT-OVR-006`.
-- The broad `LiveValidation` run is not green at the moment. The current blockers are:
-  - `FishingProfessionTests.Fishing_CatchFish_SkillIncreases`
-  - `SpellCastOnTargetTests.CastSpell_BattleShout_AuraApplied`
-- Fishing-specific follow-up work now needs both the planned `FishingTaskTests` conversion and broad-suite stability work around channel/bobber timing.
-- The spell-cast baseline now also needs focused FG isolation so the full suite does not fail on the Battle Shout aura path.
+- BG fishing now starts from `EnsureCleanSlateAsync()` before spell sync and gear setup, which removed one source of prior-test contamination.
+- The latest broad rerun did not produce a fresh fishing failure. Its updated fishing log shows a successful Ratchet catch sequence through bobber custom anim, `GAMEOBJ_USE`, loot response, and bag delta.
+- The broad `LiveValidation` run is still not green, but the next concrete blocker to isolate is the late-suite FG/self-buff path rather than the old fishing cast/bobber failure.
+- Fishing-specific follow-up work now shifts back to FG/BG packet-timing capture and eventual `FishingTaskTests` ownership instead of rediscovering the cast gate.
+- The spell-cast baseline still needs focused FG isolation so the full suite does not fail on the Battle Shout aura path.
 
 ## Core Principles
 

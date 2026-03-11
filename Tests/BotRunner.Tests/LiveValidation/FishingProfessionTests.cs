@@ -112,6 +112,7 @@ public class FishingProfessionTests
             _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccount})");
 
         // --- Prepare both bots (learn fishing + equip pole) ---
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
         await PrepareBot(bgAccount, "BG");
         if (fgAccount != null)
             await PrepareFgReferenceBotAsync(fgAccount);
