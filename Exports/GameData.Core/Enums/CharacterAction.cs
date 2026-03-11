@@ -80,4 +80,7 @@ public enum CharacterAction
     GatherNode,         // Gather a resource node (herb/ore) by GUID.
     SendChat,           // Send a chat message (used for GM commands).
     SetFacing,          // Set the character's facing orientation (radians).
+    VisitVendor,        // Queue VendorVisitTask for nearby vendor automation.
+    VisitTrainer,       // Queue TrainerVisitTask for nearby class-trainer automation.
+    VisitFlightMaster,  // Queue FlightMasterVisitTask for nearby taxi-node discovery.
 }

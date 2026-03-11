@@ -41,3 +41,16 @@ Tests spell casting via ActionType dispatch: learn spell, grant resources, cast,
 **FG vs BG Critical Difference:** FG `CastSpell(int)` is a no-op — BotRunnerService must resolve spell ID to name via spell DB for Lua `CastSpellByName()`. BG sends CMSG_CAST_SPELL with int directly.
 
 **Assertions:** Spell learned. Aura appears after CastSpell dispatch. Aura absent after cleanup.
+
+## Current Status
+
+`2026-03-11` focused parity still works well enough for the baseline design, but the broad suite exposed an FG-only stability gap:
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `30 passed, 2 failed, 3 skipped`
+- one of the two failures is `SpellCastOnTargetTests.CastSpell_BattleShout_AuraApplied`
+- in that failure, BG cast Battle Shout and detected aura `6673` after `310ms`
+- FG dispatched `CastSpell` successfully, but the 8-second aura poll never observed `6673`; the final FG aura list only contained `[2367]`
+
+Current boundary:
+- the BG packet path still looks healthy for this test
+- the unstable leg is the FG `CastSpellByName("Battle Shout")` plus snapshot-aura observation path during the broad suite order
+- this is now tracked under `BRT-OVR-007`

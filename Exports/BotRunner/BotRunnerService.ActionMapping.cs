@@ -81,6 +81,9 @@ namespace BotRunner
             Communication.ActionType.GatherNode => CharacterAction.GatherNode,
             Communication.ActionType.SendChat => CharacterAction.SendChat,
             Communication.ActionType.SetFacing => CharacterAction.SetFacing,
+            Communication.ActionType.VisitVendor => CharacterAction.VisitVendor,
+            Communication.ActionType.VisitTrainer => CharacterAction.VisitTrainer,
+            Communication.ActionType.VisitFlightMaster => CharacterAction.VisitFlightMaster,
             _ => null,
         };
 

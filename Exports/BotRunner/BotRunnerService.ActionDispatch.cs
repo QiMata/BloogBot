@@ -57,6 +57,16 @@ namespace BotRunner
                         builder.Splice(BuildSelectTaxiNodeSequence((int)actionEntry.Item2[0]));
                         break;
 
+                    case CharacterAction.VisitFlightMaster:
+                        builder.Do("Queue Flight Master Visit Task", time =>
+                        {
+                            // LiveValidation/NpcInteractionTests uses this task-owned path for BG taxi discovery coverage.
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FlightMasterVisitTask)
+                                _botTasks.Push(new Tasks.FlightMasterVisitTask(context));
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+
                     case CharacterAction.AcceptQuest:
                         // With params: [0]=npcGuid, [1]=questId — packet-based via AgentFactory
                         // Without params: legacy QuestFrame path (FG only)
@@ -125,6 +135,16 @@ namespace BotRunner
                         break;
                     case CharacterAction.TrainTalent:
                         builder.Splice(BuildLearnTalentSequence((int)actionEntry.Item2[0]));
+                        break;
+
+                    case CharacterAction.VisitTrainer:
+                        builder.Do("Queue Trainer Visit Task", time =>
+                        {
+                            // LiveValidation/NpcInteractionTests uses this task-owned path for BG trainer coverage.
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.TrainerVisitTask)
+                                _botTasks.Push(new Tasks.TrainerVisitTask(context));
+                            return BehaviourTreeStatus.Success;
+                        });
                         break;
 
                     case CharacterAction.OfferTrade:
@@ -308,6 +328,15 @@ namespace BotRunner
                         {
                             builder.Splice(RepairAllItemsSequence);
                         }
+                        break;
+
+                    case CharacterAction.VisitVendor:
+                        builder.Do("Queue Vendor Visit Task", time =>
+                        {
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.VendorVisitTask)
+                                _botTasks.Push(new Tasks.VendorVisitTask(context));
+                            return BehaviourTreeStatus.Success;
+                        });
                         break;
 
                     case CharacterAction.DismissBuff:

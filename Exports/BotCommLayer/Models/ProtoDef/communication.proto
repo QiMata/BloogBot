@@ -99,6 +99,9 @@ enum ActionType {
     GATHER_NODE = 61;
     SEND_CHAT = 62;
     SET_FACING = 63;
+    VISIT_VENDOR = 64;
+    VISIT_TRAINER = 65;
+    VISIT_FLIGHT_MASTER = 66;
 }
 
 message ActionMap {

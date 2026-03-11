@@ -60,20 +60,41 @@ Master tracker: `MASTER-SUB-022`
 
 2. [ ] `BRT-OVR-002` Replace setup-only live coverage with task-driven behavior tests.
 - Problem: the remaining live suite still overuses raw action dispatch and setup validation instead of exercising the BotTask stack.
-- Target files: `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`, `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`, `Tests/BotRunner.Tests/LiveValidation/NavigationTests.cs`, `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`, `Exports/BotRunner/Tasks/`.
-- Required change: rewrite combat, corpse recovery, navigation, and quest tests to assert on task outcomes and snapshot metrics rather than reproducing task logic inline.
+- Target files: `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`, `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`, `Tests/BotRunner.Tests/LiveValidation/NavigationTests.cs`, `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`, `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`, `Exports/BotRunner/Tasks/`.
+- Required change: rewrite combat, corpse recovery, navigation, quest, and NPC tests to assert on task outcomes and snapshot metrics rather than reproducing task logic inline.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Acceptance criteria: each rewritten suite links directly to the owning task logic and records deterministic outcome metrics.
 
 3. [ ] `BRT-OVR-004` Convert the fishing baseline into task-linked live coverage and capture FG timing references.
-- Problem: `FishingProfessionTests` now passes as a BG-first baseline, but it still drives direct `CastSpell` actions instead of a dedicated `FishingTask` and it does not yet assert FG/BG packet-timing parity.
+- Problem: `FishingProfessionTests` can pass in isolation as a BG-first baseline, but it still drives direct `CastSpell` actions instead of a dedicated `FishingTask`, it does not yet assert FG/BG packet-timing parity, and it still fails in the broad `LiveValidation` run.
 - Target files: `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`, `Exports/BotRunner/Tasks/`, FG packet-capture logs.
 - Required change:
   1. Keep the passing BG fishing baseline green while introducing task-linked ownership for the fishing loop.
   2. Record FG packet/timing evidence for cast -> channel -> bobber -> custom anim -> loot.
   3. Tie the live assertions back to the future `FishingTask` implementation and the runtime packet handlers it depends on.
+  4. Explain and fix the broad-suite failure mode where BG exhausts all shoreline locations without a sustained channel/bobber/catch signal.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-- Acceptance criteria: fishing coverage stays green, documentation points to the owning runtime logic, and the next implementation slice has concrete FG timing evidence instead of rediscovering the cast/bobber sequence.
+- Acceptance criteria: fishing coverage stays green in isolation and in the broad suite, documentation points to the owning runtime logic, and the next implementation slice has concrete FG timing evidence instead of rediscovering the cast/bobber sequence.
+
+4. [ ] `BRT-OVR-006` Fix BG trainer visit gossip-to-trainer-service handoff for task-owned NPC coverage.
+- Problem: `NpcInteractionTests.Trainer_LearnAvailableSpells` now dispatches `ActionType.VisitTrainer`, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`, so the task-owned trainer path produces no spell-count or coinage delta.
+- Target files: `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/docs/NpcInteractionTests.md`, `Exports/BotRunner/Tasks/TrainerVisitTask.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`, `Exports/WoWSharpClient/Networking/ClientComponents/GossipNetworkClientComponent.cs`, `Exports/WoWSharpClient/Networking/ClientComponents/TrainerNetworkClientComponent.cs`.
+- Required change:
+  1. Preserve the task-owned `VisitTrainer` action contract already added to `communication.proto`, `CharacterAction`, and `BotRunnerService`.
+  2. Make the BG trainer path reliably surface trainer services on this Mangos core.
+  3. Replace the current tracked skip with deterministic spell, coinage, and latency assertions.
+- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Acceptance criteria: the trainer test learns a real spell through `TrainerVisitTask`, spends copper, and the focused NPC/action contract slice passes without skip.
+
+5. [ ] `BRT-OVR-007` Stabilize FG self-buff `CastSpell` coverage in the broad live suite.
+- Problem: `SpellCastOnTargetTests.CastSpell_BattleShout_AuraApplied` still fails in the full `LiveValidation` run even though BG succeeds and FG dispatch returns `Success`. The current failure leaves FG without aura `6673` during the 8-second observation window.
+- Target files: `Tests/BotRunner.Tests/LiveValidation/SpellCastOnTargetTests.cs`, `Tests/BotRunner.Tests/LiveValidation/docs/SpellCastOnTargetTests.md`, `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`, FG spell-cast/Lua path.
+- Required change:
+  1. Isolate the FG-only failure with explicit cast, aura, and timing diagnostics.
+  2. Determine whether the missing aura is a late cast, a stale self-target/resource issue, or a snapshot propagation gap.
+  3. Make the suite pass deterministically or skip on a narrowly-scoped documented FG precondition instead of failing the broad run.
+- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Acceptance criteria: focused spell-cast coverage is deterministic and the broad suite no longer fails on the FG Battle Shout aura check.
 
 ## Completed Legacy Tasks
 
@@ -148,33 +169,42 @@ Master tracker: `MASTER-SUB-022`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-11
-- Active task: `BRT-OVR-002` task-drive the remaining major behavior suites, with `BRT-OVR-004` queued for the fishing-task/timing follow-up.
-- Last delta: hardened `GatheringProfessionTests` and `GroupFormationTests` so the broad live suite no longer cascades behind FG herbalism instability, while keeping the no-`.gobject add` proof and routing the root FG teleport crash to `FG-CRASH-TELE`.
+- Active task: `BRT-OVR-002` task-drive the remaining major behavior suites, with `BRT-OVR-004`, `BRT-OVR-006`, and `BRT-OVR-007` now the concrete live blockers exposed by the latest broad run.
+- Last delta: added the task-owned NPC visit action contract (`VisitVendor`, `VisitTrainer`, `VisitFlightMaster`), rewrote `Trainer_LearnAvailableSpells` around `VisitTrainer -> TrainerVisitTask`, isolated the BG trainer-service gap as a tracked skip, and then reran the broad suite to expose the remaining fishing + FG spell-cast blockers.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/GroupFormationTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/GroupFormationTests.md`
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/Communication.cs`
+  - `Exports/GameData.Core/Enums/CharacterAction.cs`
+  - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+  - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/NpcInteractionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SpellCastOnTargetTests.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
   - `Tests/BotRunner.Tests/TASKS.md`
-  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
 - Commands run:
   1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore`
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Outcomes:
-  - `Tests/BotRunner.Tests` build succeeded with warnings only.
-  - Focused `GatheringProfessionTests|GroupFormationTests` rerun is clean: 2 passed, 1 skipped (`Mining_GatherCopperVein_SkillIncreases`).
-  - Broad `LiveValidation` rerun is clean again: 33 passed, 0 failed, 2 skipped.
-  - Gathering now keeps BG as the hard assertion path while logging FG teleport/crash fallout as reference-only evidence.
-  - Group formation now uses `EnsureCleanSlateAsync()` plus a live FG action probe, which prevents post-herbalism FG restarts from degrading into misleading invite timeouts.
+  - `Tests/BotRunner.Tests` build succeeded.
+  - `ActionForwardingContractTests|NpcInteractionTests` passed `28`, skipped `1` (`Trainer_LearnAvailableSpells`).
+  - `QuestInteractionTests|StarterQuestTests|NpcInteractionTests` passed `7`, skipped `1` (`Trainer_LearnAvailableSpells`).
+  - Broad `LiveValidation` now reports `30 passed, 2 failed, 3 skipped`.
+  - The trainer skip is intentional and newly tracked under `BRT-OVR-006`: BG dispatches `VisitTrainer` successfully, but gossip closes without `SMSG_TRAINER_LIST`, so there is no spell-count or coinage delta yet.
+  - The broad-suite blockers are `FishingProfessionTests.Fishing_CatchFish_SkillIncreases` and `SpellCastOnTargetTests.CastSpell_BattleShout_AuraApplied`.
   - The natural-node finding remains unchanged: no active `.gobject add` path is present, and the reported Silverleaf is the existing DB row `gameobject.guid=1641` / `id=1618` with `gameobject_template.faction=0`.
 - Blockers:
-  - `QuestInteractionTests`, `StarterQuestTests`, and `NpcInteractionTests` are still action-driven baselines rather than BotTask-owned coverage under `BRT-OVR-002`.
-  - `FishingProfessionTests` is still a live baseline, not yet the planned `FishingTaskTests` coverage under `BRT-OVR-004`.
-  - The root FG remote-teleport crash remains under `FG-CRASH-TELE`, but it no longer blocks the broad live suite.
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  - `QuestInteractionTests`, `StarterQuestTests`, and the vendor/flight portions of `NpcInteractionTests` are still not fully task-owned under `BRT-OVR-002`.
+  - `FishingProfessionTests` still fails in the broad suite under `BRT-OVR-004`.
+  - `SpellCastOnTargetTests` still fails in the broad suite on the FG Battle Shout aura path under `BRT-OVR-007`.
+  - The root FG remote-teleport crash remains under `FG-CRASH-TELE`.
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

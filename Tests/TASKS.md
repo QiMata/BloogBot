@@ -70,16 +70,15 @@ Master tracker: `MASTER-SUB-021`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-11
-- Active task: `MASTER-SUB-022` live integration test overhaul tranche, now back on `BRT-OVR-002` after stabilizing the broad suite against FG herbalism/group fallout.
-- Last delta: `Tests/BotRunner.Tests` hardened gathering to keep BG as the authoritative pass/fail path, added clean-slate + FG action probes to group formation, and reran the broad `LiveValidation` suite green while preserving the no-`.gobject add` proof.
+- Active task: `MASTER-SUB-022` live integration test overhaul tranche, now carrying the new NPC action-contract work plus the exposed fishing, trainer, and FG spell-cast blockers.
+- Last delta: `Tests/BotRunner.Tests` added task-owned NPC visit actions, rewired the trainer live test through `VisitTrainer -> TrainerVisitTask`, isolated the BG trainer-service gap as a tracked skip, and then reran the broad live suite to expose fishing and FG self-buff failures.
 - Pass result: `delta shipped`
 - Files changed:
   - `Tests/TASKS.md`
   - `Tests/BotRunner.Tests/TASKS.md`
-  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
   - `Tests/BotRunner.Tests/LiveValidation/`
   - `Tests/BotRunner.Tests/LiveValidation/docs/`
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

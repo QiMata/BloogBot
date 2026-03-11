@@ -63,7 +63,7 @@ namespace Communication {
             "ck5hbWUYCCABKAkSEwoLc2NyZWVuU3RhdGUYCSABKAkSKAoMbW92ZW1lbnRE",
             "YXRhGAogASgLMhIuZ2FtZS5Nb3ZlbWVudERhdGESFwoPcGFydHlMZWFkZXJH",
             "dWlkGAsgASgEEhoKEnJlY2VudENoYXRNZXNzYWdlcxgMIAMoCRIUCgxyZWNl",
-            "bnRFcnJvcnMYDSADKAkqlAkKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdP",
+            "bnRFcnJvcnMYDSADKAkq0gkKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdP",
             "VE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBADEhQK",
             "EFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1ERUNM",
             "SU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRFX1FV",
@@ -89,12 +89,14 @@ namespace Communication {
             "VEVfQ0hBUkFDVEVSEDcSDwoLRU5URVJfV09STEQQOBIPCgtMT09UX0NPUlBT",
             "RRA5EhIKDlJFTEVBU0VfQ09SUFNFEDoSEwoPUkVUUklFVkVfQ09SUFNFEDsS",
             "DwoLU0tJTl9DT1JQU0UQPBIPCgtHQVRIRVJfTk9ERRA9Eg0KCVNFTkRfQ0hB",
-            "VBA+Eg4KClNFVF9GQUNJTkcQPyovCg1Cb3RSdW5uZXJUeXBlEg4KCkZPUkVH",
-            "Uk9VTkQQABIOCgpCQUNLR1JPVU5EEAEqdgoPU3RhdGVDaGFuZ2VUeXBlEggK",
-            "BE5BTUUQABIMCghPUEVOTkVTUxABEhUKEUNPTlNDSUVOVElPVVNORVNTEAIS",
-            "EAoMRVhUUkFWRVJTSU9OEAMSEQoNQUdSRUVBQkxFTkVTUxAEEg8KC05FVVJP",
-            "VElDSVNNEAUqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZB",
-            "SUxVUkUQARIPCgtJTl9QUk9HUkVTUxACYgZwcm90bzM="));
+            "VBA+Eg4KClNFVF9GQUNJTkcQPxIQCgxWSVNJVF9WRU5ET1IQQBIRCg1WSVNJ",
+            "VF9UUkFJTkVSEEESFwoTVklTSVRfRkxJR0hUX01BU1RFUhBCKi8KDUJvdFJ1",
+            "bm5lclR5cGUSDgoKRk9SRUdST1VORBAAEg4KCkJBQ0tHUk9VTkQQASp2Cg9T",
+            "dGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAAEgwKCE9QRU5ORVNTEAESFQoRQ09O",
+            "U0NJRU5USU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJT04QAxIRCg1BR1JFRUFC",
+            "TEVORVNTEAQSDwoLTkVVUk9USUNJU00QBSo7Cg5SZXNwb25zZVJlc3VsdBIL",
+            "CgdTVUNDRVNTEAASCwoHRkFJTFVSRRABEg8KC0lOX1BST0dSRVNTEAJiBnBy",
+            "b3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -179,6 +181,9 @@ namespace Communication {
     [pbr::OriginalName("GATHER_NODE")] GatherNode = 61,
     [pbr::OriginalName("SEND_CHAT")] SendChat = 62,
     [pbr::OriginalName("SET_FACING")] SetFacing = 63,
+    [pbr::OriginalName("VISIT_VENDOR")] VisitVendor = 64,
+    [pbr::OriginalName("VISIT_TRAINER")] VisitTrainer = 65,
+    [pbr::OriginalName("VISIT_FLIGHT_MASTER")] VisitFlightMaster = 66,
   }
 
   public enum BotRunnerType {

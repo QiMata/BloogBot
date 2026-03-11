@@ -375,11 +375,36 @@ namespace WoWSharpClient
             var factory = _agentFactoryAccessor?.Invoke();
             if (factory == null) return 0;
 
+            var gossip = factory.GossipAgent;
             var trainer = factory.TrainerAgent;
-            await trainer.OpenTrainerAsync(trainerGuid, ct);
-            await Task.Delay(500, ct);
+            await gossip.GreetNpcAsync(trainerGuid, ct);
+            await Task.Delay(200, ct);
 
-            var available = trainer.GetAvailableServices();
+            try
+            {
+                await gossip.NavigateToServiceAsync(
+                    WoWSharpClient.Networking.ClientComponents.Models.GossipServiceType.Trainer,
+                    ct);
+                await Task.Delay(200, ct);
+            }
+            catch
+            {
+                // Some trainers open directly on greet while others expose trainer through gossip.
+                // Always follow up with an explicit trainer-list request.
+            }
+
+            await trainer.RequestTrainerServicesAsync(trainerGuid, ct);
+
+            TrainerServiceData[] available = [];
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                available = trainer.GetAvailableServices();
+                if (available.Length > 0)
+                    break;
+
+                await Task.Delay(100, ct);
+            }
+
             if (available == null || available.Length == 0)
             {
                 await trainer.CloseTrainerAsync(ct);
