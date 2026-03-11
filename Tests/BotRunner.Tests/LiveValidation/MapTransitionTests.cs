@@ -12,12 +12,11 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// TEST-TRAM-001: Deeprun Tram (map 369) map transition.
 /// MaNGOS bounces Horde players out of the Deeprun Tram instance back to their
-/// hearthstone. This test verifies both BG and FG clients survive the bounce
-/// gracefully (no crash, no disconnect, client remains in-world after bounce).
+/// hearthstone. This behavior test stays BG-only per the overhaul plan: FG packet
+/// capture remains diagnostic, but the asserted behavior lives in the headless bot.
 ///
-/// Setup: Both bots teleport to Ironforge (map 0) with `.gm on` (Horde safe in
-/// Alliance city). Then teleport near the Deeprun Tram entrance. The server
-/// rejects the transition and sends the player back.
+/// Setup: teleport the BG bot to Ironforge (map 0), then teleport near the
+/// Deeprun Tram entrance. The server rejects the transition and sends the player back.
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~MapTransitionTests" --configuration Release
 /// </summary>
@@ -35,10 +34,6 @@ public class MapTransitionTests
     private const float IfTramZ = 505f;
     private const int EasternKingdomsMap = 0;
 
-    // Orgrimmar — safe return position after bounce
-    private const float OrgSafeX = 1629f;
-    private const float OrgSafeY = -4373f;
-
     public MapTransitionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -53,29 +48,10 @@ public class MapTransitionTests
         _output.WriteLine("=== TEST-TRAM-001: Deeprun Tram Map Transition Bounce ===");
 
         var bgAccount = _bot.BgAccountName!;
-        var hasFg = _bot.IsFgActionable;
 
-        // Ensure .gm on for both bots (Horde in Alliance city)
-        _output.WriteLine("[SETUP] Ensuring GM mode for Horde safety in Ironforge...");
-        await _bot.SendGmChatCommandAsync(bgAccount, ".gm on");
-        if (hasFg)
-            await _bot.SendGmChatCommandAsync(_bot.FgAccountName!, ".gm on");
-        await Task.Delay(1000);
-
-        // Run both bots in parallel if FG is available
-        if (hasFg)
-        {
-            _output.WriteLine("[PARITY] Running BG and FG map transition tests in parallel.");
-            var bgTask = RunSingleMapTransitionTest(bgAccount, "BG");
-            var fgTask = RunSingleMapTransitionTest(_bot.FgAccountName!, "FG");
-            await Task.WhenAll(bgTask, fgTask);
-        }
-        else
-        {
-            if (_bot.IsFgActionable)
-                _output.WriteLine("[WARN] FG bot present but not actionable — running BG-only.");
-            await RunSingleMapTransitionTest(bgAccount, "BG");
-        }
+        _output.WriteLine("[BG-ONLY] Running Deeprun Tram bounce validation on the headless bot.");
+        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        await RunSingleMapTransitionTest(bgAccount, "BG");
 
         _output.WriteLine("[PASS] BG client survived Deeprun Tram bounce.");
     }

@@ -193,12 +193,6 @@ public partial class LiveBotFixture
 
     public Task<string> AddItemAsync(uint itemId, int count = 1) => AddItemAsync(BgCharacterName, itemId, count);
 
-
-    public Task<string> SetGMOnAsync() => ExecuteGMCommandAsync(".gm on");
-
-    public Task<string> SetGMOffAsync() => ExecuteGMCommandAsync(".gm off");
-
-
     public Task<string> KillPlayerAsync(string? characterName = null)
         => ExecuteGMCommandAsync($".die");
 

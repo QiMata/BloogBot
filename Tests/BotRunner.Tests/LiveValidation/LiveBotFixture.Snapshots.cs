@@ -53,7 +53,6 @@ public partial class LiveBotFixture
                 {
                     AllBots = inWorld;
                     IdentifyBots(inWorld);
-                    await EnsureFgGmModeAsync();
                     LogSnapshotMessages();
                     return;
                 }
@@ -67,7 +66,6 @@ public partial class LiveBotFixture
             var finalSnapshots = await _stateManagerClient.QuerySnapshotsAsync();
             AllBots = finalSnapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
             IdentifyBots(AllBots);
-            await EnsureFgGmModeAsync();
             LogSnapshotMessages();
         }
         finally
@@ -88,28 +86,6 @@ public partial class LiveBotFixture
             WriteSnapshotMessageDelta(accountKey, label, snap.RecentErrors, _lastPrintedErrorCountByAccount, "ERROR");
         }
     }
-
-    /// <summary>
-    /// Send .gm on to FG bot if it just appeared InWorld and hasn't received it yet.
-    /// FG enters world late (WoW.exe injection takes 60s+), so this catches the case
-    /// where fixture init completed before FG was available.
-    /// </summary>
-
-
-    /// <summary>
-    /// Send .gm on to FG bot if it just appeared InWorld and hasn't received it yet.
-    /// FG enters world late (WoW.exe injection takes 60s+), so this catches the case
-    /// where fixture init completed before FG was available.
-    /// </summary>
-    private async Task EnsureFgGmModeAsync()
-    {
-        if (_fgGmModeSent || FgAccountName == null || ForegroundBot == null) return;
-
-        _logger.LogInformation("[FIXTURE] FG bot just entered world — sending deferred .gm on");
-        await SendGmChatCommandAsync(FgAccountName, ".gm on");
-        _fgGmModeSent = true;
-    }
-
 
     private void WriteSnapshotMessageDelta(
         string accountKey,

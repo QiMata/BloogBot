@@ -17,7 +17,7 @@ namespace BotRunner.Tests.LiveValidation;
 ///   Quest 4641 "Your Place In The World" — talk to Kaltunk, walk ~65y, turn in at Gornek.
 ///   No combat, no items, no prerequisites. Any Horde race.
 ///
-/// Flow per client:
+/// Flow:
 ///   1) Teleport to Valley of Trials near Kaltunk (quest giver)
 ///   2) Find Kaltunk in snapshot (NPC with UNIT_NPC_FLAG_QUESTGIVER)
 ///   3) AcceptQuest(npcGuid, 4641) via ActionType dispatch
@@ -25,6 +25,9 @@ namespace BotRunner.Tests.LiveValidation;
 ///   5) Teleport near Gornek (turn-in NPC)
 ///   6) CompleteQuest(npcGuid, 4641) via ActionType dispatch
 ///   7) Verify quest removed from snapshot
+///
+/// This suite is BG-only under the overhaul plan. FG remains useful as a packet
+/// reference, but the asserted quest behavior belongs to the headless client.
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~StarterQuestTests" --configuration Release
 /// </summary>
@@ -59,18 +62,8 @@ public class StarterQuestTests
     [SkippableFact]
     public async Task Quest_AcceptAndTurnIn_StarterQuest()
     {
-        if (_bot.IsFgActionable)
-        {
-            _output.WriteLine("[PARITY] Running BG and FG starter quest scenarios in parallel.");
-            var bgTask = RunStarterQuestScenario(_bot.BgAccountName!, "BG");
-            var fgTask = RunStarterQuestScenario(_bot.FgAccountName!, "FG");
-            await Task.WhenAll(bgTask, fgTask);
-        }
-        else
-        {
-            await RunStarterQuestScenario(_bot.BgAccountName!, "BG");
-            _output.WriteLine("\nFG Bot: NOT AVAILABLE");
-        }
+        _output.WriteLine("[BG-ONLY] Running starter quest validation on the headless bot.");
+        await RunStarterQuestScenario(_bot.BgAccountName!, "BG");
     }
 
     private async Task RunStarterQuestScenario(string account, string label)
@@ -147,13 +140,6 @@ public class StarterQuestTests
 
             // === Step 6: Find Gornek in nearby units ===
             var gornekGuid = await FindNpcByEntryAsync(account, label, GornekEntry, "Gornek");
-            if (gornekGuid == 0)
-            {
-                // Retry with forced respawn — NPC may not be loaded in visibility range yet
-                _output.WriteLine($"  [{label}] Gornek not found initially — forcing .respawn and retrying");
-                await _bot.SendGmChatCommandTrackedAsync(account, ".respawn", captureResponse: false, delayMs: 2000);
-                gornekGuid = await FindNpcByEntryAsync(account, label, GornekEntry, "Gornek");
-            }
             Assert.True(gornekGuid != 0, $"[{label}] Gornek (entry {GornekEntry}) should be visible after teleporting.");
 
             // === Step 7: Complete quest via ActionType dispatch ===
@@ -187,7 +173,7 @@ public class StarterQuestTests
 
     private async Task<ulong> FindNpcByEntryAsync(string account, string label, int npcEntry, string npcName)
     {
-        for (int attempt = 0; attempt < 3; attempt++)
+        for (int attempt = 0; attempt < 5; attempt++)
         {
             await _bot.RefreshSnapshotsAsync();
             var snap = await _bot.GetSnapshotAsync(account);
@@ -204,7 +190,7 @@ public class StarterQuestTests
                 }
             }
 
-            if (attempt < 2)
+            if (attempt < 4)
             {
                 _output.WriteLine($"  [{label}] {npcName} not found on attempt {attempt + 1}, retrying in 1s...");
                 await Task.Delay(1000);

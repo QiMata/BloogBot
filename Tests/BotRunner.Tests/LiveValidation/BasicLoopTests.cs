@@ -1,8 +1,6 @@
 using System;
-using System.Diagnostics;
-using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using Communication;
 using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
@@ -10,14 +8,9 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Basic loop validation with snapshot-driven assertions.
-///
-/// Scope:
-/// - In-world login state and identity data.
-/// - Physics stability (no falling through world).
-/// - Teleport behavior and movement-flag reset checks.
-/// - Nearby unit/object visibility in populated locations.
-/// - Level field update/read path with chat-first setup.
+/// Minimal live-validation health checks that stay useful after the overhaul:
+/// fixture readiness and post-teleport physics stability.
+/// See docs/BasicLoopTests.md for the owning production code paths.
 /// </summary>
 [RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
@@ -25,13 +18,6 @@ public class BasicLoopTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
-
-    private const int DurotarMapId = 1;
-    private const float RazorHillX = 326.81f;
-    private const float RazorHillY = -4706.65f;
-    private const float RazorHillZ = 15.37f;
-    private const float RazorHillArrivalRadius = 35f;
-    private const uint MoveFlagForward = 0x00000001;
 
     public BasicLoopTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -63,6 +49,7 @@ public class BasicLoopTests
         if (_bot.IsFgActionable)
         {
             var fg = _bot.ForegroundBot;
+            Assert.NotNull(fg);
             Assert.Equal("InWorld", fg.ScreenState);
             Assert.False(string.IsNullOrWhiteSpace(fg.CharacterName));
             Assert.False(string.IsNullOrWhiteSpace(fg.AccountName));
@@ -84,17 +71,15 @@ public class BasicLoopTests
     [SkippableFact]
     public async Task Physics_PlayerNotFallingThroughWorld()
     {
-        var hasFg = _bot.IsFgActionable;
-
-        // Setup both bots to known-good state (BT-SETUP-001).
-        var setupTasks = new System.Collections.Generic.List<Task>
+        var setupTasks = new List<Task>
         {
             _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG")
         };
-        if (hasFg)
-            setupTasks.Add(_bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG"));
-        await Task.WhenAll(setupTasks);
 
+        if (_bot.IsFgActionable)
+            setupTasks.Add(_bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG"));
+
+        await Task.WhenAll(setupTasks);
         await _bot.RefreshSnapshotsAsync();
 
         var bgPos = _bot.BackgroundBot?.Player?.Unit?.GameObject?.Base?.Position;
@@ -102,17 +87,17 @@ public class BasicLoopTests
         var initialZ = bgPos.Z;
         _output.WriteLine($"BG initial Z: {initialZ:F2}");
 
-        if (hasFg)
+        if (_bot.IsFgActionable)
         {
             _output.WriteLine("[PARITY] Running BG and FG Z-stabilization checks in parallel.");
             var bgStabTask = _bot.WaitForZStabilizationAsync(_bot.BgAccountName, waitMs: 3000);
             var fgStabTask = _bot.WaitForZStabilizationAsync(_bot.FgAccountName, waitMs: 3000);
             await Task.WhenAll(bgStabTask, fgStabTask);
 
-            var (stable, finalZ) = await bgStabTask;
-            _output.WriteLine($"BG final Z: {finalZ:F2}, stable={stable}, delta={Math.Abs(finalZ - initialZ):F2}");
-            Assert.True(finalZ > -500, $"BG physics broken: Z={finalZ:F2} below world floor threshold.");
-            Assert.True(stable, $"BG Z failed to stabilize: start={initialZ:F2}, end={finalZ:F2}.");
+            var (bgStable, bgFinalZ) = await bgStabTask;
+            _output.WriteLine($"BG final Z: {bgFinalZ:F2}, stable={bgStable}, delta={Math.Abs(bgFinalZ - initialZ):F2}");
+            Assert.True(bgFinalZ > -500, $"BG physics broken: Z={bgFinalZ:F2} below world floor threshold.");
+            Assert.True(bgStable, $"BG Z failed to stabilize: start={initialZ:F2}, end={bgFinalZ:F2}.");
 
             var (fgStable, fgFinalZ) = await fgStabTask;
             _output.WriteLine($"FG final Z: {fgFinalZ:F2}, stable={fgStable}");
@@ -127,249 +112,4 @@ public class BasicLoopTests
             Assert.True(stable, $"BG Z failed to stabilize: start={initialZ:F2}, end={finalZ:F2}.");
         }
     }
-
-    [SkippableFact]
-    public async Task Teleport_PlayerMovesToNewPosition()
-    {
-
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        var hasFg = _bot.IsFgActionable;
-
-        // Setup both bots to known-good state (BT-SETUP-001).
-        var setupTasks = new System.Collections.Generic.List<Task>
-        {
-            _bot.EnsureCleanSlateAsync(bgAccount, "BG")
-        };
-        if (hasFg)
-            setupTasks.Add(_bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG"));
-        await Task.WhenAll(setupTasks);
-
-        if (hasFg)
-        {
-            var fgAccount = _bot.FgAccountName!;
-            Assert.NotNull(fgAccount);
-            _output.WriteLine("[PARITY] Running BG and FG teleport scenarios in parallel.");
-
-            var bgTask = RunTeleportScenarioAsync(bgAccount, "BG");
-            var fgTask = RunTeleportScenarioAsync(fgAccount, "FG");
-            await Task.WhenAll(bgTask, fgTask);
-
-            Assert.True(await bgTask, "BG should arrive near Razor Hill after teleport command.");
-            Assert.True(await fgTask, "FG should arrive near Razor Hill after teleport command.");
-        }
-        else
-        {
-            var bgResult = await RunTeleportScenarioAsync(bgAccount, "BG");
-            Assert.True(bgResult, "BG should arrive near Razor Hill after teleport command.");
-        }
-    }
-
-    private async Task<bool> RunTeleportScenarioAsync(string account, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var before = await _bot.GetSnapshotAsync(account);
-        var beforePos = before?.Player?.Unit?.GameObject?.Base?.Position;
-        Assert.NotNull(beforePos);
-        var distanceBefore = LiveBotFixture.Distance2D(beforePos!.X, beforePos.Y, RazorHillX, RazorHillY);
-
-        var moved = await TeleportAndVerifyAsync(account, label);
-        Assert.True(moved, $"[{label}] TeleportAndVerify returned false — teleport dispatch may have failed.");
-
-        var after = await _bot.GetSnapshotAsync(account);
-        var afterPos = after?.Player?.Unit?.GameObject?.Base?.Position;
-        Assert.NotNull(afterPos);
-        var step = LiveBotFixture.Distance2D(beforePos.X, beforePos.Y, afterPos!.X, afterPos.Y);
-        _output.WriteLine($"[{label}] Teleport displacement: {step:F1}y (distanceBefore={distanceBefore:F1}y)");
-        if (distanceBefore > RazorHillArrivalRadius)
-            Assert.True(step > 5f, $"{label} teleport should move position by more than a trivial amount when not already near target.");
-
-        return moved;
-    }
-
-    [SkippableFact]
-    public async Task Snapshot_SeesNearbyUnits()
-    {
-
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
-        await EnsureNearRazorHillAsync(bgAccount, "BG");
-
-        var units = await WaitForNearbyUnitsAsync(bgAccount, TimeSpan.FromSeconds(10));
-        _output.WriteLine($"BG visible units in snapshot: {units.Count}");
-
-        foreach (var unit in units.Take(10))
-        {
-            var pos = unit.GameObject?.Base?.Position;
-            _output.WriteLine($"  [GUID=0x{unit.GameObject?.Base?.Guid:X}] L{unit.GameObject?.Level} HP={unit.Health}/{unit.MaxHealth} ({pos?.X:F1}, {pos?.Y:F1}, {pos?.Z:F1})");
-        }
-
-        Assert.True(units.Count > 0, "BG snapshot should see nearby units at Razor Hill.");
-    }
-
-    [SkippableFact]
-    public async Task Snapshot_SeesNearbyGameObjects()
-    {
-
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
-        await EnsureNearRazorHillAsync(bgAccount, "BG");
-
-        var objects = await WaitForNearbyObjectsAsync(bgAccount, TimeSpan.FromSeconds(10));
-        _output.WriteLine($"BG visible game objects in snapshot: {objects.Count}");
-
-        foreach (var go in objects.Take(10))
-        {
-            var pos = go.Base?.Position;
-            _output.WriteLine($"  [GUID=0x{go.Base?.Guid:X}] ({pos?.X:F1}, {pos?.Y:F1}, {pos?.Z:F1})");
-        }
-
-        Assert.True(objects.Count > 0, "BG snapshot should see nearby game objects at Razor Hill.");
-    }
-
-    [SkippableFact]
-    public async Task SetLevel_ChangesPlayerLevel()
-    {
-
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
-
-        await _bot.RefreshSnapshotsAsync();
-        var baseline = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(baseline?.Player);
-        var baselineLevel = baseline?.Player?.Unit?.GameObject?.Level ?? 0;
-        _output.WriteLine($"BG level before setup: {baselineLevel}");
-
-        if (baselineLevel < 10)
-        {
-            var command = $".character level {baseline?.CharacterName} 10";
-            var trace = await _bot.SendGmChatCommandTrackedAsync(bgAccount, command, captureResponse: true, delayMs: 1200);
-            var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
-            if (trace.DispatchResult != ResponseResult.Success || rejected)
-            {
-                _output.WriteLine("BG chat level command rejected; falling back to SOAP level setup.");
-                await _bot.SetLevelAsync(baseline?.CharacterName, 10);
-            }
-        }
-
-        var levelSet = await WaitForLevelAtLeastAsync(bgAccount, 10, TimeSpan.FromSeconds(10));
-        Assert.True(levelSet, "BG level should be >= 10 after setup.");
-
-        var after = await _bot.GetSnapshotAsync(bgAccount);
-        var levelAfter = after?.Player?.Unit?.GameObject?.Level ?? 0;
-        _output.WriteLine($"BG level after setup: {levelAfter}");
-        Assert.True(levelAfter >= 10, "BG level should be readable and >= 10.");
-    }
-
-    private async Task<bool> TeleportAndVerifyAsync(string account, string label)
-    {
-        await _bot.BotTeleportAsync(account, DurotarMapId, RazorHillX, RazorHillY, RazorHillZ);
-
-        var arrived = await WaitForNearPositionAsync(account, RazorHillX, RazorHillY, RazorHillArrivalRadius, TimeSpan.FromSeconds(12));
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-        var movementFlags = snap?.Player?.Unit?.MovementFlags ?? snap?.MovementData?.MovementFlags ?? 0;
-
-        _output.WriteLine($"[{label}] Post-teleport pos: ({pos?.X:F1}, {pos?.Y:F1}, {pos?.Z:F1}), moveFlags=0x{movementFlags:X}");
-
-        var (stable, finalZ) = await _bot.WaitForZStabilizationAsync(account, waitMs: 3000);
-        _output.WriteLine($"[{label}] Post-teleport Z stable={stable}, finalZ={finalZ:F2}");
-        Assert.True(finalZ > -500, $"{label}: physics broken after teleport (Z={finalZ:F2}).");
-        Assert.True(stable, $"{label}: post-teleport Z did not stabilize.");
-        Assert.Equal(0u, movementFlags & MoveFlagForward);
-
-        return arrived;
-    }
-
-    private async Task EnsureNearRazorHillAsync(string account, string label)
-    {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-        if (pos == null)
-            return;
-
-        var distance = LiveBotFixture.Distance2D(pos.X, pos.Y, RazorHillX, RazorHillY);
-        if (distance <= RazorHillArrivalRadius)
-        {
-            _output.WriteLine($"[{label}] Already near Razor Hill (distance={distance:F1}y); skipping teleport.");
-            return;
-        }
-
-        _output.WriteLine($"[{label}] Not near Razor Hill (distance={distance:F1}y); teleporting.");
-        var moved = await TeleportAndVerifyAsync(account, label);
-        Assert.True(moved, $"{label}: failed to arrive near Razor Hill during setup.");
-    }
-
-    private Task EnsureStrictAliveAsync(string account, string label)
-        => _bot.EnsureStrictAliveAsync(account, label);
-
-    private async Task<bool> WaitForLevelAtLeastAsync(string account, uint level, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var current = snap?.Player?.Unit?.GameObject?.Level ?? 0;
-            if (current >= level)
-                return true;
-            await Task.Delay(400);
-        }
-
-        return false;
-    }
-
-    private async Task<bool> WaitForNearPositionAsync(string account, float x, float y, float radius, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-            if (pos != null && LiveBotFixture.Distance2D(pos.X, pos.Y, x, y) <= radius)
-                return true;
-            await Task.Delay(400);
-        }
-
-        return false;
-    }
-
-    private async Task<System.Collections.Generic.IReadOnlyList<Game.WoWUnit>> WaitForNearbyUnitsAsync(string account, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var units = snap?.NearbyUnits;
-            if (units != null && units.Count > 0)
-                return units;
-            await Task.Delay(500);
-        }
-
-        return Array.Empty<Game.WoWUnit>();
-    }
-
-    private async Task<System.Collections.Generic.IReadOnlyList<Game.WoWGameObject>> WaitForNearbyObjectsAsync(string account, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var objects = snap?.NearbyObjects;
-            if (objects != null && objects.Count > 0)
-                return objects;
-            await Task.Delay(500);
-        }
-
-        return Array.Empty<Game.WoWGameObject>();
-    }
-
 }

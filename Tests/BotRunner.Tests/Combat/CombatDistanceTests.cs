@@ -30,6 +30,16 @@ public class CombatDistanceTests
     }
 
     [Fact]
+    public void GetMeleeAttackRange_OneMovingOnly_DoesNotAddLeeway()
+    {
+        var attackerMoving = CombatDistance.IsMovingXZ(0x01);
+        var targetMoving = CombatDistance.IsMovingXZ(0x00);
+
+        var range = CombatDistance.GetMeleeAttackRange(1.5f, 1.5f, bothMoving: attackerMoving && targetMoving);
+        Assert.InRange(range, 4.33f, 4.34f);
+    }
+
+    [Fact]
     public void GetMeleeAttackRange_SmallCreature_NominalFloor()
     {
         // Two tiny creatures with 0.1 combat reach:

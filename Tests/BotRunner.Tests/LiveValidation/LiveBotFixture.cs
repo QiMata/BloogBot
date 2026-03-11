@@ -59,11 +59,7 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     public bool IsReady { get; private set; }
 
-    public bool GmModeInitialized { get; private set; }
-
     public string? FailureReason { get; private set; }
-
-    private bool _fgGmModeSent;
 
     /// <summary>
     /// Whether PathfindingService is listening on port 5001.
@@ -345,18 +341,6 @@ public partial class LiveBotFixture : IAsyncLifetime
             // 6. Ensure clean state: revive dead characters, disband existing groups
             _logger.LogInformation("[FIXTURE] Ensuring clean character state (revive + disband)...");
             await EnsureCleanCharacterStateAsync();
-
-            // 6. Enable GM mode for FG only. BG and COMBATTEST must NEVER receive .gm on —
-            //    BG: MaNGOS responds with a packet that disconnects the headless client.
-            //    COMBATTEST: .gm on corrupts factionTemplate, causing mob evade in combat tests.
-            //    Both use GM account level (6) for command access without needing .gm on.
-            if (FgAccountName != null)
-            {
-                _logger.LogInformation("[FIXTURE] Enabling GM mode for FG bot...");
-                await SendGmChatCommandAsync(FgAccountName, ".gm on");
-                _fgGmModeSent = true;
-            }
-            GmModeInitialized = true;
 
             // 7. Stage bots at a shared starting location (Orgrimmar).
             //    COMBATTEST is excluded — its test handles positioning directly,

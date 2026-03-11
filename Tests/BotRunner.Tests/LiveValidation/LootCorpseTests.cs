@@ -15,9 +15,9 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Per bot:
 /// 1) Ensure strict-alive setup state.
-/// 2) Clear inventory (.reset items).
+/// 2) Clear inventory.
 /// 3) Teleport to Valley of Trials boar area.
-/// 4) Find a living Mottled Boar in snapshot.
+/// 4) Wait for a living Mottled Boar in snapshot.
 /// 5) Teleport bot to within melee range of the boar.
 /// 6) Kill the boar via .damage GM command (testing loot, not combat).
 /// 7) Send LootCorpse action with the dead boar's GUID.
@@ -87,7 +87,7 @@ public class LootCorpseTests
         string label,
         ConcurrentDictionary<ulong, string> claimedTargets)
     {
-        // Step 1: Ensure clean slate (revive + safe zone + GM on) (BT-SETUP-001)
+        // Step 1: Ensure clean slate (revive + safe zone) (BT-SETUP-001)
         _output.WriteLine($"  [{label}] Step 1: Ensure clean slate");
         await _bot.EnsureCleanSlateAsync(account, label);
         await _bot.RefreshSnapshotsAsync();
@@ -110,19 +110,7 @@ public class LootCorpseTests
 
         // Step 4: Find a living boar
         _output.WriteLine($"  [{label}] Step 4: Find a living Mottled Boar");
-        await _bot.RefreshSnapshotsAsync();
-        snap = getSnap();
-        var boar = FindLivingBoar(snap, claimedTargets, label);
-        if (boar == null)
-        {
-            // Try respawning and retrying
-            _output.WriteLine($"  [{label}] No living boar found, trying .respawn...");
-            await _bot.SendGmChatCommandAsync(account, ".respawn");
-            await Task.Delay(1000);
-            await _bot.RefreshSnapshotsAsync();
-            snap = getSnap();
-            boar = FindLivingBoar(snap, claimedTargets, label);
-        }
+        var boar = await WaitForLivingBoarAsync(account, getSnap, claimedTargets, label, TimeSpan.FromSeconds(8));
 
         if (boar == null)
         {
@@ -265,6 +253,27 @@ public class LootCorpseTests
             {
                 return unit;
             }
+        }
+
+        return null;
+    }
+
+    private async Task<Game.WoWUnit?> WaitForLivingBoarAsync(
+        string account,
+        Func<WoWActivitySnapshot?> getSnap,
+        ConcurrentDictionary<ulong, string> claimedTargets,
+        string label,
+        TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var boar = FindLivingBoar(getSnap(), claimedTargets, label);
+            if (boar != null)
+                return boar;
+
+            await Task.Delay(500);
         }
 
         return null;

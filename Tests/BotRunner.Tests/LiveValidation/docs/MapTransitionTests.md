@@ -1,44 +1,31 @@
 # MapTransitionTests
 
-Tests client survival during server-rejected map transitions (Horde entering Alliance-only Deeprun Tram).
+Validates the headless bot survives a server-driven Deeprun Tram bounce without entering a broken snapshot state.
 
-## Test Methods (1)
+## Test Method
 
 ### MapTransition_DeeprunTramBounce_ClientSurvives
 
-**Bots:** BG (TESTBOT2) + FG (TESTBOT1)
+**Bot:** BG only.
 
-**Test Flow:**
+**Why BG-only:** This is a behavior assertion, so it now follows the overhaul rule that live behavior tests validate the headless bot. FG remains useful for packet capture and crash diagnostics, but not as a required assertion target in this suite.
 
-**Setup:** `.gm on` via chat for both bots (Horde safe in Alliance city with GM mode).
+**Flow:**
+1. `EnsureCleanSlateAsync()` for the BG bot.
+2. `.go xyz -4838 -1317 505 0` to Ironforge near the Deeprun Tram entrance.
+3. Assert the bot actually arrived near the Ironforge target.
+4. `.go xyz -4838 -1317 502 369` into Deeprun Tram.
+5. Poll for `ScreenState == "InWorld"` plus a valid position.
+6. Assert the post-bounce snapshot is still in-world and not at the origin.
+7. Return the bot to Orgrimmar.
 
-**Per bot (RunSingleMapTransitionTest):**
+**Code paths:**
+- Test entry: `Tests/BotRunner.Tests/LiveValidation/MapTransitionTests.cs`
+- Chat command dispatch: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs`
+- Snapshot polling: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Snapshots.cs`
+- BG world-transfer handling: `Exports/WoWSharpClient/Client/` and `Exports/WoWSharpClient/Handlers/`
 
-| Step | Action | Details |
-|------|--------|---------|
-| 1 | Teleport to Ironforge | `.go xyz -4838 -1317 505 0` (Map 0 = Eastern Kingdoms, Tinker Town) |
-| 2 | Verify arrival | Assert distance from Ironforge <= 50y (not still at Orgrimmar) |
-| 3 | Enter Deeprun Tram | `.go xyz -4838 -1317 502 369` (Map 369 = Deeprun Tram) |
-| 4 | Server bounces | Server rejects Horde → teleports back to hearthstone (Orgrimmar). Poll 10s for `ScreenState == "InWorld"` + valid position. |
-| 5 | Verify survival | Assert snapshot != null, ScreenState == "InWorld", position != (0,0,0) |
-| 6 | Return to Orgrimmar | `.go xyz 1629 -4373 18 1` (Map 1 = Kalimdor) |
-
-**StateManager/BotRunner Role:**
-
-This test uses **no ActionType dispatches** — all movement is via GM chat commands (`.go xyz`). BotRunnerService processes `SendChat` actions for the GM commands. The test validates that the client (especially BG headless) survives the server-initiated cross-map bounce without crashing or entering a broken state.
-
-**Key concern:** The BG headless client must correctly handle:
-1. SMSG_TRANSFER_PENDING (map 369 transition)
-2. Server rejection → SMSG_TRANSFER_ABORT or forced teleport
-3. Return to Kalimdor (map 1) without losing connection
-
-**Map IDs:**
-| Map | Name | Role |
-|-----|------|------|
-| 0 | Eastern Kingdoms | Ironforge location |
-| 1 | Kalimdor | Orgrimmar hearthstone |
-| 369 | Deeprun Tram | Server bounces Horde |
-
-**GM Commands:** `.gm on`, `.go xyz X Y Z MapId`.
-
-**Assertions:** Client survives bounce. ScreenState remains "InWorld". Position is valid (not 0,0,0). No crash or disconnect.
+**Assertions:**
+- Teleport to Ironforge is reflected in snapshot position
+- Deeprun Tram bounce leaves the client in `"InWorld"`
+- Position after bounce is non-zero and therefore not obviously corrupted

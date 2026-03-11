@@ -182,8 +182,7 @@ public partial class LiveBotFixture
     /// Standardized test setup: ensures the bot is in a known-good state before any test.
     /// 1) Logs the bot's current state (position, health, flags) for debugging.
     /// 2) If dead/ghost, logs WHY (previous test state leak) and revives.
-    /// 3) Teleports to Orgrimmar safe zone.
-    /// 4) Ensures GM mode is ON.
+    /// 3) Teleports to the Orgrimmar safe zone.
     /// This replaces ad-hoc EnsureStrictAlive + manual teleport patterns (BT-SETUP-001).
     /// </summary>
     public async Task EnsureCleanSlateAsync(string account, string label)
@@ -231,10 +230,6 @@ public partial class LiveBotFixture
         // Step 2: Teleport to safe zone (prevents position contamination from previous test)
         await BotTeleportAsync(account, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
         await WaitForZStabilizationAsync(account, waitMs: 2000);
-
-        // Step 3: Ensure GM mode is on (prevents state leak if previous test toggled it off)
-        await SendGmChatCommandAsync(account, ".gm on");
-        await Task.Delay(300);
     }
 
     // ---- GM Command Helpers (via SOAP — independent of bots) ----

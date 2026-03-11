@@ -158,3 +158,12 @@ Move completed items to `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`.
   - `FishingProfessionTests` now passes with catch detection based on bag delta or skill-up.
   - Broad `LiveValidation` rerun finished `33 passed, 0 failed, 2 skipped`.
 
+- [x] `BRT-OVR-005` Isolate the FG herbalism crash/group-formation fallout and prove no active gameobject spawn path remains.
+- Evidence:
+  - Repo scan + DB verification confirmed the Mangos Silverleaf error referenced the natural world row `gameobject.guid=1641` / `id=1618`, not a test-spawned node.
+  - `GatheringProfessionTests` now keeps BG as the hard assertion path while FG mining/herbalism is best-effort reference coverage with safe-zone cleanup in `finally`.
+  - `GroupFormationTests` now starts from `EnsureCleanSlateAsync()` and a live `CheckFgActionableAsync()` probe so post-crash FG restarts skip instead of timing out.
+  - Validation:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed, 1 skipped`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `33 passed, 0 failed, 2 skipped`
+

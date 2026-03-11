@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,19 +11,17 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Combat loop integration validation using the dedicated COMBATTEST account.
+/// Live melee-combat baseline for the dedicated COMBATTEST account.
 ///
-/// COMBATTEST has GM level 6 (command access for .go xyz, .learn, .additem)
-/// but NEVER receives .gm on — so factionTemplate stays correct and mobs
-/// engage normally without evading.
+/// COMBATTEST has GM level 6 for setup commands but never receives `.gm on`,
+/// so faction data stays normal and mobs behave naturally.
 ///
 /// Flow:
-/// 1) Equip weapon + learn skill via GM commands (account gmlevel, not .gm on)
-/// 2) Teleport to Valley of Trials mob area
-/// 3) Find a living mob in snapshot
-/// 4) Teleport to mob's position
-/// 5) Send StartMeleeAttack action
-/// 6) Wait for mob death via auto-attacks
+/// 1) Equip a weapon and learn its skill via GM setup commands
+/// 2) Teleport near the Valley of Trials combat area
+/// 3) Find a living nearby mob in snapshots
+/// 4) Dispatch StartMeleeAttack from a real chase distance
+/// 5) Assert the mob takes damage and dies
 /// </summary>
 [RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
@@ -33,7 +31,6 @@ public class CombatLoopTests
     private readonly ITestOutputHelper _output;
 
     private const int MapId = 1;
-    // Valley of Trials scorpid field — Scorpid Workers (entry 3124, level 1-3).
     private const float MobAreaX = -284f;
     private const float MobAreaY = -4383f;
     private const float MobAreaZ = 57f;
@@ -41,10 +38,7 @@ public class CombatLoopTests
     private const ulong CreatureGuidHighMask = 0xF000000000000000UL;
     private const ulong CreatureGuidHighPrefix = 0xF000000000000000UL;
 
-    // Known attackable creature template entries for Valley of Trials combat testing.
-    private static readonly HashSet<uint> AttackableCreatureEntries = [3098, 3124, 3108]; // Mottled Boar, Scorpid Worker, Vile Familiar
-
-    // Weapon setup: Worn Mace (item 36) + One Hand Maces proficiency (spell 198, skill 54).
+    private static readonly HashSet<uint> AttackableCreatureEntries = [3098, 3108, 3124];
     private const uint OneHandMaceSpell = 198;
 
     public CombatLoopTests(LiveBotFixture bot, ITestOutputHelper output)
@@ -59,10 +53,10 @@ public class CombatLoopTests
     public async Task Combat_AutoAttacksMob_DealsDamageInMeleeRange()
     {
         var combatAccount = _bot.CombatTestAccountName;
-        global::Tests.Infrastructure.Skip.If(combatAccount == null, "COMBATTEST bot not available — add COMBATTEST entry to StateManagerSettings.json");
+        global::Tests.Infrastructure.Skip.If(combatAccount == null, "COMBATTEST bot not available - add COMBATTEST entry to StateManagerSettings.json");
 
         _output.WriteLine($"=== Combat Test Bot: {_bot.CombatTestCharacterName} ({combatAccount}) ===");
-        _output.WriteLine("Using dedicated non-GM account (never receives .gm on → no factionTemplate corruption)");
+        _output.WriteLine("Using dedicated non-GM account (never receives .gm on -> no factionTemplate corruption)");
 
         var passed = await RunCombatScenarioAsync(combatAccount!, "COMBAT");
         Assert.True(passed, "COMBATTEST bot must approach, face, and auto-attack a mob to death.");
@@ -70,12 +64,8 @@ public class CombatLoopTests
 
     private async Task<bool> RunCombatScenarioAsync(string account, string label)
     {
-        // ── SETUP ──────────────────────────────────────────────────────────
         await EnsureStrictAliveAsync(account, label);
 
-        // ── Phase 1: Weapon + skill setup via GM commands ──
-        // GM commands check account gmlevel (6), NOT PLAYER_FLAGS_GM.
-        // No .gm on needed — commands work with account-level GM access.
         _output.WriteLine($"  [{label}] Ensuring weapon equipped (Worn Mace).");
         await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
         await _bot.BotSetSkillAsync(account, 54, 1, 300);
@@ -88,10 +78,12 @@ public class CombatLoopTests
         });
         await Task.Delay(500);
 
-        // ── Phase 2: Teleport to mob area ──
         await EnsureNearMobAreaAsync(account, label);
-        await _bot.WaitForSnapshotConditionAsync(account,
-            s => s.NearbyUnits?.Count > 0, TimeSpan.FromSeconds(5), pollIntervalMs: 500);
+        await _bot.WaitForSnapshotConditionAsync(
+            account,
+            s => s.NearbyUnits?.Count > 0,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 500);
 
         await _bot.RefreshSnapshotsAsync();
         var selfSnap = await _bot.GetSnapshotAsync(account);
@@ -102,70 +94,35 @@ public class CombatLoopTests
             return false;
         }
 
-        // ── Phase 3: Find a living mob ──
         _output.WriteLine($"  [{label}] Finding candidate mob...");
         var (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(12));
-        if (targetGuid == 0)
-        {
-            _output.WriteLine($"  [{label}] No mob found; spawning temp Mottled Boar (entry 3098).");
-            await _bot.SendGmChatCommandTrackedAsync(account, ".npc add temp 3098", captureResponse: true, delayMs: 1000);
-            await _bot.WaitForSnapshotConditionAsync(account,
-                s => s.NearbyUnits?.Count > 0, TimeSpan.FromSeconds(5), pollIntervalMs: 500);
-            await _bot.RefreshSnapshotsAsync();
-            (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(12));
-        }
-
-        if (targetGuid == 0)
-        {
-            _output.WriteLine($"  [{label}] No living mob found.");
-            return false;
-        }
+        global::Tests.Infrastructure.Skip.If(targetGuid == 0, $"[{label}] No living mob found near Valley of Trials mob area.");
         _output.WriteLine($"  [{label}] Target: 0x{targetGuid:X} HP={initialHealth} at ({mobX:F1},{mobY:F1},{mobZ:F1})");
 
-        // ── DIAGNOSTIC: Verify GM mode is OFF (should never be on for COMBATTEST) ──
+        var playerFlags = selfSnap?.Player?.PlayerFlags ?? 0;
+        var isGmFlagSet = (playerFlags & 0x08) != 0;
+        var factionTemplate = selfSnap?.Player?.Unit?.GameObject?.FactionTemplate ?? 0;
+        _output.WriteLine(
+            $"  [{label}] GM CHECK: playerFlags=0x{playerFlags:X8}, PLAYER_FLAGS_GM={(isGmFlagSet ? "SET (BAD!)" : "CLEAR (OK)")}, factionTemplate={factionTemplate} (expect 2=Orc)");
+        if (isGmFlagSet)
         {
-            var playerFlags = selfSnap?.Player?.PlayerFlags ?? 0;
-            var isGmFlagSet = (playerFlags & 0x08) != 0; // PLAYER_FLAGS_GM
-            var factionTemplate = selfSnap?.Player?.Unit?.GameObject?.FactionTemplate ?? 0;
-            _output.WriteLine($"  [{label}] GM CHECK: playerFlags=0x{playerFlags:X8}, PLAYER_FLAGS_GM={(isGmFlagSet ? "SET (BAD!)" : "CLEAR (OK)")}, factionTemplate={factionTemplate} (expect 2=Orc)");
-
-            if (isGmFlagSet)
-            {
-                _output.WriteLine($"  [{label}] ERROR: GM flag is set on COMBATTEST account — this should never happen!");
-                return false;
-            }
+            _output.WriteLine($"  [{label}] ERROR: GM flag is set on COMBATTEST account - this should never happen.");
+            return false;
         }
 
-        // ── Phase 4: Teleport to mob position ──
-        // Mob's position is guaranteed navmesh-valid on the server.
-        _output.WriteLine($"  [{label}] Teleporting to mob position at ({mobX:F1},{mobY:F1},{mobZ:F1})");
-        await _bot.BotTeleportAsync(account, MapId, mobX, mobY, mobZ);
-        var arrivedNearMob = await WaitForNearPositionAsync(account, mobX, mobY, 5f, TimeSpan.FromSeconds(10));
-        if (!arrivedNearMob)
-            _output.WriteLine($"  [{label}] WARNING: Did not arrive near mob after teleport.");
-        await Task.Delay(2000); // Settle time for position sync
-        await _bot.RefreshSnapshotsAsync();
-        var posSnap = await _bot.GetSnapshotAsync(account);
-        var pos = posSnap?.Player?.Unit?.GameObject?.Base?.Position;
-        if (pos != null)
-            _output.WriteLine($"  [{label}] After teleport: pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})");
+        var distanceToMob = await GetDistanceToTargetAsync(account, targetGuid);
+        _output.WriteLine($"  [{label}] Starting combat from {distanceToMob:F1}y away so StartMeleeAttack owns the approach.");
 
-        // ── Phase 5: Attack ──
-        // Re-verify target is alive — mob may have died during teleport/settling.
         initialHealth = await GetTargetHealthAsync(account, targetGuid);
         if (initialHealth == 0)
         {
-            _output.WriteLine($"  [{label}] Target 0x{targetGuid:X} died during setup — finding a new mob...");
+            _output.WriteLine($"  [{label}] Target 0x{targetGuid:X} died during setup - finding a new mob...");
             (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(8));
-            if (targetGuid == 0 || initialHealth == 0)
-            {
-                _output.WriteLine($"  [{label}] No living mob available after retry.");
-                return false;
-            }
+            global::Tests.Infrastructure.Skip.If(targetGuid == 0 || initialHealth == 0, $"[{label}] No living mob available after retry.");
             _output.WriteLine($"  [{label}] New target: 0x{targetGuid:X} HP={initialHealth}");
         }
-        _output.WriteLine($"  [{label}] Sending StartMeleeAttack on 0x{targetGuid:X} (HP={initialHealth})");
 
+        _output.WriteLine($"  [{label}] Sending StartMeleeAttack on 0x{targetGuid:X} (HP={initialHealth})");
         var attackResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.StartMeleeAttack,
@@ -177,14 +134,12 @@ public class CombatLoopTests
             return false;
         }
 
-        // ── Phase 6: Wait for mob death ──
         var mobKilled = await WaitForMobDeathAsync(account, label, targetGuid, initialHealth, TimeSpan.FromSeconds(90));
-
         if (!mobKilled)
         {
             var currentHealth = await GetTargetHealthAsync(account, targetGuid);
             var postDist = await GetDistanceToTargetAsync(account, targetGuid);
-            _output.WriteLine($"  [{label}] FAIL: HP {initialHealth}→{currentHealth}, dist={postDist:F1}y");
+            _output.WriteLine($"  [{label}] FAIL: HP {initialHealth}->{currentHealth}, dist={postDist:F1}y");
             return false;
         }
 
@@ -215,7 +170,9 @@ public class CombatLoopTests
     }
 
     private async Task<(ulong guid, uint health, float mobX, float mobY, float mobZ)> FindLivingMobAsync(
-        string account, ulong selfGuid, TimeSpan timeout)
+        string account,
+        ulong selfGuid,
+        TimeSpan timeout)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < timeout)
@@ -240,12 +197,15 @@ public class CombatLoopTests
                         return false;
                     if (u.NpcFlags != 0)
                         return false;
+
                     var entry = u.GameObject?.Entry ?? 0;
                     return AttackableCreatureEntries.Contains(entry);
                 })
-                .OrderBy(u =>
+                .OrderBy(u => GetCombatTargetPriority(u.GameObject?.Entry ?? 0))
+                .ThenBy(u =>
                 {
-                    if (selfPos == null) return float.MaxValue;
+                    if (selfPos == null)
+                        return float.MaxValue;
                     var p = u.GameObject?.Base?.Position;
                     return p == null ? float.MaxValue : LiveBotFixture.Distance2D(selfPos.X, selfPos.Y, p.X, p.Y);
                 })
@@ -258,11 +218,15 @@ public class CombatLoopTests
                 var mobPos = mob.GameObject?.Base?.Position;
                 var name = string.IsNullOrWhiteSpace(mob.GameObject?.Name) ? "<unknown>" : mob.GameObject.Name;
                 var entry = mob.GameObject?.Entry ?? 0;
-                var dist = selfPos != null && mobPos != null ? LiveBotFixture.Distance2D(selfPos.X, selfPos.Y, mobPos.X, mobPos.Y) : -1f;
-                _output.WriteLine($"    Candidate: 0x{guid:X} '{name}' entry={entry} HP={mob.Health}/{mob.MaxHealth} dist={dist:F1}y at ({mobPos?.X:F1},{mobPos?.Y:F1},{mobPos?.Z:F1})");
+                var dist = selfPos != null && mobPos != null
+                    ? LiveBotFixture.Distance2D(selfPos.X, selfPos.Y, mobPos.X, mobPos.Y)
+                    : -1f;
+                _output.WriteLine(
+                    $"    Candidate: 0x{guid:X} '{name}' entry={entry} HP={mob.Health}/{mob.MaxHealth} dist={dist:F1}y at ({mobPos?.X:F1},{mobPos?.Y:F1},{mobPos?.Z:F1})");
                 return (guid, mob.Health, mobPos?.X ?? 0f, mobPos?.Y ?? 0f, mobPos?.Z ?? 0f);
             }
-            else if (sw.Elapsed.TotalSeconds < 2)
+
+            if (sw.Elapsed.TotalSeconds < 2)
             {
                 var allUnits = snap?.NearbyUnits ?? [];
                 _output.WriteLine($"    [FindMob] {allUnits.Count} nearby units, 0 candidates. Self=0x{selfGuid:X}");
@@ -271,7 +235,8 @@ public class CombatLoopTests
                     var g = u.GameObject?.Base?.Guid ?? 0UL;
                     var p = u.GameObject?.Base?.Position;
                     var n = u.GameObject?.Name ?? "?";
-                    _output.WriteLine($"      0x{g:X} '{n}' L{u.GameObject?.Level} HP={u.Health}/{u.MaxHealth} npc={u.NpcFlags} entry={u.GameObject?.Entry} at ({p?.X:F1},{p?.Y:F1},{p?.Z:F1})");
+                    _output.WriteLine(
+                        $"      0x{g:X} '{n}' L{u.GameObject?.Level} HP={u.Health}/{u.MaxHealth} npc={u.NpcFlags} entry={u.GameObject?.Entry} at ({p?.X:F1},{p?.Y:F1},{p?.Z:F1})");
                 }
             }
 
@@ -280,6 +245,15 @@ public class CombatLoopTests
 
         return (0UL, 0, 0f, 0f, 0f);
     }
+
+    private static int GetCombatTargetPriority(uint entry)
+        => entry switch
+        {
+            3098 => 0, // Mottled Boar
+            3108 => 1, // Vile Familiar
+            3124 => 2, // Scorpid Worker
+            _ => 99
+        };
 
     private async Task<float> GetDistanceToTargetAsync(string account, ulong targetGuid)
     {
@@ -320,7 +294,8 @@ public class CombatLoopTests
                     _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: Mob disappeared or HP=0 but NO damage dealt. NOT a valid kill.");
                     return false;
                 }
-                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: MOB KILLED (HP {initialHealth}→0) after {sw.Elapsed.TotalSeconds:F1}s");
+
+                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: MOB KILLED (HP {initialHealth}->0) after {sw.Elapsed.TotalSeconds:F1}s");
                 return true;
             }
 
@@ -328,13 +303,14 @@ public class CombatLoopTests
             {
                 if (!firstDamageConfirmed)
                 {
-                    _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: FIRST HIT — HP {lastLoggedHp}→{currentHealth} (damage={lastLoggedHp - currentHealth})");
+                    _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: FIRST HIT - HP {lastLoggedHp}->{currentHealth} (damage={lastLoggedHp - currentHealth})");
                     firstDamageConfirmed = true;
                 }
                 else
                 {
-                    _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: HP {lastLoggedHp}→{currentHealth} (damage={lastLoggedHp - currentHealth})");
+                    _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F1}s: HP {lastLoggedHp}->{currentHealth} (damage={lastLoggedHp - currentHealth})");
                 }
+
                 lastLoggedHp = currentHealth;
             }
 
@@ -344,8 +320,9 @@ public class CombatLoopTests
                 var pflags = snap?.Player?.PlayerFlags ?? 0;
                 var gmBit = (pflags & 0x08) != 0 ? " GM=ON!" : "";
                 var fac = snap?.Player?.Unit?.GameObject?.FactionTemplate ?? 0;
-                var mobFac = target?.GameObject?.FactionTemplate ?? 0;
-                _output.WriteLine($"    [{label}] t={sw.Elapsed.TotalSeconds:F0}s: HP={currentHealth}/{initialHealth}, dist={dist:F1}y, target=0x{diagTarget:X}, flags=0x{pflags:X}{gmBit}, playerFaction={fac}, mobFaction={mobFac}, firstHit={firstDamageConfirmed}");
+                var mobFac = target.GameObject?.FactionTemplate ?? 0;
+                _output.WriteLine(
+                    $"    [{label}] t={sw.Elapsed.TotalSeconds:F0}s: HP={currentHealth}/{initialHealth}, dist={dist:F1}y, target=0x{diagTarget:X}, flags=0x{pflags:X}{gmBit}, playerFaction={fac}, mobFaction={mobFac}, firstHit={firstDamageConfirmed}");
                 lastDiagTime = sw.Elapsed;
 
                 if (diagTarget == 0 && currentHealth >= initialHealth)

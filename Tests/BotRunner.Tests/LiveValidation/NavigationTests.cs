@@ -11,7 +11,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Navigation integration tests — validates pathfinding + physics movement end-to-end.
 ///
-/// Per bot:
+/// BG-only under the overhaul plan:
 /// 1) Teleport to a known start position.
 /// 2) Issue GOTO action to a known destination.
 /// 3) Poll position snapshots and verify the bot moves toward the destination.
@@ -69,33 +69,19 @@ public class NavigationTests
         float endX, float endY, float endZ, int maxSeconds)
     {
         var bgAccount = _bot.BgAccountName!;
-        var hasFg = _bot.IsFgActionable;
 
         _output.WriteLine($"=== Navigation: {scenarioName} ===");
+        _output.WriteLine("[BG-ONLY] Navigation assertions belong to the headless botrunner.");
 
-        if (hasFg)
-        {
-            _output.WriteLine("[PARITY] Running BG and FG navigation in parallel.");
-            var bgTask = RunSingleNavigation(bgAccount, "BG", startX, startY, startZ, endX, endY, endZ, maxSeconds);
-            var fgTask = RunSingleNavigation(_bot.FgAccountName!, "FG", startX + 3, startY, startZ, endX, endY, endZ, maxSeconds);
-            await Task.WhenAll(bgTask, fgTask);
-
-            Assert.True(await bgTask, $"[BG] Failed to navigate in '{scenarioName}'.");
-            Assert.True(await fgTask, $"[FG] Failed to navigate in '{scenarioName}'.");
-        }
-        else
-        {
-            var result = await RunSingleNavigation(bgAccount, "BG", startX, startY, startZ, endX, endY, endZ, maxSeconds);
-            Assert.True(result, $"[BG] Failed to navigate in '{scenarioName}'.");
-        }
+        var result = await RunSingleNavigation(bgAccount, "BG", startX, startY, startZ, endX, endY, endZ, maxSeconds);
+        Assert.True(result, $"[BG] Failed to navigate in '{scenarioName}'.");
     }
 
     private async Task<bool> RunSingleNavigation(string account, string label,
         float startX, float startY, float startZ,
         float endX, float endY, float endZ, int maxSeconds)
     {
-        // Step 1: Ensure alive
-        // Standardized setup (BT-SETUP-001): revive + safe zone + GM on
+        // Step 1: Standardized setup (BT-SETUP-001): revive + safe zone.
         await _bot.EnsureCleanSlateAsync(account, label);
 
         // Step 2: Teleport to start

@@ -11,21 +11,15 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Vendor buy/sell/repair integration tests — validates packet-based vendor operations.
+/// BG-first vendor packet baselines for explicit buy/sell behavior.
 ///
-/// Uses Razor Hill general goods vendor (Grimtak, entry 3165):
-///   - Buy: purchase a cheap item (Weak Flux, itemId 2512, cost 10 copper)
-///   - Sell: sell a previously added junk item back
-///   - Repair: repair all items at an armorer vendor
+/// Current production path under test:
+/// - Exports/BotRunner/BotRunnerService.ActionDispatch.cs
+/// - Exports/WoWSharpClient/WoWSharpObjectManager.Inventory.cs
+/// - Exports/WoWSharpClient/Networking/ClientComponents/VendorNetworkClientComponent.cs
 ///
-/// Flow per client:
-///   1) Teleport to Razor Hill vendor area
-///   2) Find vendor NPC with UNIT_NPC_FLAG_VENDOR
-///   3) Add test items via GM command
-///   4) Execute buy/sell via ActionType dispatch with vendorGuid param
-///   5) Verify inventory changes in snapshot
-///
-/// Run: dotnet test --filter "FullyQualifiedName~VendorBuySellTests" --configuration Release
+/// FG parity is intentionally excluded. The foreground merchant-frame path is still legacy Lua/UI logic,
+/// while the live overhaul is prioritizing the packet-driven BG implementation first.
 /// </summary>
 [RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
@@ -34,17 +28,15 @@ public class VendorBuySellTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = 1; // Kalimdor
+    private const int MapId = 1;
+    private const float GrimtakX = 305.722f;
+    private const float GrimtakY = -4665.87f;
+    private const float GrimtakZ = 16.527f;
+    private const float MaxVendorDistance = 12f;
 
-    // Grimtak — Razor Hill general goods vendor (entry 3881, NPC_FLAG_VENDOR)
-    // Exact spawn position from creature table so we can teleport within interaction range.
-    private const float GrimtakX = 305.722f, GrimtakY = -4665.87f, GrimtakZ = 16.527f;
-
-    // Refreshing Spring Water — cheap vendor item (25 copper) sold by Grimtak
-    private const uint BuyTestItemId = 159;
-
-    // Linen Cloth — common junk item for sell test
-    private const uint LinenClothItemId = 2589;
+    private const uint BuyTestItemId = LiveBotFixture.TestItems.RefreshingSpringWater;
+    private const uint SellTestItemId = LiveBotFixture.TestItems.LinenCloth;
+    private const uint BuySetupCopper = 1000;
 
     public VendorBuySellTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -57,269 +49,267 @@ public class VendorBuySellTests
     [SkippableFact]
     public async Task Vendor_BuyItem_AppearsInInventory()
     {
-        var bgTask = RunBuyScenarioAsync(_bot.BgAccountName!, "BG");
-        if (_bot.IsFgActionable)
-        {
-            var fgTask = RunBuyScenarioAsync(_bot.FgAccountName!, "FG");
-            await Task.WhenAll(bgTask, fgTask);
-        }
-        else
-        {
-            await bgTask;
-        }
+        var metrics = await RunBuyScenarioAsync(_bot.BgAccountName!, "BG");
+
+        Assert.True(metrics.VendorFound, "BG: vendor with UNIT_NPC_FLAG_VENDOR should be visible near Razor Hill.");
+        Assert.InRange(metrics.VendorDistanceYards, 0f, MaxVendorDistance);
+        Assert.Equal(0, metrics.ItemCountBefore);
+        Assert.Equal(1, metrics.ItemCountAfter);
+        Assert.True(metrics.CoinageAfter < metrics.CoinageBefore,
+            $"BG: coinage should decrease after buying item {BuyTestItemId}. Before={metrics.CoinageBefore}, after={metrics.CoinageAfter}");
+        Assert.InRange(metrics.InventoryLatencyMs, 1, 12000);
     }
 
     [SkippableFact]
     public async Task Vendor_SellItem_RemovedFromInventory()
     {
-        var bgTask = RunSellScenarioAsync(_bot.BgAccountName!, "BG");
-        if (_bot.IsFgActionable)
-        {
-            var fgTask = RunSellScenarioAsync(_bot.FgAccountName!, "FG");
-            await Task.WhenAll(bgTask, fgTask);
-        }
-        else
-        {
-            await bgTask;
-        }
+        var metrics = await RunSellScenarioAsync(_bot.BgAccountName!, "BG");
+
+        Assert.True(metrics.VendorFound, "BG: vendor with UNIT_NPC_FLAG_VENDOR should be visible near Razor Hill.");
+        Assert.InRange(metrics.VendorDistanceYards, 0f, MaxVendorDistance);
+        Assert.Equal(1, metrics.ItemCountBefore);
+        Assert.Equal(0, metrics.ItemCountAfter);
+        Assert.True(metrics.CoinageAfter > metrics.CoinageBefore,
+            $"BG: coinage should increase after selling item {SellTestItemId}. Before={metrics.CoinageBefore}, after={metrics.CoinageAfter}");
+        Assert.InRange(metrics.InventoryLatencyMs, 1, 8000);
     }
 
-    private async Task RunBuyScenarioAsync(string account, string label)
+    private async Task<VendorMetrics> RunBuyScenarioAsync(string account, string label)
     {
         await _bot.EnsureCleanSlateAsync(account, label);
-
-        // Step 0: Clean bag contents (preserves equipped gear — BT-VERIFY-002)
         await _bot.BotClearInventoryAsync(account);
 
-        // Step 1: Teleport directly to Grimtak's position (within interaction range)
-        _output.WriteLine($"  [{label}] Step 1: Teleporting to Grimtak (Razor Hill vendor)");
-        await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ + 1);
-        await _bot.WaitForTeleportSettledAsync(account, GrimtakX, GrimtakY);
+        var vendor = await StageVendorAsync(account, label);
+        await EnsureMoneyAsync(account, label, BuySetupCopper);
 
-        // Step 2: Find Grimtak in NearbyUnits
-        var (vendorGuid, npcX, npcY, npcZ) = await FindNpcByFlagAsync(account, label, (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, "vendor");
-        Assert.True(vendorGuid != 0, $"[{label}] Should find Grimtak (vendor) near Razor Hill.");
-        _output.WriteLine($"  [{label}] Found vendor GUID=0x{vendorGuid:X} at ({npcX:F1}, {npcY:F1}, {npcZ:F1})");
-
-        // Step 3: Ensure money for purchase
-        await EnsureMoneyAsync(account, label, 1000); // 10 silver should be enough
-
-        // Step 4: Record initial inventory
         await _bot.RefreshSnapshotsAsync();
-        var snapBefore = await _bot.GetSnapshotAsync(account);
-        var itemCountBefore = CountItemInBags(snapBefore, BuyTestItemId);
-        _output.WriteLine($"  [{label}] Refreshing Spring Water count before buy: {itemCountBefore}");
+        var before = await _bot.GetSnapshotAsync(account);
+        var itemCountBefore = CountItemSlots(before, BuyTestItemId);
+        var coinageBefore = before?.Player?.Coinage ?? 0;
 
-        // Step 5: Buy item via ActionType with vendorGuid
-        _output.WriteLine($"  [{label}] Step 5: Buying Refreshing Spring Water (ID={BuyTestItemId}) from vendor 0x{vendorGuid:X}");
-        var buyResult = await _bot.SendActionAsync(account, new ActionMessage
+        _output.WriteLine($"[{label}] Buying item {BuyTestItemId} from vendor 0x{vendor.Guid:X}.");
+        var dispatch = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.BuyItem,
             Parameters =
             {
-                new RequestParameter { LongParam = (long)vendorGuid },
+                new RequestParameter { LongParam = (long)vendor.Guid },
                 new RequestParameter { IntParam = (int)BuyTestItemId },
-                new RequestParameter { IntParam = 1 } // quantity
+                new RequestParameter { IntParam = 1 }
             }
         });
-        _output.WriteLine($"  [{label}] BuyItem dispatch result: {buyResult}");
-        Assert.Equal(ResponseResult.Success, buyResult);
+        Assert.Equal(ResponseResult.Success, dispatch);
 
-        // Step 6: Verify item appears in inventory
-        var itemAppeared = await WaitForItemCountChangeAsync(account, BuyTestItemId, itemCountBefore, TimeSpan.FromSeconds(12));
-        Assert.True(itemAppeared, $"[{label}] Refreshing Spring Water should appear in inventory after BuyItem.");
-        _output.WriteLine($"  [{label}] Refreshing Spring Water confirmed in inventory after purchase.");
+        var timer = Stopwatch.StartNew();
+        var itemChanged = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => CountItemSlots(snapshot, BuyTestItemId) == itemCountBefore + 1,
+            TimeSpan.FromSeconds(12),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} vendor buy item");
+        var coinageChanged = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => (snapshot.Player?.Coinage ?? coinageBefore) < coinageBefore,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} vendor buy coinage");
+        timer.Stop();
 
-        // Cleanup: destroy the purchased item
+        await _bot.RefreshSnapshotsAsync();
+        var after = await _bot.GetSnapshotAsync(account);
+        var itemCountAfter = CountItemSlots(after, BuyTestItemId);
+        var coinageAfter = after?.Player?.Coinage ?? coinageBefore;
+
+        _output.WriteLine(
+            $"[{label}] buy metrics: vendorFound={vendor.Guid != 0}, vendorDistance={vendor.DistanceYards:F1}, " +
+            $"itemCount {itemCountBefore}->{itemCountAfter}, coinage {coinageBefore}->{coinageAfter}, " +
+            $"itemChanged={itemChanged}, coinageChanged={coinageChanged}, latencyMs={timer.ElapsedMilliseconds}");
+
+        if (!itemChanged || !coinageChanged)
+            _bot.DumpSnapshotDiagnostics(after, label);
+
         await DestroyItemByIdAsync(account, label, BuyTestItemId);
+
+        return new VendorMetrics(
+            vendor.Guid != 0,
+            vendor.DistanceYards,
+            itemCountBefore,
+            itemCountAfter,
+            coinageBefore,
+            coinageAfter,
+            (int)timer.ElapsedMilliseconds);
     }
 
-    private async Task RunSellScenarioAsync(string account, string label)
+    private async Task<VendorMetrics> RunSellScenarioAsync(string account, string label)
     {
         await _bot.EnsureCleanSlateAsync(account, label);
+        await _bot.BotClearInventoryAsync(account);
 
-        // Step 1: Teleport directly to Grimtak's position (within interaction range)
-        _output.WriteLine($"  [{label}] Step 1: Teleporting to Grimtak (Razor Hill vendor)");
-        await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ + 1);
-        await _bot.WaitForTeleportSettledAsync(account, GrimtakX, GrimtakY);
+        var vendor = await StageVendorAsync(account, label);
 
-        // Step 2: Find vendor NPC
-        var (vendorGuid, npcX, npcY, npcZ) = await FindNpcByFlagAsync(account, label, (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR, "vendor");
-        Assert.True(vendorGuid != 0, $"[{label}] Should find Grimtak (vendor) near Razor Hill.");
+        _output.WriteLine($"[{label}] Adding one sell item ({SellTestItemId}) to bags.");
+        await _bot.BotAddItemAsync(account, SellTestItemId, 1);
+        var staged = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => CountItemSlots(snapshot, SellTestItemId) == 1,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} vendor sell stage");
+        Assert.True(staged, $"[{label}] sell item {SellTestItemId} should appear in bags before sell.");
 
-        // Step 3: Add a Linen Cloth to sell
-        _output.WriteLine($"  [{label}] Step 3: Adding Linen Cloth to inventory");
-        await _bot.BotSelectSelfAsync(account);
-        await Task.Delay(300);
-        await _bot.SendGmChatCommandTrackedAsync(account, $".additem {LinenClothItemId} 1", captureResponse: true, delayMs: 1500);
-
-        // Wait for item to appear
-        var hasItem = await WaitForItemPresentAsync(account, LinenClothItemId, TimeSpan.FromSeconds(5));
-        Assert.True(hasItem, $"[{label}] Linen Cloth should be in inventory after .additem.");
-
-        // Step 4: Find the item's bag/slot for sell command
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var (bagId, slotId) = FindItemBagSlot(snap, LinenClothItemId);
-        Assert.True(bagId >= 0, $"[{label}] Should find Linen Cloth in a bag slot.");
-        _output.WriteLine($"  [{label}] Linen Cloth found at bag={bagId} slot={slotId}");
+        var before = await _bot.GetSnapshotAsync(account);
+        var itemCountBefore = CountItemSlots(before, SellTestItemId);
+        var coinageBefore = before?.Player?.Coinage ?? 0;
+        var (bagId, slotId) = FindItemBagSlot(before, SellTestItemId);
+        Assert.True(bagId >= 0, $"[{label}] sell item {SellTestItemId} should resolve to a bag slot.");
 
-        // Step 5: Sell item via ActionType with vendorGuid
-        _output.WriteLine($"  [{label}] Step 5: Selling Linen Cloth to vendor 0x{vendorGuid:X}");
-        var sellResult = await _bot.SendActionAsync(account, new ActionMessage
+        _output.WriteLine($"[{label}] Selling item {SellTestItemId} from bag={bagId} slot={slotId} to vendor 0x{vendor.Guid:X}.");
+        var dispatch = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.SellItem,
             Parameters =
             {
-                new RequestParameter { LongParam = (long)vendorGuid },
+                new RequestParameter { LongParam = (long)vendor.Guid },
                 new RequestParameter { IntParam = bagId },
                 new RequestParameter { IntParam = slotId },
-                new RequestParameter { IntParam = 1 } // quantity
+                new RequestParameter { IntParam = 1 }
             }
         });
-        _output.WriteLine($"  [{label}] SellItem dispatch result: {sellResult}");
-        Assert.Equal(ResponseResult.Success, sellResult);
+        Assert.Equal(ResponseResult.Success, dispatch);
 
-        // Step 6: Verify item removed from inventory
-        var itemRemoved = await WaitForItemAbsentAsync(account, LinenClothItemId, TimeSpan.FromSeconds(8));
-        Assert.True(itemRemoved, $"[{label}] Linen Cloth should be removed from inventory after SellItem.");
-        _output.WriteLine($"  [{label}] Linen Cloth confirmed sold.");
+        var timer = Stopwatch.StartNew();
+        var itemChanged = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => CountItemSlots(snapshot, SellTestItemId) == 0,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} vendor sell item");
+        var coinageChanged = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => (snapshot.Player?.Coinage ?? coinageBefore) > coinageBefore,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} vendor sell coinage");
+        timer.Stop();
+
+        await _bot.RefreshSnapshotsAsync();
+        var after = await _bot.GetSnapshotAsync(account);
+        var itemCountAfter = CountItemSlots(after, SellTestItemId);
+        var coinageAfter = after?.Player?.Coinage ?? coinageBefore;
+
+        _output.WriteLine(
+            $"[{label}] sell metrics: vendorFound={vendor.Guid != 0}, vendorDistance={vendor.DistanceYards:F1}, " +
+            $"itemCount {itemCountBefore}->{itemCountAfter}, coinage {coinageBefore}->{coinageAfter}, " +
+            $"itemChanged={itemChanged}, coinageChanged={coinageChanged}, latencyMs={timer.ElapsedMilliseconds}");
+
+        if (!itemChanged || !coinageChanged)
+            _bot.DumpSnapshotDiagnostics(after, label);
+
+        return new VendorMetrics(
+            vendor.Guid != 0,
+            vendor.DistanceYards,
+            itemCountBefore,
+            itemCountAfter,
+            coinageBefore,
+            coinageAfter,
+            (int)timer.ElapsedMilliseconds);
     }
 
-    private async Task<(ulong guid, float x, float y, float z)> FindNpcByFlagAsync(string account, string label, uint npcFlag, string npcType)
+    private async Task<VendorTarget> StageVendorAsync(string account, string label)
     {
-        for (int attempt = 0; attempt < 3; attempt++)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var units = snap?.NearbyUnits?.Where(u => (u.NpcFlags & npcFlag) != 0).ToList() ?? [];
+        _output.WriteLine($"[{label}] Teleporting to Grimtak's Razor Hill position.");
+        await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ + 1);
+        await _bot.WaitForTeleportSettledAsync(account, GrimtakX, GrimtakY, progressLabel: $"{label} vendor teleport");
 
-            if (units.Count > 0)
-            {
-                var npc = units[0];
-                var guid = npc.GameObject?.Base?.Guid ?? 0;
-                var pos = npc.GameObject?.Base?.Position;
-                float nx = pos?.X ?? 0, ny = pos?.Y ?? 0, nz = pos?.Z ?? 0;
-                _output.WriteLine($"  [{label}] Found {npcType}: {npc.GameObject?.Name} GUID=0x{guid:X} NpcFlags={npc.NpcFlags} at ({nx:F1}, {ny:F1}, {nz:F1})");
-                return (guid, nx, ny, nz);
-            }
+        var vendorUnit = await _bot.WaitForNearbyUnitAsync(
+            account,
+            (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR,
+            timeoutMs: 5000,
+            progressLabel: $"{label} vendor lookup");
 
-            if (attempt < 2)
-            {
-                _output.WriteLine($"  [{label}] No {npcType} found on attempt {attempt + 1}, retrying in 1s...");
-                await Task.Delay(1000);
-            }
-        }
+        Assert.NotNull(vendorUnit);
+        var vendorGuid = vendorUnit!.GameObject?.Base?.Guid ?? 0;
+        var vendorPos = vendorUnit.GameObject?.Base?.Position;
 
-        return (0, 0, 0, 0);
+        await _bot.RefreshSnapshotsAsync();
+        var snapshot = await _bot.GetSnapshotAsync(account);
+        var playerPos = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
+        var vendorDistance = playerPos == null || vendorPos == null
+            ? float.MaxValue
+            : LiveBotFixture.Distance3D(playerPos.X, playerPos.Y, playerPos.Z, vendorPos.X, vendorPos.Y, vendorPos.Z);
+
+        _output.WriteLine(
+            $"[{label}] vendor target: guid=0x{vendorGuid:X}, name={vendorUnit.GameObject?.Name}, " +
+            $"flags={vendorUnit.NpcFlags}, distance={vendorDistance:F1}y");
+
+        return new VendorTarget(vendorGuid, vendorDistance);
     }
 
     private async Task EnsureMoneyAsync(string account, string label, uint copperNeeded)
     {
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var copper = snap?.Player?.Coinage ?? 0;
-        if (copper < copperNeeded)
+        var snapshot = await _bot.GetSnapshotAsync(account);
+        var currentCopper = snapshot?.Player?.Coinage ?? 0;
+        if (currentCopper >= copperNeeded)
         {
-            _output.WriteLine($"  [{label}] Adding money: have {copper}c, need {copperNeeded}c");
-            await _bot.BotSelectSelfAsync(account);
-            await Task.Delay(300);
-            await _bot.SendGmChatCommandTrackedAsync(account, $".modify money {copperNeeded}", captureResponse: false, delayMs: 500);
+            _output.WriteLine($"[{label}] Coinage already sufficient: {currentCopper}c.");
+            return;
         }
+
+        _output.WriteLine($"[{label}] Adding {copperNeeded} copper for vendor purchase baseline.");
+        await _bot.BotSelectSelfAsync(account);
+        await Task.Delay(300);
+        await _bot.SendGmChatCommandTrackedAsync(account, $".modify money {copperNeeded}", captureResponse: false, delayMs: 500);
     }
 
-    /// <summary>
-    /// BagContents is MapField&lt;uint, uint&gt; — key=absolute slot index, value=itemId.
-    /// Backpack slots are 23-38 (INVENTORY_SLOT_ITEM_START).
-    /// </summary>
-    private static int CountItemInBags(WoWActivitySnapshot? snap, uint itemId)
-        => snap?.Player?.BagContents?.Values.Count(v => v == itemId) ?? 0;
+    private static int CountItemSlots(WoWActivitySnapshot? snapshot, uint itemId)
+        => snapshot?.Player?.BagContents?.Values.Count(value => value == itemId) ?? 0;
 
-    /// <summary>
-    /// Finds bag/slot for an item. BagContents key is absolute inventory slot.
-    /// For CMSG_SELL_ITEM: bagId=0xFF (backpack), slotId=absolute slot index.
-    /// </summary>
-    private static (int bagId, int slotId) FindItemBagSlot(WoWActivitySnapshot? snap, uint itemId)
+    private static (int bagId, int slotId) FindItemBagSlot(WoWActivitySnapshot? snapshot, uint itemId)
     {
-        var bags = snap?.Player?.BagContents;
-        if (bags == null) return (-1, -1);
+        var bags = snapshot?.Player?.BagContents;
+        if (bags == null)
+            return (-1, -1);
 
-        foreach (var kvp in bags)
+        foreach (var item in bags)
         {
-            if (kvp.Value == itemId)
-                return (0xFF, (int)kvp.Key); // 0xFF = INVENTORY_SLOT_BAG_0 (backpack)
+            if (item.Value == itemId)
+                return (0xFF, (int)item.Key);
         }
+
         return (-1, -1);
-    }
-
-    private async Task<bool> WaitForItemCountChangeAsync(string account, uint itemId, int previousCount, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var currentCount = CountItemInBags(snap, itemId);
-            if (currentCount > previousCount)
-                return true;
-            await Task.Delay(500);
-        }
-        return false;
-    }
-
-    private async Task<bool> WaitForItemPresentAsync(string account, uint itemId, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            if (CountItemInBags(snap, itemId) > 0)
-                return true;
-            await Task.Delay(500);
-        }
-        return false;
-    }
-
-    private async Task<bool> WaitForItemAbsentAsync(string account, uint itemId, TimeSpan timeout)
-    {
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < timeout)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            if (CountItemInBags(snap, itemId) == 0)
-                return true;
-            await Task.Delay(500);
-        }
-        return false;
     }
 
     private async Task DestroyItemByIdAsync(string account, string label, uint itemId)
     {
-        try
+        await _bot.RefreshSnapshotsAsync();
+        var snapshot = await _bot.GetSnapshotAsync(account);
+        var (bagId, slotId) = FindItemBagSlot(snapshot, itemId);
+        if (bagId < 0)
+            return;
+
+        _output.WriteLine($"[{label}] Cleanup: destroying item {itemId} at bag={bagId} slot={slotId}.");
+        await _bot.SendActionAsync(account, new ActionMessage
         {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var (bagId, slotId) = FindItemBagSlot(snap, itemId);
-            if (bagId >= 0)
+            ActionType = ActionType.DestroyItem,
+            Parameters =
             {
-                _output.WriteLine($"  [{label}] Cleanup: destroying item {itemId} at bag={bagId} slot={slotId}");
-                await _bot.SendActionAsync(account, new ActionMessage
-                {
-                    ActionType = ActionType.DestroyItem,
-                    Parameters =
-                    {
-                        new RequestParameter { IntParam = bagId },
-                        new RequestParameter { IntParam = slotId },
-                        new RequestParameter { IntParam = 1 }
-                    }
-                });
+                new RequestParameter { IntParam = bagId },
+                new RequestParameter { IntParam = slotId },
+                new RequestParameter { IntParam = 1 }
             }
-        }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"  [{label}] Cleanup warning: {ex.Message}");
-        }
+        });
     }
+
+    private sealed record VendorTarget(ulong Guid, float DistanceYards);
+
+    private sealed record VendorMetrics(
+        bool VendorFound,
+        float VendorDistanceYards,
+        int ItemCountBefore,
+        int ItemCountAfter,
+        long CoinageBefore,
+        long CoinageAfter,
+        int InventoryLatencyMs);
 }

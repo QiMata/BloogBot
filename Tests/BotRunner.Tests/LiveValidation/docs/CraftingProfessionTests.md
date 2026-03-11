@@ -1,42 +1,40 @@
 # CraftingProfessionTests
 
-Tests crafting pipeline: learn profession + recipe, provide materials, cast recipe spell, verify output item.
+Live BG crafting baseline for Linen Bandage production.
 
-## Test Methods (1)
+This suite currently validates the BackgroundBotRunner spell-cast path through:
+- `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
+- `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
+- `Exports/WoWSharpClient/WoWSharpObjectManager.Combat.cs`
+
+## Test Methods
 
 ### FirstAid_LearnAndCraft_ProducesLinenBandage
 
-**Bots:** BG (TESTBOT2) + FG (TESTBOT1)
+**Bot:** `TESTBOT2` only
 
-**Fixture Setup:** `EnsureCleanSlateAsync()`.
+## Test Flow
 
-**Test Flow (RunCraftingScenario per bot):**
+1. Reset the bot to the fixture clean slate and clear bags for deterministic inventory state.
+2. Learn `3273` (First Aid Apprentice) and `3275` (Linen Bandage recipe).
+3. Add exactly one `2589` Linen Cloth and assert the bag state is `cloth=1`, `bandage=0`.
+4. Dispatch `ActionType.CastSpell` with spell `3275`.
+5. Poll snapshots until bag state becomes `cloth=0`, `bandage=1`.
 
-| Step | Action | Details |
-|------|--------|---------|
-| 1 | Verify position | If not near Orgrimmar (1629.4, -4373.4, 31.2), teleport. Arrival within 45y. |
-| 2 | Learn spells | Check SpellList for 3273 (First Aid Apprentice) and 3275 (Linen Bandage recipe). If missing: `BotLearnSpellAsync()` + poll 5s for SMSG_LEARNED_SPELL. |
-| 3 | Prepare inventory | Count item 1 (Linen Cloth) and item 1251 (Linen Bandage) in bags. If bandage preexists OR cloth missing + bags >= 15 items: `BotClearInventoryAsync()`. |
-| 4 | Ensure material | If no Linen Cloth: `BotAddItemAsync(1, 1)`. Poll 3s for cloth in BagContents. |
-| 5 | Cast recipe | **Dispatch `ActionType.CastSpell`** with `IntParam = 3275` (Linen Bandage recipe) |
-| 6 | Wait for output | Poll BagContents for item 1251 count increase (8s, 200ms poll) |
+## Metrics
 
-**StateManager/BotRunner Action Flow:**
+The live assertions record:
+- spell-list confirmation for apprentice + recipe
+- pre-craft cloth slot count
+- pre-craft bandage slot count
+- post-craft cloth slot count
+- post-craft bandage slot count
+- final bag item count
+- craft latency in milliseconds
 
-**CastSpell dispatch chain:**
-1. ActionMessage with `ActionType.CastSpell`, `IntParam=3275`
-2. `BuildCastSpellSequence(3275)` in BotRunnerService
-3. **FG path:** Resolves spell ID 3275 → spell name via spell DB → `CastSpellByName("Linen Bandage")` via Lua. Note: `CastSpell(int)` is a **no-op** on FG — only string override works.
-4. **BG path:** CMSG_CAST_SPELL packet with spellId=3275. Works directly with int.
-5. Server processes craft: 3.5s channel → consumes 1x Linen Cloth → produces 1x Linen Bandage
-6. Spell-cast lockout set for 20s (prevents GoTo from interrupting channel)
+`SpellList` confirmation is treated as diagnostic evidence, not the primary pass/fail gate, because BG can craft successfully even when the learned-spell snapshot has not caught up yet.
 
-**Key IDs:**
-- Item 1 = Linen Cloth (input)
-- Item 1251 = Linen Bandage (output)
-- Spell 3273 = First Aid Apprentice (proficiency)
-- Spell 3275 = Linen Bandage (recipe/craft spell)
+## Overhaul Notes
 
-**Assertions:** Craft spell dispatches successfully. Bandage count increases after channeled cast completes.
-
-**FG vs BG Difference:** FG resolves spell ID→name for Lua; BG sends packet directly. Both produce same server-side result.
+- FG parity is intentionally removed from this suite.
+- This is still an action-driven baseline; the longer-term replacement remains the planned `CraftItemTask` coverage.

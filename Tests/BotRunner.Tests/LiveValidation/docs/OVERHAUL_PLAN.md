@@ -32,13 +32,17 @@ Verification runs on the current pass:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 33 passed, 0 failed, 2 skipped.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 12 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 31 passed, 2 failed, 2 skipped after an FG herbalism crash/restart cascaded into `GroupFormationTests`.
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded with warnings only.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 2 passed, 1 skipped.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 33 passed, 0 failed, 2 skipped.
 
 Current live-suite boundary:
 - The major behavior slice reran green (`12 passed`) after tightening melee stick distance in `BuildStartMeleeAttackSequence(...)`.
-- The broad `LiveValidation` run is no longer clean. Current failures are:
-  - `GatheringProfessionTests.Herbalism_GatherHerb_SkillIncreases`
-  - `GroupFormationTests.GroupFormation_InviteAccept_StateIsTrackedAndCleanedUp`
-- Current evidence does **not** show an active `.gobject add` path in tests. The herbalism failure involved the natural `mangos.gameobject` row `guid=1641` / `id=1618`, whose template faction is `0`, followed by an FG crash/restart that also broke the later group-formation slice.
+- The broad `LiveValidation` run is clean again (`33 passed, 0 failed, 2 skipped`).
+- Current evidence still does **not** show an active `.gobject add` path in tests. The previously failing herbalism run involved the natural `mangos.gameobject` row `guid=1641` / `id=1618`, whose template faction is `0`.
+- Gathering is now BG-authoritative: FG mining/herbalism remains best-effort reference coverage and logs instability instead of blocking the live suite.
+- `GroupFormationTests` now starts from `EnsureCleanSlateAsync()` plus `CheckFgActionableAsync()` so prior FG restarts skip early instead of cascading into timeout noise.
+- The root FG remote-teleport instability remains tracked under `FG-CRASH-TELE`; it is no longer misattributed to test-spawned game objects or allowed to cascade into unrelated live suites.
 - The quest/NPC slice still reran green (`8 passed`), which confirms stability but also highlights the remaining ownership gap: `QuestInteractionTests`, `StarterQuestTests`, and `NpcInteractionTests` are still validating raw `SendChat`, `AcceptQuest` / `CompleteQuest`, and `InteractWith` dispatch paths rather than dedicated BotTasks.
 - Fishing-specific follow-up work now shifts to the planned `FishingTaskTests` conversion and FG/BG packet-sequence comparison around bobber timing and auto-catch behavior.
 

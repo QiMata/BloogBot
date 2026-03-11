@@ -1,70 +1,28 @@
 # CharacterLifecycleTests
 
-Tests inventory operations and the death/revive lifecycle.
+The class now keeps only the inventory-add baseline that other live suites depend on.
 
-## Test Methods (4)
+## Active Test
 
-### 1. Equipment_AddItemToInventory
+### Equipment_AddItemToInventory
 
-**Bots:** BG + FG
+**Purpose:** Prove the GM add-item setup path is visible in snapshots for BG and FG.
 
-**Test Flow:**
-1. `EnsureStrictAliveAsync()`
-2. Baseline: count item 1 (Linen Cloth) in BagContents
-3. If preexisting or bags near-full, `BotClearInventoryAsync()`
-4. `.additem 1 1` via `SendGmChatCommandTrackedAsync()` (1200ms delay)
-5. Assert command success (no "FAULT:", no "no such command")
-6. `WaitForBagItemPresenceAsync()` — poll 10s, 400ms interval
-7. Assert: item count changed
+**Code paths:**
+- Test entry: `Tests/BotRunner.Tests/LiveValidation/CharacterLifecycleTests.cs`
+- Chat command dispatch/tracing: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs`
+- Snapshot polling: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Snapshots.cs`
+- Inventory state production: `Exports/BotRunner/BotRunnerService.cs`
+- BG inventory updates: `Exports/WoWSharpClient/`
+- FG inventory reads: `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
 
-**StateManager/BotRunner Role:** `.additem` is a GM chat command — BotRunnerService processes `SendChat` action. Server adds item, sends SMSG_ITEM_PUSH_RESULT. BG processes packet → updates ObjectManager inventory. FG reads memory directly.
+**Assertions:**
+- `.additem` dispatch succeeds and is not rejected by the command table
+- Linen Cloth appears in bag snapshots
+- Pre-existing inventory contamination is cleared before the assertion
 
-**Key IDs:** Item 1 = Linen Cloth
+## Removed In Overhaul Pass 1
 
----
-
-### 2. Consumable_AddPotionToInventory
-
-**Bots:** BG + FG
-
-Same flow as Equipment_AddItemToInventory but with item 118 (Minor Healing Potion), quantity 5.
-
----
-
-### 3. Death_KillAndRevive
-
-**Bots:** BG + FG
-
-**Test Flow:**
-
-| Step | Action | Details |
-|------|--------|---------|
-| 1 | Ensure alive | `EnsureStrictAliveAsync()` — verify baseline alive state |
-| 2 | Kill | `InduceDeathForTestAsync()` — tries `.die`, `.kill`, `.damage 5000` via chat; fallback SOAP (15s timeout) |
-| 3 | Wait for death | Poll snapshot for ghost flag `(PlayerFlags & 0x10)` OR `Health == 0` OR `StandState == 7` (DEAD) |
-| 4 | Revive | `RevivePlayerAsync()` via SOAP `.revive` |
-| 5 | Wait for alive | Poll `IsStrictAlive()` up to 20s: health > 0 AND no ghost flag AND standState != dead |
-
-**StateManager/BotRunner Role:** Death/revive are server-side state changes. BotRunnerService's `PushDeathRecoveryIfNeeded()` would normally push ReleaseCorpseTask, but env var `WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1` prevents this during tests. Snapshot captures state transitions passively.
-
-**Player Flags:** 0x10 = PLAYER_FLAGS_GHOST. StandState 7 = UNIT_STAND_STATE_DEAD.
-
-**Assertions:** Alive → dead/ghost → alive transition confirmed in snapshots.
-
----
-
-### 4. CharacterCreation_InfoAvailable
-
-**Bots:** BG + FG
-
-**Test Flow:**
-1. `RefreshSnapshotsAsync()`
-2. Assert: GUID != 0, Position != null, Level > 0, CharacterName/AccountName populated
-
-**StateManager/BotRunner Role:** Passive snapshot observation.
-
----
-
-## Cleanup/Teardown
-
-Death_KillAndRevive revives via SOAP after assertion. No persistent state changes.
+- `Consumable_AddPotionToInventory`
+- `Death_KillAndRevive`
+- `CharacterCreation_InfoAvailable`
