@@ -497,10 +497,32 @@ namespace WoWSharpClient.Handlers
                 ulong targetGuid = ReaderUtils.ReadPackedGuid(reader);
 
                 var player = WoWSharpObjectManager.Instance.Player;
-                if (player is Models.WoWLocalPlayer localPlayer && attackerGuid == localPlayer.Guid)
-                    localPlayer.IsAutoAttacking = false;
+                if (player is Models.WoWLocalPlayer localPlayer)
+                {
+                    bool isUs = attackerGuid == localPlayer.Guid;
+                    Log.Information("[SpellHandler] SMSG_ATTACKSTOP: attacker=0x{Attacker:X} target=0x{Target:X} isLocalPlayer={IsUs} wasAutoAttacking={WasAuto}",
+                        attackerGuid, targetGuid, isUs, localPlayer.IsAutoAttacking);
+                    if (isUs)
+                        localPlayer.IsAutoAttacking = false;
+                }
             }
             catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// SMSG_CANCEL_COMBAT (0x14E) — server cancels all combat state.
+        /// Sent when a mob evades or combat is otherwise terminated server-side.
+        /// Empty payload — just clears IsAutoAttacking so the bot re-sends
+        /// CMSG_ATTACKSWING on the next melee tick.
+        /// </summary>
+        public static void HandleCancelCombat(Opcode opcode, byte[] data)
+        {
+            var player = WoWSharpObjectManager.Instance.Player;
+            if (player is Models.WoWLocalPlayer localPlayer)
+            {
+                localPlayer.IsAutoAttacking = false;
+                Log.Information("[SpellHandler] SMSG_CANCEL_COMBAT received — cleared IsAutoAttacking");
+            }
         }
 
         /// <summary>

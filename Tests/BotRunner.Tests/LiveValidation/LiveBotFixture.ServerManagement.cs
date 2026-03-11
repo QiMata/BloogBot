@@ -84,7 +84,7 @@ public partial class LiveBotFixture
             using var realmConn = new MySql.Data.MySqlClient.MySqlConnection(MangosRealmDbConnectionString);
             await realmConn.OpenAsync();
 
-            var gmAccounts = new[] { "ADMINISTRATOR", "TESTBOT1", "TESTBOT2" };
+            var gmAccounts = new[] { "ADMINISTRATOR", "TESTBOT1", "TESTBOT2", "COMBATTEST" };
             var updatedAccounts = 0;
             foreach (var accountName in gmAccounts)
             {
@@ -368,4 +368,5 @@ public partial class LiveBotFixture
     /// Query the MaNGOS gameobject table for existing spawn locations of a given template entry.
     /// Returns up to <paramref name="limit"/> (map, x, y, z) tuples.
     /// </summary>
+
 }

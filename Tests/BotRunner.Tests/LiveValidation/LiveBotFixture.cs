@@ -121,6 +121,15 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// <summary>Account name of the Foreground bot (from config).</summary>
     public string? FgAccountName { get; private set; }
 
+    /// <summary>Snapshot of the Combat Test bot (non-GM, never receives .gm on).</summary>
+    public WoWActivitySnapshot? CombatTestBot { get; private set; }
+
+    /// <summary>Account name of the Combat Test bot.</summary>
+    public string? CombatTestAccountName { get; private set; }
+
+    /// <summary>Character name of the Combat Test bot.</summary>
+    public string? CombatTestCharacterName { get; private set; }
+
     // ---- Backward-compatible adapter properties (for test migration) ----
     // These expose the BG bot state through the old API surface so tests compile.
     // Tests should be migrated to use snapshot-based queries with dual-client assertions.
@@ -330,15 +339,17 @@ public partial class LiveBotFixture : IAsyncLifetime
                 await WaitForSoapPlayerResolutionAsync(BgCharacterName);
             if (FgCharacterName != null)
                 await WaitForSoapPlayerResolutionAsync(FgCharacterName);
+            if (CombatTestCharacterName != null)
+                await WaitForSoapPlayerResolutionAsync(CombatTestCharacterName);
 
             // 6. Ensure clean state: revive dead characters, disband existing groups
             _logger.LogInformation("[FIXTURE] Ensuring clean character state (revive + disband)...");
             await EnsureCleanCharacterStateAsync();
 
-            // 6. Enable GM mode for FG only. BG must NEVER receive .gm on/.gm off via chat —
-            //    MaNGOS responds with a packet that disconnects the headless client, breaking
-            //    all subsequent commands and position tracking. BG commands work via GM account
-            //    level (set to 6 in EnsureGmCommandsEnabledAsync) without needing .gm on.
+            // 6. Enable GM mode for FG only. BG and COMBATTEST must NEVER receive .gm on —
+            //    BG: MaNGOS responds with a packet that disconnects the headless client.
+            //    COMBATTEST: .gm on corrupts factionTemplate, causing mob evade in combat tests.
+            //    Both use GM account level (6) for command access without needing .gm on.
             if (FgAccountName != null)
             {
                 _logger.LogInformation("[FIXTURE] Enabling GM mode for FG bot...");
@@ -347,7 +358,9 @@ public partial class LiveBotFixture : IAsyncLifetime
             }
             GmModeInitialized = true;
 
-            // 7. Stage both bots at a shared starting location (Orgrimmar).
+            // 7. Stage bots at a shared starting location (Orgrimmar).
+            //    COMBATTEST is excluded — its test handles positioning directly,
+            //    and rapid back-to-back SOAP teleports can disconnect BG clients.
             _logger.LogInformation("[FIXTURE] Staging bots at Orgrimmar...");
             if (BgCharacterName != null)
                 await TeleportToNamedAsync(BgCharacterName, "Orgrimmar");
@@ -359,7 +372,7 @@ public partial class LiveBotFixture : IAsyncLifetime
             //    Teleport and GM commands can cause transient CharacterSelect flickers.
             await WaitForBotsStabilizedAsync();
 
-            _logger.LogInformation("[FIXTURE] Ready. BG='{Bg}', FG='{Fg}'", BgCharacterName ?? "N/A", FgCharacterName ?? "N/A");
+            _logger.LogInformation("[FIXTURE] Ready. BG='{Bg}', FG='{Fg}', Combat='{Combat}'", BgCharacterName ?? "N/A", FgCharacterName ?? "N/A", CombatTestCharacterName ?? "N/A");
             IsReady = true;
         }
         catch (Exception ex)
@@ -380,13 +393,19 @@ public partial class LiveBotFixture : IAsyncLifetime
         // Account names are ONLY cleared during the initial call from fixture init (when
         // they haven't been set yet) or when explicitly rebuilding (e.g. during init).
 
-        // Match by account name: TESTBOT1 = Foreground (injected, gold standard), others = Background (headless).
+        // Match by account name:
+        //   TESTBOT1 (ends in "1") = Foreground (injected, gold standard)
+        //   COMBATTEST = dedicated non-GM combat testing bot (never receives .gm on)
+        //   Others = Background (headless)
         WoWActivitySnapshot? newFg = null;
         WoWActivitySnapshot? newBg = null;
+        WoWActivitySnapshot? newCombat = null;
 
         foreach (var snap in inWorldBots)
         {
-            if (snap.AccountName.EndsWith("1", StringComparison.OrdinalIgnoreCase))
+            if (snap.AccountName.Equals("COMBATTEST", StringComparison.OrdinalIgnoreCase))
+                newCombat = snap;
+            else if (snap.AccountName.EndsWith("1", StringComparison.OrdinalIgnoreCase))
                 newFg = snap;
             else
                 newBg = snap;
@@ -395,6 +414,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         // Update snapshot references (always — null if bot dropped out of InWorld)
         ForegroundBot = newFg;
         BackgroundBot = newBg;
+        CombatTestBot = newCombat;
 
         // Update account/character names only when we discover new ones — never null
         // them out once set, since tests need these to send SOAP/chat commands even
@@ -409,9 +429,14 @@ public partial class LiveBotFixture : IAsyncLifetime
             BgAccountName = newBg.AccountName;
             BgCharacterName = newBg.CharacterName;
         }
+        if (newCombat != null)
+        {
+            CombatTestAccountName = newCombat.AccountName;
+            CombatTestCharacterName = newCombat.CharacterName;
+        }
 
         // Fallback: if only one bot and neither role was matched, assign it as BG
-        if (newBg == null && newFg == null && inWorldBots.Count >= 1)
+        if (newBg == null && newFg == null && newCombat == null && inWorldBots.Count >= 1)
         {
             BackgroundBot = inWorldBots[0];
             BgAccountName = BackgroundBot.AccountName;
@@ -442,12 +467,18 @@ public partial class LiveBotFixture : IAsyncLifetime
             {
                 await EnsureAliveForSetupAsync(FgAccountName, FgCharacterName, "FG");
             }
+            if (CombatTestCharacterName != null && CombatTestAccountName != null)
+            {
+                await EnsureAliveForSetupAsync(CombatTestAccountName, CombatTestCharacterName, "COMBAT");
+            }
 
             // Clear stale grouping only when snapshot indicates group state.
             if (BgAccountName != null)
                 await EnsureNotGroupedAsync(BgAccountName, "BG");
             if (FgAccountName != null)
                 await EnsureNotGroupedAsync(FgAccountName, "FG");
+            if (CombatTestAccountName != null)
+                await EnsureNotGroupedAsync(CombatTestAccountName, "COMBAT");
         }
         catch (Exception ex)
         {

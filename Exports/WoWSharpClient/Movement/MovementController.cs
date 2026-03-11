@@ -58,6 +58,9 @@ namespace WoWSharpClient.Movement
         private uint _lastPacketTime;
         private MovementFlags _lastSentFlags = player.MovementFlags;
         private bool _forceStopAfterReset;
+        // When true, sync _lastPacketPosition to current player position on next Update().
+        // Needed because Reset() runs before the teleport position is applied to _player.
+        private bool _needsPacketPositionSync;
         private const uint PACKET_INTERVAL_MS = 500;
         private uint _latestGameTimeMs;
         private uint _staleForwardSuppressUntilMs;
@@ -106,6 +109,17 @@ namespace WoWSharpClient.Movement
         {
             _frameCounter++;
             _latestGameTimeMs = gameTimeMs;
+
+            // Deferred position sync: Reset() captured pre-teleport position.
+            // Now that the teleport destination has been applied to _player, sync it.
+            if (_needsPacketPositionSync)
+            {
+                _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
+                _lastPacketTime = gameTimeMs;
+                _needsPacketPositionSync = false;
+                Log.Information("[MovementController] Synced _lastPacketPosition to post-teleport ({X:F1},{Y:F1},{Z:F1})",
+                    _player.Position.X, _player.Position.Y, _player.Position.Z);
+            }
 
             if (_forceStopAfterReset)
             {
@@ -817,7 +831,14 @@ namespace WoWSharpClient.Movement
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
             _lastSentFlags = hadMovementToClear ? stopSeedFlags : MovementFlags.MOVEFLAG_NONE;
             _forceStopAfterReset = hadMovementToClear;
-            _lastPacketTime = 0;
+            // Sync packet tracking to current position immediately.
+            // For login (OnLoginVerifyWorld), position is already set before Reset().
+            // For teleport (NotifyTeleportIncoming), position may be pre-teleport here,
+            // but _needsPacketPositionSync corrects it on the next Update() after the
+            // teleport destination is written to _player.Position.
+            _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
+            _lastPacketTime = _latestGameTimeMs;
+            _needsPacketPositionSync = true;
 
             _prevGroundZ = _player.Position.Z;
             _prevGroundNormal = new Vector3(0, 0, 1);

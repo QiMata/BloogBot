@@ -104,6 +104,7 @@ namespace WoWSharpClient
             _handlers[Opcode.SMSG_SPELL_START] = SpellHandler.HandleSpellStart;
             _handlers[Opcode.SMSG_ATTACKSTART] = SpellHandler.HandleAttackStart;
             _handlers[Opcode.SMSG_ATTACKSTOP] = SpellHandler.HandleAttackStop;
+            _handlers[Opcode.SMSG_CANCEL_COMBAT] = SpellHandler.HandleCancelCombat;
             _handlers[Opcode.SMSG_ATTACKERSTATEUPDATE] = SpellHandler.HandleAttackerStateUpdate;
             _handlers[Opcode.SMSG_DESTROY_OBJECT] = SpellHandler.HandleDestroyObject;
             _handlers[Opcode.SMSG_CAST_FAILED] = SpellHandler.HandleCastFailed;

@@ -35,6 +35,7 @@ namespace BackgroundBotRunner
         private IWorldClient? _activeWorldClient;
         private IDisposable? _worldDisconnectSubscription;
         private IDisposable? _tradeAutoAcceptSubscription;
+        private IDisposable? _logoutCompleteSubscription;
 
         public BackgroundBotWorker(ILoggerFactory loggerFactory, IConfiguration configuration)
         {
@@ -281,6 +282,34 @@ namespace BackgroundBotRunner
                 _logger.LogWarning(ex, "Failed to subscribe to world client disconnection notifications.");
             }
 
+            // Auto-re-enter world after logout. When the server confirms logout
+            // (SMSG_LOGOUT_COMPLETE), automatically re-login with the same character.
+            // This enables tests to do .gm off → logout → relog to clear all GM state.
+            try
+            {
+                _logoutCompleteSubscription = worldClient.LogoutComplete?.Subscribe(_ =>
+                {
+                    var om = WoWSharpObjectManager.Instance;
+                    var guid = om.PlayerGuid.FullGuid;
+                    if (guid == 0)
+                    {
+                        _logger.LogWarning("Logout complete but no character GUID stored — cannot auto-re-enter.");
+                        return;
+                    }
+                    _logger.LogInformation("Logout complete — auto-re-entering world with GUID 0x{Guid:X}", guid);
+                    om.HasEnteredWorld = false;
+                    Task.Run(async () =>
+                    {
+                        await Task.Delay(1500); // Let server finalize logout
+                        om.EnterWorld(guid);
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to subscribe to logout complete notifications.");
+            }
+
             _logger.LogInformation("Initialized network client component factory using active world client.");
         }
 
@@ -311,6 +340,9 @@ namespace BackgroundBotRunner
 
             _tradeAutoAcceptSubscription?.Dispose();
             _tradeAutoAcceptSubscription = null;
+
+            _logoutCompleteSubscription?.Dispose();
+            _logoutCompleteSubscription = null;
 
             _logger.LogInformation("Cleared network client component factory state.");
         }

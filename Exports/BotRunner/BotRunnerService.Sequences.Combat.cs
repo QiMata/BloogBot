@@ -11,8 +11,11 @@ namespace BotRunner
 {
     public partial class BotRunnerService
     {
-        // Melee reach: weapon range (~2y) + both capsule radii (~0.4y each) + margin.
-        private const float MeleeChaseArrivalDist = 3.5f;
+        // Melee reach: must be within server's CanReachWithMeleeAttack() range.
+        // MaNGOS formula: attacker.GetMeleeReach() + target.GetMeleeReach()
+        // For level 1 player + scorpid ≈ 1.5 + 0.5 = 2.0y, plus tolerance.
+        // Was 3.5y which left the bot outside server melee reach after mob evade-walks.
+        private const float MeleeChaseArrivalDist = 4.0f;
         // Re-chase threshold: if target moves beyond this, start chasing again.
         private const float MeleeChaseLeashDist = 8f;
 
@@ -76,6 +79,13 @@ namespace BotRunner
                         if (dist > MeleeChaseArrivalDist)
                         {
                             // Out of melee range — chase the target.
+                            // Do NOT send CMSG_ATTACKSTOP here — the server maintains auto-attack
+                            // state and will resume swings when back in range. Sending ATTACKSTOP
+                            // tells the server we stopped fighting, causing the mob's AI to evade.
+                            // If the SERVER clears combat (SMSG_ATTACKSTOP/CANCEL_COMBAT), the
+                            // handler already sets IsAutoAttacking=false, and StartMeleeAttack()
+                            // will re-send CMSG_ATTACKSWING on re-entry to melee range.
+
                             if (navPath == null)
                             {
                                 var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
@@ -109,21 +119,21 @@ namespace BotRunner
                             return BehaviourTreeStatus.Running;
                         }
 
-                        // In melee range — stop movement and ensure auto-attack is on.
-                        if (!attackStarted || dist <= MeleeChaseArrivalDist)
+                        // In melee range — always clear movement flags so the
+                        // server doesn't think we're still walking forward.
+                        // MoveToward() sets MOVEFLAG_FORWARD during chase; if the
+                        // mob oscillates in/out of range, the flag stays set unless
+                        // we explicitly clear it on re-entry to melee range.
+                        _objectManager.StopAllMovement();
+                        if (!attackStarted)
                         {
-                            _objectManager.StopAllMovement();
                             navPath?.Clear();
-                            _objectManager.Face(target.Position);
-                            _objectManager.StartMeleeAttack();
-
-                            if (!attackStarted)
-                            {
-                                Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y) — started auto-attack on 0x{Guid:X}",
-                                    dist, targetGuid);
-                                attackStarted = true;
-                            }
+                            Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y) — engaging 0x{Guid:X}",
+                                dist, targetGuid);
+                            attackStarted = true;
                         }
+                        _objectManager.Face(target.Position);
+                        _objectManager.StartMeleeAttack();
 
                         // Stay in Running — mob is alive, keep monitoring.
                         return BehaviourTreeStatus.Running;

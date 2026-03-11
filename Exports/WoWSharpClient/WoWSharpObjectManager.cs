@@ -308,6 +308,73 @@ namespace WoWSharpClient
         }
 
 
+        /// <summary>
+        /// Logout and re-enter world with the same character. Waits for
+        /// SMSG_LOGOUT_COMPLETE then sends CMSG_PLAYER_LOGIN. Returns true
+        /// if the full cycle completed within the timeout.
+        /// </summary>
+        public async Task<bool> LogoutAndReenterWorldAsync(TimeSpan timeout)
+        {
+            if (_woWClient == null) return false;
+
+            var characterGuid = PlayerGuid.FullGuid;
+            if (characterGuid == 0)
+            {
+                Serilog.Log.Warning("[OBJMGR] LogoutAndReenterWorld: no character GUID");
+                return false;
+            }
+
+            var worldClient = _woWClient.WorldClient;
+            if (worldClient == null)
+            {
+                Serilog.Log.Warning("[OBJMGR] LogoutAndReenterWorld: no world client");
+                return false;
+            }
+
+            // Subscribe to SMSG_LOGOUT_COMPLETE before sending request.
+            var logoutTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var logoutSub = worldClient.LogoutComplete.Subscribe(_ => logoutTcs.TrySetResult(true));
+
+            // Send CMSG_LOGOUT_REQUEST.
+            HasEnteredWorld = false;
+            Logout();
+            Serilog.Log.Information("[OBJMGR] LogoutAndReenterWorld: sent CMSG_LOGOUT_REQUEST, waiting for SMSG_LOGOUT_COMPLETE...");
+
+            // Wait for server to confirm logout.
+            var logoutTask = logoutTcs.Task;
+            if (await Task.WhenAny(logoutTask, Task.Delay(timeout)) != logoutTask)
+            {
+                Serilog.Log.Warning("[OBJMGR] LogoutAndReenterWorld: timed out waiting for SMSG_LOGOUT_COMPLETE");
+                HasEnteredWorld = true; // restore state
+                return false;
+            }
+
+            Serilog.Log.Information("[OBJMGR] LogoutAndReenterWorld: logout confirmed, re-entering world with GUID 0x{Guid:X}", characterGuid);
+
+            // Brief pause to let server finalize the logout.
+            await Task.Delay(1000);
+
+            // Re-enter world with the same character.
+            EnterWorld(characterGuid);
+
+            // Wait for SMSG_LOGIN_VERIFY_WORLD (HasEnteredWorld will be set by the handler).
+            var deadline = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (HasEnteredWorld && Player?.Position != null)
+                {
+                    Serilog.Log.Information("[OBJMGR] LogoutAndReenterWorld: re-entered world at ({X:F1},{Y:F1},{Z:F1})",
+                        Player.Position.X, Player.Position.Y, Player.Position.Z);
+                    return true;
+                }
+                await Task.Delay(200);
+            }
+
+            Serilog.Log.Warning("[OBJMGR] LogoutAndReenterWorld: timed out waiting for world re-entry");
+            return false;
+        }
+
+
         public string ZoneText { get; private set; }
 
 

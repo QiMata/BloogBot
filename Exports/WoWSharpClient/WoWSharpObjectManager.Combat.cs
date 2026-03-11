@@ -281,11 +281,6 @@ namespace WoWSharpClient
         {
             if (_woWClient == null) return;
 
-            // Ensure the player model's TargetGuid is consistent with _currentTargetGuid
-            // so snapshots immediately reflect the attack target.  SetTarget() normally
-            // does this, but callers (e.g. BotProfile rotation tasks) may invoke
-            // StartMeleeAttack() after SetTarget was already called, and an intervening
-            // SMSG_UPDATE_OBJECT could have clobbered TargetGuid back to 0.
             if (_currentTargetGuid != 0)
             {
                 if (Player is Models.WoWLocalPlayer localPlayer)
@@ -294,17 +289,27 @@ namespace WoWSharpClient
                     localPlayer.TargetHighGuid.LowGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid & 0xFFFFFFFF));
                     localPlayer.TargetHighGuid.HighGuidValue = BitConverter.GetBytes((uint)(_currentTargetGuid >> 32));
 
-                    // MaNGOS requires a recent movement packet to process CMSG_ATTACKSWING.
-                    // After teleport + settle, the bot is stationary with MOVEFLAG_NONE and
-                    // IsAutoAttacking=false, so MovementController sends no heartbeats.
-                    // Force a MSG_MOVE_HEARTBEAT here so the server has fresh movement data,
-                    // then set IsAutoAttacking so the controller keeps sending periodic heartbeats.
+                    // Only send CMSG_ATTACKSWING once per engagement.
+                    // Spamming it resets the server's swing timer (each call triggers
+                    // Unit::Attack → AttackStop → AttackStart), preventing any
+                    // actual melee swing from completing. SMSG_ATTACKSTOP / SMSG_CANCEL_COMBAT
+                    // clears IsAutoAttacking, allowing re-engagement on the next call.
+                    if (localPlayer.IsAutoAttacking)
+                        return;
+
+                    Log.Information("[StartMeleeAttack] Sending CMSG_ATTACKSWING on 0x{Target:X} (re-engage={ReEngage})",
+                        _currentTargetGuid, localPlayer.TargetGuid != 0);
+
+                    // Send a position heartbeat to sync with the server BEFORE
+                    // the attack swing. Without this, the server may have a stale
+                    // player position from the last movement packet, causing it to
+                    // think the player is out of melee range even when the client
+                    // shows them right next to the mob.
                     var gameTimeMs = (uint)_worldTimeTracker.NowMS.TotalMilliseconds;
                     var heartbeat = Parsers.MovementPacketHandler.BuildMovementInfoBuffer(localPlayer, gameTimeMs, 0);
                     _ = _woWClient.SendMovementOpcodeAsync(Opcode.MSG_MOVE_HEARTBEAT, heartbeat);
+
                     localPlayer.IsAutoAttacking = true;
-                    Log.Information("[StartMeleeAttack] Sent pre-attack heartbeat at ({X:F1},{Y:F1},{Z:F1}), IsAutoAttacking=true",
-                        localPlayer.Position.X, localPlayer.Position.Y, localPlayer.Position.Z);
                 }
                 else if (Player is Models.WoWUnit unit)
                 {
@@ -312,7 +317,6 @@ namespace WoWSharpClient
                 }
             }
 
-            // CMSG_ATTACKSWING requires the target's full 8-byte GUID
             var payload = BitConverter.GetBytes(_currentTargetGuid);
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSWING, payload);
         }

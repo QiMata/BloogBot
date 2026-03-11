@@ -79,6 +79,15 @@ namespace WoWStateManager.Settings
         public BotRunnerType RunnerType { get; set; } = BotRunnerType.Foreground;
 
         /// <summary>
+        /// GM level for this account (0=player, 6=full admin).
+        /// Controls command access (e.g. .go xyz, .learn). Does NOT enable in-game GM mode
+        /// (.gm on) — that must be sent separately and should be avoided for combat testing
+        /// because it corrupts factionTemplate.
+        /// </summary>
+        [JsonProperty("GmLevel")]
+        public int GmLevel { get; set; } = 6;
+
+        /// <summary>
         /// Optional: Process ID of an existing WoW.exe to inject into.
         /// If not specified and RunnerType is Foreground, a new WoW process will be launched.
         /// </summary>

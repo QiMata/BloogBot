@@ -154,5 +154,10 @@ namespace WoWSharpClient.Client
         /// Stream of attack errors (e.g., not in range, bad facing).
         /// </summary>
         IObservable<string> AttackErrors { get; }
+
+        /// <summary>
+        /// Fires when SMSG_LOGOUT_COMPLETE is received (character returned to char select).
+        /// </summary>
+        IObservable<Unit> LogoutComplete { get; }
     }
 }
