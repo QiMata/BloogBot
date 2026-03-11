@@ -345,11 +345,10 @@ public class FishingProfessionTests
 
             Assert.NotEqual(0u, castSpellId);
 
-            // Cast fishing via player action (CMSG_CAST_SPELL) — no GM shortcuts.
+            // Start fishing via the task-owned action path — no GM shortcuts.
             await _bot.SendActionAndWaitAsync(account, new ActionMessage
             {
-                ActionType = ActionType.CastSpell,
-                Parameters = { new RequestParameter { IntParam = (int)castSpellId } }
+                ActionType = ActionType.StartFishing,
             }, delayMs: 3000);
 
             // Check if channel started
@@ -357,7 +356,7 @@ public class FishingProfessionTests
             var snap = GetSnapshot(label);
             var channelId = snap?.Player?.Unit?.ChannelSpellId ?? 0;
             var bobber = FindBobber(snap);
-            _output.WriteLine($"  [{label}] After CastSpell: channel={channelId}, bobber={bobber != null}");
+            _output.WriteLine($"  [{label}] After StartFishing: channel={channelId}, bobber={bobber != null}");
 
             // Log diagnostics
             if (bobber != null)

@@ -229,6 +229,14 @@ namespace BotRunner
                         var castTargetGuid = actionEntry.Item2.Count > 1 ? UnboxGuid(actionEntry.Item2[1]) : 0UL;
                         builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], castTargetGuid));
                         break;
+                    case CharacterAction.StartFishing:
+                        builder.Do("Queue Fishing Task", time =>
+                        {
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FishingTask)
+                                _botTasks.Push(new Tasks.FishingTask(context));
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
                     case CharacterAction.StopCast:
                         builder.Splice(StopCastSequence);
                         break;

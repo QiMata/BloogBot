@@ -3,8 +3,12 @@
 Live BG-first fishing baseline covering spell sync, shoreline stability, cast entry, and catch detection.
 
 This suite currently exercises:
+- `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
 - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
+- `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+- `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
 - `Exports/BotRunner/Combat/FishingData.cs`
+- `Exports/BotRunner/Tasks/FishingTask.cs`
 - `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
 - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
 - `Exports/WoWSharpClient/Client/WorldClient.cs`
@@ -23,7 +27,7 @@ This suite currently exercises:
 2. Set fishing skill to `1/300`, clear gear, add a pole, equip it, and add `Shiny Bauble`.
 3. Teleport across the known shoreline positions and reject unstable landings.
 4. Set facing toward water at each position.
-5. Resolve the castable fishing rank from the current known-spell list and dispatch `ActionType.CastSpell`.
+5. Dispatch `ActionType.StartFishing`, which maps to `CharacterAction.StartFishing` and queues `FishingTask`.
 6. Look for:
    - an active channel
    - a bobber game object
@@ -42,10 +46,10 @@ The live diagnostics record:
 
 ## Current Status
 
-`2026-03-11` live runs moved the suite past the BG cast gate:
+`2026-03-11` live runs moved the suite past the BG cast gate and into task-owned fishing entry:
 - BG now updates known fishing ranks from `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`
-- `ResolveCastableFishingSpellId(...)` correctly prefers the highest currently-known fishing rank
-- the live run reaches `CastSpellAtLocation()`, channel start, bobber creation, and auto-loot/catch detection
+- `ActionType.StartFishing` now queues `FishingTask`, which resolves the castable fishing rank, issues the cast, and waits for the fishing cycle to complete
+- the live run reaches `CastSpellAtLocation()`, channel start, bobber creation, and auto-loot/catch detection through `FishingTask`
 - the focused fishing slice still passes in isolation
 - BG fishing setup now starts with `EnsureCleanSlateAsync(...)`, which aligns it with the other live suites and removes prior-test position/death leakage before fishing gear and spell sync are applied
 
@@ -55,19 +59,16 @@ The pass condition no longer depends only on RNG skill-up. A run now succeeds if
 
 Latest broad-suite boundary:
 - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> `13 passed`
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `1 passed`
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed`
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` still exited nonzero, but the fresh `TestResults/LiveLogs/FishingProfessionTests.log` no longer shows a fishing failure:
-  - Ratchet dock cast started a real channel
-  - bobber custom anim fired
-  - BG sent `CMSG_GAMEOBJ_USE` after `ForceStopImmediate()`
-  - MaNGOS returned `SMSG_LOOT_RESPONSE`
-  - item `20708` was pushed into bags and the bobber was released
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `31 passed, 0 failed, 4 skipped`
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `14 passed, 1 skipped`
 
-That means the current slice moved the observed broad-suite boundary forward: fishing is no longer the failing symptom in the latest live logs, but `BRT-OVR-004` is still open until the full suite finishes green and the test is converted to task-owned coverage.
+That means the cast/channel entry is now task-owned, but `BRT-OVR-004` remains open because fishing still is not part of the default documented-stable slice until its shoreline/catch metrics stop oscillating inside broader overhaul runs.
 
 ## Overhaul Notes
 
-- This suite still needs to become the planned `FishingTaskTests` coverage so the behavior is driven through a dedicated `FishingTask`.
+- The cast entry is now driven through `FishingTask`, but the live suite still owns the shoreline selection and catch assertions.
 - The next fishing-focused pass should capture the same successful Ratchet packet/timing sequence from FG and compare it to the current BG log rather than re-debugging the old cast gate.
 - FG/BG packet-timing capture around bobber spawn, custom anim, and auto-interact timing is still the required reference path instead of re-debugging the old cast gate.
+- This suite is currently validated in isolation, not in the routine documented-stable slice, because `BRT-OVR-004` is still open.

@@ -16,6 +16,7 @@ Completed overhaul slices now on disk:
 - `FishingProfessionTests.cs` is now a BG-first baseline that forces fishing spell sync, resolves the castable fishing rank from the known-spell list, rejects unstable shoreline landings, and treats bag/loot delta as a valid catch metric when skill-up RNG does not fire.
 - BG spell-state sync now handles `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`, which unblocked server-side fishing rank replacement.
 - New unit coverage links the live fishing baseline back to the owning runtime logic in `SpellHandler` and `FishingData`.
+- `ActionType.StartFishing` / `CharacterAction.StartFishing` / `FishingTask` now own the fishing cast entry instead of raw live-test `CastSpell` dispatch.
 - The NPC action contract now includes `VisitVendor`, `VisitTrainer`, and `VisitFlightMaster`, and `Trainer_LearnAvailableSpells` now drives BG through `TrainerVisitTask`-owned logic instead of a raw `InteractWith` dispatch.
 - `LiveBotFixture.CheckFgActionableAsync()` now requires both successful action forwarding and a teleport/snapshot round-trip before later FG-sensitive suites keep running.
 - Test markdown was refreshed to link each touched test back to the production code paths it exercises.
@@ -50,6 +51,11 @@ Verification runs on the current pass:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~NpcInteractionTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~UnequipItemTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 10 passed, 2 skipped.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 32 passed, 0 failed, 3 skipped.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> 13 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 31 passed, 0 failed, 4 skipped.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 14 passed, 1 skipped.
 
 Current live-suite boundary:
 - The major behavior slice reran green (`12 passed`) after tightening melee stick distance in `BuildStartMeleeAttackSequence(...)`.
@@ -60,9 +66,9 @@ Current live-suite boundary:
 - `CheckFgActionableAsync()` now proves both command forwarding and snapshot movement responsiveness, so later FG-dependent suites no longer inherit stale world-state from earlier instability.
 - The root FG remote-teleport instability remains tracked under `FG-CRASH-TELE`; it is no longer misattributed to test-spawned game objects or allowed to cascade into unrelated live suites.
 - `Trainer_LearnAvailableSpells` now takes the task-owned `VisitTrainer -> TrainerVisitTask -> LearnAllAvailableSpellsAsync(...)` path, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`; that gap is tracked under `BRT-OVR-006`.
-- BG fishing now starts from `EnsureCleanSlateAsync()` before spell sync and gear setup, which removed one source of prior-test contamination.
-- The latest broad rerun did not produce a fresh fishing failure. Its updated fishing log shows a successful Ratchet catch sequence through bobber custom anim, `GAMEOBJ_USE`, loot response, and bag delta.
-- The full `LiveValidation` run is green again (`32 passed, 0 failed, 3 skipped`), so the active overhaul blockers are back to fishing task ownership/packet timing and the BG trainer-service handoff.
+- BG fishing now starts from `EnsureCleanSlateAsync()` before spell sync and gear setup, and the fishing cast entry now flows through `ActionType.StartFishing -> FishingTask`.
+- The latest full-suite rerun passed (`31 passed, 0 failed, 4 skipped`), but routine regression coverage now uses a narrower documented-stable slice so unfinished major-rework suites do not dominate the signal.
+- The default documented-stable slice is `14 passed, 1 skipped`; active-overhaul suites like combat, gathering, fishing, questing, and NPC trainer coverage are now validated individually until their owning task IDs close.
 - Fishing-specific follow-up work now shifts back to FG/BG packet-timing capture and eventual `FishingTaskTests` ownership instead of rediscovering the cast gate.
 
 ## Core Principles

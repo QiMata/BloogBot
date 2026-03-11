@@ -8,7 +8,7 @@ Tests spell casting via ActionType dispatch: learn spell, grant resources, cast,
 
 **Bots:** BG (TESTBOT2) + FG (TESTBOT1)
 
-**Fixture Setup:** `EnsureCleanSlateAsync()`. FG coverage only runs while `LiveBotFixture.IsFgActionable` remains true after the suite's earlier FG probes.
+**Fixture Setup:** `EnsureCleanSlateAsync()`. FG coverage only runs while `LiveBotFixture.IsFgActionable` remains true after the suite's earlier FG probes, and the test now re-runs `CheckFgActionableAsync()` before the FG scenario and after the FG clean-slate reset.
 
 **Test Flow (per bot):**
 
@@ -46,9 +46,10 @@ Tests spell casting via ActionType dispatch: learn spell, grant resources, cast,
 
 `2026-03-11` the late-suite Battle Shout failure was resolved as a fixture responsiveness issue rather than a `CastSpell` logic regression:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `1 passed`
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `32 passed, 0 failed, 3 skipped`
-- root cause: earlier suites could leave FG action forwarding alive while snapshot/world-state updates were stale; strengthening `LiveBotFixture.CheckFgActionableAsync()` to require `.targetself` plus a teleport/snapshot round-trip removed that stale-FG state before `CastSpell_BattleShout_AuraApplied`
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `31 passed, 0 failed, 4 skipped`
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `14 passed, 1 skipped`
+- root cause: earlier suites could leave FG action forwarding alive while snapshot/world-state updates were stale; strengthening `LiveBotFixture.CheckFgActionableAsync()` and invoking it directly inside `SpellCastOnTargetTests` removed that stale-FG state before `CastSpell_BattleShout_AuraApplied`
 
 Current boundary:
 - the BG packet path and the FG Lua `CastSpellByName("Battle Shout")` path are currently green for this baseline
-- remaining overhaul work is in fishing task ownership/packet timing and the BG trainer handoff, not in the Battle Shout baseline
+- this test now belongs in the default documented-stable slice; remaining overhaul work is in fishing task ownership/packet timing and the BG trainer handoff, not in the Battle Shout baseline

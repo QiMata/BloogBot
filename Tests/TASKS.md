@@ -70,15 +70,15 @@ Master tracker: `MASTER-SUB-021`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-11
-- Active task: `MASTER-SUB-022` live integration test overhaul tranche, now back on fishing task ownership and the BG trainer handoff after closing the stale-FG spell-cast blocker.
-- Last delta: `Tests/BotRunner.Tests` strengthened the FG responsiveness probe in `LiveBotFixture`, reran the focused late-suite slice plus `SpellCastOnTargetTests`, and restored a green broad `LiveValidation` run.
+- Active task: `MASTER-SUB-022` live integration test overhaul tranche, with routine validation now restricted to the documented-stable slice while fishing and trainer work continue.
+- Last delta: `Tests/BotRunner.Tests` added a task-owned fishing entry path plus a narrower documented-stable live command so unfinished overhaul suites stop polluting the default regression signal.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
   - `Tests/TASKS.md`
   - `Tests/BotRunner.Tests/TASKS.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/`
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

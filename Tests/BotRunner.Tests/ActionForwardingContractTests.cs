@@ -336,6 +336,7 @@ public class ActionForwardingContractTests
     [InlineData(ActionType.VisitVendor)]
     [InlineData(ActionType.VisitTrainer)]
     [InlineData(ActionType.VisitFlightMaster)]
+    [InlineData(ActionType.StartFishing)]
     public void ActionMessage_AllTypes_RoundTrip(ActionType actionType)
     {
         var msg = new ActionMessage { ActionType = actionType };

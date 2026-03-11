@@ -186,6 +186,100 @@ public class CastSpellTaskTests
     }
 }
 
+// ==================== FishingTask Tests ====================
+
+public class FishingTaskTests
+{
+    [Fact]
+    public void Update_WithCastableFishingSpell_StopsAndCasts()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(100, 100, 0));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
+        ]);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
+        om.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_CannotCastFishingSpell_PopsWithoutCasting()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(100, 100, 0));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
+        ]);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(false);
+        om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        Assert.Empty(stack);
+    }
+
+    [Fact]
+    public void Update_AfterConfirmedFishingCycle_PopsWhenChannelEnds()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(100, 100, 0));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
+        ]);
+
+        uint channelingId = 0;
+        bool isChanneling = false;
+        player.Setup(p => p.ChannelingId).Returns(() => channelingId);
+        player.Setup(p => p.IsChanneling).Returns(() => isChanneling);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+
+        channelingId = FishingData.FishingRank1;
+        isChanneling = true;
+        task.Update();
+        Assert.Single(stack);
+
+        channelingId = 0;
+        isChanneling = false;
+        task.Update();
+
+        Assert.Empty(stack);
+    }
+}
+
 // ==================== UseItemTask Tests ====================
 
 public class UseItemTaskTests

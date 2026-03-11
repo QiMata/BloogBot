@@ -83,4 +83,5 @@ public enum CharacterAction
     VisitVendor,        // Queue VendorVisitTask for nearby vendor automation.
     VisitTrainer,       // Queue TrainerVisitTask for nearby class-trainer automation.
     VisitFlightMaster,  // Queue FlightMasterVisitTask for nearby taxi-node discovery.
+    StartFishing,       // Queue FishingTask to resolve fishing rank and wait for the fishing cycle.
 }
