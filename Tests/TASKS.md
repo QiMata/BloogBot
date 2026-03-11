@@ -65,8 +65,23 @@ Master tracker: `MASTER-SUB-021`
 4. Pathfinding tests: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
 5. Physics tests: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"`
 6. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
+7. Focused overhaul live slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+8. Combat distance unit slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatDistanceTests" --logger "console;verbosity=minimal"`
 
-## Session Handoff
+## Session Handoff (Latest)
+- Last updated: 2026-03-11
+- Active task: `MASTER-SUB-022` live integration test overhaul tranche, now focused on the order-dependent FG crash path that broad-suite herbalism/group formation exposes.
+- Last delta: `Tests/BotRunner.Tests` fixed the melee-combat stall, reran the combined major-behavior slice clean, confirmed the failing herbalism node is a natural DB row rather than an active `.gobject add` path, and verified that the narrowed gathering/group slice passes in isolation.
+- Pass result: `delta shipped`
+- Files changed:
+  - `Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
+  - `Tests/BotRunner.Tests/LiveValidation/`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/`
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+
+## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28
 - Active task: all TST-UMB tasks verified complete
 - Last delta: TST-UMB-001..005 verified — all routing and formatting tasks done

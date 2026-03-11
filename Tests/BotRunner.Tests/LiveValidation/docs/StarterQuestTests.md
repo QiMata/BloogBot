@@ -1,65 +1,46 @@
 # StarterQuestTests
 
-Tests the player-action quest flow: accept quest from NPC, turn in to different NPC — using ActionType dispatches (not GM commands).
+BG-first live baseline for accepting and turning in quest `4641` through real NPC interaction.
 
-## Test Methods (1)
+This suite currently exercises:
+- `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
+- `Exports/BotRunner/BotRunnerService.Sequences.NPC.cs`
+- `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+- `Exports/WoWSharpClient/Networking/ClientComponents/QuestNetworkClientComponent.cs`
+- `Exports/BotRunner/BotRunnerService.Snapshot.cs`
+
+## Test Method
 
 ### Quest_AcceptAndTurnIn_StarterQuest
 
-**Bots:** BG (TESTBOT2) + FG (TESTBOT1)
+**Bots:** BG only. FG is a packet/timing reference for future follow-up, not an asserted path in this suite.
 
-**Fixture Setup:** `EnsureCleanSlateAsync()`.
+## Test Flow
 
-**Test Flow (per bot):**
+1. `EnsureCleanSlateAsync()`.
+2. Pre-flight teleport to Orgrimmar safe zone to stabilize the next teleport.
+3. Force-remove stale quest `4641`.
+4. Teleport near Kaltunk and wait until the quest giver is visible in `NearbyUnits`.
+5. Dispatch `ActionType.AcceptQuest` with Kaltunk's GUID and quest `4641`.
+6. Poll `QuestLogEntries` until quest `4641` appears.
+7. Teleport near Gornek and wait until the turn-in NPC is visible.
+8. Dispatch `ActionType.CompleteQuest` with Gornek's GUID and quest `4641`.
+9. Poll `QuestLogEntries` until quest `4641` is gone.
 
-| Step | Action | Details |
-|------|--------|---------|
-| 0 | Stabilize zone | Teleport to Orgrimmar (1629, -4373, 12). Wait for settlement. |
-| 1 | Remove stale quest | `EnsureQuestAbsentAsync(4641)` — `.quest remove 4641`. Wait 8s for absence. Wait 1s for server propagation. |
-| 2 | Teleport to quest giver | Kaltunk at (-607.43, -4251.33, 39.04+3), Map 1. Wait for settlement. |
-| 3 | Find Kaltunk | `FindNpcByEntryAsync(10176)` — retry 3x, 1s delays. Assert GUID != 0. |
-| 4 | Accept quest | **Dispatch `ActionType.AcceptQuest`** with `LongParam = kaltunkGuid`, `IntParam = 4641`. Assert Success. |
-| 5 | Verify accepted | Poll 10s for quest 4641 in `QuestLogEntries`. On failure: `.quest remove`, retry once. |
-| 6 | Teleport to turn-in | Gornek at (-600.13, -4186.19, 41.27+3), Map 1. Wait for settlement. |
-| 7 | Find Gornek | `FindNpcByEntryAsync(3143)`. If not found: `.respawn`, retry. Assert GUID != 0. |
-| 8 | Complete quest | **Dispatch `ActionType.CompleteQuest`** with `LongParam = gornekGuid`, `IntParam = 4641`. Assert Success. |
-| 9 | Verify completed | Poll 10s for quest absence from `QuestLogEntries` (turn-in removes quest). |
+## Runtime Linkage
 
-**Cleanup:** Finally block removes quest if still present. Teleport back to Orgrimmar.
+- Accept path: `BotRunnerService.ActionDispatch` -> `AcceptQuestSequence` in `BotRunnerService.Sequences.NPC.cs` -> `WoWSharpObjectManager.AcceptQuestFromNpcAsync(...)`.
+- Complete path: `BotRunnerService.ActionDispatch` -> `CompleteQuestSequence` in `BotRunnerService.Sequences.NPC.cs` -> `WoWSharpObjectManager.CompleteQuestAsync(...)`.
+- Snapshot verification path: `BotRunnerService.Snapshot` writes `Player.QuestLogEntries`.
+- The suite is closer to the final behavior target than `QuestInteractionTests`, but it is still action-driven inside the test. The planned overhaul endpoint is task ownership via `AcceptQuestTask` / `CompleteQuestTask`.
 
-**StateManager/BotRunner Action Flow:**
+## Metrics
 
-**AcceptQuest dispatch chain:**
-1. ActionMessage with `ActionType.AcceptQuest`, `LongParam=npcGuid`, `IntParam=4641`
-2. `AcceptQuestSequence` OR `_objectManager.AcceptQuestFromNpcAsync(npcGuid, questId)` (packet-based path when params provided)
-3. Packet sequence:
-   a. CMSG_QUESTGIVER_HELLO (open quest dialog with Kaltunk)
-   b. Server responds SMSG_QUESTGIVER_QUEST_LIST (available quests)
-   c. CMSG_QUESTGIVER_QUERY_QUEST (request quest 4641 details)
-   d. Server responds SMSG_QUESTGIVER_QUEST_DETAILS
-   e. CMSG_QUESTGIVER_ACCEPT_QUEST (accept quest 4641)
-   f. Server adds quest → SMSG_QUEST_QUERY_RESPONSE
+The live assertions require:
+- Kaltunk and Gornek visible through normal snapshot updates
+- `AcceptQuest` dispatch succeeds and quest `4641` appears in the snapshot
+- `CompleteQuest` dispatch succeeds and quest `4641` disappears from the snapshot
 
-**CompleteQuest dispatch chain:**
-1. `_objectManager.TurnInQuestAsync(gornekGuid, questId)` (packet-based)
-2. CMSG_QUESTGIVER_HELLO → SMSG_QUESTGIVER_STATUS
-3. CMSG_QUESTGIVER_REQUEST_REWARD → SMSG_QUESTGIVER_OFFER_REWARD
-4. CMSG_QUESTGIVER_CHOOSE_REWARD → server completes quest, grants XP/rewards
-5. Quest removed from log
+## Current Status
 
-**Key IDs:**
-- Quest 4641 (Valley of Trials starter quest)
-- NPC 10176 = Kaltunk (quest giver)
-- NPC 3143 = Gornek (turn-in NPC)
-
-**Key Coordinates:**
-| NPC | X | Y | Z |
-|-----|---|---|---|
-| Kaltunk | -607.43 | -4251.33 | 39.04 |
-| Gornek | -600.13 | -4186.19 | 41.27 |
-
-**GM Commands:** `.quest remove 4641` (cleanup only), `.respawn` (if Gornek not found).
-
-**Assertions:** Quest accepted via NPC interaction. Quest appears in log. Quest completed via NPC turn-in. Quest removed from log after turn-in.
-
-**This is a true player-action test** — AcceptQuest and CompleteQuest use the same packet flow a real player would use, not GM shortcuts.
+`2026-03-11`: the focused quest/NPC validation slice passed `8/8`. `StarterQuestTests` is green as a BG-first baseline, but it is still part of the remaining BRT-OVR-002 action-to-task migration work.

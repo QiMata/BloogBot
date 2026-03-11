@@ -11,22 +11,18 @@ namespace BotRunner
 {
     public partial class BotRunnerService
     {
-        // Melee reach: must be within server's CanReachWithMeleeAttack() range.
-        // MaNGOS formula: attacker.GetMeleeReach() + target.GetMeleeReach()
-        // For level 1 player + scorpid ≈ 1.5 + 0.5 = 2.0y, plus tolerance.
-        // Was 3.5y which left the bot outside server melee reach after mob evade-walks.
-        private const float MeleeChaseArrivalDist = 4.0f;
-        // Re-chase threshold: if target moves beyond this, start chasing again.
-        private const float MeleeChaseLeashDist = 8f;
+        // Stop slightly inside the theoretical melee range to absorb packet/snapshot drift.
+        // The server's max melee range can still leave the bot visually "in range" while
+        // sustained swings stall in live tests, especially against small Valley mobs.
+        private const float MeleeChaseStickBuffer = 2.0f;
 
         /// <summary>
-        /// Melee combat sequence: select target → chase to melee range → auto-attack.
-        /// Keeps running (returning Running) while the target is alive, chasing the
-        /// mob if it moves out of melee range. Returns Success when the target dies.
+        /// Melee combat sequence: select target -> chase to melee range -> auto-attack.
+        /// Keeps running while the target is alive, chasing the mob if it moves out of
+        /// range. Returns Success when the target dies.
         ///
-        /// Auto-attack in WoW does NOT move the character — the bot must explicitly
-        /// chase via pathfinding to stay in melee range. This matches real player
-        /// behavior: click mob → character runs to it → swings when in range.
+        /// Auto-attack in WoW does not move the character; the bot must explicitly
+        /// chase via pathfinding to stay in melee range.
         /// </summary>
         private IBehaviourTreeNode BuildStartMeleeAttackSequence(ulong targetGuid)
         {
@@ -46,7 +42,6 @@ namespace BotRunner
                             return BehaviourTreeStatus.Failure;
                         }
 
-                        // Ensure target is selected (once).
                         if (!targetSelected)
                         {
                             _objectManager.SetTarget(targetGuid);
@@ -60,14 +55,12 @@ namespace BotRunner
                         if (player?.Position == null)
                             return BehaviourTreeStatus.Running;
 
-                        // Find the target unit.
                         var target = _objectManager.Units.FirstOrDefault(u => u.Guid == targetGuid);
                         if (target == null || target.Health == 0)
                         {
-                            // Target dead or despawned — combat complete.
                             _objectManager.StopAllMovement();
                             navPath?.Clear();
-                            Log.Information("[BOT RUNNER] Target 0x{Guid:X} dead or gone — combat complete.", targetGuid);
+                            Log.Information("[BOT RUNNER] Target 0x{Guid:X} dead or gone - combat complete.", targetGuid);
                             return BehaviourTreeStatus.Success;
                         }
 
@@ -75,17 +68,14 @@ namespace BotRunner
                             return BehaviourTreeStatus.Running;
 
                         var dist = player.Position.DistanceTo(target.Position);
+                        var chaseArrivalDist = GetMeleeChaseArrivalDistance(player, target);
 
-                        if (dist > MeleeChaseArrivalDist)
+                        if (dist > chaseArrivalDist)
                         {
-                            // Out of melee range — chase the target.
-                            // Do NOT send CMSG_ATTACKSTOP here — the server maintains auto-attack
-                            // state and will resume swings when back in range. Sending ATTACKSTOP
-                            // tells the server we stopped fighting, causing the mob's AI to evade.
-                            // If the SERVER clears combat (SMSG_ATTACKSTOP/CANCEL_COMBAT), the
-                            // handler already sets IsAutoAttacking=false, and StartMeleeAttack()
-                            // will re-send CMSG_ATTACKSWING on re-entry to melee range.
-
+                            // Out of melee range - chase the target.
+                            // Do not send CMSG_ATTACKSTOP here: if the server still considers
+                            // auto-attack active, it will resume swings as soon as the player
+                            // gets back inside real melee range.
                             if (navPath == null)
                             {
                                 var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
@@ -110,42 +100,51 @@ namespace BotRunner
 
                             if (DateTime.UtcNow - lastChaseLogUtc > TimeSpan.FromSeconds(3))
                             {
-                                Log.Information("[BOT RUNNER] Chasing target 0x{Guid:X}, dist={Dist:F1}y", targetGuid, dist);
+                                Log.Information("[BOT RUNNER] Chasing target 0x{Guid:X}, dist={Dist:F1}y, arrival={Arrival:F1}y",
+                                    targetGuid, dist, chaseArrivalDist);
                                 lastChaseLogUtc = DateTime.UtcNow;
                             }
 
-                            // If attack was started but we drifted out of range, keep Running.
-                            // Auto-attack will resume swinging when back in range.
                             return BehaviourTreeStatus.Running;
                         }
 
-                        // In melee range — always clear movement flags so the
-                        // server doesn't think we're still walking forward.
-                        // MoveToward() sets MOVEFLAG_FORWARD during chase; if the
-                        // mob oscillates in/out of range, the flag stays set unless
-                        // we explicitly clear it on re-entry to melee range.
                         _objectManager.StopAllMovement();
                         if (!attackStarted)
                         {
                             navPath?.Clear();
-                            Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y) — engaging 0x{Guid:X}",
-                                dist, targetGuid);
+                            Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y <= {Arrival:F1}y) - engaging 0x{Guid:X}",
+                                dist, chaseArrivalDist, targetGuid);
                             attackStarted = true;
                         }
+
                         _objectManager.Face(target.Position);
                         _objectManager.StartMeleeAttack();
-
-                        // Stay in Running — mob is alive, keep monitoring.
                         return BehaviourTreeStatus.Running;
                     })
                 .End()
                 .Build();
         }
 
+        private static float GetMeleeChaseArrivalDistance(IWoWUnit player, IWoWUnit target)
+        {
+            var playerReach = player.CombatReach > 0f
+                ? player.CombatReach
+                : CombatDistance.DEFAULT_PLAYER_COMBAT_REACH;
+            var targetReach = target.CombatReach > 0f
+                ? target.CombatReach
+                : CombatDistance.DEFAULT_CREATURE_COMBAT_REACH;
+
+            bool bothMoving = CombatDistance.IsMovingXZ((uint)player.MovementFlags)
+                           && CombatDistance.IsMovingXZ((uint)target.MovementFlags);
+
+            var maxMeleeRange = CombatDistance.GetMeleeAttackRange(playerReach, targetReach, bothMoving);
+            return MathF.Max(CombatDistance.NOMINAL_MELEE_RANGE, maxMeleeRange - MeleeChaseStickBuffer);
+        }
+
         /// <summary>
         /// Sequence to start ranged auto-attack (bow/gun/thrown) on a target.
-        /// Uses the same CMSG_ATTACKSWING opcode — the server determines
-        /// melee vs ranged based on equipped weapon and distance.
+        /// Uses the same CMSG_ATTACKSWING opcode; the server determines melee vs ranged
+        /// based on equipped weapon and distance.
         /// </summary>
         private IBehaviourTreeNode BuildStartRangedAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
             .Sequence("Start Ranged Attack Sequence")
@@ -160,7 +159,7 @@ namespace BotRunner
 
                     _objectManager.SetTarget(targetGuid);
                     _objectManager.StartRangedAttack();
-                    Log.Information($"[BOT RUNNER] Started ranged attack on target {targetGuid:X}");
+                    Log.Information("[BOT RUNNER] Started ranged attack on target {Guid:X}", targetGuid);
                     return BehaviourTreeStatus.Success;
                 })
             .End()
@@ -168,10 +167,7 @@ namespace BotRunner
 
         private IBehaviourTreeNode StopAttackSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Attack Sequence")
-                // Check if any auto-attack (melee, ranged, or wand) is active
                 .Condition("Is Any Auto-Attack Active", time => _objectManager.Player.IsAutoAttacking)
-
-                // Disable all auto-attacks
                 .Do("Stop All Auto-Attacks", time =>
                 {
                     _objectManager.StopAttack();
@@ -179,60 +175,50 @@ namespace BotRunner
                 })
             .End()
             .Build();
+
         /// <summary>
         /// Sequence to cast a specific spell. This checks if the bot has sufficient resources,
         /// if the spell is off cooldown, and if the target is in range before casting the spell.
         /// </summary>
-        /// <param name="spellId">The ID of the spell to cast.</param>
-        /// <returns>IBehaviourTreeNode that manages casting a spell.</returns>
         private IBehaviourTreeNode BuildCastSpellSequence(int spellId, ulong targetGuid)
         {
-            Log.Information($"[BOT RUNNER] BuildCastSpellSequence: spell={spellId}, target=0x{targetGuid:X}");
+            Log.Information("[BOT RUNNER] BuildCastSpellSequence: spell={SpellId}, target=0x{Target:X}", spellId, targetGuid);
             return new BehaviourTreeBuilder()
                 .Sequence("Cast Spell Sequence")
                     .Splice(CheckForTarget(targetGuid))
-
                     .Condition("Can Cast Spell", time =>
                     {
                         var canCast = _objectManager.CanCastSpell(spellId, targetGuid);
                         if (!canCast)
-                            Log.Debug($"[BOT RUNNER] CanCastSpell({spellId}, 0x{targetGuid:X}) = false");
+                            Log.Debug("[BOT RUNNER] CanCastSpell({SpellId}, 0x{Target:X}) = false", spellId, targetGuid);
                         return canCast;
                     })
-
                     .Do("Stop and Face Target", time =>
                     {
-                        // Stop movement before casting to prevent INTERRUPTED failures
                         _objectManager.StopAllMovement();
 
-                        // Face the target to prevent UNIT_NOT_INFRONT failures
                         var target = _objectManager.Units.FirstOrDefault(u => u.Guid == targetGuid);
                         if (target?.Position != null)
-                        {
                             _objectManager.Face(target.Position);
-                        }
+
                         return BehaviourTreeStatus.Success;
                     })
-
                     .Do("Cast Spell", time =>
                     {
-                        Log.Information($"[BOT RUNNER] Casting spell {spellId} on target 0x{targetGuid:X}");
+                        Log.Information("[BOT RUNNER] Casting spell {SpellId} on target 0x{Target:X}", spellId, targetGuid);
                         _objectManager.CastSpell(spellId);
                         return BehaviourTreeStatus.Success;
                     })
                 .End()
                 .Build();
         }
+
         /// <summary>
-        /// Sequence to stop the current spell cast. This will stop any spell the bot is currently casting.
+        /// Sequence to stop the current spell cast.
         /// </summary>
-        /// <returns>IBehaviourTreeNode that manages stopping a spell cast.</returns>
         private IBehaviourTreeNode StopCastSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Cast Sequence")
-                // Ensure the bot is currently casting a spell
                 .Condition("Is Casting", time => _objectManager.Player.IsCasting || _objectManager.Player.IsChanneling)
-
-                // Stop the current spell cast
                 .Do("Stop Spell Cast", time =>
                 {
                     _objectManager.StopCasting();
@@ -240,16 +226,13 @@ namespace BotRunner
                 })
             .End()
             .Build();
+
         /// <summary>
         /// Sequence to resurrect the bot or another target.
         /// </summary>
-        /// <returns>IBehaviourTreeNode that manages the resurrection process.</returns>
         private IBehaviourTreeNode ResurrectSequence => new BehaviourTreeBuilder()
             .Sequence("Resurrect Sequence")
-                // Ensure the bot or target can be resurrected
                 .Condition("Can Resurrect", time => IsGhostState(_objectManager.Player) && _objectManager.Player.CanResurrect)
-
-                // Perform the resurrection action
                 .Do("Resurrect", time =>
                 {
                     _objectManager.AcceptResurrect();

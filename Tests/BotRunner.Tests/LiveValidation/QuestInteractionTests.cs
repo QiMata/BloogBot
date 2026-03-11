@@ -11,6 +11,9 @@ namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
 /// Quest interaction integration test - dual-client validation.
+/// This is snapshot-plumbing coverage for GM-driven quest state, not the final
+/// task-driven questing path. It verifies SendChat action dispatch plus quest-log
+/// projection into ActivitySnapshot while BRT-OVR-002 migrates questing to BotTasks.
 ///
 /// Flow per client:
 ///   1) Ensure strict-alive setup from snapshot state.

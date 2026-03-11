@@ -99,6 +99,8 @@ namespace WoWSharpClient
 
             _handlers[Opcode.SMSG_INITIAL_SPELLS] = SpellHandler.HandleInitialSpells;
             _handlers[Opcode.SMSG_LEARNED_SPELL] = SpellHandler.HandleLearnedSpell;
+            _handlers[Opcode.SMSG_SUPERCEDED_SPELL] = SpellHandler.HandleSupercededSpell;
+            _handlers[Opcode.SMSG_REMOVED_SPELL] = SpellHandler.HandleRemovedSpell;
             _handlers[Opcode.SMSG_SPELLLOGMISS] = SpellHandler.HandleSpellLogMiss;
             _handlers[Opcode.SMSG_SPELL_GO] = SpellHandler.HandleSpellGo;
             _handlers[Opcode.SMSG_SPELL_START] = SpellHandler.HandleSpellStart;

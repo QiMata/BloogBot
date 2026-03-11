@@ -217,5 +217,45 @@ namespace WoWSharpClient.Tests.Handlers
                 WoWSharpEventEmitter.Instance.OnInitialSpellsLoaded -= handler;
             }
         }
+
+        [Fact]
+        public void HandleSupercededSpell_ReplacesOldRankWithNewRank()
+        {
+            WoWSharpObjectManager.Instance.Spells =
+            [
+                new GameData.Core.Models.Spell(7620, 0, "", "", ""),
+                new GameData.Core.Models.Spell(133, 0, "", "", "")
+            ];
+
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write((ushort)7620);
+            writer.Write((ushort)7731);
+
+            SpellHandler.HandleSupercededSpell(Opcode.SMSG_SUPERCEDED_SPELL, ms.ToArray());
+
+            Assert.DoesNotContain(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7620);
+            Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7731);
+            Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 133);
+        }
+
+        [Fact]
+        public void HandleRemovedSpell_RemovesKnownSpell()
+        {
+            WoWSharpObjectManager.Instance.Spells =
+            [
+                new GameData.Core.Models.Spell(18248, 0, "", "", ""),
+                new GameData.Core.Models.Spell(7738, 0, "", "", "")
+            ];
+
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write((ushort)18248);
+
+            SpellHandler.HandleRemovedSpell(Opcode.SMSG_REMOVED_SPELL, ms.ToArray());
+
+            Assert.DoesNotContain(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 18248);
+            Assert.Contains(WoWSharpObjectManager.Instance.Spells, spell => spell.Id == 7738);
+        }
     }
 }

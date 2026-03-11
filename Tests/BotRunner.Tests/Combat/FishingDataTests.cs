@@ -21,6 +21,26 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(expectedSpellId, FishingData.GetBestFishingSpellId(skill));
         }
 
+        [Fact]
+        public void GetBestKnownFishingSpellId_PrefersHighestKnownRank()
+        {
+            uint result = FishingData.GetBestKnownFishingSpellId(
+            [
+                FishingData.FishingRank1,
+                FishingData.FishingRank2,
+                FishingData.FishingRank4
+            ]);
+
+            Assert.Equal(FishingData.FishingRank4, result);
+        }
+
+        [Fact]
+        public void ResolveCastableFishingSpellId_FallsBackToSkillRank_WhenKnownListMissing()
+        {
+            uint result = FishingData.ResolveCastableFishingSpellId(null, 80);
+            Assert.Equal(FishingData.FishingRank2, result);
+        }
+
         [Theory]
         [InlineData(FishingData.FishingPole, true)]
         [InlineData(FishingData.StrongFishingPole, true)]

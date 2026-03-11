@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BotRunner.Combat;
@@ -11,15 +12,15 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Fishing profession integration test — dual-client validation.
+/// Fishing profession integration test — BG-first live validation.
 ///
 /// Strategy:
-///   1) Enable GM mode (prevents anti-undermap kicks, hostile targeting)
-///   2) Apply setup deltas (fishing spell, skill, pole)
-///   3) Teleport to known shore positions near fishable water (DB-sourced)
+///   1) Force a clean fishing spell-sync path (.unlearn -> .learn) so BG sees SMSG_LEARNED_SPELL
+///   2) Apply setup deltas (skill, pole, lure) and assert the snapshot reflects them
+///   3) Teleport to known shore positions near fishable water and reject unstable landings
 ///   4) Try multiple positions until fishing channel starts (server confirms water)
 ///   5) Wait for auto-catch via SMSG_GAMEOBJECT_CUSTOM_ANIM handler
-///   6) Assert fishing skill increased
+///   6) Assert a catch occurred and log whether skill increased
 ///
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~FishingProfessionTests" --configuration Release -v n
@@ -31,9 +32,33 @@ public class FishingProfessionTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    // Fishing channel = 20s server-side. Wait 22s for margin.
-    private const int FishingChannelWaitMs = 22000;
+    // Fishing channel is nominally 20s server-side, but live BG runs have shown delayed
+    // bite/custom-anim delivery after teleports and packet jitter. Keep extra headroom so
+    // the test observes the actual catch pipeline instead of only the cast entry.
+    private const int FishingChannelWaitMs = 30000;
     private const int MaxFishingAttempts = 3;
+    private const float MaxLandingDeltaFromShore = 3.5f;
+
+    private static readonly uint[] FishingSpellSyncIds =
+    [
+        FishingData.FishingRank1,
+        FishingData.FishingRank2,
+        FishingData.FishingRank3,
+        FishingData.FishingRank4,
+        FishingData.FishingPoleProficiency
+    ];
+
+    private static readonly HashSet<uint> FishingSetupItemIds =
+    [
+        FishingData.FishingPole,
+        FishingData.StrongFishingPole,
+        FishingData.BigIronFishingPole,
+        FishingData.DarkwoodFishingPole,
+        FishingData.ShinyBauble,
+        FishingData.NightcrawlerBait,
+        FishingData.BrightBaubles,
+        FishingData.AquadynamicFishAttractor
+    ];
 
     // --- Fishing locations: positions near fishable water ---
     // Each entry: (mapId, shoreX, shoreY, shoreZ, facingRadians)
@@ -89,7 +114,7 @@ public class FishingProfessionTests
         // --- Prepare both bots (learn fishing + equip pole) ---
         await PrepareBot(bgAccount, "BG");
         if (fgAccount != null)
-            await PrepareBot(fgAccount, "FG");
+            await PrepareFgReferenceBotAsync(fgAccount);
 
         // Park FG bot at Orgrimmar to reduce coordinator interference
         if (fgAccount != null)
@@ -114,7 +139,8 @@ public class FishingProfessionTests
 
         Assert.True(bgCaught,
             $"BG: Failed to catch fish at any of {FishingSpots.Length} locations. skill={bgSkillAfter}. " +
-            "Check: (1) SMSG_GAMEOBJECT_CUSTOM_ANIM handler, (2) bobber CREATE_OBJECT delivery, (3) position/water detection.");
+            "Check: (1) spell sync via SMSG_LEARNED_SPELL, (2) SMSG_GAMEOBJECT_CUSTOM_ANIM handler, " +
+            "(3) bobber CREATE_OBJECT delivery, (4) shoreline stability/water detection.");
         // Skill-ups are RNG in vanilla WoW — not guaranteed per catch even at low skill.
         // At skill 1 the probability is very high but not 100%. Log the result but
         // don't fail the test on skill alone; the catch itself proves the pipeline works.
@@ -138,7 +164,7 @@ public class FishingProfessionTests
 
             // Teleport to shore position
             await _bot.BotTeleportAsync(account, map, shoreX, shoreY, shoreZ);
-            await _bot.WaitForZStabilizationAsync(account, waitMs: 4000); // polls Z samples, auto-exits on 3 stable readings
+            var (stableLanding, finalZ) = await _bot.WaitForZStabilizationAsync(account, waitMs: 4000);
 
             // Verify position is stable
             await _bot.RefreshSnapshotsAsync();
@@ -149,7 +175,15 @@ public class FishingProfessionTests
                 _output.WriteLine($"  [{label}] No position data, skipping location");
                 continue;
             }
-            _output.WriteLine($"  [{label}] Landed at ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1})");
+            var landingDelta = Math.Abs(finalZ - shoreZ);
+            _output.WriteLine($"  [{label}] Landed at ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}) " +
+                $"stable={stableLanding} finalZ={finalZ:F1} deltaFromShore={landingDelta:F1}");
+
+            if (!stableLanding || landingDelta > MaxLandingDeltaFromShore)
+            {
+                _output.WriteLine($"  [{label}] Skipping location {loc + 1}: unstable shoreline landing.");
+                continue;
+            }
 
             // Set facing toward water
             await _bot.SendActionAndWaitAsync(account, new ActionMessage
@@ -158,7 +192,6 @@ public class FishingProfessionTests
                 Parameters = { new RequestParameter { FloatParam = facing } }
             }, delayMs: 500);
 
-            // GM mode stays ON — fishing works with GM mode enabled.
             // Brief stabilization for physics to settle position after teleport + facing.
             await Task.Delay(500);
 
@@ -207,54 +240,36 @@ public class FishingProfessionTests
             snap = await _bot.GetSnapshotAsync(account) ?? snap;
         }
 
-        var spellKnown = snap.Player?.SpellList?.Contains((uint)FishingData.FishingRank1) == true;
+        var spellCountBefore = snap.Player?.SpellList?.Count ?? 0;
+        var castableBefore = ResolveCastableFishingSpellId(snap);
         var poleProfKnown = snap.Player?.SpellList?.Contains(FishingData.FishingPoleProficiency) == true;
         var currentSkill = GetFishingSkillFromSnapshot(snap);
+        _output.WriteLine($"[{label}] Setup baseline: castable={castableBefore}, poleProf={poleProfKnown}, " +
+            $"skill={currentSkill}, spellCount={spellCountBefore}");
 
-        var needsLearn = !spellKnown;
-        var needsPoleProf = !poleProfKnown;
+        // Always unlearn/relearn the fishing ranks first. If the server already knows the spell,
+        // `.learn` returns "already know that spell" and BG never receives SMSG_LEARNED_SPELL,
+        // so SpellHandler.HandleLearnedSpell() cannot repopulate the KnownSpellIds snapshot that
+        // BuildCastSpellSequence() checks before calling CastSpellAtLocation().
+        await ForceFishingSpellSyncAsync(account, label);
 
-        // Always enter setup block — skill is reset to 1/300 and items are reset every run.
+        // Always set fishing skill to 1/300 — ensures room for skill-ups during the test.
+        // MaNGOS caps max based on highest known fishing rank; Artisan (18248) allows 300.
+        var postSyncSnap = await _bot.GetSnapshotAsync(account);
+        var skillExists = postSyncSnap?.Player?.SkillInfo?.ContainsKey(FishingData.FishingSkillId) == true;
+        _output.WriteLine($"[{label}] Fishing skill exists={skillExists}");
+        if (!skillExists)
         {
-            _output.WriteLine($"[{label}] Setup: learn={needsLearn}, poleProf={needsPoleProf}, skill={currentSkill}");
-
-            if (needsLearn || needsPoleProf)
-            {
-                // Teach ALL fishing ranks to raise the natural skill cap to 300.
-                // MaNGOS caps skill max based on the highest known fishing spell.
-                // Training spells (7733/7734) trigger the full trainer effect chain
-                // and may also create the SKILL entry.
-                _output.WriteLine($"[{label}] Teaching fishing (all ranks) + pole proficiency...");
-                await _bot.BotLearnSpellAsync(account, 7733u);  // Apprentice Training (teaches rank 1)
-                await _bot.BotLearnSpellAsync(account, 7734u);  // Journeyman Training (teaches rank 2)
-                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank1);   // 7620
-                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank2);   // 7731
-                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank3);   // 7732 Expert (cap 225)
-                await _bot.BotLearnSpellAsync(account, FishingData.FishingRank4);   // 18248 Artisan (cap 300)
-                await _bot.BotLearnSpellAsync(account, FishingData.FishingPoleProficiency); // 7738
-                await Task.Delay(500);
-                await _bot.RefreshSnapshotsAsync();
-            }
-
-            // Always set fishing skill to 1/300 — ensures room for skill-ups during the test.
-            // MaNGOS caps max based on highest known fishing rank; Artisan (18248) allows 300.
-            {
-                var postSnap = await _bot.GetSnapshotAsync(account);
-                var skillExists = postSnap?.Player?.SkillInfo?.ContainsKey(FishingData.FishingSkillId) == true;
-                _output.WriteLine($"[{label}] Fishing skill exists={skillExists}");
-                if (!skillExists)
-                {
-                    _output.WriteLine($"[{label}] Skill still not created; trying .learn all_crafts...");
-                    await _bot.SendGmChatCommandAsync(account, ".learn all_crafts");
-                    await Task.Delay(1000);
-                    await _bot.RefreshSnapshotsAsync();
-                }
-                // Set skill to 1/300 — low value with headroom for increase
-                await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, 1, 300);
-                await Task.Delay(500);
-                await _bot.RefreshSnapshotsAsync();
-            }
+            _output.WriteLine($"[{label}] Skill still not created; trying .learn all_crafts...");
+            await _bot.SendGmChatCommandAsync(account, ".learn all_crafts");
+            await Task.Delay(1000);
+            await _bot.RefreshSnapshotsAsync();
         }
+
+        // Set skill to 1/300 — low value with headroom for increase
+        await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, 1, 300);
+        await Task.Delay(500);
+        await _bot.RefreshSnapshotsAsync();
 
         // Clear all equipment first. Fishing pole has inv_type=17 (2H weapon) in MaNGOS,
         // so CMSG_AUTOEQUIP_ITEM tries to put it in MAINHAND. If mainhand is occupied,
@@ -303,6 +318,16 @@ public class FishingProfessionTests
         {
             _output.WriteLine($"[{label}] Fishing pole equipped (no longer in bags).");
         }
+
+        Assert.False(poleStillInBags, $"[{label}] Fishing pole never left bag contents after EquipItem.");
+    }
+
+    private async Task PrepareFgReferenceBotAsync(string account)
+    {
+        await _bot.EnsureCleanSlateAsync(account, "FG");
+        await _bot.BotTeleportAsync(account, OrgMap, OrgX, OrgY, OrgZ);
+        await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
+        _output.WriteLine("[FG] Reference bot parked at Orgrimmar; BG remains the asserted fishing path.");
     }
 
     private async Task<bool> CastAndWaitForCatch(string account, string label, uint baseSkill)
@@ -312,14 +337,18 @@ public class FishingProfessionTests
             await _bot.RefreshSnapshotsAsync();
             var preSnap = GetSnapshot(label);
             var prePos = preSnap?.Player?.Unit?.GameObject?.Base?.Position;
+            var castSpellId = ResolveCastableFishingSpellId(preSnap);
+            var baselineCatchItems = GetCatchItemIds(preSnap);
             _output.WriteLine($"[{label}] Cast {attempt}/{MaxFishingAttempts} — " +
-                $"pos=({prePos?.X:F1}, {prePos?.Y:F1}, {prePos?.Z:F1})");
+                $"pos=({prePos?.X:F1}, {prePos?.Y:F1}, {prePos?.Z:F1}), spell={castSpellId}");
+
+            Assert.NotEqual(0u, castSpellId);
 
             // Cast fishing via player action (CMSG_CAST_SPELL) — no GM shortcuts.
             await _bot.SendActionAndWaitAsync(account, new ActionMessage
             {
                 ActionType = ActionType.CastSpell,
-                Parameters = { new RequestParameter { IntParam = (int)FishingData.FishingRank1 } }
+                Parameters = { new RequestParameter { IntParam = (int)castSpellId } }
             }, delayMs: 3000);
 
             // Check if channel started
@@ -369,6 +398,14 @@ public class FishingProfessionTests
 
                 // Re-check bobber (may appear late, or disappear after catch)
                 snap = GetSnapshot(label);
+                var currentCatchItems = GetCatchItemIds(snap);
+                if (!baselineCatchItems.SequenceEqual(currentCatchItems))
+                {
+                    _output.WriteLine($"  [{label}] Loot changed at {elapsed / 1000}s: " +
+                        $"before=[{string.Join(", ", baselineCatchItems)}] after=[{string.Join(", ", currentCatchItems)}]");
+                    return true;
+                }
+
                 var currentBobber = FindBobber(snap);
                 var currentChannel = snap?.Player?.Unit?.ChannelSpellId ?? 0;
                 if (bobber == null && currentBobber != null)
@@ -386,11 +423,20 @@ public class FishingProfessionTests
             // Final skill check
             await _bot.RefreshSnapshotsAsync();
             uint finalSkill = GetFishingSkill(label);
-            _output.WriteLine($"  [{label}] Wait done. skill={finalSkill}, hadBobber={bobber != null}");
+            snap = GetSnapshot(label);
+            var finalCatchItems = GetCatchItemIds(snap);
+            _output.WriteLine($"  [{label}] Wait done. skill={finalSkill}, hadBobber={bobber != null}, " +
+                $"catchItems=[{string.Join(", ", finalCatchItems)}]");
 
             if (finalSkill > baseSkill)
             {
                 _output.WriteLine($"  [{label}] Skill increased ({baseSkill} → {finalSkill}), catch confirmed!");
+                return true;
+            }
+
+            if (!baselineCatchItems.SequenceEqual(finalCatchItems))
+            {
+                _output.WriteLine($"  [{label}] Catch confirmed by bag delta without skill-up.");
                 return true;
             }
 
@@ -405,6 +451,41 @@ public class FishingProfessionTests
     {
         return snap?.NearbyObjects?.FirstOrDefault(go =>
             go.DisplayId == FishingData.BobberDisplayId || go.GameObjectType == 17);
+    }
+
+    private async Task ForceFishingSpellSyncAsync(string account, string label)
+    {
+        _output.WriteLine($"[{label}] Forcing fresh fishing spell sync (.unlearn -> .learn).");
+
+        foreach (var spellId in FishingSpellSyncIds)
+        {
+            await _bot.BotUnlearnSpellAsync(account, spellId);
+            await Task.Delay(250);
+        }
+
+        foreach (var spellId in FishingSpellSyncIds)
+        {
+            await _bot.BotLearnSpellAsync(account, spellId);
+            await Task.Delay(250);
+        }
+
+        var synced = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            HasRequiredFishingSpells,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} fishing-spell-sync");
+
+        await _bot.RefreshSnapshotsAsync();
+        var syncedSnap = await _bot.GetSnapshotAsync(account);
+        var spellCount = syncedSnap?.Player?.SpellList?.Count ?? 0;
+        var castableSpellId = ResolveCastableFishingSpellId(syncedSnap);
+        var hasPoleProf = syncedSnap?.Player?.SpellList?.Contains(FishingData.FishingPoleProficiency) == true;
+        _output.WriteLine($"[{label}] Fishing spell sync: spellCount={spellCount}, " +
+            $"castable={castableSpellId}, poleProf={hasPoleProf}");
+
+        Assert.True(synced,
+            $"[{label}] Fishing spell sync failed. castable={castableSpellId}, poleProf={hasPoleProf}, spellCount={spellCount}.");
     }
 
     private void LogNearbyGameObjects(WoWActivitySnapshot? snap, string label)
@@ -432,5 +513,21 @@ public class FishingProfessionTests
             return level;
         return 0;
     }
+
+    private static bool HasRequiredFishingSpells(WoWActivitySnapshot snap)
+        => ResolveCastableFishingSpellId(snap) != 0
+            && snap.Player?.SpellList?.Contains(FishingData.FishingPoleProficiency) == true;
+
+    private static uint ResolveCastableFishingSpellId(WoWActivitySnapshot? snap)
+        => FishingData.ResolveCastableFishingSpellId(
+            snap?.Player?.SpellList,
+            (int)GetFishingSkillFromSnapshot(snap));
+
+    private static IReadOnlyList<uint> GetCatchItemIds(WoWActivitySnapshot? snap)
+        => snap?.Player?.BagContents?.Values
+            .Where(itemId => !FishingSetupItemIds.Contains(itemId))
+            .OrderBy(itemId => itemId)
+            .ToArray()
+            ?? [];
 
 }

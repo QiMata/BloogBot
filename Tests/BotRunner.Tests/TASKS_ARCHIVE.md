@@ -148,3 +148,13 @@ Move completed items to `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`.
 - [x] Added timeout/runsettings plumbing baseline for test sessions.
 - [x] Switched corpse setup teleport from `ValleyOfTrials` to Orgrimmar named teleport command path.
 
+
+## Archived Snapshot (2026-03-11) - Tests/BotRunner.Tests/TASKS.md
+
+- [x] `BRT-OVR-003` Unblock the last BG live failure in `FishingProfessionTests`.
+- Evidence:
+  - BG now handles `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL` in the spell-state path.
+  - `FishingData.ResolveCastableFishingSpellId(...)` prefers the highest currently-known fishing rank and falls back to skill-derived rank only when the known-spell list is missing.
+  - `FishingProfessionTests` now passes with catch detection based on bag delta or skill-up.
+  - Broad `LiveValidation` rerun finished `33 passed, 0 failed, 2 skipped`.
+

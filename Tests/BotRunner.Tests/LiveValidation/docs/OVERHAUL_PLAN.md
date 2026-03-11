@@ -1,5 +1,47 @@
 # Live Validation Test Overhaul Plan
 
+## Current Status
+
+### 2026-03-11 Progress
+
+Completed overhaul slices now on disk:
+- Fixture no longer sends `.gm on` during initialization or `EnsureCleanSlateAsync()`.
+- `BasicLoopTests.cs` reduced to the 2 Phase 1 survivor checks.
+- `CharacterLifecycleTests.cs` reduced to the 1 Phase 1 survivor check.
+- `ConsumableUsageTests.cs` + `BuffDismissTests.cs` merged into `BuffAndConsumableTests.cs` with stronger aura/item metrics.
+- Live `CombatRangeTests.cs` removed; deterministic range coverage now lives in `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs`.
+- Remaining direct `.gm on` / `.respawn` usage was removed from the targeted live suites.
+- `CombatLoopTests.cs`, `DeathCorpseRunTests.cs`, `NavigationTests.cs`, and `StarterQuestTests.cs` were rewritten into BG-first baselines with tighter snapshot metrics.
+- `CraftingProfessionTests.cs` and `VendorBuySellTests.cs` are now BG-first baselines so the live suite no longer fails on legacy FG-only parity gaps.
+- `FishingProfessionTests.cs` is now a BG-first baseline that forces fishing spell sync, resolves the castable fishing rank from the known-spell list, rejects unstable shoreline landings, and treats bag/loot delta as a valid catch metric when skill-up RNG does not fire.
+- BG spell-state sync now handles `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`, which unblocked server-side fishing rank replacement.
+- New unit coverage links the live fishing baseline back to the owning runtime logic in `SpellHandler` and `FishingData`.
+- Test markdown was refreshed to link each touched test back to the production code paths it exercises.
+
+Verification runs on the current pass:
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded with warnings only.
+- `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> succeeded.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatDistanceTests" --logger "console;verbosity=minimal"` -> 32 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 4 passed, 1 skipped (`BB-BUFF-001`).
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 6 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~VendorBuySellTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 3 passed.
+- `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellHandlerTests" --logger "console;verbosity=minimal"` -> 12 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingDataTests" --logger "console;verbosity=minimal"` -> 26 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 8 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 33 passed, 0 failed, 2 skipped.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 12 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 31 passed, 2 failed, 2 skipped after an FG herbalism crash/restart cascaded into `GroupFormationTests`.
+
+Current live-suite boundary:
+- The major behavior slice reran green (`12 passed`) after tightening melee stick distance in `BuildStartMeleeAttackSequence(...)`.
+- The broad `LiveValidation` run is no longer clean. Current failures are:
+  - `GatheringProfessionTests.Herbalism_GatherHerb_SkillIncreases`
+  - `GroupFormationTests.GroupFormation_InviteAccept_StateIsTrackedAndCleanedUp`
+- Current evidence does **not** show an active `.gobject add` path in tests. The herbalism failure involved the natural `mangos.gameobject` row `guid=1641` / `id=1618`, whose template faction is `0`, followed by an FG crash/restart that also broke the later group-formation slice.
+- The quest/NPC slice still reran green (`8 passed`), which confirms stability but also highlights the remaining ownership gap: `QuestInteractionTests`, `StarterQuestTests`, and `NpcInteractionTests` are still validating raw `SendChat`, `AcceptQuest` / `CompleteQuest`, and `InteractWith` dispatch paths rather than dedicated BotTasks.
+- Fishing-specific follow-up work now shifts to the planned `FishingTaskTests` conversion and FG/BG packet-sequence comparison around bobber timing and auto-catch behavior.
+
 ## Core Principles
 
 1. **NO `.gm on` — EVER.** All bots use account-level GM (gmlevel=6) for setup commands (`.learn`, `.additem`, `.go xyz`). The PLAYER_FLAGS_GM flag must never be set. This eliminates factionTemplate corruption and ensures mobs/NPCs behave naturally.
@@ -118,7 +160,7 @@ Each class needs: account setup, class-specific spells/items, specific mob type
 
 **Delete the live validation test.** FG client handles range natively. BG range logic is deterministic and should be tested via unit tests against `CombatDistance` static methods.
 
-**New unit test file:** `Tests/BotRunner.Tests/CombatDistanceTests.cs`
+**Unit test file:** `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs`
 - Test `GetMeleeAttackRange()` with various CombatReach values
 - Test `GetInteractionDistance()` formula
 - Test `IsMovingXZ()` flag checking
@@ -401,8 +443,9 @@ Delete `.npc add temp` from CombatLoopTests and anywhere else it appears.
 Session 1:  Phase 1 (deletions) + Phase 2 (consolidations) + Phase 5 (global cleanup)
             - Delete 7 test methods
             - Merge ConsumableUsage+BuffDismiss
-            - Remove .gm on, .respawn everywhere
-            - Commit + push
+            - Remove fixture-level .gm on
+            - Delete live CombatRangeTests in favor of CombatDistance unit tests
+            - Continue removing remaining .gm on / .respawn call sites
 
 Session 2:  Phase 3.3 (CorpseRecoveryTask) + Phase 3.12 (NavigationTask)
             - Both use existing fully-functional tasks
@@ -474,6 +517,9 @@ Session 9:  Phase 3.10 (RaidManagement) + Phase 3.11 (MapTransition)
 - `TalentAllocationTests.cs` → `TalentSuiteTests.cs` (per-class)
 - `EconomyInteractionTests.cs` → `BankDepositTests.cs` + `AuctionHouseSuiteTests.cs` + `MailTests.cs`
 - `CraftingProfessionTests.cs` → `CraftingTaskTests.cs`
+
+### Tests Removed Early
+- `CombatRangeTests.cs` → replaced by `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs`
 
 ### Tests to Keep As-Is
 - `OrgrimmarGroundZAnalysisTests.cs` — keep

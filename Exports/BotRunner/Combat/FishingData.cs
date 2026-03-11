@@ -1,4 +1,6 @@
 using GameData.Core.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace BotRunner.Combat
 {
@@ -62,6 +64,34 @@ namespace BotRunner.Combat
             if (fishingSkill >= 150) return FishingRank3;
             if (fishingSkill >= 75) return FishingRank2;
             return FishingRank1;
+        }
+
+        /// <summary>
+        /// Returns the highest fishing rank currently present in the known-spell list.
+        /// Rank-up packets supersede lower ranks server-side, so the spell book may only
+        /// contain the highest learned fishing rank.
+        /// </summary>
+        public static uint GetBestKnownFishingSpellId(IEnumerable<uint>? knownSpellIds)
+        {
+            if (knownSpellIds == null)
+                return 0;
+
+            var spellSet = knownSpellIds as ISet<uint> ?? knownSpellIds.ToHashSet();
+            if (spellSet.Contains(FishingRank4)) return FishingRank4;
+            if (spellSet.Contains(FishingRank3)) return FishingRank3;
+            if (spellSet.Contains(FishingRank2)) return FishingRank2;
+            if (spellSet.Contains(FishingRank1)) return FishingRank1;
+            return 0;
+        }
+
+        /// <summary>
+        /// Resolves the castable fishing spell, preferring the highest currently-known rank
+        /// and falling back to the skill-derived rank when the known-spell list is unavailable.
+        /// </summary>
+        public static uint ResolveCastableFishingSpellId(IEnumerable<uint>? knownSpellIds, int fishingSkill)
+        {
+            var knownRank = GetBestKnownFishingSpellId(knownSpellIds);
+            return knownRank != 0 ? knownRank : GetBestFishingSpellId(fishingSkill);
         }
 
         /// <summary>

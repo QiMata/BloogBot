@@ -6,6 +6,7 @@ Master tracker: `MASTER-SUB-022`
 - Directory: `Tests/BotRunner.Tests`
 - Project: `BotRunner.Tests.csproj`
 - Focus: deterministic FG/BG corpse/combat/gathering parity validation with strict timeout and teardown controls.
+- Current priority: live integration test overhaul with BG-first behavior coverage, tighter fixture setup rules, and task-driven suite replacement.
 - Queue dependency: `docs/TASKS.md` controls file order and session handoff.
 
 ## Execution Rules
@@ -46,8 +47,47 @@ Master tracker: `MASTER-SUB-022`
 - Proto contract source for pathfinding payloads:
   - `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`.
 
-## P0 Active Tasks (Ordered)
-1. [x] `BRT-CR-001` Keep corpse-run setup teleport pinned to Orgrimmar named teleport path.
+## Active Overhaul Tasks (Ordered)
+1. [x] `BRT-OVR-001` Remove remaining direct `.gm on` / `.respawn` call sites from live suites and docs.
+- Problem: `GatheringProfessionTests.cs`, `MapTransitionTests.cs`, `LootCorpseTests.cs`, and `StarterQuestTests.cs` still violate the overhaul rules and hide real bot behavior.
+- Target files: `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/MapTransitionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`, `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`, matching docs under `Tests/BotRunner.Tests/LiveValidation/docs/`.
+- Required change:
+  1. Remove direct `.gm on` usage and rely on account-level GM only.
+  2. Remove direct `.respawn` usage and replace with wait/skip behavior.
+  3. Update markdown so test flow and command lists match the code.
+- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~MapTransitionTests|FullyQualifiedName~LootCorpseTests|FullyQualifiedName~StarterQuestTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Acceptance criteria: no executable `.gm on` or `.respawn` remains in those suites; docs match the new behavior.
+
+2. [ ] `BRT-OVR-002` Replace setup-only live coverage with task-driven behavior tests.
+- Problem: the remaining live suite still overuses raw action dispatch and setup validation instead of exercising the BotTask stack.
+- Target files: `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`, `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`, `Tests/BotRunner.Tests/LiveValidation/NavigationTests.cs`, `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`, `Exports/BotRunner/Tasks/`.
+- Required change: rewrite combat, corpse recovery, navigation, and quest tests to assert on task outcomes and snapshot metrics rather than reproducing task logic inline.
+- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Acceptance criteria: each rewritten suite links directly to the owning task logic and records deterministic outcome metrics.
+
+3. [ ] `BRT-OVR-004` Convert the fishing baseline into task-linked live coverage and capture FG timing references.
+- Problem: `FishingProfessionTests` now passes as a BG-first baseline, but it still drives direct `CastSpell` actions instead of a dedicated `FishingTask` and it does not yet assert FG/BG packet-timing parity.
+- Target files: `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`, `Exports/BotRunner/Tasks/`, FG packet-capture logs.
+- Required change:
+  1. Keep the passing BG fishing baseline green while introducing task-linked ownership for the fishing loop.
+  2. Record FG packet/timing evidence for cast -> channel -> bobber -> custom anim -> loot.
+  3. Tie the live assertions back to the future `FishingTask` implementation and the runtime packet handlers it depends on.
+- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Acceptance criteria: fishing coverage stays green, documentation points to the owning runtime logic, and the next implementation slice has concrete FG timing evidence instead of rediscovering the cast/bobber sequence.
+
+4. [ ] `BRT-OVR-005` Isolate the FG herbalism crash/group-formation fallout and prove no active gameobject spawn path remains.
+- Problem: after the combat fix, the broad `LiveValidation` rerun regressed to `31 passed, 2 failed, 2 skipped`. `GatheringProfessionTests.Herbalism_GatherHerb_SkillIncreases` failed after an FG crash/restart, and `GroupFormationTests` then timed out behind the same FG failure. Investigation confirmed the reported Silverleaf was the natural DB row `gameobject.guid=1641` / `id=1618`, not a newly spawned test object.
+- Target files: `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/GroupFormationTests.cs`, `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs`, matching docs under `Tests/BotRunner.Tests/LiveValidation/docs/`.
+- Required change:
+  1. Keep gathering tests on natural DB spawns only and document/query them distinctly from zombie `.gobject add` cleanup.
+  2. Reproduce the FG herbalism crash separately from BG gathering and determine whether the blocker is FG teleporting, FG gather interaction, or bad server data around the natural herb row.
+  3. Prevent `GroupFormationTests` from cascading behind the same FG crash in the full suite.
+- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Acceptance criteria: repo scan shows no active gameobject spawn command in live tests, the herbalism/group regression is isolated to a concrete owner, and the full-suite handoff no longer misattributes the failure to test-spawned nodes.
+
+## Completed Legacy Tasks
+
+3. [x] `BRT-CR-001` Keep corpse-run setup teleport pinned to Orgrimmar named teleport path.
 - Problem: setup-location drift invalidates runback behavior validation.
 - Target files: `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`.
 - Required change: preserve named teleport path `TeleportToNamedAsync(characterName, "Orgrimmar")` and no `ValleyOfTrials` setup path.
@@ -104,8 +144,72 @@ Master tracker: `MASTER-SUB-022`
 5. Repo-scoped cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 6. Path contract trace scan: `rg --line-number "HandlePath|CalculatePath|GetNextWaypoint|allowDirectFallback: false|pathfinding returned no route" Services/PathfindingService/PathfindingSocketServer.cs Services/PathfindingService/Repository/Navigation.cs Exports/BotRunner/Movement/NavigationPath.cs Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
 7. Pathfinding validity slice: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`
+8. Focused overhaul live slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+9. Combat distance unit slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatDistanceTests" --logger "console;verbosity=minimal"`
 
-## Session Handoff
+## Session Handoff (Latest)
+- Last updated: 2026-03-11
+- Active task: `BRT-OVR-002` task-drive the remaining major behavior suites, with `BRT-OVR-004` queued for the fishing-task/timing follow-up.
+- Last delta: fixed the combat stall in `BuildStartMeleeAttackSequence(...)`, reran the major behavior slice clean, then confirmed the latest herbalism failure is on a natural DB herb row rather than an active `.gobject add` path and updated the gathering docs/handoff accordingly.
+- Pass result: `delta shipped`
+- Files changed:
+  - `Exports/BotRunner/Combat/FishingData.cs`
+  - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
+  - `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+  - `Tests/BotRunner.Tests/Combat/FishingDataTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/SpellHandlerTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/QuestInteractionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/StarterQuestTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/NpcInteractionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
+- Commands run:
+  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore`
+  2. `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+  3. `dotnet build WestworldOfWarcraft.sln --configuration Release --no-restore`
+  4. `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellHandlerTests" --logger "console;verbosity=minimal"`
+  5. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingDataTests" --logger "console;verbosity=minimal"`
+  6. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  7. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  8. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  9. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  10. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  11. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  12. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- Outcomes:
+  - `Tests/BotRunner.Tests` build succeeded with warnings only.
+  - `Tests/WoWSharpClient.Tests` build succeeded.
+  - `WestworldOfWarcraft.sln` is not a clean validation gate in the current repo state:
+    - `Exports/Loader` and `Exports/FastCall` fail under `dotnet build` because of native project/tooling limits.
+    - `Services/BackgroundBotRunner/BackgroundBotWorker.cs` has an unrelated existing compile error around read-only `HasEnteredWorld`.
+  - New unit coverage passes:
+    - `SpellHandlerTests`: 12 passed
+    - `FishingDataTests`: 26 passed
+  - `FishingProfessionTests.Fishing_CatchFish_SkillIncreases` now passes after BG spell-state sync began handling rank supersession/removal and the live assertions accepted bag-delta catches.
+  - Focused combat rerun is clean: 1 passed.
+  - Focused quest/NPC slice rerun is clean: 8 passed.
+  - Combined major behavior slice rerun is clean: 12 passed.
+  - Quest/NPC markdown now links each live suite to the exact `ActionDispatch`, `Sequences.NPC`, `InteractWith`, and snapshot code paths it currently covers, and explicitly records that those suites are still action-driven baselines under `BRT-OVR-002`.
+  - Latest full `LiveValidation` rerun regressed to 31 passed, 2 failed, 2 skipped.
+  - Current failing suites are:
+    - `GatheringProfessionTests.Herbalism_GatherHerb_SkillIncreases`
+    - `GroupFormationTests.GroupFormation_InviteAccept_StateIsTrackedAndCleanedUp`
+  - Investigation after the Mangos log review confirmed there is no active `.gobject add` path in current live tests. The reported Silverleaf is the natural DB row `gameobject.guid=1641` / `id=1618` with `gameobject_template.faction=0`.
+  - Narrowed `GatheringProfessionTests|GroupFormationTests` rerun is clean in isolation: 2 passed, 1 skipped (`Mining_GatherCopperVein_SkillIncreases`).
+  - Inference: the broad-suite failure is order-dependent FG instability after earlier tests, not a direct gameobject-spawn path in the gathering test itself.
+- Blockers:
+  - `FishingProfessionTests` is still a live baseline, not yet the planned `FishingTaskTests` coverage.
+  - Full `LiveValidation` is currently blocked by an order-dependent FG crash/restart path that surfaces during the broad suite and then cascades into group formation.
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+
+## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28
 - Active task: All BRT tasks complete (BRT-CR-001/002/003, BRT-RT-001/002, BRT-PAR-001/002).
 - Last delta: BRT-PAR-002 completed — parity drift routed to 4 owning TASKS.md files (BBR-PAR-001/002, WSM-PAR-001, PFS-PAR-001). BRT-PAR-001 parity loop re-validated (21 pass, 0 fail, 4 skip).

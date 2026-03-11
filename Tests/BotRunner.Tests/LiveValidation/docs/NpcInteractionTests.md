@@ -1,80 +1,51 @@
 # NpcInteractionTests
 
-Tests NPC interactions: vendor, trainer, flight master discovery, and NPC flag detection in snapshots.
+Live NPC-interaction baseline for vendor, trainer, and flight-master visibility plus `InteractWith` dispatch.
 
-## Test Methods (6)
+This suite currently exercises:
+- `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
+- `Exports/BotRunner/BotRunnerService.Sequences.Movement.cs`
+- `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+- `Exports/WoWSharpClient/Networking/ClientComponents/GossipNetworkClientComponent.cs`
+- `Exports/BotRunner/BotRunnerService.Snapshot.cs`
 
-### 1. Vendor_OpenAndSeeInventory
+## Test Methods
 
-**Bots:** BG + FG (parity testing)
+### Vendor_OpenAndSeeInventory
+### Vendor_SellJunkItems
+### Trainer_OpenAndSeeSpells
+### Trainer_LearnAvailableSpells
+### FlightMaster_DiscoverNodes
+### ObjectManager_DetectsNpcFlags
 
-**Test Flow:**
-1. Teleport to Razor Hill vendor (340.36, -4686.29, 16.54)
-2. `EnsureReadyAtLocationAsync()` — verify within 40y or re-teleport
-3. Find NPC with `UNIT_NPC_FLAG_VENDOR` (0x80) in NearbyUnits
-4. **Dispatch `ActionType.InteractWith`** with `LongParam = vendorGuid`
-5. Wait 1s for interaction
-6. Assert dispatch Success
+**Bots:** BG plus FG when FG is actionable.
 
----
+## Test Flow
 
-### 2. Vendor_SellJunkItems
+1. Bring each bot to Razor Hill vendor, Razor Hill trainer, or Orgrimmar flight-master positions.
+2. Wait for snapshot visibility and filter `NearbyUnits` by the required `NpcFlags`.
+3. Dispatch `ActionType.InteractWith` to the matched unit GUID.
+4. Assert the dispatch succeeds.
+5. For the object-manager-only slice, assert at least one nearby unit exposes non-zero `NpcFlags`.
 
-Same as Vendor_OpenAndSeeInventory but pre-adds 5x Linen Cloth (item 2589) via `EnsureBagHasItemAsync()` before vendor interaction.
+Per-test setup adds the minimum required preconditions:
+- vendor sell: ensure bag items exist
+- trainer learn: ensure money and level are high enough
+- all scenarios: ensure the bot is strict-alive and within arrival distance
 
----
+## Runtime Linkage
 
-### 3. Trainer_OpenAndSeeSpells
+- Interaction path: `BotRunnerService.ActionDispatch` -> `BuildInteractWithSequence(guid)` -> `WoWSharpObjectManager.InteractWithNpcAsync(...)`.
+- NPC visibility path: `BotRunnerService.Snapshot` reads `NearbyUnits` / `NpcFlags` after object-manager updates.
+- This suite is still a baseline around raw `InteractWith` dispatch. The planned overhaul endpoint is task ownership via `VendorVisitTask`, `TrainerVisitTask`, and `FlightMasterVisitTask`.
 
-**Test Flow:**
-1. Teleport to Razor Hill trainer (311.35, -4827.79, 9.66)
-2. Find NPC with `UNIT_NPC_FLAG_TRAINER`
-3. **Dispatch `ActionType.InteractWith`** with trainer GUID
+## Metrics
 
----
+The live assertions require:
+- nearby NPCs are visible with the expected `NpcFlags`
+- `InteractWith` dispatch returns `Success`
+- FG/BG parity is preserved when FG is actionable
 
-### 4. Trainer_LearnAvailableSpells
+## Current Status
 
-Same as Trainer_OpenAndSeeSpells but pre-ensures money >= 10000 copper (`.modify money`) and level >= 10 (`.character level`).
-
----
-
-### 5. FlightMaster_DiscoverNodes
-
-**Test Flow:**
-1. Teleport to Orgrimmar flight master (1676.25, -4313.45, 61.72)
-2. Find NPC with `UNIT_NPC_FLAG_FLIGHTMASTER` (0x400)
-3. **Dispatch `ActionType.InteractWith`** with FM GUID
-
----
-
-### 6. ObjectManager_DetectsNpcFlags
-
-**Test Flow:**
-1. Teleport to Razor Hill vendor area
-2. Retry up to 3 times with 1s delays
-3. `RefreshSnapshotsAsync()`
-4. Assert: at least one unit in NearbyUnits has non-zero `NpcFlags`
-5. Log all NPCs with flags
-
-**StateManager/BotRunner Role:** Passive — NpcFlags populated from SMSG_UPDATE_OBJECT (BG) or memory read (FG).
-
----
-
-## StateManager/BotRunner Action Flow
-
-**InteractWith (NPC):** `BuildInteractWithSequence(npcGuid)` → detects unit type → `_objectManager.InteractWithNpcAsync(guid)`:
-- FG: right-click NPC via memory call at 0x60BEA0
-- BG: CMSG_GOSSIP_HELLO or CMSG_NPC_TEXT_QUERY depending on NPC flags
-
-**Key Coordinates:**
-
-| Location | X | Y | Z |
-|----------|---|---|---|
-| Razor Hill Vendor | 340.36 | -4686.29 | 16.54 |
-| Razor Hill Trainer | 311.35 | -4827.79 | 9.66 |
-| Orgrimmar FM | 1676.25 | -4313.45 | 61.72 |
-
-**GM Commands:** `.modify money`, `.character level` (trainer test only).
-
-**Assertions:** NPC found with correct flags. InteractWith dispatches succeed. NpcFlags populated in snapshots.
+`2026-03-11`: the focused quest/NPC validation slice passed `8/8`. The suite is stable, but it remains a dispatch-level baseline rather than the final task-driven NPC interaction coverage described in `OVERHAUL_PLAN.md`.

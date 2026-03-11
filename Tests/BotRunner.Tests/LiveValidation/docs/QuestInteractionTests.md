@@ -1,41 +1,45 @@
 # QuestInteractionTests
 
-Tests quest log tracking: add quest via GM, complete it, remove it — verify each state change in snapshots.
+Snapshot-plumbing coverage for quest state changes that are driven through GM chat commands.
 
-## Test Methods (1)
+This suite currently exercises:
+- `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
+- `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+- `Exports/BotRunner/BotRunnerService.Snapshot.cs`
+- `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+- `Exports/WoWSharpClient/Client/WorldClient.cs`
+
+## Test Methods
 
 ### Quest_AddCompleteAndRemove_AreReflectedInSnapshots
 
-**Bots:** BG (TESTBOT2) + FG (TESTBOT1)
+**Bots:** BG (`TESTBOT2`) plus FG (`TESTBOT1`) when FG is actionable.
 
-**Fixture Setup:** `EnsureCleanSlateAsync()`.
+## Test Flow
 
-**Test Flow (per bot):**
+1. `EnsureCleanSlateAsync()` and remove any stale copy of quest `786`.
+2. Self-target so MaNGOS `.quest` commands resolve against the player.
+3. Send `.quest add 786` through the normal chat/command path.
+4. Poll `ActivitySnapshot.Player.QuestLogEntries` until quest `786` appears.
+5. Send `.quest complete 786` through the same chat path.
+6. Poll until the quest is removed or `QuestLog2` / `QuestLog3` changes.
+7. Send `.quest remove 786` and verify the quest disappears from the snapshot.
 
-| Step | Action | Details |
-|------|--------|---------|
-| 0 | Remove stale quest | `EnsureQuestAbsentAsync(account, 786)` — `.quest remove 786` to guarantee clean state |
-| 1 | Self-target | `BotSelectSelfAsync()` — `.targetself` (required for quest commands) |
-| 2 | Add quest | `.quest add 786` via `SendGmChatCommandTrackedAsync()` with 1500ms delay |
-| 3 | Verify add | Assert no "FAULT:" or "no such command". Poll 12s for quest in `QuestLogEntries` with `QuestLog1 == 786`. |
-| 4 | Complete quest | `.quest complete 786` via GM chat |
-| 5 | Verify complete | `WaitForQuestCompletedChangedOrRemovedAsync()` — 12s poll. Returns true if quest removed from log OR QuestLog2/QuestLog3 changed (objective state). |
-| 6 | Remove quest | `.quest remove 786` via GM chat |
-| 7 | Verify remove | Poll 12s for quest absence from `QuestLogEntries` |
+## Runtime Linkage
 
-**Cleanup:** Finally block removes quest via `.quest remove 786` on any failure.
+- Test-owned setup/teardown: GM chat only.
+- Chat dispatch path: `BotRunnerService.ActionDispatch` -> `CharacterAction.SendChat` -> `WoWSharpObjectManager.SendChatMessage()`.
+- Snapshot projection path: `BotRunnerService.Snapshot` populates `Player.QuestLogEntries`.
+- This is **not** the final task-driven questing path. It verifies that live quest state reaches snapshots correctly so later `AcceptQuestTask` / `CompleteQuestTask` work has a reliable observation surface.
 
-**StateManager/BotRunner Role:**
+## Metrics
 
-**No ActionType dispatches.** All quest operations use GM chat commands. BotRunnerService processes `SendChat` actions. The test validates that snapshot quest log tracking correctly reflects server-side quest state changes:
-- `snapshot.Player.QuestLogEntries` — array of quest slots
-- `QuestLog1` = quest ID
-- `QuestLog2`, `QuestLog3` = objective counters/state
+The live assertions require:
+- no command-table rejection for `.quest add`, `.quest complete`, or `.quest remove`
+- quest `786` present after add
+- quest state changed or removed after complete
+- quest absent after remove
 
-Quest log updates arrive via SMSG_QUEST_QUERY_RESPONSE and SMSG_UPDATE_OBJECT packets → ObjectManager parses quest fields → snapshot captures them.
+## Current Status
 
-**Key IDs:** Quest 786 (test quest).
-
-**GM Commands:** `.quest add 786`, `.quest complete 786`, `.quest remove 786`, `.targetself`.
-
-**Assertions:** Quest appears in log after add. Quest state changes after complete. Quest absent after remove.
+`2026-03-11`: the focused quest/NPC validation slice passed `8/8`. `QuestInteractionTests` remains green, but it is still snapshot-plumbing coverage rather than the task-driven questing suite planned in the overhaul.

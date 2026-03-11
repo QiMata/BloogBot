@@ -74,6 +74,55 @@ namespace WoWSharpClient.Handlers
             catch (EndOfStreamException) { }
         }
 
+        /// <summary>
+        /// Parses SMSG_SUPERCEDED_SPELL (0x12C).
+        /// Format: uint16 oldSpellId, uint16 newSpellId
+        /// Replaces the previous spell rank with the newly learned rank.
+        /// </summary>
+        public static void HandleSupercededSpell(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint oldSpellId = reader.ReadUInt16();
+                uint newSpellId = reader.ReadUInt16();
+
+                lock (WoWSharpObjectManager.Instance.SpellLock)
+                {
+                    var existing = WoWSharpObjectManager.Instance.Spells ??= [];
+                    var removed = existing.RemoveAll(s => s.Id == oldSpellId);
+                    if (!existing.Exists(s => s.Id == newSpellId))
+                        existing.Add(new GameData.Core.Models.Spell(newSpellId, 0, "", "", ""));
+
+                    Log.Information("[SpellHandler] Superseded spell: {OldSpellId} -> {NewSpellId} (removed={Removed}, total={Count})",
+                        oldSpellId, newSpellId, removed, existing.Count);
+                }
+            }
+            catch (EndOfStreamException) { }
+        }
+
+        /// <summary>
+        /// Parses SMSG_REMOVED_SPELL (0x203).
+        /// Format: uint16 spellId
+        /// Removes a no-longer-known spell from the local spell list.
+        /// </summary>
+        public static void HandleRemovedSpell(Opcode opcode, byte[] data)
+        {
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                uint spellId = reader.ReadUInt16();
+                lock (WoWSharpObjectManager.Instance.SpellLock)
+                {
+                    var existing = WoWSharpObjectManager.Instance.Spells ??= [];
+                    var removed = existing.RemoveAll(s => s.Id == spellId);
+                    Log.Information("[SpellHandler] Removed spell: {SpellId} (removed={Removed}, total={Count})",
+                        spellId, removed, existing.Count);
+                }
+            }
+            catch (EndOfStreamException) { }
+        }
+
         public static void HandleSpellLogMiss(Opcode opcode, byte[] data)
         {
             using var reader = new BinaryReader(new MemoryStream(data));

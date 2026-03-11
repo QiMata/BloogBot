@@ -244,6 +244,8 @@ namespace WoWSharpClient.Client
             // Spells
             BridgeToLegacy(Opcode.SMSG_INITIAL_SPELLS, Handlers.SpellHandler.HandleInitialSpells);
             BridgeToLegacy(Opcode.SMSG_LEARNED_SPELL, Handlers.SpellHandler.HandleLearnedSpell);
+            BridgeToLegacy(Opcode.SMSG_SUPERCEDED_SPELL, Handlers.SpellHandler.HandleSupercededSpell);
+            BridgeToLegacy(Opcode.SMSG_REMOVED_SPELL, Handlers.SpellHandler.HandleRemovedSpell);
             BridgeToLegacy(Opcode.SMSG_SPELLLOGMISS, Handlers.SpellHandler.HandleSpellLogMiss);
             BridgeToLegacy(Opcode.SMSG_SPELL_GO, Handlers.SpellHandler.HandleSpellGo);
             BridgeToLegacy(Opcode.SMSG_SPELL_START, Handlers.SpellHandler.HandleSpellStart);

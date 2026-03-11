@@ -1,64 +1,58 @@
 # FishingProfessionTests
 
-Tests the full fishing pipeline: equip pole, learn spells, cast at water, wait for auto-catch, verify skill increase.
+Live BG-first fishing baseline covering spell sync, shoreline stability, cast entry, and catch detection.
 
-## Test Methods (1)
+This suite currently exercises:
+- `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
+- `Exports/BotRunner/Combat/FishingData.cs`
+- `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
+- `Exports/WoWSharpClient/OpCodeDispatcher.cs`
+- `Exports/WoWSharpClient/Client/WorldClient.cs`
+- `Exports/WoWSharpClient/WoWSharpObjectManager.Combat.cs`
+- `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+
+## Test Methods
 
 ### Fishing_CatchFish_SkillIncreases
 
-**Bots:** BG (TESTBOT2) primary. FG (TESTBOT1) parked at Orgrimmar during BG test.
+**Bots:** `TESTBOT2` is the asserted BG fishing bot. `TESTBOT1` is parked as a non-blocking FG reference bot.
 
-**Fixture Setup:** `EnsureCleanSlateAsync()`.
+## Test Flow
 
-**Test Flow:**
+1. Force a fresh fishing spell sync with `.unlearn -> .learn` so BG receives `SMSG_LEARNED_SPELL`, `SMSG_SUPERCEDED_SPELL`, and `SMSG_REMOVED_SPELL`.
+2. Set fishing skill to `1/300`, clear gear, add a pole, equip it, and add `Shiny Bauble`.
+3. Teleport across the known shoreline positions and reject unstable landings.
+4. Set facing toward water at each position.
+5. Resolve the castable fishing rank from the current known-spell list and dispatch `ActionType.CastSpell`.
+6. Look for:
+   - an active channel
+   - a bobber game object
+   - a bag/loot delta that proves a catch
+   - or a later fishing skill increase
 
-**Phase 1 — Bot Preparation (per bot):**
+## Metrics
 
-| Step | Action | Details |
-|------|--------|---------|
-| 1 | Ensure alive | `RevivePlayerAsync()` |
-| 2 | Teleport safe | Orgrimmar if needed |
-| 3 | Learn fishing spells | 7733 (Apprentice), 7734 (Journeyman), 7620 (Rank 1), 7731 (Rank 2), 7732 (Expert), 18248 (Artisan), 7738 (Pole Proficiency) |
-| 4 | Set skill | `BotSetSkillAsync(FishingSkillId, 1, 300)` — skill 1/300 |
-| 5 | Clear equipment | `.reset items {charName}` |
-| 6 | Add fishing pole | `BotAddItemAsync(5041)`, poll 8s |
-| 7 | Equip pole | **Dispatch `ActionType.EquipItem`** with `IntParam = 5041` |
-| 8 | Add bauble | `BotAddItemAsync(6529)` — Shiny Bauble |
+The live diagnostics record:
+- fishing skill before and after the run
+- spell-count, castable fishing rank, and pole proficiency after spell sync
+- per-location landing stability and `deltaFromShore`
+- whether channel state was entered
+- whether a bobber appeared
+- whether catch success came from loot delta, skill-up, or both
 
-**Phase 2 — Fishing at 4 Locations (sequential until success):**
+## Current Status
 
-| # | Location | Coordinates (X, Y, Z) | Facing (rad) |
-|---|----------|----------------------|---------------|
-| 1 | Ratchet dock | (-988.5, -3834, 5.7) | 6.21 (east) |
-| 2 | Ratchet alt | (-985.7, -3827, 5.7) | 5.50 |
-| 3 | Durotar coast | (-995, -3850, 4) | 6.28 |
-| 4 | Sen'jin Village | (-820, -4885, 8) | 0.0 |
+`2026-03-11` live runs moved the suite past the BG cast gate:
+- BG now updates known fishing ranks from `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`
+- `ResolveCastableFishingSpellId(...)` correctly prefers the highest currently-known fishing rank
+- the live run reaches `CastSpellAtLocation()`, channel start, bobber creation, and auto-loot/catch detection
+- full `LiveValidation` is green again: `33 passed, 0 failed, 2 skipped`
 
-**Per location:**
-1. `BotTeleportAsync()` to shore position
-2. Wait for Z stabilization (4s)
-3. **Dispatch `ActionType.SetFacing`** with `FloatParam = facing_radians`
-4. Wait 500ms
-5. `CastAndWaitForCatch()` — up to 3 attempts:
-   - **Dispatch `ActionType.CastSpell`** with `IntParam = 7620` (Fishing Rank 1)
-   - Wait 3s for channel to start
-   - Check `Player.Unit.ChannelSpellId` is active
-   - Find bobber in NearbyObjects (DisplayId=668 or GameObjectType=17)
-   - Wait 22s for auto-catch (server bites 5-20s into 20s channel)
-   - Poll every 3s for skill increase
-   - If skill increases → success
+The pass condition no longer depends only on RNG skill-up. A run now succeeds if BG either:
+- catches loot and the bag contents change
+- or gains fishing skill during the cast/catch cycle
 
-**StateManager/BotRunner Action Flow:**
+## Overhaul Notes
 
-- **SetFacing:** inline `Do()` → `_objectManager.SetFacing(angle)` → MSG_MOVE_SET_FACING packet
-- **CastSpell(7620):** `BuildCastSpellSequence(7620)` → FG: spell DB lookup → `CastSpellByName("Fishing")` via Lua / BG: CMSG_CAST_SPELL with spellId=7620. 20s channel. Spell-cast lockout set for 20s.
-- **Auto-catch:** Server-side — bobber gets a fish bite event → server completes the channel → loot window opens → auto-loot if enabled
-
-**Key IDs:**
-- Item 5041 = Fishing Pole
-- Item 6529 = Shiny Bauble
-- Spell 7620 = Fishing Rank 1
-- Bobber DisplayId = 668
-- Channel duration = 20s (22s with margin)
-
-**Assertions:** Test passes if any location catches fish. Skill increase logged but RNG-dependent in vanilla WoW.
+- This suite still needs to become the planned `FishingTaskTests` coverage so the behavior is driven through a dedicated `FishingTask`.
+- The next fishing-focused pass should compare FG and BG packet/timing around bobber spawn, custom anim, and auto-interact timing rather than re-debugging the old cast gate.
