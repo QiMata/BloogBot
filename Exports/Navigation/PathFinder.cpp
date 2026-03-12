@@ -58,6 +58,11 @@ namespace
     constexpr int MaxSegmentRefinementDepth = 6;
     constexpr float RedundantPointDistanceThreshold = 0.75f;
     constexpr int MaxSimplificationPasses = 4;
+    constexpr float MinDetourSegmentLength = 2.0f;
+    constexpr float MaxDetourLengthInflation = 2.75f;
+    constexpr float MinCandidateEndpointDistance = 1.0f;
+    constexpr float DetourAlongSamples[] = { 0.35f, 0.5f, 0.65f };
+    constexpr float DetourLateralOffsets[] = { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f, 12.0f };
 
     XYZ ToXyz(const Vector3& point)
     {
@@ -120,6 +125,118 @@ namespace
         return midpoint;
     }
 
+    bool TryBuildDetourCandidate(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        float alongFraction,
+        float lateralOffset,
+        int directionSign,
+        Vector3* candidate)
+    {
+        if (!candidate)
+            return false;
+
+        const float dx = end.x - start.x;
+        const float dy = end.y - start.y;
+        const float horizontalDistance = HorizontalDistance(start, end);
+        if (horizontalDistance < MinDetourSegmentLength)
+            return false;
+
+        const float invDistance = 1.0f / horizontalDistance;
+        const float dirX = dx * invDistance;
+        const float dirY = dy * invDistance;
+        const float perpX = -dirY * static_cast<float>(directionSign);
+        const float perpY = dirX * static_cast<float>(directionSign);
+
+        Vector3 detourPoint(
+            start.x + (dx * alongFraction) + (perpX * lateralOffset),
+            start.y + (dy * alongFraction) + (perpY * lateralOffset),
+            (start.z + end.z) * 0.5f);
+
+        const float queryBaseZ = std::max(start.z, end.z) + 2.5f;
+        const float searchDistance = std::max(8.0f, std::fabs(end.z - start.z) + lateralOffset + 4.0f);
+        const float supportZ = GetGroundZ(mapId, detourPoint.x, detourPoint.y, queryBaseZ, searchDistance);
+        if (!std::isfinite(supportZ) || supportZ <= -100000.0f)
+            return false;
+
+        detourPoint.z = supportZ;
+        if (HorizontalDistance(start, detourPoint) < MinCandidateEndpointDistance ||
+            HorizontalDistance(detourPoint, end) < MinCandidateEndpointDistance)
+        {
+            return false;
+        }
+
+        const float detourLength = HorizontalDistance(start, detourPoint) + HorizontalDistance(detourPoint, end);
+        if (detourLength > (horizontalDistance * MaxDetourLengthInflation))
+            return false;
+
+        *candidate = detourPoint;
+        return true;
+    }
+
+    bool AppendRefinedSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        int depth,
+        PointsArray& output);
+
+    bool AppendRefinedCandidate(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& candidate,
+        const Vector3& end,
+        int depth,
+        PointsArray& output)
+    {
+        const size_t baseSize = output.size();
+        if (!AppendRefinedSegment(mapId, start, candidate, depth + 1, output))
+        {
+            output.resize(baseSize);
+            return false;
+        }
+
+        const Vector3 candidateEnd = output.back();
+        if (!AppendRefinedSegment(mapId, candidateEnd, end, depth + 1, output))
+        {
+            output.resize(baseSize);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool TryAppendDetourSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        int depth,
+        PointsArray& output)
+    {
+        const float horizontalDistance = HorizontalDistance(start, end);
+        if (horizontalDistance < MinDetourSegmentLength)
+            return false;
+
+        for (const float alongFraction : DetourAlongSamples)
+        {
+            for (const float lateralOffset : DetourLateralOffsets)
+            {
+                for (int directionSign : { 1, -1 })
+                {
+                    Vector3 candidate;
+                    if (!TryBuildDetourCandidate(mapId, start, end, alongFraction, lateralOffset, directionSign, &candidate))
+                        continue;
+
+                    if (AppendRefinedCandidate(mapId, start, candidate, end, depth, output))
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     bool AppendRefinedSegment(
         uint32_t mapId,
         const Vector3& start,
@@ -138,23 +255,11 @@ namespace
         if (depth >= MaxSegmentRefinementDepth)
             return false;
 
+        if (TryAppendDetourSegment(mapId, start, end, depth, output))
+            return true;
+
         const Vector3 midpoint = BuildGroundedMidpoint(mapId, start, end);
-
-        const size_t baseSize = output.size();
-        if (!AppendRefinedSegment(mapId, start, midpoint, depth + 1, output))
-        {
-            output.resize(baseSize);
-            return false;
-        }
-
-        const Vector3 refinedMid = output.back();
-        if (!AppendRefinedSegment(mapId, refinedMid, end, depth + 1, output))
-        {
-            output.resize(baseSize);
-            return false;
-        }
-
-        return true;
+        return AppendRefinedCandidate(mapId, start, midpoint, end, depth, output);
     }
 
     void RefinePathForWalkability(uint32_t mapId, PointsArray& pathPoints)

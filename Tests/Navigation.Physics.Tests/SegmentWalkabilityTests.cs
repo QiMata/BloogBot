@@ -133,6 +133,81 @@ public class SegmentWalkabilityTests
 
         Assert.NotEmpty(path);
         Assert.True(path.Length >= 3, $"Expected multi-point corpse-run path, got {path.Length}");
+        AssertRouteShortSegmentsValidate(1, path, "Orgrimmar corpse run");
+    }
+
+    [Fact]
+    public void FindPath_RatchetFishingApproach_ReformsBlockedSegment()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var start = new Vector3(-957.0f, -3755.0f, 5.0f);
+        var end = new Vector3(-956.2f, -3775.0f, 0.0f);
+
+        var directResult = ValidateWalkableSegment(
+            1,
+            start,
+            end,
+            PhysicsTestConstants.DefaultCapsuleRadius,
+            PhysicsTestConstants.DefaultCapsuleHeight,
+            out var directResolvedEndZ,
+            out var directSupportDelta,
+            out var directTravelFraction);
+
+        _output.WriteLine(
+            $"Ratchet direct result={directResult} resolvedEndZ={directResolvedEndZ:F3} supportDelta={directSupportDelta:F3} travelFraction={directTravelFraction:F3}");
+
+        Assert.NotEqual(SegmentValidationResult.Clear, directResult);
+
+        var path = FindPath(1, start, end, smoothPath: true);
+
+        for (var i = 0; i < path.Length; i++)
+            _output.WriteLine($"ratchet pt[{i}]={path[i]}");
+
+        Assert.NotEmpty(path);
+        Assert.True(path.Length >= 3, $"Expected shoreline detour path, got {path.Length} points");
+
+        var terminalDistance = Distance2D(path[^1], end);
+        Assert.InRange(terminalDistance, 0.0f, 12.0f);
+        AssertRouteShortSegmentsValidate(1, path, "Ratchet fishing approach");
+    }
+
+    [Fact]
+    public void FindPath_ObstructedDirectSegment_ReformsIntoWalkableDetour()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var start = new Vector3(-8949.95f, -132.49f, 83.53f);
+        var end = new Vector3(-8880.00f, -220.00f, 83.53f);
+
+        var directResult = ValidateWalkableSegment(
+            0,
+            start,
+            end,
+            PhysicsTestConstants.DefaultCapsuleRadius,
+            PhysicsTestConstants.DefaultCapsuleHeight,
+            out var directResolvedEndZ,
+            out var directSupportDelta,
+            out var directTravelFraction);
+
+        _output.WriteLine(
+            $"Obstructed direct result={directResult} resolvedEndZ={directResolvedEndZ:F3} supportDelta={directSupportDelta:F3} travelFraction={directTravelFraction:F3}");
+
+        Assert.NotEqual(SegmentValidationResult.Clear, directResult);
+
+        var path = FindPath(0, start, end, smoothPath: true);
+
+        for (var i = 0; i < path.Length; i++)
+            _output.WriteLine($"obstructed pt[{i}]={path[i]}");
+
+        Assert.NotEmpty(path);
+        Assert.True(path.Length >= 3, $"Expected detour path around obstruction, got {path.Length} points");
+        AssertRouteShortSegmentsValidate(0, path, "Obstructed detour");
+    }
+
+    private void AssertRouteShortSegmentsValidate(uint mapId, Vector3[] path, string routeLabel)
+    {
+        Assert.NotEmpty(path);
 
         var current = path[0];
         for (var i = 0; i < path.Length - 1; i++)
@@ -157,15 +232,22 @@ public class SegmentWalkabilityTests
                 out var travelFraction);
 
             _output.WriteLine(
-                $"seg {i}->{i + 1} from={from} to={to} result={result} resolvedEndZ={resolvedEndZ:F3} supportDelta={supportDelta:F3} travelFraction={travelFraction:F3}");
+                $"{routeLabel} seg {i}->{i + 1} from={from} to={to} result={result} resolvedEndZ={resolvedEndZ:F3} supportDelta={supportDelta:F3} travelFraction={travelFraction:F3}");
 
             Assert.True(
                 result == SegmentValidationResult.Clear || result == SegmentValidationResult.MissingSupport,
-                $"Segment {i}->{i + 1} failed validation with {result} from={from} to={to}");
+                $"{routeLabel} segment {i}->{i + 1} failed validation with {result} from={from} to={to}");
 
             current = result == SegmentValidationResult.Clear && float.IsFinite(resolvedEndZ)
                 ? new Vector3(to.X, to.Y, resolvedEndZ)
                 : to;
         }
+    }
+
+    private static float Distance2D(in Vector3 from, in Vector3 to)
+    {
+        var dx = to.X - from.X;
+        var dy = to.Y - from.Y;
+        return MathF.Sqrt((dx * dx) + (dy * dy));
     }
 }

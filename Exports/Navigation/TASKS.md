@@ -56,6 +56,7 @@
 ### NAV-FISH-001 Fix Ratchet shoreline terrain sticking / no-LOS approach points
 - [ ] Problem: the fishing live test now reaches the correct Ratchet hole from a named teleport, but the bot can still snag on shoreline terrain or end at a cast target with no clean LOS to fishable water before `FishingTask in_cast_range`.
 - [ ] Target files: `Exports/Navigation/PhysicsCollideSlide.cpp`, `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/PathFinder.cpp`, replay/log evidence from `FishingProfessionTests`.
+- [x] Progress (2026-03-12 session 72): `PathFinder.cpp` now tries grounded lateral detour candidates before falling back to pure midpoint splitting, and deterministic native coverage now includes a Ratchet dock fishing-approach route (`-957.0,-3755.0,5.0 -> -956.2,-3775.0,0.0`) plus an obstructed direct-segment detour regression. This improves returned route shape, but it does not yet log planned-vs-executed shoreline drift or prove final cast LOS in the live task.
 - [ ] Required change:
   1. Reproduce the short Ratchet shoreline approach with planned-vs-executed waypoint evidence from the pathfinding owners.
   2. Fix corridor/collide-slide behavior so the returned short route does not strand the bot on terrain or at a no-LOS endpoint.
@@ -94,6 +95,7 @@
 ### NAV-OBJ-004 Local detour generation around collidable objects
 - [ ] Problem: once a live object blocks an mmap path segment, we need a local workaround instead of failing the whole route immediately.
 - [ ] Target files: `Exports/Navigation/PathFinder.cpp`, `Exports/Navigation/Navigation.cpp`, `Exports/Navigation/SceneQuery.cpp`.
+- [x] Progress (2026-03-12 session 72): `PathFinder.cpp` now attempts grounded lateral detour candidates around blocked segments before falling back to midpoint refinement. Focused native coverage proves both the Ratchet shoreline fishing approach and a known obstructed direct segment now return multi-point walkable routes instead of trusting the blocked straight segment.
 - [ ] Required change:
   1. Generate short detour candidates around dynamic blockers using clearance-aware probes.
   2. Reject detours that only pass LOS but fail capsule/support checks.
@@ -108,20 +110,22 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 70)
-- Active task: `NAV-OBJ-002` continue moving validator-backed shaping from service repair into native `PathFinder.cpp`
-- Last delta: `Navigation.cpp` now honors the public `smoothPath` contract (`true=smooth`, `false=straight`), and `PathFinder.cpp` now refines invalid segments, collapses redundant micro-waypoints, and grounds refinement midpoints through the native `GetGroundZ` export before returning the route. `DllMain.cpp` also accepts near-complete short segments that only fail on final overlap, and the deterministic whole-route corpse-run regression now passes when it carries grounded segment ends forward between validations.
+- Last updated: 2026-03-12 (session 72)
+- Active task: `NAV-OBJ-004` continue pushing local detour generation into native output, then feed Ratchet shoreline drift diagnostics back into live repros
+- Last delta: `PathFinder.cpp` now tries grounded lateral detour candidates around blocked segments before falling back to midpoint refinement, which moves more whole-route repair out of the service layer and into native output shaping. `SegmentWalkabilityTests.cs` now pins that behavior with a Ratchet dock fishing-approach route and a known obstructed direct-segment detour, while the full service and native suites still pass.
 - Pass result: `delta shipped`
 - Validation/tests run:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `5 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `102 passed, 1 skipped`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `7 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `35 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `104 passed, 1 skipped`
 - Files changed:
-  - `Exports/Navigation/Navigation.h`
-  - `Exports/Navigation/Navigation.cpp`
-  - `Exports/Navigation/PathFinder.h`
   - `Exports/Navigation/PathFinder.cpp`
-  - `Exports/Navigation/DllMain.cpp`
   - `Exports/Navigation/TASKS.md`
-- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -Skip 260 -First 260`
-- Blockers: native route output is now much closer to traversal-safe, but the heavier blocker workaround still lives in service-side bounded repair. The next slice remains true native detour generation around blocked segments so the service can trust whole routes without leaning on repair after the fact.
+  - `Services/PathfindingService/TASKS.md`
+  - `Services/PathfindingService/README.md`
+  - `Tests/Navigation.Physics.Tests/SegmentWalkabilityTests.cs`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs | Select-Object -Skip 140 -First 160`
+- Blockers: the returned route is stronger, but the remaining Ratchet fishing failures can still be route-shape or runtime-execution drift. The next slice needs shoreline-focused request/response logging so live failures can be attributed to bad native output versus movement/collide-slide drift after the path is returned.

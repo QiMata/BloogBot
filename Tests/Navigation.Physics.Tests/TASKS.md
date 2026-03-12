@@ -48,22 +48,17 @@ BRT-PAR-001 parity loop (2026-02-28) found **no physics/navigation regressions**
 4. Native segment walkability focus: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 70)
-- Active task: keep native `ValidateWalkableSegment` regressions pinned while `PathFinder.cpp` absorbs more of the whole-route shaping work
-- Last delta: `SegmentWalkabilityTests.cs` now covers both the full Orgrimmar graveyard->center route and a short near-complete ramp regression. The test now carries grounded segment ends forward between validations, which lets the deterministic suite validate the route the same way the movement system actually traverses it. The focused native slice now passes `5/5`.
+- Last updated: 2026-03-12 (session 72)
+- Active task: keep native whole-route shaping regressions pinned while the service instruments Ratchet shoreline drift
+- Last delta: `SegmentWalkabilityTests.cs` now covers two new native detour regressions: the Ratchet fishing shoreline route from the named-teleport dock anchor to the observed cast target, and a known obstructed direct segment that must reform into a walkable multi-point route. `PathFinder.cpp` now tries grounded lateral detour candidates before midpoint-only refinement, and the focused native slice now passes `7/7`.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/SegmentWalkabilityTests.cs`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
-  - `Exports/Navigation/Navigation.h`
-  - `Exports/Navigation/Navigation.cpp`
-  - `Exports/Navigation/PathFinder.h`
   - `Exports/Navigation/PathFinder.cpp`
-  - `Exports/Navigation/DllMain.cpp`
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `5 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `102 passed, 1 skipped`
-- Blockers: deterministic whole-route coverage is now in place, but native detour generation still belongs in `Exports/Navigation/PathFinder.cpp`. This project should keep pinning regressions while native route shaping gets stronger.
-- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -Skip 260 -First 260`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `7 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `104 passed, 1 skipped`
+- Blockers: deterministic native detour coverage is now in place, but it still does not tell us whether remaining live Ratchet failures come from bad returned paths or drift after the path is issued. The next owner work is service-side shoreline request/response logging.
+- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs | Select-Object -Skip 140 -First 160`

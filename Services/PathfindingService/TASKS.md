@@ -85,6 +85,7 @@ Master tracker: `MASTER-SUB-018`
 ### PFS-FISH-001 Research: Ratchet shoreline fishing-route diagnostics
 - [ ] Problem: `FishingTask` can now acquire the correct pool and the live contract can succeed, but the short route from the Ratchet named-teleport landing to a castable pool position can still strand FG/BG on terrain or at a no-LOS endpoint before `FishingTask in_cast_range`.
 - [ ] Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, `Services/PathfindingService/Repository/Navigation.cs`, `Tests/PathfindingService.Tests/`, live evidence from `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`.
+- [x] Progress (2026-03-12 session 72): native `PathFinder.cpp` now tries grounded lateral detour candidates before midpoint splitting, and deterministic native coverage includes the Ratchet dock fishing approach plus a known obstructed direct-segment detour. This improves the returned route surface, but the service still does not emit enough short-route diagnostics to distinguish bad native output from runtime execution drift during the live fishing path.
 - [ ] Required change:
   1. Log the requested start/end points and returned corners for short shoreline routes used by fishing-hole approaches.
   2. Record enough metadata to distinguish "bad route returned" from "route returned but runtime execution drifted off it".
@@ -123,6 +124,7 @@ Master tracker: `MASTER-SUB-018`
 - [x] Progress (2026-03-12 session 68): `Navigation.cs` now has a native `ValidateWalkableSegment` bridge available for service result mapping (`repaired_segment_validation`, `blocked_by_capsule_validation`, `blocked_by_step_up_limit`, `blocked_by_step_down_limit`) and deterministic tests cover those branches. The rollout remains gated behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` because current support probes still false-negative some long Orgrimmar/corpse-run segments.
 - [x] Progress (2026-03-12 session 69): the native validator underneath `Navigation.cs` now uses capsule-footprint support sampling and a short-horizon `PhysicsStepV2` fallback for strict straight-sweep false negatives. The first real Orgrimmar graveyard->center raw segment now passes in deterministic native coverage, and the focused plus full `PathfindingService.Tests` suites still pass.
 - [x] Progress (2026-03-12 session 71): service blocked-segment evaluation now carries each segment's grounded effective end forward through `SegmentEvaluation` instead of reusing raw smooth-path waypoint Z for the next segment. `NavigationOverlayAwarePathTests` now pins that regression, and baseline `PathfindingTests` run through the shared route-validity contract with `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION=1` so deterministic service coverage validates the shaped/repaired route runtime traversal actually consumes.
+- [x] Progress (2026-03-12 session 72): native `PathFinder.cpp` now attempts grounded lateral detour candidates before midpoint-only refinement, which reduces how often service-side bounded repair has to rescue blocked short segments. Deterministic native coverage now proves both the Ratchet fishing shoreline route and a known obstructed direct segment return walkable multi-point routes, while the full `PathfindingService.Tests` suite continues to pass unchanged.
 - [ ] Required change:
   1. Validate each returned path segment against dynamic objects, capsule clearance, LOS, and support surface checks.
   2. When a segment is blocked by live objects, build a local detour/reform pass around the obstruction instead of returning the raw native path.
@@ -166,21 +168,22 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 71)
-- Active task: `NAV-OBJ-002` / `PFS-OBJ-003` continue pushing whole-route shaping into native output while keeping service validation deterministic
-- Last delta: `Navigation.cs` now threads grounded segment ends through service blocked-segment evaluation via `SegmentEvaluation`, so overlay-aware validation continues from the effective grounded endpoint instead of raw smooth-path waypoint Z. `NavigationOverlayAwarePathTests.cs` now pins that carry-forward behavior, and `PathfindingTests` now validate the baseline route contract under `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION=1` through the shared `PathRouteAssertions` helper so deterministic route validity matches shaped/repaired runtime traversal.
+- Last updated: 2026-03-12 (session 72)
+- Active task: `PFS-FISH-001` / `NAV-OBJ-004` instrument shoreline route diagnostics now that native output has a first lateral-detour pass
+- Last delta: native `PathFinder.cpp` now tries grounded lateral detour candidates before midpoint-only refinement, which gives the service stronger first-pass routes before bounded repair runs. Deterministic native coverage now includes a Ratchet fishing shoreline route and a known obstructed direct-segment detour, while the full `PathfindingService.Tests` suite still passes with the existing service-side overlay/repair contract.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `6 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests|FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `12 passed`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `7 passed`
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `35 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `104 passed, 1 skipped`
 - Files changed:
-  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Exports/Navigation/PathFinder.cpp`
+  - `Exports/Navigation/TASKS.md`
   - `Services/PathfindingService/TASKS.md`
-  - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
-  - `Tests/PathfindingService.Tests/PathingAndOverlapTests.cs`
-  - `Tests/PathfindingService.Tests/TASKS.md`
-  - `Tests/PathfindingService.Tests/TASKS_ARCHIVE.md`
-- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -Skip 260 -First 260`
-- Blockers: service-side bounded repair still carries more of the live blocker workload than native output shaping. The next route-quality slice remains true native detour generation around blocked segments so `CalculateValidatedPath` can trust the first native route more often and leave `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` gated only as a rollout control, not a correctness crutch.
+  - `Services/PathfindingService/README.md`
+  - `Tests/Navigation.Physics.Tests/SegmentWalkabilityTests.cs`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs | Select-Object -Skip 140 -First 160`
+- Blockers: native output is stronger, but the remaining Ratchet fishing failures can still come from bad returned corners or drift after the route is issued. The next slice needs short-route request/response diagnostics so live failures can be attributed before more physics changes are made.
