@@ -302,10 +302,10 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 - **Status**: OPEN
 - **Severity**: High
 
-### BT-MOVE-003: Ratchet Pier Overrun Can Leave Fishing Bots Falling Instead of Stationary
-- **Observed**: During the live fishing path, FG can still run off the Ratchet pier before the stop/interact sequence fully arrests motion. `ForceStopImmediate()` improved the bobber interaction path, and BG now preserves `MOVEFLAG_FALLINGFAR` / swimming flags when stop packets clear directional intent, but once the bot is already beyond the dock edge, stop-only logic still does not recover the fall or re-stage the cast cleanly.
-- **Impact**: Fishing tests can still fail for the wrong reason, even though the BG-side "stop cancels falling" parity bug is partially mitigated. This remains a movement controller issue, not a fishing-task ownership issue.
-- **Fix**: Finish the BG/FG shoreline recovery pass so a stop request during shoreline approach clears stale forward intent and transitions cleanly into falling or re-stage recovery instead of hovering/overrunning.
+### BT-MOVE-003: Ratchet Shoreline Pathing Can Leave Fishing Bots Terrain-Stuck, Falling, or LOS-Blocked
+- **Observed**: During the live fishing path, the bot can now reach the correct Ratchet fishing hole from the named teleport, but the final shoreline approach can still snag on terrain, run off the pier, or settle at a cast point with no clean LOS to fishable water. The live evidence is repeated `FishingTask los_blocked phase=move` plus the WoW error `Your cast didn't land in fishable water`.
+- **Impact**: Fishing can fail intermittently even though the task-owned fishing contract is correct. This is likely the same short-horizon pathing/collision family behind other sporadic live failures where the bot reaches the area but not a usable final position.
+- **Fix**: Prioritize pathfinding/native navigation logging for planned vs executed shoreline routes, then fix the corridor/collide-slide behavior so stop/fall handling and final-position selection leave the bot at a castable, LOS-valid point instead of stuck terrain.
 - **Status**: OPEN
 - **Severity**: High
 
@@ -324,4 +324,4 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 2. **BT-COMBAT-001** — BG bot SMSG_ATTACKSTART verification (High, partially fixed)
 3. **BT-COMBAT-003** — `.damage` cleanup leaves stale combat state (Medium)
 4. **BT-FEEDBACK-002** — Aggregate test summary (Low)
-5. **BT-MOVE-003** - Ratchet pier overrun / stop-fall parity gap (High)
+5. **BT-MOVE-003** - Ratchet shoreline terrain/LOS pathing gap (High)

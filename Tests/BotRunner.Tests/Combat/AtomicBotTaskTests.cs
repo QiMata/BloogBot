@@ -280,6 +280,106 @@ public class FishingTaskTests
 
         om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.AtLeastOnce);
         om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithPoolInsideTaskCastWindow_CastsAtLosFriendlyWaterTarget()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        var poolPosition = new Position(20f, 0f, 0f);
+        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, poolPosition, 4f);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA12UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: poolPosition);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        task.Update();
+
+        om.Verify(o => o.ForceStopImmediate(), Times.AtLeastOnce);
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.Never);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(
+            (int)FishingData.FishingRank2,
+            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
+            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
+            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask cast_started", StringComparison.Ordinal)
+            && message.Contains($"target=({expectedCastTarget.X:F1},{expectedCastTarget.Y:F1},{expectedCastTarget.Z:F1})", StringComparison.Ordinal))), Times.Once);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithPoolInsideTaskCastWindowButLosBlocked_RepositionsInsteadOfCasting()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.IsInLineOfSight(
+                    It.IsAny<uint>(),
+                    It.IsAny<Position>(),
+                    It.IsAny<Position>()))
+                .Returns((uint _, Position from, Position to) => from.Y > 1f || to.Y > 1f);
+        });
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
+        player.Setup(p => p.IsMoving).Returns(false);
+        var poolPosition = new Position(20f, 0f, 0f);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA13UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: poolPosition);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank2]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank2, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.MoveToward(It.Is<Position>(position => position.Y > 0f)), Times.AtLeastOnce);
+        om.Verify(o => o.CastSpellAtLocation(It.IsAny<int>(), It.IsAny<float>(), It.IsAny<float>(), It.IsAny<float>()), Times.Never);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask los_blocked", StringComparison.Ordinal))), Times.AtLeastOnce);
         Assert.Single(stack);
     }
 
@@ -332,6 +432,7 @@ public class FishingTaskTests
             entry: 180582,
             typeId: (uint)GameObjectType.FishingHole,
             pos: new Position(-975.7f, -3835.2f, 0f));
+        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, pool.Object.Position!, 4f);
         var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object;
         var caughtFish = AtomicTaskTestHelpers.CreateItem(6361).Object;
 
@@ -366,7 +467,12 @@ public class FishingTaskTests
         AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
         task.Update();
 
-        om.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(
+            (int)FishingData.FishingRank1,
+            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
+            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
+            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
 
         channelingId = FishingData.FishingRank1;
         isChanneling = true;
@@ -406,6 +512,7 @@ public class FishingTaskTests
             entry: 180582,
             typeId: (uint)GameObjectType.FishingHole,
             pos: new Position(-975.7f, -3835.2f, 0f));
+        var expectedCastTarget = FishingData.GetPoolCastTarget(player.Object.Position!, pool.Object.Position!, 4f);
         var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object;
         var caughtFish = AtomicTaskTestHelpers.CreateItem(6361).Object;
 
@@ -438,7 +545,12 @@ public class FishingTaskTests
         AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
         task.Update();
 
-        om.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        om.Verify(o => o.CastSpellAtLocation(
+            (int)FishingData.FishingRank1,
+            It.Is<float>(x => MathF.Abs(x - expectedCastTarget.X) < 0.01f),
+            It.Is<float>(y => MathF.Abs(y - expectedCastTarget.Y) < 0.01f),
+            It.Is<float>(z => MathF.Abs(z - expectedCastTarget.Z) < 0.01f)), Times.Once);
 
         channelingId = FishingData.FishingRank1;
         isChanneling = true;

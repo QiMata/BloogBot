@@ -229,6 +229,62 @@ namespace BotRunner.Combat
         }
 
         /// <summary>
+        /// Calculates a set of shoreline approach points around the pool at the desired distance.
+        /// The first candidate stays on the direct player->pool line; later candidates rotate around
+        /// the pool so tasks can recover when the direct cast line is blocked by a dock edge or pier.
+        /// </summary>
+        public static Position[] GetPoolApproachCandidates(Position playerPosition, Position poolPosition, float desiredDistance)
+        {
+            var planarTargetDistance = GetPlanarTargetDistance(playerPosition, poolPosition, desiredDistance);
+            var dx = playerPosition.X - poolPosition.X;
+            var dy = playerPosition.Y - poolPosition.Y;
+            var baseAngle = MathF.Atan2(dy, dx);
+            if (MathF.Abs(dx) < 0.01f && MathF.Abs(dy) < 0.01f)
+                baseAngle = MathF.PI;
+
+            ReadOnlySpan<float> angleOffsetsDeg = [0f, 20f, -20f, 40f, -40f, 60f, -60f];
+            var candidates = new Position[angleOffsetsDeg.Length];
+            for (var i = 0; i < angleOffsetsDeg.Length; i++)
+            {
+                var angle = baseAngle + (angleOffsetsDeg[i] * (MathF.PI / 180f));
+                candidates[i] = new Position(
+                    poolPosition.X + (MathF.Cos(angle) * planarTargetDistance),
+                    poolPosition.Y + (MathF.Sin(angle) * planarTargetDistance),
+                    playerPosition.Z);
+            }
+
+            return candidates;
+        }
+
+        /// <summary>
+        /// Pulls the cast target slightly back from the pool center toward the player. This keeps the
+        /// bobber in open water while still landing close enough to the pool to fish it.
+        /// </summary>
+        public static Position GetPoolCastTarget(Position playerPosition, Position poolPosition, float insetFromPool)
+        {
+            var dx = playerPosition.X - poolPosition.X;
+            var dy = playerPosition.Y - poolPosition.Y;
+            var planarDistance = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (planarDistance <= 0.01f || insetFromPool <= 0f)
+                return new Position(poolPosition.X, poolPosition.Y, poolPosition.Z);
+
+            var scale = MathF.Min(insetFromPool, planarDistance) / planarDistance;
+            return new Position(
+                poolPosition.X + (dx * scale),
+                poolPosition.Y + (dy * scale),
+                poolPosition.Z);
+        }
+
+        private static float GetPlanarTargetDistance(Position playerPosition, Position poolPosition, float desiredDistance)
+        {
+            var verticalDelta = playerPosition.Z - poolPosition.Z;
+            if (MathF.Abs(verticalDelta) > 0.01f && desiredDistance > MathF.Abs(verticalDelta))
+                return MathF.Sqrt((desiredDistance * desiredDistance) - (verticalDelta * verticalDelta));
+
+            return desiredDistance;
+        }
+
+        /// <summary>
         /// Checks if any of the known fishing pole item IDs match the given item ID.
         /// </summary>
         public static bool IsFishingPole(uint itemId) =>

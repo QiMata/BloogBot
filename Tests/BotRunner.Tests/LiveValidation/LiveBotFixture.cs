@@ -162,7 +162,7 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// Probes FG actionability by sending a harmless .targetself command and checking the result.
     /// Returns true if the action was forwarded successfully.
     /// </summary>
-    public async Task<bool> CheckFgActionableAsync()
+    public async Task<bool> CheckFgActionableAsync(bool requireTeleportProbe = true)
     {
         SeedExpectedAccountsFromStateManagerSettings();
         if (FgAccountName == null)
@@ -207,38 +207,13 @@ public partial class LiveBotFixture : IAsyncLifetime
             return false;
         }
 
-        var currentPos = ForegroundBot.Player?.Unit?.GameObject?.Base?.Position;
-        var probeZ = currentPos != null && Math.Abs(currentPos.Z - SafeZoneZ) <= 5f ? 15f : SafeZoneZ;
-
-        await BotTeleportAsync(FgAccountName, SafeZoneMap, SafeZoneX, SafeZoneY, probeZ);
-        var probeSettled = await WaitForSnapshotConditionAsync(
-            FgAccountName,
-            snap =>
-            {
-                if (!IsStrictAlive(snap))
-                    return false;
-
-                var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-                return pos != null && Distance3D(pos.X, pos.Y, pos.Z, SafeZoneX, SafeZoneY, probeZ) <= 8f;
-            },
-            TimeSpan.FromSeconds(6),
-            pollIntervalMs: 500,
-            progressLabel: "FG teleport probe");
-
-        if (!probeSettled)
+        if (requireTeleportProbe)
         {
-            _fgResponsive = false;
-            var fgSnap = await GetSnapshotAsync(FgAccountName);
-            var pos = fgSnap?.Player?.Unit?.GameObject?.Base?.Position;
-            _logger.LogWarning("[FG-PROBE] FG failed teleport responsiveness probe. pos=({X:F1},{Y:F1},{Z:F1}) target=({TargetX:F1},{TargetY:F1},{TargetZ:F1})",
-                pos?.X ?? 0, pos?.Y ?? 0, pos?.Z ?? 0, SafeZoneX, SafeZoneY, probeZ);
-            return false;
-        }
+            var currentPos = ForegroundBot.Player?.Unit?.GameObject?.Base?.Position;
+            var probeZ = currentPos != null && Math.Abs(currentPos.Z - SafeZoneZ) <= 5f ? 15f : SafeZoneZ;
 
-        if (Math.Abs(probeZ - SafeZoneZ) > 0.1f)
-        {
-            await BotTeleportAsync(FgAccountName, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
-            var restored = await WaitForSnapshotConditionAsync(
+            await BotTeleportAsync(FgAccountName, SafeZoneMap, SafeZoneX, SafeZoneY, probeZ);
+            var probeSettled = await WaitForSnapshotConditionAsync(
                 FgAccountName,
                 snap =>
                 {
@@ -246,18 +221,50 @@ public partial class LiveBotFixture : IAsyncLifetime
                         return false;
 
                     var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-                    return pos != null && Distance3D(pos.X, pos.Y, pos.Z, SafeZoneX, SafeZoneY, SafeZoneZ) <= 8f;
+                    return pos != null && Distance3D(pos.X, pos.Y, pos.Z, SafeZoneX, SafeZoneY, probeZ) <= 8f;
                 },
                 TimeSpan.FromSeconds(6),
                 pollIntervalMs: 500,
-                progressLabel: "FG teleport probe restore");
+                progressLabel: "FG teleport probe");
 
-            if (!restored)
+            if (!probeSettled)
             {
                 _fgResponsive = false;
-                _logger.LogWarning("[FG-PROBE] FG failed restore leg of teleport responsiveness probe.");
+                var fgSnap = await GetSnapshotAsync(FgAccountName);
+                var pos = fgSnap?.Player?.Unit?.GameObject?.Base?.Position;
+                _logger.LogWarning("[FG-PROBE] FG failed teleport responsiveness probe. pos=({X:F1},{Y:F1},{Z:F1}) target=({TargetX:F1},{TargetY:F1},{TargetZ:F1})",
+                    pos?.X ?? 0, pos?.Y ?? 0, pos?.Z ?? 0, SafeZoneX, SafeZoneY, probeZ);
                 return false;
             }
+
+            if (Math.Abs(probeZ - SafeZoneZ) > 0.1f)
+            {
+                await BotTeleportAsync(FgAccountName, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
+                var restored = await WaitForSnapshotConditionAsync(
+                    FgAccountName,
+                    snap =>
+                    {
+                        if (!IsStrictAlive(snap))
+                            return false;
+
+                        var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
+                        return pos != null && Distance3D(pos.X, pos.Y, pos.Z, SafeZoneX, SafeZoneY, SafeZoneZ) <= 8f;
+                    },
+                    TimeSpan.FromSeconds(6),
+                    pollIntervalMs: 500,
+                    progressLabel: "FG teleport probe restore");
+
+                if (!restored)
+                {
+                    _fgResponsive = false;
+                    _logger.LogWarning("[FG-PROBE] FG failed restore leg of teleport responsiveness probe.");
+                    return false;
+                }
+            }
+        }
+        else
+        {
+            _logger.LogInformation("[FG-PROBE] Skipping teleport responsiveness probe for this caller.");
         }
 
         _fgResponsive = true;
@@ -333,6 +340,7 @@ public partial class LiveBotFixture : IAsyncLifetime
             await _stateManagerClient.ConnectAsync(connectCts.Token);
             _logger.LogInformation("[FIXTURE] Connected to StateManager on port 8088.");
             SeedExpectedAccountsFromStateManagerSettings();
+            await SeedExpectedCharacterNamesFromDatabaseAsync();
 
             // 4. Wait for bots to enter world
             _logger.LogInformation("[FIXTURE] Waiting for bots to enter world...");
@@ -352,6 +360,7 @@ public partial class LiveBotFixture : IAsyncLifetime
 
                 foreach (var snap in snapshots)
                 {
+                    NormalizeSnapshotCharacterName(snap);
                     if (snap.ScreenState == "InWorld" && !string.IsNullOrEmpty(snap.CharacterName))
                     {
                         if (!everSeenInWorld.ContainsKey(snap.AccountName))
@@ -426,18 +435,9 @@ public partial class LiveBotFixture : IAsyncLifetime
             _logger.LogInformation("[FIXTURE] Ensuring clean character state (revive + disband)...");
             await EnsureCleanCharacterStateAsync();
 
-            // 7. Stage bots at a shared starting location (Orgrimmar).
-            //    COMBATTEST is excluded — its test handles positioning directly,
-            //    and rapid back-to-back SOAP teleports can disconnect BG clients.
-            _logger.LogInformation("[FIXTURE] Staging bots at Orgrimmar...");
-            if (BgCharacterName != null)
-                await TeleportToNamedAsync(BgCharacterName, "Orgrimmar");
-            if (FgCharacterName != null)
-                _logger.LogInformation("[FIXTURE] Skipping fixture-side FG named teleport for '{Name}' due to FG-CRASH-TELE.", FgCharacterName);
-            await Task.Delay(1500);
-
-            // 8. Stabilization: wait for all known bots to be solidly InWorld before declaring ready.
-            //    Teleport and GM commands can cause transient CharacterSelect flickers.
+            // 7. Stabilization: do not apply a fixture-owned startup teleport.
+            //    Each live suite now stages its own location explicitly, which avoids
+            //    redundant travel before tests like fishing immediately named-teleport elsewhere.
             await WaitForBotsStabilizedAsync();
 
             _logger.LogInformation("[FIXTURE] Ready. BG='{Bg}' ({BgAccount}), FG='{Fg}' ({FgAccount}), Combat='{Combat}' ({CombatAccount})",
@@ -496,17 +496,20 @@ public partial class LiveBotFixture : IAsyncLifetime
         if (newFg != null)
         {
             FgAccountName = newFg.AccountName;
-            FgCharacterName = newFg.CharacterName;
+            if (!string.IsNullOrWhiteSpace(newFg.CharacterName))
+                FgCharacterName = newFg.CharacterName;
         }
         if (newBg != null)
         {
             BgAccountName = newBg.AccountName;
-            BgCharacterName = newBg.CharacterName;
+            if (!string.IsNullOrWhiteSpace(newBg.CharacterName))
+                BgCharacterName = newBg.CharacterName;
         }
         if (newCombat != null)
         {
             CombatTestAccountName = newCombat.AccountName;
-            CombatTestCharacterName = newCombat.CharacterName;
+            if (!string.IsNullOrWhiteSpace(newCombat.CharacterName))
+                CombatTestCharacterName = newCombat.CharacterName;
         }
 
         // Fallback: if only one bot and neither role was matched, assign it as BG
@@ -606,6 +609,35 @@ public partial class LiveBotFixture : IAsyncLifetime
         return missing;
     }
 
+    private string? GetKnownCharacterNameForAccount(string? accountName)
+    {
+        if (string.IsNullOrWhiteSpace(accountName))
+            return null;
+
+        if (string.Equals(accountName, BgAccountName, StringComparison.OrdinalIgnoreCase))
+            return BgCharacterName;
+
+        if (string.Equals(accountName, FgAccountName, StringComparison.OrdinalIgnoreCase))
+            return FgCharacterName;
+
+        if (string.Equals(accountName, CombatTestAccountName, StringComparison.OrdinalIgnoreCase))
+            return CombatTestCharacterName;
+
+        return AllBots
+            .FirstOrDefault(bot => string.Equals(bot.AccountName, accountName, StringComparison.OrdinalIgnoreCase))
+            ?.CharacterName;
+    }
+
+    private void NormalizeSnapshotCharacterName(WoWActivitySnapshot? snapshot)
+    {
+        if (snapshot == null || !string.IsNullOrWhiteSpace(snapshot.CharacterName))
+            return;
+
+        var knownCharacterName = GetKnownCharacterNameForAccount(snapshot.AccountName);
+        if (!string.IsNullOrWhiteSpace(knownCharacterName))
+            snapshot.CharacterName = knownCharacterName;
+    }
+
     private async Task<bool> WaitForConfiguredAccountInWorldAsync(string accountName, TimeSpan timeout, string label)
     {
         if (_stateManagerClient == null)
@@ -615,6 +647,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         while (sw.Elapsed < timeout)
         {
             var snapshot = await GetSnapshotAsync(accountName);
+            NormalizeSnapshotCharacterName(snapshot);
             if (snapshot?.ScreenState == "InWorld" && !string.IsNullOrWhiteSpace(snapshot.CharacterName))
             {
                 AllBots = AllBots
@@ -677,6 +710,7 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     private async Task EnsureAliveForSetupAsync(string accountName, string characterName, string label)
     {
+        await RefreshSnapshotsAsync();
         var baseline = await GetSnapshotAsync(accountName);
         if (IsStrictAlive(baseline))
         {
@@ -686,19 +720,17 @@ public partial class LiveBotFixture : IAsyncLifetime
 
         await RevivePlayerAsync(characterName);
         _logger.LogInformation("[FIXTURE] Revive requested for {Label} '{Name}' (fallback path)", label, characterName);
-
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(12))
+        var revived = await WaitForSnapshotConditionAsync(
+            accountName,
+            IsStrictAlive,
+            TimeSpan.FromSeconds(12),
+            pollIntervalMs: 1000,
+            progressLabel: $"{label} setup-revive");
+        if (revived)
         {
-            var snapshot = await GetSnapshotAsync(accountName);
-            if (IsStrictAlive(snapshot))
-            {
-                _logger.LogInformation("[FIXTURE] {Label} '{Name}' is strict-alive after {Elapsed:F1}s",
-                    label, characterName, sw.Elapsed.TotalSeconds);
-                return;
-            }
-
-            await Task.Delay(1000);
+            _logger.LogInformation("[FIXTURE] {Label} '{Name}' is strict-alive after revive wait window",
+                label, characterName);
+            return;
         }
 
         _logger.LogWarning("[FIXTURE] {Label} '{Name}' did not reach strict-alive state after revive wait window",
@@ -768,6 +800,8 @@ public partial class LiveBotFixture : IAsyncLifetime
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             var snapshots = await _stateManagerClient!.QuerySnapshotsAsync();
+            foreach (var snapshot in snapshots)
+                NormalizeSnapshotCharacterName(snapshot);
             var inWorld = snapshots
                 .Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName))
                 .ToList();

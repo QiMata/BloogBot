@@ -6,9 +6,9 @@ Dual-bot live validation for the task-owned Ratchet fishing path.
 
 This suite proves that both BG and FG run the same high-level fishing contract:
 
-1. teleport to Ratchet and resolve a stable dock stage with a visible pool
+1. teleport to Ratchet via `.tele name {charName} Ratchet`
 2. dispatch `ActionType.StartFishing`
-3. let `FishingTask` equip the pole, move into range, cast, wait for the bite, open the loot window, and finish after the catch reaches bags
+3. let `FishingTask` equip the pole, acquire the nearest visible pool, move into a castable LOS position, cast, wait for the bite, open the loot window, and finish after the catch reaches bags
 
 ## Production Links
 
@@ -17,25 +17,28 @@ This suite proves that both BG and FG run the same high-level fishing contract:
 - `Exports/BotRunner/Tasks/BotTask.cs`
 - `Exports/BotRunner/Tasks/FishingTask.cs`
 - `Exports/BotRunner/Combat/FishingData.cs`
+- `Exports/BotRunner/Movement/NavigationPath.cs`
 - `Exports/WoWSharpClient/Movement/MovementController.cs`
 - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
 - `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
 - `Exports/WoWSharpClient/Frames/NetworkLootFrame.cs`
+- `Services/PathfindingService/Repository/Navigation.cs`
+- `Exports/Navigation/PhysicsCollideSlide.cpp`
 - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
 - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
 - `Services/ForegroundBotRunner/Frames/FgLootFrame.cs`
 
 ## Test Flow
 
-1. `EnsureCleanSlateAsync()` runs for both bots.
-2. Both bots learn fishing, set fishing skill to `75`, clear items, receive a fishing pole plus `Nightcrawler Bait`, and teleport to Ratchet.
-3. The test probes dock-stage candidates and keeps only stable landings that expose a live visible fishing-hole object inside `FishingTask` detect range but outside immediate cast range. If Ratchet has no live visible pool at probe time, the test skips instead of using DB-only spawn coordinates.
+1. `EnsureCleanSlateAsync(..., teleportToSafeZone: false)` runs for both bots, and FG is checked with `CheckFgActionableAsync(requireTeleportProbe: false)`.
+2. Both bots learn fishing, set fishing skill to `75`, clear items, receive a fishing pole plus `Nightcrawler Bait`, and teleport to Ratchet with the named GM teleport.
+3. The test records the arrival position plus any immediately visible pool distance, but it no longer pre-selects dock stages or queries DB-only pool spawns.
 4. The test dispatches `ActionType.StartFishing` for BG and FG.
 5. `FishingTask` owns:
    - pole equip
    - bait application to the equipped pole
    - pool acquisition
-   - pool approach
+   - pool approach and LOS-aware cast positioning
    - cast start
    - channel / bobber confirmation
    - loot-window handling
@@ -47,9 +50,9 @@ Both bots must show all of the following:
 
 - pole started in bags and was removed from bags by `FishingTask`
 - bait started in bags and was consumed by `FishingTask`
-- initial visible pool distance was outside cast range but inside detect range
 - `FishingTask pool_acquired`
 - `FishingTask in_cast_range`
+- best visible pool distance entered the task cast window
 - fishing channel observed
 - fishing bobber observed
 - `FishingTask loot_window_open`
@@ -61,25 +64,27 @@ Both bots must show all of the following:
 - BG bite handling comes from `SMSG_GAMEOBJECT_CUSTOM_ANIM -> SpellHandler.HandleGameObjectCustomAnim(...) -> InteractWithGameObject(...)`.
 - FG now mirrors that behavior through the injected client's recv hook:
   `PacketLogger.OnPacketCaptured -> ForegroundBotWorker.HandleCapturedPacket(...) -> ObjectManager.TryAutoInteractFishingBobberFromPacket()`.
-- The live pass condition is no longer “skill-up or any loot-window signal.” It is `bobber observed -> loot_window_open -> fishing_loot_success -> catch item appears in bags`.
+- The live pass condition is no longer "skill-up or any loot-window signal." It is `bobber observed -> loot_window_open -> fishing_loot_success -> catch item appears in bags`.
+- The remaining intermittent failure mode is shoreline/pathfinding-bound. When approach movement stalls on terrain or never gets LOS to the water, the live evidence is `FishingTask los_blocked phase=move` and the WoW error `Your cast didn't land in fishable water`.
 
 ## Validation
 
 ```powershell
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~UseItemTaskTests" --logger "console;verbosity=minimal"
-dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"
+dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests" --logger "console;verbosity=minimal"
 dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"
 ```
 
 Latest focused results:
-- `FishingTaskTests|FishingDataTests|ActionMessage_AllTypes_RoundTrip|UseItemTaskTests` -> `48 passed`
-- `MovementControllerTests` -> `38 passed`
-- `FishingProfessionTests` -> `1 skipped` when no live Ratchet fishing-hole object was visible from any stable dock stage; the suite now skips instead of running on DB-only spawn assumptions
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
+- `FishingTaskTests|FishingDataTests` -> `40 passed`
+- Focused live fishing already proved the task-owned path can succeed end-to-end: BG completed a live catch with `skill 75 -> 76`, `bestPool=17.3y`, `lootSuccess=True`, and `catchDelta=[6358]`
+- The dual-bot live test is still intermittent because shoreline/pathfinding can strand a bot before `FishingTask in_cast_range`; the latest FG failure ended with `FishingTask los_blocked phase=move castTarget=(-956.2,-3775.0,0.0)`
 
 ## Current Focus
 
-- keep the focused fishing slice green with both bots asserted
+- keep the focused fishing slice meaningful with both bots asserted from the Ratchet named teleport
 - keep the success contract tied to the bobber-interact -> loot-window -> bag-delta sequence
-- use FG as the live packet/timing reference for the future BG botrunner parity work
-- keep the live precondition meaningful: only run the fishing task when a real visible pool exists
-- BG `MovementController` forced-stop handling now clears forward/strafe intent while preserving falling/swimming physics flags; FG Ratchet pier overrun recovery still needs follow-up
+- treat intermittent fishing failures as shoreline/pathfinding/LOS work unless the task contract itself regresses
+- use FG as the live packet/timing reference after the shoreline/pathfinding approach is stable
+- BG `MovementController` forced-stop handling now clears forward/strafe intent while preserving falling/swimming physics flags, but terrain sticking and no-LOS approach failures still need pathfinding follow-up

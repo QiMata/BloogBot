@@ -153,7 +153,7 @@ public partial class LiveBotFixture
         if (IsStrictAlive(snap))
             return;
 
-        var characterName = snap?.CharacterName;
+        var characterName = snap?.CharacterName ?? GetKnownCharacterNameForAccount(account);
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(characterName),
             $"{label}: missing character name for revive setup.");
 
@@ -185,11 +185,24 @@ public partial class LiveBotFixture
     /// 3) Teleports to the Orgrimmar safe zone.
     /// This replaces ad-hoc EnsureStrictAlive + manual teleport patterns (BT-SETUP-001).
     /// </summary>
-    public async Task EnsureCleanSlateAsync(string account, string label)
+    public async Task EnsureCleanSlateAsync(string account, string label, bool teleportToSafeZone = true)
     {
+        await WaitForSnapshotConditionAsync(
+            account,
+            snapshot =>
+            {
+                var unit = snapshot.Player?.Unit;
+                return unit != null
+                    && unit.MaxHealth > 0
+                    && !string.IsNullOrWhiteSpace(snapshot.CharacterName);
+            },
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 500,
+            progressLabel: $"{label} snapshot-hydrate");
+
         await RefreshSnapshotsAsync();
         var snap = await GetSnapshotAsync(account);
-        var characterName = snap?.CharacterName;
+        var characterName = snap?.CharacterName ?? GetKnownCharacterNameForAccount(account);
 
         // Log initial state so we can debug cross-test contamination
         var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
@@ -225,6 +238,12 @@ public partial class LiveBotFixture
                 global::Tests.Infrastructure.Skip.If(true,
                     $"{label}: missing character name for clean slate setup.");
             }
+        }
+
+        if (!teleportToSafeZone)
+        {
+            _logger.LogInformation("[{Label}] CleanSlate skipping safe-zone teleport; caller will stage location explicitly.", label);
+            return;
         }
 
         // Step 2: Teleport to safe zone (prevents position contamination from previous test)

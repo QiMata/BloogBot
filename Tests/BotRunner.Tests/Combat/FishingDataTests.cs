@@ -220,6 +220,33 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(playerPosition.Z, approach.Z);
         }
 
+        [Fact]
+        public void GetPoolApproachCandidates_KeepDesiredDistanceAcrossOffsets()
+        {
+            var playerPosition = new Position(-995f, -3850f, 4f);
+            var poolPosition = new Position(-975.7f, -3835.2f, 0f);
+
+            var candidates = FishingData.GetPoolApproachCandidates(playerPosition, poolPosition, 18f);
+
+            Assert.NotEmpty(candidates);
+            Assert.All(candidates, candidate => Assert.InRange(candidate.DistanceTo(poolPosition), 17.9f, 18.1f));
+            Assert.Equal(playerPosition.Z, candidates[0].Z);
+            Assert.NotEqual(candidates[0].Y, candidates[1].Y);
+        }
+
+        [Fact]
+        public void GetPoolCastTarget_PullsTargetBackTowardPlayer()
+        {
+            var playerPosition = new Position(0f, 0f, 0f);
+            var poolPosition = new Position(20f, 0f, 0f);
+
+            var castTarget = FishingData.GetPoolCastTarget(playerPosition, poolPosition, 4f);
+
+            Assert.Equal(16f, castTarget.X, 3);
+            Assert.Equal(0f, castTarget.Y, 3);
+            Assert.Equal(poolPosition.Z, castTarget.Z, 3);
+        }
+
         private static Mock<IObjectManager> CreateEmptyObjectManager()
         {
             var om = new Mock<IObjectManager>();

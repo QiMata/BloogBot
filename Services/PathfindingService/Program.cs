@@ -234,6 +234,15 @@ namespace PathfindingService
                     if (args != null)
                         builder.AddCommandLine(args);
                 })
+                .ConfigureLogging(logging =>
+                {
+                    // Avoid the Windows EventLog provider in the test harness/published output.
+                    // The repo only needs console/debug logging here, and EventLog pulls in an
+                    // assembly that is not copied into the local Bot output.
+                    logging.ClearProviders();
+                    logging.AddConsole();
+                    logging.AddDebug();
+                })
                 .ConfigureServices((hostContext, services) =>
                 {
                     var configuration = hostContext.Configuration;

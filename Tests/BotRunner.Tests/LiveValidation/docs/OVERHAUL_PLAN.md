@@ -13,7 +13,7 @@ Completed overhaul slices now on disk:
 - Remaining direct `.gm on` / `.respawn` usage was removed from the targeted live suites.
 - `CombatLoopTests.cs`, `DeathCorpseRunTests.cs`, `NavigationTests.cs`, and `StarterQuestTests.cs` were rewritten into BG-first baselines with tighter snapshot metrics.
 - `CraftingProfessionTests.cs` and `VendorBuySellTests.cs` are now BG-first baselines so the live suite no longer fails on legacy FG-only parity gaps.
-- `FishingProfessionTests.cs` is now a dual-bot task-owned baseline that forces fishing spell sync, resolves stable Ratchet dock stages, and requires a real post-loot bag delta after `FishingTask` completes.
+- `FishingProfessionTests.cs` is now a dual-bot task-owned baseline that forces fishing spell sync, teleports both bots to Ratchet via `.tele name`, and requires a real post-loot bag delta after `FishingTask` completes.
 - `FishingProfessionTests.cs` now stages fishing skill `75` plus `Nightcrawler Bait`, and `FishingTask` owns bait application to the equipped pole before pool approach/cast.
 - `FishingProfessionTests.cs` now requires the task-visible `loot_window_open` diagnostic plus a real post-loot bag delta, so the pass condition is anchored to the bobber-interact -> loot-window -> bag update path.
 - BG spell-state sync now handles `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`, which unblocked server-side fishing rank replacement.
@@ -22,7 +22,7 @@ Completed overhaul slices now on disk:
 - `FishingProfessionTests.cs` now asserts both BG and FG on the same task-owned Ratchet flow instead of parking FG as a reference bot.
 - FG fishing bite handling now mirrors BG packet behavior through `PacketLogger.OnPacketCaptured -> ForegroundBotWorker.HandleCapturedPacket(...) -> ObjectManager.TryAutoInteractFishingBobberFromPacket()`.
 - Fishing success now requires a real post-loot bag delta after the bobber interaction path, not just a loot-window/open-frame signal.
-- Fishing stage selection now rejects DB-only Ratchet spawn assumptions: the live test only runs when a real visible fishing-hole object is present from a stable dock stage, otherwise it skips.
+- Extra test-owned Ratchet stage probes and DB-backed pool selection were removed. The test now stages both bots with the named Ratchet teleport and lets `FishingTask` own pool acquisition plus the approach to a castable LOS position.
 - FG stop-before-interact hardening now uses `ForceStopImmediate()` plus short bobber-interact retries, but pier-edge overrun/falling remains a tracked movement-parity follow-up rather than a fishing-logic failure.
 - BG `MovementController` forced-stop handling now clears directional intent while preserving falling/swimming physics flags, so stop requests do not cancel `MOVEFLAG_FALLINGFAR` mid-overrun.
 - The NPC action contract now includes `VisitVendor`, `VisitTrainer`, and `VisitFlightMaster`, and `Trainer_LearnAvailableSpells` now drives BG through `TrainerVisitTask`-owned logic instead of a raw `InteractWith` dispatch.
@@ -62,9 +62,9 @@ Verification runs on the current pass:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> 13 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> 44 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~UseItemTaskTests" --logger "console;verbosity=minimal"` -> 48 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests" --logger "console;verbosity=minimal"` -> 40 passed.
 - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"` -> 38 passed.
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"` -> 1 skipped when no live visible Ratchet fishing-hole object was available.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "trx;LogFileName=fishing_current.trx" --logger "console;verbosity=minimal"` -> failed after `6m44s`, with BG completing a live catch (`skill 75 -> 76`, `bestPool=17.3y`, `lootSuccess=True`, `catchDelta=[6358]`) while FG stalled on shoreline/pathfinding and ended with `FishingTask los_blocked phase=move castTarget=(-956.2,-3775.0,0.0)`.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"` -> 3 skipped.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 31 passed, 0 failed, 4 skipped.
@@ -79,12 +79,11 @@ Current live-suite boundary:
 - `CheckFgActionableAsync()` now proves both command forwarding and snapshot movement responsiveness, so later FG-dependent suites no longer inherit stale world-state from earlier instability.
 - The root FG remote-teleport instability remains tracked under `FG-CRASH-TELE`; it is no longer misattributed to test-spawned game objects or allowed to cascade into unrelated live suites.
 - `Trainer_LearnAvailableSpells` now takes the task-owned `VisitTrainer -> TrainerVisitTask -> LearnAllAvailableSpellsAsync(...)` path, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`; that gap is tracked under `BRT-OVR-006`.
-- BG fishing now starts from `EnsureCleanSlateAsync()` before spell sync and gear setup, and the fishing cast entry now flows through `ActionType.StartFishing -> FishingTask`.
+- BG and FG fishing now start from the Ratchet named teleport with the fishing cast entry flowing through `ActionType.StartFishing -> FishingTask`.
 - The latest full-suite rerun passed (`31 passed, 0 failed, 4 skipped`), but routine regression coverage now uses a narrower documented-stable slice so unfinished major-rework suites do not dominate the signal.
 - The default documented-stable slice is `14 passed, 1 skipped`; active-overhaul suites like combat, gathering, fishing, questing, and NPC trainer coverage are now validated individually until their owning task IDs close.
-- Fishing-specific follow-up work now centers on keeping the dual BG/FG task-owned slice green while the captured FG packet/timing path continues to inform future BG parity work.
-- Fishing-specific follow-up work now treats "no live visible pool" as a skip condition instead of a bot failure, so the suite only runs on meaningful live-world state.
-- The next implementation slice after the BG forced-stop parity fix is FG packet-timing capture plus FG Ratchet pier overrun recovery, especially when the FG client leaves the dock before a stop fully arrests movement.
+- Fishing-specific follow-up work is now pathfinding-bound. The task contract itself can succeed, but shoreline terrain sticking and no-LOS approach positions still intermittently block `FishingTask in_cast_range`.
+- The live fishing evidence now points to pathfinding first: the task already owns equip -> bait -> pool acquire -> approach -> cast -> bobber -> loot-window -> bag-delta, and the next implementation slice is shoreline/path stabilization before more packet-timing iteration.
 
 ## Core Principles
 
@@ -314,7 +313,7 @@ Each test: add item → push `EquipItemTask(itemId, slot)` → verify snapshot s
 
 | Step | Action | Owner |
 |------|--------|-------|
-| Setup | Learn fishing spells, equip pole, teleport to Ratchet dock | Test (GM) |
+| Setup | Learn fishing spells, equip pole, teleport to Ratchet via named teleport | Test (GM) |
 | Execute | Push `FishingTask(maxCasts=3)` | BotTask |
 | Assert | Fishing skill increased OR fish in inventory | Snapshot |
 

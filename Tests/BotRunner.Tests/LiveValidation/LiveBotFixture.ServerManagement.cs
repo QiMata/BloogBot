@@ -33,6 +33,52 @@ public partial class LiveBotFixture
         => $"Server=127.0.0.1;Port={Config.MySqlPort};Uid={Config.MySqlUser};Pwd={Config.MySqlPassword};Database=realmd;Connection Timeout=5;";
 
 
+    private async Task SeedExpectedCharacterNamesFromDatabaseAsync()
+    {
+        BgCharacterName ??= await ResolvePrimaryCharacterNameAsync(BgAccountName);
+        FgCharacterName ??= await ResolvePrimaryCharacterNameAsync(FgAccountName);
+        CombatTestCharacterName ??= await ResolvePrimaryCharacterNameAsync(CombatTestAccountName);
+    }
+
+
+    private async Task<string?> ResolvePrimaryCharacterNameAsync(string? accountName)
+    {
+        if (string.IsNullOrWhiteSpace(accountName))
+            return null;
+
+        try
+        {
+            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosCharDbConnectionString);
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT c.name
+                FROM characters c
+                INNER JOIN realmd.account a ON a.id = c.account
+                WHERE a.username = @username
+                ORDER BY c.guid
+                LIMIT 1";
+            cmd.Parameters.AddWithValue("@username", accountName);
+
+            var result = await cmd.ExecuteScalarAsync();
+            if (result is string characterName && !string.IsNullOrWhiteSpace(characterName))
+            {
+                _logger.LogInformation("[MySQL] Resolved character '{Character}' for account '{Account}'",
+                    characterName, accountName);
+                return characterName;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[MySQL] Failed to resolve character name for account '{Account}': {Error}",
+                accountName, ex.Message);
+        }
+
+        return null;
+    }
+
+
     private async Task<int> RestoreCommandTableBaselineAsync(MySql.Data.MySqlClient.MySqlConnection conn)
     {
         // Backup current state once per run for local recovery.

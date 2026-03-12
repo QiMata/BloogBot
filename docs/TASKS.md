@@ -24,9 +24,9 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 
 ---
 
-## P1 - FG Packet Capture: Send + Recv Hooks (CURRENT FOCUS)
+## P1 - FG Packet Capture: Send + Recv Hooks
 
-## P0A - Live Integration Test Overhaul (CURRENT FOCUS)
+## P0A - Live Integration Test Overhaul (IN PROGRESS)
 
 **Rationale:** The live suite needs to move away from setup validation and raw action dispatches toward BG-first, task-driven behavior coverage with sharper snapshot metrics. FG remains the packet/timing reference, but the test surface must primarily validate BG behavior because that is where our logic actually runs.
 
@@ -37,7 +37,7 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 | 0A.3 | **Consumable/buff consolidation.** Replace `ConsumableUsageTests.cs` + `BuffDismissTests.cs` with `BuffAndConsumableTests.cs` and assert add-item, use-item, aura, and dismissal metrics. | `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs` | **Done** (2026-03-10 session 54) |
 | 0A.4 | **Move range coverage to deterministic tests.** Keep combat range formulas in `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs`; remove the live `CombatRangeTests.cs` suite. | `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs` | **Done** (2026-03-10 session 54) |
 | 0A.5 | **Remove remaining direct `.gm on` / `.respawn` usage** from `GatheringProfessionTests.cs`, `MapTransitionTests.cs`, `LootCorpseTests.cs`, and `StarterQuestTests.cs`, then update their docs. | `Tests/BotRunner.Tests/LiveValidation/` | **Done** (2026-03-11 session 55) |
-| 0A.6 | **Task-drive the major behavior suites.** Replace combat, corpse recovery, navigation, questing, gathering, and economy live coverage with BotTask-based tests that link directly to owning task logic. | `Tests/BotRunner.Tests/LiveValidation/`, `Exports/BotRunner/Tasks/` | In progress - fishing now enters through `ActionType.StartFishing -> FishingTask`, the default regression pass is the documented-stable slice, and the active blockers are the remaining open major-overhaul suites plus the BG trainer handoff under `BRT-OVR-006` |
+| 0A.6 | **Task-drive the major behavior suites.** Replace combat, corpse recovery, navigation, questing, gathering, and economy live coverage with BotTask-based tests that link directly to owning task logic. | `Tests/BotRunner.Tests/LiveValidation/`, `Exports/BotRunner/Tasks/` | In progress - fishing now enters through `ActionType.StartFishing -> FishingTask` from the Ratchet named teleport, the default regression pass is the documented-stable slice, and the current fishing intermittency is shoreline/pathfinding-bound while the BG trainer handoff remains open under `BRT-OVR-006` |
 
 ---
 
@@ -69,11 +69,12 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 
 **Approach:** Use FG packet capture to observe a successful FG fishing session, then compare the exact cast/channel/bobber timing against BG. The cast gate is fixed and `FishingTask` now owns the live cast path for both bots; the remaining work is packet/timing and movement-stop parity hardening.
 
-Current observed boundary from the 2026-03-11 live suite:
-- `FishingProfessionTests` now stages both BG and FG at Ratchet, sets fishing skill `75`, adds `Nightcrawler Bait`, dispatches `ActionType.StartFishing`, and only runs when a stable dock stage exposes a real visible pool.
+Current observed boundary from the 2026-03-12 live suite:
+- `FishingProfessionTests` now stages both BG and FG at Ratchet via `.tele name`, sets fishing skill `75`, adds `Nightcrawler Bait`, and dispatches `ActionType.StartFishing` into `FishingTask`.
 - BG now resolves the castable fishing rank from the known-spell list and handles server rank replacement via `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`.
 - The focused fishing pass condition now requires `bobber observed -> loot_window_open -> fishing_loot_success -> post-loot bag delta`, not just setup success or a transient loot-frame signal.
-- FG now mirrors the bobber-interact path through the recv hook plus `ForceStopImmediate()`, while BG forced-stop handling now preserves falling/swimming physics flags. Ratchet pier overrun / falling behavior still needs the next movement-controller parity pass.
+- FG now mirrors the bobber-interact path through the recv hook plus `ForceStopImmediate()`, while BG forced-stop handling now preserves falling/swimming physics flags. The remaining Ratchet shoreline failure now needs pathfinding/route hardening more than another fishing-task change.
+- The task-owned fishing path has already completed live on BG (`skill 75 -> 76`, `bestPool=17.3y`, `lootSuccess=True`, `catchDelta=[6358]`); the remaining intermittent failure is shoreline/pathfinding/LOS before `FishingTask in_cast_range`, not the old cast gate.
 - The remaining fishing work is packet/timing and shoreline-movement hardening, not the old `_objectManager.CanCastSpell(7620, 0)` cast gate.
 
 | # | Task | Owner | Status |
@@ -120,7 +121,7 @@ Current observed boundary from the 2026-03-11 live suite:
 
 ---
 
-## P7 - Ghost Form Stuck on Geometry (FG-GHOST-STUCK-001)
+## P7 - Ghost Form Stuck on Geometry (FG-GHOST-STUCK-001) (CURRENT FOCUS)
 
 **Approach:** Compare the path provided by `PathfindingService` against the path the bot actually executes. The gap reveals where corridor collision / collide-and-slide code fails to accommodate WoW movement controls. Fix the pathfinding code to navigate with precision and avoid terrain/object snags.
 
@@ -129,6 +130,7 @@ Current observed boundary from the 2026-03-11 live suite:
 | 7.1 | **Log planned vs executed path.** Record `PathfindingService` waypoints AND actual bot positions at each movement tick during ghost corpse run. | `Exports/Navigation/`, `Services/PathfindingService/` | Open |
 | 7.2 | **Identify divergence points.** Find where the bot gets stuck - which waypoint, which geometry (catapult, wall, ramp). | Analysis | Open |
 | 7.3 | **Fix corridor collision code.** Update `PhysicsCollideSlide.cpp` to handle the stuck geometry. Test with replay frames. | `Exports/Navigation/PhysicsCollideSlide.cpp` | Open |
+| 7.4 | **Ratchet shoreline/fishing-hole route hardening.** Instrument the short route from the Ratchet named-teleport landing to fishing-hole cast positions, then fix terrain-snags / LOS-blocked endpoints that strand bots before `FishingTask in_cast_range`. | `Services/PathfindingService/`, `Exports/Navigation/`, `Exports/BotRunner/Tasks/FishingTask.cs` | In progress |
 
 ---
 
@@ -186,19 +188,17 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-12 (session 61)
-- **Current work:** P0A - Live Integration Test Overhaul. The fishing slice is now dual-bot and task-owned through `FishingTask`, with skill `75`, bait, live-pool gating, and loot-window evidence; the next immediate slice is BG `MovementController` parity for stop/fall behavior on shoreline approaches while the trainer handoff remains open.
+- **Last updated:** 2026-03-12 (session 62)
+- **Current work:** P7 pathfinding/navigation hardening. The fishing slice is now task-owned enough to prove real catches, and the remaining intermittent failures point to shoreline terrain/LOS/pathfinding rather than more fishing-task contract churn.
 - **Completed this session:**
-  1. **Fishing contract tightened around bait and loot-window evidence:** BG and FG both run `ActionType.StartFishing -> CharacterAction.StartFishing -> FishingTask`, with task-owned pole equip, bait application, pool approach, cast, bobber interaction, `loot_window_open`, and bag-delta completion.
-  2. **Focused fishing coverage is now meaningful when the world state is not:** the fishing unit/action slice passed `48`, and focused `FishingProfessionTests` now skips cleanly when Ratchet has no live visible pool instead of failing on DB-only spawn assumptions.
-  3. **BG stop/fall parity moved forward:** `MovementController.SendStopPacket()` and `ForceStopImmediate()` now clear directional intent while preserving falling/swimming physics flags, backed by a new `MovementControllerTests` assertion.
+  1. **Fishing docs/comments were brought up to date:** the live flow now documents the named Ratchet teleport, task-owned approach/LOS behavior, and the remaining intermittent failure mode (`FishingTask los_blocked phase=move`, `Your cast didn't land in fishable water`).
+  2. **Ownership shifted back to pathfinding:** the remaining fishing instability is now tracked directly in `Services/PathfindingService/TASKS.md` (`PFS-FISH-001`) and `Exports/Navigation/TASKS.md` (`NAV-FISH-001`) instead of being left as vague fishing follow-up.
+  3. **Pathfinding baseline refreshed:** `PathfindingService` Release build succeeded, `Navigation.vcxproj` Release|x64 build succeeded, and `Tests/PathfindingService.Tests` passed `25`.
 - **Commands run + outcomes:**
-  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded.
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~UseItemTaskTests" --logger "console;verbosity=minimal"` -> 48 passed.
-  3. `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> succeeded.
-  4. `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"` -> 38 passed.
-  5. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"` -> 1 skipped.
-- **Next:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
+  1. `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded.
+  2. `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded.
+  3. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `25 passed`.
+- **Next:** `rg --line-number "CalculatePath|IsInLineOfSight|TryHasLos|HandlePath" Services/PathfindingService/PathfindingSocketServer.cs Services/PathfindingService/Repository/Navigation.cs Exports/BotRunner/Tasks/FishingTask.cs Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
 
 ## Session Handoff (Session 53 Archive)
 - **Last updated:** 2026-03-10 (session 53)

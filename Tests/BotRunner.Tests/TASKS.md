@@ -65,16 +65,16 @@ Master tracker: `MASTER-SUB-022`
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Acceptance criteria: each rewritten suite links directly to the owning task logic and records deterministic outcome metrics.
 
-3. [ ] `BRT-OVR-004` Convert the fishing baseline into task-linked live coverage and capture FG timing references.
-- Problem: `FishingProfessionTests` now dispatches `ActionType.StartFishing` into `FishingTask` for both bots, stages fishing skill `75` plus bait, requires `loot_window_open` plus a real post-loot bag delta, and keeps the focused unit/runtime slices green or meaningfully skipped, but shoreline selection still lives in the test and Ratchet stop/fall behavior still needs FG/BG parity hardening.
+3. [ ] `BRT-OVR-004` Keep the fishing baseline task-linked, but move the remaining instability into the pathfinding owners.
+- Problem: `FishingProfessionTests` now dispatches `ActionType.StartFishing` into `FishingTask` for both bots, stages fishing skill `75` plus bait, and requires `loot_window_open` plus a real post-loot bag delta. That contract can already succeed, but the remaining intermittent failures are now shoreline terrain/LOS/pathfinding issues before `FishingTask in_cast_range`, not missing fishing-task ownership.
 - Target files: `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`, `Exports/BotRunner/Tasks/`, FG packet-capture logs.
 - Required change:
-  1. Keep the passing dual-bot fishing baseline green while moving more of the shoreline/pool selection contract under runtime ownership.
-  2. Record FG packet/timing evidence for cast -> channel -> bobber -> custom anim -> loot.
-  3. Tie the live assertions directly to `FishingTask`, the loot-frame surfaces, and the runtime packet handlers they depend on.
-  4. Explain and fix shoreline stop/fall failures, including the FG Ratchet pier overrun path and the matching BG `MovementController` parity gap.
+  1. Keep the dual-bot fishing baseline on the named Ratchet teleport with `FishingTask` owning equip -> bait -> acquire -> approach -> cast -> bobber -> loot-window -> bag-delta.
+  2. Record live evidence that separates fishing-task regressions from shoreline/pathfinding regressions, including `FishingTask los_blocked phase=move` and `Your cast didn't land in fishable water`.
+  3. Hand the terrain-sticking / no-LOS approach failures to the pathfinding owners (`Services/PathfindingService/TASKS.md`, `Exports/Navigation/TASKS.md`) and only return to packet-timing work after approach stability improves.
+  4. Tie the live assertions directly to `FishingTask`, the loot-frame surfaces, and the runtime packet handlers they depend on.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-- Acceptance criteria: fishing coverage stays meaningful in isolation for both bots on the task-owned equip -> bait -> approach -> cast -> bobber -> loot_window_open -> bag-delta path, documentation points to the owning runtime logic, and the suite skips rather than failing when no live visible pool exists.
+- Acceptance criteria: fishing coverage stays meaningful in isolation for both bots on the task-owned equip -> bait -> approach -> cast -> bobber -> loot_window_open -> bag-delta path, documentation points to the owning runtime logic, and intermittent failures clearly identify shoreline/pathfinding/LOS as the blocker instead of reporting a fishing-task regression.
 
 4. [ ] `BRT-OVR-006` Fix BG trainer visit gossip-to-trainer-service handoff for task-owned NPC coverage.
 - Problem: `NpcInteractionTests.Trainer_LearnAvailableSpells` now dispatches `ActionType.VisitTrainer`, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`, so the task-owned trainer path produces no spell-count or coinage delta.
@@ -171,40 +171,36 @@ Master tracker: `MASTER-SUB-022`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-12
-- Active task: `BRT-OVR-004` / `BRT-OVR-006`, with focused fishing now gated on a real live pool plus `loot_window_open` evidence and the next immediate follow-up on BG `MovementController` parity for shoreline stop/fall behavior.
-- Last delta: `FishingTask` now owns bait application against the equipped pole, the live fishing contract stages skill `75` plus `Nightcrawler Bait`, and the focused fishing slice only runs when Ratchet exposes a live visible pool. BG forced-stop handling now preserves falling/swimming physics flags instead of zeroing them during shoreline stop requests.
+- Active task: `BRT-OVR-004` is now pathfinding-blocked and routed to `PFS-FISH-001` / `NAV-FISH-001`; `BRT-OVR-006` remains the separate trainer handoff.
+- Last delta: fishing docs/comments now match the named Ratchet teleport plus task-owned approach/LOS flow, and the remaining intermittent failure is recorded as shoreline/pathfinding/LOS rather than a fishing-task ownership gap.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Exports/BotRunner/Combat/FishingData.cs`
   - `Exports/BotRunner/Tasks/FishingTask.cs`
-  - `Exports/WoWSharpClient/Movement/MovementController.cs`
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.Inventory.cs`
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
-  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
-  - `Tests/BotRunner.Tests/Combat/FishingDataTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
   - `Tests/BotRunner.Tests/TASKS.md`
-  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/TASKS.md`
+  - `docs/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `docs/BAD_TEST_BEHAVIORS.md`
 - Commands run:
-  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore`
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~UseItemTaskTests" --logger "console;verbosity=minimal"`
-  3. `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
-  4. `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"`
-  5. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
+  1. `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore`
+  2. `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
+  3. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"`
 - Outcomes:
-  - `Tests/BotRunner.Tests` build succeeded.
-  - The expanded fishing unit/action-contract slice passed `48`.
-  - `Tests/WoWSharpClient.Tests` build succeeded and `MovementControllerTests` passed `38`.
-  - Focused `FishingProfessionTests` now skips when no live Ratchet pool is visible from a stable dock stage instead of failing on DB-only spawn assumptions.
+  - `PathfindingService` Release build succeeded.
+  - `Navigation.vcxproj` Release|x64 build succeeded.
+  - `Tests/PathfindingService.Tests` passed `25`.
+  - The current live fishing contract can already succeed, but the remaining intermittent failure is shoreline terrain/LOS before `FishingTask in_cast_range`.
 - Blockers:
   - `QuestInteractionTests`, `StarterQuestTests`, and the vendor/flight portions of `NpcInteractionTests` are still not fully task-owned under `BRT-OVR-002` and stay out of the routine documented-stable slice.
   - `CombatLoopTests`, `GatheringProfessionTests`, and `FishingProfessionTests` remain excluded from the routine documented-stable slice until their open overhaul work stops generating low-signal failures.
-  - `FishingProfessionTests` still needs captured FG packet-timing artifacts and BG/FG shoreline stop-fall parity under `BRT-OVR-004`, even though the task-owned equip -> bait -> loot-window -> bag-delta path is now covered in isolation.
+  - `FishingProfessionTests` still fails intermittently because shoreline pathing can terrain-stick or end at a no-LOS cast point (`FishingTask los_blocked phase=move`; `Your cast didn't land in fishable water`), even though the task-owned equip -> bait -> loot-window -> bag-delta path is already covered.
   - `Trainer_LearnAvailableSpells` remains a deterministic skip under `BRT-OVR-006`.
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
+- Next command: `Get-Content Services/PathfindingService/TASKS.md`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

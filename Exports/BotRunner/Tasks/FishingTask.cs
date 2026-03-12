@@ -33,8 +33,11 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         AwaitLootCompletion,
     }
 
-    private const float DesiredPoolDistance = 14f;
-    private const float PoolDistanceTolerance = 4f;
+    internal const float DesiredPoolDistance = 18f;
+    internal const float PoolDistanceTolerance = 4f;
+    internal const float MinCastingDistance = DesiredPoolDistance - PoolDistanceTolerance;
+    internal const float MaxCastingDistance = DesiredPoolDistance + PoolDistanceTolerance;
+    private const float CastTargetInsetFromPool = 4f;
     private const int EquipTimeoutMs = 4000;
     private const int LureApplyTimeoutMs = 6000;
     private const int PoolAcquireTimeoutMs = 5000;
@@ -275,7 +278,8 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         }
 
         var poolDistance = player.Position.DistanceTo(pool.Position);
-        if (IsInCastingWindow(player.Position, pool.Position))
+        if (IsInCastingWindow(player.Position, pool.Position)
+            && CanCastFromPosition(player.MapId, player.Position, pool.Position))
         {
             ObjectManager.ForceStopImmediate();
             ObjectManager.Face(pool.Position);
@@ -287,16 +291,21 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
             return;
         }
 
-        var approachPosition = FishingData.GetPoolApproachPosition(player.Position, pool.Position, DesiredPoolDistance);
+        var approachPosition = ResolveFishingApproachPosition(player, pool.Position);
         if (_lastApproachDiagnosticDistance == float.MaxValue || poolDistance <= _lastApproachDiagnosticDistance - 2f)
         {
             _lastApproachDiagnosticDistance = poolDistance;
             BotContext.AddDiagnosticMessage(
                 $"[TASK] FishingTask approaching_pool guid=0x{pool.Guid:X} distance={poolDistance:F1}");
         }
+        else if (IsInCastingWindow(player.Position, pool.Position))
+        {
+            EmitLosBlockedDiagnostic(player, pool.Position, "move");
+        }
 
         // Prefer the task's normal pathfinding waypoint selection, but fall back to a direct
-        // movement nudge if the dock edge does not produce a waypoint for this short approach.
+        // movement nudge if the shoreline approach does not yield a usable short waypoint.
+        // Repeated stalls here are pathfinding/terrain evidence, not a fishing-contract failure.
         if (!TryNavigateToward(approachPosition))
             ObjectManager.MoveToward(approachPosition);
     }
@@ -328,6 +337,13 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         ObjectManager.Face(pool.Position);
         ObjectManager.ForceStopImmediate();
 
+        if (!CanCastFromPosition(player.MapId, player.Position, pool.Position))
+        {
+            EmitLosBlockedDiagnostic(player, pool.Position, "cast");
+            SetState(FishingState.MoveToFishingPool);
+            return;
+        }
+
         if (ElapsedMs < CastStabilizeDelayMs || player.IsMoving)
         {
             if (ElapsedMs >= CastStabilizeTimeoutMs)
@@ -358,11 +374,20 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         _sawBobber = false;
         _sawLootWindow = false;
         _sawLootItem = false;
-        ObjectManager.CastSpell((int)_fishingSpellId);
-        Log.Information("[FISH] Cast {Attempt}/{MaxAttempts} started at pool 0x{Guid:X} with spell {SpellId}.",
-            _castsAttempted, Config.MaxFishingCasts, pool.Guid, _fishingSpellId);
+        var castTarget = FishingData.GetPoolCastTarget(player.Position, pool.Position, CastTargetInsetFromPool);
+        ObjectManager.CastSpellAtLocation((int)_fishingSpellId, castTarget.X, castTarget.Y, castTarget.Z);
+        Log.Information(
+            "[FISH] Cast {Attempt}/{MaxAttempts} started at pool 0x{Guid:X} with spell {SpellId} targeting ({X:F1}, {Y:F1}, {Z:F1}) distance={Distance:F1}.",
+            _castsAttempted,
+            Config.MaxFishingCasts,
+            pool.Guid,
+            _fishingSpellId,
+            castTarget.X,
+            castTarget.Y,
+            castTarget.Z,
+            player.Position.DistanceTo(pool.Position));
         BotContext.AddDiagnosticMessage(
-            $"[TASK] FishingTask cast_started attempt={_castsAttempted} pool=0x{pool.Guid:X} spell={_fishingSpellId}");
+            $"[TASK] FishingTask cast_started attempt={_castsAttempted} pool=0x{pool.Guid:X} spell={_fishingSpellId} target=({castTarget.X:F1},{castTarget.Y:F1},{castTarget.Z:F1}) distance={player.Position.DistanceTo(pool.Position):F1}");
         SetState(FishingState.AwaitCastConfirmation);
     }
 
@@ -548,6 +573,49 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         SetState(FishingState.AcquireFishingPool);
     }
 
+    private Position ResolveFishingApproachPosition(IWoWLocalPlayer player, Position poolPosition)
+    {
+        foreach (var candidate in FishingData.GetPoolApproachCandidates(player.Position, poolPosition, DesiredPoolDistance))
+        {
+            if (CanCastFromPosition(player.MapId, candidate, poolPosition))
+                return candidate;
+        }
+
+        return FishingData.GetPoolApproachPosition(player.Position, poolPosition, DesiredPoolDistance);
+    }
+
+    private bool CanCastFromPosition(uint mapId, Position fromPosition, Position poolPosition)
+    {
+        var castTarget = FishingData.GetPoolCastTarget(fromPosition, poolPosition, CastTargetInsetFromPool);
+        return TryHasLineOfSight(mapId, fromPosition, castTarget);
+    }
+
+    private bool TryHasLineOfSight(uint mapId, Position fromPosition, Position toPosition)
+    {
+        try
+        {
+            return Container.PathfindingClient?.IsInLineOfSight(mapId, fromPosition, toPosition) ?? true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[FISH] LOS probe failed; treating pathfinding LOS as unavailable.");
+            return true;
+        }
+    }
+
+    private void EmitLosBlockedDiagnostic(IWoWLocalPlayer player, Position poolPosition, string phase)
+    {
+        var key = $"fishing-los-{phase}-{ObjectManager.PlayerGuid.FullGuid}";
+        if (!Wait.For(key, 1000, resetOnSuccess: true))
+            return;
+
+        var castTarget = FishingData.GetPoolCastTarget(player.Position, poolPosition, CastTargetInsetFromPool);
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask los_blocked phase={phase} castTarget=({castTarget.X:F1},{castTarget.Y:F1},{castTarget.Z:F1})");
+        Log.Information("[FISH] LOS blocked for fishing {Phase}. castTarget=({X:F1}, {Y:F1}, {Z:F1})",
+            phase, castTarget.X, castTarget.Y, castTarget.Z);
+    }
+
     private void PopWithSuccess()
     {
         var lootItems = _lootItemIds.Count > 0 ? string.Join(", ", _lootItemIds.OrderBy(id => id)) : "none";
@@ -561,8 +629,8 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     private static bool IsInCastingWindow(Position playerPosition, Position poolPosition)
     {
         var distance = playerPosition.DistanceTo(poolPosition);
-        return distance >= DesiredPoolDistance - PoolDistanceTolerance
-            && distance <= DesiredPoolDistance + PoolDistanceTolerance;
+        return distance >= MinCastingDistance
+            && distance <= MaxCastingDistance;
     }
 
     private void SetState(FishingState state)

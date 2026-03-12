@@ -496,14 +496,12 @@ namespace BotRunner
             {
                 var @class = WoWNameGenerator.ResolveClass(accountName);
 
-                // IdleTask sits at the bottom of the stack â€” does nothing.
-                // StateManager sends actions via IPC that build behavior trees.
-                // Push tasks in reverse order (stack is LIFO)
+                // IdleTask stays at the bottom of the stack until a live test or coordinator
+                // explicitly sends work. Startup travel is test-owned now, so do not inject
+                // default wait/teleport tasks here.
                 _botTasks.Push(new Tasks.IdleTask(context));
-                _botTasks.Push(new Tasks.WaitTask(context, 3000));
-                _botTasks.Push(new Tasks.TeleportTask(context, "valleyoftrials"));
-                Log.Information("[BOT RUNNER] Initialized {Class} task sequence for {Account} using {Profile}",
-                    @class, accountName, _container.ClassContainer.Name);
+                Log.Information("[BOT RUNNER] Initialized idle task sequence for {Account} using {Profile} ({Class})",
+                    accountName, _container.ClassContainer.Name, @class);
             }
             catch (Exception ex)
             {

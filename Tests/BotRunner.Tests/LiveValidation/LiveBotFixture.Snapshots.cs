@@ -47,6 +47,8 @@ public partial class LiveBotFixture
             for (int attempt = 0; attempt < 3; attempt++)
             {
                 var snapshots = await _stateManagerClient.QuerySnapshotsAsync();
+                foreach (var snapshot in snapshots)
+                    NormalizeSnapshotCharacterName(snapshot);
                 inWorld = snapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
 
                 if (inWorld.Count >= expectedCount || expectedCount == 0)
@@ -64,6 +66,8 @@ public partial class LiveBotFixture
 
             // Accept whatever we have after retries
             var finalSnapshots = await _stateManagerClient.QuerySnapshotsAsync();
+            foreach (var snapshot in finalSnapshots)
+                NormalizeSnapshotCharacterName(snapshot);
             AllBots = finalSnapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
             IdentifyBots(AllBots);
             LogSnapshotMessages();
@@ -136,7 +140,9 @@ public partial class LiveBotFixture
     {
         if (_stateManagerClient == null) return null;
         var snapshots = await _stateManagerClient.QuerySnapshotsAsync(accountName);
-        return snapshots.FirstOrDefault();
+        var snapshot = snapshots.FirstOrDefault();
+        NormalizeSnapshotCharacterName(snapshot);
+        return snapshot;
     }
 
     /// <summary>Forward an action to a specific bot.</summary>
