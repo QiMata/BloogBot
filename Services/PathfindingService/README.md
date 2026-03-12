@@ -76,6 +76,7 @@ Services/PathfindingService/
 +-- Repository/
 |   +-- Navigation.cs               # P/Invoke wrapper for pathfinding
 |   +-- Physics.cs                  # P/Invoke wrapper for physics + LoS
+|   +-- RequestScopedDynamicObjectOverlay.cs # Request-scoped dynamic object overlay lifecycle
 +-- README.md                       # This documentation
 ```
 
@@ -121,6 +122,8 @@ public class PathfindingSocketServer : ProtobufSocketServer<PathfindingRequest, 
 {
     private readonly Navigation _navigation = new();
     private readonly Physics _physics = new();
+    private readonly RequestScopedDynamicObjectOverlay _dynamicObjectOverlay =
+        new(new NativeDynamicObjectOverlayRegistry());
     
     protected override PathfindingResponse HandleRequest(PathfindingRequest request)
     {
@@ -134,6 +137,8 @@ public class PathfindingSocketServer : ProtobufSocketServer<PathfindingRequest, 
     }
 }
 ```
+
+Current rollout note: `CalculatePathRequest.nearby_objects` is now consumed inside the service. Each path request mounts a request-scoped synthetic-guid overlay into the native dynamic-object registry, executes the native path call, and unregisters those synthetic entries in `finally`. Other registry-sensitive native calls currently run behind the same gate so path overlays cannot leak across concurrent requests.
 
 ### Navigation Repository
 
@@ -269,9 +274,7 @@ Computes an A* path between two points:
 
 **Response**: List of `Position` waypoints
 
-Current rollout note: BotRunner now populates `NearbyObjects` from a conservative live overlay (`40y` from start/end, collidable object types only, nearest `64` max). The next owner slice is request-scoped overlay registration and route validation inside the service.
-
-Current rollout note: the service accepts and logs `NearbyObjects` on path requests now; request-scoped overlay validation and detour repair are the next owner slices in `Services/PathfindingService/TASKS.md`.
+Current rollout note: BotRunner now populates `NearbyObjects` from a conservative live overlay (`40y` from start/end, collidable object types only, nearest `64` max), and the service mounts those objects into a request-scoped overlay for the duration of the native path call. Route validation/repair is still the next owner slice in `Services/PathfindingService/TASKS.md`.
 
 ### LineOfSightRequest
 

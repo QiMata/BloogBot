@@ -78,6 +78,7 @@ namespace PathfindingService
     {
         private Navigation _navigation;
         private Physics _physics;
+        private readonly RequestScopedDynamicObjectOverlay _dynamicObjectOverlay = new(new NativeDynamicObjectOverlayRegistry());
         private volatile bool _isInitialized;
         private readonly object _initLock = new();
 
@@ -186,7 +187,13 @@ namespace PathfindingService
 
             var start = new XYZ(req.Start.X, req.Start.Y, req.Start.Z);
             var end = new XYZ(req.End.X, req.End.Y, req.End.Z);
-            var path = _navigation.CalculatePath(req.MapId, start, end, req.Straight);
+            var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
+                req.MapId,
+                req.NearbyObjects,
+                () => _navigation.CalculatePath(req.MapId, start, end, req.Straight),
+                logger,
+                operationName: "path");
+            var path = overlayResult.Value;
             var sanitizedPath = path
                 .Where(IsFinitePoint)
                 .ToArray();
@@ -208,8 +215,23 @@ namespace PathfindingService
             {
                 var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
                 logger.LogInformation(
-                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} corners={Corners} overlayObjects={OverlayObjects}",
-                    req.MapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, dist2D, smoothPath, sanitizedPath.Length, req.NearbyObjects.Count);
+                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} corners={Corners} overlayRequested={OverlayRequested} overlayRegistered={OverlayRegistered} overlayFiltered={OverlayFiltered} overlayDisplayIds=[{OverlayDisplayIds}]",
+                    req.MapId,
+                    start.X,
+                    start.Y,
+                    start.Z,
+                    end.X,
+                    end.Y,
+                    end.Z,
+                    dist2D,
+                    smoothPath,
+                    sanitizedPath.Length,
+                    overlayResult.Summary.RequestedCount,
+                    overlayResult.Summary.RegisteredCount,
+                    overlayResult.Summary.FilteredCount,
+                    overlayResult.Summary.RegisteredDisplayIds.Count > 0
+                        ? string.Join(",", overlayResult.Summary.RegisteredDisplayIds)
+                        : string.Empty);
             }
 
             var resp = new CalculatePathResponse();
@@ -223,56 +245,61 @@ namespace PathfindingService
         private int _physicsLogCounter = 0;
         private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
         {
-            var physicsInput = step.ToPhysicsInput();
-
-            // Marshal nearby dynamic objects (if any) from proto to pinned native array
-            Repository.DynamicObjectInfo[]? nativeObjects = null;
-            System.Runtime.InteropServices.GCHandle pinHandle = default;
-            if (step.NearbyObjects.Count > 0)
+            return _dynamicObjectOverlay.ExecuteExclusive(() =>
             {
-                nativeObjects = new Repository.DynamicObjectInfo[step.NearbyObjects.Count];
-                for (int i = 0; i < step.NearbyObjects.Count; i++)
+                var physicsInput = step.ToPhysicsInput();
+
+                // Marshal nearby dynamic objects (if any) from proto to pinned native array
+                Repository.DynamicObjectInfo[]? nativeObjects = null;
+                System.Runtime.InteropServices.GCHandle pinHandle = default;
+                if (step.NearbyObjects.Count > 0)
                 {
-                    var obj = step.NearbyObjects[i];
-                    nativeObjects[i] = new Repository.DynamicObjectInfo
+                    nativeObjects = new Repository.DynamicObjectInfo[step.NearbyObjects.Count];
+                    for (int i = 0; i < step.NearbyObjects.Count; i++)
                     {
-                        guid = obj.Guid,
-                        displayId = obj.DisplayId,
-                        x = obj.X, y = obj.Y, z = obj.Z,
-                        orientation = obj.Orientation,
-                        scale = obj.Scale > 0 ? obj.Scale : 1.0f,
-                        goState = obj.GoState
-                    };
+                        var obj = step.NearbyObjects[i];
+                        nativeObjects[i] = new Repository.DynamicObjectInfo
+                        {
+                            guid = obj.Guid,
+                            displayId = obj.DisplayId,
+                            x = obj.X,
+                            y = obj.Y,
+                            z = obj.Z,
+                            orientation = obj.Orientation,
+                            scale = obj.Scale > 0 ? obj.Scale : 1.0f,
+                            goState = obj.GoState
+                        };
+                    }
+                    pinHandle = System.Runtime.InteropServices.GCHandle.Alloc(nativeObjects, System.Runtime.InteropServices.GCHandleType.Pinned);
+                    physicsInput.nearbyObjects = pinHandle.AddrOfPinnedObject();
+                    physicsInput.nearbyObjectCount = nativeObjects.Length;
                 }
-                pinHandle = System.Runtime.InteropServices.GCHandle.Alloc(nativeObjects, System.Runtime.InteropServices.GCHandleType.Pinned);
-                physicsInput.nearbyObjects = pinHandle.AddrOfPinnedObject();
-                physicsInput.nearbyObjectCount = nativeObjects.Length;
-            }
 
-            Repository.PhysicsOutput physicsOutput;
-            try
-            {
-                physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
-            }
-            finally
-            {
-                if (pinHandle.IsAllocated) pinHandle.Free();
-            }
+                Repository.PhysicsOutput physicsOutput;
+                try
+                {
+                    physicsOutput = _physics.StepPhysicsV2(physicsInput, step.DeltaTime);
+                }
+                finally
+                {
+                    if (pinHandle.IsAllocated) pinHandle.Free();
+                }
 
-            // Log every 100th physics step to diagnose ground snapping
-            if (++_physicsLogCounter % 100 == 1)
-            {
-                float dz = physicsOutput.z - physicsInput.z;
-                logger.LogInformation(
-                    "[PHYS_DIAG] frame={Frame} in=({X:F1},{Y:F1},{Z:F1}) out=({OX:F1},{OY:F1},{OZ:F1}) dZ={DZ:F2} groundZ={GZ:F1} flags=0x{F:X} prevGZ={PGZ:F1} dt={DT:F4}",
-                    physicsInput.frameCounter,
-                    physicsInput.x, physicsInput.y, physicsInput.z,
-                    physicsOutput.x, physicsOutput.y, physicsOutput.z,
-                    dz, physicsOutput.groundZ, physicsOutput.moveFlags,
-                    physicsInput.prevGroundZ, physicsInput.deltaTime);
-            }
+                // Log every 100th physics step to diagnose ground snapping
+                if (++_physicsLogCounter % 100 == 1)
+                {
+                    float dz = physicsOutput.z - physicsInput.z;
+                    logger.LogInformation(
+                        "[PHYS_DIAG] frame={Frame} in=({X:F1},{Y:F1},{Z:F1}) out=({OX:F1},{OY:F1},{OZ:F1}) dZ={DZ:F2} groundZ={GZ:F1} flags=0x{F:X} prevGZ={PGZ:F1} dt={DT:F4}",
+                        physicsInput.frameCounter,
+                        physicsInput.x, physicsInput.y, physicsInput.z,
+                        physicsOutput.x, physicsOutput.y, physicsOutput.z,
+                        dz, physicsOutput.groundZ, physicsOutput.moveFlags,
+                        physicsInput.prevGroundZ, physicsInput.deltaTime);
+                }
 
-            return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
+                return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };
+            });
         }
 
         private PathfindingResponse HandleLineOfSight(LineOfSightRequest req)
@@ -283,7 +310,8 @@ namespace PathfindingService
             var from = new XYZ(req.From.X, req.From.Y, req.From.Z);
             var to = new XYZ(req.To.X, req.To.Y, req.To.Z);
 
-            bool hasLOS = _physics.LineOfSight(req.MapId, from, to);
+            bool hasLOS = _dynamicObjectOverlay.ExecuteExclusive(
+                () => _physics.LineOfSight(req.MapId, from, to));
 
             return new PathfindingResponse
             {
@@ -296,10 +324,15 @@ namespace PathfindingService
             if (req.From == null || req.To == null || !IsFinitePosition(req.From) || !IsFinitePosition(req.To))
                 return ErrorResponse("Missing or non-finite position for SegmentDynCheck.");
 
-            bool intersects = _navigation.SegmentIntersectsDynamicObjects(
-                req.MapId,
-                req.From.X, req.From.Y, req.From.Z,
-                req.To.X, req.To.Y, req.To.Z);
+            bool intersects = _dynamicObjectOverlay.ExecuteExclusive(
+                () => _navigation.SegmentIntersectsDynamicObjects(
+                    req.MapId,
+                    req.From.X,
+                    req.From.Y,
+                    req.From.Z,
+                    req.To.X,
+                    req.To.Y,
+                    req.To.Z));
 
             return new PathfindingResponse
             {
@@ -313,7 +346,8 @@ namespace PathfindingService
                 return ErrorResponse("Missing or non-finite position for GetGroundZ.");
 
             float maxDist = req.MaxSearchDist > 0 ? req.MaxSearchDist : 10.0f;
-            var (groundZ, found) = _physics.GetGroundZ(req.MapId, req.Position.X, req.Position.Y, req.Position.Z, maxDist);
+            var (groundZ, found) = _dynamicObjectOverlay.ExecuteExclusive(
+                () => _physics.GetGroundZ(req.MapId, req.Position.X, req.Position.Y, req.Position.Z, maxDist));
 
             return new PathfindingResponse
             {
@@ -327,19 +361,24 @@ namespace PathfindingService
                 return ErrorResponse("BatchGroundZ request contains no positions.");
 
             float maxDist = req.MaxSearchDist > 0 ? req.MaxSearchDist : 10.0f;
-            var response = new BatchGroundZResponse();
-
-            foreach (var pos in req.Positions)
+            var response = _dynamicObjectOverlay.ExecuteExclusive(() =>
             {
-                if (pos == null || !IsFinitePosition(pos))
+                var batchResponse = new BatchGroundZResponse();
+
+                foreach (var pos in req.Positions)
                 {
-                    response.Results.Add(new BatchGroundZEntry { GroundZ = 0f, Found = false });
-                    continue;
+                    if (pos == null || !IsFinitePosition(pos))
+                    {
+                        batchResponse.Results.Add(new BatchGroundZEntry { GroundZ = 0f, Found = false });
+                        continue;
+                    }
+
+                    var (groundZ, found) = _physics.GetGroundZ(req.MapId, pos.X, pos.Y, pos.Z, maxDist);
+                    batchResponse.Results.Add(new BatchGroundZEntry { GroundZ = groundZ, Found = found });
                 }
 
-                var (groundZ, found) = _physics.GetGroundZ(req.MapId, pos.X, pos.Y, pos.Z, maxDist);
-                response.Results.Add(new BatchGroundZEntry { GroundZ = groundZ, Found = found });
-            }
+                return batchResponse;
+            });
 
             return new PathfindingResponse { BatchGroundZ = response };
         }

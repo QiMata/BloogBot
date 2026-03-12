@@ -17,6 +17,7 @@ Master tracker: `MASTER-SUB-018`
 6. Every pass must write one-line `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
 7. Every implementation slice must add or update focused unit tests and finish with those tests passing before the next slice unless a blocker is recorded.
 8. After each shipped delta, update this file and `docs/TASKS.md`, commit, push, and hand off the next open item for the next session.
+9. For the object-aware pathfinding phase (`PFS-OBJ-*`), every checkpoint must explicitly record: passing unit tests, plan/doc updates, full branch commit+push, and the exact next command the next session must run first.
 
 ## Evidence Snapshot (2026-02-25)
 - Build check passes: `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> `0 Error(s)`, `0 Warning(s)`.
@@ -105,11 +106,15 @@ Master tracker: `MASTER-SUB-018`
 - [ ] Problem: the existing `DynamicObjectRegistry` is fed by physics ticks, but path requests do not yet mount a request-scoped overlay for live obstacle-aware route validation.
 - [ ] Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/Repository/Physics.cs`.
 - [x] Ready signal (2026-03-12 session 65): caller-side overlay plumbing is now live, so this task is the next implementation slice. The service no longer needs more BotRunner contract work before it can start registering and clearing request-scoped overlays.
+- [x] Progress (2026-03-12 session 66): `CalculatePathRequest.nearby_objects` is now mounted via `RequestScopedDynamicObjectOverlay`, which registers synthetic GUIDs, forwards `goState`, logs overlay counts/display IDs, and unregisters those synthetic objects in `finally`. Registry-sensitive native calls (`HandlePhysics`, `HandleLineOfSight`, `HandleGroundZ`, `HandleBatchGroundZ`, `HandleSegmentDynCheck`) now run behind the same gate so the singleton registry cannot leak mounted caller overlays across requests.
 - [ ] Required change:
   1. Convert path/LOS/path-validation requests to register and clear a request-scoped overlay from `nearby_objects`.
   2. Keep transport and long-lived world geometry support intact while avoiding registry leakage between requests.
   3. Add diagnostics that report object counts, filtered object counts, and the collidable display IDs used during a path request.
-- [ ] Acceptance criteria: each path request sees exactly the live obstacles provided by the caller, and path results are reproducible per request without cross-bot contamination.
+- [ ] Remaining gap:
+  1. `CalculatePathRequest` is currently the only request type that carries `nearby_objects`, so standalone LOS / GroundZ / SegmentDynCheck requests are serialized but not yet overlay-aware themselves.
+  2. Raw native routes are still returned without overlay-aware segment validation or repair.
+- [ ] Acceptance criteria: each path request sees exactly the live obstacles provided by the caller, non-path registry-sensitive requests cannot observe leaked overlay state, and path results are reproducible per request without cross-bot contamination.
 
 ### PFS-OBJ-003 Overlay-aware path validation and repair
 - [ ] Problem: native `FindPath` returns mmap routes, but there is no service-level repair loop that rejects corners/segments crossing collidable live objects and reforms the path around them.
@@ -154,27 +159,24 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-12
-- Active task: `PFS-OBJ-002` service overlay lifecycle: request-scoped dynamic obstacle context
-- Last delta: BotRunner now sends conservative collidable `nearby_objects` from all live `NavigationPath` call sites, so the next service slice is to register/clear request-scoped overlays and validate routes against them
+- Last updated: 2026-03-12 (session 66)
+- Active task: `PFS-OBJ-003` overlay-aware path validation and repair
+- Last delta: service-side request-scoped overlay lifecycle is now in place for `CalculatePathRequest.nearby_objects`, with synthetic-guid registration, `finally` unregister cleanup, and a shared gate that keeps registry-sensitive native calls from observing leaked overlay state
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TargetPositioningServiceTests|FullyQualifiedName~FishingTaskTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"` -> `72 passed`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal"` -> `20 passed`
+  - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~RequestScopedDynamicObjectOverlayTests|FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"` -> `15 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `29 passed`
 - Files changed:
-  - `Exports/BotRunner/Movement/PathfindingOverlayBuilder.cs`
-  - `Exports/BotRunner/Movement/NavigationPath.cs`
-  - `Exports/BotRunner/Tasks/BotTask.cs`
-  - `Exports/BotRunner/BotRunnerService.Sequences.Movement.cs`
-  - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
-  - `Exports/BotRunner/Movement/TargetPositioningService.cs`
-  - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
-  - `Tests/BotRunner.Tests/Movement/PathfindingOverlayBuilderTests.cs`
-  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
-  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
-  - `Tests/BotRunner.Tests/BotRunnerServiceTests.cs`
+  - `Services/PathfindingService/PathfindingSocketServer.cs`
+  - `Services/PathfindingService/Repository/RequestScopedDynamicObjectOverlay.cs`
+  - `Services/PathfindingService/README.md`
+  - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/PathfindingService.Tests/RequestScopedDynamicObjectOverlayTests.cs`
+  - `Tests/PathfindingService.Tests/TASKS.md`
   - `Services/PathfindingService/TASKS.md`
-- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs`
-- Blockers: `nearby_objects` are now populated on live requests, but the service still only logs them. Request-scoped overlay lifecycle, route validation, and repair loops remain unimplemented.
+- Next command: `Get-Content Services/PathfindingService/Repository/Navigation.cs`
+- Blockers: the service now mounts path overlays, but raw native routes are still returned without overlay-aware segment validation or detour repair; standalone non-path requests also still lack their own `nearby_objects` payload.

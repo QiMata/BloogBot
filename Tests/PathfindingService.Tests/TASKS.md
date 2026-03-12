@@ -16,6 +16,7 @@
 7. Add a one-line `Pass result` in `Session Handoff` (`delta shipped` or `blocked`) every pass so compaction resumes from `Next command` directly.
 8. Start each pass by running the prior `Session Handoff -> Next command` verbatim before any broader scan/search.
 9. After shipping one local delta, set `Session Handoff -> Next command` to the next queue-file read command and execute it in the same session.
+10. For object-aware pathfinding coverage, every test slice must land with passing focused tests, updated task docs, a committed+pushed branch checkpoint, and a handoff that names the next implementation command explicitly.
 
 ## Environment Checklist (Run Before P0)
 - [ ] `Navigation.dll` is present in test output (`Tests/PathfindingService.Tests/bin/Release/net8.0/Navigation.dll` currently missing in this shell session).
@@ -154,6 +155,17 @@
 1. Engineers can run all or focused suites with one-line commands.
 2. Timeout behavior is consistent and documented.
 
+### [x] PFS-TST-007 - Add request-scoped overlay lifecycle coverage
+- **Done (session 66).** Added `RequestScopedDynamicObjectOverlayTests` to verify valid object register/update/unregister, invalid-object filtering, `goState` forwarding, exception-safe cleanup, and gate serialization between overlay work and other registry-sensitive calls.
+- Evidence:
+1. `Tests/PathfindingService.Tests/RequestScopedDynamicObjectOverlayTests.cs`
+2. `Services/PathfindingService/Repository/RequestScopedDynamicObjectOverlay.cs`
+3. `Services/PathfindingService/PathfindingSocketServer.cs`
+- Command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~RequestScopedDynamicObjectOverlayTests|FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. Overlay lifecycle regressions fail in deterministic tests before live bot routing is exercised.
+2. Test output proves overlay cleanup still happens when the wrapped native call fails.
+
 ## Simple Command Set
 1. Full project sweep: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"`.
 2. Route validity focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`.
@@ -161,11 +173,19 @@
 4. Proto contract focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-02-28
-- Active task: PFS-TST-002/003/005 (require nav data for validation)
+- Last updated: 2026-03-12 (session 66)
+- Active task: PFS-TST-002/003/005 remain open; PFS-TST-007 is now done
 - Last delta: PFS-TST-001 (preflight), PFS-TST-004 (5 round-trip tests), PFS-TST-006 (README) — all done in batch 17
 - Pass result: `delta shipped`
-- Build: 0 errors. Proto tests: 11/11 pass.
-- Files changed: NavigationFixture.cs, ProtoInteropExtensionsTests.cs, README.md, TASKS.md
-- Blockers: PFS-TST-002/003/005 require Navigation.dll and nav data for live path validation
-- Next command: continue with next queue file
+- Validation/tests run:
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~RequestScopedDynamicObjectOverlayTests|FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"` -> `15 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `29 passed`
+- Files changed:
+  - `Tests/PathfindingService.Tests/RequestScopedDynamicObjectOverlayTests.cs`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Services/PathfindingService/Repository/RequestScopedDynamicObjectOverlay.cs`
+  - `Services/PathfindingService/PathfindingSocketServer.cs`
+- Blockers: PFS-TST-002/003/005 still depend on live nav-data route assertions, while the current service slice only mounts overlays for path requests because only `CalculatePathRequest` currently carries `nearby_objects`
+- Next command: `Get-Content Services/PathfindingService/Repository/Navigation.cs`

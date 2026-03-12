@@ -135,7 +135,7 @@ Current observed boundary from the 2026-03-12 live suite:
 | 7.2 | **Identify divergence points.** Find where the bot gets stuck - which waypoint, which geometry (catapult, wall, ramp). | Analysis | Open |
 | 7.3 | **Fix corridor collision code.** Update `PhysicsCollideSlide.cpp` to handle the stuck geometry. Test with replay frames. | `Exports/Navigation/PhysicsCollideSlide.cpp` | Open |
 | 7.4 | **Ratchet shoreline/fishing-hole route hardening.** Instrument the short route from the Ratchet named-teleport landing to fishing-hole cast positions, then fix terrain-snags / LOS-blocked endpoints that strand bots before `FishingTask in_cast_range`. | `Services/PathfindingService/`, `Exports/Navigation/`, `Exports/BotRunner/Tasks/FishingTask.cs` | In progress |
-| 7.5 | **Object-aware path requests.** Extend path requests so BotRunner sends nearby collidable game objects and movement capabilities to PathfindingService instead of pathing with only `mapId/start/end`. | `Exports/BotRunner/Clients/PathfindingClient.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Services/PathfindingService/`, `pathfinding.proto` | In progress - contract slice is done, BotRunner now builds a conservative collidable overlay (`40y` from start/end, nearest `64` max) and live `NavigationPath` call sites populate `nearby_objects`; next slice is service-side request-scoped overlay registration/consumption |
+| 7.5 | **Object-aware path requests.** Extend path requests so BotRunner sends nearby collidable game objects and movement capabilities to PathfindingService instead of pathing with only `mapId/start/end`. | `Exports/BotRunner/Clients/PathfindingClient.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Services/PathfindingService/`, `pathfinding.proto` | In progress - contract slice is done, BotRunner now builds a conservative collidable overlay (`40y` from start/end, nearest `64` max), and the service now mounts `nearby_objects` into a request-scoped synthetic-guid overlay for `CalculatePath` while serializing other registry-sensitive native calls to avoid cross-request contamination; next slice is overlay-aware route validation/repair |
 | 7.6 | **Overlay-aware path validation and repair.** Validate native mmap routes against live object overlays, then reform blocked segments into usable local detours when possible. | `Services/PathfindingService/Repository/Navigation.cs`, `Exports/Navigation/PathFinder.cpp`, `Exports/Navigation/SceneQuery.cpp` | Open |
 | 7.7 | **Route affordance metadata.** Classify path transitions as walk / step-up / jump-gap / safe-drop / unsafe-drop / swim / blocked and return that metadata to callers. | `Services/PathfindingService/`, `Exports/Navigation/PhysicsEngine.cpp`, `pathfinding.proto` | Open |
 | 7.8 | **Decision-grade spatial queries.** After object-aware paths are stable, add higher-level reachability/LOS/surface queries so BotRunner can choose better approach points instead of only consuming corner lists. | `Services/PathfindingService/`, `Exports/BotRunner/` | Open |
@@ -196,18 +196,20 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-12 (session 65)
-- **Current work:** P7.5 object-aware path requests are still in progress. BotRunner now sends conservative live collidable overlays on path requests, and the next slice is `PFS-OBJ-002`: service-side request-scoped overlay registration/consumption.
+- **Last updated:** 2026-03-12 (session 66)
+- **Current work:** P7.5 shipped the service-side overlay lifecycle checkpoint. The next slice is `PFS-OBJ-003` / P7.6: validate raw native routes against the mounted overlay and repair blocked segments instead of returning them unchanged.
 - **Completed this session:**
-  1. **Shipped the BotRunner overlay slice:** added `PathfindingOverlayBuilder`, which filters nearby collidable game objects from `IObjectManager.GameObjects` (`40y` from start/end, finite positions only, nearest `64` max) and maps them into `DynamicObjectProto`.
-  2. **Wired live path callers:** `NavigationPath`, `BotTask`, `RetrieveCorpseTask`, `TargetPositioningService`, and BotRunner movement/combat sequences now send `nearby_objects` whenever the filtered overlay is non-empty.
-  3. **Added and passed focused deterministic coverage:** new `PathfindingOverlayBuilderTests` and `NavigationPath` forwarding assertions passed, along with the related BotRunner path/client/task slices.
+  1. **Mounted request-scoped overlays in the service:** `PathfindingSocketServer` now wraps `CalculatePath` in `RequestScopedDynamicObjectOverlay`, registering synthetic GUIDs for caller-provided `nearby_objects`, forwarding `goState`, logging overlay diagnostics, and unregistering those synthetic objects in `finally`.
+  2. **Prevented cross-request registry leakage:** registry-sensitive native calls now share the same gate, so physics / LOS / ground-Z / dynamic-segment checks cannot observe another request's mounted overlay while the native singleton registry is in use.
+  3. **Added and passed deterministic lifecycle coverage:** new `RequestScopedDynamicObjectOverlayTests` verify valid registration/update/unregister, invalid-object filtering, exception-safe cleanup, and gate serialization; the full `PathfindingService.Tests` project now passes with the new slice in place.
 - **Commands run + outcomes:**
-  1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore` -> succeeded.
-  2. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded.
-  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TargetPositioningServiceTests|FullyQualifiedName~FishingTaskTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"` -> `72 passed`.
-  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal"` -> `20 passed`.
-- **Next:** `Get-Content Services/PathfindingService/PathfindingSocketServer.cs`
+  1. `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded.
+  2. `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded.
+  3. `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded.
+  4. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~RequestScopedDynamicObjectOverlayTests|FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"` -> `15 passed`.
+  5. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`.
+  6. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `29 passed`.
+- **Next:** `Get-Content Services/PathfindingService/Repository/Navigation.cs`
 
 ## Session Handoff (Session 53 Archive)
 - **Last updated:** 2026-03-10 (session 53)

@@ -492,9 +492,9 @@ extern "C"
 
     /// Update the world position and orientation of a dynamic object.
     __declspec(dllexport) void UpdateDynamicObjectPosition(
-        uint64_t guid, float x, float y, float z, float orientation)
+        uint64_t guid, float x, float y, float z, float orientation, uint32_t goState)
     {
-        DynamicObjectRegistry::Instance()->UpdatePosition(guid, x, y, z, orientation);
+        DynamicObjectRegistry::Instance()->UpdatePosition(guid, x, y, z, orientation, goState);
     }
 
     /// Remove a single dynamic object by GUID.
