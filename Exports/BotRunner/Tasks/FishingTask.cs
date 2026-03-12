@@ -1,33 +1,60 @@
 using BotRunner.Combat;
 using BotRunner.Interfaces;
+using GameData.Core.Frames;
 using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using Serilog;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace BotRunner.Tasks;
 
 /// <summary>
-/// Resolves the current fishing rank, casts it, then waits for the fishing cycle to finish.
-/// The live fishing test remains responsible for asserting catch metrics; this task owns the
-/// cast/channel/bobber side of the behavior instead of raw action dispatch.
+/// Owns the full fishing loop: equip a pole, approach a visible fishing pool,
+/// cast, wait for the bobber/loot event, and loot the catch before completing.
 /// </summary>
 public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
 {
     private enum FishingState
     {
+        EnsurePoleEquipped,
+        AwaitPoleEquip,
+        AcquireFishingPool,
+        MoveToFishingPool,
         ResolveAndCast,
         AwaitCastConfirmation,
         AwaitCatchResolution,
+        AwaitLootWindow,
+        LootCatch,
+        AwaitLootCompletion,
     }
 
+    private const float DesiredPoolDistance = 14f;
+    private const float PoolDistanceTolerance = 4f;
+    private const int EquipTimeoutMs = 4000;
+    private const int PoolAcquireTimeoutMs = 5000;
+    private const int CastStabilizeDelayMs = 250;
+    private const int CastStabilizeTimeoutMs = 1500;
     private const int CastConfirmationTimeoutMs = 5000;
-    private const int CatchResolutionTimeoutMs = 35000;
+    private const int CatchResolutionTimeoutMs = 28000;
+    private const int LootWindowTimeoutMs = 5000;
+    private const int LootCompletionTimeoutMs = 3000;
 
-    private FishingState _state = FishingState.ResolveAndCast;
+    private FishingState _state = FishingState.EnsurePoleEquipped;
     private DateTime _stateEnteredAt = DateTime.UtcNow;
     private uint _fishingSpellId;
+    private int _castsAttempted;
+    private int _equipAttempts;
+    private ulong _activePoolGuid;
     private bool _sawFishingState;
+    private bool _sawBobber;
+    private bool _sawLootWindow;
+    private bool _sawLootItem;
+    private readonly HashSet<uint> _lootItemIds = [];
+    private readonly Dictionary<uint, int> _startingBagItemCounts = [];
+    private bool _startingBagSnapshotCaptured;
+    private float _lastApproachDiagnosticDistance = float.MaxValue;
 
     public void Update()
     {
@@ -45,8 +72,22 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
             return;
         }
 
+        EnsureStartingBagSnapshot();
+
         switch (_state)
         {
+            case FishingState.EnsurePoleEquipped:
+                EnsurePoleEquipped();
+                return;
+            case FishingState.AwaitPoleEquip:
+                AwaitPoleEquip();
+                return;
+            case FishingState.AcquireFishingPool:
+                AcquireFishingPool(player);
+                return;
+            case FishingState.MoveToFishingPool:
+                MoveToFishingPool(player);
+                return;
             case FishingState.ResolveAndCast:
                 ResolveAndCast(player);
                 return;
@@ -56,11 +97,174 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
             case FishingState.AwaitCatchResolution:
                 AwaitCatchResolution(player);
                 return;
+            case FishingState.AwaitLootWindow:
+                AwaitLootWindow();
+                return;
+            case FishingState.LootCatch:
+                LootCatch();
+                return;
+            case FishingState.AwaitLootCompletion:
+                AwaitLootCompletion();
+                return;
         }
+    }
+
+    private void EnsurePoleEquipped()
+    {
+        if (FishingData.HasFishingPoleEquipped(ObjectManager))
+        {
+            SetState(FishingState.AcquireFishingPool);
+            return;
+        }
+
+        var poleLocation = FishingData.FindFishingPoleInBags(ObjectManager);
+        if (poleLocation == null)
+        {
+            Log.Warning("[FISH] No fishing pole found in bags.");
+            PopTask("no_fishing_pole");
+            return;
+        }
+
+        _equipAttempts++;
+        ObjectManager.EquipItem(poleLocation.Value.bag, poleLocation.Value.slot);
+        Log.Information("[FISH] Equipping fishing pole from bag={Bag} slot={Slot} (attempt {Attempt}).",
+            poleLocation.Value.bag, poleLocation.Value.slot, _equipAttempts);
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask equipping_pole bag={poleLocation.Value.bag} slot={poleLocation.Value.slot} attempt={_equipAttempts}");
+        SetState(FishingState.AwaitPoleEquip);
+    }
+
+    private void AwaitPoleEquip()
+    {
+        if (FishingData.HasFishingPoleEquipped(ObjectManager))
+        {
+            Log.Information("[FISH] Fishing pole equipped.");
+            BotContext.AddDiagnosticMessage("[TASK] FishingTask pole_equipped");
+            SetState(FishingState.AcquireFishingPool);
+            return;
+        }
+
+        if (ElapsedMs < EquipTimeoutMs)
+            return;
+
+        if (_equipAttempts < 2)
+        {
+            SetState(FishingState.EnsurePoleEquipped);
+            return;
+        }
+
+        Log.Warning("[FISH] Fishing pole equip timed out.");
+        PopTask("pole_equip_timeout");
+    }
+
+    private void AcquireFishingPool(IWoWLocalPlayer player)
+    {
+        var pool = FindTrackedOrNearestPool(player.Position);
+        if (pool == null)
+        {
+            if (ElapsedMs >= PoolAcquireTimeoutMs)
+            {
+                Log.Warning("[FISH] No visible fishing pool within {Range}y.", Config.FishingPoolDetectRange);
+                PopTask("no_fishing_pool");
+            }
+
+            return;
+        }
+
+        _activePoolGuid = pool.Guid;
+        var poolDistance = player.Position.DistanceTo(pool.Position!);
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask pool_acquired guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1}");
+        if (IsInCastingWindow(player.Position, pool.Position!))
+        {
+            ObjectManager.ForceStopImmediate();
+            ObjectManager.Face(pool.Position!);
+            SetState(FishingState.ResolveAndCast);
+            return;
+        }
+
+        ClearNavigation();
+        SetState(FishingState.MoveToFishingPool);
+    }
+
+    private void MoveToFishingPool(IWoWLocalPlayer player)
+    {
+        var pool = FindTrackedOrNearestPool(player.Position);
+        if (pool?.Position == null)
+        {
+            if (ElapsedMs >= PoolAcquireTimeoutMs)
+            {
+                Log.Warning("[FISH] Lost fishing pool while approaching.");
+                PopTask("lost_fishing_pool");
+            }
+
+            return;
+        }
+
+        var poolDistance = player.Position.DistanceTo(pool.Position);
+        if (IsInCastingWindow(player.Position, pool.Position))
+        {
+            ObjectManager.ForceStopImmediate();
+            ObjectManager.Face(pool.Position);
+            Log.Information("[FISH] Reached fishing pool range at {Distance:F1}y (pool=0x{Guid:X}).",
+                poolDistance, pool.Guid);
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask in_cast_range guid=0x{pool.Guid:X} distance={poolDistance:F1}");
+            SetState(FishingState.ResolveAndCast);
+            return;
+        }
+
+        var approachPosition = FishingData.GetPoolApproachPosition(player.Position, pool.Position, DesiredPoolDistance);
+        if (_lastApproachDiagnosticDistance == float.MaxValue || poolDistance <= _lastApproachDiagnosticDistance - 2f)
+        {
+            _lastApproachDiagnosticDistance = poolDistance;
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask approaching_pool guid=0x{pool.Guid:X} distance={poolDistance:F1}");
+        }
+
+        // Prefer the task's normal pathfinding waypoint selection, but fall back to a direct
+        // movement nudge if the dock edge does not produce a waypoint for this short approach.
+        if (!TryNavigateToward(approachPosition))
+            ObjectManager.MoveToward(approachPosition);
     }
 
     private void ResolveAndCast(IWoWLocalPlayer player)
     {
+        var pool = FindTrackedOrNearestPool(player.Position);
+        if (pool?.Position == null)
+        {
+            SetState(FishingState.AcquireFishingPool);
+            return;
+        }
+
+        if (_castsAttempted >= Config.MaxFishingCasts)
+        {
+            Log.Warning("[FISH] Max cast attempts reached without a catch.");
+            PopTask("max_casts_reached");
+            return;
+        }
+
+        if (player.IsSwimming)
+        {
+            Log.Warning("[FISH] Player entered water before cast; aborting fishing attempt.");
+            BotContext.AddDiagnosticMessage("[TASK] FishingTask retry reason=player_swimming");
+            PopTask("player_swimming");
+            return;
+        }
+
+        ObjectManager.Face(pool.Position);
+        ObjectManager.ForceStopImmediate();
+
+        if (ElapsedMs < CastStabilizeDelayMs || player.IsMoving)
+        {
+            if (ElapsedMs >= CastStabilizeTimeoutMs)
+            {
+                RetryFromPool("still_moving_before_cast");
+            }
+
+            return;
+        }
+
         _fishingSpellId = FishingData.ResolveCastableFishingSpellId(ObjectManager.KnownSpellIds, GetFishingSkill(player));
         if (_fishingSpellId == 0)
         {
@@ -76,57 +280,177 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
             return;
         }
 
-        ObjectManager.ForceStopImmediate();
+        _castsAttempted++;
+        _sawFishingState = false;
+        _sawBobber = false;
+        _sawLootWindow = false;
+        _sawLootItem = false;
         ObjectManager.CastSpell((int)_fishingSpellId);
-        Log.Information("[FISH] Cast initiated with spell {SpellId}.", _fishingSpellId);
+        Log.Information("[FISH] Cast {Attempt}/{MaxAttempts} started at pool 0x{Guid:X} with spell {SpellId}.",
+            _castsAttempted, Config.MaxFishingCasts, pool.Guid, _fishingSpellId);
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask cast_started attempt={_castsAttempted} pool=0x{pool.Guid:X} spell={_fishingSpellId}");
         SetState(FishingState.AwaitCastConfirmation);
     }
 
     private void AwaitCastConfirmation(IWoWLocalPlayer player)
     {
+        if (FindActiveBobber() != null)
+            _sawBobber = true;
+
         if (HasFishingState(player))
         {
             _sawFishingState = true;
             Log.Information("[FISH] Fishing cast confirmed. channel={ChannelingId} bobber={HasBobber}",
-                player.ChannelingId, FindActiveBobber() != null);
+                player.ChannelingId, _sawBobber);
             SetState(FishingState.AwaitCatchResolution);
             return;
         }
 
         if (ElapsedMs >= CastConfirmationTimeoutMs)
         {
-            Log.Warning("[FISH] No channel or bobber detected within {TimeoutMs}ms for spell {SpellId}.",
-                CastConfirmationTimeoutMs, _fishingSpellId);
-            PopTask("no_channel_or_bobber");
+            RetryFromPool("no_channel_or_bobber");
         }
     }
 
     private void AwaitCatchResolution(IWoWLocalPlayer player)
     {
+        if (ObjectManager.LootFrame?.IsOpen == true)
+        {
+            _sawLootWindow = true;
+            SetState(FishingState.LootCatch);
+            return;
+        }
+
+        var bobber = FindActiveBobber();
+        if (bobber != null)
+            _sawBobber = true;
+
         if (HasFishingState(player))
         {
             _sawFishingState = true;
             if (ElapsedMs >= CatchResolutionTimeoutMs)
-            {
-                Log.Warning("[FISH] Fishing cycle timed out after {TimeoutMs}ms for spell {SpellId}.",
-                    CatchResolutionTimeoutMs, _fishingSpellId);
-                PopTask("fishing_timeout");
-            }
+                RetryFromPool("fishing_timeout");
             return;
         }
 
-        if (_sawFishingState)
+        if (_sawFishingState || _sawBobber)
         {
-            Log.Information("[FISH] Fishing cycle completed for spell {SpellId}.", _fishingSpellId);
-            PopTask("fishing_cycle_complete");
+            SetState(FishingState.AwaitLootWindow);
             return;
         }
 
         if (ElapsedMs >= CatchResolutionTimeoutMs)
+            RetryFromPool("no_confirmed_fishing_state");
+    }
+
+    private void AwaitLootWindow()
+    {
+        if (ObjectManager.LootFrame?.IsOpen == true)
         {
-            Log.Warning("[FISH] Fishing cycle ended without confirmed channel/bobber state.");
-            PopTask("no_confirmed_fishing_state");
+            _sawLootWindow = true;
+            SetState(FishingState.LootCatch);
+            return;
         }
+
+        var bobber = FindActiveBobber();
+        if (bobber != null)
+            _sawBobber = true;
+
+        if (ElapsedMs >= LootWindowTimeoutMs)
+            RetryFromPool("loot_window_timeout");
+    }
+
+    private void LootCatch()
+    {
+        var lootFrame = ObjectManager.LootFrame;
+        if (lootFrame == null)
+        {
+            TryRecordLootedBagDelta();
+            if (_sawLootWindow && _sawLootItem)
+            {
+                PopWithSuccess();
+                return;
+            }
+
+            if (ElapsedMs >= LootCompletionTimeoutMs)
+                RetryFromPool("loot_frame_unavailable");
+
+            return;
+        }
+
+        if (!lootFrame.IsOpen)
+        {
+            SetState(FishingState.AwaitLootCompletion);
+            return;
+        }
+
+        var lootItems = lootFrame.LootItems?.Where(item => item != null && item.GotLoot).ToArray() ?? [];
+        var lootItemIds = lootItems
+            .Where(item => item.ItemId > 0)
+            .Select(item => (uint)item.ItemId)
+            .ToArray();
+
+        if (lootItemIds.Length == 0 && lootFrame.Coins <= 0 && lootFrame.LootCount <= 0)
+        {
+            if (ElapsedMs >= LootCompletionTimeoutMs)
+            {
+                lootFrame.Close();
+                RetryFromPool("empty_loot_window");
+            }
+
+            return;
+        }
+
+        _sawLootWindow = true;
+        _sawLootItem |= lootItemIds.Length > 0;
+        foreach (var lootItemId in lootItemIds)
+            _lootItemIds.Add(lootItemId);
+
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask loot_window_open count={lootFrame.LootCount} coins={lootFrame.Coins} items=[{string.Join(", ", lootItemIds)}]");
+        Log.Information("[FISH] Loot window open. guid=0x{Guid:X} count={Count} items=[{Items}] coins={Coins}",
+            lootFrame.LootGuid,
+            lootFrame.LootCount,
+            string.Join(", ", lootItemIds),
+            lootFrame.Coins);
+
+        lootFrame.LootAll();
+        lootFrame.Close();
+        SetState(FishingState.AwaitLootCompletion);
+    }
+
+    private void AwaitLootCompletion()
+    {
+        if (ObjectManager.LootFrame?.IsOpen == true)
+        {
+            ObjectManager.LootFrame.LootAll();
+            ObjectManager.LootFrame.Close();
+            return;
+        }
+
+        TryRecordLootedBagDelta();
+
+        if (_sawLootWindow && _sawLootItem)
+        {
+            PopWithSuccess();
+            return;
+        }
+
+        if (ElapsedMs >= LootCompletionTimeoutMs)
+            RetryFromPool("loot_completion_timeout");
+    }
+
+    private IWoWGameObject? FindTrackedOrNearestPool(Position playerPosition)
+    {
+        var tracked = _activePoolGuid != 0
+            ? ObjectManager.GameObjects.FirstOrDefault(gameObject => gameObject.Guid == _activePoolGuid && FishingData.IsFishingPool(gameObject))
+            : null;
+
+        if (tracked?.Position != null)
+            return tracked;
+
+        return FishingData.FindNearestFishingPool(ObjectManager, playerPosition, Config.FishingPoolDetectRange);
     }
 
     private bool HasFishingState(IWoWLocalPlayer player)
@@ -137,22 +461,98 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     private IWoWGameObject? FindActiveBobber()
     {
         var playerGuid = ObjectManager.PlayerGuid.FullGuid;
-        return ObjectManager.GameObjects.FirstOrDefault(go =>
-            (go.DisplayId == FishingData.BobberDisplayId || go.TypeId == 17)
-            && (go.CreatedBy.FullGuid == 0UL || go.CreatedBy.FullGuid == playerGuid));
+        return ObjectManager.GameObjects.FirstOrDefault(gameObject =>
+            gameObject.Position != null
+            && (gameObject.DisplayId == FishingData.BobberDisplayId || gameObject.TypeId == 17)
+            && (gameObject.CreatedBy.FullGuid == 0UL || gameObject.CreatedBy.FullGuid == playerGuid));
+    }
+
+    private void RetryFromPool(string reason)
+    {
+        Log.Warning("[FISH] {Reason}; resetting fishing state for another cast.", reason);
+        BotContext.AddDiagnosticMessage($"[TASK] FishingTask retry reason={reason}");
+        ClearNavigation();
+        SetState(FishingState.AcquireFishingPool);
+    }
+
+    private void PopWithSuccess()
+    {
+        var lootItems = _lootItemIds.Count > 0 ? string.Join(", ", _lootItemIds.OrderBy(id => id)) : "none";
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask fishing_loot_success lootWindowSeen={_sawLootWindow} lootItemSeen={_sawLootItem} bobberSeen={_sawBobber} lootItems=[{lootItems}]");
+        Log.Information("[FISH] Fishing catch completed. lootWindowSeen={LootWindowSeen} lootItemSeen={LootItemSeen} bobberSeen={BobberSeen} lootItems=[{LootItems}]",
+            _sawLootWindow, _sawLootItem, _sawBobber, lootItems);
+        PopTask("fishing_loot_success");
+    }
+
+    private static bool IsInCastingWindow(Position playerPosition, Position poolPosition)
+    {
+        var distance = playerPosition.DistanceTo(poolPosition);
+        return distance >= DesiredPoolDistance - PoolDistanceTolerance
+            && distance <= DesiredPoolDistance + PoolDistanceTolerance;
     }
 
     private void SetState(FishingState state)
     {
+        if (_state == FishingState.MoveToFishingPool && state != FishingState.MoveToFishingPool)
+            ClearNavigation();
+
+        if (state == FishingState.MoveToFishingPool)
+            _lastApproachDiagnosticDistance = float.MaxValue;
+
         _state = state;
         _stateEnteredAt = DateTime.UtcNow;
     }
 
     private int ElapsedMs => (int)(DateTime.UtcNow - _stateEnteredAt).TotalMilliseconds;
 
+    private void EnsureStartingBagSnapshot()
+    {
+        if (_startingBagSnapshotCaptured)
+            return;
+
+        _startingBagSnapshotCaptured = true;
+        foreach (var (itemId, count) in SnapshotCatchBagItemCounts())
+            _startingBagItemCounts[itemId] = count;
+    }
+
+    private bool TryRecordLootedBagDelta()
+    {
+        var deltaItemIds = new List<uint>();
+        foreach (var (itemId, count) in SnapshotCatchBagItemCounts())
+        {
+            _startingBagItemCounts.TryGetValue(itemId, out var startingCount);
+            if (count > startingCount)
+            {
+                deltaItemIds.Add(itemId);
+                _lootItemIds.Add(itemId);
+            }
+        }
+
+        if (deltaItemIds.Count == 0)
+            return false;
+
+        _sawLootItem = true;
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask loot_bag_delta items=[{string.Join(", ", deltaItemIds.OrderBy(id => id))}]");
+        return true;
+    }
+
+    private Dictionary<uint, int> SnapshotCatchBagItemCounts()
+        => ObjectManager.GetContainedItems()
+            .Where(item => item != null && item.ItemId != 0 && !FishingData.IsFishingPole(item.ItemId))
+            .GroupBy(item => item.ItemId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Sum(item =>
+                {
+                    var stackCount = item.StackCount > 0 ? item.StackCount : item.Quantity;
+                    return (int)Math.Max(stackCount, 1u);
+                }));
+
     private static int GetFishingSkill(IWoWLocalPlayer player)
     {
-        foreach (var skill in player.SkillInfo ?? Array.Empty<GameData.Core.Models.SkillInfo>())
+        foreach (var skill in player.SkillInfo ?? Array.Empty<SkillInfo>())
         {
             var skillId = skill.SkillInt1 & 0xFFFF;
             if (skillId == FishingData.FishingSkillId)

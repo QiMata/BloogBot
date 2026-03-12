@@ -59,7 +59,8 @@ For BG, FG, and COMBAT when present:
 
 ### Step 7: Stage bots at Orgrimmar
 
-- BG and FG are teleported with `TeleportToNamedAsync(characterName, "Orgrimmar")`
+- BG is teleported with `TeleportToNamedAsync(characterName, "Orgrimmar")`
+- FG is not fixture-teleported with SOAP `.tele name`; FG-sensitive files must own their own `BotTeleportAsync(...)` / `CheckFgActionableAsync()` staging because remote named teleports are still the tracked `FG-CRASH-TELE` trigger
 - COMBATTEST is left alone because rapid back-to-back SOAP teleports have disconnected BG clients in prior runs
 
 ### Step 8: Stabilize snapshots

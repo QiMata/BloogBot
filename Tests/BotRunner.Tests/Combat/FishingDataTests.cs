@@ -1,5 +1,7 @@
 using BotRunner.Combat;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using Moq;
 
 namespace BotRunner.Tests.Combat
@@ -151,6 +153,55 @@ namespace BotRunner.Tests.Combat
             Assert.Equal(356u, FishingData.FishingSkillId);
         }
 
+        [Fact]
+        public void HasFishingPoleEquipped_ReturnsTrueWhenPoleIsEquipped()
+        {
+            var om = new Mock<IObjectManager>();
+            om.Setup(o => o.GetEquippedItems()).Returns(
+            [
+                CreateMockItem(FishingData.FishingPole).Object
+            ]);
+
+            Assert.True(FishingData.HasFishingPoleEquipped(om.Object));
+        }
+
+        [Fact]
+        public void IsFishingPool_ReturnsTrueForFishingHoleType()
+        {
+            var go = new Mock<IWoWGameObject>();
+            go.Setup(g => g.TypeId).Returns((uint)GameObjectType.FishingHole);
+            go.Setup(g => g.Position).Returns(new Position(0, 0, 0));
+
+            Assert.True(FishingData.IsFishingPool(go.Object));
+        }
+
+        [Fact]
+        public void FindNearestFishingPool_ReturnsClosestVisiblePool()
+        {
+            var playerPosition = new Position(-995f, -3850f, 4f);
+            var closePool = CreateMockGameObject(180582, (uint)GameObjectType.FishingHole, new Position(-975.7f, -3835.2f, 0f));
+            var farPool = CreateMockGameObject(180683, (uint)GameObjectType.FishingHole, new Position(-900f, -3700f, 0f));
+            var om = new Mock<IObjectManager>();
+            om.Setup(o => o.GameObjects).Returns([farPool.Object, closePool.Object]);
+
+            var result = FishingData.FindNearestFishingPool(om.Object, playerPosition, 40f);
+
+            Assert.NotNull(result);
+            Assert.Equal(closePool.Object.Guid, result.Guid);
+        }
+
+        [Fact]
+        public void GetPoolApproachPosition_KeepsDesiredDistanceFromPool()
+        {
+            var playerPosition = new Position(-995f, -3850f, 4f);
+            var poolPosition = new Position(-975.7f, -3835.2f, 0f);
+
+            var approach = FishingData.GetPoolApproachPosition(playerPosition, poolPosition, 14f);
+
+            Assert.InRange(approach.DistanceTo(poolPosition), 13.9f, 14.1f);
+            Assert.Equal(playerPosition.Z, approach.Z);
+        }
+
         private static Mock<IObjectManager> CreateEmptyObjectManager()
         {
             var om = new Mock<IObjectManager>();
@@ -163,6 +214,18 @@ namespace BotRunner.Tests.Combat
             var mock = new Mock<IWoWItem>();
             mock.Setup(i => i.ItemId).Returns(itemId);
             mock.Setup(i => i.Name).Returns($"Item_{itemId}");
+            mock.Setup(i => i.StackCount).Returns(1);
+            return mock;
+        }
+
+        private static Mock<IWoWGameObject> CreateMockGameObject(uint entry, uint typeId, Position position)
+        {
+            var mock = new Mock<IWoWGameObject>();
+            mock.Setup(g => g.Guid).Returns(((ulong)entry << 8) | typeId);
+            mock.Setup(g => g.Entry).Returns(entry);
+            mock.Setup(g => g.TypeId).Returns(typeId);
+            mock.Setup(g => g.Position).Returns(position);
+            mock.Setup(g => g.Name).Returns($"Pool_{entry}");
             return mock;
         }
     }

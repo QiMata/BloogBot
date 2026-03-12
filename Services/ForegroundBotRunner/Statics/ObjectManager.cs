@@ -132,6 +132,8 @@ namespace ForegroundBotRunner.Statics
 
         private readonly FgCharacterSelectScreen _fgCharacterSelectScreen;
 
+        private readonly ILootFrame _fgLootFrame;
+
 
 
         public ObjectManager(IWoWEventHandler eventHandler, IWoWActivitySnapshot parProbe)
@@ -152,6 +154,9 @@ namespace ForegroundBotRunner.Statics
                 () => GetCurrentScreenState(),
                 () => MaxCharacterCount,
                 lua => MainThreadLuaCall(lua));
+            _fgLootFrame = new FgLootFrame(
+                lua => MainThreadLuaCall(lua),
+                lua => MainThreadLuaCallWithResult(lua));
 
             CallbackDelegate = CallbackVanilla;
             callbackPtr = Marshal.GetFunctionPointerForDelegate(CallbackDelegate);

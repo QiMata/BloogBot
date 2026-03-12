@@ -101,5 +101,15 @@ namespace BotRunner
                 }
             }
         }
+
+        private void EnqueueDiagnosticMessage(string message)
+        {
+            lock (_recentChatMessages)
+            {
+                _recentChatMessages.Enqueue(message);
+                while (_recentChatMessages.Count > MaxBufferedMessages)
+                    _recentChatMessages.Dequeue();
+            }
+        }
     }
 }

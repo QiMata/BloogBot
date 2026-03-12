@@ -1,8 +1,8 @@
 using System;
-using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using BotRunner.Constants;
 using BotRunner.Combat;
 using Communication;
 using Tests.Infrastructure;
@@ -12,18 +12,16 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Fishing profession integration test — BG-first live validation.
+/// Fishing live validation for the task-owned Ratchet pool flow.
 ///
-/// Strategy:
-///   1) Force a clean fishing spell-sync path (.unlearn -> .learn) so BG sees SMSG_LEARNED_SPELL
-///   2) Apply setup deltas (skill, pole, lure) and assert the snapshot reflects them
-///   3) Teleport to known shore positions near fishable water and reject unstable landings
-///   4) Try multiple positions until fishing channel starts (server confirms water)
-///   5) Wait for auto-catch via SMSG_GAMEOBJECT_CUSTOM_ANIM handler
-///   6) Assert a catch occurred and log whether skill increased
+/// Setup stays in the test (.learn/.setskill/.additem/.tele), but the runtime path under test is:
+///   ActionType.StartFishing -> CharacterAction.StartFishing -> FishingTask
 ///
-/// Run:
-///   dotnet test --filter "FullyQualifiedName~FishingProfessionTests" --configuration Release -v n
+/// FishingTask is responsible for:
+///   1) equipping the fishing pole from bags
+///   2) moving into cast range of a visible Ratchet fishing pool
+///   3) casting and waiting through the bobber/channel cycle
+///   4) looting the catch from the loot window after bobber interaction
 /// </summary>
 [RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
@@ -32,12 +30,16 @@ public class FishingProfessionTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    // Fishing channel is nominally 20s server-side, but live BG runs have shown delayed
-    // bite/custom-anim delivery after teleports and packet jitter. Keep extra headroom so
-    // the test observes the actual catch pipeline instead of only the cast entry.
-    private const int FishingChannelWaitMs = 30000;
-    private const int MaxFishingAttempts = 3;
-    private const float MaxLandingDeltaFromShore = 3.5f;
+    private const int MapId = 1;
+    private const float RatchetAnchorX = -995f;
+    private const float RatchetAnchorY = -3850f;
+    private const float RatchetAnchorZ = 4f;
+    private const float RatchetPoolSearchRadius = 250f;
+    private const int PollIntervalMs = 1000;
+    private const float ExpectedApproachRange = 18f;
+    private const float MaxLandingDelta = 3f;
+    private static readonly int FishingTimeoutMs = (new BotBehaviorConfig().MaxFishingCasts * 30000) + 20000;
+    private static readonly float FishingPoolDetectRange = new BotBehaviorConfig().FishingPoolDetectRange;
 
     private static readonly uint[] FishingSpellSyncIds =
     [
@@ -48,49 +50,28 @@ public class FishingProfessionTests
         FishingData.FishingPoleProficiency
     ];
 
-    private static readonly HashSet<uint> FishingSetupItemIds =
+    private static readonly HashSet<uint> FishingPoleIds =
     [
         FishingData.FishingPole,
         FishingData.StrongFishingPole,
         FishingData.BigIronFishingPole,
-        FishingData.DarkwoodFishingPole,
-        FishingData.ShinyBauble,
-        FishingData.NightcrawlerBait,
-        FishingData.BrightBaubles,
-        FishingData.AquadynamicFishAttractor
+        FishingData.DarkwoodFishingPole
     ];
 
-    // --- Fishing locations: positions near fishable water ---
-    // Each entry: (mapId, shoreX, shoreY, shoreZ, facingRadians)
-    // Requirements: (a) physics-stable (navmesh ground ≈ terrain Z, no Z clamp),
-    //               (b) server considers player "on land" (not swimming),
-    //               (c) fishable water within 20y in facing direction,
-    //               (d) bobber can land at water surface (not too far below player Z).
-    //
-    // Ratchet dock: CONFIRMED bobber creation (displayId=668, TypeId=17) at water surface.
-    // Fixed: Z clamp was sending MOVEFLAG_FALLINGFAR heartbeats that interrupted the channel.
-    private static readonly (int map, float x, float y, float z, float facing)[] FishingSpots =
+    private static readonly RatchetStageCandidate[] RatchetStageCandidates =
     [
-        // Ratchet dock — stand on dock surface (Z=5.7), face east toward ocean.
-        // CONFIRMED: server creates bobber at (-968,-3834,0). Bobber is ~14y from player.
-        (1, -988.5f, -3834f, 5.7f, 6.21f),
-
-        // Ratchet dock — alternate, face NE toward Oily Blackmouth School
-        (1, -985.7f, -3827f, 5.7f, 5.50f),
-
-        // Durotar coast — natural beach south of Ratchet, face east.
-        // Natural terrain → navmesh should match, no Z clamp needed.
-        (1, -995f, -3850f, 4f, 6.28f),
-
-        // Sen'jin Village — lower position closer to water, face east.
-        (1, -820f, -4885f, 8f, 0.0f),
+        new("DockEastNorthLegacy", -985.7f, -3827f, 5.7f),
+        new("DockEastNorth", -986f, -3826f, 5.7f),
+        new("DockEastMid", -985f, -3821f, 5.7f),
+        new("DockEastApproach", -987f, -3818f, 5.7f),
+        new("DockEastWestBridge", -989f, -3822f, 5.7f),
+        new("DockWestNorth", -994f, -3828f, 5.7f),
+        new("DockWestMid", -994f, -3834f, 5.7f),
+        new("DockWestSouth", -994f, -3839f, 5.7f),
+        new("DockMidNorth", -992f, -3828f, 5.7f),
+        new("DockMidSouth", -992f, -3839f, 5.7f),
+        new("DockCenter", -992f, -3834f, 5.7f)
     ];
-
-    // Orgrimmar park location for setup & parking
-    private const int OrgMap = 1;
-    private const float OrgX = 1629f;
-    private const float OrgY = -4373f;
-    private const float OrgZ = 15f;
 
     public FishingProfessionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -101,361 +82,292 @@ public class FishingProfessionTests
     }
 
     [SkippableFact]
-    public async Task Fishing_CatchFish_SkillIncreases()
+    public async Task Fishing_CatchFish_BgAndFg_RatchetPoolTaskPath()
     {
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsPathfindingReady, "PathfindingService is required for FishingTask pool approach validation.");
 
-        string? fgAccount = _bot.IsFgActionable ? _bot.FgAccountName : null;
-        if (fgAccount != null)
-            _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccount})");
+        var bgAccount = _bot.BgAccountName;
+        var fgAccount = _bot.FgAccountName;
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot account not available.");
 
-        // --- Prepare both bots (learn fishing + equip pole) ---
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
-        await PrepareBot(bgAccount, "BG");
-        if (fgAccount != null)
-            await PrepareFgReferenceBotAsync(fgAccount);
+        await _bot.EnsureCleanSlateAsync(bgAccount!, "BG");
+        await _bot.EnsureCleanSlateAsync(fgAccount!, "FG");
 
-        // Park FG bot at Orgrimmar to reduce coordinator interference
-        if (fgAccount != null)
-        {
-            _output.WriteLine("[FG] Parking at Orgrimmar during BG fishing test");
-            await _bot.BotTeleportAsync(fgAccount, OrgMap, OrgX, OrgY, OrgZ);
-        }
+        var fgActionable = await _bot.CheckFgActionableAsync();
+        global::Tests.Infrastructure.Skip.IfNot(fgActionable, "FG bot is not actionable for the dual fishing validation.");
 
-        // --- Record initial skill ---
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillBefore = GetFishingSkill("BG");
-        Assert.True(bgSkillBefore > 0, "BG: Initial fishing skill is 0 — setup failed to teach fishing.");
-        _output.WriteLine($"Initial fishing skill: BG={bgSkillBefore}");
+        await PrepareBotAsync(bgAccount!, "BG");
+        await PrepareBotAsync(fgAccount!, "FG");
 
-        // --- Find a working fishing position and catch fish ---
-        bool bgCaught = await TryFishAtLocations(bgAccount, "BG", bgSkillBefore);
+        await LogRatchetPoolDiagnosticsAsync();
+        var bgStage = await ResolveRatchetStageAsync(bgAccount!, "BG");
+        var fgStage = await ResolveRatchetStageAsync(fgAccount!, "FG");
 
-        // --- Assert ---
-        await _bot.RefreshSnapshotsAsync();
-        uint bgSkillAfter = GetFishingSkill("BG");
-        _output.WriteLine($"Results: BG caught={bgCaught}, skill {bgSkillBefore} → {bgSkillAfter}");
+        var bgResult = await RunFishingTaskAsync(bgAccount!, "BG", bgStage);
+        var fgResult = await RunFishingTaskAsync(fgAccount!, "FG", fgStage);
 
-        Assert.True(bgCaught,
-            $"BG: Failed to catch fish at any of {FishingSpots.Length} locations. skill={bgSkillAfter}. " +
-            "Check: (1) spell sync via SMSG_LEARNED_SPELL, (2) SMSG_GAMEOBJECT_CUSTOM_ANIM handler, " +
-            "(3) bobber CREATE_OBJECT delivery, (4) shoreline stability/water detection.");
-        // Skill-ups are RNG in vanilla WoW — not guaranteed per catch even at low skill.
-        // At skill 1 the probability is very high but not 100%. Log the result but
-        // don't fail the test on skill alone; the catch itself proves the pipeline works.
-        if (bgSkillAfter <= bgSkillBefore)
-            _output.WriteLine($"BG: WARNING — Fishing skill did not increase ({bgSkillBefore} → {bgSkillAfter}). " +
-                "This can happen due to WoW's RNG skill-up mechanic.");
+        AssertFishingResult("BG", bgResult);
+        AssertFishingResult("FG", fgResult);
     }
 
-    /// <summary>
-    /// Iterate through known fishing locations. At each location, try fishing.
-    /// Return true on first successful catch (skill increase).
-    /// </summary>
-    private async Task<bool> TryFishAtLocations(string account, string label, uint initialSkill)
+    private async Task PrepareBotAsync(string account, string label)
     {
-        for (int loc = 0; loc < FishingSpots.Length; loc++)
-        {
-            var (map, shoreX, shoreY, shoreZ, facing) = FishingSpots[loc];
-
-            _output.WriteLine($"[{label}] Location {loc + 1}/{FishingSpots.Length}: " +
-                $"shore=({shoreX:F0}, {shoreY:F0}, {shoreZ:F0}), facing={facing:F2}");
-
-            // Teleport to shore position
-            await _bot.BotTeleportAsync(account, map, shoreX, shoreY, shoreZ);
-            var (stableLanding, finalZ) = await _bot.WaitForZStabilizationAsync(account, waitMs: 4000);
-
-            // Verify position is stable
-            await _bot.RefreshSnapshotsAsync();
-            var snap = GetSnapshot(label);
-            var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-            if (pos == null)
-            {
-                _output.WriteLine($"  [{label}] No position data, skipping location");
-                continue;
-            }
-            var landingDelta = Math.Abs(finalZ - shoreZ);
-            _output.WriteLine($"  [{label}] Landed at ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}) " +
-                $"stable={stableLanding} finalZ={finalZ:F1} deltaFromShore={landingDelta:F1}");
-
-            if (!stableLanding || landingDelta > MaxLandingDeltaFromShore)
-            {
-                _output.WriteLine($"  [{label}] Skipping location {loc + 1}: unstable shoreline landing.");
-                continue;
-            }
-
-            // Set facing toward water
-            await _bot.SendActionAndWaitAsync(account, new ActionMessage
-            {
-                ActionType = ActionType.SetFacing,
-                Parameters = { new RequestParameter { FloatParam = facing } }
-            }, delayMs: 500);
-
-            // Brief stabilization for physics to settle position after teleport + facing.
-            await Task.Delay(500);
-
-            // Log nearby game objects (fishing nodes, etc.)
-            await _bot.RefreshSnapshotsAsync();
-            snap = GetSnapshot(label);
-            var nearbyGOs = snap?.NearbyObjects?.ToList() ?? [];
-            _output.WriteLine($"  [{label}] Nearby GOs: {nearbyGOs.Count}");
-            foreach (var go in nearbyGOs.Take(8))
-                _output.WriteLine($"    entry={go.Entry}, displayId={go.DisplayId}, type={go.GameObjectType}, " +
-                    $"pos=({go.Base?.Position?.X:F1}, {go.Base?.Position?.Y:F1}, {go.Base?.Position?.Z:F1})");
-
-            // Try fishing at this location — up to MaxFishingAttempts casts
-            bool caught = await CastAndWaitForCatch(account, label, initialSkill);
-            if (caught) return true;
-
-            // Check if skill increased even without explicit catch detection
-            await _bot.RefreshSnapshotsAsync();
-            uint currentSkill = GetFishingSkill(label);
-            if (currentSkill > initialSkill)
-            {
-                _output.WriteLine($"  [{label}] Skill increased ({initialSkill} → {currentSkill}) at location {loc + 1}!");
-                return true;
-            }
-
-            _output.WriteLine($"  [{label}] No catch at this location, trying next...");
-        }
-
-        return false;
-    }
-
-    private async Task PrepareBot(string account, string label)
-    {
-        // GM mode is already ON (enabled by caller).
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
+        var snap = await RefreshAndGetSnapshotAsync(account);
         if (snap == null)
             throw new InvalidOperationException($"[{label}] Missing snapshot during fishing setup.");
 
         if (!LiveBotFixture.IsStrictAlive(snap))
         {
-            _output.WriteLine($"[{label}] Not strict-alive; reviving before setup.");
             await _bot.RevivePlayerAsync(snap.CharacterName);
             await _bot.WaitForSnapshotConditionAsync(account, LiveBotFixture.IsStrictAlive, TimeSpan.FromSeconds(5));
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
         }
 
-        var spellCountBefore = snap.Player?.SpellList?.Count ?? 0;
-        var castableBefore = ResolveCastableFishingSpellId(snap);
-        var poleProfKnown = snap.Player?.SpellList?.Contains(FishingData.FishingPoleProficiency) == true;
-        var currentSkill = GetFishingSkillFromSnapshot(snap);
-        _output.WriteLine($"[{label}] Setup baseline: castable={castableBefore}, poleProf={poleProfKnown}, " +
-            $"skill={currentSkill}, spellCount={spellCountBefore}");
-
-        // Always unlearn/relearn the fishing ranks first. If the server already knows the spell,
-        // `.learn` returns "already know that spell" and BG never receives SMSG_LEARNED_SPELL,
-        // so SpellHandler.HandleLearnedSpell() cannot repopulate the KnownSpellIds snapshot that
-        // BuildCastSpellSequence() checks before calling CastSpellAtLocation().
         await ForceFishingSpellSyncAsync(account, label);
-
-        // Always set fishing skill to 1/300 — ensures room for skill-ups during the test.
-        // MaNGOS caps max based on highest known fishing rank; Artisan (18248) allows 300.
-        var postSyncSnap = await _bot.GetSnapshotAsync(account);
-        var skillExists = postSyncSnap?.Player?.SkillInfo?.ContainsKey(FishingData.FishingSkillId) == true;
-        _output.WriteLine($"[{label}] Fishing skill exists={skillExists}");
-        if (!skillExists)
-        {
-            _output.WriteLine($"[{label}] Skill still not created; trying .learn all_crafts...");
-            await _bot.SendGmChatCommandAsync(account, ".learn all_crafts");
-            await Task.Delay(1000);
-            await _bot.RefreshSnapshotsAsync();
-        }
-
-        // Set skill to 1/300 — low value with headroom for increase
         await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, 1, 300);
         await Task.Delay(500);
-        await _bot.RefreshSnapshotsAsync();
 
-        // Clear all equipment first. Fishing pole has inv_type=17 (2H weapon) in MaNGOS,
-        // so CMSG_AUTOEQUIP_ITEM tries to put it in MAINHAND. If mainhand is occupied,
-        // the swap can silently fail. Clearing equipment ensures clean equip.
-        _output.WriteLine($"[{label}] Clearing items/equipment for clean fishing pole equip...");
-        await _bot.ExecuteGMCommandAsync($".reset items {snap?.CharacterName}");
+        await _bot.ExecuteGMCommandAsync($".reset items {snap.CharacterName}");
         await Task.Delay(1000);
 
-        // Re-add the fishing pole to the now-empty inventory
         await _bot.BotAddItemAsync(account, FishingData.FishingPole);
-        var poleAppeared = await _bot.WaitForSnapshotConditionAsync(account,
-            s => s?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true,
-            TimeSpan.FromSeconds(8));
-        _output.WriteLine($"[{label}] Fishing pole re-added to bags: {poleAppeared}");
+        var polePresent = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => ContainsFishingPole(snapshot),
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} fishing-pole-added");
 
-        // Re-add Shiny Bauble if needed
-        await _bot.BotAddItemAsync(account, FishingData.ShinyBauble);
-        await Task.Delay(300);
+        Assert.True(polePresent, $"[{label}] Fishing pole never appeared in bags after setup.");
+    }
 
-        // Now equip the fishing pole — mainhand should be empty after .reset items
+    private async Task LogRatchetPoolDiagnosticsAsync()
+    {
+        var poolSpawns = await _bot.QueryGameObjectSpawnsNearAsync(
+            FishingData.KnownFishingPoolEntries,
+            MapId,
+            RatchetAnchorX,
+            RatchetAnchorY,
+            RatchetPoolSearchRadius,
+            limit: 10);
+
+        if (poolSpawns.Count == 0)
+        {
+            _output.WriteLine("[STAGE] No Ratchet-area fishing pool spawns were returned by the world DB.");
+            return;
+        }
+
+        foreach (var pool in poolSpawns.Take(5))
+            _output.WriteLine($"[STAGE] DB pool entry={pool.entry} pos=({pool.x:F1}, {pool.y:F1}, {pool.z:F1}) dist={pool.distance2D:F1}y from Ratchet anchor.");
+    }
+
+    private async Task<FishingStage> ResolveRatchetStageAsync(string account, string label)
+    {
+        var attempts = new List<string>(RatchetStageCandidates.Length);
+        FishingStage? selectedStage = null;
+        foreach (var candidate in RatchetStageCandidates)
+        {
+            _output.WriteLine($"[{label}] Probing Ratchet stage {candidate.Name} at ({candidate.X:F1}, {candidate.Y:F1}, {candidate.Z:F1}).");
+            await _bot.BotTeleportAsync(account, MapId, candidate.X, candidate.Y, candidate.Z);
+            var (stableLanding, finalZ) = await _bot.WaitForZStabilizationAsync(account, waitMs: 4000);
+            var landingDelta = Math.Abs(finalZ - candidate.Z);
+
+            var snapshot = await RefreshAndGetSnapshotAsync(account);
+            var visiblePool = FindNearestVisibleFishingPool(snapshot);
+            var poolDistance = visiblePool?.Distance ?? float.MaxValue;
+
+            var summary = $"candidate={candidate.Name} stable={stableLanding} finalZ={finalZ:F1} deltaZ={landingDelta:F1} visiblePool={(visiblePool != null ? $"{visiblePool.Entry}:{visiblePool.Name}" : "none")} distance={(poolDistance < float.MaxValue ? poolDistance.ToString("F1") : "n/a")}";
+            attempts.Add(summary);
+            _output.WriteLine($"[{label}] {summary}");
+
+            if (!stableLanding || landingDelta > MaxLandingDelta)
+                continue;
+
+            if (visiblePool == null
+                || poolDistance <= ExpectedApproachRange
+                || poolDistance > FishingPoolDetectRange)
+            {
+                continue;
+            }
+
+            var stage = new FishingStage(candidate.Name, candidate.X, candidate.Y, candidate.Z, visiblePool.Entry, visiblePool.Name, poolDistance);
+            if (selectedStage == null || stage.InitialVisiblePoolDistance < selectedStage.InitialVisiblePoolDistance)
+                selectedStage = stage;
+        }
+
+        if (selectedStage != null)
+        {
+            _output.WriteLine($"[{label}] Restaging on selected Ratchet dock point {selectedStage.StageName} at ({selectedStage.StageX:F1}, {selectedStage.StageY:F1}, {selectedStage.StageZ:F1}).");
+            await _bot.BotTeleportAsync(account, MapId, selectedStage.StageX, selectedStage.StageY, selectedStage.StageZ);
+            await _bot.WaitForZStabilizationAsync(account, waitMs: 4000);
+            return selectedStage;
+        }
+
+        Assert.Fail($"[{label}] No stable Ratchet stage exposed a visible pool between {ExpectedApproachRange:F1}y and {FishingPoolDetectRange:F1}y. Attempts: {string.Join(" | ", attempts)}");
+        throw new InvalidOperationException("unreachable");
+    }
+
+    private async Task<FishingRunResult> RunFishingTaskAsync(string account, string label, FishingStage stage)
+    {
+        var before = await RefreshAndGetSnapshotAsync(account);
+        if (before == null)
+            throw new InvalidOperationException($"[{label}] Missing baseline snapshot before fishing.");
+
+        var baselineCatchItems = GetCatchItemIds(before);
+        var previousTaskMessages = GetFishingTaskMessages(before);
+        var skillBefore = GetFishingSkill(before);
+        var initialPoolDistance = FindNearestPoolDistance(before);
+        var poleStartedInBag = ContainsFishingPole(before);
+
+        _output.WriteLine($"[{label}] Dispatching StartFishing from Ratchet stage {stage.StageName}. skill={skillBefore} poleInBag={poleStartedInBag} nearestPool={initialPoolDistance:F1}y targetPool={stage.VisiblePoolEntry}:{stage.VisiblePoolName}");
         await _bot.SendActionAndWaitAsync(account, new ActionMessage
         {
-            ActionType = ActionType.EquipItem,
-            Parameters = { new RequestParameter { IntParam = (int)FishingData.FishingPole } }
-        }, delayMs: 2000);
+            ActionType = ActionType.StartFishing
+        }, delayMs: 1000);
 
-        // Verify fishing pole was consumed from bags (moved to equipment slot).
+        var deadline = DateTime.UtcNow.AddMilliseconds(FishingTimeoutMs);
+        var bestPoolDistance = initialPoolDistance;
+        var sawChannel = false;
+        var sawBobber = false;
+        var sawPoolAcquireDiagnostic = false;
+        var sawInCastRangeDiagnostic = false;
+        var sawLootWindowDiagnostic = false;
+        var sawLootSuccessDiagnostic = false;
+        var sawSwimmingError = false;
+        var poleEquippedByTask = !poleStartedInBag;
+        IReadOnlyList<uint> finalCatchItems = baselineCatchItems;
+        IReadOnlyList<uint> finalCatchDeltaItems = [];
+        string lastFishingTaskMessage = string.Empty;
+        uint skillAfter = skillBefore;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(PollIntervalMs);
+            var snapshot = await RefreshAndGetSnapshotAsync(account);
+            if (snapshot == null)
+                continue;
+
+            poleEquippedByTask |= poleStartedInBag && !ContainsFishingPole(snapshot);
+            sawChannel |= IsFishingChannelActive(snapshot);
+            sawBobber |= FindBobber(snapshot) != null;
+            sawSwimmingError |= snapshot.RecentErrors.Any(message => message.Contains("swimming", StringComparison.OrdinalIgnoreCase));
+            skillAfter = GetFishingSkill(snapshot);
+
+            var currentTaskMessages = GetFishingTaskMessages(snapshot);
+            var newTaskMessages = GetMessageDelta(previousTaskMessages, currentTaskMessages);
+            previousTaskMessages = currentTaskMessages;
+            if (newTaskMessages.Count > 0)
+            {
+                foreach (var taskMessage in newTaskMessages)
+                    _output.WriteLine($"[{label}] {taskMessage}");
+            }
+
+            var latestTaskMessage = currentTaskMessages.LastOrDefault();
+            if (!string.IsNullOrWhiteSpace(latestTaskMessage))
+                lastFishingTaskMessage = latestTaskMessage;
+
+            sawPoolAcquireDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask pool_acquired", StringComparison.Ordinal));
+            sawInCastRangeDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask in_cast_range", StringComparison.Ordinal));
+            sawLootWindowDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask loot_window_open", StringComparison.Ordinal));
+            var lootSuccessMessage = currentTaskMessages.LastOrDefault(message => message.Contains("FishingTask fishing_loot_success", StringComparison.Ordinal));
+            if (!string.IsNullOrWhiteSpace(lootSuccessMessage))
+            {
+                sawLootSuccessDiagnostic = true;
+                lastFishingTaskMessage = lootSuccessMessage;
+            }
+
+            var poolDistance = FindNearestPoolDistance(snapshot);
+            if (poolDistance < bestPoolDistance)
+                bestPoolDistance = poolDistance;
+
+            finalCatchItems = GetCatchItemIds(snapshot);
+            finalCatchDeltaItems = GetItemDelta(baselineCatchItems, finalCatchItems);
+            if (sawLootSuccessDiagnostic && finalCatchDeltaItems.Count > 0)
+            {
+                _output.WriteLine($"[{label}] FishingTask reported loot success. stage={stage.StageName} bestPool={bestPoolDistance:F1}y channel={sawChannel} bobber={sawBobber} catchDelta=[{string.Join(", ", finalCatchDeltaItems)}]");
+                return new FishingRunResult(
+                    StageName: stage.StageName,
+                    PoleStartedInBag: poleStartedInBag,
+                    PoleEquippedByTask: poleEquippedByTask,
+                    InitialPoolDistance: initialPoolDistance,
+                    BestPoolDistance: bestPoolDistance,
+                    SawChannel: sawChannel,
+                    SawBobber: sawBobber,
+                    SawPoolAcquireDiagnostic: sawPoolAcquireDiagnostic,
+                    SawInCastRangeDiagnostic: sawInCastRangeDiagnostic,
+                    SawLootWindowDiagnostic: sawLootWindowDiagnostic,
+                    SawLootSuccessDiagnostic: sawLootSuccessDiagnostic,
+                    SawSwimmingError: sawSwimmingError,
+                    LastFishingTaskMessage: lastFishingTaskMessage,
+                    CatchItems: finalCatchItems,
+                    CatchDeltaItems: finalCatchDeltaItems,
+                    SkillBefore: skillBefore,
+                    SkillAfter: skillAfter);
+            }
+        }
+
+        _output.WriteLine($"[{label}] Fishing timeout. stage={stage.StageName} bestPool={bestPoolDistance:F1}y channel={sawChannel} bobber={sawBobber} catchDelta=[{string.Join(", ", finalCatchDeltaItems)}]");
+        return new FishingRunResult(
+            StageName: stage.StageName,
+            PoleStartedInBag: poleStartedInBag,
+            PoleEquippedByTask: poleEquippedByTask,
+            InitialPoolDistance: initialPoolDistance,
+            BestPoolDistance: bestPoolDistance,
+            SawChannel: sawChannel,
+            SawBobber: sawBobber,
+            SawPoolAcquireDiagnostic: sawPoolAcquireDiagnostic,
+            SawInCastRangeDiagnostic: sawInCastRangeDiagnostic,
+            SawLootWindowDiagnostic: sawLootWindowDiagnostic,
+            SawLootSuccessDiagnostic: sawLootSuccessDiagnostic,
+            SawSwimmingError: sawSwimmingError,
+            LastFishingTaskMessage: lastFishingTaskMessage,
+            CatchItems: finalCatchItems,
+            CatchDeltaItems: finalCatchDeltaItems,
+            SkillBefore: skillBefore,
+            SkillAfter: skillAfter);
+    }
+
+    private async Task<WoWActivitySnapshot?> RefreshAndGetSnapshotAsync(string account)
+    {
         await _bot.RefreshSnapshotsAsync();
-        var equipSnap = await _bot.GetSnapshotAsync(account);
-        var poleStillInBags = equipSnap?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true;
-        if (poleStillInBags)
-        {
-            _output.WriteLine($"[{label}] WARNING: Fishing pole still in bags after equip. Retrying once...");
-            await Task.Delay(1500);
-            await _bot.SendActionAndWaitAsync(account, new ActionMessage
-            {
-                ActionType = ActionType.EquipItem,
-                Parameters = { new RequestParameter { IntParam = (int)FishingData.FishingPole } }
-            }, delayMs: 2000);
-            await _bot.RefreshSnapshotsAsync();
-            equipSnap = await _bot.GetSnapshotAsync(account);
-            poleStillInBags = equipSnap?.Player?.BagContents?.Values.Contains((uint)FishingData.FishingPole) == true;
-            _output.WriteLine($"[{label}] Fishing pole still in bags after retry: {poleStillInBags}");
-        }
-        else
-        {
-            _output.WriteLine($"[{label}] Fishing pole equipped (no longer in bags).");
-        }
-
-        Assert.False(poleStillInBags, $"[{label}] Fishing pole never left bag contents after EquipItem.");
+        return _bot.AllBots.FirstOrDefault(snapshot =>
+                   string.Equals(snapshot.AccountName, account, StringComparison.OrdinalIgnoreCase))
+               ?? await _bot.GetSnapshotAsync(account);
     }
 
-    private async Task PrepareFgReferenceBotAsync(string account)
+    private void AssertFishingResult(string label, FishingRunResult result)
     {
-        await _bot.EnsureCleanSlateAsync(account, "FG");
-        await _bot.BotTeleportAsync(account, OrgMap, OrgX, OrgY, OrgZ);
-        await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
-        _output.WriteLine("[FG] Reference bot parked at Orgrimmar; BG remains the asserted fishing path.");
-    }
+        Assert.True(result.PoleStartedInBag, $"[{label}] Fishing pole should start in bags so FishingTask owns the equip step.");
+        Assert.True(result.PoleEquippedByTask, $"[{label}] FishingTask never removed the fishing pole from bags.");
+        Assert.True(result.InitialPoolDistance > ExpectedApproachRange,
+            $"[{label}] Ratchet stage did not start outside the pool casting window. distance={result.InitialPoolDistance:F1}");
+        Assert.True(result.InitialPoolDistance <= FishingPoolDetectRange,
+            $"[{label}] Ratchet stage started outside FishingTask detect range. distance={result.InitialPoolDistance:F1} detectRange={FishingPoolDetectRange:F1}");
+        Assert.True(result.SawPoolAcquireDiagnostic,
+            $"[{label}] FishingTask never reported acquiring a visible pool. lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.BestPoolDistance <= ExpectedApproachRange,
+            $"[{label}] FishingTask never approached a pool into cast range. bestDistance={result.BestPoolDistance:F1} lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.SawInCastRangeDiagnostic,
+            $"[{label}] FishingTask never reported entering cast range. lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.SawChannel,
+            $"[{label}] FishingTask never reached a fishing channel state. lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.SawBobber,
+            $"[{label}] FishingTask never observed a fishing bobber. lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.SawLootWindowDiagnostic || result.SawLootSuccessDiagnostic,
+            $"[{label}] FishingTask never surfaced a loot-window-open or loot-success diagnostic. lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.SawLootSuccessDiagnostic,
+            $"[{label}] FishingTask never reported fishing_loot_success. lastMessage={result.LastFishingTaskMessage}");
+        Assert.False(result.SawSwimmingError,
+            $"[{label}] Fishing path entered a swimming failure state before the catch completed. lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.CatchDeltaItems.Count > 0,
+            $"[{label}] FishingTask completed without a newly looted item appearing in bags. lastMessage={result.LastFishingTaskMessage} catchItems=[{string.Join(", ", result.CatchItems)}]");
 
-    private async Task<bool> CastAndWaitForCatch(string account, string label, uint baseSkill)
-    {
-        for (int attempt = 1; attempt <= MaxFishingAttempts; attempt++)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var preSnap = GetSnapshot(label);
-            var prePos = preSnap?.Player?.Unit?.GameObject?.Base?.Position;
-            var castSpellId = ResolveCastableFishingSpellId(preSnap);
-            var baselineCatchItems = GetCatchItemIds(preSnap);
-            _output.WriteLine($"[{label}] Cast {attempt}/{MaxFishingAttempts} — " +
-                $"pos=({prePos?.X:F1}, {prePos?.Y:F1}, {prePos?.Z:F1}), spell={castSpellId}");
-
-            Assert.NotEqual(0u, castSpellId);
-
-            // Start fishing via the task-owned action path — no GM shortcuts.
-            await _bot.SendActionAndWaitAsync(account, new ActionMessage
-            {
-                ActionType = ActionType.StartFishing,
-            }, delayMs: 3000);
-
-            // Check if channel started
-            await _bot.RefreshSnapshotsAsync();
-            var snap = GetSnapshot(label);
-            var channelId = snap?.Player?.Unit?.ChannelSpellId ?? 0;
-            var bobber = FindBobber(snap);
-            _output.WriteLine($"  [{label}] After StartFishing: channel={channelId}, bobber={bobber != null}");
-
-            // Log diagnostics
-            if (bobber != null)
-            {
-                var bpos = bobber.Base?.Position;
-                _output.WriteLine($"  [{label}] BOBBER FOUND: guid=0x{bobber.Base?.Guid ?? 0:X}, " +
-                    $"pos=({bpos?.X:F1}, {bpos?.Y:F1}, {bpos?.Z:F1}), display={bobber.DisplayId}");
-            }
-            else
-            {
-                LogNearbyGameObjects(snap, label);
-            }
-
-            // If neither channel nor bobber, this spot doesn't work
-            if (channelId == 0 && bobber == null)
-            {
-                _output.WriteLine($"  [{label}] No channel and no bobber — no fishable water here");
-                return false;
-            }
-
-            // Step 3: Wait for auto-catch. The SpellHandler's HandleGameObjectCustomAnim
-            // handler auto-interacts with the bobber when SMSG_GAMEOBJECT_CUSTOM_ANIM
-            // arrives (fish bite event, random 5-20s into the 20s channel).
-            _output.WriteLine($"  [{label}] Waiting up to {FishingChannelWaitMs / 1000}s for auto-catch...");
-            int elapsed = 0;
-            const int pollInterval = 3000;
-            while (elapsed < FishingChannelWaitMs)
-            {
-                await Task.Delay(pollInterval);
-                elapsed += pollInterval;
-
-                await _bot.RefreshSnapshotsAsync();
-                uint midSkill = GetFishingSkill(label);
-                if (midSkill > baseSkill)
-                {
-                    _output.WriteLine($"  [{label}] Skill increased ({baseSkill} → {midSkill}) at {elapsed / 1000}s!");
-                    return true;
-                }
-
-                // Re-check bobber (may appear late, or disappear after catch)
-                snap = GetSnapshot(label);
-                var currentCatchItems = GetCatchItemIds(snap);
-                if (!baselineCatchItems.SequenceEqual(currentCatchItems))
-                {
-                    _output.WriteLine($"  [{label}] Loot changed at {elapsed / 1000}s: " +
-                        $"before=[{string.Join(", ", baselineCatchItems)}] after=[{string.Join(", ", currentCatchItems)}]");
-                    return true;
-                }
-
-                var currentBobber = FindBobber(snap);
-                var currentChannel = snap?.Player?.Unit?.ChannelSpellId ?? 0;
-                if (bobber == null && currentBobber != null)
-                {
-                    bobber = currentBobber;
-                    var bpos = bobber.Base?.Position;
-                    _output.WriteLine($"  [{label}] BOBBER APPEARED at {elapsed / 1000}s: " +
-                        $"guid=0x{bobber.Base?.Guid ?? 0:X}, pos=({bpos?.X:F1}, {bpos?.Y:F1}, {bpos?.Z:F1})");
-                }
-                // Log when channel/bobber disappears (spell ended)
-                if (elapsed == pollInterval)
-                    _output.WriteLine($"  [{label}] At {elapsed / 1000}s: channel={currentChannel}, bobber={currentBobber != null}");
-            }
-
-            // Final skill check
-            await _bot.RefreshSnapshotsAsync();
-            uint finalSkill = GetFishingSkill(label);
-            snap = GetSnapshot(label);
-            var finalCatchItems = GetCatchItemIds(snap);
-            _output.WriteLine($"  [{label}] Wait done. skill={finalSkill}, hadBobber={bobber != null}, " +
-                $"catchItems=[{string.Join(", ", finalCatchItems)}]");
-
-            if (finalSkill > baseSkill)
-            {
-                _output.WriteLine($"  [{label}] Skill increased ({baseSkill} → {finalSkill}), catch confirmed!");
-                return true;
-            }
-
-            if (!baselineCatchItems.SequenceEqual(finalCatchItems))
-            {
-                _output.WriteLine($"  [{label}] Catch confirmed by bag delta without skill-up.");
-                return true;
-            }
-
-            _output.WriteLine($"  [{label}] No catch this attempt, retrying...");
-        }
-
-        _output.WriteLine($"  [{label}] {MaxFishingAttempts} attempts exhausted.");
-        return false;
-    }
-
-    private static Game.WoWGameObject? FindBobber(WoWActivitySnapshot? snap)
-    {
-        return snap?.NearbyObjects?.FirstOrDefault(go =>
-            go.DisplayId == FishingData.BobberDisplayId || go.GameObjectType == 17);
+        _output.WriteLine($"[{label}] Final metrics: stage={result.StageName}, skill {result.SkillBefore} -> {result.SkillAfter}, bestPool={result.BestPoolDistance:F1}y, lootSuccess={result.SawLootSuccessDiagnostic}, catchDelta=[{string.Join(", ", result.CatchDeltaItems)}]");
     }
 
     private async Task ForceFishingSpellSyncAsync(string account, string label)
     {
-        _output.WriteLine($"[{label}] Forcing fresh fishing spell sync (.unlearn -> .learn).");
+        _output.WriteLine($"[{label}] Forcing fishing spell sync (.unlearn -> .learn).");
 
         foreach (var spellId in FishingSpellSyncIds)
         {
@@ -476,58 +388,157 @@ public class FishingProfessionTests
             pollIntervalMs: 300,
             progressLabel: $"{label} fishing-spell-sync");
 
-        await _bot.RefreshSnapshotsAsync();
-        var syncedSnap = await _bot.GetSnapshotAsync(account);
-        var spellCount = syncedSnap?.Player?.SpellList?.Count ?? 0;
-        var castableSpellId = ResolveCastableFishingSpellId(syncedSnap);
-        var hasPoleProf = syncedSnap?.Player?.SpellList?.Contains(FishingData.FishingPoleProficiency) == true;
-        _output.WriteLine($"[{label}] Fishing spell sync: spellCount={spellCount}, " +
-            $"castable={castableSpellId}, poleProf={hasPoleProf}");
-
-        Assert.True(synced,
-            $"[{label}] Fishing spell sync failed. castable={castableSpellId}, poleProf={hasPoleProf}, spellCount={spellCount}.");
+        Assert.True(synced, $"[{label}] Fishing spell sync failed.");
     }
 
-    private void LogNearbyGameObjects(WoWActivitySnapshot? snap, string label)
+    private static bool HasRequiredFishingSpells(WoWActivitySnapshot snapshot)
+        // FG chat reliably confirms the learn path, but FG snapshots do not always surface
+        // Fishing Pole Proficiency in SpellList. The live contract is the task-owned equip/
+        // cast/loot path, so the setup gate only requires a castable fishing spell here.
+        => snapshot.Player?.SpellList?.Any(IsFishingSpellId) == true;
+
+    private static bool ContainsFishingPole(WoWActivitySnapshot? snapshot)
+        => snapshot?.Player?.BagContents?.Values.Any(itemId => FishingPoleIds.Contains(itemId)) == true;
+
+    private static uint GetFishingSkill(WoWActivitySnapshot? snapshot)
     {
-        var goCount = snap?.NearbyObjects?.Count ?? 0;
-        if (goCount > 0)
+        if (snapshot?.Player?.SkillInfo != null
+            && snapshot.Player.SkillInfo.TryGetValue(FishingData.FishingSkillId, out uint skillLevel))
         {
-            _output.WriteLine($"  [{label}] Visible GOs ({goCount}):");
-            foreach (var go in snap!.NearbyObjects!.Take(8))
-                _output.WriteLine($"    e={go.Entry} d={go.DisplayId} t={go.GameObjectType} " +
-                    $"g=0x{go.Base?.Guid ?? 0:X}");
+            return skillLevel;
         }
-    }
 
-    private uint GetFishingSkill(string label)
-        => GetFishingSkillFromSnapshot(GetSnapshot(label));
-
-    private WoWActivitySnapshot? GetSnapshot(string label)
-        => label == "FG" ? _bot.ForegroundBot : _bot.BackgroundBot;
-
-    private static uint GetFishingSkillFromSnapshot(WoWActivitySnapshot? snap)
-    {
-        var skillMap = snap?.Player?.SkillInfo;
-        if (skillMap != null && skillMap.TryGetValue(FishingData.FishingSkillId, out uint level))
-            return level;
         return 0;
     }
 
-    private static bool HasRequiredFishingSpells(WoWActivitySnapshot snap)
-        => ResolveCastableFishingSpellId(snap) != 0
-            && snap.Player?.SpellList?.Contains(FishingData.FishingPoleProficiency) == true;
+    private static bool IsFishingChannelActive(WoWActivitySnapshot? snapshot)
+        => snapshot?.Player?.Unit?.ChannelSpellId is uint spellId && IsFishingSpellId(spellId);
 
-    private static uint ResolveCastableFishingSpellId(WoWActivitySnapshot? snap)
-        => FishingData.ResolveCastableFishingSpellId(
-            snap?.Player?.SpellList,
-            (int)GetFishingSkillFromSnapshot(snap));
+    private static bool IsFishingSpellId(uint spellId)
+        => spellId == FishingData.FishingRank1
+            || spellId == FishingData.FishingRank2
+            || spellId == FishingData.FishingRank3
+            || spellId == FishingData.FishingRank4;
 
-    private static IReadOnlyList<uint> GetCatchItemIds(WoWActivitySnapshot? snap)
-        => snap?.Player?.BagContents?.Values
-            .Where(itemId => !FishingSetupItemIds.Contains(itemId))
+    private static float FindNearestPoolDistance(WoWActivitySnapshot? snapshot)
+        => FindNearestVisibleFishingPool(snapshot)?.Distance ?? float.MaxValue;
+
+    private static VisibleFishingPool? FindNearestVisibleFishingPool(WoWActivitySnapshot? snapshot)
+    {
+        var playerPosition = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
+        if (playerPosition == null)
+            return null;
+
+        return snapshot.NearbyObjects?
+            .Where(IsFishingPool)
+            .Select(gameObject => new VisibleFishingPool(
+                gameObject.Entry,
+                gameObject.Name ?? "FishingPool",
+                Distance3D(playerPosition, gameObject.Base?.Position),
+                gameObject.Base?.Position))
+            .OrderBy(pool => pool.Distance)
+            .FirstOrDefault();
+    }
+
+    private static Game.WoWGameObject? FindBobber(WoWActivitySnapshot? snapshot)
+        => snapshot?.NearbyObjects?.FirstOrDefault(gameObject =>
+            gameObject.DisplayId == FishingData.BobberDisplayId || gameObject.GameObjectType == 17);
+
+    private static bool IsFishingPool(Game.WoWGameObject gameObject)
+        => gameObject.GameObjectType == 25
+            || gameObject.Entry == 180582
+            || (!string.IsNullOrWhiteSpace(gameObject.Name)
+                && (gameObject.Name.Contains("School", StringComparison.OrdinalIgnoreCase)
+                    || gameObject.Name.Contains("Pool", StringComparison.OrdinalIgnoreCase)
+                    || gameObject.Name.Contains("Wreckage", StringComparison.OrdinalIgnoreCase)));
+
+    private static float Distance3D(Game.Position playerPosition, Game.Position? objectPosition)
+    {
+        if (objectPosition == null)
+            return float.MaxValue;
+
+        var dx = playerPosition.X - objectPosition.X;
+        var dy = playerPosition.Y - objectPosition.Y;
+        var dz = playerPosition.Z - objectPosition.Z;
+        return MathF.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    }
+
+    private static IReadOnlyList<uint> GetCatchItemIds(WoWActivitySnapshot? snapshot)
+        => snapshot?.Player?.BagContents?.Values
+            .Where(itemId => !FishingPoleIds.Contains(itemId))
             .OrderBy(itemId => itemId)
             .ToArray()
             ?? [];
 
+    private static IReadOnlyList<string> GetFishingTaskMessages(WoWActivitySnapshot? snapshot)
+        => snapshot?.RecentChatMessages?
+            .Where(message => message.Contains("[TASK] FishingTask", StringComparison.Ordinal))
+            .ToArray()
+            ?? [];
+
+    private static IReadOnlyList<string> GetMessageDelta(IReadOnlyList<string> baseline, IReadOnlyList<string> current)
+    {
+        var remainingBaseline = new List<string>(baseline);
+        var delta = new List<string>();
+
+        foreach (var message in current)
+        {
+            var index = remainingBaseline.IndexOf(message);
+            if (index >= 0)
+                remainingBaseline.RemoveAt(index);
+            else
+                delta.Add(message);
+        }
+
+        return delta;
+    }
+
+    private static IReadOnlyList<uint> GetItemDelta(IReadOnlyList<uint> baseline, IReadOnlyList<uint> current)
+    {
+        var remainingBaseline = new List<uint>(baseline);
+        var delta = new List<uint>();
+
+        foreach (var itemId in current)
+        {
+            var index = remainingBaseline.IndexOf(itemId);
+            if (index >= 0)
+                remainingBaseline.RemoveAt(index);
+            else
+                delta.Add(itemId);
+        }
+
+        return delta;
+    }
+
+    private sealed record FishingRunResult(
+        string StageName,
+        bool PoleStartedInBag,
+        bool PoleEquippedByTask,
+        float InitialPoolDistance,
+        float BestPoolDistance,
+        bool SawChannel,
+        bool SawBobber,
+        bool SawPoolAcquireDiagnostic,
+        bool SawInCastRangeDiagnostic,
+        bool SawLootWindowDiagnostic,
+        bool SawLootSuccessDiagnostic,
+        bool SawSwimmingError,
+        string LastFishingTaskMessage,
+        IReadOnlyList<uint> CatchItems,
+        IReadOnlyList<uint> CatchDeltaItems,
+        uint SkillBefore,
+        uint SkillAfter);
+
+    private sealed record FishingStage(
+        string StageName,
+        float StageX,
+        float StageY,
+        float StageZ,
+        uint VisiblePoolEntry,
+        string VisiblePoolName,
+        float InitialVisiblePoolDistance);
+
+    private sealed record RatchetStageCandidate(string Name, float X, float Y, float Z);
+
+    private sealed record VisibleFishingPool(uint Entry, string Name, float Distance, Game.Position? Position);
 }

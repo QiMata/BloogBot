@@ -13,7 +13,7 @@ namespace BotRunner
     {
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
         {
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
             var builder = new BehaviourTreeBuilder()
                 .Sequence("StateManager Action Sequence");
 

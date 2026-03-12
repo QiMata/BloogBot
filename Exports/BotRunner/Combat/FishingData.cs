@@ -1,6 +1,9 @@
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
+using GameData.Core.Models;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 namespace BotRunner.Combat
 {
@@ -54,6 +57,21 @@ namespace BotRunner.Combat
             StrongFishingPole,      // +5
             FishingPole,            // +0
         ];
+
+        private static readonly HashSet<uint> FishingPoolEntries =
+        [
+            180248, // School of Tastyfish
+            180582, // Oily Blackmouth School
+            180683, // Firefin Snapper School
+            180684, // Greater Sagefish School
+            180685, // Deviate Fish Node
+            180901, // Bloodsail Wreckage
+            180902, // Floating Wreckage
+            180503, // Stonescale Eel Swarm
+            180751, // Floating Debris
+        ];
+
+        public static IReadOnlyCollection<uint> KnownFishingPoolEntries => FishingPoolEntries;
 
         /// <summary>
         /// Returns the highest fishing spell rank the character should have at a given skill level.
@@ -136,6 +154,67 @@ namespace BotRunner.Combat
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Checks if a fishing pole is already equipped in any weapon slot.
+        /// </summary>
+        public static bool HasFishingPoleEquipped(IObjectManager objectManager)
+            => objectManager.GetEquippedItems()
+                .Where(item => item != null)
+                .Any(item => IsFishingPole(item.ItemId));
+
+        /// <summary>
+        /// Checks if the supplied game object is a fishable pool/school.
+        /// </summary>
+        public static bool IsFishingPool(IWoWGameObject? gameObject)
+        {
+            if (gameObject?.Position == null)
+                return false;
+
+            if (gameObject.TypeId == (uint)GameObjectType.FishingHole)
+                return true;
+
+            if (FishingPoolEntries.Contains(gameObject.Entry))
+                return true;
+
+            return !string.IsNullOrWhiteSpace(gameObject.Name)
+                && (gameObject.Name.Contains("School", StringComparison.OrdinalIgnoreCase)
+                    || gameObject.Name.Contains("Pool", StringComparison.OrdinalIgnoreCase)
+                    || gameObject.Name.Contains("Wreckage", StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// Finds the nearest visible fishing pool from the supplied position.
+        /// </summary>
+        public static IWoWGameObject? FindNearestFishingPool(IObjectManager objectManager, Position playerPosition, float maxDistance)
+            => objectManager.GameObjects
+                .Where(IsFishingPool)
+                .Where(gameObject => gameObject.Position != null && gameObject.Position.DistanceTo(playerPosition) <= maxDistance)
+                .OrderBy(gameObject => gameObject.Position!.DistanceTo(playerPosition))
+                .FirstOrDefault();
+
+        /// <summary>
+        /// Calculates a shoreline approach point that keeps the player a fixed distance from the pool.
+        /// </summary>
+        public static Position GetPoolApproachPosition(Position playerPosition, Position poolPosition, float desiredDistance)
+        {
+            var dx = playerPosition.X - poolPosition.X;
+            var dy = playerPosition.Y - poolPosition.Y;
+            var planarDistance = MathF.Sqrt((dx * dx) + (dy * dy));
+            var verticalDelta = playerPosition.Z - poolPosition.Z;
+            var planarTargetDistance = desiredDistance;
+            if (MathF.Abs(verticalDelta) > 0.01f && desiredDistance > MathF.Abs(verticalDelta))
+                planarTargetDistance = MathF.Sqrt((desiredDistance * desiredDistance) - (verticalDelta * verticalDelta));
+
+            if (planarDistance < 0.01f)
+                return new Position(poolPosition.X - planarTargetDistance, poolPosition.Y, playerPosition.Z);
+
+            var scale = planarTargetDistance / planarDistance;
+            return new Position(
+                poolPosition.X + (dx * scale),
+                poolPosition.Y + (dy * scale),
+                playerPosition.Z);
         }
 
         /// <summary>

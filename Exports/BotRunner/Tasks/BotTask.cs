@@ -55,6 +55,12 @@ public abstract class BotTask(IBotContext botContext)
     /// Call ClearNavigation() when switching targets.
     /// </summary>
     protected void NavigateToward(Position destination)
+        => TryNavigateToward(destination);
+
+    /// <summary>
+    /// Move toward a destination using cached pathfinding and report whether a waypoint was found.
+    /// </summary>
+    protected bool TryNavigateToward(Position destination)
     {
         var player = ObjectManager.Player;
         if (_navPath == null)
@@ -66,7 +72,7 @@ public abstract class BotTask(IBotContext botContext)
                 capsuleRadius: radius, capsuleHeight: height);
         }
         if (player?.Position == null)
-            return;
+            return false;
 
         var waypoint = _navPath.GetNextWaypoint(
             player.Position,
@@ -77,10 +83,11 @@ public abstract class BotTask(IBotContext botContext)
         if (waypoint != null)
         {
             ObjectManager.MoveToward(waypoint);
-            return;
+            return true;
         }
 
         ObjectManager.StopAllMovement();
+        return false;
     }
 
     /// <summary>
@@ -98,6 +105,7 @@ public abstract class BotTask(IBotContext botContext)
             return;
 
         var top = BotTasks.Peek();
+        BotContext.AddDiagnosticMessage($"[TASK] {top.GetType().Name} pop reason={reason}");
         BotTasks.Pop();
         Log.Information("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
             top.GetType().Name, reason, BotTasks.Count);

@@ -57,6 +57,20 @@ namespace ForegroundBotRunner.Statics
             StopMovement(bits);
         }
 
+        public void ForceStopImmediate()
+        {
+            StopAllMovement();
+
+            if (Player is not LocalPlayer localPlayer || localPlayer.Pointer == nint.Zero)
+                return;
+
+            ThreadSynchronizer.RunOnMainThread(() =>
+                Functions.SendMovementUpdate(localPlayer.Pointer, (int)Opcode.MSG_MOVE_STOP));
+
+            Log.Information("[ForceStopImmediate] Cleared all movement flags and sent MSG_MOVE_STOP");
+            DiagLog("[ForceStopImmediate] Cleared all movement flags and sent MSG_MOVE_STOP");
+        }
+
 
 
         public void StopMovement(ControlBits bits)

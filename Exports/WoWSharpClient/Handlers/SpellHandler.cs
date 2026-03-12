@@ -577,8 +577,9 @@ namespace WoWSharpClient.Handlers
         /// <summary>
         /// Handles SMSG_GAMEOBJECT_CUSTOM_ANIM (0x0B3).
         /// Format: uint64 guid, uint32 anim
-        /// For fishing bobbers, anim 0 signals a fish bite. We auto-interact (CMSG_GAMEOBJ_USE)
-        /// so the catch happens instantly without requiring external polling.
+        /// For fishing bobbers, anim 0 signals a fish bite. We auto-interact
+        /// (CMSG_GAMEOBJ_USE) so the task-owned loot window can open, but we do not
+        /// auto-loot here. FishingTask is responsible for consuming the loot window.
         /// </summary>
         public static void HandleGameObjectCustomAnim(Opcode opcode, byte[] data)
         {
@@ -619,20 +620,12 @@ namespace WoWSharpClient.Handlers
 
                 if (anim == 0 && (isPlayerCreated || isFallbackBobber))
                 {
-                    Log.Information("[FishBite] Bobber 0x{Guid:X} — auto-interacting", guid);
-                    // Bobber use is server-side sensitive to stale movement state after teleports.
-                    ((GameData.Core.Interfaces.IObjectManager)om).ForceStopImmediate();
-                    om.InteractWithGameObject(guid);
-
-                    // Auto-loot the catch after server processes interaction
+                    Log.Information("[FishBite] Bobber 0x{Guid:X} - scheduling auto-interact", guid);
                     _ = Task.Run(async () =>
                     {
-                        await Task.Delay(1500);
-                        Log.Information("[FishBite] Auto-looting slot 0...");
-                        om.AutoStoreLootItem(0);
-                        await Task.Delay(500);
-                        om.ReleaseLoot(guid);
-                        Log.Information("[FishBite] Released loot for bobber 0x{Guid:X}", guid);
+                        await Task.Delay(75).ConfigureAwait(false);
+                        ((GameData.Core.Interfaces.IObjectManager)om).ForceStopImmediate();
+                        om.InteractWithGameObject(guid);
                     });
                 }
             }
@@ -698,3 +691,4 @@ namespace WoWSharpClient.Handlers
         }
     }
 }
+

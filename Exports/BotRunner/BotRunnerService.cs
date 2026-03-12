@@ -370,7 +370,7 @@ namespace BotRunner
             if ((DateTime.UtcNow - _lastDeathRecoveryPush).TotalSeconds < 5)
                 return;
 
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
 
             // Dead but not ghost - release spirit first
             if (isCorpse)
@@ -490,7 +490,7 @@ namespace BotRunner
                 return;
             }
 
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
 
             try
             {

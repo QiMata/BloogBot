@@ -54,6 +54,7 @@ namespace ForegroundBotRunner
         // Packet-driven connection state machine
         private readonly ConnectionStateMachine _connectionState = new();
         private uint _lastObservedContinentId = 0xFFFFFFFF;
+        private static readonly ushort FishingCustomAnimOpcode = (ushort)Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM;
 
         // Diagnostic logging to file (for debugging when running inside WoW.exe)
         private static readonly string DiagnosticLogPath;
@@ -290,6 +291,7 @@ namespace ForegroundBotRunner
                             try
                             {
                                 PacketLogger.OnPacketCaptured += _connectionState.ProcessPacket;
+                                PacketLogger.OnPacketCaptured += HandleCapturedPacket;
                                 PacketLogger.InitializeHooks();
                                 _connectionState.ForceState(
                                     ConnectionStateMachine.State.InWorld,
@@ -416,6 +418,33 @@ namespace ForegroundBotRunner
             _logger.LogInformation("ObjectManager initialized - direct memory access enabled");
             _logger.LogInformation("MovementRecorder ready - say 'rec' in chat to toggle recording");
             return Task.CompletedTask;
+        }
+
+        private void HandleCapturedPacket(PacketDirection direction, ushort opcode, int size)
+        {
+            if (direction != PacketDirection.Recv || opcode != FishingCustomAnimOpcode)
+                return;
+
+            var objectManager = _objectManager;
+            if (objectManager?.HasEnteredWorld != true)
+                return;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    for (var attempt = 0; attempt < 6; attempt++)
+                    {
+                        await Task.Delay(75 + (attempt * 50)).ConfigureAwait(false);
+                        if (objectManager.TryAutoInteractFishingBobberFromPacket())
+                            return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagLog($"HandleCapturedPacket fishing custom anim failed: {ex.Message}");
+                }
+            });
         }
 
         /// <summary>
@@ -585,6 +614,8 @@ namespace ForegroundBotRunner
             _logger.LogInformation("ForegroundBotWorker stop requested...");
 
             _botRunner?.Stop();
+            PacketLogger.OnPacketCaptured -= _connectionState.ProcessPacket;
+            PacketLogger.OnPacketCaptured -= HandleCapturedPacket;
 
             // Stop any ongoing movement recording
             if (_movementRecorder?.IsRecording == true)

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -33,6 +34,8 @@ namespace BotRunner.Tests.LiveValidation;
 /// </summary>
 public partial class LiveBotFixture : IAsyncLifetime
 {
+    private const string CombatTestAccount = "COMBATTEST";
+
     public IntegrationTestConfig Config { get; } = IntegrationTestConfig.FromEnvironment();
 
     private readonly BotServiceFixture _serviceFixture = new();
@@ -161,9 +164,23 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// </summary>
     public async Task<bool> CheckFgActionableAsync()
     {
-        if (FgAccountName == null || ForegroundBot == null)
+        SeedExpectedAccountsFromStateManagerSettings();
+        if (FgAccountName == null)
         {
             _fgResponsive = false;
+            return false;
+        }
+
+        if (ForegroundBot == null)
+        {
+            await WaitForConfiguredAccountInWorldAsync(FgAccountName, TimeSpan.FromSeconds(20), "FG");
+            await RefreshSnapshotsAsync();
+        }
+
+        if (ForegroundBot == null)
+        {
+            _fgResponsive = false;
+            _logger.LogWarning("[FG-PROBE] FG snapshot never reached InWorld for configured account '{Account}'", FgAccountName);
             return false;
         }
 
@@ -315,6 +332,7 @@ public partial class LiveBotFixture : IAsyncLifetime
             using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await _stateManagerClient.ConnectAsync(connectCts.Token);
             _logger.LogInformation("[FIXTURE] Connected to StateManager on port 8088.");
+            SeedExpectedAccountsFromStateManagerSettings();
 
             // 4. Wait for bots to enter world
             _logger.LogInformation("[FIXTURE] Waiting for bots to enter world...");
@@ -326,8 +344,6 @@ public partial class LiveBotFixture : IAsyncLifetime
             // while HasEnteredWorld is transiently false reports CharacterSelect).
             // Track "ever seen InWorld" per account to handle this flickering.
             var sw = Stopwatch.StartNew();
-            WoWActivitySnapshot? bgSnap = null;
-            WoWActivitySnapshot? fgSnap = null;
             var everSeenInWorld = new Dictionary<string, WoWActivitySnapshot>();
 
             while (sw.Elapsed < TimeSpan.FromSeconds(120) && !worldCts.Token.IsCancellationRequested)
@@ -353,14 +369,15 @@ public partial class LiveBotFixture : IAsyncLifetime
                     AllBots = everSeenInWorld.Values.ToList();
                     IdentifyBots(AllBots);
 
-                    if (everSeenInWorld.Count >= 2)
+                    if (HasRequiredRoleCoverage(everSeenInWorld))
                     {
-                        _logger.LogInformation("[FIXTURE] Both bots in-world after {Elapsed:F1}s.", sw.Elapsed.TotalSeconds);
+                        _logger.LogInformation("[FIXTURE] Required live bots in-world after {Elapsed:F1}s.", sw.Elapsed.TotalSeconds);
                         break;
                     }
 
-                    // If we've waited a while and only have 1, log stuck bots and proceed
-                    if (sw.Elapsed > TimeSpan.FromSeconds(60))
+                    // Give the configured FG/BG roles extra time to surface before
+                    // declaring the fixture partial.
+                    if (sw.Elapsed > TimeSpan.FromSeconds(45))
                     {
                         // Log any bots that have never been seen in-world
                         var stuckBots = snapshots
@@ -374,6 +391,9 @@ public partial class LiveBotFixture : IAsyncLifetime
 
                         _logger.LogWarning("[FIXTURE] Only {Count} bot(s) in-world after {Elapsed:F1}s. Proceeding with available bot(s).",
                             everSeenInWorld.Count, sw.Elapsed.TotalSeconds);
+                        var missingRoles = GetMissingRequiredRoles(everSeenInWorld);
+                        _logger.LogWarning("[FIXTURE] Missing configured roles after partial startup: {MissingRoles}",
+                            missingRoles.Count == 0 ? "none" : string.Join(", ", missingRoles));
                         break;
                     }
                 }
@@ -413,14 +433,20 @@ public partial class LiveBotFixture : IAsyncLifetime
             if (BgCharacterName != null)
                 await TeleportToNamedAsync(BgCharacterName, "Orgrimmar");
             if (FgCharacterName != null)
-                await TeleportToNamedAsync(FgCharacterName, "Orgrimmar");
+                _logger.LogInformation("[FIXTURE] Skipping fixture-side FG named teleport for '{Name}' due to FG-CRASH-TELE.", FgCharacterName);
             await Task.Delay(1500);
 
             // 8. Stabilization: wait for all known bots to be solidly InWorld before declaring ready.
             //    Teleport and GM commands can cause transient CharacterSelect flickers.
             await WaitForBotsStabilizedAsync();
 
-            _logger.LogInformation("[FIXTURE] Ready. BG='{Bg}', FG='{Fg}', Combat='{Combat}'", BgCharacterName ?? "N/A", FgCharacterName ?? "N/A", CombatTestCharacterName ?? "N/A");
+            _logger.LogInformation("[FIXTURE] Ready. BG='{Bg}' ({BgAccount}), FG='{Fg}' ({FgAccount}), Combat='{Combat}' ({CombatAccount})",
+                BgCharacterName ?? "N/A",
+                BgAccountName ?? "N/A",
+                FgCharacterName ?? "N/A",
+                FgAccountName ?? "N/A",
+                CombatTestCharacterName ?? "N/A",
+                CombatTestAccountName ?? "N/A");
             IsReady = true;
         }
         catch (Exception ex)
@@ -451,7 +477,7 @@ public partial class LiveBotFixture : IAsyncLifetime
 
         foreach (var snap in inWorldBots)
         {
-            if (snap.AccountName.Equals("COMBATTEST", StringComparison.OrdinalIgnoreCase))
+            if (snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase))
                 newCombat = snap;
             else if (snap.AccountName.EndsWith("1", StringComparison.OrdinalIgnoreCase))
                 newFg = snap;
@@ -490,6 +516,120 @@ public partial class LiveBotFixture : IAsyncLifetime
             BgAccountName = BackgroundBot.AccountName;
             BgCharacterName = BackgroundBot.CharacterName;
         }
+    }
+
+    private void SeedExpectedAccountsFromStateManagerSettings()
+    {
+        try
+        {
+            var settingsPath = ResolveStateManagerSettingsPath();
+            if (settingsPath == null || !File.Exists(settingsPath))
+                return;
+
+            using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                if (element.TryGetProperty("ShouldRun", out var shouldRunProperty)
+                    && shouldRunProperty.ValueKind == JsonValueKind.False)
+                {
+                    continue;
+                }
+
+                if (!element.TryGetProperty("AccountName", out var accountProperty))
+                    continue;
+
+                var accountName = accountProperty.GetString();
+                if (string.IsNullOrWhiteSpace(accountName))
+                    continue;
+
+                if (!element.TryGetProperty("RunnerType", out var runnerTypeProperty))
+                    continue;
+
+                var runnerType = runnerTypeProperty.GetString();
+                if (string.Equals(accountName, CombatTestAccount, StringComparison.OrdinalIgnoreCase))
+                {
+                    CombatTestAccountName ??= accountName;
+                    continue;
+                }
+
+                if (string.Equals(runnerType, "Foreground", StringComparison.OrdinalIgnoreCase))
+                {
+                    FgAccountName ??= accountName;
+                }
+                else if (string.Equals(runnerType, "Background", StringComparison.OrdinalIgnoreCase))
+                {
+                    BgAccountName ??= accountName;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[FIXTURE] Failed to seed expected account names from StateManagerSettings.json");
+        }
+    }
+
+    private static string? ResolveStateManagerSettingsPath()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "Services", "WoWStateManager", "Settings", "StateManagerSettings.json");
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        return null;
+    }
+
+    private bool HasRequiredRoleCoverage(Dictionary<string, WoWActivitySnapshot> everSeenInWorld)
+    {
+        var bgReady = string.IsNullOrWhiteSpace(BgAccountName)
+            || everSeenInWorld.ContainsKey(BgAccountName);
+        var fgReady = string.IsNullOrWhiteSpace(FgAccountName)
+            || everSeenInWorld.ContainsKey(FgAccountName);
+
+        if (BgAccountName != null || FgAccountName != null)
+            return bgReady && fgReady;
+
+        return everSeenInWorld.Count >= 2;
+    }
+
+    private List<string> GetMissingRequiredRoles(Dictionary<string, WoWActivitySnapshot> everSeenInWorld)
+    {
+        var missing = new List<string>();
+        if (!string.IsNullOrWhiteSpace(BgAccountName) && !everSeenInWorld.ContainsKey(BgAccountName))
+            missing.Add($"BG:{BgAccountName}");
+        if (!string.IsNullOrWhiteSpace(FgAccountName) && !everSeenInWorld.ContainsKey(FgAccountName))
+            missing.Add($"FG:{FgAccountName}");
+        return missing;
+    }
+
+    private async Task<bool> WaitForConfiguredAccountInWorldAsync(string accountName, TimeSpan timeout, string label)
+    {
+        if (_stateManagerClient == null)
+            return false;
+
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            var snapshot = await GetSnapshotAsync(accountName);
+            if (snapshot?.ScreenState == "InWorld" && !string.IsNullOrWhiteSpace(snapshot.CharacterName))
+            {
+                AllBots = AllBots
+                    .Where(existing => !string.Equals(existing.AccountName, accountName, StringComparison.OrdinalIgnoreCase))
+                    .Append(snapshot)
+                    .ToList();
+                IdentifyBots(AllBots);
+                return true;
+            }
+
+            await Task.Delay(500);
+        }
+
+        _logger.LogWarning("[FIXTURE] Timed out waiting for configured {Label} account '{Account}' to reach InWorld.", label, accountName);
+        return false;
     }
 
     /// <summary>
@@ -832,6 +972,81 @@ public partial class LiveBotFixture : IAsyncLifetime
         {
             _logger.LogWarning("[MySQL] Failed to query gameobject spawns: {Error}", ex.Message);
         }
+        return results;
+    }
+
+    /// <summary>
+    /// Query nearby world gameobject spawns for a set of entries and order them by 2D distance
+    /// from the supplied center point. Read-only DB access only; used for live-test staging.
+    /// </summary>
+    public async Task<List<(uint entry, int map, float x, float y, float z, float distance2D)>> QueryGameObjectSpawnsNearAsync(
+        IReadOnlyCollection<uint> entries,
+        int mapId,
+        float centerX,
+        float centerY,
+        float maxDistance,
+        int limit = 10)
+    {
+        var results = new List<(uint, int, float, float, float, float)>();
+        if (entries.Count == 0)
+            return results;
+
+        try
+        {
+            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            var entryParameters = new List<string>(entries.Count);
+            var entryIndex = 0;
+            foreach (var entry in entries)
+            {
+                var parameterName = $"@entry{entryIndex++}";
+                entryParameters.Add(parameterName);
+                cmd.Parameters.AddWithValue(parameterName, entry);
+            }
+
+            cmd.CommandText = $@"
+                SELECT
+                    id,
+                    map,
+                    position_x,
+                    position_y,
+                    position_z,
+                    SQRT(POW(position_x - @centerX, 2) + POW(position_y - @centerY, 2)) AS distance2D
+                FROM gameobject
+                WHERE map = @map
+                  AND id IN ({string.Join(", ", entryParameters)})
+                  AND SQRT(POW(position_x - @centerX, 2) + POW(position_y - @centerY, 2)) <= @maxDistance
+                ORDER BY distance2D
+                LIMIT @limit";
+
+            cmd.Parameters.AddWithValue("@map", mapId);
+            cmd.Parameters.AddWithValue("@centerX", centerX);
+            cmd.Parameters.AddWithValue("@centerY", centerY);
+            cmd.Parameters.AddWithValue("@maxDistance", maxDistance);
+            cmd.Parameters.AddWithValue("@limit", limit);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add((
+                    (uint)reader.GetInt32(0),
+                    reader.GetInt32(1),
+                    reader.GetFloat(2),
+                    reader.GetFloat(3),
+                    reader.GetFloat(4),
+                    reader.GetFloat(5)));
+            }
+
+            _logger.LogInformation("[MySQL] Found {Count} nearby gameobject spawns on map={MapId} within {Distance:F1}y",
+                results.Count, mapId, maxDistance);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[MySQL] Failed to query nearby gameobject spawns: {Error}", ex.Message);
+        }
+
         return results;
     }
 }

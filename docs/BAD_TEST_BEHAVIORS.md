@@ -257,7 +257,7 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 
 ### BT-PARK-003: Bots Not Teleported Together
 - **Observed**: Only the active bot was teleported to the test area; the other stayed wherever the last test left it.
-- **Fix**: 22/24 test classes already had FG parity via `IsFgActionable`. Added FG parity to VendorBuySellTests (was the only BG-only class). FishingProfessionTests intentionally parks FG (different fishing mechanics).
+- **Fix**: 22/24 test classes already had FG parity via `IsFgActionable`. Added FG parity to VendorBuySellTests and converted `FishingProfessionTests` into a dual-bot task-owned Ratchet flow with hard FG assertions once FG is actionable.
 - **Status**: **FIXED** (`f1a3a97`)
 - **Severity**: High
 
@@ -302,6 +302,13 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 - **Status**: OPEN
 - **Severity**: High
 
+### BT-MOVE-003: Ratchet Pier Overrun Can Leave Fishing Bots Falling Instead of Stationary
+- **Observed**: During the live fishing path, FG can still run off the Ratchet pier before the stop/interact sequence fully arrests motion. `ForceStopImmediate()` improved the bobber interaction path, but once the bot is already beyond the dock edge, stop-only logic does not recover the fall or re-stage the cast cleanly.
+- **Impact**: Fishing tests can fail for the wrong reason, and the same stop/fall-state gap is likely present in BG `MovementController` parity. This is a movement controller issue, not a fishing-task ownership issue.
+- **Fix**: Bring BG `MovementController` stop/fall handling to FG parity, then harden both runners so a stop request during shoreline approach clears stale forward intent and transitions cleanly into falling or recovery instead of hovering/overrunning.
+- **Status**: OPEN
+- **Severity**: High
+
 ---
 
 ## Status Summary
@@ -312,8 +319,9 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 
 **Deferred (2):** BT-LOGIC-003 (timeout centralization), BT-PARK-002 (idle bot assertion)
 
-**Still Open (4):**
+**Still Open (5):**
 1. **BT-SETUP-002** — SOAP revive fallback (Medium)
 2. **BT-COMBAT-001** — BG bot SMSG_ATTACKSTART verification (High, partially fixed)
 3. **BT-COMBAT-003** — `.damage` cleanup leaves stale combat state (Medium)
 4. **BT-FEEDBACK-002** — Aggregate test summary (Low)
+5. **BT-MOVE-003** - Ratchet pier overrun / stop-fall parity gap (High)

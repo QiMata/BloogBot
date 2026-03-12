@@ -16,6 +16,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using WoWSharpClient.Client;
+using WoWSharpClient.Frames;
 using WoWSharpClient.Models;
 using WoWSharpClient.Movement;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -129,6 +130,7 @@ namespace WoWSharpClient
             _loginScreen = new(_woWClient);
             _realmScreen = new(_woWClient);
             _characterSelectScreen = new(_woWClient);
+            LootFrame = new NetworkLootFrame(() => _agentFactoryAccessor?.Invoke()?.LootingAgent);
         }
 
         private void InitializeMovementController()

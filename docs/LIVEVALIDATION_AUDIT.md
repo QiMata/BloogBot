@@ -93,7 +93,7 @@ Fixes applied to 6 HIGH and 3 MEDIUM severity items. All 40 tests now pass. Chan
 
 ### TIM-7: Fishing test doesn't test FG bot
 - **File:** `FishingProfessionTests.cs:107`
-- **Fix:** Run both BG and FG in parallel via `Task.WhenAll`.
+- **Fix:** `FishingProfessionTests` now stages both bots at Ratchet, dispatches `ActionType.StartFishing` for both, and hard-asserts the FG task-owned equip -> approach -> cast -> bobber -> loot-window -> bag-delta path once FG is actionable.
 
 ### TIM-10: Undocumented 180s ReclaimTimeout — FIXED
 - **File:** `DeathCorpseRunTests.cs:50`
@@ -156,7 +156,6 @@ Fixes applied to 6 HIGH and 3 MEDIUM severity items. All 40 tests now pass. Chan
 | TIM-13 | LiveBotFixture.cs:45-48 | Command counters accumulate across tests |
 | AST-9 | DeathCorpseRunTests.cs:385 | ReleaseCorpse dispatch assertion style |
 | AST-10 | EconomyInteractionTests.cs:158 | Snapshot null not checked |
-| AST-14 | FishingProfessionTests.cs:150-154 | SetFacing dispatch unchecked |
 | AST-17 | GatheringProfessionTests.cs:150 | Skip.If vs Assert for skill cap |
 | AST-19 | NpcInteractionTests.cs:115 | BackgroundBot null not asserted |
 | AST-21 | CombatRangeTests.cs:163-164 | Skip.If vs Assert for mob detection |

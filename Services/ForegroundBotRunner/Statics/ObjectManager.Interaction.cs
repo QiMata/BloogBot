@@ -17,6 +17,9 @@ namespace ForegroundBotRunner.Statics
 {
     public partial class ObjectManager
     {
+        private readonly object _fishingBobberInteractLock = new();
+        private DateTime _lastFishingBobberInteractAt = DateTime.MinValue;
+        private ulong _lastFishingBobberGuid;
 
         public IWoWEventHandler EventHandler { get; }
 
@@ -279,7 +282,62 @@ namespace ForegroundBotRunner.Statics
             // FG bot: find the game object and call native CGGameObject_C::OnRightClick.
             var obj = Objects.FirstOrDefault(o => o.Guid == gameObjectGuid);
             if (obj is WoWObject wowObj && wowObj.ObjectType == WoWObjectType.GameObj)
-                wowObj.Interact(); // CGGameObject_C::OnRightClick at 0x5F8660
+            {
+                ThreadSynchronizer.RunOnMainThread(() => wowObj.Interact()); // CGGameObject_C::OnRightClick at 0x5F8660
+            }
+        }
+
+        internal bool TryAutoInteractFishingBobberFromPacket()
+        {
+            try
+            {
+                var player = Player;
+                if (player?.Position == null)
+                    return false;
+
+                var playerGuid = PlayerGuid.FullGuid;
+                var bobber = GameObjects
+                    .Where(gameObject =>
+                        gameObject.Position != null
+                        && (gameObject.DisplayId == 668 || gameObject.TypeId == (uint)GameObjectType.FishingNode)
+                        && (gameObject.CreatedBy.FullGuid == playerGuid || gameObject.CreatedBy.FullGuid == 0UL))
+                    .OrderBy(gameObject => player.Position.DistanceTo(gameObject.Position!))
+                    .FirstOrDefault();
+
+                if (bobber?.Position == null)
+                    return false;
+
+                var distance = player.Position.DistanceTo(bobber.Position);
+                if (distance > 25f)
+                    return false;
+
+                var now = DateTime.UtcNow;
+                lock (_fishingBobberInteractLock)
+                {
+                    if (bobber.Guid == _lastFishingBobberGuid
+                        && (now - _lastFishingBobberInteractAt).TotalMilliseconds < 1500)
+                    {
+                        return false;
+                    }
+
+                    _lastFishingBobberGuid = bobber.Guid;
+                    _lastFishingBobberInteractAt = now;
+                }
+
+                ForceStopImmediate();
+                InteractWithGameObject(bobber.Guid);
+                Log.Information("[FG-FISH] Auto-interacted with bobber 0x{Guid:X} at {Distance:F1}y (createdBy=0x{CreatedBy:X}).",
+                    bobber.Guid,
+                    distance,
+                    bobber.CreatedBy.FullGuid);
+                DiagLog($"[FG-FISH] Auto-interacted with bobber 0x{bobber.Guid:X} distance={distance:F1} createdBy=0x{bobber.CreatedBy.FullGuid:X}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DiagLog($"[FG-FISH] Auto-interact failed: {ex.Message}");
+                return false;
+            }
         }
 
 

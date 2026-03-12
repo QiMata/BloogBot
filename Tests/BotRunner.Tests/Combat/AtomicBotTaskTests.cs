@@ -68,6 +68,37 @@ internal static class AtomicTaskTestHelpers
         player.Setup(p => p.MapId).Returns(0);
         return player;
     }
+
+    internal static Mock<IWoWItem> CreateItem(uint itemId, uint stackCount = 1)
+    {
+        var item = new Mock<IWoWItem>();
+        item.Setup(i => i.ItemId).Returns(itemId);
+        item.Setup(i => i.Name).Returns($"Item_{itemId}");
+        item.Setup(i => i.StackCount).Returns(stackCount);
+        return item;
+    }
+
+    internal static Mock<IWoWGameObject> CreateGameObject(ulong guid, uint entry, uint typeId, Position pos, string name = "Fishing Pool")
+    {
+        var go = new Mock<IWoWGameObject>();
+        go.Setup(g => g.Guid).Returns(guid);
+        go.Setup(g => g.Entry).Returns(entry);
+        go.Setup(g => g.TypeId).Returns(typeId);
+        go.Setup(g => g.Position).Returns(pos);
+        go.Setup(g => g.Name).Returns(name);
+        go.Setup(g => g.CreatedBy).Returns(new HighGuid(0UL));
+        return go;
+    }
+
+    internal static void RewindFishingTaskState(FishingTask task, int elapsedMs)
+    {
+        var stateEnteredAtField = typeof(FishingTask).GetField(
+            "_stateEnteredAt",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("FishingTask._stateEnteredAt field not found.");
+
+        stateEnteredAtField.SetValue(task, DateTime.UtcNow.AddMilliseconds(-elapsedMs));
+    }
 }
 
 // ==================== IdleTask Tests ====================
@@ -191,7 +222,7 @@ public class CastSpellTaskTests
 public class FishingTaskTests
 {
     [Fact]
-    public void Update_WithCastableFishingSpell_StopsAndCasts()
+    public void Update_WithoutEquippedPole_EquipsPoleBeforeCasting()
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(100, 100, 0));
@@ -201,8 +232,8 @@ public class FishingTaskTests
         ]);
 
         om.Setup(o => o.Player).Returns(player.Object);
-        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
-        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(true);
+        om.Setup(o => o.GetEquippedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GetItem(0, 0)).Returns(AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object);
         om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
         om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
 
@@ -211,61 +242,92 @@ public class FishingTaskTests
 
         task.Update();
 
-        om.Verify(o => o.ForceStopImmediate(), Times.Once);
-        om.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
+        om.Verify(o => o.EquipItem(0, 0, null), Times.Once);
+        om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
         Assert.Single(stack);
     }
 
     [Fact]
-    public void Update_CannotCastFishingSpell_PopsWithoutCasting()
+    public void Update_WithVisiblePool_MovesTowardFishingRange()
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
-        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(100, 100, 0));
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-995f, -3850f, 4f));
         player.Setup(p => p.SkillInfo).Returns(
         [
             new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
         ]);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xAA11UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(-975.7f, -3835.2f, 0f));
 
         om.Setup(o => o.Player).Returns(player.Object);
-        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
-        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(false);
-        om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
+        om.Setup(o => o.GetEquippedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object]);
+        om.Setup(o => o.GetContainedItems()).Returns(Enumerable.Empty<IWoWItem>());
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
         om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
 
         var task = new FishingTask(ctx.Object);
         stack.Push(task);
 
         task.Update();
+        task.Update();
+        task.Update();
 
+        om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.AtLeastOnce);
         om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
-        Assert.Empty(stack);
+        Assert.Single(stack);
     }
 
     [Fact]
-    public void Update_AfterConfirmedFishingCycle_PopsWhenChannelEnds()
+    public void Update_AfterLootWindowLootsCatchAndPops()
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
-        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(100, 100, 0));
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-988.5f, -3834f, 5.7f));
         player.Setup(p => p.SkillInfo).Returns(
         [
             new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
         ]);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xBB22UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(-975.7f, -3835.2f, 0f));
+        var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object;
+        var caughtFish = AtomicTaskTestHelpers.CreateItem(6361).Object;
 
         uint channelingId = 0;
         bool isChanneling = false;
+        bool lootOpen = false;
+        IEnumerable<IWoWItem> bagItems = Enumerable.Empty<IWoWItem>();
         player.Setup(p => p.ChannelingId).Returns(() => channelingId);
         player.Setup(p => p.IsChanneling).Returns(() => isChanneling);
 
+        var lootFrame = new Mock<ILootFrame>();
+        lootFrame.Setup(l => l.IsOpen).Returns(() => lootOpen);
+        lootFrame.Setup(l => l.LootCount).Returns(() => lootOpen ? 1 : 0);
+        lootFrame.Setup(l => l.LootItems).Returns(Array.Empty<LootItem>());
+        lootFrame.Setup(l => l.Close()).Callback(() => lootOpen = false);
+
         om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([equippedPole]);
+        om.Setup(o => o.GetContainedItems()).Returns(() => bagItems);
         om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
         om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(true);
-        om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
         om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+        om.Setup(o => o.LootFrame).Returns(lootFrame.Object);
 
         var task = new FishingTask(ctx.Object);
         stack.Push(task);
 
         task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        task.Update();
+
+        om.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
 
         channelingId = FishingData.FishingRank1;
         isChanneling = true;
@@ -275,8 +337,81 @@ public class FishingTaskTests
         channelingId = 0;
         isChanneling = false;
         task.Update();
+        lootOpen = true;
+        task.Update();
+        bagItems = [caughtFish];
+        task.Update();
+        task.Update();
+        task.Update();
 
+        lootFrame.Verify(l => l.LootAll(), Times.Once);
+        lootFrame.Verify(l => l.Close(), Times.AtLeastOnce);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask loot_window_open", StringComparison.Ordinal)
+            || message.Contains("FishingTask fishing_loot_success", StringComparison.Ordinal))), Times.AtLeastOnce);
         Assert.Empty(stack);
+    }
+
+    [Fact]
+    public void Update_BagDeltaWithoutLootWindow_DoesNotPopSuccess()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-988.5f, -3834f, 5.7f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
+        ]);
+        var pool = AtomicTaskTestHelpers.CreateGameObject(
+            guid: 0xCC33UL,
+            entry: 180582,
+            typeId: (uint)GameObjectType.FishingHole,
+            pos: new Position(-975.7f, -3835.2f, 0f));
+        var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole).Object;
+        var caughtFish = AtomicTaskTestHelpers.CreateItem(6361).Object;
+
+        uint channelingId = 0;
+        bool isChanneling = false;
+        IEnumerable<IWoWItem> bagItems = Enumerable.Empty<IWoWItem>();
+        player.Setup(p => p.ChannelingId).Returns(() => channelingId);
+        player.Setup(p => p.IsChanneling).Returns(() => isChanneling);
+
+        var lootFrame = new Mock<ILootFrame>();
+        lootFrame.Setup(l => l.IsOpen).Returns(false);
+        lootFrame.Setup(l => l.LootCount).Returns(0);
+        lootFrame.Setup(l => l.LootItems).Returns(Array.Empty<LootItem>());
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GetEquippedItems()).Returns([equippedPole]);
+        om.Setup(o => o.GetContainedItems()).Returns(() => bagItems);
+        om.Setup(o => o.KnownSpellIds).Returns([FishingData.FishingRank1]);
+        om.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(true);
+        om.Setup(o => o.GameObjects).Returns([pool.Object]);
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+        om.Setup(o => o.LootFrame).Returns(lootFrame.Object);
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+        AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
+        task.Update();
+
+        om.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
+
+        channelingId = FishingData.FishingRank1;
+        isChanneling = true;
+        task.Update();
+
+        channelingId = 0;
+        isChanneling = false;
+        task.Update();
+        bagItems = [caughtFish];
+        task.Update();
+
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("fishing_loot_success", StringComparison.Ordinal))), Times.Never);
+        Assert.Single(stack);
     }
 }
 

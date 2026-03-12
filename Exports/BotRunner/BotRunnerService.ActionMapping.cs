@@ -124,13 +124,19 @@ namespace BotRunner
             return result;
         }
 
-        private sealed class BotRunnerContext(IObjectManager objectManager, Stack<IBotTask> tasks, IDependencyContainer container, Constants.BotBehaviorConfig config) : IBotContext
+        private sealed class BotRunnerContext(
+            IObjectManager objectManager,
+            Stack<IBotTask> tasks,
+            IDependencyContainer container,
+            Constants.BotBehaviorConfig config,
+            Action<string> addDiagnosticMessage) : IBotContext
         {
             public IObjectManager ObjectManager => objectManager;
             public Stack<IBotTask> BotTasks => tasks;
             public IDependencyContainer Container => container;
             public Constants.BotBehaviorConfig Config => config;
             public IWoWEventHandler EventHandler => objectManager.EventHandler;
+            public void AddDiagnosticMessage(string message) => addDiagnosticMessage(message);
         }
 
         /// <summary>

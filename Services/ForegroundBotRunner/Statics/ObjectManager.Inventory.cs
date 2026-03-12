@@ -158,7 +158,7 @@ namespace ForegroundBotRunner.Statics
         IRealmSelectScreen IObjectManager.RealmSelectScreen => _fgRealmSelectScreen;
         ICharacterSelectScreen IObjectManager.CharacterSelectScreen => _fgCharacterSelectScreen;
         IGossipFrame IObjectManager.GossipFrame => null;
-        ILootFrame IObjectManager.LootFrame => null;
+        ILootFrame IObjectManager.LootFrame => _fgLootFrame;
         IMerchantFrame IObjectManager.MerchantFrame => null;
         ICraftFrame IObjectManager.CraftFrame => null;
         IQuestFrame IObjectManager.QuestFrame => null;
