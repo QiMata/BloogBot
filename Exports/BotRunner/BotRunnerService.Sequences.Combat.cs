@@ -80,7 +80,9 @@ namespace BotRunner
                             {
                                 var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
                                 navPath = new NavigationPath(_container.PathfindingClient,
-                                    capsuleRadius: radius, capsuleHeight: height);
+                                    capsuleRadius: radius,
+                                    capsuleHeight: height,
+                                    nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end));
                             }
 
                             if (player.RunSpeed > 0)

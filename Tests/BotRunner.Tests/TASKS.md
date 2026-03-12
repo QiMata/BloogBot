@@ -171,39 +171,41 @@ Master tracker: `MASTER-SUB-022`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-12
-- Active task: `BRT-OVR-004` is now pathfinding-blocked and routed to `PFS-FISH-001` / `NAV-FISH-001`; `BRT-OVR-006` remains the separate trainer handoff.
-- Last delta: fishing docs/comments still reflect the named Ratchet teleport plus task-owned approach/LOS flow, and this pass added deterministic `PathfindingClientRequestTests` coverage for `BR-NAV-002` / `PFS-OBJ-001` without changing live-overhaul priority.
+- Active task: `BRT-OVR-004` remains pathfinding-blocked and routed to `PFS-FISH-001` / `NAV-FISH-001`; deterministic BotRunner coverage for object-aware routing is the current supporting test work.
+- Last delta: added deterministic `PathfindingOverlayBuilderTests` plus `NavigationPath` forwarding coverage, and updated BotRunner test doubles so live path callers can send nearby-object overlays without breaking the task-level pathing tests.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Tests/BotRunner.Tests/Clients/PathfindingClientRequestTests.cs`
-  - `Exports/BotRunner/Tasks/FishingTask.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
+  - `Tests/BotRunner.Tests/Movement/PathfindingOverlayBuilderTests.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceTests.cs`
+  - `Exports/BotRunner/Movement/PathfindingOverlayBuilder.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/BotTask.cs`
+  - `Exports/BotRunner/BotRunnerService.Sequences.Movement.cs`
+  - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
+  - `Exports/BotRunner/Movement/TargetPositioningService.cs`
+  - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
   - `Tests/BotRunner.Tests/TASKS.md`
-  - `Tests/TASKS.md`
   - `docs/TASKS.md`
-  - `Services/PathfindingService/TASKS.md`
-  - `Exports/Navigation/TASKS.md`
   - `Exports/BotRunner/TASKS.md`
-  - `docs/BAD_TEST_BEHAVIORS.md`
 - Commands run:
-  1. `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore`
-  2. `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
-  3. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"`
-  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests" --logger "console;verbosity=minimal"`
+  1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore`
+  2. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore`
+  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TargetPositioningServiceTests|FullyQualifiedName~FishingTaskTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"`
+  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal"`
 - Outcomes:
-  - `PathfindingService` Release build succeeded.
-  - `Navigation.vcxproj` Release|x64 build succeeded.
-  - `Tests/PathfindingService.Tests` passed `25`.
-  - `PathfindingClientRequestTests|PathfindingClientDeadReckoningTests` passed `17`.
-  - The current live fishing contract can already succeed, but the remaining intermittent failure is shoreline terrain/LOS before `FishingTask in_cast_range`.
+  - `BotRunner` Release build succeeded.
+  - `Tests/BotRunner.Tests` Release build succeeded.
+  - `PathfindingOverlayBuilderTests|NavigationPathTests|TargetPositioningServiceTests|FishingTaskTests|RetrieveCorpseTaskTests` passed `72`.
+  - `PathfindingClientRequestTests|PathfindingClientDeadReckoningTests|BotRunnerServiceTests` passed `20`.
+  - The current live fishing contract can already succeed, but the remaining intermittent failure is still shoreline terrain/LOS before `FishingTask in_cast_range`; this deterministic slice only hardened the route-request plumbing.
 - Blockers:
   - `QuestInteractionTests`, `StarterQuestTests`, and the vendor/flight portions of `NpcInteractionTests` are still not fully task-owned under `BRT-OVR-002` and stay out of the routine documented-stable slice.
   - `CombatLoopTests`, `GatheringProfessionTests`, and `FishingProfessionTests` remain excluded from the routine documented-stable slice until their open overhaul work stops generating low-signal failures.
   - `FishingProfessionTests` still fails intermittently because shoreline pathing can terrain-stick or end at a no-LOS cast point (`FishingTask los_blocked phase=move`; `Your cast didn't land in fishable water`), even though the task-owned equip -> bait -> loot-window -> bag-delta path is already covered.
   - `Trainer_LearnAvailableSpells` remains a deterministic skip under `BRT-OVR-006`.
- - Next command: `Get-Content Exports/BotRunner/BotRunnerService.Snapshot.cs`
+- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

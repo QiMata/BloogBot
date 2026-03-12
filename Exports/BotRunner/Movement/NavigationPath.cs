@@ -110,7 +110,8 @@ public class NavigationPath(
     bool enableDynamicProbeSkipping = true,
     bool strictPathValidation = false,
     float capsuleRadius = 0.6f,
-    float capsuleHeight = 2.5f)
+    float capsuleHeight = 2.5f,
+    Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? nearbyObjectProvider = null)
 {
     private readonly PathfindingClient? _pathfinding = pathfinding;
     private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
@@ -119,6 +120,7 @@ public class NavigationPath(
     private readonly bool _strictPathValidation = strictPathValidation;
     private readonly float _capsuleRadius = capsuleRadius;
     private readonly float _capsuleHeight = capsuleHeight;
+    private readonly Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? _nearbyObjectProvider = nearbyObjectProvider;
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
     private int _currentIndex;
@@ -814,7 +816,19 @@ public class NavigationPath(
         Metrics.IncrementPathsCalculated();
         var sw = Stopwatch.StartNew();
 
-        var rawPath = _pathfinding.GetPath(mapId, start, end, smoothPath);
+        IReadOnlyList<DynamicObjectProto>? nearbyObjects = null;
+        try
+        {
+            nearbyObjects = _nearbyObjectProvider?.Invoke(start, end);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Debug(ex, "[NavigationPath] Nearby-object overlay generation failed; falling back to legacy path request.");
+        }
+
+        var rawPath = nearbyObjects is { Count: > 0 }
+            ? _pathfinding.GetPath(mapId, start, end, nearbyObjects, smoothPath)
+            : _pathfinding.GetPath(mapId, start, end, smoothPath);
         var sanitizedPath = SanitizePath(rawPath);
         var prunedPath = _enableProbeHeuristics
             ? PruneProbeWaypoints(start, sanitizedPath)

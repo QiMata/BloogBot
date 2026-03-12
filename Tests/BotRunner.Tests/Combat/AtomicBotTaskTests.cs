@@ -8,6 +8,7 @@ using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
+using Pathfinding;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -29,6 +30,18 @@ internal static class AtomicTaskTestHelpers
         pathfinding
             .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
             .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+            [
+                new Position(start.X, start.Y, start.Z),
+                new Position(end.X, end.Y, end.Z)
+            ]);
+        pathfinding
+            .Setup(p => p.GetPath(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>>(),
+                It.IsAny<bool>()))
+            .Returns((uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath) =>
             [
                 new Position(start.X, start.Y, start.Z),
                 new Position(end.X, end.Y, end.Z)

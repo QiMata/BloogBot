@@ -1,6 +1,8 @@
 using BotRunner.Clients;
 using BotRunner.Movement;
 using GameData.Core.Models;
+using Pathfinding;
+using System.Collections.Generic;
 
 namespace BotRunner.Tests.Movement;
 
@@ -871,18 +873,101 @@ public class NavigationPathTests
         Assert.Empty(gaps);
     }
 
+    [Fact]
+    public void GetNextWaypoint_ForwardsNearbyObjectsFromProvider()
+    {
+        var expectedNearbyObjects = new[]
+        {
+            new DynamicObjectProto
+            {
+                Guid = 0xBEEF,
+                DisplayId = 17,
+                X = 4f,
+                Y = 5f,
+                Z = 6f,
+                Orientation = 1.2f,
+                Scale = 1.1f,
+                GoState = 1,
+            }
+        };
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, end, _) => [start, end],
+            getPathWithNearbyObjects: (_, start, end, nearbyObjects, _) =>
+            {
+                Assert.NotNull(nearbyObjects);
+                Assert.Single(nearbyObjects!);
+                return [start, end];
+            });
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            nearbyObjectProvider: (_, _) => expectedNearbyObjects);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(1, pathfinding.OverlayGetPathCalls);
+        Assert.Equal(0, pathfinding.LegacyGetPathCalls);
+        Assert.NotNull(pathfinding.LastNearbyObjects);
+        Assert.Single(pathfinding.LastNearbyObjects!);
+        Assert.Equal(expectedNearbyObjects[0].Guid, pathfinding.LastNearbyObjects![0].Guid);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_UsesLegacyPathCallWhenOverlayProviderReturnsNoObjects()
+    {
+        var pathfinding = new DelegatePathfindingClient((_, start, end, _) => [start, end]);
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            nearbyObjectProvider: (_, _) => []);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(0, pathfinding.OverlayGetPathCalls);
+        Assert.Equal(1, pathfinding.LegacyGetPathCalls);
+        Assert.Null(pathfinding.LastNearbyObjects);
+    }
+
     private sealed class DelegatePathfindingClient(
         Func<uint, Position, Position, bool, Position[]> getPath,
         Func<uint, Position, Position, bool>? isInLineOfSight = null,
-        Func<uint, Position, float, (float, bool)>? getGroundZ = null) : PathfindingClient
+        Func<uint, Position, float, (float, bool)>? getGroundZ = null,
+        Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? getPathWithNearbyObjects = null) : PathfindingClient
     {
         private readonly Func<uint, Position, Position, bool, Position[]> _getPath = getPath;
         private readonly Func<uint, Position, Position, bool> _isInLineOfSight =
             isInLineOfSight ?? ((_, _, _) => true);
         private readonly Func<uint, Position, float, (float, bool)>? _getGroundZ = getGroundZ;
+        private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? _getPathWithNearbyObjects = getPathWithNearbyObjects;
+
+        public int LegacyGetPathCalls { get; private set; }
+        public int OverlayGetPathCalls { get; private set; }
+        public IReadOnlyList<DynamicObjectProto>? LastNearbyObjects { get; private set; }
 
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false)
-            => _getPath(mapId, start, end, smoothPath);
+        {
+            LegacyGetPathCalls++;
+            return _getPath(mapId, start, end, smoothPath);
+        }
+
+        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false)
+        {
+            OverlayGetPathCalls++;
+            LastNearbyObjects = nearbyObjects?.ToArray();
+            return _getPathWithNearbyObjects?.Invoke(mapId, start, end, nearbyObjects, smoothPath)
+                ?? _getPath(mapId, start, end, smoothPath);
+        }
 
         public override bool IsInLineOfSight(uint mapId, Position from, Position to)
             => _isInLineOfSight(mapId, from, to);

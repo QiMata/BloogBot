@@ -269,6 +269,8 @@ Computes an A* path between two points:
 
 **Response**: List of `Position` waypoints
 
+Current rollout note: BotRunner now populates `NearbyObjects` from a conservative live overlay (`40y` from start/end, collidable object types only, nearest `64` max). The next owner slice is request-scoped overlay registration and route validation inside the service.
+
 Current rollout note: the service accepts and logs `NearbyObjects` on path requests now; request-scoped overlay validation and detour repair are the next owner slices in `Services/PathfindingService/TASKS.md`.
 
 ### LineOfSightRequest

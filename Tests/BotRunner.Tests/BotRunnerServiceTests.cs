@@ -4,6 +4,7 @@ using BotRunner.Clients;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
+using Pathfinding;
 using WoWSharpClient.Networking.ClientComponents.I;
 using System.Threading.Tasks;
 using System.Threading;
@@ -268,6 +269,7 @@ namespace BotRunner.Tests
         private readonly Position[] _path = path;
 
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
+        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false) => _path;
 
         public override bool IsInLineOfSight(uint mapId, Position from, Position to) => true;
 
@@ -280,5 +282,6 @@ namespace BotRunner.Tests
         private readonly Position[] _path = path;
 
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
+        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false) => _path;
     }
 }

@@ -69,7 +69,9 @@ public abstract class BotTask(IBotContext botContext)
                 ? RaceDimensions.GetCapsuleForRace(player.Race, player.Gender)
                 : (0.3064f, 2.0313f);
             _navPath = new NavigationPath(Container.PathfindingClient,
-                capsuleRadius: radius, capsuleHeight: height);
+                capsuleRadius: radius,
+                capsuleHeight: height,
+                nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, start, end));
         }
         if (player?.Position == null)
             return false;

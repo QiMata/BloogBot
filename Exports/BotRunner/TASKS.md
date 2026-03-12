@@ -59,6 +59,7 @@
 ### BR-NAV-001 Build a collidable game-object snapshot for path requests
 - [ ] Problem: BotRunner currently asks for paths with only `mapId/start/end`. It does not package the live game-object list the pathfinding service needs to avoid temporary blockers and route around collision-heavy areas.
 - [ ] Target files: `Exports/BotRunner/Clients/PathfindingClient.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager*.cs`, FG snapshot equivalents.
+- [x] Progress (2026-03-12 session 65): `PathfindingOverlayBuilder` now builds a conservative collidable overlay from `IObjectManager.GameObjects`, filtering to nearby finite collidable objects, capping to the nearest `64`, and mapping them into `DynamicObjectProto` with transform/scale/state. `NavigationPath` now forwards that overlay from all live BotRunner path call sites, and focused unit tests pass.
 - [ ] Required change:
   1. Build a filtered list of nearby collidable game objects from the current object manager snapshot.
   2. Map those objects into `DynamicObjectProto` with display ID, transform, scale, and state.
@@ -69,6 +70,7 @@
 - [ ] Problem: `PathfindingClient.GetPath(...)` cannot send the context needed for object-aware routing or decision-grade route selection.
 - [ ] Target files: `Exports/BotRunner/Clients/PathfindingClient.cs`, call sites in `NavigationPath.cs`, `BotRunnerService.Sequences.Movement.cs`, relevant tests.
 - [x] Progress (2026-03-12 session 64): first checkpoint landed. `PathfindingClient.GetPath(...)` now has a compatibility overload that can send `nearby_objects`, and deterministic request-shape coverage passes in `PathfindingClientRequestTests`.
+- [x] Progress (2026-03-12 session 65): third checkpoint is now in place for live callers. `NavigationPath`, `BotTask`, `RetrieveCorpseTask`, `TargetPositioningService`, and the BotRunner movement/combat sequences now use the overlay-aware overload when nearby collidable objects are present. Remaining BotRunner work in this item is the movement-capability / route-policy fields.
 - [ ] Required change:
   1. First checkpoint: extend `GetPath(...)` with a compatibility overload that can send `nearby_objects`, and prove the request shape with passing unit tests.
   2. Second checkpoint: thread character movement capabilities and route-policy settings down from BotRunner.
@@ -101,18 +103,26 @@
 
 ## Session Handoff
 - Last updated: 2026-03-12
-- Active task: `BR-NAV-001` build a collidable game-object snapshot for path requests
-- Last delta: shipped the first `BR-NAV-002` checkpoint by adding a `PathfindingClient.GetPath(...)` compatibility overload for `nearby_objects`, regenerating the protobuf contract, and adding passing deterministic request-shape coverage
+- Active task: `BR-NAV-002` extend path requests to send object context and movement capabilities
+- Last delta: shipped the BotRunner overlay slice for `BR-NAV-001`/`BR-NAV-002` by adding `PathfindingOverlayBuilder`, wiring live `NavigationPath` call sites to send conservative collidable `nearby_objects`, and adding passing deterministic overlay-builder/forwarding tests
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore` -> succeeded
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests" --logger "console;verbosity=minimal"` -> `17 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"` -> `12 passed`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TargetPositioningServiceTests|FullyQualifiedName~FishingTaskTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"` -> `72 passed`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal"` -> `20 passed`
 - Files changed:
-  - `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`
-  - `Exports/BotCommLayer/Models/Pathfinding.cs`
-  - `Exports/BotRunner/Clients/PathfindingClient.cs`
-  - `Tests/BotRunner.Tests/Clients/PathfindingClientRequestTests.cs`
+  - `Exports/BotRunner/Movement/PathfindingOverlayBuilder.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/BotTask.cs`
+  - `Exports/BotRunner/BotRunnerService.Sequences.Movement.cs`
+  - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
+  - `Exports/BotRunner/Movement/TargetPositioningService.cs`
+  - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
+  - `Tests/BotRunner.Tests/Movement/PathfindingOverlayBuilderTests.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceTests.cs`
   - `Exports/BotRunner/TASKS.md`
-- Next command: `Get-Content Exports/BotRunner/BotRunnerService.Snapshot.cs`
-- Blockers: `PathfindingClient` can now send `nearby_objects`, but BotRunner still lacks the filtered collidable game-object snapshot and the `NavigationPath` call sites needed to populate the new request field during live routing.
+- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs`
+- Blockers: BotRunner now sends conservative collidable overlays on live path calls, but the service still only logs `nearby_objects`; request-scoped overlay registration, route validation, and movement-capability fields remain open.

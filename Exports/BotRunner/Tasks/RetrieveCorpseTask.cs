@@ -36,7 +36,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             enableDynamicProbeSkipping: false,
             strictPathValidation: false,
             capsuleRadius: radius,
-            capsuleHeight: height);
+            capsuleHeight: height,
+            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ctx.ObjectManager, start, end));
     }
     private DateTime _startTime = DateTime.UtcNow;
     private DateTime _lastReclaimAttempt = DateTime.MinValue;

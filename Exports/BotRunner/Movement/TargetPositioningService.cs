@@ -39,7 +39,9 @@ namespace BotRunner.Movement
             {
                 var (radius, height) = RaceDimensions.GetCapsuleForRace(player.Race, player.Gender);
                 _navPath = new NavigationPath(_pathfindingClient,
-                    capsuleRadius: radius, capsuleHeight: height);
+                    capsuleRadius: radius,
+                    capsuleHeight: height,
+                    nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end));
             }
 
             var playerPosition = player.Position;
