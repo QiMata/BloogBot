@@ -98,6 +98,54 @@ public sealed class NavigationMetrics
     }
 }
 
+public static class NavigationTraceReason
+{
+    public const string InitialPath = "initial_path";
+    public const string DestinationChanged = "destination_changed";
+    public const string PathUnavailable = "path_unavailable";
+    public const string PathExhaustedStillFar = "path_exhausted_still_far";
+    public const string StalledNearWaypoint = "stalled_near_waypoint";
+    public const string StrictWaypointRecalc = "strict_waypoint_recalc";
+    public const string Manual = "manual";
+}
+
+public readonly record struct NavigationExecutionSample(
+    Position CurrentPosition,
+    Position Destination,
+    Position? ReturnedWaypoint,
+    int WaypointIndex,
+    int PlanVersion,
+    float DistanceToWaypoint,
+    bool UsedDirectFallback,
+    long Tick,
+    string Resolution);
+
+public sealed record NavigationTraceSnapshot(
+    uint MapId,
+    Position? RequestedStart,
+    Position? RequestedDestination,
+    Position[] ServiceWaypoints,
+    Position[] PlannedWaypoints,
+    Position? ActiveWaypoint,
+    int CurrentWaypointIndex,
+    int PlanVersion,
+    string? LastReplanReason,
+    string? LastResolution,
+    bool UsedDirectFallback,
+    bool UsedNearbyObjectOverlay,
+    int NearbyObjectCount,
+    bool SmoothPath,
+    bool IsShortRoute,
+    long LastPlanTick,
+    NavigationExecutionSample[] ExecutionSamples);
+
+internal readonly record struct ValidatedPathResult(
+    Position[] RawPath,
+    Position[] PlannedPath,
+    bool UsedNearbyObjectOverlay,
+    int NearbyObjectCount,
+    bool SmoothPath);
+
 /// <summary>
 /// Manages a path of waypoints from the pathfinding service.
 /// Tracks progress through the path and handles recalculation.
@@ -181,6 +229,50 @@ public class NavigationPath(
     private const float STRICT_DESTINATION_ENDPOINT_DISTANCE = 8f;
     private const float MAX_PROBE_SEGMENT_DISTANCE = 2f;
     private const float PROBE_COLLINEARITY_DOT_MIN = 0.985f;
+    private const int MAX_TRACE_SAMPLES = 64;
+    private const float SHORT_ROUTE_TRACE_DISTANCE = 40f;
+    private const string TRACE_RESOLUTION_WAYPOINT = "waypoint";
+    private const string TRACE_RESOLUTION_DIRECT_FALLBACK = "direct_fallback";
+    private const string TRACE_RESOLUTION_NO_ROUTE = "no_route";
+
+    private readonly List<NavigationExecutionSample> _executionSamples = [];
+    private Position[] _traceServiceWaypoints = [];
+    private Position[] _tracePlannedWaypoints = [];
+    private Position? _traceRequestedStart;
+    private Position? _traceRequestedDestination;
+    private uint _traceMapId;
+    private int _tracePlanVersion;
+    private string? _traceLastReplanReason;
+    private string? _traceLastResolution;
+    private bool _traceUsedDirectFallback;
+    private bool _traceUsedNearbyObjectOverlay;
+    private int _traceNearbyObjectCount;
+    private bool _traceSmoothPath;
+    private bool _traceIsShortRoute;
+    private long _traceLastPlanTick;
+
+    /// <summary>
+    /// Latest route plan and execution samples so live failures can be attributed
+    /// to service output versus runtime drift without relying on logs alone.
+    /// </summary>
+    public NavigationTraceSnapshot TraceSnapshot => new(
+        _traceMapId,
+        ClonePosition(_traceRequestedStart),
+        ClonePosition(_traceRequestedDestination),
+        ClonePositions(_traceServiceWaypoints),
+        ClonePositions(_tracePlannedWaypoints),
+        _currentIndex < _waypoints.Length ? ClonePosition(_waypoints[_currentIndex]) : null,
+        _currentIndex,
+        _tracePlanVersion,
+        _traceLastReplanReason,
+        _traceLastResolution,
+        _traceUsedDirectFallback,
+        _traceUsedNearbyObjectOverlay,
+        _traceNearbyObjectCount,
+        _traceSmoothPath,
+        _traceIsShortRoute,
+        _traceLastPlanTick,
+        CloneExecutionSamples());
 
     /// <summary>
     /// Gets the next waypoint to move toward, or the direct destination if no path is available.
@@ -189,25 +281,42 @@ public class NavigationPath(
     public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, bool physicsHitWall = false)
     {
         if (_pathfinding == null)
-            return ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+        {
+            var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+            return RecordWaypointResult(
+                currentPosition,
+                destination,
+                fallback,
+                usedDirectFallback: fallback != null,
+                fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
+        }
 
         // Recalculate if destination changed significantly
         if (_destination == null || _destination.DistanceTo(destination) > RECALCULATE_DISTANCE)
         {
-            CalculatePath(currentPosition, destination, mapId);
+            var reason = _destination == null
+                ? NavigationTraceReason.InitialPath
+                : NavigationTraceReason.DestinationChanged;
+            CalculatePath(currentPosition, destination, mapId, reason: reason);
         }
 
         if (_waypoints.Length == 0)
         {
             if (!allowDirectFallback)
             {
-                CalculatePath(currentPosition, destination, mapId);
+                CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathUnavailable);
                 if (_waypoints.Length == 0)
-                    return null;
+                    return RecordWaypointResult(currentPosition, destination, null, usedDirectFallback: false, TRACE_RESOLUTION_NO_ROUTE);
             }
             else
             {
-                return ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+                var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+                return RecordWaypointResult(
+                    currentPosition,
+                    destination,
+                    fallback,
+                    usedDirectFallback: fallback != null,
+                    fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
             }
         }
 
@@ -224,26 +333,50 @@ public class NavigationPath(
             // If we're still not near the destination, recalculate path periodically.
             if (currentPosition.DistanceTo(destination) > WAYPOINT_REACH_DISTANCE)
             {
-                CalculatePath(currentPosition, destination, mapId);
+                CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
             }
 
             if (_currentIndex >= _waypoints.Length)
-                return ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+            {
+                var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+                return RecordWaypointResult(
+                    currentPosition,
+                    destination,
+                    fallback,
+                    usedDirectFallback: fallback != null,
+                    fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
+            }
         }
 
         if (!TryResolveWaypoint(currentPosition, destination, mapId, minWaypointDistance, allowDirectFallback, out var waypoint))
-            return null;
+            return RecordWaypointResult(currentPosition, destination, null, usedDirectFallback: false, TRACE_RESOLUTION_NO_ROUTE);
 
         if (waypoint == null)
-            return ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+        {
+            var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+            return RecordWaypointResult(
+                currentPosition,
+                destination,
+                fallback,
+                usedDirectFallback: fallback != null,
+                fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
+        }
 
         var waypointDistance = currentPosition.DistanceTo(waypoint);
         if (_currentIndex >= _waypoints.Length)
         {
             if (currentPosition.DistanceTo(destination) > WAYPOINT_REACH_DISTANCE)
-                CalculatePath(currentPosition, destination, mapId);
+                CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
             if (_currentIndex >= _waypoints.Length)
-                return ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+            {
+                var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+                return RecordWaypointResult(
+                    currentPosition,
+                    destination,
+                    fallback,
+                    usedDirectFallback: fallback != null,
+                    fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
+            }
         }
 
         // Phase 2 (physics-confirmed corridor): when physics reports a wall contact,
@@ -274,7 +407,7 @@ public class NavigationPath(
                 // Always recalculate when stalled — never advance by index alone.
                 // Index-only advance bypasses path validation and can push the bot
                 // into invalid geometry. If recalculation fails, mark path as exhausted.
-                CalculatePath(currentPosition, destination, mapId, force: true);
+                CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.StalledNearWaypoint);
                 AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
                 _stalledNearWaypointSamples = 0;
                 _lastWaypointSampleDistance = float.NaN;
@@ -283,9 +416,17 @@ public class NavigationPath(
                 if (_currentIndex >= _waypoints.Length)
                 {
                     if (currentPosition.DistanceTo(destination) > WAYPOINT_REACH_DISTANCE)
-                        CalculatePath(currentPosition, destination, mapId);
+                        CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
                     if (_currentIndex >= _waypoints.Length)
-                        return ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+                    {
+                        var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+                        return RecordWaypointResult(
+                            currentPosition,
+                            destination,
+                            fallback,
+                            usedDirectFallback: fallback != null,
+                            fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
+                    }
                 }
 
                 waypoint = _waypoints[_currentIndex];
@@ -299,7 +440,7 @@ public class NavigationPath(
 
         _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
         _lastWaypointSampleDistance = waypointDistance;
-        return waypoint;
+        return RecordWaypointResult(currentPosition, destination, waypoint, usedDirectFallback: false, TRACE_RESOLUTION_WAYPOINT);
     }
 
     /// <summary>
@@ -415,7 +556,7 @@ public class NavigationPath(
             if (!_strictPathValidation)
                 return true;
 
-            CalculatePath(currentPosition, destination, mapId, force: true);
+            CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.StrictWaypointRecalc);
             AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
             if (_currentIndex >= _waypoints.Length)
             {
@@ -439,7 +580,7 @@ public class NavigationPath(
             && TryPromoteReachableWaypoint(currentPosition, mapId, out waypoint))
             return true;
 
-        CalculatePath(currentPosition, destination, mapId, force: true);
+        CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.StrictWaypointRecalc);
         AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
         if (_currentIndex >= _waypoints.Length)
         {
@@ -496,6 +637,99 @@ public class NavigationPath(
 
         return HasLineOfSight(currentPosition, destination, mapId) ? destination : null;
     }
+
+    private Position? RecordWaypointResult(
+        Position currentPosition,
+        Position destination,
+        Position? waypoint,
+        bool usedDirectFallback,
+        string resolution)
+    {
+        _traceUsedDirectFallback = usedDirectFallback;
+        _traceLastResolution = resolution;
+
+        var distanceToWaypoint = waypoint == null
+            ? float.NaN
+            : currentPosition.DistanceTo(waypoint);
+
+        _executionSamples.Add(new NavigationExecutionSample(
+            ClonePosition(currentPosition)!,
+            ClonePosition(destination)!,
+            ClonePosition(waypoint),
+            _currentIndex,
+            _tracePlanVersion,
+            distanceToWaypoint,
+            usedDirectFallback,
+            _tickProvider(),
+            resolution));
+
+        if (_executionSamples.Count > MAX_TRACE_SAMPLES)
+            _executionSamples.RemoveAt(0);
+
+        return waypoint;
+    }
+
+    private void RecordCalculatedTrace(
+        uint mapId,
+        Position start,
+        Position end,
+        in ValidatedPathResult path,
+        string reason)
+    {
+        _traceMapId = mapId;
+        _traceRequestedStart = ClonePosition(start);
+        _traceRequestedDestination = ClonePosition(end);
+        _traceServiceWaypoints = ClonePositions(path.RawPath);
+        _tracePlannedWaypoints = ClonePositions(_waypoints);
+        _tracePlanVersion++;
+        _traceLastReplanReason = reason;
+        _traceLastResolution = null;
+        _traceUsedDirectFallback = false;
+        _traceUsedNearbyObjectOverlay = path.UsedNearbyObjectOverlay;
+        _traceNearbyObjectCount = path.NearbyObjectCount;
+        _traceSmoothPath = path.SmoothPath;
+        _traceIsShortRoute = start.DistanceTo(end) <= SHORT_ROUTE_TRACE_DISTANCE;
+        _traceLastPlanTick = _lastCalculationTick;
+    }
+
+    private NavigationExecutionSample[] CloneExecutionSamples()
+    {
+        if (_executionSamples.Count == 0)
+            return [];
+
+        var snapshot = new NavigationExecutionSample[_executionSamples.Count];
+        for (var i = 0; i < _executionSamples.Count; i++)
+        {
+            var sample = _executionSamples[i];
+            snapshot[i] = new NavigationExecutionSample(
+                ClonePosition(sample.CurrentPosition)!,
+                ClonePosition(sample.Destination)!,
+                ClonePosition(sample.ReturnedWaypoint),
+                sample.WaypointIndex,
+                sample.PlanVersion,
+                sample.DistanceToWaypoint,
+                sample.UsedDirectFallback,
+                sample.Tick,
+                sample.Resolution);
+        }
+
+        return snapshot;
+    }
+
+    private static Position[] ClonePositions(IReadOnlyList<Position> positions)
+    {
+        if (positions.Count == 0)
+            return [];
+
+        var clone = new Position[positions.Count];
+        for (var i = 0; i < positions.Count; i++)
+            clone[i] = ClonePosition(positions[i])!;
+
+        return clone;
+    }
+
+    private static Position? ClonePosition(Position? position)
+        => position == null ? null : new Position(position.X, position.Y, position.Z);
 
     private bool HasLineOfSight(Position from, Position to, uint mapId)
     {
@@ -808,10 +1042,10 @@ public class NavigationPath(
         return HasTraversableSegments(mapId, start, path);
     }
 
-    private Position[] GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
+    private ValidatedPathResult GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
     {
         if (_pathfinding == null)
-            return [];
+            return new([], [], false, 0, smoothPath);
 
         Metrics.IncrementPathsCalculated();
         var sw = Stopwatch.StartNew();
@@ -826,7 +1060,10 @@ public class NavigationPath(
             Serilog.Log.Debug(ex, "[NavigationPath] Nearby-object overlay generation failed; falling back to legacy path request.");
         }
 
-        var rawPath = nearbyObjects is { Count: > 0 }
+        var usedNearbyObjectOverlay = nearbyObjects is { Count: > 0 };
+        var nearbyObjectCount = nearbyObjects?.Count ?? 0;
+
+        var rawPath = usedNearbyObjectOverlay
             ? _pathfinding.GetPath(mapId, start, end, nearbyObjects, smoothPath)
             : _pathfinding.GetPath(mapId, start, end, smoothPath);
         var sanitizedPath = SanitizePath(rawPath);
@@ -875,7 +1112,7 @@ public class NavigationPath(
         Metrics.RecordPathLength(result.Length);
         if (result.Length == 0)
             Metrics.IncrementPathsFailed();
-        return result;
+        return new(rawPath, result, usedNearbyObjectOverlay, nearbyObjectCount, smoothPath);
     }
 
     /// <summary>
@@ -922,7 +1159,7 @@ public class NavigationPath(
         return corrected;
     }
 
-    public void CalculatePath(Position start, Position end, uint mapId, bool force = false)
+    public void CalculatePath(Position start, Position end, uint mapId, bool force = false, string reason = NavigationTraceReason.Manual)
     {
         var nowTick = _tickProvider();
         if (!force && _hasCalculatedPath && nowTick - _lastCalculationTick < RECALCULATE_COOLDOWN_MS)
@@ -943,6 +1180,7 @@ public class NavigationPath(
             _waypoints = [];
             _waypointAcceptanceRadii = [];
             _currentIndex = 0;
+            RecordCalculatedTrace(mapId, start, end, new([], [], false, 0, _enableProbeHeuristics), reason);
             return;
         }
 
@@ -954,9 +1192,13 @@ public class NavigationPath(
             // string-pulling routes through steep Z transitions that the headless
             // client can't safely descend.
             var preferSmooth = _enableProbeHeuristics;
-            _waypoints = GetValidatedPath(mapId, start, end, smoothPath: preferSmooth);
+            var selectedPath = GetValidatedPath(mapId, start, end, smoothPath: preferSmooth);
+            _waypoints = selectedPath.PlannedPath;
             if (_waypoints.Length == 0)
-                _waypoints = GetValidatedPath(mapId, start, end, smoothPath: !preferSmooth);
+            {
+                selectedPath = GetValidatedPath(mapId, start, end, smoothPath: !preferSmooth);
+                _waypoints = selectedPath.PlannedPath;
+            }
 
             // Always begin at index 0. GetNextWaypoint() will safely advance
             // near/duplicate start points with LOS guards instead of blindly
@@ -968,12 +1210,15 @@ public class NavigationPath(
                 OffsetCornerWaypoints(start);
                 ComputeWaypointAcceptanceRadii(start);
             }
+
+            RecordCalculatedTrace(mapId, start, end, selectedPath, reason);
         }
         catch
         {
             _waypoints = [];
             _waypointAcceptanceRadii = [];
             _currentIndex = 0;
+            RecordCalculatedTrace(mapId, start, end, new([], [], false, 0, _enableProbeHeuristics), reason);
         }
     }
 
@@ -1531,6 +1776,21 @@ public class NavigationPath(
         _losSkipCacheIndex = -1;
         _losSkipCacheFarthest = -1;
         _losSkipCacheTick = 0;
+        _traceServiceWaypoints = [];
+        _tracePlannedWaypoints = [];
+        _traceRequestedStart = null;
+        _traceRequestedDestination = null;
+        _traceMapId = 0;
+        _tracePlanVersion = 0;
+        _traceLastReplanReason = null;
+        _traceLastResolution = null;
+        _traceUsedDirectFallback = false;
+        _traceUsedNearbyObjectOverlay = false;
+        _traceNearbyObjectCount = 0;
+        _traceSmoothPath = false;
+        _traceIsShortRoute = false;
+        _traceLastPlanTick = 0;
+        _executionSamples.Clear();
     }
 
     /// <summary>

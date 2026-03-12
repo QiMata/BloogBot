@@ -939,6 +939,115 @@ public class NavigationPathTests
         Assert.Null(pathfinding.LastNearbyObjects);
     }
 
+    [Fact]
+    public void GetNextWaypoint_TraceCapturesShortRoutePlanAndExecution()
+    {
+        long tick = 250;
+        var pathfinding = new DelegatePathfindingClient((_, start, end, _) =>
+            [start, new Position(5f, 0f, 0f), end]);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: false);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(NavigationTraceReason.InitialPath, trace.LastReplanReason);
+        Assert.Equal("waypoint", trace.LastResolution);
+        Assert.False(trace.UsedDirectFallback);
+        Assert.True(trace.IsShortRoute);
+        Assert.False(trace.UsedNearbyObjectOverlay);
+        Assert.False(trace.SmoothPath);
+        Assert.Equal(1, trace.PlanVersion);
+        Assert.Equal(250, trace.LastPlanTick);
+        Assert.NotNull(trace.RequestedStart);
+        Assert.NotNull(trace.RequestedDestination);
+        Assert.Equal(3, trace.ServiceWaypoints.Length);
+        Assert.Equal(3, trace.PlannedWaypoints.Length);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.Equal(5f, trace.ActiveWaypoint!.X);
+        Assert.Single(trace.ExecutionSamples);
+        Assert.Equal(1, trace.ExecutionSamples[0].PlanVersion);
+        Assert.Equal(1, trace.ExecutionSamples[0].WaypointIndex);
+        Assert.Equal("waypoint", trace.ExecutionSamples[0].Resolution);
+        Assert.False(trace.ExecutionSamples[0].UsedDirectFallback);
+        Assert.NotNull(trace.ExecutionSamples[0].ReturnedWaypoint);
+        Assert.Equal(5f, trace.ExecutionSamples[0].ReturnedWaypoint!.X);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_TraceRecordsStallDrivenReplanReason()
+    {
+        var pathfindingCalls = 0;
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            {
+                pathfindingCalls++;
+                return [new Position(10, 0, 0), new Position(10, 10, 0)];
+            },
+            isInLineOfSight: (_, from, to) => !(from.Y < 0.5f && to.Y >= 7f));
+
+        var navPath = new NavigationPath(pathfinding, () => 10_000);
+        for (var i = 0; i < 30; i++)
+        {
+            navPath.GetNextWaypoint(
+                new Position(4f, 0f, 0f),
+                new Position(10f, 20f, 0f),
+                mapId: 1,
+                allowDirectFallback: false,
+                minWaypointDistance: 4f);
+        }
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.True(pathfindingCalls >= 2);
+        Assert.True(trace.PlanVersion >= 2);
+        Assert.Equal(NavigationTraceReason.StalledNearWaypoint, trace.LastReplanReason);
+        Assert.Equal("waypoint", trace.LastResolution);
+        Assert.NotEmpty(trace.ExecutionSamples);
+        Assert.Equal(trace.PlanVersion, trace.ExecutionSamples[^1].PlanVersion);
+        Assert.Equal("waypoint", trace.ExecutionSamples[^1].Resolution);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_TraceRecordsDirectFallbackWhenNoRouteExists()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: true);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(20f, waypoint!.X);
+        Assert.Equal(NavigationTraceReason.InitialPath, trace.LastReplanReason);
+        Assert.Equal("direct_fallback", trace.LastResolution);
+        Assert.True(trace.UsedDirectFallback);
+        Assert.Empty(trace.ServiceWaypoints);
+        Assert.Empty(trace.PlannedWaypoints);
+        Assert.Null(trace.ActiveWaypoint);
+        Assert.Single(trace.ExecutionSamples);
+        Assert.True(trace.ExecutionSamples[0].UsedDirectFallback);
+        Assert.Equal("direct_fallback", trace.ExecutionSamples[0].Resolution);
+        Assert.NotNull(trace.ExecutionSamples[0].ReturnedWaypoint);
+        Assert.Equal(20f, trace.ExecutionSamples[0].ReturnedWaypoint!.X);
+    }
+
     private sealed class DelegatePathfindingClient(
         Func<uint, Position, Position, bool, Position[]> getPath,
         Func<uint, Position, Position, bool>? isInLineOfSight = null,

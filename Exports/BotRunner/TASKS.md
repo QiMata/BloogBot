@@ -80,10 +80,11 @@
 ### BR-NAV-003 Replan and re-optimize when dynamic blockers invalidate the current route
 - [ ] Problem: once live obstacles move or appear, BotRunner still tends to walk the old path until it stalls.
 - [ ] Target files: `Exports/BotRunner/Movement/NavigationPath.cs`, movement task call sites, telemetry/tests.
+- [x] Progress (2026-03-12 session 74): `NavigationPath.TraceSnapshot` now records requested start/end, raw service waypoints, runtime waypoints, plan version, explicit replan reason, and bounded per-tick execution samples. Focused `NavigationPathTests` now pin short-route trace capture, stall-driven replans, and direct-fallback attribution.
 - [ ] Required change:
   1. Re-request paths when the current route collides with new object context or repeated wall-hit telemetry.
   2. Prefer repaired/re-optimized paths over direct fallback movement when service data is available.
-  3. Log the reason for replans so service vs runtime failures are distinguishable.
+  3. Surface the new trace/replan evidence in corpse-run and fishing task diagnostics so service vs runtime failures are distinguishable during live runs.
 - [ ] Acceptance criteria: dynamic blockers trigger planned replans instead of long stall loops and direct-move thrash.
 
 ### BR-NAV-004 Consume affordance metadata in movement and decision logic
@@ -103,26 +104,17 @@
 
 ## Session Handoff
 - Last updated: 2026-03-12
-- Active task: `BR-NAV-002` extend path requests to send object context and movement capabilities
-- Last delta: shipped the BotRunner overlay slice for `BR-NAV-001`/`BR-NAV-002` by adding `PathfindingOverlayBuilder`, wiring live `NavigationPath` call sites to send conservative collidable `nearby_objects`, and adding passing deterministic overlay-builder/forwarding tests
+- Active task: `BR-NAV-003` replan and re-optimize when dynamic blockers invalidate the current route
+- Last delta: added `NavigationPath.TraceSnapshot` so BotRunner now records raw service waypoints, runtime waypoints, plan version, explicit replan reason, short-route classification, and bounded execution samples for every `GetNextWaypoint` tick; focused tests prove short-route capture, stall-driven replans, and direct-fallback attribution
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TargetPositioningServiceTests|FullyQualifiedName~FishingTaskTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"` -> `72 passed`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal"` -> `20 passed`
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `45 passed`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
 - Files changed:
-  - `Exports/BotRunner/Movement/PathfindingOverlayBuilder.cs`
   - `Exports/BotRunner/Movement/NavigationPath.cs`
-  - `Exports/BotRunner/Tasks/BotTask.cs`
-  - `Exports/BotRunner/BotRunnerService.Sequences.Movement.cs`
-  - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
-  - `Exports/BotRunner/Movement/TargetPositioningService.cs`
-  - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
-  - `Tests/BotRunner.Tests/Movement/PathfindingOverlayBuilderTests.cs`
   - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
-  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
-  - `Tests/BotRunner.Tests/BotRunnerServiceTests.cs`
   - `Exports/BotRunner/TASKS.md`
-- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs`
-- Blockers: BotRunner now sends conservative collidable overlays on live path calls, but the service still only logs `nearby_objects`; request-scoped overlay registration, route validation, and movement-capability fields remain open.
+  - `docs/TASKS.md`
+- Next command: `Get-Content Exports/BotRunner/Tasks/RetrieveCorpseTask.cs | Select-Object -Skip 180 -First 220`
+- Blockers: `TraceSnapshot` is not yet consumed by `RetrieveCorpseTask` or fishing live diagnostics, so live failures still rely on parallel service logs instead of a single bot-owned divergence record. Movement-capability fields for `BR-NAV-002` also remain open.
