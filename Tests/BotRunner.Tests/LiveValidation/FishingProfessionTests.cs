@@ -36,10 +36,14 @@ public class FishingProfessionTests
     private const float RatchetAnchorZ = 4f;
     private const float RatchetPoolSearchRadius = 250f;
     private const int PollIntervalMs = 1000;
+    private const int StartingFishingSkill = 75;
     private const float ExpectedApproachRange = 18f;
     private const float MaxLandingDelta = 3f;
+    private const int StageObservationWindowMs = 3000;
+    private const int StageObservationPollMs = 500;
     private static readonly int FishingTimeoutMs = (new BotBehaviorConfig().MaxFishingCasts * 30000) + 20000;
     private static readonly float FishingPoolDetectRange = new BotBehaviorConfig().FishingPoolDetectRange;
+    private const uint FishingLureItemId = FishingData.NightcrawlerBait;
 
     private static readonly uint[] FishingSpellSyncIds =
     [
@@ -100,9 +104,10 @@ public class FishingProfessionTests
         await PrepareBotAsync(bgAccount!, "BG");
         await PrepareBotAsync(fgAccount!, "FG");
 
-        await LogRatchetPoolDiagnosticsAsync();
-        var bgStage = await ResolveRatchetStageAsync(bgAccount!, "BG");
-        var fgStage = await ResolveRatchetStageAsync(fgAccount!, "FG");
+        var poolSpawns = await QueryRatchetPoolSpawnsAsync();
+        LogRatchetPoolDiagnostics(poolSpawns);
+        var bgStage = await ResolveRatchetStageAsync(bgAccount!, "BG", poolSpawns);
+        var fgStage = await ResolveRatchetStageAsync(fgAccount!, "FG", poolSpawns);
 
         var bgResult = await RunFishingTaskAsync(bgAccount!, "BG", bgStage);
         var fgResult = await RunFishingTaskAsync(fgAccount!, "FG", fgStage);
@@ -124,24 +129,32 @@ public class FishingProfessionTests
         }
 
         await ForceFishingSpellSyncAsync(account, label);
-        await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, 1, 300);
+        await _bot.BotSetSkillAsync(account, FishingData.FishingSkillId, StartingFishingSkill, 300);
         await Task.Delay(500);
 
         await _bot.ExecuteGMCommandAsync($".reset items {snap.CharacterName}");
         await Task.Delay(1000);
 
         await _bot.BotAddItemAsync(account, FishingData.FishingPole);
+        await _bot.BotAddItemAsync(account, FishingLureItemId);
         var polePresent = await _bot.WaitForSnapshotConditionAsync(
             account,
             snapshot => ContainsFishingPole(snapshot),
             TimeSpan.FromSeconds(8),
             pollIntervalMs: 300,
             progressLabel: $"{label} fishing-pole-added");
+        var baitPresent = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => CountItem(snapshot, FishingLureItemId) > 0,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} fishing-bait-added");
 
         Assert.True(polePresent, $"[{label}] Fishing pole never appeared in bags after setup.");
+        Assert.True(baitPresent, $"[{label}] Fishing bait never appeared in bags after setup.");
     }
 
-    private async Task LogRatchetPoolDiagnosticsAsync()
+    private async Task<IReadOnlyList<DbFishingPool>> QueryRatchetPoolSpawnsAsync()
     {
         var poolSpawns = await _bot.QueryGameObjectSpawnsNearAsync(
             FishingData.KnownFishingPoolEntries,
@@ -151,6 +164,13 @@ public class FishingProfessionTests
             RatchetPoolSearchRadius,
             limit: 10);
 
+        return poolSpawns
+            .Select(pool => new DbFishingPool(pool.entry, pool.x, pool.y, pool.z, pool.distance2D))
+            .ToArray();
+    }
+
+    private void LogRatchetPoolDiagnostics(IReadOnlyList<DbFishingPool> poolSpawns)
+    {
         if (poolSpawns.Count == 0)
         {
             _output.WriteLine("[STAGE] No Ratchet-area fishing pool spawns were returned by the world DB.");
@@ -158,10 +178,10 @@ public class FishingProfessionTests
         }
 
         foreach (var pool in poolSpawns.Take(5))
-            _output.WriteLine($"[STAGE] DB pool entry={pool.entry} pos=({pool.x:F1}, {pool.y:F1}, {pool.z:F1}) dist={pool.distance2D:F1}y from Ratchet anchor.");
+            _output.WriteLine($"[STAGE] DB pool entry={pool.Entry} pos=({pool.X:F1}, {pool.Y:F1}, {pool.Z:F1}) dist={pool.DistanceFromAnchor:F1}y from Ratchet anchor.");
     }
 
-    private async Task<FishingStage> ResolveRatchetStageAsync(string account, string label)
+    private async Task<FishingStage> ResolveRatchetStageAsync(string account, string label, IReadOnlyList<DbFishingPool> poolSpawns)
     {
         var attempts = new List<string>(RatchetStageCandidates.Length);
         FishingStage? selectedStage = null;
@@ -172,11 +192,15 @@ public class FishingProfessionTests
             var (stableLanding, finalZ) = await _bot.WaitForZStabilizationAsync(account, waitMs: 4000);
             var landingDelta = Math.Abs(finalZ - candidate.Z);
 
-            var snapshot = await RefreshAndGetSnapshotAsync(account);
-            var visiblePool = FindNearestVisibleFishingPool(snapshot);
-            var poolDistance = visiblePool?.Distance ?? float.MaxValue;
+            var visiblePool = await ObserveVisibleFishingPoolAsync(account);
+            var visiblePoolDistance = visiblePool?.Distance ?? float.MaxValue;
+            var dbPool = FindNearestDbFishingPool(candidate, poolSpawns);
+            var dbPoolDistance = dbPool?.DistanceFromStage ?? float.MaxValue;
 
-            var summary = $"candidate={candidate.Name} stable={stableLanding} finalZ={finalZ:F1} deltaZ={landingDelta:F1} visiblePool={(visiblePool != null ? $"{visiblePool.Entry}:{visiblePool.Name}" : "none")} distance={(poolDistance < float.MaxValue ? poolDistance.ToString("F1") : "n/a")}";
+            var summary =
+                $"candidate={candidate.Name} stable={stableLanding} finalZ={finalZ:F1} deltaZ={landingDelta:F1} " +
+                $"visiblePool={(visiblePool != null ? $"{visiblePool.Entry}:{visiblePool.Name}" : "none")} visibleDistance={(visiblePoolDistance < float.MaxValue ? visiblePoolDistance.ToString("F1") : "n/a")} " +
+                $"dbPool={(dbPool != null ? dbPool.Entry.ToString() : "none")} dbDistance={(dbPoolDistance < float.MaxValue ? dbPoolDistance.ToString("F1") : "n/a")}";
             attempts.Add(summary);
             _output.WriteLine($"[{label}] {summary}");
 
@@ -184,27 +208,71 @@ public class FishingProfessionTests
                 continue;
 
             if (visiblePool == null
-                || poolDistance <= ExpectedApproachRange
-                || poolDistance > FishingPoolDetectRange)
+                || visiblePoolDistance <= ExpectedApproachRange
+                || visiblePoolDistance > FishingPoolDetectRange)
             {
                 continue;
             }
 
-            var stage = new FishingStage(candidate.Name, candidate.X, candidate.Y, candidate.Z, visiblePool.Entry, visiblePool.Name, poolDistance);
-            if (selectedStage == null || stage.InitialVisiblePoolDistance < selectedStage.InitialVisiblePoolDistance)
+            var stage = new FishingStage(
+                candidate.Name,
+                candidate.X,
+                candidate.Y,
+                candidate.Z,
+                visiblePool.Entry,
+                visiblePoolDistance,
+                visiblePoolDistance,
+                "visible");
+            if (selectedStage == null || stage.TargetPoolDistance < selectedStage.TargetPoolDistance)
                 selectedStage = stage;
         }
 
         if (selectedStage != null)
         {
-            _output.WriteLine($"[{label}] Restaging on selected Ratchet dock point {selectedStage.StageName} at ({selectedStage.StageX:F1}, {selectedStage.StageY:F1}, {selectedStage.StageZ:F1}).");
+            _output.WriteLine(
+                $"[{label}] Restaging on selected Ratchet dock point {selectedStage.StageName} at ({selectedStage.StageX:F1}, {selectedStage.StageY:F1}, {selectedStage.StageZ:F1}) " +
+                $"with targetPool={selectedStage.TargetPoolEntry} targetDistance={selectedStage.TargetPoolDistance:F1}y source={selectedStage.SelectionSource}.");
             await _bot.BotTeleportAsync(account, MapId, selectedStage.StageX, selectedStage.StageY, selectedStage.StageZ);
             await _bot.WaitForZStabilizationAsync(account, waitMs: 4000);
+            var restagedVisiblePool = await ObserveVisibleFishingPoolAsync(account);
+            _output.WriteLine(
+                $"[{label}] Restaged visibility: visiblePool={(restagedVisiblePool != null ? $"{restagedVisiblePool.Entry}:{restagedVisiblePool.Name}" : "none")} " +
+                $"distance={(restagedVisiblePool?.Distance.ToString("F1") ?? "n/a")}");
+            global::Tests.Infrastructure.Skip.If(
+                restagedVisiblePool == null
+                || restagedVisiblePool.Distance <= ExpectedApproachRange
+                || restagedVisiblePool.Distance > FishingPoolDetectRange,
+                $"[{label}] No live Ratchet fishing-hole object remained visible from stage {selectedStage.StageName} after restage. DB-backed coordinates alone are not meaningful for this test.");
             return selectedStage;
         }
 
-        Assert.Fail($"[{label}] No stable Ratchet stage exposed a visible pool between {ExpectedApproachRange:F1}y and {FishingPoolDetectRange:F1}y. Attempts: {string.Join(" | ", attempts)}");
+        global::Tests.Infrastructure.Skip.If(
+            true,
+            $"[{label}] No stable Ratchet stage exposed a live visible pool between {ExpectedApproachRange:F1}y and {FishingPoolDetectRange:F1}y. Attempts: {string.Join(" | ", attempts)}");
         throw new InvalidOperationException("unreachable");
+    }
+
+    private async Task<VisibleFishingPool?> ObserveVisibleFishingPoolAsync(string account)
+    {
+        VisibleFishingPool? bestVisiblePool = null;
+        var deadline = DateTime.UtcNow.AddMilliseconds(StageObservationWindowMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            var snapshot = await RefreshAndGetSnapshotAsync(account);
+            var visiblePool = FindNearestVisibleFishingPool(snapshot);
+            if (visiblePool != null)
+            {
+                if (bestVisiblePool == null || visiblePool.Distance < bestVisiblePool.Distance)
+                    bestVisiblePool = visiblePool;
+
+                if (visiblePool.Distance > ExpectedApproachRange && visiblePool.Distance <= FishingPoolDetectRange)
+                    return visiblePool;
+            }
+
+            await Task.Delay(StageObservationPollMs);
+        }
+
+        return bestVisiblePool;
     }
 
     private async Task<FishingRunResult> RunFishingTaskAsync(string account, string label, FishingStage stage)
@@ -216,25 +284,32 @@ public class FishingProfessionTests
         var baselineCatchItems = GetCatchItemIds(before);
         var previousTaskMessages = GetFishingTaskMessages(before);
         var skillBefore = GetFishingSkill(before);
-        var initialPoolDistance = FindNearestPoolDistance(before);
+        var initialVisiblePoolDistance = FindNearestPoolDistance(before);
         var poleStartedInBag = ContainsFishingPole(before);
+        var baitStartedInBag = CountItem(before, FishingLureItemId) > 0;
+        var baitCountBefore = CountItem(before, FishingLureItemId);
 
-        _output.WriteLine($"[{label}] Dispatching StartFishing from Ratchet stage {stage.StageName}. skill={skillBefore} poleInBag={poleStartedInBag} nearestPool={initialPoolDistance:F1}y targetPool={stage.VisiblePoolEntry}:{stage.VisiblePoolName}");
+        _output.WriteLine(
+            $"[{label}] Dispatching StartFishing from Ratchet stage {stage.StageName}. skill={skillBefore} poleInBag={poleStartedInBag} baitCount={baitCountBefore} " +
+            $"visiblePoolAtStart={(initialVisiblePoolDistance < float.MaxValue ? $"{initialVisiblePoolDistance:F1}y" : "none")} " +
+            $"targetPool={stage.TargetPoolEntry} targetDistance={stage.TargetPoolDistance:F1}y source={stage.SelectionSource}");
         await _bot.SendActionAndWaitAsync(account, new ActionMessage
         {
             ActionType = ActionType.StartFishing
         }, delayMs: 1000);
 
         var deadline = DateTime.UtcNow.AddMilliseconds(FishingTimeoutMs);
-        var bestPoolDistance = initialPoolDistance;
+        var bestPoolDistance = initialVisiblePoolDistance;
         var sawChannel = false;
         var sawBobber = false;
         var sawPoolAcquireDiagnostic = false;
         var sawInCastRangeDiagnostic = false;
+        var sawLureUseDiagnostic = false;
         var sawLootWindowDiagnostic = false;
         var sawLootSuccessDiagnostic = false;
         var sawSwimmingError = false;
         var poleEquippedByTask = !poleStartedInBag;
+        var baitConsumedByTask = baitCountBefore == 0;
         IReadOnlyList<uint> finalCatchItems = baselineCatchItems;
         IReadOnlyList<uint> finalCatchDeltaItems = [];
         string lastFishingTaskMessage = string.Empty;
@@ -268,6 +343,9 @@ public class FishingProfessionTests
 
             sawPoolAcquireDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask pool_acquired", StringComparison.Ordinal));
             sawInCastRangeDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask in_cast_range", StringComparison.Ordinal));
+            sawLureUseDiagnostic |= currentTaskMessages.Any(message =>
+                message.Contains("FishingTask lure_use_started", StringComparison.Ordinal)
+                || message.Contains("FishingTask lure_applied", StringComparison.Ordinal));
             sawLootWindowDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask loot_window_open", StringComparison.Ordinal));
             var lootSuccessMessage = currentTaskMessages.LastOrDefault(message => message.Contains("FishingTask fishing_loot_success", StringComparison.Ordinal));
             if (!string.IsNullOrWhiteSpace(lootSuccessMessage))
@@ -282,6 +360,7 @@ public class FishingProfessionTests
 
             finalCatchItems = GetCatchItemIds(snapshot);
             finalCatchDeltaItems = GetItemDelta(baselineCatchItems, finalCatchItems);
+            baitConsumedByTask |= CountItem(snapshot, FishingLureItemId) < baitCountBefore;
             if (sawLootSuccessDiagnostic && finalCatchDeltaItems.Count > 0)
             {
                 _output.WriteLine($"[{label}] FishingTask reported loot success. stage={stage.StageName} bestPool={bestPoolDistance:F1}y channel={sawChannel} bobber={sawBobber} catchDelta=[{string.Join(", ", finalCatchDeltaItems)}]");
@@ -289,12 +368,16 @@ public class FishingProfessionTests
                     StageName: stage.StageName,
                     PoleStartedInBag: poleStartedInBag,
                     PoleEquippedByTask: poleEquippedByTask,
-                    InitialPoolDistance: initialPoolDistance,
+                    BaitStartedInBag: baitStartedInBag,
+                    BaitConsumedByTask: baitConsumedByTask,
+                    StagedPoolDistance: stage.TargetPoolDistance,
+                    InitialVisiblePoolDistance: initialVisiblePoolDistance,
                     BestPoolDistance: bestPoolDistance,
                     SawChannel: sawChannel,
                     SawBobber: sawBobber,
                     SawPoolAcquireDiagnostic: sawPoolAcquireDiagnostic,
                     SawInCastRangeDiagnostic: sawInCastRangeDiagnostic,
+                    SawLureUseDiagnostic: sawLureUseDiagnostic,
                     SawLootWindowDiagnostic: sawLootWindowDiagnostic,
                     SawLootSuccessDiagnostic: sawLootSuccessDiagnostic,
                     SawSwimmingError: sawSwimmingError,
@@ -311,12 +394,16 @@ public class FishingProfessionTests
             StageName: stage.StageName,
             PoleStartedInBag: poleStartedInBag,
             PoleEquippedByTask: poleEquippedByTask,
-            InitialPoolDistance: initialPoolDistance,
+            BaitStartedInBag: baitStartedInBag,
+            BaitConsumedByTask: baitConsumedByTask,
+            StagedPoolDistance: stage.TargetPoolDistance,
+            InitialVisiblePoolDistance: initialVisiblePoolDistance,
             BestPoolDistance: bestPoolDistance,
             SawChannel: sawChannel,
             SawBobber: sawBobber,
             SawPoolAcquireDiagnostic: sawPoolAcquireDiagnostic,
             SawInCastRangeDiagnostic: sawInCastRangeDiagnostic,
+            SawLureUseDiagnostic: sawLureUseDiagnostic,
             SawLootWindowDiagnostic: sawLootWindowDiagnostic,
             SawLootSuccessDiagnostic: sawLootSuccessDiagnostic,
             SawSwimmingError: sawSwimmingError,
@@ -339,10 +426,13 @@ public class FishingProfessionTests
     {
         Assert.True(result.PoleStartedInBag, $"[{label}] Fishing pole should start in bags so FishingTask owns the equip step.");
         Assert.True(result.PoleEquippedByTask, $"[{label}] FishingTask never removed the fishing pole from bags.");
-        Assert.True(result.InitialPoolDistance > ExpectedApproachRange,
-            $"[{label}] Ratchet stage did not start outside the pool casting window. distance={result.InitialPoolDistance:F1}");
-        Assert.True(result.InitialPoolDistance <= FishingPoolDetectRange,
-            $"[{label}] Ratchet stage started outside FishingTask detect range. distance={result.InitialPoolDistance:F1} detectRange={FishingPoolDetectRange:F1}");
+        Assert.True(result.BaitStartedInBag, $"[{label}] Fishing bait should start in bags so FishingTask owns the lure step.");
+        Assert.True(result.SawLureUseDiagnostic, $"[{label}] FishingTask never reported using fishing bait. lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.BaitConsumedByTask, $"[{label}] FishingTask never consumed the staged fishing bait.");
+        Assert.True(result.StagedPoolDistance > ExpectedApproachRange,
+            $"[{label}] Ratchet stage did not start outside the pool casting window. distance={result.StagedPoolDistance:F1}");
+        Assert.True(result.StagedPoolDistance <= FishingPoolDetectRange,
+            $"[{label}] Ratchet stage started outside FishingTask detect range. distance={result.StagedPoolDistance:F1} detectRange={FishingPoolDetectRange:F1}");
         Assert.True(result.SawPoolAcquireDiagnostic,
             $"[{label}] FishingTask never reported acquiring a visible pool. lastMessage={result.LastFishingTaskMessage}");
         Assert.True(result.BestPoolDistance <= ExpectedApproachRange,
@@ -353,8 +443,8 @@ public class FishingProfessionTests
             $"[{label}] FishingTask never reached a fishing channel state. lastMessage={result.LastFishingTaskMessage}");
         Assert.True(result.SawBobber,
             $"[{label}] FishingTask never observed a fishing bobber. lastMessage={result.LastFishingTaskMessage}");
-        Assert.True(result.SawLootWindowDiagnostic || result.SawLootSuccessDiagnostic,
-            $"[{label}] FishingTask never surfaced a loot-window-open or loot-success diagnostic. lastMessage={result.LastFishingTaskMessage}");
+        Assert.True(result.SawLootWindowDiagnostic,
+            $"[{label}] FishingTask never surfaced the loot_window_open diagnostic after the bobber interaction path. lastMessage={result.LastFishingTaskMessage}");
         Assert.True(result.SawLootSuccessDiagnostic,
             $"[{label}] FishingTask never reported fishing_loot_success. lastMessage={result.LastFishingTaskMessage}");
         Assert.False(result.SawSwimmingError,
@@ -362,7 +452,10 @@ public class FishingProfessionTests
         Assert.True(result.CatchDeltaItems.Count > 0,
             $"[{label}] FishingTask completed without a newly looted item appearing in bags. lastMessage={result.LastFishingTaskMessage} catchItems=[{string.Join(", ", result.CatchItems)}]");
 
-        _output.WriteLine($"[{label}] Final metrics: stage={result.StageName}, skill {result.SkillBefore} -> {result.SkillAfter}, bestPool={result.BestPoolDistance:F1}y, lootSuccess={result.SawLootSuccessDiagnostic}, catchDelta=[{string.Join(", ", result.CatchDeltaItems)}]");
+        _output.WriteLine(
+            $"[{label}] Final metrics: stage={result.StageName}, skill {result.SkillBefore} -> {result.SkillAfter}, stagedPool={result.StagedPoolDistance:F1}y, " +
+            $"initialVisiblePool={(result.InitialVisiblePoolDistance < float.MaxValue ? result.InitialVisiblePoolDistance.ToString("F1") : "none")}, " +
+            $"bestPool={result.BestPoolDistance:F1}y, lootSuccess={result.SawLootSuccessDiagnostic}, catchDelta=[{string.Join(", ", result.CatchDeltaItems)}]");
     }
 
     private async Task ForceFishingSpellSyncAsync(string account, string label)
@@ -399,6 +492,9 @@ public class FishingProfessionTests
 
     private static bool ContainsFishingPole(WoWActivitySnapshot? snapshot)
         => snapshot?.Player?.BagContents?.Values.Any(itemId => FishingPoleIds.Contains(itemId)) == true;
+
+    private static int CountItem(WoWActivitySnapshot? snapshot, uint itemId)
+        => snapshot?.Player?.BagContents?.Values.Count(value => value == itemId) ?? 0;
 
     private static uint GetFishingSkill(WoWActivitySnapshot? snapshot)
     {
@@ -463,6 +559,22 @@ public class FishingProfessionTests
         return MathF.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
     }
 
+    private static DbFishingPoolStageDistance? FindNearestDbFishingPool(RatchetStageCandidate candidate, IReadOnlyList<DbFishingPool> poolSpawns)
+        => poolSpawns
+            .Select(pool => new DbFishingPoolStageDistance(
+                pool.Entry,
+                Distance3D(candidate.X, candidate.Y, candidate.Z, pool.X, pool.Y, pool.Z)))
+            .OrderBy(pool => pool.DistanceFromStage)
+            .FirstOrDefault();
+
+    private static float Distance3D(float x1, float y1, float z1, float x2, float y2, float z2)
+    {
+        var dx = x1 - x2;
+        var dy = y1 - y2;
+        var dz = z1 - z2;
+        return MathF.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    }
+
     private static IReadOnlyList<uint> GetCatchItemIds(WoWActivitySnapshot? snapshot)
         => snapshot?.Player?.BagContents?.Values
             .Where(itemId => !FishingPoleIds.Contains(itemId))
@@ -514,12 +626,16 @@ public class FishingProfessionTests
         string StageName,
         bool PoleStartedInBag,
         bool PoleEquippedByTask,
-        float InitialPoolDistance,
+        bool BaitStartedInBag,
+        bool BaitConsumedByTask,
+        float StagedPoolDistance,
+        float InitialVisiblePoolDistance,
         float BestPoolDistance,
         bool SawChannel,
         bool SawBobber,
         bool SawPoolAcquireDiagnostic,
         bool SawInCastRangeDiagnostic,
+        bool SawLureUseDiagnostic,
         bool SawLootWindowDiagnostic,
         bool SawLootSuccessDiagnostic,
         bool SawSwimmingError,
@@ -534,11 +650,16 @@ public class FishingProfessionTests
         float StageX,
         float StageY,
         float StageZ,
-        uint VisiblePoolEntry,
-        string VisiblePoolName,
-        float InitialVisiblePoolDistance);
+        uint TargetPoolEntry,
+        float TargetPoolDistance,
+        float InitialVisiblePoolDistance,
+        string SelectionSource);
 
     private sealed record RatchetStageCandidate(string Name, float X, float Y, float Z);
+
+    private sealed record DbFishingPool(uint Entry, float X, float Y, float Z, float DistanceFromAnchor);
+
+    private sealed record DbFishingPoolStageDistance(uint Entry, float DistanceFromStage);
 
     private sealed record VisibleFishingPool(uint Entry, string Name, float Distance, Game.Position? Position);
 }

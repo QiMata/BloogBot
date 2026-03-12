@@ -337,6 +337,13 @@ namespace ForegroundBotRunner.Statics
         {
             // WoW Lua bags are 0-based: 0=backpack, 1-4=extra bags
             // Slot is 1-based in Lua
+            if (TryGetEquippedInventorySlot(targetGuid, out var inventorySlot))
+            {
+                MainThreadLuaCall($"UseContainerItem({bagId},{slotId + 1})");
+                MainThreadLuaCall($"PickupInventoryItem({inventorySlot})");
+                return;
+            }
+
             MainThreadLuaCall($"UseContainerItem({bagId},{slotId + 1})");
         }
 
@@ -442,6 +449,24 @@ namespace ForegroundBotRunner.Statics
         public void PickupContainerItem(uint bag, uint slot)
         {
             MainThreadLuaCall($"PickupContainerItem({bag},{slot})");
+        }
+
+        private bool TryGetEquippedInventorySlot(ulong targetGuid, out int inventorySlot)
+        {
+            inventorySlot = 0;
+            if (targetGuid == 0)
+                return false;
+
+            for (var slot = EquipSlot.Head; slot <= EquipSlot.Ranged; slot++)
+            {
+                if (GetEquippedItemGuid(slot) != targetGuid)
+                    continue;
+
+                inventorySlot = (int)slot;
+                return true;
+            }
+
+            return false;
         }
     }
 }

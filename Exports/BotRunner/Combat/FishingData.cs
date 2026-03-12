@@ -118,6 +118,16 @@ namespace BotRunner.Combat
         /// </summary>
         public static IWoWItem? FindUsableLure(IObjectManager objectManager)
         {
+            var lureLocation = FindUsableLureInBags(objectManager);
+            return lureLocation == null ? null : objectManager.GetItem(lureLocation.Value.bag, lureLocation.Value.slot);
+        }
+
+        /// <summary>
+        /// Finds the best fishing lure in the player's inventory, preferring higher bonus.
+        /// Returns the (bag, slot, itemId) tuple, or null if none found.
+        /// </summary>
+        public static (int bag, int slot, uint itemId)? FindUsableLureInBags(IObjectManager objectManager)
+        {
             foreach (var (itemId, _) in LureTiers)
             {
                 for (int bag = 0; bag < 5; bag++)
@@ -127,10 +137,11 @@ namespace BotRunner.Combat
                     {
                         var item = objectManager.GetItem(bag, slot);
                         if (item != null && item.ItemId == itemId)
-                            return item;
+                            return (bag, slot, itemId);
                     }
                 }
             }
+
             return null;
         }
 

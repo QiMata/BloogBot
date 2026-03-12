@@ -1,5 +1,6 @@
 using BotRunner.Combat;
 using BotRunner.Interfaces;
+using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
@@ -20,6 +21,8 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         EnsurePoleEquipped,
         AwaitPoleEquip,
+        EnsureLureApplied,
+        AwaitLureApply,
         AcquireFishingPool,
         MoveToFishingPool,
         ResolveAndCast,
@@ -33,6 +36,7 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     private const float DesiredPoolDistance = 14f;
     private const float PoolDistanceTolerance = 4f;
     private const int EquipTimeoutMs = 4000;
+    private const int LureApplyTimeoutMs = 6000;
     private const int PoolAcquireTimeoutMs = 5000;
     private const int CastStabilizeDelayMs = 250;
     private const int CastStabilizeTimeoutMs = 1500;
@@ -46,7 +50,10 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     private uint _fishingSpellId;
     private int _castsAttempted;
     private int _equipAttempts;
+    private int _lureAttempts;
     private ulong _activePoolGuid;
+    private uint _activeLureItemId;
+    private int _activeLureStartingCount;
     private bool _sawFishingState;
     private bool _sawBobber;
     private bool _sawLootWindow;
@@ -82,6 +89,12 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
             case FishingState.AwaitPoleEquip:
                 AwaitPoleEquip();
                 return;
+            case FishingState.EnsureLureApplied:
+                EnsureLureApplied(player);
+                return;
+            case FishingState.AwaitLureApply:
+                AwaitLureApply(player);
+                return;
             case FishingState.AcquireFishingPool:
                 AcquireFishingPool(player);
                 return;
@@ -113,7 +126,7 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     {
         if (FishingData.HasFishingPoleEquipped(ObjectManager))
         {
-            SetState(FishingState.AcquireFishingPool);
+            SetState(FishingState.EnsureLureApplied);
             return;
         }
 
@@ -140,7 +153,7 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         {
             Log.Information("[FISH] Fishing pole equipped.");
             BotContext.AddDiagnosticMessage("[TASK] FishingTask pole_equipped");
-            SetState(FishingState.AcquireFishingPool);
+            SetState(FishingState.EnsureLureApplied);
             return;
         }
 
@@ -155,6 +168,66 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
 
         Log.Warning("[FISH] Fishing pole equip timed out.");
         PopTask("pole_equip_timeout");
+    }
+
+    private void EnsureLureApplied(IWoWLocalPlayer player)
+    {
+        if (player.MainhandIsEnchanted)
+        {
+            BotContext.AddDiagnosticMessage("[TASK] FishingTask lure_already_active");
+            SetState(FishingState.AcquireFishingPool);
+            return;
+        }
+
+        var lureLocation = FishingData.FindUsableLureInBags(ObjectManager);
+        if (lureLocation == null)
+        {
+            BotContext.AddDiagnosticMessage("[TASK] FishingTask no_lure_available");
+            SetState(FishingState.AcquireFishingPool);
+            return;
+        }
+
+        _lureAttempts++;
+        _activeLureItemId = lureLocation.Value.itemId;
+        _activeLureStartingCount = CountContainedItem(_activeLureItemId);
+        var equippedPoleGuid = GetEquippedPoleGuid();
+        ObjectManager.UseItem(lureLocation.Value.bag, lureLocation.Value.slot, equippedPoleGuid);
+        Log.Information("[FISH] Applying lure item={ItemId} from bag={Bag} slot={Slot} (attempt {Attempt}).",
+            _activeLureItemId,
+            lureLocation.Value.bag,
+            lureLocation.Value.slot,
+            _lureAttempts);
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask lure_use_started item={_activeLureItemId} bag={lureLocation.Value.bag} slot={lureLocation.Value.slot} target=0x{equippedPoleGuid:X} attempt={_lureAttempts}");
+        SetState(FishingState.AwaitLureApply);
+    }
+
+    private void AwaitLureApply(IWoWLocalPlayer player)
+    {
+        var lureCountDropped = _activeLureItemId != 0 && CountContainedItem(_activeLureItemId) < _activeLureStartingCount;
+        if (player.MainhandIsEnchanted || lureCountDropped)
+        {
+            Log.Information("[FISH] Lure application confirmed. item={ItemId} countDropped={CountDropped} mainhandEnchanted={MainhandEnchanted}",
+                _activeLureItemId,
+                lureCountDropped,
+                player.MainhandIsEnchanted);
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask lure_applied item={_activeLureItemId} countDropped={lureCountDropped} mainhandEnchanted={player.MainhandIsEnchanted}");
+            SetState(FishingState.AcquireFishingPool);
+            return;
+        }
+
+        if (ElapsedMs < LureApplyTimeoutMs)
+            return;
+
+        if (_lureAttempts < 2)
+        {
+            SetState(FishingState.EnsureLureApplied);
+            return;
+        }
+
+        Log.Warning("[FISH] Fishing lure application timed out for item {ItemId}.", _activeLureItemId);
+        PopTask("lure_apply_timeout");
     }
 
     private void AcquireFishingPool(IWoWLocalPlayer player)
@@ -536,6 +609,25 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         BotContext.AddDiagnosticMessage(
             $"[TASK] FishingTask loot_bag_delta items=[{string.Join(", ", deltaItemIds.OrderBy(id => id))}]");
         return true;
+    }
+
+    private int CountContainedItem(uint itemId)
+        => ObjectManager.GetContainedItems()
+            .Count(item => item != null && item.ItemId == itemId);
+
+    private ulong GetEquippedPoleGuid()
+    {
+        foreach (var slot in new[] { EquipSlot.MainHand, EquipSlot.OffHand, EquipSlot.Ranged })
+        {
+            var equippedItem = ObjectManager.GetEquippedItem(slot);
+            var equippedGuid = ObjectManager.GetEquippedItemGuid(slot);
+            if (equippedItem != null && FishingData.IsFishingPole(equippedItem.ItemId) && equippedGuid != 0)
+                return equippedGuid;
+        }
+
+        return ObjectManager.GetEquippedItems()
+            .FirstOrDefault(item => item != null && FishingData.IsFishingPole(item.ItemId))
+            ?.Guid ?? 0UL;
     }
 
     private Dictionary<uint, int> SnapshotCatchBagItemCounts()

@@ -75,6 +75,7 @@ internal static class AtomicTaskTestHelpers
         item.Setup(i => i.ItemId).Returns(itemId);
         item.Setup(i => i.Name).Returns($"Item_{itemId}");
         item.Setup(i => i.StackCount).Returns(stackCount);
+        item.Setup(i => i.Guid).Returns(itemId);
         return item;
     }
 
@@ -256,6 +257,7 @@ public class FishingTaskTests
         [
             new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
         ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
         var pool = AtomicTaskTestHelpers.CreateGameObject(
             guid: 0xAA11UL,
             entry: 180582,
@@ -274,9 +276,44 @@ public class FishingTaskTests
         task.Update();
         task.Update();
         task.Update();
+        task.Update();
 
         om.Verify(o => o.MoveToward(It.IsAny<Position>()), Times.AtLeastOnce);
         om.Verify(o => o.CastSpell(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_WithAvailableBait_UsesLureBeforeApproachingPool()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(-995f, -3850f, 4f));
+        player.Setup(p => p.SkillInfo).Returns(
+        [
+            new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 75 }
+        ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(false);
+
+        om.Setup(o => o.Player).Returns(player.Object);
+        var equippedPole = AtomicTaskTestHelpers.CreateItem(FishingData.FishingPole);
+        equippedPole.Setup(i => i.Guid).Returns(0UL);
+        om.Setup(o => o.GetEquippedItems()).Returns([equippedPole.Object]);
+        om.Setup(o => o.GetEquippedItem(EquipSlot.MainHand)).Returns(equippedPole.Object);
+        om.Setup(o => o.GetEquippedItemGuid(EquipSlot.MainHand)).Returns(0xF1A5UL);
+        om.Setup(o => o.GetContainedItems()).Returns([AtomicTaskTestHelpers.CreateItem(FishingData.NightcrawlerBait).Object]);
+        om.Setup(o => o.GetItem(0, 1)).Returns(AtomicTaskTestHelpers.CreateItem(FishingData.NightcrawlerBait).Object);
+        om.Setup(o => o.GameObjects).Returns(Enumerable.Empty<IWoWGameObject>());
+        om.Setup(o => o.PlayerGuid).Returns(new HighGuid(0UL));
+
+        var task = new FishingTask(ctx.Object);
+        stack.Push(task);
+
+        task.Update();
+        task.Update();
+
+        om.Verify(o => o.UseItem(0, 1, 0xF1A5UL), Times.Once);
+        ctx.Verify(c => c.AddDiagnosticMessage(It.Is<string>(message =>
+            message.Contains("FishingTask lure_use_started", StringComparison.Ordinal))), Times.Once);
         Assert.Single(stack);
     }
 
@@ -289,6 +326,7 @@ public class FishingTaskTests
         [
             new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
         ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
         var pool = AtomicTaskTestHelpers.CreateGameObject(
             guid: 0xBB22UL,
             entry: 180582,
@@ -322,6 +360,7 @@ public class FishingTaskTests
         var task = new FishingTask(ctx.Object);
         stack.Push(task);
 
+        task.Update();
         task.Update();
         task.Update();
         AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);
@@ -361,6 +400,7 @@ public class FishingTaskTests
         [
             new SkillInfo { SkillInt1 = FishingData.FishingSkillId, SkillInt2 = 1 }
         ]);
+        player.Setup(p => p.MainhandIsEnchanted).Returns(true);
         var pool = AtomicTaskTestHelpers.CreateGameObject(
             guid: 0xCC33UL,
             entry: 180582,
@@ -392,6 +432,7 @@ public class FishingTaskTests
         var task = new FishingTask(ctx.Object);
         stack.Push(task);
 
+        task.Update();
         task.Update();
         task.Update();
         AtomicTaskTestHelpers.RewindFishingTaskState(task, 300);

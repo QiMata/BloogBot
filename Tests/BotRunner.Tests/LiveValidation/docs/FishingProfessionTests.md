@@ -17,6 +17,8 @@ This suite proves that both BG and FG run the same high-level fishing contract:
 - `Exports/BotRunner/Tasks/BotTask.cs`
 - `Exports/BotRunner/Tasks/FishingTask.cs`
 - `Exports/BotRunner/Combat/FishingData.cs`
+- `Exports/WoWSharpClient/Movement/MovementController.cs`
+- `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
 - `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
 - `Exports/WoWSharpClient/Frames/NetworkLootFrame.cs`
 - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
@@ -26,11 +28,12 @@ This suite proves that both BG and FG run the same high-level fishing contract:
 ## Test Flow
 
 1. `EnsureCleanSlateAsync()` runs for both bots.
-2. Both bots learn fishing, set fishing skill, clear items, receive a fishing pole, and teleport to Ratchet.
-3. The test probes dock-stage candidates and keeps only stable landings that expose a visible pool inside `FishingTask` detect range but outside immediate cast range.
+2. Both bots learn fishing, set fishing skill to `75`, clear items, receive a fishing pole plus `Nightcrawler Bait`, and teleport to Ratchet.
+3. The test probes dock-stage candidates and keeps only stable landings that expose a live visible fishing-hole object inside `FishingTask` detect range but outside immediate cast range. If Ratchet has no live visible pool at probe time, the test skips instead of using DB-only spawn coordinates.
 4. The test dispatches `ActionType.StartFishing` for BG and FG.
 5. `FishingTask` owns:
    - pole equip
+   - bait application to the equipped pole
    - pool acquisition
    - pool approach
    - cast start
@@ -43,12 +46,13 @@ This suite proves that both BG and FG run the same high-level fishing contract:
 Both bots must show all of the following:
 
 - pole started in bags and was removed from bags by `FishingTask`
+- bait started in bags and was consumed by `FishingTask`
 - initial visible pool distance was outside cast range but inside detect range
 - `FishingTask pool_acquired`
 - `FishingTask in_cast_range`
 - fishing channel observed
 - fishing bobber observed
-- `FishingTask loot_window_open` or a terminal `FishingTask fishing_loot_success` marker
+- `FishingTask loot_window_open`
 - `FishingTask fishing_loot_success`
 - a non-pole bag delta after the loot window closes
 
@@ -57,22 +61,25 @@ Both bots must show all of the following:
 - BG bite handling comes from `SMSG_GAMEOBJECT_CUSTOM_ANIM -> SpellHandler.HandleGameObjectCustomAnim(...) -> InteractWithGameObject(...)`.
 - FG now mirrors that behavior through the injected client's recv hook:
   `PacketLogger.OnPacketCaptured -> ForegroundBotWorker.HandleCapturedPacket(...) -> ObjectManager.TryAutoInteractFishingBobberFromPacket()`.
-- The live pass condition is no longer “skill-up or any loot-window signal.” It is an actual catch item appearing in bags after the bobber interaction path.
+- The live pass condition is no longer “skill-up or any loot-window signal.” It is `bobber observed -> loot_window_open -> fishing_loot_success -> catch item appears in bags`.
 
 ## Validation
 
 ```powershell
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~UseItemTaskTests" --logger "console;verbosity=minimal"
+dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"
 ```
 
 Latest focused results:
-- `FishingTaskTests|FishingDataTests|ActionMessage_AllTypes_RoundTrip` -> `44 passed`
-- `FishingProfessionTests` -> `1 passed`
+- `FishingTaskTests|FishingDataTests|ActionMessage_AllTypes_RoundTrip|UseItemTaskTests` -> `48 passed`
+- `MovementControllerTests` -> `38 passed`
+- `FishingProfessionTests` -> `1 skipped` when no live Ratchet fishing-hole object was visible from any stable dock stage; the suite now skips instead of running on DB-only spawn assumptions
 
 ## Current Focus
 
 - keep the focused fishing slice green with both bots asserted
-- keep the success contract tied to actual loot reaching bags
+- keep the success contract tied to the bobber-interact -> loot-window -> bag-delta sequence
 - use FG as the live packet/timing reference for the future BG botrunner parity work
-- fix shoreline movement parity next: FG can still run off the Ratchet pier if movement stop arrives after the overrun has already started, and BG `MovementController` needs the same stop/fall-state rigor
+- keep the live precondition meaningful: only run the fishing task when a real visible pool exists
+- BG `MovementController` forced-stop handling now clears forward/strafe intent while preserving falling/swimming physics flags; FG Ratchet pier overrun recovery still needs follow-up

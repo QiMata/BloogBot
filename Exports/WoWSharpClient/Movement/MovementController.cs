@@ -75,6 +75,21 @@ namespace WoWSharpClient.Movement
             MovementFlags.MOVEFLAG_BACKWARD |
             MovementFlags.MOVEFLAG_STRAFE_LEFT |
             MovementFlags.MOVEFLAG_STRAFE_RIGHT;
+        private const MovementFlags FORCED_STOP_CLEAR_MASK =
+            MovementFlags.MOVEFLAG_FORWARD |
+            MovementFlags.MOVEFLAG_BACKWARD |
+            MovementFlags.MOVEFLAG_STRAFE_LEFT |
+            MovementFlags.MOVEFLAG_STRAFE_RIGHT |
+            MovementFlags.MOVEFLAG_TURN_LEFT |
+            MovementFlags.MOVEFLAG_TURN_RIGHT |
+            MovementFlags.MOVEFLAG_PITCH_UP |
+            MovementFlags.MOVEFLAG_PITCH_DOWN |
+            MovementFlags.MOVEFLAG_PENDING_STOP |
+            MovementFlags.MOVEFLAG_PENDING_UNSTRAFE |
+            MovementFlags.MOVEFLAG_PENDING_FORWARD |
+            MovementFlags.MOVEFLAG_PENDING_BACKWARD |
+            MovementFlags.MOVEFLAG_PENDING_STR_LEFT |
+            MovementFlags.MOVEFLAG_PENDING_STR_RGHT;
 
         // Wall contact state — updated each frame from physics output
         public bool LastHitWall { get; private set; }
@@ -488,21 +503,25 @@ namespace WoWSharpClient.Movement
         private void SendForcedStopPacket(uint gameTimeMs)
         {
             // Always emit a true MSG_MOVE_STOP before resuming movement after reset/recovery.
+            // Clear directional intent, but preserve active physics state such as falling/swimming.
             // Do not immediately restore pre-stop movement flags in this tick.
             // Let bot logic re-issue movement intent on the next tick so stale forward/strafe
             // state is fully cleared server-side first.
-            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _player.MovementFlags = ClearForcedStopIntent(_player.MovementFlags);
 
+            var opcode = DetermineOpcode(_player.MovementFlags, _lastSentFlags);
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_STOP, buffer);
+            _ = _client.SendMovementOpcodeAsync(opcode, buffer);
 
             _lastPacketPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
             _lastPacketTime = gameTimeMs;
-            _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
+            _lastSentFlags = _player.MovementFlags;
             _forceStopAfterReset = false;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
-            Log.Information("[MovementController] Forced MSG_MOVE_STOP dispatched; movement flags remain cleared for clean resume.");
+            Log.Information("[MovementController] Forced {Opcode} dispatched; flags now 0x{Flags:X} for clean resume.",
+                opcode,
+                (uint)_player.MovementFlags);
         }
 
         private static bool IsBefore(uint nowMs, uint targetMs)
@@ -672,16 +691,21 @@ namespace WoWSharpClient.Movement
 
         public void SendStopPacket(uint gameTimeMs)
         {
-            // Force send a stop packet (useful after teleports or when bot stops)
-            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            // Clear directional intent while preserving active physics state such as falling/swimming.
+            // This prevents stop requests from cancelling airborne state after shoreline overruns.
+            _player.MovementFlags = ClearForcedStopIntent(_player.MovementFlags);
+            var opcode = DetermineOpcode(_player.MovementFlags, _lastSentFlags);
             var buffer = MovementPacketHandler.BuildMovementInfoBuffer(_player, gameTimeMs, _fallTimeMs);
-            _ = _client.SendMovementOpcodeAsync(Opcode.MSG_MOVE_STOP, buffer);
-            _lastSentFlags = MovementFlags.MOVEFLAG_NONE;
+            _ = _client.SendMovementOpcodeAsync(opcode, buffer);
+            _lastSentFlags = _player.MovementFlags;
             _forceStopAfterReset = false;
             _staleForwardNoDisplacementTicks = 0;
             _staleForwardSuppressUntilMs = AddMs(gameTimeMs, STALE_FORWARD_SUPPRESS_AFTER_RECOVERY_MS);
-            Log.Debug("[MovementController] MSG_MOVE_STOP (forced)");
+            Log.Debug("[MovementController] {Opcode} (forced stop) flags=0x{Flags:X}", opcode, (uint)_player.MovementFlags);
         }
+
+        private static MovementFlags ClearForcedStopIntent(MovementFlags flags)
+            => flags & ~FORCED_STOP_CLEAR_MASK;
 
         // ======== PATH FOLLOWING ========
 

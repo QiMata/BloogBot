@@ -50,6 +50,10 @@
 - [x] **Done (batch 11).** Replaced bare `catch { }` blocks in `BotRunnerService.Snapshot.cs` with `TryPopulate()` helper that logs field name + exception type at Debug level. All 20+ silent catch blocks now emit `[Snapshot] {Field} unavailable: {Type}` when Debug logging is enabled.
 - [x] Acceptance: snapshot fallback is explicit, traceable, and does not mask missing FG implementation work.
 
+### BR-PAR-004 Harden task-owned fishing around bait usage and real loot completion
+- [x] **Done (2026-03-12).** `FishingTask` now applies bait to the equipped fishing pole before pool approach, confirms lure consumption/enchant state, and keeps the live success contract tied to `loot_window_open` plus a post-loot bag delta instead of setup-only signals.
+- [x] Acceptance: dual-bot live fishing can assert `equip -> bait -> approach -> bobber -> loot-window -> bag-delta` directly against `FishingTask`, and unit coverage proves the lure path targets the equipped pole GUID instead of `0x0`.
+
 ## Simple Command Set
 1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore`
 2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Quest|FullyQualifiedName~BotRunner" --logger "console;verbosity=minimal"`
@@ -57,13 +61,20 @@
 4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-28
-- Active task: BR-MISS-002 code-complete (live validation deferred)
-- Last delta: BR-MISS-002 marked code-complete — Orgrimmar setup and reclaim gating already in place
+- Last updated: 2026-03-12
+- Active task: BR-PAR-004 complete; next BotRunner follow-up stays on the remaining live-overhaul slices in `Tests/BotRunner.Tests/TASKS.md`
+- Last delta: FishingTask now owns bait application against the equipped pole and the live fishing contract now requires loot-window evidence plus a bag delta, with no DB-only pool assumptions
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release` — 0 errors
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` — succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~UseItemTaskTests" --logger "console;verbosity=minimal"` — 48 passed
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"` — 1 skipped (no live visible Ratchet pool)
 - Files changed:
+  - `Exports/BotRunner/Combat/FishingData.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
+  - `Tests/BotRunner.Tests/Combat/FishingDataTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
   - `Exports/BotRunner/TASKS.md`
-- Next command: continue with next queue file
-- Blockers: BR-MISS-002 live validation requires running MaNGOS server
+- Next command: `Get-Content -Path 'Exports/WoWSharpClient/TASKS.md' -TotalCount 260`
+- Blockers: live fishing still depends on a real visible Ratchet pool and the remaining shoreline stop/fall parity work in `MovementController`

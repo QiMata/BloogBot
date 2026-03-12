@@ -76,18 +76,19 @@ namespace WoWSharpClient
         }
 
         /// <summary>
-        /// Clears all movement flags AND immediately sends MSG_MOVE_STOP to the server.
-        /// Use before interactions that require the player to be stationary (CMSG_GAMEOBJ_USE, etc.).
+        /// Clears directional movement intent and immediately sends the appropriate movement opcode.
+        /// Active physics state (for example falling or swimming) is preserved.
+        /// Use before interactions that require the player to stop advancing (CMSG_GAMEOBJ_USE, etc.).
         /// </summary>
         void IObjectManager.ForceStopImmediate()
         {
             var player = (WoWLocalPlayer)Player;
             if (player == null) return;
 
-            player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            StopMovement(ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight);
             _movementController?.ClearPath();
             _movementController?.SendStopPacket((uint)_worldTimeTracker.NowMS.TotalMilliseconds);
-            Log.Information("[ForceStopImmediate] Cleared all movement flags and sent MSG_MOVE_STOP");
+            Log.Information("[ForceStopImmediate] Cleared directional movement intent and sent immediate stop/update packet");
         }
 
 

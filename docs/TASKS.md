@@ -70,9 +70,10 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 **Approach:** Use FG packet capture to observe a successful FG fishing session, then compare the exact cast/channel/bobber timing against BG. The cast gate is fixed and `FishingTask` now owns the live cast path for both bots; the remaining work is packet/timing and movement-stop parity hardening.
 
 Current observed boundary from the 2026-03-11 live suite:
-- `FishingProfessionTests` now stages both BG and FG at Ratchet, dispatches `ActionType.StartFishing`, and stays green in the focused slice with success based on a real post-loot bag delta.
+- `FishingProfessionTests` now stages both BG and FG at Ratchet, sets fishing skill `75`, adds `Nightcrawler Bait`, dispatches `ActionType.StartFishing`, and only runs when a stable dock stage exposes a real visible pool.
 - BG now resolves the castable fishing rank from the known-spell list and handles server rank replacement via `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`.
-- FG now mirrors the bobber-interact path through the recv hook plus `ForceStopImmediate()`, but Ratchet pier overrun / falling behavior still needs movement-controller parity work.
+- The focused fishing pass condition now requires `bobber observed -> loot_window_open -> fishing_loot_success -> post-loot bag delta`, not just setup success or a transient loot-frame signal.
+- FG now mirrors the bobber-interact path through the recv hook plus `ForceStopImmediate()`, while BG forced-stop handling now preserves falling/swimming physics flags. Ratchet pier overrun / falling behavior still needs the next movement-controller parity pass.
 - The remaining fishing work is packet/timing and shoreline-movement hardening, not the old `_objectManager.CanCastSpell(7620, 0)` cast gate.
 
 | # | Task | Owner | Status |
@@ -185,18 +186,19 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-12 (session 60)
-- **Current work:** P0A - Live Integration Test Overhaul. The fishing slice is now dual-bot and task-owned through `FishingTask`; the next immediate slice is BG `MovementController` parity for stop/fall behavior on shoreline approaches while the trainer handoff remains open.
+- **Last updated:** 2026-03-12 (session 61)
+- **Current work:** P0A - Live Integration Test Overhaul. The fishing slice is now dual-bot and task-owned through `FishingTask`, with skill `75`, bait, live-pool gating, and loot-window evidence; the next immediate slice is BG `MovementController` parity for stop/fall behavior on shoreline approaches while the trainer handoff remains open.
 - **Completed this session:**
-  1. **Dual-bot fishing contract tightened:** BG and FG now both run `ActionType.StartFishing -> CharacterAction.StartFishing -> FishingTask`, with task-owned pole equip, pool approach, cast, bobber interaction, and loot completion.
-  2. **Focused fishing coverage is green on the new contract:** the fishing unit/action slice passed `44`, focused `FishingProfessionTests` passed `1`, and success now requires a real post-loot bag delta instead of a setup-only or loot-window-only signal.
-  3. **Movement follow-up recorded explicitly:** FG pier overrun / stop-fall behavior is now tracked as the next parity task instead of being treated as a fishing-logic failure.
+  1. **Fishing contract tightened around bait and loot-window evidence:** BG and FG both run `ActionType.StartFishing -> CharacterAction.StartFishing -> FishingTask`, with task-owned pole equip, bait application, pool approach, cast, bobber interaction, `loot_window_open`, and bag-delta completion.
+  2. **Focused fishing coverage is now meaningful when the world state is not:** the fishing unit/action slice passed `48`, and focused `FishingProfessionTests` now skips cleanly when Ratchet has no live visible pool instead of failing on DB-only spawn assumptions.
+  3. **BG stop/fall parity moved forward:** `MovementController.SendStopPacket()` and `ForceStopImmediate()` now clear directional intent while preserving falling/swimming physics flags, backed by a new `MovementControllerTests` assertion.
 - **Commands run + outcomes:**
   1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded.
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> 44 passed.
-  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
-  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 14 passed, 1 skipped.
-- **Next:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
+  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~UseItemTaskTests" --logger "console;verbosity=minimal"` -> 48 passed.
+  3. `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` -> succeeded.
+  4. `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"` -> 38 passed.
+  5. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"` -> 1 skipped.
+- **Next:** `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (Session 53 Archive)
 - **Last updated:** 2026-03-10 (session 53)

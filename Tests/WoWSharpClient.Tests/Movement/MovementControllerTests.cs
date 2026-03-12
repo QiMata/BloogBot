@@ -448,15 +448,31 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
-        public void SendStopPacket_SendsMsgMoveStop_AndClearsFlags()
+        public void SendStopPacket_SendsMsgMoveStop_AfterForwardMovementWasSent()
         {
             _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+            _controller.Update(0.05f, 1000);
+            _sentPackets.Clear();
 
             _controller.SendStopPacket(5000);
 
             Assert.Single(_sentPackets);
             Assert.Equal(Opcode.MSG_MOVE_STOP, _sentPackets[0].opcode);
             Assert.Equal(MovementFlags.MOVEFLAG_NONE, _player.MovementFlags);
+        }
+
+        [Fact]
+        public void SendStopPacket_PreservesFallingFlags_WhenClearingForwardIntent()
+        {
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR;
+            _controller.Update(0.05f, 1000);
+            _sentPackets.Clear();
+
+            _controller.SendStopPacket(5000);
+
+            Assert.Single(_sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
+            Assert.Equal(MovementFlags.MOVEFLAG_FALLINGFAR, _player.MovementFlags);
         }
 
         // ======== STATE MANAGEMENT ========
@@ -476,8 +492,9 @@ namespace WoWSharpClient.Tests.Movement
             _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
             _controller.Update(0.05f, 2000);
 
-            // Reset with prior movement correctly sends stop packet(s)
-            Assert.All(_sentPackets, p => Assert.Equal(Opcode.MSG_MOVE_STOP, p.opcode));
+            Assert.Equal(2, _sentPackets.Count);
+            Assert.Equal(Opcode.MSG_MOVE_STOP, _sentPackets[0].opcode);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[1].opcode);
 
             // Second update should be clean — no additional packets
             _sentPackets.Clear();

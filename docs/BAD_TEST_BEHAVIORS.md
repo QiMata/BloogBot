@@ -303,9 +303,9 @@ Tracks observed bad patterns in the LiveValidation integration test suite. Each 
 - **Severity**: High
 
 ### BT-MOVE-003: Ratchet Pier Overrun Can Leave Fishing Bots Falling Instead of Stationary
-- **Observed**: During the live fishing path, FG can still run off the Ratchet pier before the stop/interact sequence fully arrests motion. `ForceStopImmediate()` improved the bobber interaction path, but once the bot is already beyond the dock edge, stop-only logic does not recover the fall or re-stage the cast cleanly.
-- **Impact**: Fishing tests can fail for the wrong reason, and the same stop/fall-state gap is likely present in BG `MovementController` parity. This is a movement controller issue, not a fishing-task ownership issue.
-- **Fix**: Bring BG `MovementController` stop/fall handling to FG parity, then harden both runners so a stop request during shoreline approach clears stale forward intent and transitions cleanly into falling or recovery instead of hovering/overrunning.
+- **Observed**: During the live fishing path, FG can still run off the Ratchet pier before the stop/interact sequence fully arrests motion. `ForceStopImmediate()` improved the bobber interaction path, and BG now preserves `MOVEFLAG_FALLINGFAR` / swimming flags when stop packets clear directional intent, but once the bot is already beyond the dock edge, stop-only logic still does not recover the fall or re-stage the cast cleanly.
+- **Impact**: Fishing tests can still fail for the wrong reason, even though the BG-side "stop cancels falling" parity bug is partially mitigated. This remains a movement controller issue, not a fishing-task ownership issue.
+- **Fix**: Finish the BG/FG shoreline recovery pass so a stop request during shoreline approach clears stale forward intent and transitions cleanly into falling or re-stage recovery instead of hovering/overrunning.
 - **Status**: OPEN
 - **Severity**: High
 

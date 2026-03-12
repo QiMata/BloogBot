@@ -61,6 +61,11 @@
 - [x] Validation: `dotnet build Exports/WoWSharpClient/WoWSharpClient.csproj -c Debug` — 0 errors. 1229/1234 WoWSharpClient tests pass (4 pre-existing failures).
 - [x] Acceptance: quest reward selection respects requested strategy; placeholder behavior removed.
 
+### WSC-PAR-005 Preserve physics flags when forced stop clears directional intent
+- [x] **Done (2026-03-12).** `MovementController.SendStopPacket()` and the reset-time forced-stop path now clear only directional/turn intent while preserving falling/swimming state, and `WoWSharpObjectManager.ForceStopImmediate()` mirrors that contract instead of zeroing all movement flags.
+- [x] Validation: `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` and `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"` -> 38 passed.
+- [x] Acceptance: a forced stop during shoreline overrun or mid-fall no longer erases `MOVEFLAG_FALLINGFAR`, and targeted movement tests prove the preserved-physics behavior.
+
 ## Simple Command Set
 1. `dotnet build Exports/WoWSharpClient/WoWSharpClient.csproj -c Release`
 2. `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"`
@@ -69,16 +74,17 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented" Exports/WoWSharpClient -g "*.cs"`
 
 ## Session Handoff
-- Last updated: 2026-02-28
-- Active task: all WoWSharpClient tasks complete (WSC-MISS-001..004)
-- Last delta: WSC-MISS-004 (strategy-aware quest reward selection replacing placeholder)
+- Last updated: 2026-03-12
+- Active task: WSC-PAR-005 complete; next queue file should continue the cross-runner fishing/movement parity work
+- Last delta: forced-stop movement packets now preserve active falling/swimming physics state while clearing directional intent, which unblocks the fishing shoreline parity slice
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Exports/WoWSharpClient/WoWSharpClient.csproj -c Debug` — 0 errors
-  - `dotnet test Tests/WoWSharpClient.Tests -c Debug` — 1229/1234 pass (4 pre-existing failures)
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore` — succeeded
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"` — 38 passed
 - Files changed:
-  - `Exports/WoWSharpClient/Networking/ClientComponents/GossipNetworkClientComponent.cs` — strategy-aware SelectRewardIndex
-  - `Exports/WoWSharpClient/Networking/ClientComponents/I/IGossipNetworkClientComponent.cs` — new overload
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Inventory.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
   - `Exports/WoWSharpClient/TASKS.md`
 - Next command: continue with next queue file
 - Loop Break: if two passes produce no delta, record blocker + exact next command and move to next queued file.

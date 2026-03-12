@@ -70,18 +70,22 @@ Master tracker: `MASTER-SUB-021`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-12
-- Active task: `MASTER-SUB-022` live integration test overhaul tranche, with focused fishing now green on the task-owned dual-bot path and BG movement parity the next follow-up.
-- Last delta: `Tests/BotRunner.Tests` tightened the fishing contract around `FishingTask` plus real loot-window/bag-delta success, documented the Ratchet pier stop-fall gap, and kept the default regression signal on the documented-stable slice.
+- Active task: `MASTER-SUB-022` live integration test overhaul tranche, with focused fishing now tied to a real live-pool precondition plus loot-window evidence and BG movement parity the next follow-up.
+- Last delta: `Tests/BotRunner.Tests` tightened fishing around `FishingTask`-owned bait/equip/approach/loot-window/bag-delta behavior, and `Tests/WoWSharpClient.Tests` locked in the BG forced-stop parity fix with explicit falling-flag coverage.
 - Pass result: `delta shipped`
 - Files changed:
   - `Exports/BotRunner/Combat/FishingData.cs`
   - `Exports/BotRunner/Tasks/FishingTask.cs`
-  - `Exports/WoWSharpClient/Frames/NetworkLootFrame.cs`
-  - `Services/ForegroundBotRunner/Frames/FgLootFrame.cs`
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Inventory.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
   - `Tests/TASKS.md`
   - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/docs/`
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

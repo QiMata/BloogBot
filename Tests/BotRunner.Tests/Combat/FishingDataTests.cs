@@ -80,6 +80,24 @@ namespace BotRunner.Tests.Combat
         }
 
         [Fact]
+        public void FindUsableLureInBags_ReturnsLocationOfBestLure()
+        {
+            var om = new Mock<IObjectManager>();
+            var bait = CreateMockItem(FishingData.NightcrawlerBait);
+            var bauble = CreateMockItem(FishingData.ShinyBauble);
+
+            om.Setup(o => o.GetItem(0, 0)).Returns(bauble.Object);
+            om.Setup(o => o.GetItem(2, 5)).Returns(bait.Object);
+
+            var result = FishingData.FindUsableLureInBags(om.Object);
+
+            Assert.NotNull(result);
+            Assert.Equal(2, result.Value.bag);
+            Assert.Equal(5, result.Value.slot);
+            Assert.Equal(FishingData.NightcrawlerBait, result.Value.itemId);
+        }
+
+        [Fact]
         public void FindUsableLure_FindsLureInExtraBag()
         {
             var om = new Mock<IObjectManager>();

@@ -42,7 +42,20 @@ namespace WoWSharpClient
             w.Write(srcBag);
             w.Write(srcSlot);
             w.Write((byte)0); // spellSlot
-            w.Write((ushort)0x0000); // TARGET_FLAG_SELF
+            if (targetGuid == 0)
+            {
+                w.Write((ushort)0x0000); // TARGET_FLAG_SELF
+            }
+            else if (IsEquippedItemGuid(targetGuid))
+            {
+                w.Write((ushort)0x0010); // TARGET_FLAG_ITEM
+                ReaderUtils.WritePackedGuid(w, targetGuid);
+            }
+            else
+            {
+                w.Write((ushort)0x0002); // TARGET_FLAG_UNIT
+                ReaderUtils.WritePackedGuid(w, targetGuid);
+            }
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_USE_ITEM, ms.ToArray());
         }
 
@@ -215,6 +228,20 @@ namespace WoWSharpClient
             if (guid == 0) return null;
             lock (_objectsLock)
                 return _objects.FirstOrDefault(o => o.Guid == guid) as WoWItem;
+        }
+
+        private bool IsEquippedItemGuid(ulong guid)
+        {
+            if (guid == 0)
+                return false;
+
+            for (var slot = EquipSlot.Head; slot <= EquipSlot.Ranged; slot++)
+            {
+                if (GetEquippedItemGuid(slot) == guid)
+                    return true;
+            }
+
+            return false;
         }
 
 

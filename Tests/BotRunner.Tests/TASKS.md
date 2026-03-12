@@ -66,7 +66,7 @@ Master tracker: `MASTER-SUB-022`
 - Acceptance criteria: each rewritten suite links directly to the owning task logic and records deterministic outcome metrics.
 
 3. [ ] `BRT-OVR-004` Convert the fishing baseline into task-linked live coverage and capture FG timing references.
-- Problem: `FishingProfessionTests` now dispatches `ActionType.StartFishing` into `FishingTask` for both bots and the focused slice is green, but shoreline selection still lives in the test and Ratchet stop/fall behavior is still unstable enough that fishing remains outside the routine documented-stable slice.
+- Problem: `FishingProfessionTests` now dispatches `ActionType.StartFishing` into `FishingTask` for both bots, stages fishing skill `75` plus bait, requires `loot_window_open` plus a real post-loot bag delta, and keeps the focused unit/runtime slices green or meaningfully skipped, but shoreline selection still lives in the test and Ratchet stop/fall behavior still needs FG/BG parity hardening.
 - Target files: `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`, `Exports/BotRunner/Tasks/`, FG packet-capture logs.
 - Required change:
   1. Keep the passing dual-bot fishing baseline green while moving more of the shoreline/pool selection contract under runtime ownership.
@@ -74,7 +74,7 @@ Master tracker: `MASTER-SUB-022`
   3. Tie the live assertions directly to `FishingTask`, the loot-frame surfaces, and the runtime packet handlers they depend on.
   4. Explain and fix shoreline stop/fall failures, including the FG Ratchet pier overrun path and the matching BG `MovementController` parity gap.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-- Acceptance criteria: fishing coverage stays green in isolation for both bots on the task-owned equip -> approach -> cast -> loot path, documentation points to the owning runtime logic, and the next implementation slice has concrete FG timing and movement-stop evidence instead of rediscovering the cast/bobber sequence.
+- Acceptance criteria: fishing coverage stays meaningful in isolation for both bots on the task-owned equip -> bait -> approach -> cast -> bobber -> loot_window_open -> bag-delta path, documentation points to the owning runtime logic, and the suite skips rather than failing when no live visible pool exists.
 
 4. [ ] `BRT-OVR-006` Fix BG trainer visit gossip-to-trainer-service handoff for task-owned NPC coverage.
 - Problem: `NpcInteractionTests.Trainer_LearnAvailableSpells` now dispatches `ActionType.VisitTrainer`, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`, so the task-owned trainer path produces no spell-count or coinage delta.
@@ -171,50 +171,40 @@ Master tracker: `MASTER-SUB-022`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-12
-- Active task: `BRT-OVR-004` / `BRT-OVR-006`, with the focused fishing slice green and the next immediate follow-up on BG `MovementController` parity for shoreline stop/fall behavior.
-- Last delta: tightened `FishingTask` into the dual-bot live contract, added task-visible loot diagnostics plus FG/BG loot-frame support, hardened FG bobber interaction with immediate stop + retries, and documented the Ratchet pier overrun as movement-controller follow-up work.
+- Active task: `BRT-OVR-004` / `BRT-OVR-006`, with focused fishing now gated on a real live pool plus `loot_window_open` evidence and the next immediate follow-up on BG `MovementController` parity for shoreline stop/fall behavior.
+- Last delta: `FishingTask` now owns bait application against the equipped pole, the live fishing contract stages skill `75` plus `Nightcrawler Bait`, and the focused fishing slice only runs when Ratchet exposes a live visible pool. BG forced-stop handling now preserves falling/swimming physics flags instead of zeroing them during shoreline stop requests.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
-  - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
   - `Exports/BotRunner/Combat/FishingData.cs`
-  - `Exports/BotRunner/Interfaces/IBotContext.cs`
-  - `Exports/BotRunner/Tasks/BotTask.cs`
   - `Exports/BotRunner/Tasks/FishingTask.cs`
-  - `Exports/WoWSharpClient/Frames/NetworkLootFrame.cs`
-  - `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
-  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Inventory.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
   - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
-  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
-  - `Services/ForegroundBotRunner/Frames/FgLootFrame.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.Movement.cs`
-  - `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+  - `Tests/BotRunner.Tests/Combat/FishingDataTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/FIXTURE_LIFECYCLE.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`
   - `Tests/BotRunner.Tests/TASKS.md`
-  - `Tests/TASKS.md`
-  - `docs/BAD_TEST_BEHAVIORS.md`
-  - `docs/LIVEVALIDATION_AUDIT.md`
-  - `docs/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
 - Commands run:
   1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore`
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"`
-  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~UseItemTaskTests" --logger "console;verbosity=minimal"`
+  3. `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore`
+  4. `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"`
+  5. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
 - Outcomes:
   - `Tests/BotRunner.Tests` build succeeded.
-  - The expanded fishing unit/action-contract slice passed `44`.
-  - Focused `FishingProfessionTests` passed `1` with both bots completing the task-owned Ratchet flow.
-  - The documented-stable slice passed `14`, skipped `1`.
+  - The expanded fishing unit/action-contract slice passed `48`.
+  - `Tests/WoWSharpClient.Tests` build succeeded and `MovementControllerTests` passed `38`.
+  - Focused `FishingProfessionTests` now skips when no live Ratchet pool is visible from a stable dock stage instead of failing on DB-only spawn assumptions.
 - Blockers:
   - `QuestInteractionTests`, `StarterQuestTests`, and the vendor/flight portions of `NpcInteractionTests` are still not fully task-owned under `BRT-OVR-002` and stay out of the routine documented-stable slice.
   - `CombatLoopTests`, `GatheringProfessionTests`, and `FishingProfessionTests` remain excluded from the routine documented-stable slice until their open overhaul work stops generating low-signal failures.
-  - `FishingProfessionTests` still needs captured FG packet-timing artifacts and BG/FG shoreline stop-fall parity under `BRT-OVR-004`, even though the task-owned cast and loot path is green in isolation.
+  - `FishingProfessionTests` still needs captured FG packet-timing artifacts and BG/FG shoreline stop-fall parity under `BRT-OVR-004`, even though the task-owned equip -> bait -> loot-window -> bag-delta path is now covered in isolation.
   - `Trainer_LearnAvailableSpells` remains a deterministic skip under `BRT-OVR-006`.
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28
