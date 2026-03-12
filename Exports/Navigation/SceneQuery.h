@@ -237,6 +237,18 @@ class SceneQuery
         // More precise than capsule sweep for exact XY positions (no lateral contact offset).
         static float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist = 10.0f);
 
+        // Capsule-aware support query. Samples the center and nearby footprint points
+        // so narrow ledges / triangle seams do not falsely report "no support" when the
+        // character capsule is still safely supported.
+        static float GetCapsuleSupportZ(
+            uint32_t mapId,
+            float x,
+            float y,
+            float currentZ,
+            float queryZ,
+            float maxSearchDist,
+            float radius);
+
         // --- Scene Cache (pre-processed collision geometry) ---
         static void SetSceneCache(uint32_t mapId, SceneCache* cache);
         static SceneCache* GetSceneCache(uint32_t mapId);

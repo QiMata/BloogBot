@@ -75,6 +75,7 @@
 - [ ] Problem: LOS alone is insufficient for walkability. We need to know whether the character capsule can clear the segment and whether the destination/support surface is actually usable.
 - [ ] Target files: `Exports/Navigation/SceneQuery.cpp`, `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/PhysicsCollideSlide.cpp`, native exports as needed.
 - [x] Progress (2026-03-12 session 68): added native `ValidateWalkableSegment` in `DllMain.cpp`. It uses `HorizontalSweepAdvance`, support-surface checks, and overlap rejection to classify `Clear`, `BlockedGeometry`, `MissingSupport`, `StepUpTooHigh`, and `StepDownTooFar`. Focused native tests now cover the export directly.
+- [x] Progress (2026-03-12 session 69): `SceneQuery.cpp` now exposes capsule-footprint support selection through `GetCapsuleSupportZ(...)`, `ValidateWalkableSegment` uses that probe plus looser overlap tolerance, and short false-negative straight sweeps can fall back to `PhysicsStepV2` so the validator matches real collide-and-slide movement better. The first real Orgrimmar graveyard->center raw-path segment now passes in deterministic native coverage.
 - [ ] Required change:
   1. Add reusable segment validation helpers for capsule clearance, support surface, and obstacle squeeze cases.
   2. Use the same walkability thresholds as the physics engine (`STEP_HEIGHT`, slope, step-down limits).
@@ -107,16 +108,18 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 68)
-- Active task: `NAV-OBJ-002` harden support-surface selection for `ValidateWalkableSegment`
-- Last delta: `DllMain.cpp` now exports `ValidateWalkableSegment`, giving the managed/service layers a native capsule-clearance + support-surface diagnostic. Focused physics tests pass, and the first service consumer is ready behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION`, but `MissingSupport` still false-negatives some long Orgrimmar routes so the next pass must harden `SceneQuery::GetGroundZ` / support selection
+- Last updated: 2026-03-12 (session 69)
+- Active task: `NAV-OBJ-002` promote the hardened validator from short-segment fallback into native route shaping
+- Last delta: `SceneQuery.cpp` now has `GetCapsuleSupportZ(...)`, and `DllMain.cpp` uses it inside `ValidateWalkableSegment` together with physics-aligned overlap tolerance and a `PhysicsStepV2` fallback for short false-negative straight sweeps. `SegmentWalkabilityTests.cs` now covers the first real Orgrimmar graveyard->center raw-path segment and it passes as `Clear`, so the immediate short-segment false-negative is fixed even though longer route shaping still belongs in `PathFinder.cpp`
 - Pass result: `delta shipped`
 - Validation/tests run:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `2 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `3 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `100 passed, 1 skipped`
 - Files changed:
+  - `Exports/Navigation/SceneQuery.h`
+  - `Exports/Navigation/SceneQuery.cpp`
   - `Exports/Navigation/DllMain.cpp`
   - `Exports/Navigation/TASKS.md`
-- Next command: `Get-Content Exports/Navigation/SceneQuery.cpp | Select-Object -Skip 520 -First 260`
-- Blockers: the new export can classify blocked geometry and step limits, but support selection still false-negatives some long routes, so it cannot safely be enabled by default in the service yet.
+- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -First 260`
+- Blockers: short-segment false-negatives are now covered, but the fallback still lives in `ValidateWalkableSegment` rather than native route generation. Longer multi-segment corpse-run routes still need `PathFinder.cpp` / `SceneQuery.cpp` shaping so the service does not rely on post-hoc repair alone.

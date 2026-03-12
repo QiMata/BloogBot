@@ -312,7 +312,8 @@ static bool HasBlockingCapsuleOverlap(
             continue;
 
         const float penetrationDepth = std::max(0.0f, hit.penetrationDepth);
-        if (penetrationDepth <= 0.02f)
+        const float maxAllowedPenDepth = std::max(0.02f, radius * 0.5f);
+        if (penetrationDepth <= maxAllowedPenDepth)
             continue;
 
         if (std::fabs(hit.normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z)
@@ -322,6 +323,269 @@ static bool HasBlockingCapsuleOverlap(
     }
 
     return false;
+}
+
+static SegmentValidationCode FinalizeSimulatedSegment(
+    uint32_t mapId,
+    XYZ start,
+    float x,
+    float y,
+    float currentZ,
+    float orientation,
+    float radius,
+    float height,
+    float horizontalDistance,
+    float completedFraction,
+    float* resolvedEndZ,
+    float* supportDelta,
+    float* travelFraction)
+{
+    const float queryDistance = PhysicsConstants::STEP_HEIGHT + PhysicsConstants::STEP_DOWN_HEIGHT + 0.5f;
+    const float queryBaseZ = currentZ + PhysicsConstants::STEP_HEIGHT + 0.5f;
+    const float supportZ = SceneQuery::GetCapsuleSupportZ(
+        mapId,
+        x,
+        y,
+        currentZ,
+        queryBaseZ,
+        queryDistance,
+        radius);
+    if (supportZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+        return SegmentValidationCode::MissingSupport;
+
+    const float deltaZ = supportZ - currentZ;
+    if (deltaZ > PhysicsConstants::STEP_HEIGHT + 0.1f)
+        return SegmentValidationCode::StepUpTooHigh;
+
+    if (deltaZ < -PhysicsConstants::STEP_DOWN_HEIGHT - 0.1f)
+        return SegmentValidationCode::StepDownTooFar;
+
+    if (resolvedEndZ)
+        *resolvedEndZ = supportZ;
+
+    if (supportDelta)
+        *supportDelta = supportZ - start.Z;
+
+    if (travelFraction)
+        *travelFraction = horizontalDistance > 0.01f
+            ? std::max(0.0f, std::min(1.0f, completedFraction))
+            : 1.0f;
+
+    if (HasBlockingCapsuleOverlap(mapId, x, y, supportZ, radius, height, orientation))
+        return SegmentValidationCode::BlockedGeometry;
+
+    return SegmentValidationCode::Clear;
+}
+
+static SegmentValidationCode TryValidateWalkableSegmentWithPhysics(
+    uint32_t mapId,
+    XYZ start,
+    XYZ end,
+    float radius,
+    float height,
+    float horizontalDistance,
+    float* resolvedEndZ,
+    float* supportDelta,
+    float* travelFraction)
+{
+    if (horizontalDistance <= 0.05f)
+        return SegmentValidationCode::BlockedGeometry;
+
+    constexpr float walkSpeed = 2.5f;
+    constexpr float runSpeed = 7.0f;
+    constexpr float runBackSpeed = 4.5f;
+    constexpr float swimSpeed = 4.72f;
+    constexpr float swimBackSpeed = 2.5f;
+    constexpr float flightSpeed = 7.0f;
+    constexpr float turnSpeed = 3.14159265f;
+    constexpr float baseDt = 0.05f;
+    constexpr float arrivalTolerance = 0.15f;
+    constexpr int maxSteps = 96;
+
+    PhysicsInput input{};
+    input.moveFlags = MOVEFLAG_FORWARD;
+    input.x = start.X;
+    input.y = start.Y;
+    input.z = start.Z;
+    input.orientation = std::atan2(end.Y - start.Y, end.X - start.X);
+    input.pitch = 0.0f;
+    input.vx = 0.0f;
+    input.vy = 0.0f;
+    input.vz = 0.0f;
+    input.walkSpeed = walkSpeed;
+    input.runSpeed = runSpeed;
+    input.runBackSpeed = runBackSpeed;
+    input.swimSpeed = swimSpeed;
+    input.swimBackSpeed = swimBackSpeed;
+    input.flightSpeed = flightSpeed;
+    input.turnSpeed = turnSpeed;
+    input.transportGuid = 0;
+    input.fallTime = 0;
+    input.fallStartZ = PhysicsConstants::INVALID_HEIGHT;
+    input.height = height;
+    input.radius = radius;
+    input.hasSplinePath = false;
+    input.splineSpeed = 0.0f;
+    input.splinePoints = nullptr;
+    input.splinePointCount = 0;
+    input.currentSplineIndex = 0;
+    input.prevGroundZ = start.Z;
+    input.prevGroundNx = 0.0f;
+    input.prevGroundNy = 0.0f;
+    input.prevGroundNz = 1.0f;
+    input.pendingDepenX = 0.0f;
+    input.pendingDepenY = 0.0f;
+    input.pendingDepenZ = 0.0f;
+    input.standingOnInstanceId = 0;
+    input.standingOnLocalX = 0.0f;
+    input.standingOnLocalY = 0.0f;
+    input.standingOnLocalZ = 0.0f;
+    input.nearbyObjects = nullptr;
+    input.nearbyObjectCount = 0;
+    input.mapId = mapId;
+    input.deltaTime = baseDt;
+    input.frameCounter = 0;
+    input.physicsFlags = 0;
+    input.stepUpBaseZ = PhysicsConstants::INVALID_HEIGHT;
+    input.stepUpAge = 0;
+
+    float bestRemaining = horizontalDistance;
+    float bestX = start.X;
+    float bestY = start.Y;
+    float bestZ = start.Z;
+    int stalledSteps = 0;
+
+    for (int step = 0; step < maxSteps; ++step)
+    {
+        const float remainingX = end.X - input.x;
+        const float remainingY = end.Y - input.y;
+        const float remaining = std::sqrt((remainingX * remainingX) + (remainingY * remainingY));
+        if (remaining <= arrivalTolerance)
+        {
+            const float completedFraction = 1.0f - (remaining / horizontalDistance);
+            return FinalizeSimulatedSegment(
+                mapId,
+                start,
+                input.x,
+                input.y,
+                input.z,
+                input.orientation,
+                radius,
+                height,
+                horizontalDistance,
+                completedFraction,
+                resolvedEndZ,
+                supportDelta,
+                travelFraction);
+        }
+
+        input.orientation = std::atan2(remainingY, remainingX);
+        input.deltaTime = std::max(0.016f, std::min(baseDt, remaining / runSpeed));
+        input.frameCounter = static_cast<uint32_t>(step + 1);
+        input.moveFlags = MOVEFLAG_FORWARD;
+        input.vx = 0.0f;
+        input.vy = 0.0f;
+
+        const PhysicsOutput output = PhysicsStepV2Inner(input);
+        if (!std::isfinite(output.x) || !std::isfinite(output.y) || !std::isfinite(output.z))
+            return SegmentValidationCode::BlockedGeometry;
+
+        const float nextRemainingX = end.X - output.x;
+        const float nextRemainingY = end.Y - output.y;
+        const float nextRemaining = std::sqrt((nextRemainingX * nextRemainingX) + (nextRemainingY * nextRemainingY));
+        const float progress = remaining - nextRemaining;
+
+        if (nextRemaining < bestRemaining)
+        {
+            bestRemaining = nextRemaining;
+            bestX = output.x;
+            bestY = output.y;
+            bestZ = output.z;
+        }
+
+        if (nextRemaining <= arrivalTolerance)
+        {
+            const float completedFraction = 1.0f - (nextRemaining / horizontalDistance);
+            return FinalizeSimulatedSegment(
+                mapId,
+                start,
+                output.x,
+                output.y,
+                output.z,
+                input.orientation,
+                radius,
+                height,
+                horizontalDistance,
+                completedFraction,
+                resolvedEndZ,
+                supportDelta,
+                travelFraction);
+        }
+
+        if (progress > 0.01f)
+            stalledSteps = 0;
+        else
+            ++stalledSteps;
+
+        if ((output.moveFlags & MOVEFLAG_FALLINGFAR) != 0 &&
+            (start.Z - output.z) > PhysicsConstants::STEP_DOWN_HEIGHT + 0.25f)
+        {
+            if (resolvedEndZ)
+                *resolvedEndZ = output.z;
+
+            if (supportDelta)
+                *supportDelta = output.z - start.Z;
+
+            if (travelFraction)
+                *travelFraction = std::max(0.0f, std::min(1.0f, 1.0f - (nextRemaining / horizontalDistance)));
+
+            return SegmentValidationCode::StepDownTooFar;
+        }
+
+        if (stalledSteps >= 4 || (output.hitWall && output.blockedFraction < 0.05f && stalledSteps >= 2))
+            break;
+
+        input.x = output.x;
+        input.y = output.y;
+        input.z = output.z;
+        input.orientation = output.orientation;
+        input.pitch = output.pitch;
+        input.vx = output.vx;
+        input.vy = output.vy;
+        input.vz = output.vz;
+        input.moveFlags = output.moveFlags;
+        input.prevGroundZ = output.groundZ;
+        input.prevGroundNx = output.groundNx;
+        input.prevGroundNy = output.groundNy;
+        input.prevGroundNz = output.groundNz;
+        input.pendingDepenX = output.pendingDepenX;
+        input.pendingDepenY = output.pendingDepenY;
+        input.pendingDepenZ = output.pendingDepenZ;
+        input.standingOnInstanceId = output.standingOnInstanceId;
+        input.standingOnLocalX = output.standingOnLocalX;
+        input.standingOnLocalY = output.standingOnLocalY;
+        input.standingOnLocalZ = output.standingOnLocalZ;
+        input.fallTime = output.fallTime > 0.0f
+            ? static_cast<uint32_t>(output.fallTime * 1000.0f)
+            : 0u;
+        input.fallStartZ = output.fallStartZ;
+        input.currentSplineIndex = output.currentSplineIndex;
+        input.stepUpBaseZ = output.stepUpBaseZ;
+        input.stepUpAge = output.stepUpAge;
+    }
+
+    if (resolvedEndZ)
+        *resolvedEndZ = bestZ;
+
+    if (supportDelta)
+        *supportDelta = bestZ - start.Z;
+
+    if (travelFraction)
+        *travelFraction = horizontalDistance > 0.01f
+            ? std::max(0.0f, std::min(1.0f, 1.0f - (bestRemaining / horizontalDistance)))
+            : 1.0f;
+
+    return SegmentValidationCode::BlockedGeometry;
 }
 
 extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
@@ -355,7 +619,14 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
     auto validateSupport = [&](float x, float y, float currentZ, float orientation, float traveled) -> SegmentValidationCode
     {
         const float queryBaseZ = currentZ + PhysicsConstants::STEP_HEIGHT + 0.5f;
-        const float groundZ = SceneQuery::GetGroundZ(mapId, x, y, queryBaseZ, queryDistance);
+        const float groundZ = SceneQuery::GetCapsuleSupportZ(
+            mapId,
+            x,
+            y,
+            currentZ,
+            queryBaseZ,
+            queryDistance,
+            radius);
         if (groundZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
             return SegmentValidationCode::MissingSupport;
 
@@ -379,7 +650,8 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
                 ? std::max(0.0f, std::min(1.0f, traveled / horizontalDistance))
                 : 1.0f;
 
-        if (HasBlockingCapsuleOverlap(mapId, x, y, groundZ, radius, height, orientation))
+        if (traveled > 0.05f &&
+            HasBlockingCapsuleOverlap(mapId, x, y, groundZ, radius, height, orientation))
             return SegmentValidationCode::BlockedGeometry;
 
         return SegmentValidationCode::Clear;
@@ -399,13 +671,37 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
 
     const G3D::Vector3 direction(dx / horizontalDistance, dy / horizontalDistance, 0.0f);
     const float orientation = std::atan2(direction.y, direction.x);
-    constexpr float chunkSize = 1.0f;
+    constexpr float chunkSize = 0.25f;
+    constexpr float minMeaningfulAdvance = 0.02f;
 
     float currentX = start.X;
     float currentY = start.Y;
     float currentZ = start.Z;
     float traveled = 0.0f;
     float remaining = horizontalDistance;
+
+    const auto startSupportResult = validateSupport(currentX, currentY, currentZ, orientation, 0.0f);
+    if (startSupportResult != SegmentValidationCode::Clear)
+    {
+        if (startSupportResult == SegmentValidationCode::BlockedGeometry)
+        {
+            const auto simulatedResult = TryValidateWalkableSegmentWithPhysics(
+                mapId,
+                start,
+                end,
+                radius,
+                height,
+                horizontalDistance,
+                resolvedEndZ,
+                supportDelta,
+                travelFraction);
+            return static_cast<uint32_t>(simulatedResult);
+        }
+
+        return static_cast<uint32_t>(startSupportResult);
+    }
+
+    currentZ = lastSupportZ;
 
     while (remaining > 0.05f)
     {
@@ -421,12 +717,19 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
             direction,
             requested);
 
-        if (advanced + 0.05f < requested)
+        if (advanced <= minMeaningfulAdvance)
         {
-            if (travelFraction && horizontalDistance > 0.01f)
-                *travelFraction = std::max(0.0f, std::min(1.0f, traveled / horizontalDistance));
-
-            return static_cast<uint32_t>(SegmentValidationCode::BlockedGeometry);
+            const auto simulatedResult = TryValidateWalkableSegmentWithPhysics(
+                mapId,
+                start,
+                end,
+                radius,
+                height,
+                horizontalDistance,
+                resolvedEndZ,
+                supportDelta,
+                travelFraction);
+            return static_cast<uint32_t>(simulatedResult);
         }
 
         currentX += direction.x * advanced;
@@ -436,7 +739,24 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
 
         const auto supportResult = validateSupport(currentX, currentY, currentZ, orientation, traveled);
         if (supportResult != SegmentValidationCode::Clear)
+        {
+            if (supportResult == SegmentValidationCode::BlockedGeometry)
+            {
+                const auto simulatedResult = TryValidateWalkableSegmentWithPhysics(
+                    mapId,
+                    start,
+                    end,
+                    radius,
+                    height,
+                    horizontalDistance,
+                    resolvedEndZ,
+                    supportDelta,
+                    travelFraction);
+                return static_cast<uint32_t>(simulatedResult);
+            }
+
             return static_cast<uint32_t>(supportResult);
+        }
 
         currentZ = lastSupportZ;
     }

@@ -140,6 +140,8 @@ public class PathfindingSocketServer : ProtobufSocketServer<PathfindingRequest, 
 
 Current rollout note: `CalculatePathRequest.nearby_objects` is now consumed inside the service. Each path request mounts a request-scoped synthetic-guid overlay into the native dynamic-object registry, executes the native path call, and unregisters those synthetic entries in `finally`. Other registry-sensitive native calls currently run behind the same gate so path overlays cannot leak across concurrent requests.
 
+Current native-validator note: the service can optionally validate returned segments through `ValidateWalkableSegment`, and that native path now uses capsule-footprint support probes plus a short-horizon `PhysicsStepV2` fallback for strict straight-sweep false negatives. The first real Orgrimmar corpse-run raw segment now clears deterministically, but default rollout still stays behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` until longer multi-segment routes and native detour shaping are covered.
+
 ### Navigation Repository
 
 P/Invoke wrapper for the native pathfinding library:

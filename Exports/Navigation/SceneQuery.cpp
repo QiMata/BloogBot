@@ -617,6 +617,109 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
     return bestZ;
 }
 
+float SceneQuery::GetCapsuleSupportZ(
+    uint32_t mapId,
+    float x,
+    float y,
+    float currentZ,
+    float queryZ,
+    float maxSearchDist,
+    float radius)
+{
+    // Validate support against the capsule footprint instead of only the center point.
+    // This avoids false "no support" results on stairs, ramps, ledges, and triangle seams
+    // where the center sample is empty but the capsule is still legitimately supported.
+    const float safeRadius = std::max(0.05f, radius);
+    const float innerRadius = std::max(0.05f, safeRadius * 0.55f);
+    const float outerRadius = safeRadius;
+    const float innerDiag = innerRadius * 0.70710678f;
+    const float outerDiag = outerRadius * 0.70710678f;
+    const float maxRise = PhysicsConstants::STEP_HEIGHT + 0.35f;
+    const float maxDrop = maxSearchDist + 0.25f;
+
+    struct OffsetSample
+    {
+        float ox;
+        float oy;
+    };
+
+    const OffsetSample offsets[] = {
+        { 0.0f, 0.0f },
+        { innerRadius, 0.0f }, { -innerRadius, 0.0f }, { 0.0f, innerRadius }, { 0.0f, -innerRadius },
+        { innerDiag, innerDiag }, { innerDiag, -innerDiag }, { -innerDiag, innerDiag }, { -innerDiag, -innerDiag },
+        { outerRadius, 0.0f }, { -outerRadius, 0.0f }, { 0.0f, outerRadius }, { 0.0f, -outerRadius },
+        { outerDiag, outerDiag }, { outerDiag, -outerDiag }, { -outerDiag, outerDiag }, { -outerDiag, -outerDiag }
+    };
+
+    const float raisedQueryZ = std::max(queryZ, currentZ + 0.35f);
+    const float queryHeights[] = {
+        currentZ + 0.05f,
+        raisedQueryZ,
+        raisedQueryZ + 0.45f,
+        raisedQueryZ + 0.90f
+    };
+
+    float bestZ = PhysicsConstants::INVALID_HEIGHT;
+    float bestDelta = std::numeric_limits<float>::max();
+    float bestOffsetSq = std::numeric_limits<float>::max();
+
+    for (const auto& offset : offsets)
+    {
+        const float sampleX = x + offset.ox;
+        const float sampleY = y + offset.oy;
+        const float offsetSq = (offset.ox * offset.ox) + (offset.oy * offset.oy);
+
+        float sampleBestZ = PhysicsConstants::INVALID_HEIGHT;
+        float sampleBestDelta = std::numeric_limits<float>::max();
+
+        for (const float sampleQueryZ : queryHeights)
+        {
+            const float candidateZ = GetGroundZ(mapId, sampleX, sampleY, sampleQueryZ, maxSearchDist);
+            if (candidateZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+                continue;
+
+            const float deltaFromCurrent = candidateZ - currentZ;
+            if (deltaFromCurrent > maxRise || deltaFromCurrent < -maxDrop)
+                continue;
+
+            const float absDelta = std::fabs(deltaFromCurrent);
+            if (sampleBestZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f || absDelta < sampleBestDelta - 1e-4f)
+            {
+                sampleBestZ = candidateZ;
+                sampleBestDelta = absDelta;
+            }
+            else if (std::fabs(absDelta - sampleBestDelta) <= 1e-4f && candidateZ > sampleBestZ)
+            {
+                sampleBestZ = candidateZ;
+            }
+        }
+
+        if (sampleBestZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+            continue;
+
+        if (bestZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f || sampleBestDelta < bestDelta - 1e-4f)
+        {
+            bestZ = sampleBestZ;
+            bestDelta = sampleBestDelta;
+            bestOffsetSq = offsetSq;
+        }
+        else if (std::fabs(sampleBestDelta - bestDelta) <= 1e-4f)
+        {
+            if (offsetSq < bestOffsetSq - 1e-4f)
+            {
+                bestZ = sampleBestZ;
+                bestOffsetSq = offsetSq;
+            }
+            else if (std::fabs(offsetSq - bestOffsetSq) <= 1e-4f && sampleBestZ > bestZ)
+            {
+                bestZ = sampleBestZ;
+            }
+        }
+    }
+
+    return bestZ;
+}
+
 float SceneQuery::GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float y, float z, float maxSearchDist)
 {
     // Convert query point to internal coordinates (X/Y mirrored, Z preserved)

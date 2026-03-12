@@ -26,7 +26,8 @@
 - New native walkability coverage is now present for `ValidateWalkableSegment`:
   - zero-distance same-ground probe returns `Clear`
   - obstructed route returns a non-clear native classification
-- This project is now the deterministic owner for native segment-walkability diagnostics while `Exports/Navigation` hardens support-surface selection.
+- A real Orgrimmar graveyard->center raw-path segment is now pinned here as a deterministic regression. The export now clears it only because the native validator was hardened to use capsule-footprint support probes plus a `PhysicsStepV2` fallback for straight-sweep false negatives.
+- This project is now the deterministic owner for native segment-walkability diagnostics while `Exports/Navigation` hardens support-surface selection and native route shaping.
 
 ## P0 Active Tasks (Ordered)
 
@@ -46,18 +47,19 @@ BRT-PAR-001 parity loop (2026-02-28) found **no physics/navigation regressions**
 4. Native segment walkability focus: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 68)
-- Active task: support diagnostics for native `ValidateWalkableSegment`
-- Last delta: added direct native coverage for `ValidateWalkableSegment` in `SegmentWalkabilityTests.cs`, proving the export rejects an obstructed route and treats a zero-distance same-ground capsule probe as clear. This gives the navigation/pathfinding owners a focused native test while they harden support-surface selection for longer routes.
+- Last updated: 2026-03-12 (session 69)
+- Active task: keep native `ValidateWalkableSegment` regressions pinned while `PathFinder.cpp` absorbs more of the route-shaping work
+- Last delta: `SegmentWalkabilityTests.cs` now pins the first real Orgrimmar graveyard->center raw-path segment that previously false-negatived as `BlockedGeometry`. After the native validator gained capsule-footprint support probes and a `PhysicsStepV2` fallback, the focused native suite now passes `3/3`.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/SegmentWalkabilityTests.cs`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `Exports/Navigation/SceneQuery.h`
+  - `Exports/Navigation/SceneQuery.cpp`
   - `Exports/Navigation/DllMain.cpp`
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `2 passed`
-- Blockers: `MissingSupport` still false-negatives some longer traversable routes, so the export is not yet safe for default service-wide enablement on multi-segment corpse-run paths.
-- Next command: `Get-Content Exports/Navigation/SceneQuery.cpp | Select-Object -Skip 520 -First 260`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `3 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `100 passed, 1 skipped`
+- Blockers: the short-segment false-negative is fixed, but longer route shaping still sits outside this project in `Exports/Navigation/PathFinder.cpp`, so default service rollout stays gated until those whole-route cases are covered.
+- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -First 260`

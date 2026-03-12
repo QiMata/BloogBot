@@ -121,12 +121,13 @@ Master tracker: `MASTER-SUB-018`
 - [ ] Target files: `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/PathfindingSocketServer.cs`, tests under `Tests/PathfindingService.Tests/`.
 - [x] Progress (2026-03-12 session 67): `Navigation.CalculateValidatedPath(...)` now validates each returned segment against the mounted overlay, retries the alternate native mode, and runs a bounded local detour search around the first blocked segment before returning a result. `PathfindingSocketServer` now surfaces the new result codes (`native_path`, `native_path_alternate_mode`, `repaired_dynamic_overlay`, `blocked_by_dynamic_overlay`, `los_fallback_path`, `no_path`) and keeps `raw_corner_count` tied to the original native route that was validated/repaired.
 - [x] Progress (2026-03-12 session 68): `Navigation.cs` now has a native `ValidateWalkableSegment` bridge available for service result mapping (`repaired_segment_validation`, `blocked_by_capsule_validation`, `blocked_by_step_up_limit`, `blocked_by_step_down_limit`) and deterministic tests cover those branches. The rollout remains gated behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` because current support probes still false-negative some long Orgrimmar/corpse-run segments.
+- [x] Progress (2026-03-12 session 69): the native validator underneath `Navigation.cs` now uses capsule-footprint support sampling and a short-horizon `PhysicsStepV2` fallback for strict straight-sweep false negatives. The first real Orgrimmar graveyard->center raw segment now passes in deterministic native coverage, and the focused plus full `PathfindingService.Tests` suites still pass.
 - [ ] Required change:
   1. Validate each returned path segment against dynamic objects, capsule clearance, LOS, and support surface checks.
   2. When a segment is blocked by live objects, build a local detour/reform pass around the obstruction instead of returning the raw native path.
   3. Re-optimize the repaired route so the caller gets a usable waypoint chain instead of a one-off avoidance spike.
 - [ ] Remaining gap:
-  1. The native walkability bridge exists, but default service use is still env-gated because `missing_support` currently false-negatives some otherwise valid long segments.
+  1. The native walkability bridge is now viable for short-segment false negatives, but default service use is still env-gated until longer multi-segment corpse-run routes and whole-path shaping are covered.
   2. The local repair pass is intentionally bounded and service-side. More robust detour generation still belongs in native `PathFinder.cpp` / `SceneQuery.cpp`.
 - [ ] Acceptance criteria: a path that would clip through a live collidable object is either reformed into a valid route or returned with an explicit blocked reason; raw invalid corners are no longer silently trusted.
 
@@ -164,21 +165,19 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 68)
-- Active task: `NAV-OBJ-002` native support-probe hardening for `ValidateWalkableSegment`
-- Last delta: `Navigation.cs` can now map native walkability failures (`blocked_by_capsule_validation`, `blocked_by_step_up_limit`, `blocked_by_step_down_limit`, `repaired_segment_validation`) via the new native `ValidateWalkableSegment` export, but default service rollout is intentionally gated behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` until support probes stop false-negative blocking long Orgrimmar routes
+- Last updated: 2026-03-12 (session 69)
+- Active task: `NAV-OBJ-002` / `PFS-OBJ-003` promote the hardened native segment validator into broader native route shaping
+- Last delta: the native `ValidateWalkableSegment` path under `Navigation.cs` now uses capsule-footprint support sampling (`SceneQuery::GetCapsuleSupportZ`) and a `PhysicsStepV2` fallback when strict straight sweeps falsely reject a short route that the real movement stack can traverse. The first real Orgrimmar graveyard->center raw segment now passes deterministically, and the focused/full PathfindingService deterministic suites still pass, but default rollout remains gated until longer multi-segment routes are covered
 - Pass result: `delta shipped`
 - Validation/tests run:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1` -> succeeded
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `9 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `34 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `9 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `34 passed`
 - Files changed:
+  - `Exports/Navigation/SceneQuery.h`
+  - `Exports/Navigation/SceneQuery.cpp`
   - `Exports/Navigation/DllMain.cpp`
-  - `Services/PathfindingService/Repository/Navigation.cs`
-  - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
-  - `Tests/PathfindingService.Tests/TASKS.md`
   - `Services/PathfindingService/TASKS.md`
   - `Services/PathfindingService/README.md`
-- Next command: `Get-Content Exports/Navigation/SceneQuery.cpp | Select-Object -Skip 520 -First 260`
-- Blockers: the native bridge is usable for diagnostics and result mapping, but `missing_support` still false-negatives some long corpse-run segments, so default service rollout must stay gated until `SceneQuery::GetGroundZ` / support-surface selection is hardened.
+- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -First 260`
+- Blockers: short-segment false-negatives are fixed, but longer multi-segment route shaping and native detour generation still need work in `PathFinder.cpp` / `SceneQuery.cpp`, so the service gate must remain until the whole-route path is trustworthy without relying on bounded service-side repair.
