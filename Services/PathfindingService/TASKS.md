@@ -15,6 +15,8 @@ Master tracker: `MASTER-SUB-018`
 4. Every pathing fix must be validated with a simple command and recorded in `Session Handoff`.
 5. Archive completed items to `Services/PathfindingService/TASKS_ARCHIVE.md` in the same session.
 6. Every pass must write one-line `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
+7. Every implementation slice must add or update focused unit tests and finish with those tests passing before the next slice unless a blocker is recorded.
+8. After each shipped delta, update this file and `docs/TASKS.md`, commit, push, and hand off the next open item for the next session.
 
 ## Evidence Snapshot (2026-02-25)
 - Build check passes: `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> `0 Error(s)`, `0 Warning(s)`.
@@ -91,10 +93,11 @@ Master tracker: `MASTER-SUB-018`
 ### PFS-OBJ-001 Contract: object-aware path request/response
 - [ ] Problem: `CalculatePathRequest` currently only carries `map_id`, `start`, `end`, and `straight`. Dynamic objects already flow through `PhysicsInput.nearby_objects`, but BotRunner cannot ask PathfindingService for a path that is aware of live world obstacles.
 - [ ] Target files: `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`, generated `Exports/BotCommLayer/Models/Pathfinding.cs`, `Services/PathfindingService/PathfindingSocketServer.cs`, `Exports/BotRunner/Clients/PathfindingClient.cs`.
+- [x] Progress (2026-03-12 session 64): first checkpoint landed. `CalculatePathRequest.nearby_objects` now exists, protobuf code was regenerated, `PathfindingClient` has a compatibility overload that can send request-scoped dynamic objects, `HandlePath(...)` logs overlay counts for diagnostics, and focused proto/client unit tests pass.
 - [ ] Required change:
-  1. Extend `CalculatePathRequest` with a request-scoped world overlay payload: `repeated DynamicObjectProto nearby_objects`.
-  2. Add caller capability/options fields for path shaping and decision use, such as `allow_step_up`, `allow_jump_gap`, `allow_safe_drop`, `allow_swim`, `request_affordance_metadata`, and `agent_radius/height` when race defaults are not enough.
-  3. Extend `CalculatePathResponse` so the caller gets more than corners: path result, blocked-reason metadata, and segment affordance data.
+  1. First checkpoint: extend `CalculatePathRequest` with a request-scoped world overlay payload: `repeated DynamicObjectProto nearby_objects`, regenerate protobuf code, and prove the contract with passing unit tests.
+  2. Second checkpoint: add caller capability/options fields for path shaping and decision use, such as `allow_step_up`, `allow_jump_gap`, `allow_safe_drop`, `allow_swim`, `request_affordance_metadata`, and `agent_radius/height` when race defaults are not enough.
+  3. Third checkpoint: extend `CalculatePathResponse` so the caller gets more than corners: path result, blocked-reason metadata, and segment affordance data.
 - [ ] Acceptance criteria: BotRunner can send a live game-object list with each path request, and the response schema can explain why a path is valid, blocked, or requires a movement affordance.
 
 ### PFS-OBJ-002 Service overlay lifecycle: request-scoped dynamic obstacle context
@@ -151,13 +154,20 @@ Master tracker: `MASTER-SUB-018`
 ## Session Handoff
 - Last updated: 2026-03-12
 - Active task: `PFS-OBJ-001` object-aware path request/response
-- Last delta: expanded the PathfindingService roadmap from a narrow shoreline diagnostic into the full object-aware routing plan: request-scoped obstacle overlays, route repair, affordance metadata, and decision-grade queries
+- Last delta: shipped the first `PFS-OBJ-001` checkpoint by adding `CalculatePathRequest.nearby_objects`, regenerating protobuf outputs, updating `PathfindingClient` to send request-scoped overlay objects through a compatibility overload, and adding passing proto/client request tests
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - No new validation commands run in this planning pass. Latest baseline remains:
-  - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `25 passed`
+  - `& .\\protocsharp.bat` (from `Exports/BotCommLayer/Models/ProtoDef`) -> succeeded
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"` -> `12 passed`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests" --logger "console;verbosity=minimal"` -> `17 passed`
 - Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`
+  - `Exports/BotCommLayer/Models/Pathfinding.cs`
+  - `Exports/BotRunner/Clients/PathfindingClient.cs`
+  - `Services/PathfindingService/PathfindingSocketServer.cs`
+  - `Tests/PathfindingService.Tests/ProtoInteropExtensionsTests.cs`
+  - `Tests/BotRunner.Tests/Clients/PathfindingClientRequestTests.cs`
   - `Services/PathfindingService/TASKS.md`
-- Next command: `Get-Content Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`
-- Blockers: `CalculatePathRequest` still lacks request-scoped object overlay fields, so PathfindingService cannot yet treat live game objects as blockers during path calculation.
+- Next command: `Get-Content Exports/BotRunner/BotRunnerService.Snapshot.cs`
+- Blockers: the contract can now carry `nearby_objects`, but BotRunner still needs a filtered collidable game-object snapshot and the service still needs request-scoped overlay registration/route validation before live path calls can reform around blockers.

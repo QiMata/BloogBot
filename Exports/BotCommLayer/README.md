@@ -236,7 +236,7 @@ Navigation and physics:
 | Model | Description |
 |-------|-------------|
 | **PathfindingRequest/Response** | Main request/response wrapper |
-| **CalculatePathRequest/Response** | A* pathfinding |
+| **CalculatePathRequest/Response** | A* pathfinding, including request-scoped `nearby_objects` overlays for live blockers |
 | **LineOfSightRequest/Response** | Line-of-sight checks |
 | **PhysicsInput/Output** | Client physics simulation state |
 

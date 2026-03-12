@@ -212,7 +212,21 @@ var request = new PathfindingRequest
         MapId = 0,
         Start = new Position { X = 100, Y = 200, Z = 50 },
         End = new Position { X = 500, Y = 600, Z = 55 },
-        Straight = false
+        Straight = false,
+        NearbyObjects =
+        {
+            new DynamicObjectProto
+            {
+                Guid = 0x1001,
+                DisplayId = 17,
+                X = 140,
+                Y = 240,
+                Z = 50,
+                Orientation = 0.5f,
+                Scale = 1.0f,
+                GoState = 1,
+            }
+        }
     }
 };
 
@@ -251,8 +265,11 @@ Computes an A* path between two points:
 | `Start` | Position | Starting coordinates (X, Y, Z) |
 | `End` | Position | Destination coordinates |
 | `Straight` | bool | If true, attempts direct path without navmesh |
+| `NearbyObjects` | repeated `DynamicObjectProto` | Request-scoped live collidable objects to validate against the static route |
 
 **Response**: List of `Position` waypoints
+
+Current rollout note: the service accepts and logs `NearbyObjects` on path requests now; request-scoped overlay validation and detour repair are the next owner slices in `Services/PathfindingService/TASKS.md`.
 
 ### LineOfSightRequest
 

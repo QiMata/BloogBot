@@ -4,6 +4,7 @@ using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
 using Pathfinding;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 namespace BotRunner.Clients
 {
@@ -23,6 +24,14 @@ namespace BotRunner.Clients
         public bool IsAvailable => _consecutiveFailures == 0;
 
         public virtual Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false)
+            => GetPath(mapId, start, end, nearbyObjects: null, smoothPath);
+
+        public virtual Position[] GetPath(
+            uint mapId,
+            Position start,
+            Position end,
+            IReadOnlyList<DynamicObjectProto>? nearbyObjects,
+            bool smoothPath = false)
         {
             var request = new PathfindingRequest
             {
@@ -34,7 +43,10 @@ namespace BotRunner.Clients
                     Straight = smoothPath
                 }
             };
-            var response = SendMessage(request);
+            if (nearbyObjects is { Count: > 0 })
+                request.Path.NearbyObjects.Add(nearbyObjects);
+
+            var response = SendRequest(request);
             _consecutiveFailures = 0;
             if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                 throw new Exception(response.Error.Message);
@@ -61,7 +73,7 @@ namespace BotRunner.Clients
                     MaxSearchDist = maxSearchDist
                 }
             };
-            var response = SendMessage(request);
+            var response = SendRequest(request);
             _consecutiveFailures = 0;
             if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                 throw new Exception(response.Error.Message);
@@ -91,7 +103,7 @@ namespace BotRunner.Clients
                 foreach (var pos in positions)
                     request.BatchGroundZ.Positions.Add(ToProto(pos));
 
-                var response = SendMessage(request);
+                var response = SendRequest(request);
                 _consecutiveFailures = 0;
 
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
@@ -129,7 +141,7 @@ namespace BotRunner.Clients
                     To = ToProto(to)
                 }
             };
-            var response = SendMessage(request);
+            var response = SendRequest(request);
             _consecutiveFailures = 0;
             if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                 throw new Exception(response.Error.Message);
@@ -146,7 +158,7 @@ namespace BotRunner.Clients
             try
             {
                 var request = new PathfindingRequest { Step = physicsInput };
-                var response = SendMessage(request);
+                var response = SendRequest(request);
                 _consecutiveFailures = 0;
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                     throw new Exception(response.Error.Message);
@@ -210,7 +222,7 @@ namespace BotRunner.Clients
                         To = ToProto(to)
                     }
                 };
-                var response = SendMessage(request);
+                var response = SendRequest(request);
                 _consecutiveFailures = 0;
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                     return false; // Non-fatal — treat as clear
@@ -221,6 +233,8 @@ namespace BotRunner.Clients
                 return false; // Pathfinding service unavailable — assume clear
             }
         }
+
+        protected virtual PathfindingResponse SendRequest(PathfindingRequest request) => SendMessage(request);
 
         private static Game.Position ToProto(Position p) => new() { X = p.X, Y = p.Y, Z = p.Z };
     }

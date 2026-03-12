@@ -15,6 +15,8 @@
 6. `Session Handoff` must include `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
 7. Resume-first guard: start each pass by running the prior `Session Handoff -> Next command` verbatim before new scans.
 8. After shipping one local delta, set `Session Handoff -> Next command` to the next queue-file read command and execute it in the same pass.
+9. Every implementation slice must add or update focused unit tests and finish with those tests passing before the next slice unless a blocker is recorded.
+10. After each shipped delta, update this file and `docs/TASKS.md`, commit, push, and hand off the next open item for the next session.
 
 ## Environment Checklist
 - [x] `Exports/BotRunner/BotRunner.csproj` builds in `Release`.
@@ -66,10 +68,11 @@
 ### BR-NAV-002 Extend path requests to send object context and movement capabilities
 - [ ] Problem: `PathfindingClient.GetPath(...)` cannot send the context needed for object-aware routing or decision-grade route selection.
 - [ ] Target files: `Exports/BotRunner/Clients/PathfindingClient.cs`, call sites in `NavigationPath.cs`, `BotRunnerService.Sequences.Movement.cs`, relevant tests.
+- [x] Progress (2026-03-12 session 64): first checkpoint landed. `PathfindingClient.GetPath(...)` now has a compatibility overload that can send `nearby_objects`, and deterministic request-shape coverage passes in `PathfindingClientRequestTests`.
 - [ ] Required change:
-  1. Extend `GetPath(...)` to send `nearby_objects` and route capability flags once `PFS-OBJ-001` lands.
-  2. Thread character movement capabilities and route-policy settings down from BotRunner.
-  3. Keep old call sites working behind a compatibility overload while the rollout is in progress.
+  1. First checkpoint: extend `GetPath(...)` with a compatibility overload that can send `nearby_objects`, and prove the request shape with passing unit tests.
+  2. Second checkpoint: thread character movement capabilities and route-policy settings down from BotRunner.
+  3. Third checkpoint: update live call sites to use the new overload without breaking existing behavior during the rollout.
 - [ ] Acceptance criteria: BotRunner can ask for "path to X with these live blockers and these allowed movement affordances."
 
 ### BR-NAV-003 Replan and re-optimize when dynamic blockers invalidate the current route
@@ -99,11 +102,17 @@
 ## Session Handoff
 - Last updated: 2026-03-12
 - Active task: `BR-NAV-001` build a collidable game-object snapshot for path requests
-- Last delta: expanded the BotRunner roadmap so path requests can carry live collidable object context, route capability flags, and future affordance metadata instead of only `mapId/start/end`
+- Last delta: shipped the first `BR-NAV-002` checkpoint by adding a `PathfindingClient.GetPath(...)` compatibility overload for `nearby_objects`, regenerating the protobuf contract, and adding passing deterministic request-shape coverage
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - No new validation commands run in this planning pass.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientDeadReckoningTests" --logger "console;verbosity=minimal"` -> `17 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"` -> `12 passed`
 - Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`
+  - `Exports/BotCommLayer/Models/Pathfinding.cs`
+  - `Exports/BotRunner/Clients/PathfindingClient.cs`
+  - `Tests/BotRunner.Tests/Clients/PathfindingClientRequestTests.cs`
   - `Exports/BotRunner/TASKS.md`
-- Next command: `Get-Content Exports/BotRunner/Clients/PathfindingClient.cs`
-- Blockers: `PathfindingClient.GetPath(...)` cannot yet send live obstacle context or path-affordance options to PathfindingService.
+- Next command: `Get-Content Exports/BotRunner/BotRunnerService.Snapshot.cs`
+- Blockers: `PathfindingClient` can now send `nearby_objects`, but BotRunner still lacks the filtered collidable game-object snapshot and the `NavigationPath` call sites needed to populate the new request field during live routing.

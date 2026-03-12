@@ -54,6 +54,7 @@ message CalculatePathRequest {
     game.Position start = 2;
     game.Position end = 3;
     bool straight = 4;  // semantics: smoothPath flag (true = Detour smooth path, false = straight line)
+    repeated DynamicObjectProto nearby_objects = 5;
 }
 
 message CalculatePathResponse {

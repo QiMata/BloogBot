@@ -365,4 +365,51 @@ public class ProtoInteropExtensionsTests
         Assert.Equal(float.MinValue / 2f, deserialized.Corners[1].Y);
         Assert.Equal(float.Epsilon, deserialized.Corners[1].Z);
     }
+
+    [Fact]
+    public void CalculatePathRequest_RoundTrip_PreservesNearbyObjects()
+    {
+        var request = new Pathfinding.CalculatePathRequest
+        {
+            MapId = 1u,
+            Start = new Game.Position { X = 1f, Y = 2f, Z = 3f },
+            End = new Game.Position { X = 4f, Y = 5f, Z = 6f },
+            Straight = true,
+        };
+        request.NearbyObjects.Add(new Pathfinding.DynamicObjectProto
+        {
+            Guid = 0xAA01,
+            DisplayId = 17,
+            X = 100.25f,
+            Y = 200.5f,
+            Z = 300.75f,
+            Orientation = 1.5f,
+            Scale = 2.0f,
+            GoState = 1u,
+        });
+        request.NearbyObjects.Add(new Pathfinding.DynamicObjectProto
+        {
+            Guid = 0xAA02,
+            DisplayId = 42,
+            X = -10f,
+            Y = -20f,
+            Z = -30f,
+            Orientation = 0.25f,
+            Scale = 1.25f,
+            GoState = 0u,
+        });
+
+        var bytes = request.ToByteArray();
+        var deserialized = Pathfinding.CalculatePathRequest.Parser.ParseFrom(bytes);
+
+        Assert.Equal(request.MapId, deserialized.MapId);
+        Assert.True(deserialized.Straight);
+        Assert.Equal(2, deserialized.NearbyObjects.Count);
+        Assert.Equal(request.NearbyObjects[0].Guid, deserialized.NearbyObjects[0].Guid);
+        Assert.Equal(request.NearbyObjects[0].DisplayId, deserialized.NearbyObjects[0].DisplayId);
+        Assert.Equal(request.NearbyObjects[0].Orientation, deserialized.NearbyObjects[0].Orientation);
+        Assert.Equal(request.NearbyObjects[1].Guid, deserialized.NearbyObjects[1].Guid);
+        Assert.Equal(request.NearbyObjects[1].Scale, deserialized.NearbyObjects[1].Scale);
+        Assert.Equal(request.NearbyObjects[1].GoState, deserialized.NearbyObjects[1].GoState);
+    }
 }

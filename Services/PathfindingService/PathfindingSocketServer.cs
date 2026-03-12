@@ -208,8 +208,8 @@ namespace PathfindingService
             {
                 var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
                 logger.LogInformation(
-                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} corners={Corners}",
-                    req.MapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, dist2D, smoothPath, sanitizedPath.Length);
+                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} corners={Corners} overlayObjects={OverlayObjects}",
+                    req.MapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, dist2D, smoothPath, sanitizedPath.Length, req.NearbyObjects.Count);
             }
 
             var resp = new CalculatePathResponse();
