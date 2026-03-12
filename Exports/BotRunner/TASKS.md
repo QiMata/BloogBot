@@ -54,6 +54,42 @@
 - [x] Done (2026-03-12). `FishingTask` now applies bait to the equipped fishing pole before pool approach, confirms lure consumption/enchant state, and keeps the live success contract tied to `loot_window_open` plus a post-loot bag delta instead of setup-only signals.
 - [x] Acceptance: dual-bot live fishing can assert `equip -> bait -> approach -> bobber -> loot-window -> bag-delta` directly against `FishingTask`, and unit coverage proves the lure path targets the equipped pole GUID instead of `0x0`.
 
+### BR-NAV-001 Build a collidable game-object snapshot for path requests
+- [ ] Problem: BotRunner currently asks for paths with only `mapId/start/end`. It does not package the live game-object list the pathfinding service needs to avoid temporary blockers and route around collision-heavy areas.
+- [ ] Target files: `Exports/BotRunner/Clients/PathfindingClient.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager*.cs`, FG snapshot equivalents.
+- [ ] Required change:
+  1. Build a filtered list of nearby collidable game objects from the current object manager snapshot.
+  2. Map those objects into `DynamicObjectProto` with display ID, transform, scale, and state.
+  3. Keep the filter conservative first: only pass objects known to have collision or gameplay relevance.
+- [ ] Acceptance criteria: every path request can include a live obstacle list without flooding the service with irrelevant world objects.
+
+### BR-NAV-002 Extend path requests to send object context and movement capabilities
+- [ ] Problem: `PathfindingClient.GetPath(...)` cannot send the context needed for object-aware routing or decision-grade route selection.
+- [ ] Target files: `Exports/BotRunner/Clients/PathfindingClient.cs`, call sites in `NavigationPath.cs`, `BotRunnerService.Sequences.Movement.cs`, relevant tests.
+- [ ] Required change:
+  1. Extend `GetPath(...)` to send `nearby_objects` and route capability flags once `PFS-OBJ-001` lands.
+  2. Thread character movement capabilities and route-policy settings down from BotRunner.
+  3. Keep old call sites working behind a compatibility overload while the rollout is in progress.
+- [ ] Acceptance criteria: BotRunner can ask for "path to X with these live blockers and these allowed movement affordances."
+
+### BR-NAV-003 Replan and re-optimize when dynamic blockers invalidate the current route
+- [ ] Problem: once live obstacles move or appear, BotRunner still tends to walk the old path until it stalls.
+- [ ] Target files: `Exports/BotRunner/Movement/NavigationPath.cs`, movement task call sites, telemetry/tests.
+- [ ] Required change:
+  1. Re-request paths when the current route collides with new object context or repeated wall-hit telemetry.
+  2. Prefer repaired/re-optimized paths over direct fallback movement when service data is available.
+  3. Log the reason for replans so service vs runtime failures are distinguishable.
+- [ ] Acceptance criteria: dynamic blockers trigger planned replans instead of long stall loops and direct-move thrash.
+
+### BR-NAV-004 Consume affordance metadata in movement and decision logic
+- [ ] Problem: even after the service can classify `step_up` / `jump_gap` / `safe_drop`, BotRunner will ignore that metadata unless movement and decision layers consume it.
+- [ ] Target files: `NavigationPath.cs`, movement tasks, future decision-system consumers.
+- [ ] Required change:
+  1. Teach movement/path consumers to reject unsupported routes and prefer cheaper valid routes.
+  2. Surface path affordances to higher-level tasks so they can decide whether a goal is reachable, risky, or requires a different approach point.
+  3. Keep the first slice small: pathing should consume the metadata before combat/interaction code does.
+- [ ] Acceptance criteria: decision logic can reason about route quality, not just route existence.
+
 ## Simple Command Set
 1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore`
 2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Quest|FullyQualifiedName~BotRunner" --logger "console;verbosity=minimal"`
@@ -62,17 +98,12 @@
 
 ## Session Handoff
 - Last updated: 2026-03-12
-- Active task: `BR-PAR-004` remains functionally complete; BotRunner-side fishing follow-up is now blocked on `PFS-FISH-001` / `NAV-FISH-001`
-- Last delta: updated the fishing comments/docs to match the named Ratchet teleport flow and recorded that the remaining intermittent failures are pathfinding/terrain/LOS-bound rather than missing `FishingTask` ownership
+- Active task: `BR-NAV-001` build a collidable game-object snapshot for path requests
+- Last delta: expanded the BotRunner roadmap so path requests can carry live collidable object context, route capability flags, and future affordance metadata instead of only `mapId/start/end`
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `25 passed`
+  - No new validation commands run in this planning pass.
 - Files changed:
-  - `Exports/BotRunner/Tasks/FishingTask.cs`
   - `Exports/BotRunner/TASKS.md`
-  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
-- Next command: `Get-Content Services/PathfindingService/TASKS.md`
-- Blockers: live fishing can already succeed through `FishingTask`, but intermittent failures still come from shoreline terrain sticking or a no-LOS cast position before `FishingTask in_cast_range`
+- Next command: `Get-Content Exports/BotRunner/Clients/PathfindingClient.cs`
+- Blockers: `PathfindingClient.GetPath(...)` cannot yet send live obstacle context or path-affordance options to PathfindingService.

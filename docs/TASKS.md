@@ -131,6 +131,10 @@ Current observed boundary from the 2026-03-12 live suite:
 | 7.2 | **Identify divergence points.** Find where the bot gets stuck - which waypoint, which geometry (catapult, wall, ramp). | Analysis | Open |
 | 7.3 | **Fix corridor collision code.** Update `PhysicsCollideSlide.cpp` to handle the stuck geometry. Test with replay frames. | `Exports/Navigation/PhysicsCollideSlide.cpp` | Open |
 | 7.4 | **Ratchet shoreline/fishing-hole route hardening.** Instrument the short route from the Ratchet named-teleport landing to fishing-hole cast positions, then fix terrain-snags / LOS-blocked endpoints that strand bots before `FishingTask in_cast_range`. | `Services/PathfindingService/`, `Exports/Navigation/`, `Exports/BotRunner/Tasks/FishingTask.cs` | In progress |
+| 7.5 | **Object-aware path requests.** Extend path requests so BotRunner sends nearby collidable game objects and movement capabilities to PathfindingService instead of pathing with only `mapId/start/end`. | `Exports/BotRunner/Clients/PathfindingClient.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Services/PathfindingService/`, `pathfinding.proto` | Open |
+| 7.6 | **Overlay-aware path validation and repair.** Validate native mmap routes against live object overlays, then reform blocked segments into usable local detours when possible. | `Services/PathfindingService/Repository/Navigation.cs`, `Exports/Navigation/PathFinder.cpp`, `Exports/Navigation/SceneQuery.cpp` | Open |
+| 7.7 | **Route affordance metadata.** Classify path transitions as walk / step-up / jump-gap / safe-drop / unsafe-drop / swim / blocked and return that metadata to callers. | `Services/PathfindingService/`, `Exports/Navigation/PhysicsEngine.cpp`, `pathfinding.proto` | Open |
+| 7.8 | **Decision-grade spatial queries.** After object-aware paths are stable, add higher-level reachability/LOS/surface queries so BotRunner can choose better approach points instead of only consuming corner lists. | `Services/PathfindingService/`, `Exports/BotRunner/` | Open |
 
 ---
 
@@ -188,17 +192,17 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-12 (session 62)
-- **Current work:** P7 pathfinding/navigation hardening. The fishing slice is now task-owned enough to prove real catches, and the remaining intermittent failures point to shoreline terrain/LOS/pathfinding rather than more fishing-task contract churn.
+- **Last updated:** 2026-03-12 (session 63)
+- **Current work:** P7 pathfinding/navigation hardening has been expanded into the object-aware routing roadmap. The next implementation slice is no longer just the Ratchet shoreline symptom; it is the path request contract that lets BotRunner send live collidable objects into PathfindingService.
 - **Completed this session:**
-  1. **Fishing docs/comments were brought up to date:** the live flow now documents the named Ratchet teleport, task-owned approach/LOS behavior, and the remaining intermittent failure mode (`FishingTask los_blocked phase=move`, `Your cast didn't land in fishable water`).
-  2. **Ownership shifted back to pathfinding:** the remaining fishing instability is now tracked directly in `Services/PathfindingService/TASKS.md` (`PFS-FISH-001`) and `Exports/Navigation/TASKS.md` (`NAV-FISH-001`) instead of being left as vague fishing follow-up.
-  3. **Pathfinding baseline refreshed:** `PathfindingService` Release build succeeded, `Navigation.vcxproj` Release|x64 build succeeded, and `Tests/PathfindingService.Tests` passed `25`.
+  1. **Grounded the new roadmap in the existing code:** confirmed that dynamic objects already exist in `PhysicsInput.nearby_objects` and `DynamicObjectRegistry`, while `CalculatePathRequest` and `PathfindingClient.GetPath(...)` still lack live object context.
+  2. **Expanded the owner plans:** `Services/PathfindingService/TASKS.md`, `Exports/Navigation/TASKS.md`, and `Exports/BotRunner/TASKS.md` now track object-aware path requests, overlay-aware route repair, segment affordance metadata, and BotRunner replanning work.
+  3. **Updated master priority tracking:** P7 now explicitly covers object-aware path requests, route validation/repair, affordance metadata, and future decision-grade spatial queries.
 - **Commands run + outcomes:**
-  1. `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded.
-  2. `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded.
-  3. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `25 passed`.
-- **Next:** `rg --line-number "CalculatePath|IsInLineOfSight|TryHasLos|HandlePath" Services/PathfindingService/PathfindingSocketServer.cs Services/PathfindingService/Repository/Navigation.cs Exports/BotRunner/Tasks/FishingTask.cs Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  1. `Get-Content Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto` -> confirmed `CalculatePathRequest` still only carries `map_id/start/end/straight`, while dynamic-object support exists on `PhysicsInput`.
+  2. `rg --line-number "nearbyObjects|DynamicObjectRegistry|CalculatePathAsync|CalculatePath\\(|PathfindingClient|PhysicsInput|LineOfSight|GetGroundZ|DynamicObject" Exports Services Tests -g "*.cs" -g "*.cpp" -g "*.h"` -> confirmed native dynamic-object and physics substrate already exists, but path requests do not consume it.
+  3. `Get-Content Exports/BotRunner/Clients/PathfindingClient.cs` -> confirmed `GetPath(...)` has no object-overlay or movement-capability parameters.
+- **Next:** `Get-Content Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`
 
 ## Session Handoff (Session 53 Archive)
 - **Last updated:** 2026-03-10 (session 53)

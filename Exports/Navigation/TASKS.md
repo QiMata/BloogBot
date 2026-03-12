@@ -62,6 +62,42 @@
   3. Validate against the fishing-hole approach first, then reuse the same diagnostics for other sporadic live pathing failures.
 - [ ] Acceptance criteria: the short Ratchet shoreline route consistently reaches a castable, LOS-valid position without terrain sticking or hover/fall artifacts.
 
+### NAV-OBJ-001 Integrate request-scoped dynamic objects into native path validation
+- [ ] Problem: `DynamicObjectRegistry` exists and is already used by physics/LOS, but native path generation and path-validation flows do not yet treat caller-supplied live objects as first-class blockers during route shaping.
+- [ ] Target files: `Exports/Navigation/Navigation.cpp`, `Exports/Navigation/PathFinder.cpp`, `Exports/Navigation/SceneQuery.cpp`, `Exports/Navigation/DynamicObjectRegistry.*`.
+- [ ] Required change:
+  1. Accept request-scoped dynamic-object overlays from the service layer.
+  2. Use those overlays during segment validation and candidate-route rejection.
+  3. Keep the overlay lifecycle deterministic so two bots cannot pollute each other's native obstacle state.
+- [ ] Acceptance criteria: native route validation can say "this mmap segment is blocked by live object X" instead of pretending the object is not there.
+
+### NAV-OBJ-002 Add capsule-clearance and support-surface validation for candidate segments
+- [ ] Problem: LOS alone is insufficient for walkability. We need to know whether the character capsule can clear the segment and whether the destination/support surface is actually usable.
+- [ ] Target files: `Exports/Navigation/SceneQuery.cpp`, `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/PhysicsCollideSlide.cpp`, native exports as needed.
+- [ ] Required change:
+  1. Add reusable segment validation helpers for capsule clearance, support surface, and obstacle squeeze cases.
+  2. Use the same walkability thresholds as the physics engine (`STEP_HEIGHT`, slope, step-down limits).
+  3. Expose enough native results for the service layer to classify the segment.
+- [ ] Acceptance criteria: the native layer can distinguish "visible" from "walkable with this capsule."
+
+### NAV-OBJ-003 Surface-transition affordance classification
+- [ ] Problem: the engine has step/jump/fall substrate, but route planning does not yet tag transitions as step-up, jump-gap, safe-drop, unsafe-drop, or blocked.
+- [ ] Target files: `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/PhysicsThreePass.cpp`, `Exports/Navigation/SceneQuery.cpp`, helper exports/tests.
+- [ ] Required change:
+  1. Reuse existing jump/fall/gap detection to classify candidate transitions.
+  2. Emit quantitative metrics for climb height, gap distance, and drop height.
+  3. Keep the classification consistent with actual movement execution, not a separate planner-only heuristic.
+- [ ] Acceptance criteria: higher layers can ask the native stack what movement affordance a segment requires.
+
+### NAV-OBJ-004 Local detour generation around collidable objects
+- [ ] Problem: once a live object blocks an mmap path segment, we need a local workaround instead of failing the whole route immediately.
+- [ ] Target files: `Exports/Navigation/PathFinder.cpp`, `Exports/Navigation/Navigation.cpp`, `Exports/Navigation/SceneQuery.cpp`.
+- [ ] Required change:
+  1. Generate short detour candidates around dynamic blockers using clearance-aware probes.
+  2. Reject detours that only pass LOS but fail capsule/support checks.
+  3. Return the best repaired route for service-side smoothing/re-optimization.
+- [ ] Acceptance criteria: temporary blockers produce a valid workaround route whenever one exists within a local search envelope.
+
 ## Simple Command Set
 1. `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`
 2. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"`
@@ -71,12 +107,13 @@
 
 ## Session Handoff
 - Last updated: 2026-03-12
-- Active task: `NAV-FISH-001` Ratchet shoreline terrain sticking / no-LOS approach points
-- Last delta: added explicit native-navigation ownership for the Ratchet shoreline fishing failure and refreshed the Release|x64 build baseline
+- Active task: `NAV-OBJ-001` integrate request-scoped dynamic objects into native path validation
+- Last delta: expanded native-navigation ownership from the Ratchet shoreline symptom into the broader object-aware routing plan: dynamic object overlays, capsule/support validation, affordance classification, and local detours
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - No new validation commands run in this planning pass. Latest baseline remains:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
 - Files changed:
   - `Exports/Navigation/TASKS.md`
-- Next command: `rg --line-number "Collide|Slide|PathFinder|LOS|LineOfSight" Exports/Navigation/PhysicsCollideSlide.cpp Exports/Navigation/PhysicsEngine.cpp Exports/Navigation/PathFinder.cpp`
-- Blockers: the current live fishing evidence points to final-position/collision trouble on the Ratchet shoreline, but native replay/path logs for that route still need to be captured.
+- Next command: `rg --line-number "DynamicObjectRegistry|LineOfSight|GetGroundZ|FindPath|PathFinder" Exports/Navigation/Navigation.cpp Exports/Navigation/PathFinder.cpp Exports/Navigation/SceneQuery.cpp Exports/Navigation/DynamicObjectRegistry.cpp`
+- Blockers: native path generation still does not consume request-scoped live object overlays during `FindPath`, so mmap routes can ignore temporary collidable blockers.

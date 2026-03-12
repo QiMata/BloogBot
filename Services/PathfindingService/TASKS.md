@@ -5,7 +5,7 @@ Master tracker: `MASTER-SUB-018`
 ## Scope
 - Directory: `Services/PathfindingService`
 - Project: `PathfindingService.csproj`
-- Focus: corpse-run path validity (Orgrimmar runback), short-horizon shoreline route diagnostics, native-path usage correctness, and deterministic service readiness/response contracts.
+- Focus: corpse-run path validity (Orgrimmar runback), short-horizon shoreline route diagnostics, object-aware path requests, affordance-rich path responses, and deterministic service readiness/response contracts.
 - Queue dependency: `docs/TASKS.md` controls execution order and handoff pointers.
 
 ## Execution Rules
@@ -88,6 +88,60 @@ Master tracker: `MASTER-SUB-018`
   3. Tie the diagnostics back to the Ratchet fishing evidence (`FishingTask los_blocked phase=move`, `Your cast didn't land in fishable water`).
 - [ ] Acceptance criteria: a focused pathfinding pass can name whether the Ratchet shoreline issue is a service route-shape problem, a native collision/path problem, or a runtime execution drift problem.
 
+### PFS-OBJ-001 Contract: object-aware path request/response
+- [ ] Problem: `CalculatePathRequest` currently only carries `map_id`, `start`, `end`, and `straight`. Dynamic objects already flow through `PhysicsInput.nearby_objects`, but BotRunner cannot ask PathfindingService for a path that is aware of live world obstacles.
+- [ ] Target files: `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`, generated `Exports/BotCommLayer/Models/Pathfinding.cs`, `Services/PathfindingService/PathfindingSocketServer.cs`, `Exports/BotRunner/Clients/PathfindingClient.cs`.
+- [ ] Required change:
+  1. Extend `CalculatePathRequest` with a request-scoped world overlay payload: `repeated DynamicObjectProto nearby_objects`.
+  2. Add caller capability/options fields for path shaping and decision use, such as `allow_step_up`, `allow_jump_gap`, `allow_safe_drop`, `allow_swim`, `request_affordance_metadata`, and `agent_radius/height` when race defaults are not enough.
+  3. Extend `CalculatePathResponse` so the caller gets more than corners: path result, blocked-reason metadata, and segment affordance data.
+- [ ] Acceptance criteria: BotRunner can send a live game-object list with each path request, and the response schema can explain why a path is valid, blocked, or requires a movement affordance.
+
+### PFS-OBJ-002 Service overlay lifecycle: request-scoped dynamic obstacle context
+- [ ] Problem: the existing `DynamicObjectRegistry` is fed by physics ticks, but path requests do not yet mount a request-scoped overlay for live obstacle-aware route validation.
+- [ ] Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/Repository/Physics.cs`.
+- [ ] Required change:
+  1. Convert path/LOS/path-validation requests to register and clear a request-scoped overlay from `nearby_objects`.
+  2. Keep transport and long-lived world geometry support intact while avoiding registry leakage between requests.
+  3. Add diagnostics that report object counts, filtered object counts, and the collidable display IDs used during a path request.
+- [ ] Acceptance criteria: each path request sees exactly the live obstacles provided by the caller, and path results are reproducible per request without cross-bot contamination.
+
+### PFS-OBJ-003 Overlay-aware path validation and repair
+- [ ] Problem: native `FindPath` returns mmap routes, but there is no service-level repair loop that rejects corners/segments crossing collidable live objects and reforms the path around them.
+- [ ] Target files: `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/PathfindingSocketServer.cs`, tests under `Tests/PathfindingService.Tests/`.
+- [ ] Required change:
+  1. Validate each returned path segment against dynamic objects, capsule clearance, LOS, and support surface checks.
+  2. When a segment is blocked by live objects, build a local detour/reform pass around the obstruction instead of returning the raw native path.
+  3. Re-optimize the repaired route so the caller gets a usable waypoint chain instead of a one-off avoidance spike.
+- [ ] Acceptance criteria: a path that would clip through a live collidable object is either reformed into a valid route or returned with an explicit blocked reason; raw invalid corners are no longer silently trusted.
+
+### PFS-OBJ-004 Affordance metadata: step, jump, drop, swim, blocked
+- [ ] Problem: the service knows about ground Z, LOS, falling, and gap detection, but a caller cannot currently ask "is this route walkable vs requiring a jump/drop/step-up?"
+- [ ] Target files: `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/Repository/Physics.cs`, protobuf contract, `Tests/PathfindingService.Tests/`.
+- [ ] Required change:
+  1. Classify each segment or transition as `walk`, `step_up`, `jump_gap`, `safe_drop`, `unsafe_drop`, `swim`, or `blocked`.
+  2. Surface quantitative metadata such as climb height, gap length, drop height, clearance, slope, and support confidence.
+  3. Keep the rules compatible with existing native constants (`STEP_HEIGHT`, jump velocity, fall-distance tracking, gap detection) instead of inventing a second physics model in C#.
+- [ ] Acceptance criteria: BotRunner can reject or prefer routes based on movement affordances instead of only corner count and LOS.
+
+### PFS-OBJ-005 Decision-grade spatial queries
+- [ ] Problem: the advanced decision system needs more than start->end pathing; it needs queries like "nearest reachable LOS position" and "best nearby valid surface for interaction."
+- [ ] Target files: `pathfinding.proto`, `PathfindingSocketServer.cs`, `Repository/Navigation.cs`, future BotRunner consumers.
+- [ ] Required change:
+  1. Add follow-on request types after the base path contract is stable, such as `FindReachablePositionInRadius`, `FindLosPositionForTarget`, and `EvaluateRoute`.
+  2. Reuse the same object-aware overlay and affordance metadata from `PFS-OBJ-001..004`.
+  3. Keep the first slice narrow: build these only after object-aware path requests are stable.
+- [ ] Acceptance criteria: decision systems can query reachability/LOS/surface options without re-implementing path safety logic inside BotRunner.
+
+### PFS-OBJ-006 Validation matrix: deterministic + live replay
+- [ ] Problem: object-aware routing will regress quietly unless it is covered by deterministic route fixtures and live collision scenarios.
+- [ ] Target files: `Tests/PathfindingService.Tests/`, `Tests/BotRunner.Tests/LiveValidation/`, route replay fixtures/logs.
+- [ ] Required change:
+  1. Add deterministic service tests for blocked-by-object, repaired-detour, step-up, jump-gap, and safe-drop classification.
+  2. Add live validation scenarios that consume the new route metadata, starting with Ratchet shoreline and any existing temporary-object blockers.
+  3. Capture planned-vs-executed route evidence so failures can be attributed to service route shape vs runtime execution drift.
+- [ ] Acceptance criteria: each new object-aware routing capability has both a deterministic test and at least one live integration contract.
+
 ## Simple Command Set
 1. Build service: `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore`
 2. Pathfinding tests: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"`
@@ -96,13 +150,14 @@ Master tracker: `MASTER-SUB-018`
 
 ## Session Handoff
 - Last updated: 2026-03-12
-- Active task: `PFS-FISH-001` Ratchet shoreline fishing-route diagnostics
-- Last delta: added explicit fishing-route ownership for the short Ratchet shoreline path and refreshed the project/test baseline before code changes
+- Active task: `PFS-OBJ-001` object-aware path request/response
+- Last delta: expanded the PathfindingService roadmap from a narrow shoreline diagnostic into the full object-aware routing plan: request-scoped obstacle overlays, route repair, affordance metadata, and decision-grade queries
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - No new validation commands run in this planning pass. Latest baseline remains:
   - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `25 passed`
 - Files changed:
   - `Services/PathfindingService/TASKS.md`
-- Next command: `rg --line-number "CalculatePath|IsInLineOfSight|TryHasLos|HandlePath" Services/PathfindingService/PathfindingSocketServer.cs Services/PathfindingService/Repository/Navigation.cs Exports/BotRunner/Tasks/FishingTask.cs Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
-- Blockers: the live Ratchet shoreline failure is still only documented by downstream fishing evidence (`FishingTask los_blocked phase=move`, `Your cast didn't land in fishable water`) until the new route diagnostics are added.
+- Next command: `Get-Content Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`
+- Blockers: `CalculatePathRequest` still lacks request-scoped object overlay fields, so PathfindingService cannot yet treat live game objects as blockers during path calculation.
