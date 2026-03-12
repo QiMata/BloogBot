@@ -84,6 +84,7 @@ Current live-suite boundary:
 - The default documented-stable slice is `14 passed, 1 skipped`; active-overhaul suites like combat, gathering, fishing, questing, and NPC trainer coverage are now validated individually until their owning task IDs close.
 - Fishing-specific follow-up work is now pathfinding-bound. The task contract itself can succeed, but shoreline terrain sticking and no-LOS approach positions still intermittently block `FishingTask in_cast_range`.
 - The live fishing evidence now points to pathfinding first: the task already owns equip -> bait -> pool acquire -> approach -> cast -> bobber -> loot-window -> bag-delta, and the next implementation slice is shoreline/path stabilization before more packet-timing iteration.
+- `DeathCorpseRunTests` and `FishingProfessionTests` now append snapshot tails plus recent BotRunner diag lines on failure, but the latest focused live reruns were blocked earlier by a fixture/setup issue: BG entered both tests at `health=0/0` and never returned to strict-alive within the revive window despite SOAP `.revive` reporting success.
 
 ## Core Principles
 

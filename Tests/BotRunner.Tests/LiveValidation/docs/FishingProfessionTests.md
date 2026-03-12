@@ -58,6 +58,8 @@ Both bots must show all of the following:
 - `FishingTask loot_window_open`
 - `FishingTask fishing_loot_success`
 - a non-pole bag delta after the loot window closes
+- no `FishingTask los_blocked`
+- no `Your cast didn't land in fishable water`
 
 ## FG/BG Runtime Notes
 
@@ -66,6 +68,7 @@ Both bots must show all of the following:
   `PacketLogger.OnPacketCaptured -> ForegroundBotWorker.HandleCapturedPacket(...) -> ObjectManager.TryAutoInteractFishingBobberFromPacket()`.
 - The live pass condition is no longer "skill-up or any loot-window signal." It is `bobber observed -> loot_window_open -> fishing_loot_success -> catch item appears in bags`.
 - The remaining intermittent failure mode is shoreline/pathfinding-bound. When approach movement stalls on terrain or never gets LOS to the water, the live evidence is `FishingTask los_blocked phase=move` and the WoW error `Your cast didn't land in fishable water`.
+- The live failure path now appends recent snapshot errors plus recent BotRunner diagnostic lines, so shoreline/pathfinding failures are distinguishable from fishing-task regressions without opening process logs manually.
 
 ## Validation
 
@@ -80,6 +83,7 @@ Latest focused results:
 - `FishingTaskTests|FishingDataTests` -> `40 passed`
 - Focused live fishing already proved the task-owned path can succeed end-to-end: BG completed a live catch with `skill 75 -> 76`, `bestPool=17.3y`, `lootSuccess=True`, and `catchDelta=[6358]`
 - The dual-bot live test is still intermittent because shoreline/pathfinding can strand a bot before `FishingTask in_cast_range`; the latest FG failure ended with `FishingTask los_blocked phase=move castTarget=(-956.2,-3775.0,0.0)`
+- The newest focused rerun on 2026-03-12 skipped before Ratchet staging because BG entered setup at `health=0/0` and did not reach strict-alive after `.revive`, so the new shoreline/pathfinding assertions were not exercised in that pass.
 
 ## Current Focus
 

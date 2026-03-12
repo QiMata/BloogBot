@@ -82,10 +82,11 @@
 - [ ] Target files: `Exports/BotRunner/Movement/NavigationPath.cs`, movement task call sites, telemetry/tests.
 - [x] Progress (2026-03-12 session 74): `NavigationPath.TraceSnapshot` now records requested start/end, raw service waypoints, runtime waypoints, plan version, explicit replan reason, and bounded per-tick execution samples. Focused `NavigationPathTests` now pin short-route trace capture, stall-driven replans, and direct-fallback attribution.
 - [x] Progress (2026-03-12 session 75): `RetrieveCorpseTask` warning paths now consume the trace via `FormatNavigationTraceSummary(...)`, so no-route and stall-recovery logs include the active plan, current index, route snippets, and recent execution samples. `RetrieveCorpseTaskTests` pin the formatter output.
+- [x] Progress (2026-03-12 session 76): live corpse/fishing test failures now append snapshot tails plus recent BotRunner diagnostics, and `RetrieveCorpseTask` now mirrors stall/no-path/timeout trace summaries into the BotRunner diag file so those live assertions can pull the same divergence record without reading service logs directly. `LiveBotFixtureDiagnosticsTests` cover the log-tail helper.
 - [ ] Required change:
   1. Re-request paths when the current route collides with new object context or repeated wall-hit telemetry.
   2. Prefer repaired/re-optimized paths over direct fallback movement when service data is available.
-  3. Surface the new trace/replan evidence in live corpse-run and fishing assertions so service vs runtime failures are distinguishable during live runs.
+  3. Finish exercising the new trace/replan evidence in live corpse-run and fishing runs once BG clean-slate revive stops blocking the suites at setup time.
 - [ ] Acceptance criteria: dynamic blockers trigger planned replans instead of long stall loops and direct-move thrash.
 
 ### BR-NAV-004 Consume affordance metadata in movement and decision logic
@@ -106,18 +107,23 @@
 ## Session Handoff
 - Last updated: 2026-03-12
 - Active task: `BR-NAV-003` replan and re-optimize when dynamic blockers invalidate the current route
-- Last delta: wired `NavigationPath.TraceSnapshot` into `RetrieveCorpseTask` warning paths via `FormatNavigationTraceSummary(...)`, so corpse-run no-route and stall-recovery logs now carry the active plan, current index, truncated route chains, and recent execution samples; focused tests now cover both the trace capture and the corpse-run formatter
+- Last delta: mirrored corpse-run trace summaries into the BotRunner diag log, added deterministic log-tail coverage, and updated the live corpse/fishing tests to append snapshot/error tails plus recent BotRunner diagnostics on failure
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"` -> `63 passed`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LiveBotFixtureDiagnosticsTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~RetrieveCorpseTaskTests|FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests" --logger "console;verbosity=minimal"` -> `105 passed`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=detailed"` -> `1 skipped` (`BG: failed to revive bot at test start (death reason: health=0).`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`BG: failed to revive bot at test start (death reason: health=0).`)
 - Files changed:
-  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
   - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
-  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
-  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Diagnostics.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixtureDiagnosticsTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
   - `Exports/BotRunner/TASKS.md`
   - `Tests/BotRunner.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs | Select-Object -First 220`
-- Blockers: `TraceSnapshot` is now consumed by corpse-run task warnings, but live test assertions still do not surface that divergence record or the equivalent fishing trace. Movement-capability fields for `BR-NAV-002` also remain open.
+- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Snapshots.cs | Select-Object -Skip 140 -First 220`
+- Blockers: The new live pathing diagnostics are wired, but both `DeathCorpseRunTests` and `FishingProfessionTests` currently skip because BG starts the session at `health=0/0` and does not reach strict-alive after `.revive`. Movement-capability fields for `BR-NAV-002` also remain open.

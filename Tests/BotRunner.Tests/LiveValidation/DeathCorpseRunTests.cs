@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Communication;
 using Tests.Infrastructure;
@@ -22,6 +24,7 @@ namespace BotRunner.Tests.LiveValidation;
 [Collection(LiveValidationCollection.Name)]
 public class DeathCorpseRunTests
 {
+    private const int FailureMessageLimit = 4;
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
@@ -56,6 +59,9 @@ public class DeathCorpseRunTests
 
     private async Task<(bool passed, string reason)> RunCorpseRunScenario(string account, string charName, string label)
     {
+        Task<(bool passed, string reason)> FailAsync(string reason, global::Game.Position? corpsePos = null)
+            => BuildFailureResultAsync(account, label, reason, corpsePos);
+
         _output.WriteLine($"  [{label}] Step 1: Ensure alive");
         await _bot.EnsureCleanSlateAsync(account, label);
 
@@ -70,7 +76,7 @@ public class DeathCorpseRunTests
         var snap = await _bot.GetSnapshotAsync(account);
         var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
         if (pos == null)
-            return (false, "No position after teleport to Orgrimmar");
+            return await FailAsync("No position after teleport to Orgrimmar");
 
         _output.WriteLine($"  [{label}] Position after teleport: ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1})");
 
@@ -82,18 +88,18 @@ public class DeathCorpseRunTests
             requireCorpseTransition: true);
         _output.WriteLine($"  [{label}] Kill result: {deathResult.Succeeded}, cmd={deathResult.Command}");
         if (!deathResult.Succeeded)
-            return (false, $"Kill failed: {deathResult.Details}");
+            return await FailAsync($"Kill failed: {deathResult.Details}");
 
         var corpsePos = deathResult.ObservedCorpsePosition;
         if (corpsePos == null)
-            return (false, "Corpse position not captured");
+            return await FailAsync("Corpse position not captured");
 
         _output.WriteLine($"  [{label}] Corpse at: ({corpsePos.X:F1}, {corpsePos.Y:F1}, {corpsePos.Z:F1})");
 
         _output.WriteLine($"  [{label}] Step 4: Release corpse");
         var releaseResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.ReleaseCorpse });
         if (releaseResult != ResponseResult.Success)
-            return (false, $"ReleaseCorpse failed: {releaseResult}");
+            return await FailAsync($"ReleaseCorpse failed: {releaseResult}", corpsePos);
 
         var ghostConfirmed = await _bot.WaitForSnapshotConditionAsync(
             account,
@@ -101,7 +107,7 @@ public class DeathCorpseRunTests
             TimeSpan.FromSeconds(10),
             progressLabel: $"{label} ghost-state");
         if (!ghostConfirmed)
-            return (false, "Never transitioned to ghost state");
+            return await FailAsync("Never transitioned to ghost state", corpsePos);
 
         _output.WriteLine($"  [{label}] Ghost confirmed");
 
@@ -109,12 +115,12 @@ public class DeathCorpseRunTests
         var (graveyardSettled, graveyardDistanceToCorpse, initialReclaimDelay) =
             await WaitForGraveyardTransitionAsync(account, label, corpsePos);
         if (!graveyardSettled)
-            return (false, $"Ghost never left corpse location (lastDist={graveyardDistanceToCorpse:F0}y, reclaimDelay={initialReclaimDelay}s)");
+            return await FailAsync($"Ghost never left corpse location (lastDist={graveyardDistanceToCorpse:F0}y, reclaimDelay={initialReclaimDelay}s)", corpsePos);
 
         _output.WriteLine($"  [{label}] Step 6: Queue RetrieveCorpse task from {graveyardDistanceToCorpse:F0}y away");
         var retrieveResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.RetrieveCorpse });
         if (retrieveResult != ResponseResult.Success)
-            return (false, $"RetrieveCorpse failed: {retrieveResult}");
+            return await FailAsync($"RetrieveCorpse failed: {retrieveResult}", corpsePos);
 
         _output.WriteLine($"  [{label}] Step 7: Observe RetrieveCorpseTask runback/cooldown/reclaim");
         var (alive, bestDistanceToCorpse, bestReclaimDelay, reachedCorpseRange) =
@@ -123,17 +129,72 @@ public class DeathCorpseRunTests
         {
             var improvement = graveyardDistanceToCorpse - bestDistanceToCorpse;
             if (improvement < MinRunbackImprovement)
-                return (false, $"RetrieveCorpseTask never reduced corpse distance enough (start={graveyardDistanceToCorpse:F0}y, best={bestDistanceToCorpse:F0}y)");
+                return await FailAsync($"RetrieveCorpseTask never reduced corpse distance enough (start={graveyardDistanceToCorpse:F0}y, best={bestDistanceToCorpse:F0}y)", corpsePos);
             if (!reachedCorpseRange)
-                return (false, $"RetrieveCorpseTask improved runback but never reached reclaim range (best={bestDistanceToCorpse:F0}y, bestDelay={bestReclaimDelay}s)");
+                return await FailAsync($"RetrieveCorpseTask improved runback but never reached reclaim range (best={bestDistanceToCorpse:F0}y, bestDelay={bestReclaimDelay}s)", corpsePos);
             if (bestReclaimDelay > 0)
-                return (false, $"RetrieveCorpseTask reached corpse range but reclaim delay never elapsed (bestDelay={bestReclaimDelay}s)");
-            return (false, $"RetrieveCorpseTask reached corpse range but bot never returned to strict-alive (best={bestDistanceToCorpse:F0}y)");
+                return await FailAsync($"RetrieveCorpseTask reached corpse range but reclaim delay never elapsed (bestDelay={bestReclaimDelay}s)", corpsePos);
+            return await FailAsync($"RetrieveCorpseTask reached corpse range but bot never returned to strict-alive (best={bestDistanceToCorpse:F0}y)", corpsePos);
         }
 
         _output.WriteLine($"  [{label}] PASSED -> release + RetrieveCorpseTask restored strict-alive state");
         return (true, string.Empty);
     }
+
+    private async Task<(bool passed, string reason)> BuildFailureResultAsync(
+        string account,
+        string label,
+        string reason,
+        global::Game.Position? corpsePos)
+    {
+        var context = await BuildCorpseFailureContextAsync(account, label, corpsePos);
+        return (false, $"{reason} | {context}");
+    }
+
+    private async Task<string> BuildCorpseFailureContextAsync(
+        string account,
+        string label,
+        global::Game.Position? corpsePos)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var snapshot = await _bot.GetSnapshotAsync(account);
+        _bot.DumpSnapshotDiagnostics(snapshot, $"{label}-corpse-failure");
+        _bot.DumpRecentBotRunnerDiagnostics($"{label}-corpse", "[RETRIEVE_CORPSE]", "DeathRecovery", "NavigationPath");
+
+        var playerPosition = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
+        var corpseDistance = corpsePos != null && playerPosition != null
+            ? $"{LiveBotFixture.Distance2D(playerPosition.X, playerPosition.Y, corpsePos.X, corpsePos.Y):F1}y"
+            : "unknown";
+        var reclaimDelay = snapshot?.Player?.CorpseRecoveryDelaySeconds is uint delay
+            ? $"{delay}s"
+            : "unknown";
+        var relevantChats = snapshot?.RecentChatMessages?
+            .Where(message =>
+                message.Contains("corpse", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("ghost", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("reclaim", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("path", StringComparison.OrdinalIgnoreCase))
+            .ToArray()
+            ?? [];
+        var diagSummary = _bot.FormatRecentBotRunnerDiagnostics("[RETRIEVE_CORPSE]", "DeathRecovery", "NavigationPath");
+
+        return $"screen={snapshot?.ScreenState ?? "null"} strictAlive={LiveBotFixture.IsStrictAlive(snapshot)} " +
+               $"pos={FormatPosition(playerPosition)} corpseDist={corpseDistance} reclaimDelay={reclaimDelay} " +
+               $"recentErrors={FormatMessageTail(snapshot?.RecentErrors)} corpseChat={FormatMessageTail(relevantChats)} diag={diagSummary}";
+    }
+
+    private static string FormatMessageTail(IReadOnlyList<string>? messages)
+    {
+        if (messages == null || messages.Count == 0)
+            return "[]";
+
+        return "[" + string.Join(" || ", messages.TakeLast(FailureMessageLimit)) + "]";
+    }
+
+    private static string FormatPosition(global::Game.Position? position)
+        => position == null
+            ? "null"
+            : $"({position.X:F1},{position.Y:F1},{position.Z:F1})";
 
     private async Task<(bool settled, float distanceToCorpse, uint reclaimDelay)> WaitForGraveyardTransitionAsync(
         string account,

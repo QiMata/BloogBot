@@ -56,7 +56,7 @@ namespace BotRunner
             }
             catch { _diagPath = ""; }
         }
-        private static void DiagLog(string msg)
+        internal static void DiagLog(string msg)
         {
             if (string.IsNullOrEmpty(_diagPath)) return;
             try { lock (_diagLock) { File.AppendAllText(_diagPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n"); } } catch { }

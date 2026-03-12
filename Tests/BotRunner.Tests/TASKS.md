@@ -73,6 +73,7 @@ Master tracker: `MASTER-SUB-022`
   2. Record live evidence that separates fishing-task regressions from shoreline/pathfinding regressions, including `FishingTask los_blocked phase=move` and `Your cast didn't land in fishable water`.
   3. Hand the terrain-sticking / no-LOS approach failures to the pathfinding owners (`Services/PathfindingService/TASKS.md`, `Exports/Navigation/TASKS.md`) and only return to packet-timing work after approach stability improves.
   4. Tie the live assertions directly to `FishingTask`, the loot-frame surfaces, and the runtime packet handlers they depend on.
+- Progress (2026-03-12 session 76): the live fishing failure path now carries `FishingTask los_blocked`, `Your cast didn't land in fishable water`, recent error tails, and recent BotRunner diag lines. The latest rerun never reached those assertions because BG failed clean-slate revive before the test could stage Ratchet.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Acceptance criteria: fishing coverage stays meaningful in isolation for both bots on the task-owned equip -> bait -> approach -> cast -> bobber -> loot_window_open -> bag-delta path, documentation points to the owning runtime logic, and intermittent failures clearly identify shoreline/pathfinding/LOS as the blocker instead of reporting a fishing-task regression.
 
@@ -171,30 +172,38 @@ Master tracker: `MASTER-SUB-022`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-12
-- Active task: `BRT-OVR-004` remains pathfinding-blocked, but deterministic BotRunner trace coverage is now in place and corpse-run task warnings now emit the trace summary; the next supporting test slice is surfacing that divergence record directly in the live corpse/fishing test assertions.
-- Last delta: added `RetrieveCorpseTask` trace-summary formatting and wiring on top of the existing `NavigationPath.TraceSnapshot` coverage, and pinned both layers with focused BotRunner tests.
+- Active task: `BRT-OVR-004` remains pathfinding-blocked, but the live corpse/fishing suites now surface snapshot tails plus BotRunner diag context; the current blocker is BG failing clean-slate revive before those assertions can run.
+- Last delta: added the `LiveBotFixture` diag-tail helper plus deterministic tests, mirrored corpse-run trace summaries into the BotRunner diag file, and updated corpse/fishing live assertions to report recent errors + diagnostics instead of generic failure text.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
-  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
-  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Diagnostics.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixtureDiagnosticsTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
   - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
   - `Tests/BotRunner.Tests/TASKS.md`
   - `docs/TASKS.md`
   - `Exports/BotRunner/TASKS.md`
 - Commands run:
-  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"`
+  1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
+  2. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
+  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LiveBotFixtureDiagnosticsTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~RetrieveCorpseTaskTests|FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests" --logger "console;verbosity=minimal"`
+  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=detailed"`
+  5. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"`
 - Outcomes:
+  - `Exports/BotRunner` Release build succeeded.
   - `Tests/BotRunner.Tests` Release build succeeded.
-  - `NavigationPathTests|RetrieveCorpseTaskTests` passed `63`.
-  - Deterministic BotRunner pathing now records route/output attribution and corpse-run warnings emit it, but the live corpse/fishing suites still need to surface that same trace in their failure messages before the next live pass is high-signal.
+  - `LiveBotFixtureDiagnosticsTests|NavigationPathTests|RetrieveCorpseTaskTests|FishingTaskTests|FishingDataTests` passed `105`.
+  - `DeathCorpseRunTests` skipped because BG entered setup at `health=0/0` and did not reach strict-alive after `.revive`.
+  - `FishingProfessionTests` skipped for the same BG revive reason, so the new shoreline/pathfinding assertions are wired but not yet exercised in a live pass.
 - Blockers:
   - `QuestInteractionTests`, `StarterQuestTests`, and the vendor/flight portions of `NpcInteractionTests` are still not fully task-owned under `BRT-OVR-002` and stay out of the routine documented-stable slice.
   - `CombatLoopTests`, `GatheringProfessionTests`, and `FishingProfessionTests` remain excluded from the routine documented-stable slice until their open overhaul work stops generating low-signal failures.
-  - `FishingProfessionTests` still fails intermittently because shoreline pathing can terrain-stick or end at a no-LOS cast point (`FishingTask los_blocked phase=move`; `Your cast didn't land in fishable water`), even though the task-owned equip -> bait -> loot-window -> bag-delta path is already covered.
+  - `FishingProfessionTests` still fails intermittently because shoreline pathing can terrain-stick or end at a no-LOS cast point (`FishingTask los_blocked phase=move`; `Your cast didn't land in fishable water`), even though the task-owned equip -> bait -> loot-window -> bag-delta path is already covered; the newest live rerun did not reach that point because BG setup revive failed first.
+  - `DeathCorpseRunTests` is also blocked by the same BG clean-slate revive failure (`health=0/0` after fixture startup, `.revive` succeeds server-side but snapshot never returns to strict-alive within 10s).
   - `Trainer_LearnAvailableSpells` remains a deterministic skip under `BRT-OVR-006`.
-- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs | Select-Object -First 220`
+- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Snapshots.cs | Select-Object -Skip 140 -First 220`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

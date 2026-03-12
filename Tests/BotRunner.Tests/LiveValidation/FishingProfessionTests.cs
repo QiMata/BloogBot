@@ -207,10 +207,16 @@ public class FishingProfessionTests
         var sawSwimmingError = false;
         var poleEquippedByTask = !poleStartedInBag;
         var baitConsumedByTask = baitCountBefore == 0;
+        var sawLosBlockedDiagnostic = false;
+        var sawNonFishableWaterError = false;
         IReadOnlyList<uint> finalCatchItems = baselineCatchItems;
         IReadOnlyList<uint> finalCatchDeltaItems = [];
+        IReadOnlyList<string> recentErrors = before.RecentErrors.TakeLast(4).ToArray();
         string lastFishingTaskMessage = string.Empty;
+        string lastRelevantError = string.Empty;
+        string recentDiagnosticsSummary = "none";
         uint skillAfter = skillBefore;
+        WoWActivitySnapshot? lastSnapshot = before;
 
         while (DateTime.UtcNow < deadline)
         {
@@ -218,12 +224,22 @@ public class FishingProfessionTests
             var snapshot = await RefreshAndGetSnapshotAsync(account);
             if (snapshot == null)
                 continue;
+            lastSnapshot = snapshot;
 
             poleEquippedByTask |= poleStartedInBag && !ContainsFishingPole(snapshot);
             sawChannel |= IsFishingChannelActive(snapshot);
             sawBobber |= FindBobber(snapshot) != null;
             sawSwimmingError |= snapshot.RecentErrors.Any(message => message.Contains("swimming", StringComparison.OrdinalIgnoreCase));
+            sawNonFishableWaterError |= snapshot.RecentErrors.Any(message => message.Contains("didn't land in fishable water", StringComparison.OrdinalIgnoreCase));
             skillAfter = GetFishingSkill(snapshot);
+            recentErrors = snapshot.RecentErrors.TakeLast(4).ToArray();
+
+            var latestRelevantError = snapshot.RecentErrors.LastOrDefault(message =>
+                message.Contains("didn't land in fishable water", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("swimming", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("line of sight", StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(latestRelevantError))
+                lastRelevantError = latestRelevantError;
 
             var currentTaskMessages = GetFishingTaskMessages(snapshot);
             var newTaskMessages = GetMessageDelta(previousTaskMessages, currentTaskMessages);
@@ -240,6 +256,7 @@ public class FishingProfessionTests
 
             sawPoolAcquireDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask pool_acquired", StringComparison.Ordinal));
             sawInCastRangeDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask in_cast_range", StringComparison.Ordinal));
+            sawLosBlockedDiagnostic |= currentTaskMessages.Any(message => message.Contains("FishingTask los_blocked", StringComparison.Ordinal));
             sawLureUseDiagnostic |= currentTaskMessages.Any(message =>
                 message.Contains("FishingTask lure_use_started", StringComparison.Ordinal)
                 || message.Contains("FishingTask lure_applied", StringComparison.Ordinal));
@@ -258,6 +275,7 @@ public class FishingProfessionTests
             finalCatchItems = GetCatchItemIds(snapshot);
             finalCatchDeltaItems = GetItemDelta(baselineCatchItems, finalCatchItems);
             baitConsumedByTask |= CountItem(snapshot, FishingLureItemId) < baitCountBefore;
+            recentDiagnosticsSummary = _bot.FormatRecentBotRunnerDiagnostics("FishingTask", "NavigationPath");
             if (sawLootSuccessDiagnostic && finalCatchDeltaItems.Count > 0)
             {
                 _output.WriteLine($"[{label}] FishingTask reported loot success. bestPool={bestPoolDistance:F1}y channel={sawChannel} bobber={sawBobber} catchDelta=[{string.Join(", ", finalCatchDeltaItems)}]");
@@ -272,17 +290,26 @@ public class FishingProfessionTests
                     SawBobber: sawBobber,
                     SawPoolAcquireDiagnostic: sawPoolAcquireDiagnostic,
                     SawInCastRangeDiagnostic: sawInCastRangeDiagnostic,
+                    SawLosBlockedDiagnostic: sawLosBlockedDiagnostic,
                     SawLureUseDiagnostic: sawLureUseDiagnostic,
                     SawLootWindowDiagnostic: sawLootWindowDiagnostic,
                     SawLootSuccessDiagnostic: sawLootSuccessDiagnostic,
                     SawSwimmingError: sawSwimmingError,
+                    SawNonFishableWaterError: sawNonFishableWaterError,
                     LastFishingTaskMessage: lastFishingTaskMessage,
+                    LastRelevantError: lastRelevantError,
+                    RecentErrors: recentErrors,
+                    RecentDiagnosticsSummary: recentDiagnosticsSummary,
                     CatchItems: finalCatchItems,
                     CatchDeltaItems: finalCatchDeltaItems,
                     SkillBefore: skillBefore,
                     SkillAfter: skillAfter);
             }
         }
+
+        _bot.DumpRecentBotRunnerDiagnostics($"{label}-fishing-timeout", "FishingTask", "NavigationPath");
+        if (lastSnapshot != null)
+            _bot.DumpSnapshotDiagnostics(lastSnapshot, $"{label}-fishing-timeout");
 
         _output.WriteLine($"[{label}] Fishing timeout. bestPool={bestPoolDistance:F1}y channel={sawChannel} bobber={sawBobber} catchDelta=[{string.Join(", ", finalCatchDeltaItems)}]");
         return new FishingRunResult(
@@ -296,11 +323,16 @@ public class FishingProfessionTests
             SawBobber: sawBobber,
             SawPoolAcquireDiagnostic: sawPoolAcquireDiagnostic,
             SawInCastRangeDiagnostic: sawInCastRangeDiagnostic,
+            SawLosBlockedDiagnostic: sawLosBlockedDiagnostic,
             SawLureUseDiagnostic: sawLureUseDiagnostic,
             SawLootWindowDiagnostic: sawLootWindowDiagnostic,
             SawLootSuccessDiagnostic: sawLootSuccessDiagnostic,
             SawSwimmingError: sawSwimmingError,
+            SawNonFishableWaterError: sawNonFishableWaterError,
             LastFishingTaskMessage: lastFishingTaskMessage,
+            LastRelevantError: lastRelevantError,
+            RecentErrors: recentErrors,
+            RecentDiagnosticsSummary: recentDiagnosticsSummary,
             CatchItems: finalCatchItems,
             CatchDeltaItems: finalCatchDeltaItems,
             SkillBefore: skillBefore,
@@ -317,35 +349,45 @@ public class FishingProfessionTests
 
     private void AssertFishingResult(string label, FishingRunResult result)
     {
+        var failureContext = FormatFishingFailureContext(result);
+
         Assert.True(result.PoleStartedInBag, $"[{label}] Fishing pole should start in bags so FishingTask owns the equip step.");
-        Assert.True(result.PoleEquippedByTask, $"[{label}] FishingTask never removed the fishing pole from bags.");
+        Assert.True(result.PoleEquippedByTask, $"[{label}] FishingTask never removed the fishing pole from bags. {failureContext}");
         Assert.True(result.BaitStartedInBag, $"[{label}] Fishing bait should start in bags so FishingTask owns the lure step.");
-        Assert.True(result.SawLureUseDiagnostic, $"[{label}] FishingTask never reported using fishing bait. lastMessage={result.LastFishingTaskMessage}");
-        Assert.True(result.BaitConsumedByTask, $"[{label}] FishingTask never consumed the staged fishing bait.");
+        Assert.True(result.SawLureUseDiagnostic, $"[{label}] FishingTask never reported using fishing bait. {failureContext}");
+        Assert.True(result.BaitConsumedByTask, $"[{label}] FishingTask never consumed the staged fishing bait. {failureContext}");
         Assert.True(result.SawPoolAcquireDiagnostic,
-            $"[{label}] FishingTask never reported acquiring a visible pool. lastMessage={result.LastFishingTaskMessage}");
+            $"[{label}] FishingTask never reported acquiring a visible pool. {failureContext}");
         Assert.True(result.BestPoolDistance <= ExpectedApproachRange,
-            $"[{label}] FishingTask never approached a pool into cast range. bestDistance={result.BestPoolDistance:F1} lastMessage={result.LastFishingTaskMessage}");
+            $"[{label}] FishingTask never approached a pool into cast range. bestDistance={result.BestPoolDistance:F1} {failureContext}");
         Assert.True(result.SawInCastRangeDiagnostic,
-            $"[{label}] FishingTask never reported entering cast range. lastMessage={result.LastFishingTaskMessage}");
+            $"[{label}] FishingTask never reported entering cast range. {failureContext}");
+        Assert.False(result.SawLosBlockedDiagnostic,
+            $"[{label}] FishingTask reported LOS-blocked movement before completing the catch. {failureContext}");
         Assert.True(result.SawChannel,
-            $"[{label}] FishingTask never reached a fishing channel state. lastMessage={result.LastFishingTaskMessage}");
+            $"[{label}] FishingTask never reached a fishing channel state. {failureContext}");
         Assert.True(result.SawBobber,
-            $"[{label}] FishingTask never observed a fishing bobber. lastMessage={result.LastFishingTaskMessage}");
+            $"[{label}] FishingTask never observed a fishing bobber. {failureContext}");
         Assert.True(result.SawLootWindowDiagnostic,
-            $"[{label}] FishingTask never surfaced the loot_window_open diagnostic after the bobber interaction path. lastMessage={result.LastFishingTaskMessage}");
+            $"[{label}] FishingTask never surfaced the loot_window_open diagnostic after the bobber interaction path. {failureContext}");
         Assert.True(result.SawLootSuccessDiagnostic,
-            $"[{label}] FishingTask never reported fishing_loot_success. lastMessage={result.LastFishingTaskMessage}");
+            $"[{label}] FishingTask never reported fishing_loot_success. {failureContext}");
         Assert.False(result.SawSwimmingError,
-            $"[{label}] Fishing path entered a swimming failure state before the catch completed. lastMessage={result.LastFishingTaskMessage}");
+            $"[{label}] Fishing path entered a swimming failure state before the catch completed. {failureContext}");
+        Assert.False(result.SawNonFishableWaterError,
+            $"[{label}] Fishing cast landed outside fishable water, which indicates LOS/shoreline pathing drift. {failureContext}");
         Assert.True(result.CatchDeltaItems.Count > 0,
-            $"[{label}] FishingTask completed without a newly looted item appearing in bags. lastMessage={result.LastFishingTaskMessage} catchItems=[{string.Join(", ", result.CatchItems)}]");
+            $"[{label}] FishingTask completed without a newly looted item appearing in bags. {failureContext} catchItems=[{string.Join(", ", result.CatchItems)}]");
 
         _output.WriteLine(
             $"[{label}] Final metrics: skill {result.SkillBefore} -> {result.SkillAfter}, " +
             $"initialVisiblePool={(result.InitialVisiblePoolDistance < float.MaxValue ? result.InitialVisiblePoolDistance.ToString("F1") : "none")}, " +
             $"bestPool={result.BestPoolDistance:F1}y, lootSuccess={result.SawLootSuccessDiagnostic}, catchDelta=[{string.Join(", ", result.CatchDeltaItems)}]");
     }
+
+    private static string FormatFishingFailureContext(FishingRunResult result)
+        => $"lastMessage={result.LastFishingTaskMessage} lastError={result.LastRelevantError} " +
+           $"recentErrors=[{string.Join(" || ", result.RecentErrors)}] diag={result.RecentDiagnosticsSummary}";
 
     private async Task ForceFishingSpellSyncAsync(string account, string label)
     {
@@ -414,7 +456,7 @@ public class FishingProfessionTests
         if (playerPosition == null)
             return null;
 
-        return snapshot.NearbyObjects?
+        return snapshot?.NearbyObjects?
             .Where(IsFishingPool)
             .Select(gameObject => new VisibleFishingPool(
                 gameObject.Entry,
@@ -514,11 +556,16 @@ public class FishingProfessionTests
         bool SawBobber,
         bool SawPoolAcquireDiagnostic,
         bool SawInCastRangeDiagnostic,
+        bool SawLosBlockedDiagnostic,
         bool SawLureUseDiagnostic,
         bool SawLootWindowDiagnostic,
         bool SawLootSuccessDiagnostic,
         bool SawSwimmingError,
+        bool SawNonFishableWaterError,
         string LastFishingTaskMessage,
+        string LastRelevantError,
+        IReadOnlyList<string> RecentErrors,
+        string RecentDiagnosticsSummary,
         IReadOnlyList<uint> CatchItems,
         IReadOnlyList<uint> CatchDeltaItems,
         uint SkillBefore,

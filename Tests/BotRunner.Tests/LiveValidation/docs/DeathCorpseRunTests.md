@@ -27,9 +27,15 @@ This suite now links directly to the production logic it is validating:
 - best corpse distance improves during runback
 - reclaim delay trends down while ghosted
 - strict-alive state returns before timeout
+- on failure, the test now appends recent snapshot errors/chats plus recent BotRunner diag lines from `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Diagnostics.cs`
 
 **Current shape under the overhaul plan:**
 - BG-only
 - no FG parity assertion
 - no manual second reclaim dispatch
 - `RetrieveCorpseTask` owns runback, cooldown, and reclaim after the single action enqueue
+
+## Current boundary
+
+- `RetrieveCorpseTask` now mirrors stall/no-path/timeout trace summaries into the BotRunner diag file, and the live test failure text includes those recent diag lines.
+- The latest focused live rerun did not reach the corpse-run assertions because BG entered setup at `health=0/0` and never returned to strict-alive within the fixture revive window, even though SOAP `.revive` reported success.

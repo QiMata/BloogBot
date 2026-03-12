@@ -411,11 +411,15 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
         Log.Warning("[RETRIEVE_CORPSE] Runback stall recovery #{Attempt}: {Reason} (distance2D={Distance2D:F1}) trace={Trace}. Cleared movement and rebuilding path.",
             _runbackRecoveryCount, reason, corpseHorizontalDistance, GetNavigationTraceSummary());
+        BotRunnerService.DiagLog(
+            $"[RETRIEVE_CORPSE] stall_recovery attempt={_runbackRecoveryCount} reason={reason} distance2D={corpseHorizontalDistance:F1} trace={GetNavigationTraceSummary()}");
 
         if (_runbackRecoveryCount > MaxRunbackRecoveryAttempts)
         {
             Log.Warning("[RETRIEVE_CORPSE] Runback remained stalled after {Attempts} recoveries; aborting task.",
                 _runbackRecoveryCount);
+            BotRunnerService.DiagLog(
+                $"[RETRIEVE_CORPSE] stall_recovery_exceeded attempts={_runbackRecoveryCount} trace={GetNavigationTraceSummary()}");
             PopTask("RunbackStallRecoveryExceeded");
             return true;
         }
@@ -435,6 +439,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         if (DateTime.UtcNow - _startTime > TaskTimeout)
         {
             Log.Warning("[RETRIEVE_CORPSE] Timed out navigating to corpse");
+            BotRunnerService.DiagLog(
+                $"[RETRIEVE_CORPSE] timeout corpse=({corpsePosition.X:F1},{corpsePosition.Y:F1},{corpsePosition.Z:F1}) trace={GetNavigationTraceSummary()}");
             ObjectManager.StopAllMovement();
             PopTask("Timeout");
             return;
@@ -485,6 +491,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
                     var stalledSeconds = (int)(now - _noPathSinceUtc.Value).TotalSeconds;
                     Log.Warning("[RETRIEVE_CORPSE] No pathfinding route for corpse target ({X:F1}, {Y:F1}, {Z:F1}) stalledFor={Seconds}s distance2D={Distance2D:F1} zDelta={ZDelta:F1} trace={Trace}",
                         corpseNavTarget.X, corpseNavTarget.Y, corpseNavTarget.Z, stalledSeconds, corpseHorizontalDistance, corpseDeltaZ, GetNavigationTraceSummary());
+                    BotRunnerService.DiagLog(
+                        $"[RETRIEVE_CORPSE] no_path corpse=({corpseNavTarget.X:F1},{corpseNavTarget.Y:F1},{corpseNavTarget.Z:F1}) stalledFor={stalledSeconds}s distance2D={corpseHorizontalDistance:F1} zDelta={corpseDeltaZ:F1} trace={GetNavigationTraceSummary()}");
                     _lastCooldownLog = now;
                 }
 
@@ -492,6 +500,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
                 {
                     Log.Warning("[RETRIEVE_CORPSE] No pathfinding route after {Seconds}s; aborting corpse run task. trace={Trace}",
                         (int)NoPathTimeout.TotalSeconds, GetNavigationTraceSummary());
+                    BotRunnerService.DiagLog(
+                        $"[RETRIEVE_CORPSE] no_path_timeout seconds={(int)NoPathTimeout.TotalSeconds} trace={GetNavigationTraceSummary()}");
                     ObjectManager.StopAllMovement();
                     PopTask("NoPathTimeout");
                     return;
