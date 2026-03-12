@@ -171,30 +171,30 @@ Master tracker: `MASTER-SUB-022`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-12
-- Active task: `BRT-OVR-004` remains pathfinding-blocked, but deterministic BotRunner trace coverage is now in place; the next supporting test slice is consuming `NavigationPath.TraceSnapshot` inside corpse-run and fishing diagnostics so live failures identify the exact divergence point.
-- Last delta: added `NavigationPath.TraceSnapshot` coverage and new deterministic `NavigationPathTests` for short-route plan capture, stall-driven replans, and direct-fallback attribution.
+- Active task: `BRT-OVR-004` remains pathfinding-blocked, but deterministic BotRunner trace coverage is now in place and corpse-run task warnings now emit the trace summary; the next supporting test slice is surfacing that divergence record directly in the live corpse/fishing test assertions.
+- Last delta: added `RetrieveCorpseTask` trace-summary formatting and wiring on top of the existing `NavigationPath.TraceSnapshot` coverage, and pinned both layers with focused BotRunner tests.
 - Pass result: `delta shipped`
 - Files changed:
   - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
   - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
   - `Tests/BotRunner.Tests/TASKS.md`
   - `docs/TASKS.md`
   - `Exports/BotRunner/TASKS.md`
 - Commands run:
-  1. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"`
-  3. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
+  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
+  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"`
 - Outcomes:
-  - `BotRunner` Release build succeeded.
   - `Tests/BotRunner.Tests` Release build succeeded.
-  - `NavigationPathTests` passed `45`.
-  - Deterministic BotRunner pathing now records route/output attribution, but live corpse/fishing suites still need to surface that trace in their own failure messages before the next live pass is high-signal.
+  - `NavigationPathTests|RetrieveCorpseTaskTests` passed `63`.
+  - Deterministic BotRunner pathing now records route/output attribution and corpse-run warnings emit it, but the live corpse/fishing suites still need to surface that same trace in their failure messages before the next live pass is high-signal.
 - Blockers:
   - `QuestInteractionTests`, `StarterQuestTests`, and the vendor/flight portions of `NpcInteractionTests` are still not fully task-owned under `BRT-OVR-002` and stay out of the routine documented-stable slice.
   - `CombatLoopTests`, `GatheringProfessionTests`, and `FishingProfessionTests` remain excluded from the routine documented-stable slice until their open overhaul work stops generating low-signal failures.
   - `FishingProfessionTests` still fails intermittently because shoreline pathing can terrain-stick or end at a no-LOS cast point (`FishingTask los_blocked phase=move`; `Your cast didn't land in fishable water`), even though the task-owned equip -> bait -> loot-window -> bag-delta path is already covered.
   - `Trainer_LearnAvailableSpells` remains a deterministic skip under `BRT-OVR-006`.
-- Next command: `Get-Content Exports/BotRunner/Tasks/RetrieveCorpseTask.cs | Select-Object -Skip 180 -First 220`
+- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs | Select-Object -First 220`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

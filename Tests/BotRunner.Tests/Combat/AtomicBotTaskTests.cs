@@ -2,6 +2,7 @@ using BotRunner.Combat;
 using BotRunner.Clients;
 using BotRunner.Constants;
 using BotRunner.Interfaces;
+using BotRunner.Movement;
 using BotRunner.Tasks;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
@@ -1024,6 +1025,62 @@ public class MoveToPositionTaskTests
 
 public class RetrieveCorpseTaskTests
 {
+    [Fact]
+    public void FormatNavigationTraceSummary_IncludesKeyFieldsAndTruncatesPathsAndSamples()
+    {
+        var trace = new NavigationTraceSnapshot(
+            MapId: 1,
+            RequestedStart: new Position(0f, 0f, 0f),
+            RequestedDestination: new Position(100f, 50f, 0f),
+            ServiceWaypoints:
+            [
+                new Position(0f, 0f, 0f),
+                new Position(10f, 0f, 0f),
+                new Position(20f, 5f, 0f),
+                new Position(30f, 10f, 0f),
+                new Position(40f, 15f, 0f)
+            ],
+            PlannedWaypoints:
+            [
+                new Position(0f, 0f, 0f),
+                new Position(12f, 1f, 0f),
+                new Position(24f, 7f, 0f),
+                new Position(36f, 12f, 0f),
+                new Position(48f, 18f, 0f)
+            ],
+            ActiveWaypoint: new Position(24f, 7f, 0f),
+            CurrentWaypointIndex: 2,
+            PlanVersion: 3,
+            LastReplanReason: NavigationTraceReason.StalledNearWaypoint,
+            LastResolution: "waypoint",
+            UsedDirectFallback: false,
+            UsedNearbyObjectOverlay: true,
+            NearbyObjectCount: 6,
+            SmoothPath: false,
+            IsShortRoute: false,
+            LastPlanTick: 1234,
+            ExecutionSamples:
+            [
+                new NavigationExecutionSample(new Position(0f, 0f, 0f), new Position(100f, 50f, 0f), new Position(10f, 0f, 0f), 1, 1, 10f, false, 100, "waypoint"),
+                new NavigationExecutionSample(new Position(9f, 0f, 0f), new Position(100f, 50f, 0f), new Position(20f, 5f, 0f), 2, 2, 12f, false, 200, "waypoint"),
+                new NavigationExecutionSample(new Position(18f, 4f, 0f), new Position(100f, 50f, 0f), new Position(24f, 7f, 0f), 2, 3, 6f, false, 300, "waypoint"),
+                new NavigationExecutionSample(new Position(23f, 6f, 0f), new Position(100f, 50f, 0f), new Position(36f, 12f, 0f), 3, 3, 14f, false, 400, "waypoint")
+            ]);
+
+        var summary = RetrieveCorpseTask.FormatNavigationTraceSummary(trace);
+
+        Assert.Contains("plan=3", summary);
+        Assert.Contains($"reason={NavigationTraceReason.StalledNearWaypoint}", summary);
+        Assert.Contains("resolution=waypoint", summary);
+        Assert.Contains("idx=2", summary);
+        Assert.Contains("overlay=6", summary);
+        Assert.Contains("request=(0.0,0.0,0.0)->(100.0,50.0,0.0)", summary);
+        Assert.Contains("service=[(0.0,0.0,0.0), (10.0,0.0,0.0), (20.0,5.0,0.0), (30.0,10.0,0.0), +1 more]", summary);
+        Assert.Contains("planned=[(0.0,0.0,0.0), (12.0,1.0,0.0), (24.0,7.0,0.0), (36.0,12.0,0.0), +1 more]", summary);
+        Assert.Contains("samples=[+1 earlier", summary);
+        Assert.Contains("p3:waypoint:idx3:(23.0,6.0,0.0)->(36.0,12.0,0.0)", summary);
+    }
+
     private static void ForceRunbackSampleReady(RetrieveCorpseTask task)
     {
         var sampleField = typeof(RetrieveCorpseTask).GetField(

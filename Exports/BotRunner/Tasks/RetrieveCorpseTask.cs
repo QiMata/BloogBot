@@ -90,6 +90,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private const int RunbackNoIntentDisplacementThreshold = 12;
     private const int RunbackStaleForwardThreshold = 6;
     private const int MaxRunbackRecoveryAttempts = 8;
+    private const int TraceSummaryWaypointLimit = 4;
+    private const int TraceSummarySampleLimit = 3;
 
     private static bool HasGhostFlag(IWoWLocalPlayer player)
     {
@@ -142,6 +144,64 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             return false;
         }
     }
+
+    internal static string FormatNavigationTraceSummary(NavigationTraceSnapshot trace)
+    {
+        return $"plan={trace.PlanVersion} reason={trace.LastReplanReason ?? "none"} resolution={trace.LastResolution ?? "none"} " +
+               $"idx={trace.CurrentWaypointIndex} active={FormatTracePosition(trace.ActiveWaypoint)} short={trace.IsShortRoute} " +
+               $"smooth={trace.SmoothPath} overlay={trace.NearbyObjectCount} request={FormatTracePosition(trace.RequestedStart)}->{FormatTracePosition(trace.RequestedDestination)} " +
+               $"service={FormatTracePath(trace.ServiceWaypoints, TraceSummaryWaypointLimit)} " +
+               $"planned={FormatTracePath(trace.PlannedWaypoints, TraceSummaryWaypointLimit)} " +
+               $"samples={FormatTraceSamples(trace.ExecutionSamples, TraceSummarySampleLimit)}";
+    }
+
+    private string GetNavigationTraceSummary()
+        => FormatNavigationTraceSummary(_navPath.TraceSnapshot);
+
+    private static string FormatTracePath(Position[] path, int limit)
+    {
+        if (path.Length == 0)
+            return "[]";
+
+        var displayCount = Math.Min(path.Length, limit);
+        var parts = new string[displayCount + (path.Length > limit ? 1 : 0)];
+        for (var i = 0; i < displayCount; i++)
+            parts[i] = FormatTracePosition(path[i]);
+
+        if (path.Length > limit)
+            parts[^1] = $"+{path.Length - limit} more";
+
+        return "[" + string.Join(", ", parts) + "]";
+    }
+
+    private static string FormatTraceSamples(NavigationExecutionSample[] samples, int limit)
+    {
+        if (samples.Length == 0)
+            return "[]";
+
+        var startIndex = Math.Max(0, samples.Length - limit);
+        var displayCount = samples.Length - startIndex;
+        var parts = new string[displayCount + (startIndex > 0 ? 1 : 0)];
+        var offset = 0;
+        if (startIndex > 0)
+        {
+            parts[0] = $"+{startIndex} earlier";
+            offset = 1;
+        }
+
+        for (var i = 0; i < displayCount; i++)
+        {
+            var sample = samples[startIndex + i];
+            parts[offset + i] = $"p{sample.PlanVersion}:{sample.Resolution}:idx{sample.WaypointIndex}:{FormatTracePosition(sample.CurrentPosition)}->{FormatTracePosition(sample.ReturnedWaypoint)}";
+        }
+
+        return "[" + string.Join(", ", parts) + "]";
+    }
+
+    private static string FormatTracePosition(Position? position)
+        => position == null
+            ? "null"
+            : $"({position.X:F1},{position.Y:F1},{position.Z:F1})";
 
     private static Position CopyPosition(Position source) => new(source.X, source.Y, source.Z);
 
@@ -349,8 +409,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             Log.Information("[RETRIEVE_CORPSE] Stall recovery #{Attempt}: jump+backward to break collision deadlock", _runbackRecoveryCount);
         }
 
-        Log.Warning("[RETRIEVE_CORPSE] Runback stall recovery #{Attempt}: {Reason} (distance2D={Distance2D:F1}). Cleared movement and rebuilding path.",
-            _runbackRecoveryCount, reason, corpseHorizontalDistance);
+        Log.Warning("[RETRIEVE_CORPSE] Runback stall recovery #{Attempt}: {Reason} (distance2D={Distance2D:F1}) trace={Trace}. Cleared movement and rebuilding path.",
+            _runbackRecoveryCount, reason, corpseHorizontalDistance, GetNavigationTraceSummary());
 
         if (_runbackRecoveryCount > MaxRunbackRecoveryAttempts)
         {
@@ -423,15 +483,15 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
                 if (now - _lastCooldownLog >= CooldownLogInterval)
                 {
                     var stalledSeconds = (int)(now - _noPathSinceUtc.Value).TotalSeconds;
-                    Log.Warning("[RETRIEVE_CORPSE] No pathfinding route for corpse target ({X:F1}, {Y:F1}, {Z:F1}) stalledFor={Seconds}s distance2D={Distance2D:F1} zDelta={ZDelta:F1}",
-                        corpseNavTarget.X, corpseNavTarget.Y, corpseNavTarget.Z, stalledSeconds, corpseHorizontalDistance, corpseDeltaZ);
+                    Log.Warning("[RETRIEVE_CORPSE] No pathfinding route for corpse target ({X:F1}, {Y:F1}, {Z:F1}) stalledFor={Seconds}s distance2D={Distance2D:F1} zDelta={ZDelta:F1} trace={Trace}",
+                        corpseNavTarget.X, corpseNavTarget.Y, corpseNavTarget.Z, stalledSeconds, corpseHorizontalDistance, corpseDeltaZ, GetNavigationTraceSummary());
                     _lastCooldownLog = now;
                 }
 
                 if (now - _noPathSinceUtc.Value > NoPathTimeout)
                 {
-                    Log.Warning("[RETRIEVE_CORPSE] No pathfinding route after {Seconds}s; aborting corpse run task.",
-                        (int)NoPathTimeout.TotalSeconds);
+                    Log.Warning("[RETRIEVE_CORPSE] No pathfinding route after {Seconds}s; aborting corpse run task. trace={Trace}",
+                        (int)NoPathTimeout.TotalSeconds, GetNavigationTraceSummary());
                     ObjectManager.StopAllMovement();
                     PopTask("NoPathTimeout");
                     return;
@@ -460,8 +520,9 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             if (now - _lastWaypointDriveLogUtc >= TimeSpan.FromSeconds(2))
             {
                 var waypointDistance = player.Position.DistanceTo(waypoint);
-                Log.Information("[RETRIEVE_CORPSE] Driving path waypoint ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1}",
-                    waypoint.X, waypoint.Y, waypoint.Z, waypointDistance, corpseHorizontalDistance);
+                var trace = _navPath.TraceSnapshot;
+                Log.Information("[RETRIEVE_CORPSE] Driving path waypoint ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1} plan={Plan} idx={Index} reason={Reason}",
+                    waypoint.X, waypoint.Y, waypoint.Z, waypointDistance, corpseHorizontalDistance, trace.PlanVersion, trace.CurrentWaypointIndex, trace.LastReplanReason ?? "none");
                 _lastWaypointDriveLogUtc = now;
             }
 

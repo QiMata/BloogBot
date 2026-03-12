@@ -81,10 +81,11 @@
 - [ ] Problem: once live obstacles move or appear, BotRunner still tends to walk the old path until it stalls.
 - [ ] Target files: `Exports/BotRunner/Movement/NavigationPath.cs`, movement task call sites, telemetry/tests.
 - [x] Progress (2026-03-12 session 74): `NavigationPath.TraceSnapshot` now records requested start/end, raw service waypoints, runtime waypoints, plan version, explicit replan reason, and bounded per-tick execution samples. Focused `NavigationPathTests` now pin short-route trace capture, stall-driven replans, and direct-fallback attribution.
+- [x] Progress (2026-03-12 session 75): `RetrieveCorpseTask` warning paths now consume the trace via `FormatNavigationTraceSummary(...)`, so no-route and stall-recovery logs include the active plan, current index, route snippets, and recent execution samples. `RetrieveCorpseTaskTests` pin the formatter output.
 - [ ] Required change:
   1. Re-request paths when the current route collides with new object context or repeated wall-hit telemetry.
   2. Prefer repaired/re-optimized paths over direct fallback movement when service data is available.
-  3. Surface the new trace/replan evidence in corpse-run and fishing task diagnostics so service vs runtime failures are distinguishable during live runs.
+  3. Surface the new trace/replan evidence in live corpse-run and fishing assertions so service vs runtime failures are distinguishable during live runs.
 - [ ] Acceptance criteria: dynamic blockers trigger planned replans instead of long stall loops and direct-move thrash.
 
 ### BR-NAV-004 Consume affordance metadata in movement and decision logic
@@ -105,16 +106,18 @@
 ## Session Handoff
 - Last updated: 2026-03-12
 - Active task: `BR-NAV-003` replan and re-optimize when dynamic blockers invalidate the current route
-- Last delta: added `NavigationPath.TraceSnapshot` so BotRunner now records raw service waypoints, runtime waypoints, plan version, explicit replan reason, short-route classification, and bounded execution samples for every `GetNextWaypoint` tick; focused tests prove short-route capture, stall-driven replans, and direct-fallback attribution
+- Last delta: wired `NavigationPath.TraceSnapshot` into `RetrieveCorpseTask` warning paths via `FormatNavigationTraceSummary(...)`, so corpse-run no-route and stall-recovery logs now carry the active plan, current index, truncated route chains, and recent execution samples; focused tests now cover both the trace capture and the corpse-run formatter
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `45 passed`
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~RetrieveCorpseTaskTests" --logger "console;verbosity=minimal"` -> `63 passed`
 - Files changed:
   - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
   - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Tests/BotRunner.Tests/Combat/AtomicBotTaskTests.cs`
   - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `Get-Content Exports/BotRunner/Tasks/RetrieveCorpseTask.cs | Select-Object -Skip 180 -First 220`
-- Blockers: `TraceSnapshot` is not yet consumed by `RetrieveCorpseTask` or fishing live diagnostics, so live failures still rely on parallel service logs instead of a single bot-owned divergence record. Movement-capability fields for `BR-NAV-002` also remain open.
+- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs | Select-Object -First 220`
+- Blockers: `TraceSnapshot` is now consumed by corpse-run task warnings, but live test assertions still do not surface that divergence record or the equivalent fishing trace. Movement-capability fields for `BR-NAV-002` also remain open.
