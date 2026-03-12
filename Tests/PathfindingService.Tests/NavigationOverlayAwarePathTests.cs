@@ -111,6 +111,31 @@ public class NavigationOverlayAwarePathTests
         Assert.Empty(result.Path);
     }
 
+    [Fact]
+    public void CalculateValidatedPath_CarriesGroundedSegmentEnds_AcrossValidation()
+    {
+        var groundedMid = new XYZ(5f, 0f, 5f);
+        var rawMid = new XYZ(5f, 0f, 1f);
+        var rawEnd = new XYZ(10f, 0f, 2f);
+        var navigation = new Navigation(
+            (mapId, start, end, smoothPath) => [Start, rawMid, rawEnd],
+            (mapId, from, to) =>
+            {
+                if (to.Equals(rawMid))
+                    return new Navigation.SegmentEvaluation(groundedMid, Navigation.SegmentBlockReason.None);
+
+                return MathF.Abs(from.Z - groundedMid.Z) < 0.01f
+                    ? new Navigation.SegmentEvaluation(rawEnd, Navigation.SegmentBlockReason.None)
+                    : new Navigation.SegmentEvaluation(rawEnd, Navigation.SegmentBlockReason.StepUpLimit);
+            });
+
+        var result = navigation.CalculateValidatedPath(1, Start, rawEnd, smoothPath: true);
+
+        Assert.Equal("native_path", result.Result);
+        Assert.Null(result.BlockedSegmentIndex);
+        Assert.Equal([Start, rawMid, rawEnd], result.Path);
+    }
+
     private static bool IntersectsFlatCorridor(XYZ from, XYZ to)
     {
         for (var i = 0; i <= 32; i++)

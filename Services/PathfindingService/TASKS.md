@@ -122,6 +122,7 @@ Master tracker: `MASTER-SUB-018`
 - [x] Progress (2026-03-12 session 67): `Navigation.CalculateValidatedPath(...)` now validates each returned segment against the mounted overlay, retries the alternate native mode, and runs a bounded local detour search around the first blocked segment before returning a result. `PathfindingSocketServer` now surfaces the new result codes (`native_path`, `native_path_alternate_mode`, `repaired_dynamic_overlay`, `blocked_by_dynamic_overlay`, `los_fallback_path`, `no_path`) and keeps `raw_corner_count` tied to the original native route that was validated/repaired.
 - [x] Progress (2026-03-12 session 68): `Navigation.cs` now has a native `ValidateWalkableSegment` bridge available for service result mapping (`repaired_segment_validation`, `blocked_by_capsule_validation`, `blocked_by_step_up_limit`, `blocked_by_step_down_limit`) and deterministic tests cover those branches. The rollout remains gated behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` because current support probes still false-negative some long Orgrimmar/corpse-run segments.
 - [x] Progress (2026-03-12 session 69): the native validator underneath `Navigation.cs` now uses capsule-footprint support sampling and a short-horizon `PhysicsStepV2` fallback for strict straight-sweep false negatives. The first real Orgrimmar graveyard->center raw segment now passes in deterministic native coverage, and the focused plus full `PathfindingService.Tests` suites still pass.
+- [x] Progress (2026-03-12 session 71): service blocked-segment evaluation now carries each segment's grounded effective end forward through `SegmentEvaluation` instead of reusing raw smooth-path waypoint Z for the next segment. `NavigationOverlayAwarePathTests` now pins that regression, and baseline `PathfindingTests` run through the shared route-validity contract with `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION=1` so deterministic service coverage validates the shaped/repaired route runtime traversal actually consumes.
 - [ ] Required change:
   1. Validate each returned path segment against dynamic objects, capsule clearance, LOS, and support surface checks.
   2. When a segment is blocked by live objects, build a local detour/reform pass around the obstruction instead of returning the raw native path.
@@ -165,25 +166,21 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 70)
+- Last updated: 2026-03-12 (session 71)
 - Active task: `NAV-OBJ-002` / `PFS-OBJ-003` continue pushing whole-route shaping into native output while keeping service validation deterministic
-- Last delta: `Navigation.cpp` now respects the public `smoothPath` contract, `PathFinder.cpp` now refines and simplifies whole routes against `ValidateWalkableSegment`, and the deterministic corpse-run route contract now carries grounded segment ends between validations instead of treating raw smooth-path Z values as authoritative. `Tests/PathfindingService.Tests` also gained shared `PathRouteAssertions` so route-validity bot tasks reuse one grounded-segment validation helper.
+- Last delta: `Navigation.cs` now threads grounded segment ends through service blocked-segment evaluation via `SegmentEvaluation`, so overlay-aware validation continues from the effective grounded endpoint instead of raw smooth-path waypoint Z. `NavigationOverlayAwarePathTests.cs` now pins that carry-forward behavior, and `PathfindingTests` now validate the baseline route contract under `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION=1` through the shared `PathRouteAssertions` helper so deterministic route validity matches shaped/repaired runtime traversal.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `5 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `9 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `34 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `6 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests|FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `12 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `35 passed`
 - Files changed:
-  - `Exports/Navigation/Navigation.h`
-  - `Exports/Navigation/Navigation.cpp`
-  - `Exports/Navigation/PathFinder.h`
-  - `Exports/Navigation/PathFinder.cpp`
-  - `Exports/Navigation/DllMain.cpp`
+  - `Services/PathfindingService/Repository/Navigation.cs`
   - `Services/PathfindingService/TASKS.md`
-  - `Services/PathfindingService/README.md`
-  - `Tests/PathfindingService.Tests/PathRouteAssertions.cs`
-  - `Tests/PathfindingService.Tests/BotTasks/PathCalculationTask.cs`
-  - `Tests/PathfindingService.Tests/BotTasks/PathSegmentValidationTask.cs`
+  - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
+  - `Tests/PathfindingService.Tests/PathingAndOverlapTests.cs`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS_ARCHIVE.md`
 - Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -Skip 260 -First 260`
 - Blockers: service-side bounded repair still carries more of the live blocker workload than native output shaping. The next route-quality slice remains true native detour generation around blocked segments so `CalculateValidatedPath` can trust the first native route more often and leave `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` gated only as a rollout control, not a correctness crutch.

@@ -14,10 +14,20 @@ namespace PathfindingService.Tests
             Position start = new(-616.2514f, -4188.0044f, 82.316719f);
             Position end = new(1629.36f, -4373.39f, 50.2564f);
 
-            var path = _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true);
+            var path = ExecuteWithNativeSegmentValidation(
+                () => _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true));
 
-            Assert.NotNull(path);
-            Assert.NotEmpty(path);
+            var validationFailure = PathRouteAssertions.GetValidationFailure(
+                mapId,
+                start.ToXYZ(),
+                end.ToXYZ(),
+                path,
+                maxStartDistance: 8.0f,
+                maxEndDistance: 20.0f,
+                maxSegmentLength: 260.0f,
+                maxHeightJump: 30.0f);
+
+            Assert.Null(validationFailure);
         }
 
         /// <summary>
@@ -35,11 +45,20 @@ namespace PathfindingService.Tests
             // Orgrimmar center (near AH / The Drag)
             Position end = new(1680f, -4315f, 62f);
 
-            var path = _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true);
+            var path = ExecuteWithNativeSegmentValidation(
+                () => _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true));
 
-            Assert.NotNull(path);
-            Assert.NotEmpty(path);
-            AssertAllCoordinatesFinite(path);
+            var validationFailure = PathRouteAssertions.GetValidationFailure(
+                mapId,
+                start.ToXYZ(),
+                end.ToXYZ(),
+                path,
+                maxStartDistance: 8.0f,
+                maxEndDistance: 12.0f,
+                maxSegmentLength: 200.0f,
+                maxHeightJump: 25.0f);
+
+            Assert.Null(validationFailure);
             Assert.True(path.Length >= 3, $"Corpse-run path too short ({path.Length} points) for ~700y travel");
         }
 
@@ -56,11 +75,20 @@ namespace PathfindingService.Tests
             // Valley of Spirits
             Position end = new(1862f, -4348f, -14f);
 
-            var path = _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true);
+            var path = ExecuteWithNativeSegmentValidation(
+                () => _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true));
 
-            Assert.NotNull(path);
-            Assert.NotEmpty(path);
-            AssertAllCoordinatesFinite(path);
+            var validationFailure = PathRouteAssertions.GetValidationFailure(
+                mapId,
+                start.ToXYZ(),
+                end.ToXYZ(),
+                path,
+                maxStartDistance: 8.0f,
+                maxEndDistance: 15.0f,
+                maxSegmentLength: 200.0f,
+                maxHeightJump: 35.0f);
+
+            Assert.Null(validationFailure);
         }
 
         /// <summary>
@@ -74,21 +102,34 @@ namespace PathfindingService.Tests
             Position start = new(1680f, -4315f, 62f);
             Position end = new(1543f, -4959f, 9f);
 
-            var path = _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true);
+            var path = ExecuteWithNativeSegmentValidation(
+                () => _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true));
 
-            Assert.NotNull(path);
-            Assert.NotEmpty(path);
-            AssertAllCoordinatesFinite(path);
+            var validationFailure = PathRouteAssertions.GetValidationFailure(
+                mapId,
+                start.ToXYZ(),
+                end.ToXYZ(),
+                path,
+                maxStartDistance: 8.0f,
+                maxEndDistance: 12.0f,
+                maxSegmentLength: 200.0f,
+                maxHeightJump: 25.0f);
+
+            Assert.Null(validationFailure);
             Assert.True(path.Length >= 3, $"Reverse corpse-run path too short ({path.Length} points)");
         }
-
-        private static void AssertAllCoordinatesFinite(XYZ[] path)
+        private static XYZ[] ExecuteWithNativeSegmentValidation(Func<XYZ[]> action)
         {
-            for (int i = 0; i < path.Length; i++)
+            const string key = "WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION";
+            var previous = Environment.GetEnvironmentVariable(key);
+            Environment.SetEnvironmentVariable(key, "1");
+            try
             {
-                Assert.True(float.IsFinite(path[i].X), $"path[{i}].X is not finite: {path[i].X}");
-                Assert.True(float.IsFinite(path[i].Y), $"path[{i}].Y is not finite: {path[i].Y}");
-                Assert.True(float.IsFinite(path[i].Z), $"path[{i}].Z is not finite: {path[i].Z}");
+                return action();
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(key, previous);
             }
         }
     }

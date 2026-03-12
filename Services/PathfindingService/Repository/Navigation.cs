@@ -91,19 +91,30 @@ namespace PathfindingService.Repository
 
         private const string EnableLosFallbackEnv = "WWOW_ENABLE_LOS_FALLBACK";
         private readonly Func<uint, XYZ, XYZ, bool, XYZ[]> _findPathResolver;
-        private readonly Func<uint, XYZ, XYZ, SegmentBlockReason> _segmentBlockEvaluator;
+        private readonly Func<uint, XYZ, XYZ, SegmentEvaluation> _segmentEvaluator;
 
         public Navigation()
-            : this(TryFindPathNative, EvaluateSegmentBlockInternal)
+            : this(TryFindPathNative, EvaluateSegmentTraversalInternal)
         {
         }
 
         public Navigation(
             Func<uint, XYZ, XYZ, bool, XYZ[]> findPathResolver,
             Func<uint, XYZ, XYZ, SegmentBlockReason> segmentBlockEvaluator)
+            : this(
+                findPathResolver,
+                (mapId, from, to) => new SegmentEvaluation(
+                    to,
+                    (segmentBlockEvaluator ?? throw new ArgumentNullException(nameof(segmentBlockEvaluator)))(mapId, from, to)))
+        {
+        }
+
+        public Navigation(
+            Func<uint, XYZ, XYZ, bool, XYZ[]> findPathResolver,
+            Func<uint, XYZ, XYZ, SegmentEvaluation> segmentEvaluator)
         {
             _findPathResolver = findPathResolver ?? throw new ArgumentNullException(nameof(findPathResolver));
-            _segmentBlockEvaluator = segmentBlockEvaluator ?? throw new ArgumentNullException(nameof(segmentBlockEvaluator));
+            _segmentEvaluator = segmentEvaluator ?? throw new ArgumentNullException(nameof(segmentEvaluator));
         }
 
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
@@ -368,11 +379,14 @@ namespace PathfindingService.Repository
             if (path.Length < 2)
                 return null;
 
+            var current = path[0];
             for (var i = 0; i < path.Length - 1; i++)
             {
-                var reason = _segmentBlockEvaluator(mapId, path[i], path[i + 1]);
-                if (reason != SegmentBlockReason.None)
-                    return new BlockedSegmentInfo(i, reason);
+                var evaluation = _segmentEvaluator(mapId, current, path[i + 1]);
+                if (evaluation.Reason != SegmentBlockReason.None)
+                    return new BlockedSegmentInfo(i, evaluation.Reason);
+
+                current = evaluation.EffectiveEnd;
             }
 
             return null;
@@ -665,16 +679,16 @@ namespace PathfindingService.Repository
             }
         }
 
-        private static SegmentBlockReason EvaluateSegmentBlockInternal(uint mapId, XYZ from, XYZ to)
+        private static SegmentEvaluation EvaluateSegmentTraversalInternal(uint mapId, XYZ from, XYZ to)
         {
             if (SegmentIntersectsDynamicObjectsInternal(mapId, from, to))
-                return SegmentBlockReason.DynamicOverlay;
+                return new SegmentEvaluation(to, SegmentBlockReason.DynamicOverlay);
 
             if (!IsNativeSegmentValidationEnabled())
-                return SegmentBlockReason.None;
+                return new SegmentEvaluation(to, SegmentBlockReason.None);
 
             if (Distance2D(from, to) > NativeWalkabilityMaxSegmentLength)
-                return SegmentBlockReason.None;
+                return new SegmentEvaluation(to, SegmentBlockReason.None);
 
             try
             {
@@ -684,11 +698,15 @@ namespace PathfindingService.Repository
                     new NativeXyz(to),
                     DefaultAgentRadius,
                     DefaultAgentHeight,
-                    out _,
+                    out var resolvedEndZ,
                     out _,
                     out _);
 
-                return validation switch
+                var effectiveEnd = validation == SegmentValidationCode.Clear && float.IsFinite(resolvedEndZ)
+                    ? new XYZ(to.X, to.Y, resolvedEndZ)
+                    : to;
+
+                var reason = validation switch
                 {
                     SegmentValidationCode.Clear => SegmentBlockReason.None,
                     SegmentValidationCode.BlockedGeometry => SegmentBlockReason.CapsuleValidation,
@@ -700,10 +718,12 @@ namespace PathfindingService.Repository
                     SegmentValidationCode.StepDownTooFar => SegmentBlockReason.StepDownLimit,
                     _ => SegmentBlockReason.None,
                 };
+
+                return new SegmentEvaluation(effectiveEnd, reason);
             }
             catch
             {
-                return SegmentBlockReason.None;
+                return new SegmentEvaluation(to, SegmentBlockReason.None);
             }
         }
 
@@ -725,6 +745,10 @@ namespace PathfindingService.Repository
 
         private readonly record struct BlockedSegmentInfo(
             int Index,
+            SegmentBlockReason Reason);
+
+        public readonly record struct SegmentEvaluation(
+            XYZ EffectiveEnd,
             SegmentBlockReason Reason);
 
         public enum SegmentBlockReason
