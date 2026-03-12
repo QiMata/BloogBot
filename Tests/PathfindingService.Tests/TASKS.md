@@ -161,20 +161,18 @@
 4. Proto contract focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 71)
-- Active task: `PFS-TST-003` and `PFS-TST-005` remain open; route-validity coverage now shares one grounded-segment assertion path
-- Last delta: completed `PFS-TST-002`. `Navigation.cs` now carries grounded segment ends across blocked-segment evaluation via `SegmentEvaluation`, `NavigationOverlayAwarePathTests.cs` now pins that behavior, and `PathfindingTests` now use `PathRouteAssertions` under `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION=1` so deterministic route contracts validate the shaped/repaired path instead of the ungated rollout default.
+- Last updated: 2026-03-12 (session 73)
+- Active task: `PFS-TST-003` and `PFS-TST-005` remain open; short-route shoreline diagnostics are now pinned deterministically
+- Last delta: added `PathRouteDiagnosticsTests.cs`, which now pins the service-side short-route logging rules that Ratchet shoreline debugging depends on. `PathRouteDiagnostics` classifies why a path is logged (`short_route`, `sparse_result`, `sanitized_corners`, non-native result, sampled) and formats corner chains with deterministic truncation for `[PATH_DIAG]`.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `6 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests|FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `12 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `35 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathRouteDiagnosticsTests" --logger "console;verbosity=minimal"` -> `4 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `39 passed`
 - Files changed:
-  - `Services/PathfindingService/Repository/Navigation.cs`
-  - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
-  - `Tests/PathfindingService.Tests/PathingAndOverlapTests.cs`
+  - `Services/PathfindingService/PathRouteDiagnostics.cs`
+  - `Services/PathfindingService/PathfindingSocketServer.cs`
+  - `Tests/PathfindingService.Tests/PathRouteDiagnosticsTests.cs`
   - `Tests/PathfindingService.Tests/TASKS.md`
   - `Tests/PathfindingService.Tests/TASKS_ARCHIVE.md`
 - Blockers: `PFS-TST-003` still lacks a deterministic blocked-corridor reroute case, and `PFS-TST-005` still needs an Orgrimmar-focused bot-task route contract. Native segment validation remains gated by default for rollout, even though deterministic route tests now opt into it deliberately.
-- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -Skip 260 -First 260`
+- Next command: `Get-Content Exports/BotRunner/Movement/NavigationPath.cs | Select-Object -First 260`

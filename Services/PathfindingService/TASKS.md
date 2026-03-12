@@ -86,6 +86,7 @@ Master tracker: `MASTER-SUB-018`
 - [ ] Problem: `FishingTask` can now acquire the correct pool and the live contract can succeed, but the short route from the Ratchet named-teleport landing to a castable pool position can still strand FG/BG on terrain or at a no-LOS endpoint before `FishingTask in_cast_range`.
 - [ ] Target files: `Services/PathfindingService/PathfindingSocketServer.cs`, `Services/PathfindingService/Repository/Navigation.cs`, `Tests/PathfindingService.Tests/`, live evidence from `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`.
 - [x] Progress (2026-03-12 session 72): native `PathFinder.cpp` now tries grounded lateral detour candidates before midpoint splitting, and deterministic native coverage includes the Ratchet dock fishing approach plus a known obstructed direct-segment detour. This improves the returned route surface, but the service still does not emit enough short-route diagnostics to distinguish bad native output from runtime execution drift during the live fishing path.
+- [x] Progress (2026-03-12 session 73): `PathfindingSocketServer` now routes `[PATH_DIAG]` through `PathRouteDiagnostics`, which logs short routes (`<=40y`) with explicit reasons plus formatted `path=[...]` and `rawPath=[...]` corner chains. `PathRouteDiagnosticsTests` now pin those classification/truncation rules so Ratchet shoreline request/response evidence stays deterministic.
 - [ ] Required change:
   1. Log the requested start/end points and returned corners for short shoreline routes used by fishing-hole approaches.
   2. Record enough metadata to distinguish "bad route returned" from "route returned but runtime execution drifted off it".
@@ -168,22 +169,21 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 72)
-- Active task: `PFS-FISH-001` / `NAV-OBJ-004` instrument shoreline route diagnostics now that native output has a first lateral-detour pass
-- Last delta: native `PathFinder.cpp` now tries grounded lateral detour candidates before midpoint-only refinement, which gives the service stronger first-pass routes before bounded repair runs. Deterministic native coverage now includes a Ratchet fishing shoreline route and a known obstructed direct-segment detour, while the full `PathfindingService.Tests` suite still passes with the existing service-side overlay/repair contract.
+- Last updated: 2026-03-12 (session 73)
+- Active task: `PFS-FISH-001` move from service-side short-route diagnostics into bot-side planned-vs-executed shoreline tracing
+- Last delta: `PathfindingSocketServer.cs` now logs short routes (`<=40y`) with explicit reasons plus formatted `path=[...]` and `rawPath=[...]` corner chains via `PathRouteDiagnostics`. That gives deterministic request/response evidence for Ratchet shoreline failures before the next pass adds bot-side execution traces.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `7 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `35 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `104 passed, 1 skipped`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathRouteDiagnosticsTests" --logger "console;verbosity=minimal"` -> `4 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `39 passed`
 - Files changed:
-  - `Exports/Navigation/PathFinder.cpp`
-  - `Exports/Navigation/TASKS.md`
+  - `Services/PathfindingService/PathRouteDiagnostics.cs`
+  - `Services/PathfindingService/PathfindingSocketServer.cs`
   - `Services/PathfindingService/TASKS.md`
   - `Services/PathfindingService/README.md`
-  - `Tests/Navigation.Physics.Tests/SegmentWalkabilityTests.cs`
-  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `Tests/PathfindingService.Tests/PathRouteDiagnosticsTests.cs`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS_ARCHIVE.md`
   - `docs/TASKS.md`
-- Next command: `Get-Content Services/PathfindingService/PathfindingSocketServer.cs | Select-Object -Skip 140 -First 160`
-- Blockers: native output is stronger, but the remaining Ratchet fishing failures can still come from bad returned corners or drift after the route is issued. The next slice needs short-route request/response diagnostics so live failures can be attributed before more physics changes are made.
+- Next command: `Get-Content Exports/BotRunner/Movement/NavigationPath.cs | Select-Object -First 260`
+- Blockers: service-side request/response diagnostics now show what route was returned for short shoreline paths, but they still cannot prove whether the bot drifted off that route during execution. The next slice needs bot-side waypoint-consumption / position-trace logging to close that attribution gap.

@@ -142,6 +142,8 @@ Current rollout note: `CalculatePathRequest.nearby_objects` is now consumed insi
 
 Current native-validator note: the service can optionally validate returned segments through `ValidateWalkableSegment`, and that native path now uses capsule-footprint support probes plus a short-horizon `PhysicsStepV2` fallback for strict straight-sweep false negatives. Native `FindPath` now also honors the public `smoothPath` contract (`true=smooth`, `false=straight`), threads grounded segment ends through validation, and attempts grounded lateral detour candidates before midpoint-only refinement so more blocked short routes are repaired natively before the service considers bounded repair. Default rollout still stays behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` until longer multi-segment routes and shoreline drift diagnostics are covered.
 
+Current shoreline-diagnostic note: `[PATH_DIAG]` logging now treats short routes (`<=40y`) as first-class evidence. Logged path responses include an explicit reason plus formatted `path=[...]` and `rawPath=[...]` corner chains so live Ratchet fishing failures can be compared against later bot-side execution traces instead of only seeing corner counts.
+
 ### Navigation Repository
 
 P/Invoke wrapper for the native pathfinding library:

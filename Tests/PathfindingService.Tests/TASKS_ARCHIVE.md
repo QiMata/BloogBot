@@ -2,6 +2,19 @@
 
 Completed items moved from TASKS.md.
 
+## Completed (2026-03-12 session 73)
+
+### [x] PFS-TST-009 - Add deterministic shoreline path-diagnostic helper coverage
+- Completed by extracting `PathRouteDiagnostics` from `PathfindingSocketServer` and pinning the short-route logging rules in `PathRouteDiagnosticsTests.cs`.
+- Coverage now proves:
+  1. short healthy routes are logged,
+  2. healthy long unsampled routes are not,
+  3. combined diagnostic reasons are stable and explicit,
+  4. logged corner chains truncate deterministically.
+- Validation:
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathRouteDiagnosticsTests" --logger "console;verbosity=minimal"` -> `4 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `39 passed`
+
 ## Completed (2026-03-12 session 71)
 
 ### [x] PFS-TST-002 - Convert baseline path assertions to full route validity contract

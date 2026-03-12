@@ -212,11 +212,23 @@ namespace PathfindingService
             }
 
             // Log path requests that return few/no corners for diagnostics
-            if (sanitizedPath.Length <= 1 || ++_pathLogCounter % 50 == 1)
+            var requestOrdinal = ++_pathLogCounter;
+            var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
+            if (PathRouteDiagnostics.ShouldLogRoute(
+                dist2D,
+                sanitizedPath.Length,
+                pathResult.RawPath.Length,
+                pathResult.Result,
+                requestOrdinal))
             {
-                var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
                 logger.LogInformation(
-                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} result={Result} blockedSegment={BlockedSegment} corners={Corners} rawCorners={RawCorners} overlayRequested={OverlayRequested} overlayRegistered={OverlayRegistered} overlayFiltered={OverlayFiltered} overlayDisplayIds=[{OverlayDisplayIds}]",
+                    "[PATH_DIAG] reason={Reason} map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} result={Result} blockedSegment={BlockedSegment} corners={Corners} rawCorners={RawCorners} path=[{PathCorners}] rawPath=[{RawPathCorners}] overlayRequested={OverlayRequested} overlayRegistered={OverlayRegistered} overlayFiltered={OverlayFiltered} overlayDisplayIds=[{OverlayDisplayIds}]",
+                    PathRouteDiagnostics.GetReason(
+                        dist2D,
+                        sanitizedPath.Length,
+                        pathResult.RawPath.Length,
+                        pathResult.Result,
+                        requestOrdinal),
                     req.MapId,
                     start.X,
                     start.Y,
@@ -230,6 +242,8 @@ namespace PathfindingService
                     pathResult.BlockedSegmentIndex?.ToString() ?? string.Empty,
                     sanitizedPath.Length,
                     pathResult.RawPath.Length,
+                    PathRouteDiagnostics.FormatCorners(sanitizedPath),
+                    PathRouteDiagnostics.FormatCorners(pathResult.RawPath),
                     overlayResult.Summary.RequestedCount,
                     overlayResult.Summary.RegisteredCount,
                     overlayResult.Summary.FilteredCount,
