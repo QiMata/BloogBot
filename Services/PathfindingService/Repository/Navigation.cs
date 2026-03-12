@@ -14,6 +14,10 @@ namespace PathfindingService.Repository
     public class Navigation
     {
         private const string DLL_NAME = "Navigation.dll";
+        private const float DefaultAgentRadius = 0.6f;
+        private const float DefaultAgentHeight = 2.0f;
+        private const float NativeWalkabilityMaxSegmentLength = 20f;
+        private const string EnableNativeSegmentValidationEnv = "WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION";
         private const float FallbackMinCellSize = 6f;
         private const float FallbackMediumCellSize = 8f;
         private const float FallbackLongRouteCellSize = 10f;
@@ -74,21 +78,32 @@ namespace PathfindingService.Repository
         private static extern bool SegmentIntersectsDynamicObjectsNative(
             uint mapId, float x0, float y0, float z0, float x1, float y1, float z1);
 
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "ValidateWalkableSegment")]
+        private static extern SegmentValidationCode ValidateWalkableSegmentNative(
+            uint mapId,
+            NativeXyz start,
+            NativeXyz end,
+            float radius,
+            float height,
+            out float resolvedEndZ,
+            out float supportDelta,
+            out float travelFraction);
+
         private const string EnableLosFallbackEnv = "WWOW_ENABLE_LOS_FALLBACK";
         private readonly Func<uint, XYZ, XYZ, bool, XYZ[]> _findPathResolver;
-        private readonly Func<uint, XYZ, XYZ, bool> _segmentBlocker;
+        private readonly Func<uint, XYZ, XYZ, SegmentBlockReason> _segmentBlockEvaluator;
 
         public Navigation()
-            : this(TryFindPathNative, SegmentIntersectsDynamicObjectsInternal)
+            : this(TryFindPathNative, EvaluateSegmentBlockInternal)
         {
         }
 
         public Navigation(
             Func<uint, XYZ, XYZ, bool, XYZ[]> findPathResolver,
-            Func<uint, XYZ, XYZ, bool> segmentBlocker)
+            Func<uint, XYZ, XYZ, SegmentBlockReason> segmentBlockEvaluator)
         {
             _findPathResolver = findPathResolver ?? throw new ArgumentNullException(nameof(findPathResolver));
-            _segmentBlocker = segmentBlocker ?? throw new ArgumentNullException(nameof(segmentBlocker));
+            _segmentBlockEvaluator = segmentBlockEvaluator ?? throw new ArgumentNullException(nameof(segmentBlockEvaluator));
         }
 
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
@@ -117,16 +132,16 @@ namespace PathfindingService.Repository
             }
 
             var repairSource = SelectRepairSource(preferredAttempt, alternateAttempt);
-            if (repairSource.Path.Length > 1 && repairSource.BlockedSegmentIndex is int blockedSegmentIndex)
+            if (repairSource.Path.Length > 1 && repairSource.BlockedSegment is BlockedSegmentInfo repairBlockedSegment)
             {
-                var repairedPath = TryRepairPath(mapId, start, end, smoothPath, repairSource.Path, blockedSegmentIndex);
+                var repairedPath = TryRepairPath(mapId, start, end, smoothPath, repairSource.Path, repairBlockedSegment.Index);
                 if (repairedPath.Length > 0)
                 {
                     return new NavigationPathResult(
                         repairedPath,
                         repairSource.Path,
-                        "repaired_dynamic_overlay",
-                        blockedSegmentIndex);
+                        GetRepairResult(repairBlockedSegment.Reason),
+                        repairBlockedSegment.Index);
                 }
             }
 
@@ -136,7 +151,7 @@ namespace PathfindingService.Repository
             if (IsLosFallbackEnabled())
             {
                 var fallbackPath = BuildLosFallbackPath(mapId, start, end);
-                if (fallbackPath.Length > 0 && FindBlockedSegmentIndex(mapId, fallbackPath) is null)
+                if (fallbackPath.Length > 0 && FindBlockedSegment(mapId, fallbackPath) is null)
                 {
                     return new NavigationPathResult(
                         fallbackPath,
@@ -146,19 +161,33 @@ namespace PathfindingService.Repository
                 }
             }
 
-            var blockedIndex = preferredAttempt.BlockedSegmentIndex ?? alternateAttempt.BlockedSegmentIndex;
+            BlockedSegmentInfo? blockedSegment = preferredAttempt.BlockedSegment is not null
+                ? preferredAttempt.BlockedSegment
+                : alternateAttempt.BlockedSegment;
             var rawPath = repairSource.Path.Length > 0 ? repairSource.Path : Array.Empty<XYZ>();
-            var result = blockedIndex is null ? "no_path" : "blocked_by_dynamic_overlay";
+            var result = blockedSegment is null ? "no_path" : GetBlockedResult(blockedSegment.Value.Reason);
             return new NavigationPathResult(
                 Array.Empty<XYZ>(),
                 rawPath,
                 result,
-                blockedIndex);
+                blockedSegment?.Index);
         }
 
         private static bool IsLosFallbackEnabled()
         {
             var value = Environment.GetEnvironmentVariable(EnableLosFallbackEnv);
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            return value.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("on", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsNativeSegmentValidationEnabled()
+        {
+            var value = Environment.GetEnvironmentVariable(EnableNativeSegmentValidationEnv);
             if (string.IsNullOrWhiteSpace(value))
                 return false;
 
@@ -207,8 +236,8 @@ namespace PathfindingService.Repository
                 if (path.Length == 0)
                     return new PathAttempt(Array.Empty<XYZ>(), successResult, null);
 
-                var blockedSegmentIndex = FindBlockedSegmentIndex(mapId, path);
-                return new PathAttempt(path, successResult, blockedSegmentIndex);
+                var blockedSegment = FindBlockedSegment(mapId, path);
+                return new PathAttempt(path, successResult, blockedSegment);
             }
             catch
             {
@@ -218,10 +247,10 @@ namespace PathfindingService.Repository
 
         private static PathAttempt SelectRepairSource(PathAttempt preferredAttempt, PathAttempt alternateAttempt)
         {
-            if (preferredAttempt.Path.Length > 0 && preferredAttempt.BlockedSegmentIndex is not null)
+            if (preferredAttempt.Path.Length > 0 && preferredAttempt.BlockedSegment is not null)
                 return preferredAttempt;
 
-            if (alternateAttempt.Path.Length > 0 && alternateAttempt.BlockedSegmentIndex is not null)
+            if (alternateAttempt.Path.Length > 0 && alternateAttempt.BlockedSegment is not null)
                 return alternateAttempt;
 
             return preferredAttempt.Path.Length >= alternateAttempt.Path.Length
@@ -245,7 +274,7 @@ namespace PathfindingService.Repository
                 if (repaired.Length == 0)
                     continue;
 
-                var blockedCandidateSegment = FindBlockedSegmentIndex(mapId, repaired);
+                var blockedCandidateSegment = FindBlockedSegment(mapId, repaired);
                 if (blockedCandidateSegment is not null)
                     continue;
 
@@ -334,15 +363,16 @@ namespace PathfindingService.Repository
             return combined.ToArray();
         }
 
-        private int? FindBlockedSegmentIndex(uint mapId, XYZ[] path)
+        private BlockedSegmentInfo? FindBlockedSegment(uint mapId, XYZ[] path)
         {
             if (path.Length < 2)
                 return null;
 
             for (var i = 0; i < path.Length - 1; i++)
             {
-                if (_segmentBlocker(mapId, path[i], path[i + 1]))
-                    return i;
+                var reason = _segmentBlockEvaluator(mapId, path[i], path[i + 1]);
+                if (reason != SegmentBlockReason.None)
+                    return new BlockedSegmentInfo(i, reason);
             }
 
             return null;
@@ -621,7 +651,7 @@ namespace PathfindingService.Repository
         }
 
         public bool SegmentIntersectsDynamicObjects(uint mapId, float x0, float y0, float z0, float x1, float y1, float z1)
-            => _segmentBlocker(mapId, new XYZ(x0, y0, z0), new XYZ(x1, y1, z1));
+            => SegmentIntersectsDynamicObjectsInternal(mapId, new XYZ(x0, y0, z0), new XYZ(x1, y1, z1));
 
         private static bool SegmentIntersectsDynamicObjectsInternal(uint mapId, XYZ from, XYZ to)
         {
@@ -635,12 +665,93 @@ namespace PathfindingService.Repository
             }
         }
 
+        private static SegmentBlockReason EvaluateSegmentBlockInternal(uint mapId, XYZ from, XYZ to)
+        {
+            if (SegmentIntersectsDynamicObjectsInternal(mapId, from, to))
+                return SegmentBlockReason.DynamicOverlay;
+
+            if (!IsNativeSegmentValidationEnabled())
+                return SegmentBlockReason.None;
+
+            if (Distance2D(from, to) > NativeWalkabilityMaxSegmentLength)
+                return SegmentBlockReason.None;
+
+            try
+            {
+                var validation = ValidateWalkableSegmentNative(
+                    mapId,
+                    new NativeXyz(from),
+                    new NativeXyz(to),
+                    DefaultAgentRadius,
+                    DefaultAgentHeight,
+                    out _,
+                    out _,
+                    out _);
+
+                return validation switch
+                {
+                    SegmentValidationCode.Clear => SegmentBlockReason.None,
+                    SegmentValidationCode.BlockedGeometry => SegmentBlockReason.CapsuleValidation,
+                    // Support probes still have known false negatives on some valid mmap
+                    // segments, so keep them diagnostic-only until the native query is
+                    // proven stable enough to block service paths outright.
+                    SegmentValidationCode.MissingSupport => SegmentBlockReason.None,
+                    SegmentValidationCode.StepUpTooHigh => SegmentBlockReason.StepUpLimit,
+                    SegmentValidationCode.StepDownTooFar => SegmentBlockReason.StepDownLimit,
+                    _ => SegmentBlockReason.None,
+                };
+            }
+            catch
+            {
+                return SegmentBlockReason.None;
+            }
+        }
+
+        private static string GetRepairResult(SegmentBlockReason reason)
+            => reason == SegmentBlockReason.DynamicOverlay
+                ? "repaired_dynamic_overlay"
+                : "repaired_segment_validation";
+
+        private static string GetBlockedResult(SegmentBlockReason reason)
+            => reason switch
+            {
+                SegmentBlockReason.DynamicOverlay => "blocked_by_dynamic_overlay",
+                SegmentBlockReason.SupportSurface => "blocked_by_support_surface",
+                SegmentBlockReason.StepUpLimit => "blocked_by_step_up_limit",
+                SegmentBlockReason.StepDownLimit => "blocked_by_step_down_limit",
+                SegmentBlockReason.CapsuleValidation => "blocked_by_capsule_validation",
+                _ => "no_path",
+            };
+
+        private readonly record struct BlockedSegmentInfo(
+            int Index,
+            SegmentBlockReason Reason);
+
+        public enum SegmentBlockReason
+        {
+            None = 0,
+            DynamicOverlay,
+            CapsuleValidation,
+            SupportSurface,
+            StepUpLimit,
+            StepDownLimit,
+        }
+
+        private enum SegmentValidationCode : uint
+        {
+            Clear = 0,
+            BlockedGeometry = 1,
+            MissingSupport = 2,
+            StepUpTooHigh = 3,
+            StepDownTooFar = 4,
+        }
+
         private readonly record struct PathAttempt(
             XYZ[] Path,
             string SuccessResult,
-            int? BlockedSegmentIndex)
+            BlockedSegmentInfo? BlockedSegment)
         {
-            public bool IsUsable => Path.Length > 0 && BlockedSegmentIndex is null;
+            public bool IsUsable => Path.Length > 0 && BlockedSegment is null;
         }
     }
 }

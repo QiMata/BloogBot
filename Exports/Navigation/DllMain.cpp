@@ -4,12 +4,15 @@
 #include "VMapFactory.h"
 #include "PhysicsEngine.h"
 #include "PhysicsBridge.h"
+#include "PhysicsGroundSnap.h"
+#include "PhysicsShapeHelpers.h"
 #include "MapLoader.h"
 #include "SceneQuery.h"
 #include "DynamicObjectRegistry.h"
 
 #define NOMINMAX
 #include <windows.h>
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -278,6 +281,167 @@ static bool SegmentIntersectsTriangle(
     if (v < 0.0f || u + v > 1.0f) return false;
     const float t = f * e2.dot(q);
     return t >= 0.0f && t <= 1.0f;             // hit within segment
+}
+
+enum class SegmentValidationCode : uint32_t
+{
+    Clear = 0,
+    BlockedGeometry = 1,
+    MissingSupport = 2,
+    StepUpTooHigh = 3,
+    StepDownTooFar = 4,
+};
+
+static bool HasBlockingCapsuleOverlap(
+    uint32_t mapId,
+    float x,
+    float y,
+    float z,
+    float radius,
+    float height,
+    float orientation)
+{
+    CapsuleCollision::Capsule cap = PhysShapes::BuildFullHeightCapsule(x, y, z, radius, height);
+    std::vector<SceneHit> overlaps;
+    G3D::Vector3 playerFwd(std::cos(orientation), std::sin(orientation), 0.0f);
+    SceneQuery::SweepCapsule(mapId, cap, G3D::Vector3(0, 0, 0), 0.0f, overlaps, playerFwd);
+
+    for (const auto& hit : overlaps)
+    {
+        if (!hit.hit || !hit.startPenetrating)
+            continue;
+
+        const float penetrationDepth = std::max(0.0f, hit.penetrationDepth);
+        if (penetrationDepth <= 0.02f)
+            continue;
+
+        if (std::fabs(hit.normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z)
+            continue;
+
+        return true;
+    }
+
+    return false;
+}
+
+extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
+    uint32_t mapId,
+    XYZ start,
+    XYZ end,
+    float radius,
+    float height,
+    float* resolvedEndZ,
+    float* supportDelta,
+    float* travelFraction)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    if (resolvedEndZ)
+        *resolvedEndZ = start.Z;
+
+    if (supportDelta)
+        *supportDelta = 0.0f;
+
+    if (travelFraction)
+        *travelFraction = 0.0f;
+
+    const float dx = end.X - start.X;
+    const float dy = end.Y - start.Y;
+    const float horizontalDistance = std::sqrt((dx * dx) + (dy * dy));
+    const float queryDistance = PhysicsConstants::STEP_HEIGHT + PhysicsConstants::STEP_DOWN_HEIGHT + 0.5f;
+
+    float lastSupportZ = start.Z;
+    auto validateSupport = [&](float x, float y, float currentZ, float orientation, float traveled) -> SegmentValidationCode
+    {
+        const float queryBaseZ = currentZ + PhysicsConstants::STEP_HEIGHT + 0.5f;
+        const float groundZ = SceneQuery::GetGroundZ(mapId, x, y, queryBaseZ, queryDistance);
+        if (groundZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+            return SegmentValidationCode::MissingSupport;
+
+        const float deltaZ = groundZ - currentZ;
+        if (deltaZ > PhysicsConstants::STEP_HEIGHT + 0.1f)
+            return SegmentValidationCode::StepUpTooHigh;
+
+        if (deltaZ < -PhysicsConstants::STEP_DOWN_HEIGHT - 0.1f)
+            return SegmentValidationCode::StepDownTooFar;
+
+        lastSupportZ = groundZ;
+
+        if (resolvedEndZ)
+            *resolvedEndZ = groundZ;
+
+        if (supportDelta)
+            *supportDelta = groundZ - start.Z;
+
+        if (travelFraction)
+            *travelFraction = horizontalDistance > 0.01f
+                ? std::max(0.0f, std::min(1.0f, traveled / horizontalDistance))
+                : 1.0f;
+
+        if (HasBlockingCapsuleOverlap(mapId, x, y, groundZ, radius, height, orientation))
+            return SegmentValidationCode::BlockedGeometry;
+
+        return SegmentValidationCode::Clear;
+    };
+
+    if (horizontalDistance <= 0.05f)
+    {
+        const float orientation = 0.0f;
+        if (travelFraction)
+            *travelFraction = 1.0f;
+
+        if (HasBlockingCapsuleOverlap(mapId, start.X, start.Y, start.Z, radius, height, orientation))
+            return static_cast<uint32_t>(SegmentValidationCode::BlockedGeometry);
+
+        return static_cast<uint32_t>(SegmentValidationCode::Clear);
+    }
+
+    const G3D::Vector3 direction(dx / horizontalDistance, dy / horizontalDistance, 0.0f);
+    const float orientation = std::atan2(direction.y, direction.x);
+    constexpr float chunkSize = 1.0f;
+
+    float currentX = start.X;
+    float currentY = start.Y;
+    float currentZ = start.Z;
+    float traveled = 0.0f;
+    float remaining = horizontalDistance;
+
+    while (remaining > 0.05f)
+    {
+        const float requested = std::min(chunkSize, remaining);
+        const float advanced = PhysicsGroundSnap::HorizontalSweepAdvance(
+            mapId,
+            currentX,
+            currentY,
+            currentZ,
+            orientation,
+            radius,
+            height,
+            direction,
+            requested);
+
+        if (advanced + 0.05f < requested)
+        {
+            if (travelFraction && horizontalDistance > 0.01f)
+                *travelFraction = std::max(0.0f, std::min(1.0f, traveled / horizontalDistance));
+
+            return static_cast<uint32_t>(SegmentValidationCode::BlockedGeometry);
+        }
+
+        currentX += direction.x * advanced;
+        currentY += direction.y * advanced;
+        traveled += advanced;
+        remaining -= advanced;
+
+        const auto supportResult = validateSupport(currentX, currentY, currentZ, orientation, traveled);
+        if (supportResult != SegmentValidationCode::Clear)
+            return static_cast<uint32_t>(supportResult);
+
+        currentZ = lastSupportZ;
+    }
+
+    return static_cast<uint32_t>(SegmentValidationCode::Clear);
 }
 
 // Check whether the line segment (x0,y0,z0)→(x1,y1,z1) intersects any triangle

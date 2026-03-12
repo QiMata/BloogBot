@@ -24,7 +24,9 @@ public class NavigationOverlayAwarePathTests
 
                 return Array.Empty<XYZ>();
             },
-            (mapId, from, to) => IntersectsFlatCorridor(from, to));
+            (mapId, from, to) => IntersectsFlatCorridor(from, to)
+                ? Navigation.SegmentBlockReason.DynamicOverlay
+                : Navigation.SegmentBlockReason.None);
 
         var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
 
@@ -39,7 +41,9 @@ public class NavigationOverlayAwarePathTests
     {
         var navigation = new Navigation(
             (mapId, start, end, smoothPath) => [start, end],
-            (mapId, from, to) => IntersectsFlatCorridor(from, to));
+            (mapId, from, to) => IntersectsFlatCorridor(from, to)
+                ? Navigation.SegmentBlockReason.DynamicOverlay
+                : Navigation.SegmentBlockReason.None);
 
         var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
 
@@ -63,7 +67,9 @@ public class NavigationOverlayAwarePathTests
     {
         var navigation = new Navigation(
             (mapId, start, end, smoothPath) => [start, end],
-            (mapId, from, to) => SegmentCrossesBlockedSpan(from, to));
+            (mapId, from, to) => SegmentCrossesBlockedSpan(from, to)
+                ? Navigation.SegmentBlockReason.DynamicOverlay
+                : Navigation.SegmentBlockReason.None);
 
         var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
 
@@ -71,6 +77,38 @@ public class NavigationOverlayAwarePathTests
         Assert.Equal(0, result.BlockedSegmentIndex);
         Assert.Empty(result.Path);
         Assert.Equal([Start, End], result.RawPath);
+    }
+
+    [Fact]
+    public void CalculateValidatedPath_RepairsCapsuleValidation_WithSegmentValidationResult()
+    {
+        var navigation = new Navigation(
+            (mapId, start, end, smoothPath) => [start, end],
+            (mapId, from, to) => IntersectsFlatCorridor(from, to)
+                ? Navigation.SegmentBlockReason.CapsuleValidation
+                : Navigation.SegmentBlockReason.None);
+
+        var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
+
+        Assert.Equal("repaired_segment_validation", result.Result);
+        Assert.Equal(0, result.BlockedSegmentIndex);
+        Assert.True(result.Path.Length >= 3);
+    }
+
+    [Fact]
+    public void CalculateValidatedPath_ReturnsSpecificStepDownReason_WhenSegmentFailsWalkability()
+    {
+        var navigation = new Navigation(
+            (mapId, start, end, smoothPath) => [start, end],
+            (mapId, from, to) => SegmentCrossesBlockedSpan(from, to)
+                ? Navigation.SegmentBlockReason.StepDownLimit
+                : Navigation.SegmentBlockReason.None);
+
+        var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
+
+        Assert.Equal("blocked_by_step_down_limit", result.Result);
+        Assert.Equal(0, result.BlockedSegmentIndex);
+        Assert.Empty(result.Path);
     }
 
     private static bool IntersectsFlatCorridor(XYZ from, XYZ to)

@@ -120,12 +120,13 @@ Master tracker: `MASTER-SUB-018`
 - [ ] Problem: native `FindPath` returns mmap routes, but there is no service-level repair loop that rejects corners/segments crossing collidable live objects and reforms the path around them.
 - [ ] Target files: `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/PathfindingSocketServer.cs`, tests under `Tests/PathfindingService.Tests/`.
 - [x] Progress (2026-03-12 session 67): `Navigation.CalculateValidatedPath(...)` now validates each returned segment against the mounted overlay, retries the alternate native mode, and runs a bounded local detour search around the first blocked segment before returning a result. `PathfindingSocketServer` now surfaces the new result codes (`native_path`, `native_path_alternate_mode`, `repaired_dynamic_overlay`, `blocked_by_dynamic_overlay`, `los_fallback_path`, `no_path`) and keeps `raw_corner_count` tied to the original native route that was validated/repaired.
+- [x] Progress (2026-03-12 session 68): `Navigation.cs` now has a native `ValidateWalkableSegment` bridge available for service result mapping (`repaired_segment_validation`, `blocked_by_capsule_validation`, `blocked_by_step_up_limit`, `blocked_by_step_down_limit`) and deterministic tests cover those branches. The rollout remains gated behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` because current support probes still false-negative some long Orgrimmar/corpse-run segments.
 - [ ] Required change:
   1. Validate each returned path segment against dynamic objects, capsule clearance, LOS, and support surface checks.
   2. When a segment is blocked by live objects, build a local detour/reform pass around the obstruction instead of returning the raw native path.
   3. Re-optimize the repaired route so the caller gets a usable waypoint chain instead of a one-off avoidance spike.
 - [ ] Remaining gap:
-  1. The current validator/repair loop only reasons about dynamic-object segment intersections; capsule clearance, LOS, and support-surface validation still need native help from `NAV-OBJ-001/002`.
+  1. The native walkability bridge exists, but default service use is still env-gated because `missing_support` currently false-negatives some otherwise valid long segments.
   2. The local repair pass is intentionally bounded and service-side. More robust detour generation still belongs in native `PathFinder.cpp` / `SceneQuery.cpp`.
 - [ ] Acceptance criteria: a path that would clip through a live collidable object is either reformed into a valid route or returned with an explicit blocked reason; raw invalid corners are no longer silently trusted.
 
@@ -163,30 +164,21 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 67)
-- Active task: `NAV-OBJ-001` native request-scoped dynamic-object path validation
-- Last delta: `Navigation.CalculateValidatedPath(...)` now validates native paths against the mounted dynamic-object overlay, retries alternate native mode, attempts bounded service-side detours, and returns explicit blocked/repaired result codes through `PathfindingSocketServer`
+- Last updated: 2026-03-12 (session 68)
+- Active task: `NAV-OBJ-002` native support-probe hardening for `ValidateWalkableSegment`
+- Last delta: `Navigation.cs` can now map native walkability failures (`blocked_by_capsule_validation`, `blocked_by_step_up_limit`, `blocked_by_step_down_limit`, `repaired_segment_validation`) via the new native `ValidateWalkableSegment` export, but default service rollout is intentionally gated behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` until support probes stop false-negative blocking long Orgrimmar routes
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded after one transient parallel-build `GameData.Core.dll` obj-file lock
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `3 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `32 passed`
-  - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~RequestScopedDynamicObjectOverlayTests|FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"` -> `15 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `29 passed`
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1` -> succeeded
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `9 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `34 passed`
 - Files changed:
+  - `Exports/Navigation/DllMain.cpp`
   - `Services/PathfindingService/Repository/Navigation.cs`
-  - `Services/PathfindingService/PathfindingSocketServer.cs`
-  - `Services/PathfindingService/Repository/RequestScopedDynamicObjectOverlay.cs`
-  - `Services/PathfindingService/README.md`
-  - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
-  - `Tests/PathfindingService.Tests/RequestScopedDynamicObjectOverlayTests.cs`
   - `Tests/PathfindingService.Tests/TASKS.md`
   - `Services/PathfindingService/TASKS.md`
-- Next command: `rg --line-number "DynamicObjectRegistry|LineOfSight|GetGroundZ|FindPath|PathFinder" Exports/Navigation/Navigation.cpp Exports/Navigation/PathFinder.cpp Exports/Navigation/SceneQuery.cpp Exports/Navigation/DynamicObjectRegistry.cpp`
-- Blockers: the service now performs bounded dynamic-object validation/repair, but capsule/support validation and stronger local detours still need native route-shaping support so mmap paths can reject blocked candidates before they reach the service layer.
+  - `Services/PathfindingService/README.md`
+- Next command: `Get-Content Exports/Navigation/SceneQuery.cpp | Select-Object -Skip 520 -First 260`
+- Blockers: the native bridge is usable for diagnostics and result mapping, but `missing_support` still false-negatives some long corpse-run segments, so default service rollout must stay gated until `SceneQuery::GetGroundZ` / support-surface selection is hardened.

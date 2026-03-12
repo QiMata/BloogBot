@@ -74,6 +74,7 @@
 ### NAV-OBJ-002 Add capsule-clearance and support-surface validation for candidate segments
 - [ ] Problem: LOS alone is insufficient for walkability. We need to know whether the character capsule can clear the segment and whether the destination/support surface is actually usable.
 - [ ] Target files: `Exports/Navigation/SceneQuery.cpp`, `Exports/Navigation/PhysicsEngine.cpp`, `Exports/Navigation/PhysicsCollideSlide.cpp`, native exports as needed.
+- [x] Progress (2026-03-12 session 68): added native `ValidateWalkableSegment` in `DllMain.cpp`. It uses `HorizontalSweepAdvance`, support-surface checks, and overlap rejection to classify `Clear`, `BlockedGeometry`, `MissingSupport`, `StepUpTooHigh`, and `StepDownTooFar`. Focused native tests now cover the export directly.
 - [ ] Required change:
   1. Add reusable segment validation helpers for capsule clearance, support surface, and obstacle squeeze cases.
   2. Use the same walkability thresholds as the physics engine (`STEP_HEIGHT`, slope, step-down limits).
@@ -106,14 +107,16 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 67)
-- Active task: `NAV-OBJ-001` integrate request-scoped dynamic objects into native path validation
-- Last delta: the service layer now performs bounded dynamic-object validation/repair (`native_path_alternate_mode`, `repaired_dynamic_overlay`, `blocked_by_dynamic_overlay`), so the next native slice is to move stronger blocker rejection into `FindPath`/`SceneQuery` instead of relying on service-side post-processing
+- Last updated: 2026-03-12 (session 68)
+- Active task: `NAV-OBJ-002` harden support-surface selection for `ValidateWalkableSegment`
+- Last delta: `DllMain.cpp` now exports `ValidateWalkableSegment`, giving the managed/service layers a native capsule-clearance + support-surface diagnostic. Focused physics tests pass, and the first service consumer is ready behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION`, but `MissingSupport` still false-negatives some long Orgrimmar routes so the next pass must harden `SceneQuery::GetGroundZ` / support selection
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - No new native validation commands run in this handoff-only update. Latest baseline remains:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1` -> succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `2 passed`
 - Files changed:
+  - `Exports/Navigation/DllMain.cpp`
   - `Exports/Navigation/TASKS.md`
-- Next command: `rg --line-number "DynamicObjectRegistry|LineOfSight|GetGroundZ|FindPath|PathFinder" Exports/Navigation/Navigation.cpp Exports/Navigation/PathFinder.cpp Exports/Navigation/SceneQuery.cpp Exports/Navigation/DynamicObjectRegistry.cpp`
-- Blockers: native path generation still does not consume request-scoped live object overlays during `FindPath`, so mmap routes can ignore temporary collidable blockers.
+- Next command: `Get-Content Exports/Navigation/SceneQuery.cpp | Select-Object -Skip 520 -First 260`
+- Blockers: the new export can classify blocked geometry and step limits, but support selection still false-negatives some long routes, so it cannot safely be enabled by default in the service yet.

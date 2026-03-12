@@ -282,6 +282,31 @@ public static partial class NavigationInterop
     [DllImport(NavigationDll, EntryPoint = "GetGroundZ", CallingConvention = CallingConvention.Cdecl)]
     public static extern float GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist);
 
+    public enum SegmentValidationResult : uint
+    {
+        Clear = 0,
+        BlockedGeometry = 1,
+        MissingSupport = 2,
+        StepUpTooHigh = 3,
+        StepDownTooFar = 4,
+    }
+
+    /// <summary>
+    /// Validates whether an agent-sized capsule can traverse the segment while remaining
+    /// on a supported surface, using the same step-up / step-down thresholds as the
+    /// native movement stack.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "ValidateWalkableSegment", CallingConvention = CallingConvention.Cdecl)]
+    public static extern SegmentValidationResult ValidateWalkableSegment(
+        uint mapId,
+        in Vector3 start,
+        in Vector3 end,
+        float radius,
+        float height,
+        out float resolvedEndZ,
+        out float supportDelta,
+        out float travelFraction);
+
     /// <summary>
     /// Diagnostic: bypass scene cache and query VMAP ray + ADT + BIH directly.
     /// Forces VMAP initialization if not already loaded.
