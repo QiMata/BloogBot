@@ -43,7 +43,7 @@ public:
         const XYZ& p1,
         float r, float h,
         float step /* =0.3f */);
-    XYZ* CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool straightPath, int* length);
+    XYZ* CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, int* length);
     void FreePathArr(XYZ* length);
     std::string GetMmapsPath();
     bool IsLineOfSight(uint32_t mapId, const XYZ& a, const XYZ& b);

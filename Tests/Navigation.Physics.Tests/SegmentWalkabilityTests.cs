@@ -93,4 +93,79 @@ public class SegmentWalkabilityTests
         Assert.True(float.IsFinite(resolvedEndZ));
         Assert.InRange(travelFraction, 0.98f, 1.01f);
     }
+
+    [Fact]
+    public void ValidateWalkableSegment_OrgrimmarShortRampNearCompleteSegment_IsClear()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        // Short smooth-path segment that previously false-negatived as BlockedGeometry
+        // after reaching >98% completion on the corpse-run climb.
+        var start = new Vector3(1510.2681f, -4876.3428f, 30.7479f);
+        var end = new Vector3(1507.8679f, -4874.8135f, 31.3779f);
+
+        var result = ValidateWalkableSegment(
+            1,
+            start,
+            end,
+            PhysicsTestConstants.DefaultCapsuleRadius,
+            PhysicsTestConstants.DefaultCapsuleHeight,
+            out var resolvedEndZ,
+            out var supportDelta,
+            out var travelFraction);
+
+        _output.WriteLine(
+            $"Near-complete corpse-run segment result={result} resolvedEndZ={resolvedEndZ:F3} supportDelta={supportDelta:F3} travelFraction={travelFraction:F3}");
+
+        Assert.Equal(SegmentValidationResult.Clear, result);
+        Assert.True(float.IsFinite(resolvedEndZ));
+        Assert.InRange(travelFraction, 0.98f, 1.01f);
+    }
+
+    [Fact]
+    public void FindPath_OrgrimmarCorpseRun_AllShortSegmentsValidate()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var start = new Vector3(1543f, -4959f, 9f);
+        var end = new Vector3(1680f, -4315f, 62f);
+        var path = FindPath(1, start, end, smoothPath: true);
+
+        Assert.NotEmpty(path);
+        Assert.True(path.Length >= 3, $"Expected multi-point corpse-run path, got {path.Length}");
+
+        var current = path[0];
+        for (var i = 0; i < path.Length - 1; i++)
+        {
+            var from = current;
+            var to = path[i + 1];
+            var horizontalDistance = MathF.Sqrt(MathF.Pow(to.X - from.X, 2) + MathF.Pow(to.Y - from.Y, 2));
+            if (horizontalDistance > 20f)
+            {
+                current = to;
+                continue;
+            }
+
+            var result = ValidateWalkableSegment(
+                1,
+                from,
+                to,
+                PhysicsTestConstants.DefaultCapsuleRadius,
+                PhysicsTestConstants.DefaultCapsuleHeight,
+                out var resolvedEndZ,
+                out var supportDelta,
+                out var travelFraction);
+
+            _output.WriteLine(
+                $"seg {i}->{i + 1} from={from} to={to} result={result} resolvedEndZ={resolvedEndZ:F3} supportDelta={supportDelta:F3} travelFraction={travelFraction:F3}");
+
+            Assert.True(
+                result == SegmentValidationResult.Clear || result == SegmentValidationResult.MissingSupport,
+                $"Segment {i}->{i + 1} failed validation with {result} from={from} to={to}");
+
+            current = result == SegmentValidationResult.Clear && float.IsFinite(resolvedEndZ)
+                ? new Vector3(to.X, to.Y, resolvedEndZ)
+                : to;
+        }
+    }
 }

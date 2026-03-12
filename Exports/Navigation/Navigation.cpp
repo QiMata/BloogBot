@@ -55,7 +55,7 @@ const dtNavMeshQuery* Navigation::GetQueryForMap(uint32_t mapId)
 	return query;
 }
 
-XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool straightPath, int* length)
+XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, int* length)
 {
 	if (length)
 		*length = 0;
@@ -65,7 +65,10 @@ XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool stra
 	InitializeMapsForContinent(manager, mapId);
 
 	PathFinder pathFinder(mapId, 1);
-	pathFinder.setUseStrightPath(straightPath);
+	// Public/native callers pass "smoothPath" semantics:
+	// true  => Detour smooth path
+	// false => straight corner path
+	pathFinder.setUseStrightPath(!smoothPath);
 	pathFinder.calculate(start.X, start.Y, start.Z, end.X, end.Y, end.Z);
 
 	PointsArray pointPath = pathFinder.getPath();

@@ -108,18 +108,20 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 69)
-- Active task: `NAV-OBJ-002` promote the hardened validator from short-segment fallback into native route shaping
-- Last delta: `SceneQuery.cpp` now has `GetCapsuleSupportZ(...)`, and `DllMain.cpp` uses it inside `ValidateWalkableSegment` together with physics-aligned overlap tolerance and a `PhysicsStepV2` fallback for short false-negative straight sweeps. `SegmentWalkabilityTests.cs` now covers the first real Orgrimmar graveyard->center raw-path segment and it passes as `Clear`, so the immediate short-segment false-negative is fixed even though longer route shaping still belongs in `PathFinder.cpp`
+- Last updated: 2026-03-12 (session 70)
+- Active task: `NAV-OBJ-002` continue moving validator-backed shaping from service repair into native `PathFinder.cpp`
+- Last delta: `Navigation.cpp` now honors the public `smoothPath` contract (`true=smooth`, `false=straight`), and `PathFinder.cpp` now refines invalid segments, collapses redundant micro-waypoints, and grounds refinement midpoints through the native `GetGroundZ` export before returning the route. `DllMain.cpp` also accepts near-complete short segments that only fail on final overlap, and the deterministic whole-route corpse-run regression now passes when it carries grounded segment ends forward between validations.
 - Pass result: `delta shipped`
 - Validation/tests run:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `3 passed`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `100 passed, 1 skipped`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `5 passed`
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `102 passed, 1 skipped`
 - Files changed:
-  - `Exports/Navigation/SceneQuery.h`
-  - `Exports/Navigation/SceneQuery.cpp`
+  - `Exports/Navigation/Navigation.h`
+  - `Exports/Navigation/Navigation.cpp`
+  - `Exports/Navigation/PathFinder.h`
+  - `Exports/Navigation/PathFinder.cpp`
   - `Exports/Navigation/DllMain.cpp`
   - `Exports/Navigation/TASKS.md`
-- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -First 260`
-- Blockers: short-segment false-negatives are now covered, but the fallback still lives in `ValidateWalkableSegment` rather than native route generation. Longer multi-segment corpse-run routes still need `PathFinder.cpp` / `SceneQuery.cpp` shaping so the service does not rely on post-hoc repair alone.
+- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -Skip 260 -First 260`
+- Blockers: native route output is now much closer to traversal-safe, but the heavier blocker workaround still lives in service-side bounded repair. The next slice remains true native detour generation around blocked segments so the service can trust whole routes without leaning on repair after the fact.

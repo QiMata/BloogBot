@@ -63,6 +63,7 @@
 3. The preflight-focused filter command executes at least one discovered test (no zero-match result).
 
 ### [ ] PFS-TST-002 - Convert baseline path assertions to full route validity contract
+- Progress (2026-03-12 session 70): added shared [PathRouteAssertions.cs](E:/repos/Westworld%20of%20Warcraft/Tests/PathfindingService.Tests/PathRouteAssertions.cs), which centralizes finite-coordinate, start/end proximity, zero-length, segment-length, and grounded short-segment validation through `ValidateWalkableSegment`. [PathCalculationTask.cs](E:/repos/Westworld%20of%20Warcraft/Tests/PathfindingService.Tests/BotTasks/PathCalculationTask.cs) and [PathSegmentValidationTask.cs](E:/repos/Westworld%20of%20Warcraft/Tests/PathfindingService.Tests/BotTasks/PathSegmentValidationTask.cs) now reuse it; the remaining work is converting the baseline xUnit route tests in `PathingAndOverlapTests.cs` / `PathfindingTests` onto the same helper and adding a blocked-corridor reroute case.
 - Problem: baseline path test only asserts `NotEmpty`, which is too weak to catch wall-running or malformed route segments.
 - Evidence:
 1. `Tests/PathfindingService.Tests/PathingAndOverlapTests.cs:11`
@@ -184,17 +185,17 @@
 4. Proto contract focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 68)
-- Active task: PFS-TST-002/003/005 remain open; `PFS-TST-008` now also covers native walkability result mapping
-- Last delta: expanded `NavigationOverlayAwarePathTests` with non-dynamic repair/result-mapping cases for the new native segment-validation bridge, then revalidated the full `PathfindingService.Tests` project with default rollout still disabled
+- Last updated: 2026-03-12 (session 70)
+- Active task: `PFS-TST-002` is now in progress; `PFS-TST-003` and `PFS-TST-005` remain open behind the shared route-validity helper
+- Last delta: added shared `PathRouteAssertions` so bot-task route checks now validate start/end proximity, zero-length segments, segment bounds, and grounded short-segment walkability via `ValidateWalkableSegment`. This was required to keep the full service suite green after native route shaping changed smooth-path output and whole-route corpse-run validation semantics.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1` -> succeeded
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `9 passed`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `34 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `9 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `34 passed`
 - Files changed:
-  - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
+  - `Tests/PathfindingService.Tests/PathRouteAssertions.cs`
+  - `Tests/PathfindingService.Tests/BotTasks/PathCalculationTask.cs`
+  - `Tests/PathfindingService.Tests/BotTasks/PathSegmentValidationTask.cs`
   - `Tests/PathfindingService.Tests/TASKS.md`
-  - `Services/PathfindingService/Repository/Navigation.cs`
-- Blockers: PFS-TST-002/003/005 still depend on stronger shared route-validity assertions and live nav-data route evidence; the new native segment-validation bridge is present, but its support-surface probe is still gated off by default for long routes.
-- Next command: `Get-Content Exports/Navigation/SceneQuery.cpp | Select-Object -Skip 520 -First 260`
+- Blockers: `PFS-TST-002` still needs the baseline xUnit route tests converted onto the shared helper, and `PFS-TST-003` still lacks the blocked-corridor reroute case. Native segment validation remains gated by default for long routes even though the deterministic helper can use it directly on short segments.
+- Next command: `Get-Content Tests/PathfindingService.Tests/PathingAndOverlapTests.cs | Select-Object -First 220`

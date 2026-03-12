@@ -26,9 +26,227 @@
 
 #include "MoveMap.h"
 #include "PathFinder.h"
+#include "Navigation.h"
 
 #include <iostream>
 #include <fstream>
+#include <cmath>
+
+extern "C" uint32_t ValidateWalkableSegment(
+    uint32_t mapId,
+    XYZ start,
+    XYZ end,
+    float radius,
+    float height,
+    float* resolvedEndZ,
+    float* supportDelta,
+    float* travelFraction);
+
+extern "C" float GetGroundZ(
+    uint32_t mapId,
+    float x,
+    float y,
+    float z,
+    float maxSearchDist);
+
+namespace
+{
+    constexpr float PathValidationAgentRadius = 0.6f;
+    constexpr float PathValidationAgentHeight = 2.0f;
+    constexpr uint32_t SegmentValidationClear = 0;
+    constexpr uint32_t SegmentValidationMissingSupport = 2;
+    constexpr int MaxSegmentRefinementDepth = 6;
+    constexpr float RedundantPointDistanceThreshold = 0.75f;
+    constexpr int MaxSimplificationPasses = 4;
+
+    XYZ ToXyz(const Vector3& point)
+    {
+        return XYZ(point.x, point.y, point.z);
+    }
+
+    float HorizontalDistance(const Vector3& start, const Vector3& end)
+    {
+        const float dx = end.x - start.x;
+        const float dy = end.y - start.y;
+        return std::sqrt((dx * dx) + (dy * dy));
+    }
+
+    bool ValidatePathSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        Vector3* adjustedEnd,
+        uint32_t* resultCode = nullptr)
+    {
+        float resolvedEndZ = end.z;
+        float supportDelta = 0.0f;
+        float travelFraction = 0.0f;
+        const uint32_t validation = ValidateWalkableSegment(
+            mapId,
+            ToXyz(start),
+            ToXyz(end),
+            PathValidationAgentRadius,
+            PathValidationAgentHeight,
+            &resolvedEndZ,
+            &supportDelta,
+            &travelFraction);
+
+        if (resultCode)
+            *resultCode = validation;
+
+        if (adjustedEnd)
+        {
+            *adjustedEnd = end;
+            if (std::isfinite(resolvedEndZ) && validation == SegmentValidationClear)
+                adjustedEnd->z = resolvedEndZ;
+        }
+
+        return validation == SegmentValidationClear || validation == SegmentValidationMissingSupport;
+    }
+
+    Vector3 BuildGroundedMidpoint(uint32_t mapId, const Vector3& start, const Vector3& end)
+    {
+        Vector3 midpoint(
+            (start.x + end.x) * 0.5f,
+            (start.y + end.y) * 0.5f,
+            (start.z + end.z) * 0.5f);
+
+        const float queryBaseZ = std::max(start.z, end.z) + 2.0f;
+        const float supportZ = GetGroundZ(mapId, midpoint.x, midpoint.y, queryBaseZ, 8.0f);
+
+        if (std::isfinite(supportZ) && supportZ > -100000.0f)
+            midpoint.z = supportZ;
+
+        return midpoint;
+    }
+
+    bool AppendRefinedSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        int depth,
+        PointsArray& output)
+    {
+        Vector3 adjustedEnd = end;
+        uint32_t validation = SegmentValidationClear;
+        if (ValidatePathSegment(mapId, start, end, &adjustedEnd, &validation))
+        {
+            output.push_back(adjustedEnd);
+            return true;
+        }
+
+        if (depth >= MaxSegmentRefinementDepth)
+            return false;
+
+        const Vector3 midpoint = BuildGroundedMidpoint(mapId, start, end);
+
+        const size_t baseSize = output.size();
+        if (!AppendRefinedSegment(mapId, start, midpoint, depth + 1, output))
+        {
+            output.resize(baseSize);
+            return false;
+        }
+
+        const Vector3 refinedMid = output.back();
+        if (!AppendRefinedSegment(mapId, refinedMid, end, depth + 1, output))
+        {
+            output.resize(baseSize);
+            return false;
+        }
+
+        return true;
+    }
+
+    void RefinePathForWalkability(uint32_t mapId, PointsArray& pathPoints)
+    {
+        if (pathPoints.size() < 2)
+            return;
+
+        PointsArray refined;
+        refined.reserve(pathPoints.size() * 2);
+        refined.push_back(pathPoints.front());
+
+        bool changed = false;
+        for (size_t i = 1; i < pathPoints.size(); ++i)
+        {
+            const Vector3 start = refined.back();
+            const Vector3 end = pathPoints[i];
+
+            Vector3 adjustedEnd = end;
+            uint32_t validation = SegmentValidationClear;
+            if (ValidatePathSegment(mapId, start, end, &adjustedEnd, &validation))
+            {
+                refined.push_back(adjustedEnd);
+                continue;
+            }
+
+            const size_t beforeRefineSize = refined.size();
+            if (AppendRefinedSegment(mapId, start, end, 0, refined))
+            {
+                changed = true;
+                continue;
+            }
+
+            refined.resize(beforeRefineSize);
+            refined.push_back(end);
+        }
+
+        if (changed)
+            pathPoints.swap(refined);
+    }
+
+    void SimplifyPathForWalkability(uint32_t mapId, PointsArray& pathPoints)
+    {
+        if (pathPoints.size() < 3)
+            return;
+
+        for (int pass = 0; pass < MaxSimplificationPasses; ++pass)
+        {
+            const PointsArray source = pathPoints;
+            PointsArray simplified;
+            simplified.reserve(source.size());
+            simplified.push_back(source.front());
+
+            bool changed = false;
+            Vector3 pendingNext = source[1];
+
+            for (size_t i = 1; i + 1 < source.size(); ++i)
+            {
+                const Vector3 prev = simplified.back();
+                const Vector3 curr = pendingNext;
+                pendingNext = source[i + 1];
+
+                const float incomingDistance = HorizontalDistance(prev, curr);
+                const float outgoingDistance = HorizontalDistance(curr, pendingNext);
+                if (incomingDistance > RedundantPointDistanceThreshold &&
+                    outgoingDistance > RedundantPointDistanceThreshold)
+                {
+                    simplified.push_back(curr);
+                    continue;
+                }
+
+                Vector3 adjustedNext = pendingNext;
+                uint32_t validation = SegmentValidationClear;
+                if (ValidatePathSegment(mapId, prev, pendingNext, &adjustedNext, &validation))
+                {
+                    pendingNext = adjustedNext;
+                    changed = true;
+                    continue;
+                }
+
+                simplified.push_back(curr);
+            }
+
+            simplified.push_back(pendingNext);
+            if (!changed)
+                return;
+
+            pathPoints.swap(simplified);
+            if (pathPoints.size() < 3)
+                return;
+        }
+    }
+}
 
 ////////////////// PathFinder //////////////////
 PathFinder::PathFinder(unsigned int mapId, unsigned int instanceId) :
@@ -434,8 +652,11 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 		m_pathPoints[i] = Vector3(pathPoints[i * VERTEX_SIZE + 2], pathPoints[i * VERTEX_SIZE], pathPoints[i * VERTEX_SIZE + 1]);
 	}
 
+    RefinePathForWalkability(m_mapId, m_pathPoints);
+    SimplifyPathForWalkability(m_mapId, m_pathPoints);
+
 	// first point is always our current location - we need the next one
-	setActualEndPosition(m_pathPoints[pointCount - 1]);
+	setActualEndPosition(m_pathPoints[m_pathPoints.size() - 1]);
 
 	// force the given destination, if needed
 	if (m_forceDestination &&

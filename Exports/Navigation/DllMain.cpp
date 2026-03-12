@@ -325,6 +325,18 @@ static bool HasBlockingCapsuleOverlap(
     return false;
 }
 
+static bool ShouldAcceptNearCompleteSegment(float horizontalDistance, float completedFraction)
+{
+    if (horizontalDistance <= 0.01f)
+        return false;
+
+    const float clampedFraction = std::max(0.0f, std::min(1.0f, completedFraction));
+    const float remainingDistance = horizontalDistance * (1.0f - clampedFraction);
+    return horizontalDistance <= 4.0f &&
+        clampedFraction >= 0.98f &&
+        remainingDistance <= 0.1f;
+}
+
 static SegmentValidationCode FinalizeSimulatedSegment(
     uint32_t mapId,
     XYZ start,
@@ -372,7 +384,12 @@ static SegmentValidationCode FinalizeSimulatedSegment(
             : 1.0f;
 
     if (HasBlockingCapsuleOverlap(mapId, x, y, supportZ, radius, height, orientation))
+    {
+        if (ShouldAcceptNearCompleteSegment(horizontalDistance, completedFraction))
+            return SegmentValidationCode::Clear;
+
         return SegmentValidationCode::BlockedGeometry;
+    }
 
     return SegmentValidationCode::Clear;
 }
@@ -646,13 +663,24 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
             *supportDelta = groundZ - start.Z;
 
         if (travelFraction)
-            *travelFraction = horizontalDistance > 0.01f
+        {
+            const float completedFraction = horizontalDistance > 0.01f
                 ? std::max(0.0f, std::min(1.0f, traveled / horizontalDistance))
                 : 1.0f;
+            *travelFraction = completedFraction;
+        }
 
         if (traveled > 0.05f &&
             HasBlockingCapsuleOverlap(mapId, x, y, groundZ, radius, height, orientation))
+        {
+            const float completedFraction = horizontalDistance > 0.01f
+                ? std::max(0.0f, std::min(1.0f, traveled / horizontalDistance))
+                : 1.0f;
+            if (ShouldAcceptNearCompleteSegment(horizontalDistance, completedFraction))
+                return SegmentValidationCode::Clear;
+
             return SegmentValidationCode::BlockedGeometry;
+        }
 
         return SegmentValidationCode::Clear;
     };

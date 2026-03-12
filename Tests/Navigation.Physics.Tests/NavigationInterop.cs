@@ -282,6 +282,17 @@ public static partial class NavigationInterop
     [DllImport(NavigationDll, EntryPoint = "GetGroundZ", CallingConvention = CallingConvention.Cdecl)]
     public static extern float GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist);
 
+    [DllImport(NavigationDll, EntryPoint = "FindPath", CallingConvention = CallingConvention.Cdecl)]
+    private static extern IntPtr FindPathNative(
+        uint mapId,
+        in Vector3 start,
+        in Vector3 end,
+        [MarshalAs(UnmanagedType.I1)] bool smoothPath,
+        out int length);
+
+    [DllImport(NavigationDll, EntryPoint = "PathArrFree", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void PathArrFree(IntPtr pathArr);
+
     public enum SegmentValidationResult : uint
     {
         Clear = 0,
@@ -306,6 +317,32 @@ public static partial class NavigationInterop
         out float resolvedEndZ,
         out float supportDelta,
         out float travelFraction);
+
+    public static Vector3[] FindPath(uint mapId, in Vector3 start, in Vector3 end, bool smoothPath)
+    {
+        var pathPtr = IntPtr.Zero;
+        try
+        {
+            pathPtr = FindPathNative(mapId, start, end, smoothPath, out var length);
+            if (pathPtr == IntPtr.Zero || length <= 0)
+                return [];
+
+            var path = new Vector3[length];
+            var stride = Marshal.SizeOf<Vector3>();
+            for (var i = 0; i < length; i++)
+            {
+                var currentPtr = IntPtr.Add(pathPtr, i * stride);
+                path[i] = Marshal.PtrToStructure<Vector3>(currentPtr);
+            }
+
+            return path;
+        }
+        finally
+        {
+            if (pathPtr != IntPtr.Zero)
+                PathArrFree(pathPtr);
+        }
+    }
 
     /// <summary>
     /// Diagnostic: bypass scene cache and query VMAP ray + ADT + BIH directly.

@@ -165,19 +165,25 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 69)
-- Active task: `NAV-OBJ-002` / `PFS-OBJ-003` promote the hardened native segment validator into broader native route shaping
-- Last delta: the native `ValidateWalkableSegment` path under `Navigation.cs` now uses capsule-footprint support sampling (`SceneQuery::GetCapsuleSupportZ`) and a `PhysicsStepV2` fallback when strict straight sweeps falsely reject a short route that the real movement stack can traverse. The first real Orgrimmar graveyard->center raw segment now passes deterministically, and the focused/full PathfindingService deterministic suites still pass, but default rollout remains gated until longer multi-segment routes are covered
+- Last updated: 2026-03-12 (session 70)
+- Active task: `NAV-OBJ-002` / `PFS-OBJ-003` continue pushing whole-route shaping into native output while keeping service validation deterministic
+- Last delta: `Navigation.cpp` now respects the public `smoothPath` contract, `PathFinder.cpp` now refines and simplifies whole routes against `ValidateWalkableSegment`, and the deterministic corpse-run route contract now carries grounded segment ends between validations instead of treating raw smooth-path Z values as authoritative. `Tests/PathfindingService.Tests` also gained shared `PathRouteAssertions` so route-validity bot tasks reuse one grounded-segment validation helper.
 - Pass result: `delta shipped`
 - Validation/tests run:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentWalkabilityTests" --logger "console;verbosity=minimal"` -> `5 passed`
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `9 passed`
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `34 passed`
 - Files changed:
-  - `Exports/Navigation/SceneQuery.h`
-  - `Exports/Navigation/SceneQuery.cpp`
+  - `Exports/Navigation/Navigation.h`
+  - `Exports/Navigation/Navigation.cpp`
+  - `Exports/Navigation/PathFinder.h`
+  - `Exports/Navigation/PathFinder.cpp`
   - `Exports/Navigation/DllMain.cpp`
   - `Services/PathfindingService/TASKS.md`
   - `Services/PathfindingService/README.md`
-- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -First 260`
-- Blockers: short-segment false-negatives are fixed, but longer multi-segment route shaping and native detour generation still need work in `PathFinder.cpp` / `SceneQuery.cpp`, so the service gate must remain until the whole-route path is trustworthy without relying on bounded service-side repair.
+  - `Tests/PathfindingService.Tests/PathRouteAssertions.cs`
+  - `Tests/PathfindingService.Tests/BotTasks/PathCalculationTask.cs`
+  - `Tests/PathfindingService.Tests/BotTasks/PathSegmentValidationTask.cs`
+- Next command: `Get-Content Exports/Navigation/PathFinder.cpp | Select-Object -Skip 260 -First 260`
+- Blockers: service-side bounded repair still carries more of the live blocker workload than native output shaping. The next route-quality slice remains true native detour generation around blocked segments so `CalculateValidatedPath` can trust the first native route more often and leave `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` gated only as a rollout control, not a correctness crutch.
