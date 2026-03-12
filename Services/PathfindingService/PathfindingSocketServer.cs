@@ -190,10 +190,11 @@ namespace PathfindingService
             var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
                 req.MapId,
                 req.NearbyObjects,
-                () => _navigation.CalculatePath(req.MapId, start, end, req.Straight),
+                () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight),
                 logger,
                 operationName: "path");
-            var path = overlayResult.Value;
+            var pathResult = overlayResult.Value;
+            var path = pathResult.Path;
             var sanitizedPath = path
                 .Where(IsFinitePoint)
                 .ToArray();
@@ -215,7 +216,7 @@ namespace PathfindingService
             {
                 var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
                 logger.LogInformation(
-                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} corners={Corners} overlayRequested={OverlayRequested} overlayRegistered={OverlayRegistered} overlayFiltered={OverlayFiltered} overlayDisplayIds=[{OverlayDisplayIds}]",
+                    "[PATH_DIAG] map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} result={Result} blockedSegment={BlockedSegment} corners={Corners} rawCorners={RawCorners} overlayRequested={OverlayRequested} overlayRegistered={OverlayRegistered} overlayFiltered={OverlayFiltered} overlayDisplayIds=[{OverlayDisplayIds}]",
                     req.MapId,
                     start.X,
                     start.Y,
@@ -225,7 +226,10 @@ namespace PathfindingService
                     end.Z,
                     dist2D,
                     smoothPath,
+                    pathResult.Result,
+                    pathResult.BlockedSegmentIndex?.ToString() ?? string.Empty,
                     sanitizedPath.Length,
+                    pathResult.RawPath.Length,
                     overlayResult.Summary.RequestedCount,
                     overlayResult.Summary.RegisteredCount,
                     overlayResult.Summary.FilteredCount,
@@ -236,8 +240,8 @@ namespace PathfindingService
 
             var resp = new CalculatePathResponse();
             resp.Corners.AddRange(sanitizedPath.Select(p => new Game.Position { X = p.X, Y = p.Y, Z = p.Z }));
-            resp.RawCornerCount = (uint)path.Length;
-            resp.Result = sanitizedPath.Length > 0 ? "native_path" : "no_path";
+            resp.RawCornerCount = (uint)pathResult.RawPath.Length;
+            resp.Result = pathResult.Result;
 
             return new PathfindingResponse { Path = resp };
         }

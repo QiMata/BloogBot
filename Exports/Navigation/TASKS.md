@@ -106,12 +106,12 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-03-12
+- Last updated: 2026-03-12 (session 67)
 - Active task: `NAV-OBJ-001` integrate request-scoped dynamic objects into native path validation
-- Last delta: expanded native-navigation ownership from the Ratchet shoreline symptom into the broader object-aware routing plan: dynamic object overlays, capsule/support validation, affordance classification, and local detours
+- Last delta: the service layer now performs bounded dynamic-object validation/repair (`native_path_alternate_mode`, `repaired_dynamic_overlay`, `blocked_by_dynamic_overlay`), so the next native slice is to move stronger blocker rejection into `FindPath`/`SceneQuery` instead of relying on service-side post-processing
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - No new validation commands run in this planning pass. Latest baseline remains:
+  - No new native validation commands run in this handoff-only update. Latest baseline remains:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
 - Files changed:
   - `Exports/Navigation/TASKS.md`

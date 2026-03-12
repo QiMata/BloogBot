@@ -5,6 +5,12 @@ using System.Runtime.InteropServices;
 
 namespace PathfindingService.Repository
 {
+    public readonly record struct NavigationPathResult(
+        XYZ[] Path,
+        XYZ[] RawPath,
+        string Result,
+        int? BlockedSegmentIndex);
+
     public class Navigation
     {
         private const string DLL_NAME = "Navigation.dll";
@@ -24,6 +30,9 @@ namespace PathfindingService.Repository
             (1, 1), (1, -1), (-1, 1), (-1, -1),
         ];
         private static readonly float[] FallbackLosZOffsets = [0f, 1.0f, 2.0f];
+        private static readonly float[] RepairOffsetDistances = [2f, 4f, 6f, 8f, 10f, 12f];
+        private static readonly float[] RepairAlongSegmentSamples = [0.35f, 0.5f, 0.65f];
+        private const float CombineWaypointEpsilon = 0.25f;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeXyz
@@ -66,30 +75,85 @@ namespace PathfindingService.Repository
             uint mapId, float x0, float y0, float z0, float x1, float y1, float z1);
 
         private const string EnableLosFallbackEnv = "WWOW_ENABLE_LOS_FALLBACK";
+        private readonly Func<uint, XYZ, XYZ, bool, XYZ[]> _findPathResolver;
+        private readonly Func<uint, XYZ, XYZ, bool> _segmentBlocker;
+
+        public Navigation()
+            : this(TryFindPathNative, SegmentIntersectsDynamicObjectsInternal)
+        {
+        }
+
+        public Navigation(
+            Func<uint, XYZ, XYZ, bool, XYZ[]> findPathResolver,
+            Func<uint, XYZ, XYZ, bool> segmentBlocker)
+        {
+            _findPathResolver = findPathResolver ?? throw new ArgumentNullException(nameof(findPathResolver));
+            _segmentBlocker = segmentBlocker ?? throw new ArgumentNullException(nameof(segmentBlocker));
+        }
 
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
-        {
-            try
-            {
-                var preferredPath = TryFindPathNative(mapId, start, end, smoothPath);
-                if (preferredPath.Length > 0)
-                    return preferredPath;
+            => CalculateValidatedPath(mapId, start, end, smoothPath).Path;
 
-                var alternatePath = TryFindPathNative(mapId, start, end, !smoothPath);
-                if (alternatePath.Length > 0)
-                    return alternatePath;
-            }
-            catch
+        public NavigationPathResult CalculateValidatedPath(uint mapId, XYZ start, XYZ end, bool smoothPath)
+        {
+            var preferredAttempt = EvaluateNativePath(mapId, start, end, smoothPath, "native_path");
+            if (preferredAttempt.IsUsable)
             {
+                return new NavigationPathResult(
+                    preferredAttempt.Path,
+                    preferredAttempt.Path,
+                    preferredAttempt.SuccessResult,
+                    null);
+            }
+
+            var alternateAttempt = EvaluateNativePath(mapId, start, end, !smoothPath, "native_path_alternate_mode");
+            if (alternateAttempt.IsUsable)
+            {
+                return new NavigationPathResult(
+                    alternateAttempt.Path,
+                    alternateAttempt.Path,
+                    alternateAttempt.SuccessResult,
+                    null);
+            }
+
+            var repairSource = SelectRepairSource(preferredAttempt, alternateAttempt);
+            if (repairSource.Path.Length > 1 && repairSource.BlockedSegmentIndex is int blockedSegmentIndex)
+            {
+                var repairedPath = TryRepairPath(mapId, start, end, smoothPath, repairSource.Path, blockedSegmentIndex);
+                if (repairedPath.Length > 0)
+                {
+                    return new NavigationPathResult(
+                        repairedPath,
+                        repairSource.Path,
+                        "repaired_dynamic_overlay",
+                        blockedSegmentIndex);
+                }
             }
 
             // Keep native navmesh as the authoritative source by default.
             // LOS-grid fallback can create wall-hugging routes that are valid in LOS
             // but not walkable in practice (notably during corpse runback).
             if (IsLosFallbackEnabled())
-                return BuildLosFallbackPath(mapId, start, end);
+            {
+                var fallbackPath = BuildLosFallbackPath(mapId, start, end);
+                if (fallbackPath.Length > 0 && FindBlockedSegmentIndex(mapId, fallbackPath) is null)
+                {
+                    return new NavigationPathResult(
+                        fallbackPath,
+                        fallbackPath,
+                        "los_fallback_path",
+                        null);
+                }
+            }
 
-            return Array.Empty<XYZ>();
+            var blockedIndex = preferredAttempt.BlockedSegmentIndex ?? alternateAttempt.BlockedSegmentIndex;
+            var rawPath = repairSource.Path.Length > 0 ? repairSource.Path : Array.Empty<XYZ>();
+            var result = blockedIndex is null ? "no_path" : "blocked_by_dynamic_overlay";
+            return new NavigationPathResult(
+                Array.Empty<XYZ>(),
+                rawPath,
+                result,
+                blockedIndex);
         }
 
         private static bool IsLosFallbackEnabled()
@@ -133,6 +197,169 @@ namespace PathfindingService.Repository
                 if (pathPtr != IntPtr.Zero)
                     PathArrFree(pathPtr);
             }
+        }
+
+        private PathAttempt EvaluateNativePath(uint mapId, XYZ start, XYZ end, bool smoothPath, string successResult)
+        {
+            try
+            {
+                var path = _findPathResolver(mapId, start, end, smoothPath);
+                if (path.Length == 0)
+                    return new PathAttempt(Array.Empty<XYZ>(), successResult, null);
+
+                var blockedSegmentIndex = FindBlockedSegmentIndex(mapId, path);
+                return new PathAttempt(path, successResult, blockedSegmentIndex);
+            }
+            catch
+            {
+                return new PathAttempt(Array.Empty<XYZ>(), successResult, null);
+            }
+        }
+
+        private static PathAttempt SelectRepairSource(PathAttempt preferredAttempt, PathAttempt alternateAttempt)
+        {
+            if (preferredAttempt.Path.Length > 0 && preferredAttempt.BlockedSegmentIndex is not null)
+                return preferredAttempt;
+
+            if (alternateAttempt.Path.Length > 0 && alternateAttempt.BlockedSegmentIndex is not null)
+                return alternateAttempt;
+
+            return preferredAttempt.Path.Length >= alternateAttempt.Path.Length
+                ? preferredAttempt
+                : alternateAttempt;
+        }
+
+        private XYZ[] TryRepairPath(uint mapId, XYZ start, XYZ end, bool smoothPath, XYZ[] rawPath, int blockedSegmentIndex)
+        {
+            if (rawPath.Length < 2 || blockedSegmentIndex < 0 || blockedSegmentIndex >= rawPath.Length - 1)
+                return Array.Empty<XYZ>();
+
+            var blockedStart = rawPath[blockedSegmentIndex];
+            var blockedEnd = rawPath[blockedSegmentIndex + 1];
+            var bestPath = Array.Empty<XYZ>();
+            var bestCost = float.MaxValue;
+
+            foreach (var candidate in BuildRepairCandidates(blockedStart, blockedEnd))
+            {
+                var repaired = TryComposeCandidatePath(mapId, start, end, candidate, smoothPath);
+                if (repaired.Length == 0)
+                    continue;
+
+                var blockedCandidateSegment = FindBlockedSegmentIndex(mapId, repaired);
+                if (blockedCandidateSegment is not null)
+                    continue;
+
+                var cost = ComputePathCost(repaired);
+                if (cost < bestCost)
+                {
+                    bestCost = cost;
+                    bestPath = repaired;
+                }
+            }
+
+            return bestPath;
+        }
+
+        private IEnumerable<XYZ> BuildRepairCandidates(XYZ blockedStart, XYZ blockedEnd)
+        {
+            var dx = blockedEnd.X - blockedStart.X;
+            var dy = blockedEnd.Y - blockedStart.Y;
+            var length = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (length < 0.01f)
+                yield break;
+
+            var unitX = dx / length;
+            var unitY = dy / length;
+            var perpX = -unitY;
+            var perpY = unitX;
+
+            foreach (var along in RepairAlongSegmentSamples)
+            {
+                var basePoint = new XYZ(
+                    blockedStart.X + (dx * along),
+                    blockedStart.Y + (dy * along),
+                    blockedStart.Z + ((blockedEnd.Z - blockedStart.Z) * along));
+
+                foreach (var offset in RepairOffsetDistances)
+                {
+                    yield return new XYZ(basePoint.X + (perpX * offset), basePoint.Y + (perpY * offset), basePoint.Z);
+                    yield return new XYZ(basePoint.X - (perpX * offset), basePoint.Y - (perpY * offset), basePoint.Z);
+                }
+            }
+        }
+
+        private XYZ[] TryComposeCandidatePath(uint mapId, XYZ start, XYZ end, XYZ candidate, bool smoothPath)
+        {
+            foreach (var firstLegSmooth in EnumeratePathModes(smoothPath))
+            {
+                var firstLeg = _findPathResolver(mapId, start, candidate, firstLegSmooth);
+                if (firstLeg.Length == 0)
+                    continue;
+
+                foreach (var secondLegSmooth in EnumeratePathModes(smoothPath))
+                {
+                    var secondLeg = _findPathResolver(mapId, candidate, end, secondLegSmooth);
+                    if (secondLeg.Length == 0)
+                        continue;
+
+                    var combined = CombinePaths(firstLeg, secondLeg);
+                    if (combined.Length > 0)
+                        return combined;
+                }
+            }
+
+            return Array.Empty<XYZ>();
+        }
+
+        private static IEnumerable<bool> EnumeratePathModes(bool preferredMode)
+        {
+            yield return preferredMode;
+            yield return !preferredMode;
+        }
+
+        private static XYZ[] CombinePaths(XYZ[] firstLeg, XYZ[] secondLeg)
+        {
+            if (firstLeg.Length == 0 || secondLeg.Length == 0)
+                return Array.Empty<XYZ>();
+
+            var combined = new List<XYZ>(firstLeg.Length + secondLeg.Length);
+            combined.AddRange(firstLeg);
+
+            var secondStartIndex = Distance3D(firstLeg[^1], secondLeg[0]) <= CombineWaypointEpsilon ? 1 : 0;
+            for (var i = secondStartIndex; i < secondLeg.Length; i++)
+            {
+                combined.Add(secondLeg[i]);
+            }
+
+            return combined.ToArray();
+        }
+
+        private int? FindBlockedSegmentIndex(uint mapId, XYZ[] path)
+        {
+            if (path.Length < 2)
+                return null;
+
+            for (var i = 0; i < path.Length - 1; i++)
+            {
+                if (_segmentBlocker(mapId, path[i], path[i + 1]))
+                    return i;
+            }
+
+            return null;
+        }
+
+        private static float ComputePathCost(XYZ[] path)
+        {
+            if (path.Length < 2)
+                return float.MaxValue;
+
+            var cost = 0f;
+            for (var i = 1; i < path.Length; i++)
+            {
+                cost += Distance3D(path[i - 1], path[i]);
+            }
+
+            return cost;
         }
 
         private static XYZ[] BuildLosFallbackPath(uint mapId, XYZ start, XYZ end)
@@ -385,16 +612,35 @@ namespace PathfindingService.Repository
             return MathF.Sqrt((dx * dx) + (dy * dy));
         }
 
+        private static float Distance3D(XYZ a, XYZ b)
+        {
+            var dx = a.X - b.X;
+            var dy = a.Y - b.Y;
+            var dz = a.Z - b.Z;
+            return MathF.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+        }
+
         public bool SegmentIntersectsDynamicObjects(uint mapId, float x0, float y0, float z0, float x1, float y1, float z1)
+            => _segmentBlocker(mapId, new XYZ(x0, y0, z0), new XYZ(x1, y1, z1));
+
+        private static bool SegmentIntersectsDynamicObjectsInternal(uint mapId, XYZ from, XYZ to)
         {
             try
             {
-                return SegmentIntersectsDynamicObjectsNative(mapId, x0, y0, z0, x1, y1, z1);
+                return SegmentIntersectsDynamicObjectsNative(mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
             }
             catch
             {
                 return false;
             }
+        }
+
+        private readonly record struct PathAttempt(
+            XYZ[] Path,
+            string SuccessResult,
+            int? BlockedSegmentIndex)
+        {
+            public bool IsUsable => Path.Length > 0 && BlockedSegmentIndex is null;
         }
     }
 }

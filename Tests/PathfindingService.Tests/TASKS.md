@@ -166,6 +166,17 @@
 1. Overlay lifecycle regressions fail in deterministic tests before live bot routing is exercised.
 2. Test output proves overlay cleanup still happens when the wrapped native call fails.
 
+### [x] PFS-TST-008 - Add deterministic overlay-aware path validation/repair coverage
+- **Done (session 67).** Added `NavigationOverlayAwarePathTests` to verify alternate-mode recovery when the preferred route is blocked, bounded detour repair around a blocked segment, and explicit `blocked_by_dynamic_overlay` failure when no repair candidate works.
+- Evidence:
+1. `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
+2. `Services/PathfindingService/Repository/Navigation.cs`
+3. `Services/PathfindingService/PathfindingSocketServer.cs`
+- Command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"`.
+- Acceptance:
+1. Service-level overlay validation/repair regressions fail deterministically before live collision scenarios are exercised.
+2. The deterministic suite now covers `native_path_alternate_mode`, `repaired_dynamic_overlay`, and `blocked_by_dynamic_overlay` results.
+
 ## Simple Command Set
 1. Full project sweep: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"`.
 2. Route validity focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`.
@@ -173,19 +184,24 @@
 4. Proto contract focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 66)
-- Active task: PFS-TST-002/003/005 remain open; PFS-TST-007 is now done
-- Last delta: PFS-TST-001 (preflight), PFS-TST-004 (5 round-trip tests), PFS-TST-006 (README) — all done in batch 17
+- Last updated: 2026-03-12 (session 67)
+- Active task: PFS-TST-002/003/005 remain open; PFS-TST-008 is now done
+- Last delta: added deterministic overlay-aware path validation/repair coverage (`PFS-TST-008`) and revalidated the full `PathfindingService.Tests` project after the service-side bounded repair slice
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded after one transient parallel-build `GameData.Core.dll` obj-file lock
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `3 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `32 passed`
   - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~RequestScopedDynamicObjectOverlayTests|FullyQualifiedName~ProtoInteropExtensionsTests" --logger "console;verbosity=minimal"` -> `15 passed`
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `29 passed`
 - Files changed:
+  - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
   - `Tests/PathfindingService.Tests/RequestScopedDynamicObjectOverlayTests.cs`
   - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Services/PathfindingService/Repository/Navigation.cs`
   - `Services/PathfindingService/Repository/RequestScopedDynamicObjectOverlay.cs`
   - `Services/PathfindingService/PathfindingSocketServer.cs`
-- Blockers: PFS-TST-002/003/005 still depend on live nav-data route assertions, while the current service slice only mounts overlays for path requests because only `CalculatePathRequest` currently carries `nearby_objects`
-- Next command: `Get-Content Services/PathfindingService/Repository/Navigation.cs`
+- Blockers: PFS-TST-002/003/005 still depend on live nav-data route assertions, and the remaining overlay-aware route safety work now depends on native capsule/support validation rather than more deterministic C# harness changes
+- Next command: `rg --line-number "DynamicObjectRegistry|LineOfSight|GetGroundZ|FindPath|PathFinder" Exports/Navigation/Navigation.cpp Exports/Navigation/PathFinder.cpp Exports/Navigation/SceneQuery.cpp Exports/Navigation/DynamicObjectRegistry.cpp`

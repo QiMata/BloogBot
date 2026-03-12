@@ -113,16 +113,20 @@ Master tracker: `MASTER-SUB-018`
   3. Add diagnostics that report object counts, filtered object counts, and the collidable display IDs used during a path request.
 - [ ] Remaining gap:
   1. `CalculatePathRequest` is currently the only request type that carries `nearby_objects`, so standalone LOS / GroundZ / SegmentDynCheck requests are serialized but not yet overlay-aware themselves.
-  2. Raw native routes are still returned without overlay-aware segment validation or repair.
+  2. Standalone non-path requests still serialize access to the registry but do not carry their own overlay payloads yet.
 - [ ] Acceptance criteria: each path request sees exactly the live obstacles provided by the caller, non-path registry-sensitive requests cannot observe leaked overlay state, and path results are reproducible per request without cross-bot contamination.
 
 ### PFS-OBJ-003 Overlay-aware path validation and repair
 - [ ] Problem: native `FindPath` returns mmap routes, but there is no service-level repair loop that rejects corners/segments crossing collidable live objects and reforms the path around them.
 - [ ] Target files: `Services/PathfindingService/Repository/Navigation.cs`, `Services/PathfindingService/PathfindingSocketServer.cs`, tests under `Tests/PathfindingService.Tests/`.
+- [x] Progress (2026-03-12 session 67): `Navigation.CalculateValidatedPath(...)` now validates each returned segment against the mounted overlay, retries the alternate native mode, and runs a bounded local detour search around the first blocked segment before returning a result. `PathfindingSocketServer` now surfaces the new result codes (`native_path`, `native_path_alternate_mode`, `repaired_dynamic_overlay`, `blocked_by_dynamic_overlay`, `los_fallback_path`, `no_path`) and keeps `raw_corner_count` tied to the original native route that was validated/repaired.
 - [ ] Required change:
   1. Validate each returned path segment against dynamic objects, capsule clearance, LOS, and support surface checks.
   2. When a segment is blocked by live objects, build a local detour/reform pass around the obstruction instead of returning the raw native path.
   3. Re-optimize the repaired route so the caller gets a usable waypoint chain instead of a one-off avoidance spike.
+- [ ] Remaining gap:
+  1. The current validator/repair loop only reasons about dynamic-object segment intersections; capsule clearance, LOS, and support-surface validation still need native help from `NAV-OBJ-001/002`.
+  2. The local repair pass is intentionally bounded and service-side. More robust detour generation still belongs in native `PathFinder.cpp` / `SceneQuery.cpp`.
 - [ ] Acceptance criteria: a path that would clip through a live collidable object is either reformed into a valid route or returned with an explicit blocked reason; raw invalid corners are no longer silently trusted.
 
 ### PFS-OBJ-004 Affordance metadata: step, jump, drop, swim, blocked
@@ -159,11 +163,15 @@ Master tracker: `MASTER-SUB-018`
 4. Repo cleanup: `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-03-12 (session 66)
-- Active task: `PFS-OBJ-003` overlay-aware path validation and repair
-- Last delta: service-side request-scoped overlay lifecycle is now in place for `CalculatePathRequest.nearby_objects`, with synthetic-guid registration, `finally` unregister cleanup, and a shared gate that keeps registry-sensitive native calls from observing leaked overlay state
+- Last updated: 2026-03-12 (session 67)
+- Active task: `NAV-OBJ-001` native request-scoped dynamic-object path validation
+- Last delta: `Navigation.CalculateValidatedPath(...)` now validates native paths against the mounted dynamic-object overlay, retries alternate native mode, attempts bounded service-side detours, and returns explicit blocked/repaired result codes through `PathfindingSocketServer`
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded after one transient parallel-build `GameData.Core.dll` obj-file lock
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests" --logger "console;verbosity=minimal"` -> `3 passed`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `32 passed`
   - `dotnet build Services/PathfindingService/PathfindingService.csproj --configuration Release --no-restore` -> succeeded
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> succeeded
   - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore` -> succeeded
@@ -171,12 +179,14 @@ Master tracker: `MASTER-SUB-018`
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~PathfindingTests" --logger "console;verbosity=minimal"` -> `4 passed`
   - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"` -> `29 passed`
 - Files changed:
+  - `Services/PathfindingService/Repository/Navigation.cs`
   - `Services/PathfindingService/PathfindingSocketServer.cs`
   - `Services/PathfindingService/Repository/RequestScopedDynamicObjectOverlay.cs`
   - `Services/PathfindingService/README.md`
   - `Exports/Navigation/PhysicsTestExports.cpp`
+  - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
   - `Tests/PathfindingService.Tests/RequestScopedDynamicObjectOverlayTests.cs`
   - `Tests/PathfindingService.Tests/TASKS.md`
   - `Services/PathfindingService/TASKS.md`
-- Next command: `Get-Content Services/PathfindingService/Repository/Navigation.cs`
-- Blockers: the service now mounts path overlays, but raw native routes are still returned without overlay-aware segment validation or detour repair; standalone non-path requests also still lack their own `nearby_objects` payload.
+- Next command: `rg --line-number "DynamicObjectRegistry|LineOfSight|GetGroundZ|FindPath|PathFinder" Exports/Navigation/Navigation.cpp Exports/Navigation/PathFinder.cpp Exports/Navigation/SceneQuery.cpp Exports/Navigation/DynamicObjectRegistry.cpp`
+- Blockers: the service now performs bounded dynamic-object validation/repair, but capsule/support validation and stronger local detours still need native route-shaping support so mmap paths can reject blocked candidates before they reach the service layer.

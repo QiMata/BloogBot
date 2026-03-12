@@ -272,9 +272,9 @@ Computes an A* path between two points:
 | `Straight` | bool | If true, attempts direct path without navmesh |
 | `NearbyObjects` | repeated `DynamicObjectProto` | Request-scoped live collidable objects to validate against the static route |
 
-**Response**: List of `Position` waypoints
+**Response**: List of `Position` waypoints plus `result` / `raw_corner_count` metadata.
 
-Current rollout note: BotRunner now populates `NearbyObjects` from a conservative live overlay (`40y` from start/end, collidable object types only, nearest `64` max), and the service mounts those objects into a request-scoped overlay for the duration of the native path call. Route validation/repair is still the next owner slice in `Services/PathfindingService/TASKS.md`.
+Current rollout note: BotRunner now populates `NearbyObjects` from a conservative live overlay (`40y` from start/end, collidable object types only, nearest `64` max), and the service mounts those objects into a request-scoped overlay for the duration of the native path call. The service now validates returned segments against that overlay, retries alternate native mode when needed, and runs a bounded repair pass before surfacing `native_path`, `native_path_alternate_mode`, `repaired_dynamic_overlay`, `blocked_by_dynamic_overlay`, `los_fallback_path`, or `no_path`. Capsule/support validation and stronger detours are still the next native owner slices in `Exports/Navigation/TASKS.md`.
 
 ### LineOfSightRequest
 
