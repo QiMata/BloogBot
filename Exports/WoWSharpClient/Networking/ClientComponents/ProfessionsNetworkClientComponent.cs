@@ -32,6 +32,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         private uint? _currentCraftingSpellId;
         private bool _disposed;
 
+        // Self-subscriptions that keep state-tracking .Do() side effects active
+        // even when no external code subscribes to the public observables.
+        private readonly IDisposable _trainerListSub;
+        private readonly IDisposable _trainerOpenedSub;
+        private readonly IDisposable _trainerClosedSub;
+
         // State properties
         public bool IsTrainerWindowOpen { get; private set; }
         public bool IsCraftingWindowOpen { get; private set; }
@@ -123,6 +129,12 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             // Generic error stream: empty for now; local methods do logging/throw. Could be mapped from specific SMSG_*_FAILED opcodes
             ProfessionErrors = Observable.Empty<string>();
+
+            // Self-subscribe so that the .Do() side effects (_availableServices, IsTrainerWindowOpen, etc.)
+            // always fire when packets arrive, even if no external code subscribes.
+            _trainerListSub = trainerList.Subscribe(_ => { });
+            _trainerOpenedSub = TrainerWindowOpened.Subscribe(_ => { });
+            _trainerClosedSub = TrainerWindowClosed.Subscribe(_ => { });
         }
 
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
@@ -561,6 +573,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) return;
             _disposed = true;
+
+            _trainerListSub?.Dispose();
+            _trainerOpenedSub?.Dispose();
+            _trainerClosedSub?.Dispose();
+
             _logger.LogDebug("ProfessionsNetworkClientComponent disposed");
         }
         #endregion

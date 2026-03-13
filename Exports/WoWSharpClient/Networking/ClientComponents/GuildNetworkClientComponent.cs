@@ -33,6 +33,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<GuildCommandResult> _guildCommandResults;
         private readonly IObservable<GuildMemberStatusChange> _memberStatusChanges;
 
+        // Self-subscriptions that keep state-tracking .Do() side effects active
+        // even when no external code subscribes to the public observables.
+        private readonly IDisposable _guildInviteSub;
+        private readonly IDisposable _guildInfoSub;
+        private readonly IDisposable _guildRosterSub;
+
         // Backward compatibility delegate for legacy tests
         private Action<string, string>? _onGuildInviteReceived;
 
@@ -92,6 +98,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .SelectMany(ParseGuildEvents)
                 .Do(change => _logger.LogDebug("Guild member {Member} is now {State}", change.MemberName, change.IsOnline ? "online" : "offline"))
                 .Publish().RefCount();
+
+            // Self-subscribe so that the .Do() side effects (_guildInfo, IsInGuild, _guildMembers, etc.)
+            // always fire when packets arrive, even if no external code subscribes.
+            _guildInviteSub = _guildInvites.Subscribe(_ => { });
+            _guildInfoSub = _guildInfos.Subscribe(_ => { });
+            _guildRosterSub = _guildRosters.Subscribe(_ => { });
         }
 
         #region Backward Compatibility Event
@@ -453,6 +465,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) return;
             _disposed = true;
+
+            _guildInviteSub?.Dispose();
+            _guildInfoSub?.Dispose();
+            _guildRosterSub?.Dispose();
+
             _logger.LogDebug("Disposing GuildNetworkClientComponent");
         }
         #endregion

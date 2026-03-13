@@ -38,13 +38,19 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<GossipErrorData> _gossipErrors;
         private readonly IObservable<GossipServiceData> _serviceDiscovered;
 
+        // Self-subscriptions that keep state-tracking .Do() side effects active
+        // even when no external code subscribes to the public observables.
+        private readonly IDisposable _gossipMenuSub;
+        private readonly IDisposable _completionSub;
+        private readonly IDisposable _textUpdateSub;
+
         public GossipNetworkClientComponent(IWorldClient worldClient, ILogger<GossipNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
             // Base gossip menu stream
-            _gossipMenus = SafeOpcodeStream(Opcode.SMSG_GOSSIP_MESSAGE)
+            var gossipMenuBase = SafeOpcodeStream(Opcode.SMSG_GOSSIP_MESSAGE)
                 .Select(ParseGossipMenu)
                 .Do(menu =>
                 {
@@ -59,6 +65,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 })
                 .Publish()
                 .RefCount();
+
+            _gossipMenus = gossipMenuBase;
 
             // Completion stream updates state; emission for closed menus comes from projection
             var completion = SafeOpcodeStream(Opcode.SMSG_GOSSIP_COMPLETE)
@@ -127,6 +135,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Select(o => new GossipServiceData(_currentNpcGuid ?? 0, o.ServiceType, o))
                 .Publish()
                 .RefCount();
+
+            // Self-subscribe so that the .Do() side effects (_currentMenu, _isGossipWindowOpen, etc.)
+            // always fire when packets arrive, even if no external code subscribes.
+            _gossipMenuSub = gossipMenuBase.Subscribe(_ => { });
+            _completionSub = completion.Subscribe(_ => { });
+            _textUpdateSub = textUpdates.Subscribe(_ => { });
         }
 
         #region IGossipNetworkClientComponent Properties
@@ -510,6 +524,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) return;
             _disposed = true;
+
+            _gossipMenuSub?.Dispose();
+            _completionSub?.Dispose();
+            _textUpdateSub?.Dispose();
+
             GC.SuppressFinalize(this);
         }
         #endregion
