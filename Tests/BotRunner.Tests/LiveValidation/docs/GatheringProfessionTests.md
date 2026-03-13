@@ -70,7 +70,7 @@ FG remains a packet/interaction reference path, but BG is the authoritative asse
 ## Current Status
 
 - No active live test in this repo currently uses `.gobject add` or any other game-object spawn command.
-- `GatheringProfessionTests` only queries natural rows from `mangos.gameobject` via `QueryGameObjectSpawnsAsync(...)`.
+- `GatheringProfessionTests` only queries natural rows from `mangos.gameobject` via `QueryGameObjectSpawnsNearAsync(...)`.
 - `2026-03-11` investigation on the failing herbalism run confirmed the reported Silverleaf is the natural DB row:
   - `gameobject.guid = 1641`
   - `gameobject.id = 1618`

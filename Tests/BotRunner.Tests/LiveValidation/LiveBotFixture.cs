@@ -993,43 +993,6 @@ public partial class LiveBotFixture : IAsyncLifetime
     // ---- World Database Queries ----
 
     /// <summary>
-    /// Query the MaNGOS gameobject table for existing spawn locations of a given template entry.
-    /// Returns up to <paramref name="limit"/> (map, x, y, z) tuples.
-    /// </summary>
-    public async Task<List<(int map, float x, float y, float z)>> QueryGameObjectSpawnsAsync(
-        uint entry, int? mapFilter = null, int limit = 10)
-    {
-        var results = new List<(int, float, float, float)>();
-        try
-        {
-            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
-            await conn.OpenAsync();
-
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = mapFilter.HasValue
-                ? "SELECT map, position_x, position_y, position_z FROM gameobject WHERE id = @id AND map = @map ORDER BY RAND() LIMIT @limit"
-                : "SELECT map, position_x, position_y, position_z FROM gameobject WHERE id = @id ORDER BY RAND() LIMIT @limit";
-            cmd.Parameters.AddWithValue("@id", entry);
-            cmd.Parameters.AddWithValue("@limit", limit);
-            if (mapFilter.HasValue)
-                cmd.Parameters.AddWithValue("@map", mapFilter.Value);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                results.Add((reader.GetInt32(0), reader.GetFloat(1), reader.GetFloat(2), reader.GetFloat(3)));
-            }
-
-            _logger.LogInformation("[MySQL] Found {Count} spawns for gameobject entry={Entry}", results.Count, entry);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("[MySQL] Failed to query gameobject spawns: {Error}", ex.Message);
-        }
-        return results;
-    }
-
-    /// <summary>
     /// Query nearby world gameobject spawns for a set of entries and order them by 2D distance
     /// from the supplied center point. Read-only DB access only; used for live-test staging.
     /// </summary>
