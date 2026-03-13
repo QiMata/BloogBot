@@ -78,15 +78,10 @@ Master tracker: `MASTER-SUB-022`
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Acceptance criteria: fishing coverage stays meaningful in isolation for both bots on the task-owned equip -> bait -> approach -> cast -> bobber -> loot_window_open -> bag-delta path, documentation points to the owning runtime logic, and intermittent failures clearly identify shoreline/pathfinding/LOS as the blocker instead of reporting a fishing-task regression.
 
-4. [ ] `BRT-OVR-006` Fix BG trainer visit gossip-to-trainer-service handoff for task-owned NPC coverage.
-- Problem: `NpcInteractionTests.Trainer_LearnAvailableSpells` now dispatches `ActionType.VisitTrainer`, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`, so the task-owned trainer path produces no spell-count or coinage delta.
-- Target files: `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/docs/NpcInteractionTests.md`, `Exports/BotRunner/Tasks/TrainerVisitTask.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`, `Exports/WoWSharpClient/Networking/ClientComponents/GossipNetworkClientComponent.cs`, `Exports/WoWSharpClient/Networking/ClientComponents/TrainerNetworkClientComponent.cs`.
-- Required change:
-  1. Preserve the task-owned `VisitTrainer` action contract already added to `communication.proto`, `CharacterAction`, and `BotRunnerService`.
-  2. Make the BG trainer path reliably surface trainer services on this Mangos core.
-  3. Replace the current tracked skip with deterministic spell, coinage, and latency assertions.
-- Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~NpcInteractionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
-- Acceptance criteria: the trainer test learns a real spell through `TrainerVisitTask`, spends copper, and the focused NPC/action contract slice passes without skip.
+4. [x] `BRT-OVR-006` Fix BG trainer visit gossip-to-trainer-service handoff for task-owned NPC coverage.
+- **RESOLVED (sessions 86-87):** Root cause was Rx `.Publish().RefCount()` without self-subscriptions in `TrainerNetworkClientComponent` (and 3 other components). `.Do()` side-effects that populate `_availableServices` never fired. Added self-subscriptions in constructor. Also added FG trainer interaction via Lua (`LearnAllAvailableSpellsAsync`).
+- Validation: `Trainer_LearnAvailableSpells` now passes with spell count growth, coinage decrease, and latency metrics for both BG and FG (FG when available).
+- Commits: `7d130d0` (trainer Rx fix), `0684150` (Gossip/Guild/Professions Rx fix), `9c59286` (FG Lua trainer impl).
 
 ## Completed Legacy Tasks
 
