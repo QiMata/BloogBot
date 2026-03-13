@@ -193,23 +193,23 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ## Session Handoff (Latest)
 - **Last updated:** 2026-03-13 (session 87)
 - **Branch:** `cpp_physics_system`
-- **Commits:** `0684150` (Rx fixes: Gossip/Guild/Professions), `9c59286` (FG trainer Lua impl), `eb83e8a` (corpse run recovery fix), `cf0c9f3` (test skip detection)
+- **Commits:** `0684150` (Rx: Gossip/Guild/Professions), `9c59286` (FG trainer Lua), `eb83e8a` (corpse recovery fix), `cf0c9f3` (test skip), `29e46a9` (Rx: 9 more components)
 - **Completed this session:**
-  1. **Rx Publish+RefCount self-subscription fix** (`0684150`): Same bug as TrainerNetworkClientComponent extended to GossipNetworkClientComponent, GuildNetworkClientComponent, and ProfessionsNetworkClientComponent. `.Do()` side-effects were never firing because `.Publish().RefCount()` requires at least one subscriber. Gossip was CRITICAL — `_currentMenu`, `_currentNpcGuid`, `_isGossipWindowOpen` were never populated.
-  2. **FG trainer interaction via Lua** (`9c59286`): Implemented `LearnAllAvailableSpellsAsync` in FG ObjectManager using WoW Lua API (right-click NPC → GetNumTrainerServices → BuyTrainerService for available services → CloseTrainer). Previously fell through to default interface method returning 0.
-  3. **Corpse run recovery counter fix** (`eb83e8a`): Recovery count was reset to 0 on any 1y displacement (including the jump+backward recovery maneuver). This caused infinite "#1" recovery loops that never reached MaxRunbackRecoveryAttempts. Now only resets when corpse distance improves by 5y+. Also reduced max attempts from 8 to 4.
-  4. **Test skip detection improvement** (`cf0c9f3`): Death test now refreshes snapshot before checking diagnostic messages (was reading stale snapshot), checks for both RunbackStallRecoveryExceeded and NoPathTimeout, and logs chat messages during skip check.
-- **Test results (full LiveValidation):** `37 passed, 1 failed, 6 skipped` (best run) / `36 passed, 2 failed, 6 skipped` (worst run)
-  - **Intermittent:** DeathCorpseRun BG (pathfinding navmesh gap at graveyard→corpse route — passes 2/3 runs), Navigation_LongPath (also pathfinding)
+  1. **Rx Publish+RefCount systematic fix** — 13 client components total (4 in session 86, 9 more in 87). All 19 client components audited, all with state-mutating `.Do()` now have self-subscriptions. Critical fixes: Gossip (menu/NPC state), SpellCasting (IsCasting/IsChanneling/cooldowns), CombatSpell (IsInCombat/auras), Looting (loot window state), FlightMaster (taxi map state).
+  2. **FG trainer interaction via Lua** (`9c59286`): `LearnAllAvailableSpellsAsync` using WoW Lua API.
+  3. **Corpse run recovery counter fix** (`eb83e8a`): Infinite "#1" recovery loop — counter reset on any movement including recovery maneuver itself. Now only resets on 5y+ corpse distance improvement. Max attempts 8→4.
+  4. **Test skip detection improvement** (`cf0c9f3`): Stale snapshot + broader skip conditions for navmesh gaps.
+- **Test results (full LiveValidation):** `37 passed, 1 failed, 6 skipped`
+  - **Intermittent (1):** Navigation_LongPath (pathfinding navmesh gap on sloped Valley of Trials terrain)
   - **Skipped (6):** BuffDismiss (BB-BUFF-001), FG DeathCorpseRun (no WoW.exe), Fishing (shoreline), GatheringMining (respawn), GatheringHerbalism (respawn), GroupFormation (FG n/a)
 - **Known remaining issues:**
-  - Pathfinding navmesh gaps causing intermittent failures at graveyard→corpse and long navigation routes
+  - Navigation_LongPath intermittent (pathfinding navmesh gap on sloped terrain)
   - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
   - BuffDismiss: WoWSharpClient doesn't populate WoWUnit.Buffs (BB-BUFF-001)
 - **Next:**
   1. Continue BRT-OVR-002 remaining behavior suites (quest, NPC task-driven migration)
-  2. Pathfinding navmesh coverage improvements for graveyard routes
+  2. Pathfinding navmesh coverage improvements for sloped terrain
   3. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
 
 ## Session Handoff (Session 86 Archive)
