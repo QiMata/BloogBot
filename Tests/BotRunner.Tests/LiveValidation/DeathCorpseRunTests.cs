@@ -148,9 +148,19 @@ public class DeathCorpseRunTests
             // Check if failure was due to pathfinding no_route — skip rather than fail.
             // The pathfinding service cannot route from many graveyard positions (navmesh gaps).
             // This is tracked as a PathfindingService issue, not a RetrieveCorpseTask bug.
+            // Refresh snapshot to pick up diagnostic messages flushed after task pop.
+            await _bot.RefreshSnapshotsAsync();
             var chatMessages = (await _bot.GetSnapshotAsync(account))?.RecentChatMessages ?? [];
             var isPathfindingGap = chatMessages.Any(m =>
-                m.Contains("RunbackStallRecoveryExceeded", StringComparison.Ordinal));
+                m.Contains("RunbackStallRecoveryExceeded", StringComparison.Ordinal)
+                || m.Contains("NoPathTimeout", StringComparison.Ordinal));
+            _output.WriteLine($"  [{label}] Skip check: {chatMessages.Count} chat messages, pathfindingGap={isPathfindingGap}");
+            if (chatMessages.Count > 0)
+            {
+                foreach (var msg in chatMessages.TakeLast(5))
+                    _output.WriteLine($"    chat: {msg}");
+            }
+
             if (isPathfindingGap)
             {
                 var skipMsg = $"[{label}] SKIP: RetrieveCorpseTask hit RunbackStallRecoveryExceeded — pathfinding " +
