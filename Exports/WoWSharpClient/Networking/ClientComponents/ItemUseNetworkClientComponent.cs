@@ -34,6 +34,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<ItemUseErrorData> _itemUseFailed;
         private readonly IObservable<ConsumableEffectData> _consumableEffectApplied;
 
+        // Self-subscriptions to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+        private readonly IDisposable _itemUseStartedSub;
+        private readonly IDisposable _itemUseCompletedSub;
+        private readonly IDisposable _itemUseFailedSub;
+
         public ItemUseNetworkClientComponent(IWorldClient worldClient, ILogger<ItemUseNetworkClientComponent> logger)
         {
             _worldClient = worldClient ?? throw new ArgumentNullException(nameof(worldClient));
@@ -90,6 +95,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .RefCount();
 
             _consumableEffectApplied = Observable.Never<ConsumableEffectData>();
+
+            // Self-subscribe to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+            _itemUseStartedSub = _itemUseStarted.Subscribe(_ => { });
+            _itemUseCompletedSub = _itemUseCompleted.Subscribe(_ => { });
+            _itemUseFailedSub = _itemUseFailed.Subscribe(_ => { });
         }
 
         private IObservable<ReadOnlyMemory<byte>> SafeStream(Opcode opcode)
@@ -514,6 +524,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         public override void Dispose()
         {
             if (_disposed) return;
+            _itemUseStartedSub?.Dispose();
+            _itemUseCompletedSub?.Dispose();
+            _itemUseFailedSub?.Dispose();
             _disposed = true;
             base.Dispose();
         }

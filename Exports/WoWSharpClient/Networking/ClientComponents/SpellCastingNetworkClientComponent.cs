@@ -46,6 +46,13 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<SpellCooldownData> _spellCooldownsStream;
         private readonly IObservable<SpellHitData> _spellHits;
 
+        // Self-subscriptions to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+        private readonly IDisposable _spellCastStartsSub;
+        private readonly IDisposable _spellCastCompletionsSub;
+        private readonly IDisposable _spellCastErrorsSub;
+        private readonly IDisposable _channelingEventsSub;
+        private readonly IDisposable _spellCooldownsSub;
+
         /// <summary>
         /// Initializes a new instance of the SpellCastingNetworkClientComponent class.
         /// </summary>
@@ -139,6 +146,13 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Select(payload => ParseSpellHit(payload))
                 .Publish()
                 .RefCount();
+
+            // Self-subscribe to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+            _spellCastStartsSub = _spellCastStarts.Subscribe(_ => { });
+            _spellCastCompletionsSub = _spellCastCompletions.Subscribe(_ => { });
+            _spellCastErrorsSub = _spellCastErrors.Subscribe(_ => { });
+            _channelingEventsSub = _channelingEvents.Subscribe(_ => { });
+            _spellCooldownsSub = _spellCooldownsStream.Subscribe(_ => { });
         }
 
         // Provides a non-null observable stream for an opcode.
@@ -550,6 +564,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         public override void Dispose()
         {
             if (_disposed) return;
+            _spellCastStartsSub?.Dispose();
+            _spellCastCompletionsSub?.Dispose();
+            _spellCastErrorsSub?.Dispose();
+            _channelingEventsSub?.Dispose();
+            _spellCooldownsSub?.Dispose();
             _disposed = true;
             base.Dispose();
         }

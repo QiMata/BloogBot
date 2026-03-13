@@ -32,6 +32,8 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<(uint SourceNodeId, uint DestinationNodeId, uint Cost)> _flightActivated;
         private readonly IObservable<(uint NodeId, byte Status)> _taxiNodeStatus;
         private readonly IObservable<string> _flightMasterErrors;
+        private readonly IDisposable _taxiMapOpenedSub;
+        private readonly IDisposable _taxiMapClosedSub;
 
         /// <summary>
         /// Initializes a new instance of the FlightMasterNetworkClientComponent class.
@@ -91,6 +93,9 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             // No dedicated error opcode known; expose a never stream to satisfy interface
             _flightMasterErrors = Observable.Never<string>();
+
+            _taxiMapOpenedSub = _taxiMapOpened.Subscribe(_ => { });
+            _taxiMapClosedSub = _taxiMapClosed.Subscribe(_ => { });
         }
 
         #region Properties
@@ -547,6 +552,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _logger.LogDebug("Disposing FlightMasterNetworkClientComponent");
 
+            _taxiMapOpenedSub?.Dispose();
+            _taxiMapClosedSub?.Dispose();
             _disposed = true;
             _logger.LogDebug("FlightMasterNetworkClientComponent disposed");
         }

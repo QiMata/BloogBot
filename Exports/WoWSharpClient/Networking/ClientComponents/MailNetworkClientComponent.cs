@@ -53,6 +53,11 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<(string Recipient, string Subject)> _mailSentResults;
         private readonly IObservable<(string Operation, string Error)> _mailErrors;
 
+        // Self-subscriptions to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+        private readonly IDisposable _mailListCountsSub;
+        private readonly IDisposable _mailSentResultsSub;
+        private readonly IDisposable _mailErrorsSub;
+
         // Optional streams (no direct opcode mapping known) -> Never/Empty to satisfy interface
         private readonly IObservable<(uint MailId, uint Amount)> _moneyTakenResults;
         private readonly IObservable<(uint MailId, uint ItemId, uint Quantity)> _itemTakenResults;
@@ -102,6 +107,11 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _mailboxWindowOpenings = Observable.Empty<ulong>();
             _mailboxWindowClosings = Observable.Empty<Unit>();
+
+            // Self-subscribe to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+            _mailListCountsSub = _mailListCounts.Subscribe(_ => { });
+            _mailSentResultsSub = _mailSentResults.Subscribe(_ => { });
+            _mailErrorsSub = _mailErrors.Subscribe(_ => { });
         }
 
         #region IMailNetworkClientComponent (reactive properties)
@@ -793,6 +803,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void Dispose()
         {
             if (_disposed) return;
+            _mailListCountsSub?.Dispose();
+            _mailSentResultsSub?.Dispose();
+            _mailErrorsSub?.Dispose();
             _disposed = true;
             _logger.LogDebug("MailNetworkClientComponent disposed");
         }

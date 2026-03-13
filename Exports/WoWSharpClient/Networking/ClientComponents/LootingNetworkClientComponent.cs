@@ -51,6 +51,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private Action<string>? _lootErrorCallback;
 
         private bool _disposed;
+        private readonly IDisposable _lootWindowChangesSub;
 
         /// <summary>
         /// Initializes a new instance of the LootingNetworkClientComponent class.
@@ -105,6 +106,8 @@ namespace WoWSharpClient.Networking.ClientComponents
             _groupLootNotifications = Observable.Never<GroupLootNotificationData>();
 
             // Subscribe to real SMSG loot opcodes and route to Handle* methods
+            _lootWindowChangesSub = _lootWindowChanges.Subscribe(_ => { });
+
             SafeOpcodeStream(Opcode.SMSG_LOOT_RESPONSE).Subscribe(OnLootResponseReceived);
             SafeOpcodeStream(Opcode.SMSG_LOOT_RELEASE_RESPONSE).Subscribe(OnLootReleaseReceived);
             SafeOpcodeStream(Opcode.SMSG_LOOT_REMOVED).Subscribe(OnLootRemovedReceived);
@@ -824,6 +827,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void Dispose()
         {
             if (_disposed) return;
+            _lootWindowChangesSub?.Dispose();
             _disposed = true;
             _availableLoot.Clear();
             _pendingRolls.Clear();

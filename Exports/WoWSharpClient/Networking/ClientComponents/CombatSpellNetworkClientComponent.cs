@@ -44,6 +44,8 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<AuraUpdateData> _auraUpdates;
         private readonly IObservable<CombatItemUseData> _combatItemUsage;
         private readonly IObservable<CombatErrorData> _combatErrors;
+        private readonly IDisposable _combatStateSub;
+        private readonly IDisposable _auraUpdatesSub;
 
         #region Public Properties
 
@@ -185,6 +187,9 @@ namespace WoWSharpClient.Networking.ClientComponents
                 ))
                 .Publish()
                 .RefCount();
+
+            _combatStateSub = _combatStateChanges.Subscribe(_ => { });
+            _auraUpdatesSub = _auraUpdates.Subscribe(_ => { });
 
             SetupEventCoordination();
         }
@@ -720,6 +725,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _logger.LogDebug("Disposing CombatSpellNetworkClientComponent");
 
+            _combatStateSub?.Dispose();
+            _auraUpdatesSub?.Dispose();
             _disposed = true;
             base.Dispose();
             _logger.LogDebug("CombatSpellNetworkClientComponent disposed");

@@ -26,6 +26,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private bool _disposed;
 
         private readonly IObservable<IReadOnlyList<ulong>> _ignoreListUpdates;
+        private readonly IDisposable _ignoreListSub;
 
         public IgnoreNetworkClientComponent(IWorldClient worldClient, ILogger<IgnoreNetworkClientComponent> logger)
         {
@@ -37,6 +38,8 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Do(ApplyIgnoreList)
                 .Publish()
                 .RefCount();
+
+            _ignoreListSub = _ignoreListUpdates.Subscribe(_ => { });
         }
 
         public IReadOnlyList<ulong> IgnoredPlayers
@@ -179,6 +182,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             if (_disposed) return;
             _disposed = true;
+            _ignoreListSub?.Dispose();
             _logger.LogDebug("Disposing IgnoreNetworkClientComponent");
         }
         #endregion
