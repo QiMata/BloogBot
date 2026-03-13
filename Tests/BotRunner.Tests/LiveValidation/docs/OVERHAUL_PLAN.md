@@ -30,6 +30,7 @@ Completed overhaul slices now on disk:
 - Mining live coverage now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` from an explicit `ValleyOfTrials` test setup, so the task owns route optimization, candidate movement, node discovery, and gather interaction instead of the test piloting per-node `Goto` steps.
 - The Valley mining probe now loads pooled candidate metadata from `pool_gameobject` / `pool_template` and no longer truncates the nearby Valley copper set to 6 rows. The latest live rerun confirmed `7` Valley candidates loaded from pool `1024`.
 - Fixture/login scan confirmed there is no fixture-level or post-login `ValleyOfTrials` teleport path; the only active Valley teleport is the mining test's own staging helper.
+- Herbalism live coverage now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` from an explicit Durotar herb route start (`-500, -4800, 38`), querying Peacebloom (1617), Silverleaf (1618), and Earthroot (1619) candidates with pool metadata. The old inline `TryGatherAtSpawns` herbalism path was replaced. Latest live rerun found `24` Durotar herb-route candidates across pools `1020`, `1021`, `1022`.
 - Test markdown was refreshed to link each touched test back to the production code paths it exercises.
 
 Verification runs on the current pass:

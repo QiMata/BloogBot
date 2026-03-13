@@ -28,8 +28,22 @@ FG remains a packet/interaction reference path, but BG is the authoritative asse
 
 ### 2. Herbalism_GatherHerb_SkillIncreases
 
-Still uses the older spawn-by-spawn natural-node path with herbalism entries `1617`, `1618`, and `1619`.
-The next gathering overhaul step is to move herbalism onto the same route-task contract used by mining.
+**Flow summary:**
+1. Query Peacebloom (1617), Silverleaf (1618), and Earthroot (1619) spawns near the Durotar herb route start from the world DB, including pool metadata.
+2. Prepare FG first, then BG:
+   - revive / return to setup location
+   - clear bags when needed
+   - self-target
+   - learn herbalism spells
+   - set skill
+3. Stage at the Durotar herb route start (`-500, -4800, 38`).
+4. Dispatch `ActionType.StartGatheringRoute` with the natural herb candidate coordinates and all three herb entry IDs.
+5. Let `GatheringRouteTask` optimize the route, path candidate-to-candidate, scan visible nodes, and gather the first valid node.
+6. Assert gather success via task diagnostics, bag delta, or skill delta.
+   - FG failures log diagnostic evidence and return to the safe zone.
+   - BG remains the hard assertion path for live-suite pass/fail.
+   - If all natural candidates are on respawn, the live test skips instead of spawning objects.
+   - The nearby-node query includes `pool_gameobject` / `pool_template` metadata so the Durotar route loads the full pooled candidate set.
 
 ## Code Paths
 
@@ -74,6 +88,12 @@ The next gathering overhaul step is to move herbalism onto the same route-task c
   - all `7` belong to `pool_entry=1024` (`Copper Veins - Durotar (Master Pool)`)
   - the previous `6`-candidate cap was removed
 - `2026-03-12` fixture/login scan confirmed there is no fixture-level or post-login `.tele name {name} ValleyOfTrials` path. The only active Valley teleport in the mining flow is the test's explicit staging helper.
+- `2026-03-13` herbalism was moved onto the same task-owned route contract as mining:
+  - `GatheringRouteSelection.SelectDurotarHerbCandidates(...)` queries Peacebloom, Silverleaf, and Earthroot near `(-500, -4800)` with `300y` radius and pool metadata
+  - `ActionType.StartGatheringRoute` dispatches all three herb entry IDs with the candidate coordinates
+  - `GatheringRouteTask` owns route optimization, candidate movement, visible-node discovery, and gather interaction — identical to the mining contract
+  - the old inline `TryGatherAtSpawns` herbalism path was replaced
+  - the latest live rerun found `24` Durotar herb-route candidates across pools `1020`, `1021`, `1022` and skipped because all natural herbs were on respawn
 - Validation after the route-task mining pass:
   - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
@@ -81,6 +101,10 @@ The next gathering overhaul step is to move herbalism onto the same route-task c
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No Copper Vein nodes currently spawned on any of the 6 Valley copper-route candidates`)
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> `17 passed`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No Copper Vein nodes currently spawned on any of the 7 Valley copper-route candidates`)
+- Validation after the herbalism route-task migration:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> `20 passed`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Herbalism_GatherHerb_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No herb nodes currently spawned on any of the 24 Durotar herb-route candidates`)
 - Validation after the hardening pass:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed, 1 skipped`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `33 passed, 0 failed, 2 skipped`

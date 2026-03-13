@@ -18,7 +18,8 @@ namespace BotRunner.Tests.LiveValidation;
 ///   1. Teleport to Orgrimmar (safe zone) for setup — learn spells, set skills
 ///   2. For mining, query Valley of Trials copper spawns and dispatch StartGatheringRoute
 ///      so GatheringRouteTask owns route optimization, movement, discovery, and gather
-///   3. For herbalism, query existing natural herb spawns and path to the first visible node
+///   3. For herbalism, query Durotar herb spawns and dispatch StartGatheringRoute
+///      so GatheringRouteTask owns route optimization, movement, discovery, and gather
 ///   4. Interact and verify gather success / skill progression metrics
 ///
 /// Run:
@@ -54,7 +55,7 @@ public class GatheringProfessionTests
     private const float OrgY = -4373.4f;
     private const float OrgZ = 31.2f;
 
-    // Mining is the active pathfinding probe; herbalism still uses direct spawn staging.
+    // Route approach tolerances for task-driven gathering.
     private const float CandidateApproachTolerance = 8f;
     private const float NodeInteractionTolerance = 4f;
     private const float NodeDiscoveryTolerance = 100f;
@@ -242,21 +243,38 @@ public class GatheringProfessionTests
     [SkippableFact]
     public async Task Herbalism_GatherHerb_SkillIncreases()
     {
-        // --- Find herb spawns in Kalimdor (Durotar/Mulgore — low-level zones) ---
-        var allSpawns = new List<(int map, float x, float y, float z, uint entry)>();
-        foreach (var entry in new[] { PeacebloomEntry, SilverleafEntry, EarthrootEntry })
-        {
-            var spawns = await _bot.QueryGameObjectSpawnsAsync(entry, mapFilter: 1, limit: 25);
-            foreach (var s in spawns)
-                allSpawns.Add((s.map, s.x, s.y, s.z, entry));
-        }
-        global::Tests.Infrastructure.Skip.If(allSpawns.Count == 0,
-            "No Peacebloom/Silverleaf/Earthroot spawns found in gameobject table (Kalimdor).");
-        // Sort by distance from Orgrimmar so we try nearby spawns first (avoids long-distance teleport failures).
-        allSpawns.Sort((a, b) => LiveBotFixture.Distance3D(a.x, a.y, a.z, OrgX, OrgY, OrgZ).CompareTo(LiveBotFixture.Distance3D(b.x, b.y, b.z, OrgX, OrgY, OrgZ)));
-        _output.WriteLine($"Found {allSpawns.Count} herb spawn locations (nearest: {LiveBotFixture.Distance3D(allSpawns[0].x, allSpawns[0].y, allSpawns[0].z, OrgX, OrgY, OrgZ):F0}y)");
+        uint[] herbEntries = [PeacebloomEntry, SilverleafEntry, EarthrootEntry];
 
-        var herbEntries = allSpawns.Select(s => s.entry).Distinct().ToArray();
+        var herbCandidates = GatheringRouteSelection.SelectDurotarHerbCandidates(
+            await _bot.QueryGameObjectSpawnsNearAsync(
+                herbEntries,
+                GatheringRouteSelection.DurotarMap,
+                GatheringRouteSelection.DurotarHerbRouteStartX,
+                GatheringRouteSelection.DurotarHerbRouteStartY,
+                GatheringRouteSelection.DurotarHerbSearchRadius,
+                limit: GatheringRouteSelection.DurotarHerbQueryLimit),
+            herbEntries);
+        int herbCandidateCount = herbCandidates.Count;
+        int herbPoolCount = herbCandidates
+            .Select(c => c.poolEntry)
+            .Where(p => p.HasValue)
+            .Select(p => p!.Value)
+            .Distinct()
+            .Count();
+        global::Tests.Infrastructure.Skip.If(herbCandidateCount == 0,
+            "No natural herb route candidates were found near the Durotar herb pathing start.");
+        _output.WriteLine(
+            $"Selected {herbCandidateCount} Durotar herb-route candidates across {Math.Max(1, herbPoolCount)} spawn pool(s) from " +
+            $"({GatheringRouteSelection.DurotarHerbRouteStartX:F0}, {GatheringRouteSelection.DurotarHerbRouteStartY:F0}, {GatheringRouteSelection.DurotarHerbRouteStartZ:F0}) " +
+            $"with nearest route distance {herbCandidates[0].distance2D:F0}y.");
+        var pooledHerbSummary = string.Join(", ",
+            herbCandidates.Select(c => c.poolEntry)
+                .Where(p => p.HasValue)
+                .Select(p => p!.Value)
+                .Distinct()
+                .OrderBy(p => p));
+        if (!string.IsNullOrWhiteSpace(pooledHerbSummary))
+            _output.WriteLine($"Loaded Durotar herb pool entries: {pooledHerbSummary}");
 
         // --- FG FIRST: native WoW right-click interaction (gold standard) ---
         var fgAccount = _bot.FgAccountName;
@@ -264,8 +282,6 @@ public class GatheringProfessionTests
         {
             try
             {
-                // Park BG bot nearby so CombatCoordinator doesn't send
-                // competing GOTO actions that overwrite the test's navigation.
                 var bgParkAccount = _bot.BgAccountName;
                 if (bgParkAccount != null)
                 {
@@ -280,16 +296,20 @@ public class GatheringProfessionTests
                 uint fgSkillBefore = GetSkill("FG", GatheringData.HERBALISM_SKILL_ID);
                 _output.WriteLine($"FG initial herbalism skill: {fgSkillBefore}");
 
-                bool fgGathered = false;
-                foreach (var entry in herbEntries)
-                {
-                    var entrySpawns = allSpawns.Where(s => s.entry == entry).Select(s => (s.map, s.x, s.y, s.z)).ToList();
-                    fgGathered = await TryGatherAtSpawns(fgAccount, "FG", entrySpawns,
-                        entry, GatheringData.HERBALISM_SKILL_ID, $"herb (entry {entry})",
-                        initialSkill: fgSkillBefore,
-                        gatherSpellId: HerbalismGatherSpell, parkAccount: _bot.BgAccountName);
-                    if (fgGathered) break;
-                }
+                await StageAtDurotarHerbRouteStartAsync(fgAccount, "FG");
+                var fgBagBefore = CaptureBagItemCounts("FG");
+                var fgDiagStart = DateTime.UtcNow;
+                await _bot.SendActionAndWaitAsync(
+                    fgAccount,
+                    BuildGatheringRouteAction(HerbalismGatherSpell, herbEntries, herbCandidates),
+                    delayMs: 500);
+                bool fgGathered = await WaitForGatheringRouteOutcomeAsync(
+                    "FG",
+                    GatheringData.HERBALISM_SKILL_ID,
+                    fgSkillBefore,
+                    fgBagBefore,
+                    fgDiagStart,
+                    timeout: TimeSpan.FromMinutes(2));
 
                 await _bot.RefreshSnapshotsAsync();
                 uint fgSkillAfter = GetSkill("FG", GatheringData.HERBALISM_SKILL_ID);
@@ -298,7 +318,7 @@ public class GatheringProfessionTests
                 if (!fgGathered)
                 {
                     _output.WriteLine(
-                        $"FG reference herbalism did not complete at any of {allSpawns.Count} natural nodes. " +
+                        $"FG reference herbalism did not complete on any of {herbCandidateCount} Durotar herb-route candidates. " +
                         $"Continuing with BG-authoritative assertions. skill={fgSkillAfter}.");
                 }
                 else if (fgSkillAfter <= fgSkillBefore)
@@ -328,8 +348,6 @@ public class GatheringProfessionTests
 
         try
         {
-            // Park the OTHER bot in Orgrimmar so CombatCoordinator doesn't send GOTOs
-            // that overwrite the GatherNode behavior tree during the herbalism channel.
             var fgParkAccount = _bot.FgAccountName;
             if (fgParkAccount != null)
             {
@@ -337,45 +355,42 @@ public class GatheringProfessionTests
                 await _bot.BotTeleportAsync(fgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
             }
 
-            // --- Prepare: learn Herbalism + set skill ---
             await PrepareHerbalism(bgAccount, "BG");
 
-            // --- Record initial skill ---
             await _bot.RefreshSnapshotsAsync();
             uint bgSkillBefore = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
             _output.WriteLine($"BG initial herbalism skill: {bgSkillBefore}");
             global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG herbalism skill already capped ({bgSkillBefore}); cannot assert further increase.");
 
-            // --- Try each spawn location ---
-            bool bgGathered = false;
-            foreach (var entry in herbEntries)
-            {
-                var entrySpawns = allSpawns.Where(s => s.entry == entry).Select(s => (s.map, s.x, s.y, s.z)).ToList();
-                bgGathered = await TryGatherAtSpawns(bgAccount, "BG", entrySpawns,
-                    entry, GatheringData.HERBALISM_SKILL_ID, $"herb (entry {entry})",
-                    initialSkill: bgSkillBefore,
-                    gatherSpellId: HerbalismGatherSpell, parkAccount: _bot.FgAccountName);
-                if (bgGathered) break;
-            }
+            await StageAtDurotarHerbRouteStartAsync(bgAccount, "BG");
+            var bgBagBefore = CaptureBagItemCounts("BG");
+            var bgDiagStart = DateTime.UtcNow;
+            await _bot.SendActionAndWaitAsync(
+                bgAccount,
+                BuildGatheringRouteAction(HerbalismGatherSpell, herbEntries, herbCandidates),
+                delayMs: 500);
+            bool bgGathered = await WaitForGatheringRouteOutcomeAsync(
+                "BG",
+                GatheringData.HERBALISM_SKILL_ID,
+                bgSkillBefore,
+                bgBagBefore,
+                bgDiagStart,
+                timeout: TimeSpan.FromMinutes(2));
 
-            // --- Assert ---
             await _bot.RefreshSnapshotsAsync();
             uint bgSkillAfter = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
             _output.WriteLine($"BG Results: gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
 
             global::Tests.Infrastructure.Skip.If(!bgGathered,
-                $"BG: No herb nodes currently spawned at any of {allSpawns.Count} DB locations (all on respawn timer). Skill={bgSkillAfter}. Re-run after respawn.");
+                $"BG: No herb nodes currently spawned on any of the {herbCandidateCount} Durotar herb-route candidates. Skill={bgSkillAfter}. Re-run after respawn.");
             Assert.True(bgGathered,
-                $"BG: Failed to gather herb at any of {allSpawns.Count} locations. skill={bgSkillAfter}.");
-            // Skill-ups are RNG — gathering success proves the pipeline; skill increase is not guaranteed.
+                $"BG: Failed to gather herb on the Durotar herb route ({herbCandidateCount} candidates). skill={bgSkillAfter}.");
             if (bgSkillAfter <= bgSkillBefore)
                 _output.WriteLine($"BG: WARNING — Herbalism skill did not increase ({bgSkillBefore} → {bgSkillAfter}). " +
                     "This can happen due to WoW's RNG skill-up mechanic.");
         }
         finally
         {
-            // Return bot to safe zone on failure to avoid leaving it stranded
-            // at a remote herb node location, which can corrupt subsequent tests.
             await ReturnToSafeZoneAsync(bgAccount, "BG");
         }
     }
@@ -657,6 +672,20 @@ public class GatheringProfessionTests
                 GatheringRouteSelection.ValleyCopperRouteStartY,
                 GatheringRouteSelection.ValleyCopperRouteStartZ);
         }
+        await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
+    }
+
+    private async Task StageAtDurotarHerbRouteStartAsync(string account, string label)
+    {
+        _output.WriteLine(
+            $"[{label}] Staging at Durotar herb route start " +
+            $"({GatheringRouteSelection.DurotarHerbRouteStartX:F1}, {GatheringRouteSelection.DurotarHerbRouteStartY:F1}, {GatheringRouteSelection.DurotarHerbRouteStartZ:F1})");
+        await _bot.BotTeleportAsync(
+            account,
+            GatheringRouteSelection.DurotarMap,
+            GatheringRouteSelection.DurotarHerbRouteStartX,
+            GatheringRouteSelection.DurotarHerbRouteStartY,
+            GatheringRouteSelection.DurotarHerbRouteStartZ);
         await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
     }
 

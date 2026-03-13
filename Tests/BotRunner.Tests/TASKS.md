@@ -62,7 +62,7 @@ Master tracker: `MASTER-SUB-022`
 - Problem: the remaining live suite still overuses raw action dispatch and setup validation instead of exercising the BotTask stack.
 - Target files: `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`, `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`, `Tests/BotRunner.Tests/LiveValidation/NavigationTests.cs`, `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`, `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`, `Exports/BotRunner/Tasks/`.
 - Required change: rewrite combat, corpse recovery, navigation, quest, and NPC tests to assert on task outcomes and snapshot metrics rather than reproducing task logic inline.
-- Progress (2026-03-12 sessions 78-79): mining now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` with a natural Valley of Trials copper-node coordinate list. The old inline mining fallback path is gone, repo-wide scan confirmed there is no fixture/login/post-login `ValleyOfTrials` teleport outside the mining test's explicit staging helper, and the nearby-node query now includes `pool_gameobject` / `pool_template` metadata so the full Valley pooled set is loaded. The latest live rerun confirmed `7` Valley copper candidates from pool `1024`; the current live boundary is still natural node availability.
+- Progress (2026-03-13 session 80): both mining and herbalism now dispatch `ActionType.StartGatheringRoute` into `GatheringRouteTask`. Mining uses Valley of Trials copper candidates (`7` from pool `1024`). Herbalism uses Durotar herb candidates near `(-500, -4800)` covering Peacebloom/Silverleaf/Earthroot (`24` candidates from pools `1020/1021/1022`). Both share a common `SelectRouteCandidates` implementation. The old inline `TryGatherAtSpawns` herbalism path was removed. Live boundary for both is still natural node availability.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Acceptance criteria: each rewritten suite links directly to the owning task logic and records deterministic outcome metrics.
 
@@ -172,35 +172,28 @@ Master tracker: `MASTER-SUB-022`
 10. Documented-stable live slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (Latest)
-- Last updated: 2026-03-12
-- Active task: `BRT-OVR-002` gathering slice. Mining is task-owned and now pool-aware; the next step is moving herbalism onto the same route-task contract and broadening natural-route coverage without reintroducing test-driven movement.
-- Last delta: widened Valley copper discovery so the mining test loads pool metadata and all nearby pooled candidates, then reran the focused live mining pass to confirm the task now skips on `7` Valley candidates instead of the previous `6`-candidate truncation.
+- Last updated: 2026-03-13
+- Active task: `BRT-OVR-002` gathering slice complete for both mining and herbalism. Both now use `StartGatheringRoute -> GatheringRouteTask`.
+- Last delta: migrated herbalism to the route-task contract — `GatheringRouteSelection.SelectDurotarHerbCandidates(...)` queries Peacebloom/Silverleaf/Earthroot near `(-500, -4800)` with pool metadata, dispatches `StartGatheringRoute`, and lets `GatheringRouteTask` own the full gather pipeline.
 - Pass result: `delta shipped`
 - Files changed:
   - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelection.cs`
   - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelectionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
   - `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
   - `Tests/BotRunner.Tests/TASKS.md`
   - `docs/TASKS.md`
 - Commands run:
-  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
-  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"`
-  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"`
-- Outcomes:
-  - `Tests/BotRunner.Tests` Release build succeeded.
-  - `GatheringRouteSelectionTests|GatheringRouteTaskTests|ActionMessage_AllTypes_RoundTrip` passed `17`.
-  - Focused live mining rerun still skipped, but now with the corrected pooled candidate count: `No Copper Vein nodes currently spawned on any of the 7 Valley copper-route candidates.`
+  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
+  2. `dotnet test ... --filter "FullyQualifiedName~GatheringRouteSelectionTests|GatheringRouteTaskTests|ActionMessage_AllTypes_RoundTrip"` -> `20 passed`
+  3. `dotnet test ... --filter "FullyQualifiedName~Herbalism_GatherHerb_SkillIncreases" --blame-hang --blame-hang-timeout 15m` -> `1 skipped` (`24` Durotar herb candidates, all on respawn)
 - Blockers:
-  - `QuestInteractionTests`, `StarterQuestTests`, and the vendor/flight portions of `NpcInteractionTests` are still not fully task-owned under `BRT-OVR-002` and stay out of the routine documented-stable slice.
-  - `CombatLoopTests`, `GatheringProfessionTests`, and `FishingProfessionTests` remain excluded from the routine documented-stable slice until their open overhaul work stops generating low-signal failures.
-  - `GatheringProfessionTests` mining is now task-owned and pool-aware, but the live signal still depends on natural node uptime; when the candidate veins are all on respawn, the test skips by design rather than spawning or force-respawning game objects.
-  - `FishingProfessionTests` still fails intermittently because shoreline pathing can terrain-stick or end at a no-LOS cast point (`FishingTask los_blocked phase=move`; `Your cast didn't land in fishable water`), even though the task-owned equip -> bait -> loot-window -> bag-delta path is already covered; the newest live rerun did not reach that point because BG setup revive failed first.
-  - `DeathCorpseRunTests` is also blocked by the same BG clean-slate revive failure (`health=0/0` after fixture startup, `.revive` succeeds server-side but snapshot never returns to strict-alive within 10s).
+  - `GatheringProfessionTests` mining+herbalism are both task-owned but live signal depends on natural node uptime; tests skip by design when all candidates are on respawn.
+  - `FishingProfessionTests` still fails intermittently on shoreline pathing.
+  - `DeathCorpseRunTests` blocked by BG clean-slate revive failure.
   - `Trainer_LearnAvailableSpells` remains a deterministic skip under `BRT-OVR-006`.
-- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs | Select-Object -Skip 240 -First 220`
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28
