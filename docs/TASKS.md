@@ -58,14 +58,9 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 
 ---
 
-## P2 - CraftingProfessionTests.FirstAid Fix
+## P2 - CraftingProfessionTests.FirstAid Fix (RESOLVED)
 
-**Approach:** Diagnostic-first. Add 10 Linen Cloth (not 1), craft, and check for ANY new item in bags. This reveals whether the issue is item ID mismatch, craft failure, or snapshot timing.
-
-| # | Task | Owner | Status |
-|---|------|-------|--------|
-| 2.1 | **Diagnostic run:** Add 10 Linen Cloth, cast recipe, dump full BagContents before/after. Identify if bandage appears under different item ID or if craft silently fails. | `CraftingProfessionTests.cs` | Open |
-| 2.2 | **Fix based on diagnostic results.** | `CraftingProfessionTests.cs` | Open |
+FirstAid_LearnAndCraft_ProducesLinenBandage passes reliably as of session 86. Fixed by intervening work (snapshot pipeline improvements, spell handling fixes).
 
 ---
 
@@ -196,35 +191,33 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-13 (session 85)
+- **Last updated:** 2026-03-13 (session 86)
 - **Branch:** `cpp_physics_system`
-- **Commits:** `f6fc2a4` (pathfinding perf + FG ghost fix), `2344c2e` (test improvements + console windows), `da286d1` (slope guard), `41f7740` (slope guard tuning)
+- **Commits:** `3dc0227` (CMSG_RECLAIM_CORPSE GUID fix), `7d130d0` (trainer Rx observable fix + test update)
 - **Completed this session:**
-  1. **Pathfinding performance fix** (`f6fc2a4`): Native `FindPath` 16,470ms → 0ms. Disabled `RefinePathForWalkability` + `SimplifyPathForWalkability` (physics capsule sweeps too expensive). Paths: 0ms native, 6ms server, 47ms end-to-end.
-  2. **DynamicOverlay false positive fix** (`f6fc2a4`): `EvaluateSegmentTraversalInternal` rejected ALL paths near game objects. Made diagnostic-only.
-  3. **PathfindingClient timeout** (`f6fc2a4`): 30s → 5s (was masking the perf bug).
-  4. **FG ghost crash fix (BT-DEATH-003)** (`f6fc2a4`): Null pointer guards on `SetFacing()`, `ReleaseCorpse()`, `Turn180()`.
-  5. **BG slope ground-snap fix** (`da286d1`, `41f7740`): `GetGroundZ` "closest to query Z" cascades into cave geometry on slopes. Added `MaxGroundZDropPerFrame=15.0` guard in MovementController — rejects single-frame ground Z drops >15y and clamps position Z. Prevents 40+ yard cascade to cave floor while allowing legitimate steep terrain.
-  6. **Combat test retry** (`2344c2e`): 3-attempt loop for mob evade/despawn before damage dealt.
-  7. **BG console windows** (`2344c2e`): `WWOW_SHOW_WINDOWS=1` set on StateManager child env in BotServiceFixture so BG bot + PathfindingService get visible consoles during tests.
-  8. **Code cleanup**: Removed duplicate comment blocks in FG `ObjectManager.Movement.cs`.
-- **Test results (full LiveValidation):** `36 passed, 1 failed, 7 skipped` (44 total, 16m47s)
-  - **Passed (36):** Navigation_ShortPath + Navigation_LongPath (BOTH pass now!), Combat, all 34 previous passes
-  - **Failed (1):** DeathCorpseRun BG (intermittent — passed in earlier run at 2m4s, failed this run at 2m13s; corpse run navigation edge case near corpse reclaim range)
-  - **Skipped (7):** BuffDismiss, FG DeathCorpseRun (no WoW.exe), Fishing, GatheringMining, GatheringHerbalism, GroupFormation, TrainerLearn
-- **Key fixes this session:**
-  - PathfindingService no_route was NOT systemic — caused by `RefinePathForWalkability` hanging + `DynamicOverlay` rejecting valid paths
-  - BG falling through sloped terrain — caused by `GetGroundZ` "closest to query Z" cascading into cave geometry. Fixed with per-frame Z delta guard.
+  1. **CMSG_RECLAIM_CORPSE GUID fix** (`3dc0227`): Packet was sending 8 zero bytes instead of player GUID. VMaNGOS validates the GUID against the session — zero was silently rejected. DeathCorpseRun now passes reliably (1m36s-1m48s, was intermittent 2m+ timeouts). Both `WoWSharpObjectManager.RetrieveCorpse()` and `DeadActorClientComponent.ResurrectAtCorpseAsync()` fixed.
+  2. **BG trainer learning fix (BRT-OVR-006)** (`7d130d0`): `TrainerNetworkClientComponent` used `.Publish().RefCount()` on Rx opcode streams but never self-subscribed, so `.Do()` side-effects that populate `_availableServices` never fired. Added self-subscriptions in constructor. Trainer_LearnAvailableSpells now passes (was deterministic skip).
+  3. **Trainer test dual-bot update** (`7d130d0`): Test now runs both BG and FG (FG skipped when not available since FG lacks `LearnAllAvailableSpellsAsync` implementation).
+  4. **P2 (CraftingProfessionTests.FirstAid) verified resolved**: FirstAid_LearnAndCraft passes reliably — was failing in session 53 but fixed by intervening work.
+- **Test results (full LiveValidation):** `38 passed, 0 failed, 6 skipped` (44 total)
+  - **Passed (38):** +2 vs session 85. New passes: Trainer_LearnAvailableSpells (was skip), DeathCorpseRun BG (was intermittent fail). All 36 previous passes stable.
+  - **Failed (0):** Clean sweep — no failures.
+  - **Skipped (6):** BuffDismiss (BB-BUFF-001 capability gap), FG DeathCorpseRun (no WoW.exe), Fishing (shoreline pathing), GatheringMining (respawn timer), GatheringHerbalism (respawn timer), GroupFormation (FG not available)
 - **Known remaining issues:**
-  - **DeathCorpseRun intermittent**: Corpse run navigation sometimes doesn't reach reclaim range. Investigate waypoint consumption near corpse position.
   - **FG bot not launching in tests**: StateManager 60s cooldown on FG launch attempts. WoW.exe infrastructure dependency.
-  - Fishing FG: LOS blocked during approach to pool (pre-existing)
+  - **FG LearnAllAvailableSpellsAsync**: FG bot returns 0 from default interface method — needs Lua-based trainer interaction.
+  - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
+  - BuffDismiss: WoWSharpClient doesn't populate WoWUnit.Buffs (BB-BUFF-001)
 - **Next:**
-  1. Investigate death corpse run navigation edge case (bot reaches 33y but doesn't reclaim)
-  2. Continue BRT-OVR-002 remaining behavior suites
-  3. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
-  4. Continue BRT-OVR-002 remaining behavior suites
+  1. Continue BRT-OVR-002 remaining behavior suites (quest, NPC task-driven migration)
+  2. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
+  3. FG trainer interaction via Lua (enables FG trainer test path)
+
+## Session Handoff (Session 85 Archive)
+- **Last updated:** 2026-03-13 (session 85)
+- **Completed:** Pathfinding perf fix (16s→0ms), slope guard, FG ghost crash fix, combat retry, BG console windows.
+- **Test results:** 36 passed, 1 failed (DeathCorpseRun intermittent), 7 skipped.
 
 ## Session Handoff (Session 80 Archive)
 - **Last updated:** 2026-03-13 (session 80)
