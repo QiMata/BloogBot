@@ -196,27 +196,27 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-13 (session 82)
+- **Last updated:** 2026-03-13 (session 83)
 - **Branch:** `cpp_physics_system`
-- **Current work:** P0A.6 — Physics init and combat fixes shipped. CombatLoopTests now passes. Next: investigate remaining test failures and continue BRT-OVR-002.
+- **Current work:** Teleport Z clamp fix shipped (`ae62be5`). Ground snap cave geometry issue resolved. Continuing BRT-OVR-002.
 - **Completed this session:**
-  1. **Fixed physics engine initialization** (`1146587`): `DllMain.cpp::InitializeAllSystems()` had all subsystems in a single try/catch. If `Navigation::Initialize()` threw, `PhysicsEngine::Initialize()` was skipped permanently (`m_initialized` stayed false). Every `StepV2()` call returned zero-displacement output. Fix: each subsystem gets its own try/catch.
-  2. **Fixed melee combat** (`f6ad88a`): Three issues combined to prevent BG bot auto-attack:
-     - Used 3D `DistanceTo()` for melee range check — MaNGOS uses 2D. Bot at Z=54.4, mob at Z=57.4 = 3.0y 3D distance but only 0.8y 2D.
-     - `MeleeChaseStickBuffer` of 2.0 pushed arrival distance down to `NOMINAL_MELEE_RANGE` (1.67y) — unreachable via navmesh.
-     - Behavior tree spammed `StopAllMovement()`/`Face()`/`StartMeleeAttack()` every tick, flooding server with `MSG_MOVE_SET_FACING` packets and disrupting the swing timer.
-  3. **Added diagnostics:** PHYS_STUCK zero-delta detection in PathfindingSocketServer, zero-delta logging in MovementController.
-  4. **Navigation.dll rebuilt** in both Debug and Release configurations with the physics init fix.
-- **Test results (full LiveValidation):** `18 passed, 14 failed, 10 skipped` (25min timeout abort).
-  - **New pass:** CombatLoopTests.Combat_AutoAttacksMob_DealsDamageInMeleeRange (44s)
-  - **Key failures:** DeathCorpseRun (2), NpcInteraction (5), Economy (2), Quest (2), SpellCast (1), UnequipItem (1), OrgrimmarGroundZ (1) — mostly pre-existing
-  - **PathfindingService crash:** Intermittent connection loss ~25-30s into sustained pathfinding. Does not affect combat (bot is stationary). Needs investigation.
-- **Known issue — Physics ground snap Z discrepancy:** Bot teleported to Valley of Trials ends up at Z=54.4 while terrain is at Z≈57.4. Physics `groundZ` returns values 3-10y below actual terrain. `MOVEFLAG_FALLINGFAR` (0x4000) is set. Root cause likely in ground detection against the map/navmesh data for this area. The 2D distance fix works around this for combat.
-- **Build note:** Navigation.dll must be built via MSBuild (not `dotnet build`). After C++ changes: `"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Debug -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`. Copy to `Services/WoWStateManager/Build/Debug/net8.0-windows/` if tests use Debug config.
+  1. **Fixed teleport Z clamp cave geometry issue** (`ae62be5`): Physics `GetGroundZ()` picks closest surface to query Z — selects cave floors over terrain. Three-part fix in MovementController:
+     - Ground snap phase clamps position to teleport Z when physics pulls below
+     - Zero-tolerance teleport Z clamp (was 5y threshold, missed 1y cave drops) + 300-frame hard limit
+     - `_prevGroundZ` guard holds at teleport Z when physics reports cave ground >1.5y below
+  2. **NPC test Z+3 offset**: Applied Z+3 to Razor Hill vendor/trainer and Orgrimmar FM coordinates
+- **Test results (full LiveValidation):** `18 passed, 4 failed, 3 skipped` (25 total, 24m18s — timeout abort cut remaining tests)
+  - **CombatLoopTests passes** (confirmed no regression from Z clamp fix)
+  - **Failures (all pre-existing):** DeathCorpseRun x2 (runback stall, RunbackStallRecoveryExceeded), Economy Bank (pre-existing), Fishing (FG LOS blocked at Ratchet)
+  - **BG fishing succeeded** — full loot cycle (equip→bait→approach→cast→bobber→loot→bag delta with item 3820)
+- **Known remaining issues:**
+  - DeathCorpseRun: ghost runback stalls at ~363y from corpse, then RunbackStallRecoveryExceeded pops the task
+  - Fishing FG: LOS blocked during approach to pool (castTarget Z=0.0 suggests water surface LOS issue)
+  - NpcInteraction: 5 tests didn't run this cycle (timeout abort). Z+3 offset applied but untested.
 - **Next:**
-  1. Investigate PathfindingService intermittent crash (Connection lost IOException after ~25-30s)
-  2. Investigate NpcInteraction failures (Trainer, Vendor, FlightMaster — 5 failures)
-  3. Continue BRT-OVR-002 remaining behavior suites (corpse, navigation, questing)
+  1. Investigate NpcInteraction test failures with new Z+3 coordinates
+  2. Investigate DeathCorpseRun runback stall (pathfinding or movement issue)
+  3. Continue BRT-OVR-002 remaining behavior suites
 
 ## Session Handoff (Session 80 Archive)
 - **Last updated:** 2026-03-13 (session 80)
