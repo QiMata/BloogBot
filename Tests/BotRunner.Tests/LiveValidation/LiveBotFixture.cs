@@ -1033,7 +1033,7 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// Query nearby world gameobject spawns for a set of entries and order them by 2D distance
     /// from the supplied center point. Read-only DB access only; used for live-test staging.
     /// </summary>
-    public async Task<List<(uint entry, int map, float x, float y, float z, float distance2D)>> QueryGameObjectSpawnsNearAsync(
+    public async Task<List<(uint entry, int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)>> QueryGameObjectSpawnsNearAsync(
         IReadOnlyCollection<uint> entries,
         int mapId,
         float centerX,
@@ -1041,7 +1041,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         float maxDistance,
         int limit = 10)
     {
-        var results = new List<(uint, int, float, float, float, float)>();
+        var results = new List<(uint, int, float, float, float, float, uint?, string?)>();
         if (entries.Count == 0)
             return results;
 
@@ -1062,16 +1062,20 @@ public partial class LiveBotFixture : IAsyncLifetime
 
             cmd.CommandText = $@"
                 SELECT
-                    id,
-                    map,
-                    position_x,
-                    position_y,
-                    position_z,
+                    g.id,
+                    g.map,
+                    g.position_x,
+                    g.position_y,
+                    g.position_z,
+                    pg.pool_entry,
+                    pt.description,
                     SQRT(POW(position_x - @centerX, 2) + POW(position_y - @centerY, 2)) AS distance2D
-                FROM gameobject
-                WHERE map = @map
-                  AND id IN ({string.Join(", ", entryParameters)})
-                  AND SQRT(POW(position_x - @centerX, 2) + POW(position_y - @centerY, 2)) <= @maxDistance
+                FROM gameobject g
+                LEFT JOIN pool_gameobject pg ON pg.guid = g.guid
+                LEFT JOIN pool_template pt ON pt.entry = pg.pool_entry
+                WHERE g.map = @map
+                  AND g.id IN ({string.Join(", ", entryParameters)})
+                  AND SQRT(POW(g.position_x - @centerX, 2) + POW(g.position_y - @centerY, 2)) <= @maxDistance
                 ORDER BY distance2D
                 LIMIT @limit";
 
@@ -1090,7 +1094,9 @@ public partial class LiveBotFixture : IAsyncLifetime
                     reader.GetFloat(2),
                     reader.GetFloat(3),
                     reader.GetFloat(4),
-                    reader.GetFloat(5)));
+                    reader.GetFloat(7),
+                    reader.IsDBNull(5) ? null : Convert.ToUInt32(reader.GetValue(5)),
+                    reader.IsDBNull(6) ? null : reader.GetString(6)));
             }
 
             _logger.LogInformation("[MySQL] Found {Count} nearby gameobject spawns on map={MapId} within {Distance:F1}y",

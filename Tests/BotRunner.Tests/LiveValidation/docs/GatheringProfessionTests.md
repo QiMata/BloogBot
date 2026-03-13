@@ -24,6 +24,7 @@ FG remains a packet/interaction reference path, but BG is the authoritative asse
    - FG failures now log diagnostic evidence and return to the safe zone.
    - BG remains the hard assertion path for live-suite pass/fail.
    - If all natural candidates are on respawn, the live test skips instead of spawning objects.
+   - The nearby-node query now includes `pool_gameobject` / `pool_template` metadata so the Valley route loads the full pooled candidate set instead of truncating pooled spawns silently.
 
 ### 2. Herbalism_GatherHerb_SkillIncreases
 
@@ -68,12 +69,18 @@ The next gathering overhaul step is to move herbalism onto the same route-task c
   - `CharacterAction.StartGatheringRoute` maps through BotRunner
   - `GatheringRouteTask` owns route optimization, candidate movement, visible-node discovery, and gather interaction
   - the old inline mining fallback path was removed from the live test
+- `2026-03-12` Valley copper discovery was widened again so the mining test loads pool metadata and all nearby pooled candidates in the Valley radius. The latest DB + live rerun confirmed:
+  - `7` natural Valley copper candidates inside the route radius
+  - all `7` belong to `pool_entry=1024` (`Copper Veins - Durotar (Master Pool)`)
+  - the previous `6`-candidate cap was removed
 - `2026-03-12` fixture/login scan confirmed there is no fixture-level or post-login `.tele name {name} ValleyOfTrials` path. The only active Valley teleport in the mining flow is the test's explicit staging helper.
 - Validation after the route-task mining pass:
   - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> `16 passed`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No Copper Vein nodes currently spawned on any of the 6 Valley copper-route candidates`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> `17 passed`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No Copper Vein nodes currently spawned on any of the 7 Valley copper-route candidates`)
 - Validation after the hardening pass:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed, 1 skipped`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `33 passed, 0 failed, 2 skipped`

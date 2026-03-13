@@ -62,7 +62,7 @@ Master tracker: `MASTER-SUB-022`
 - Problem: the remaining live suite still overuses raw action dispatch and setup validation instead of exercising the BotTask stack.
 - Target files: `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`, `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`, `Tests/BotRunner.Tests/LiveValidation/NavigationTests.cs`, `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`, `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`, `Exports/BotRunner/Tasks/`.
 - Required change: rewrite combat, corpse recovery, navigation, quest, and NPC tests to assert on task outcomes and snapshot metrics rather than reproducing task logic inline.
-- Progress (2026-03-12 session 78): mining now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` with a natural Valley of Trials copper-node coordinate list. The old inline mining fallback path is gone, and repo-wide scan confirmed there is no fixture/login/post-login `ValleyOfTrials` teleport outside the mining test's explicit staging helper. The current live boundary is natural node availability: the task-owned mining run now skips cleanly when all six route candidates are on respawn.
+- Progress (2026-03-12 sessions 78-79): mining now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` with a natural Valley of Trials copper-node coordinate list. The old inline mining fallback path is gone, repo-wide scan confirmed there is no fixture/login/post-login `ValleyOfTrials` teleport outside the mining test's explicit staging helper, and the nearby-node query now includes `pool_gameobject` / `pool_template` metadata so the full Valley pooled set is loaded. The latest live rerun confirmed `7` Valley copper candidates from pool `1024`; the current live boundary is still natural node availability.
 - Validation command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatLoopTests|FullyQualifiedName~DeathCorpseRunTests|FullyQualifiedName~NavigationTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 - Acceptance criteria: each rewritten suite links directly to the owning task logic and records deterministic outcome metrics.
 
@@ -173,53 +173,34 @@ Master tracker: `MASTER-SUB-022`
 
 ## Session Handoff (Latest)
 - Last updated: 2026-03-12
-- Active task: `BRT-OVR-002` gathering slice. Mining is now task-owned through `StartGatheringRoute -> GatheringRouteTask`; the next step is moving herbalism onto the same route-task contract and broadening natural-route coverage without reintroducing test-driven movement.
-- Last delta: removed the dead pre-overhaul mining fallback block, kept `ValleyOfTrials` staging test-local, validated the new `StartGatheringRoute` deterministic slice, and reran the live mining test to confirm the task-owned route now skips cleanly on natural-node respawn instead of failing through the old inline path.
+- Active task: `BRT-OVR-002` gathering slice. Mining is task-owned and now pool-aware; the next step is moving herbalism onto the same route-task contract and broadening natural-route coverage without reintroducing test-driven movement.
+- Last delta: widened Valley copper discovery so the mining test loads pool metadata and all nearby pooled candidates, then reran the focused live mining pass to confirm the task now skips on `7` Valley candidates instead of the previous `6`-candidate truncation.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
-  - `Exports/BotCommLayer/Models/Communication.cs`
-  - `Exports/GameData.Core/Enums/CharacterAction.cs`
-  - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
-  - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
-  - `Exports/BotRunner/Tasks/GatheringRouteTask.cs`
-  - `Tests/BotRunner.Tests/Combat/GatheringRouteTaskTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelection.cs`
   - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelectionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
   - `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Diagnostics.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixtureDiagnosticsTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
-  - `Exports/BotRunner/BotRunnerService.cs`
-  - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
   - `Tests/BotRunner.Tests/TASKS.md`
   - `docs/TASKS.md`
-  - `Exports/BotRunner/TASKS.md`
 - Commands run:
-  1. `rg --line-number "ValleyOfTrials|Valley of Trials|\.tele name .*ValleyOfTrials|BotTeleportToNamedAsync\(|TeleportToNamedAsync\(|\.tele .*Valley" Tests/BotRunner.Tests Exports/BotRunner Services -g "*.cs"`
-  2. `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
-  3. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
-  4. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"`
-  5. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"`
-  6. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WorldEntryHydrationTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientTimeoutTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"`
+  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false`
+  2. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"`
+  3. `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"`
 - Outcomes:
-  - Repo-wide scan found no fixture/login/post-login `ValleyOfTrials` teleport path; the only active named Valley teleport remains the mining test's explicit setup helper.
-  - `Exports/BotRunner` Release build succeeded.
   - `Tests/BotRunner.Tests` Release build succeeded.
-  - `GatheringRouteTaskTests|ActionMessage_AllTypes_RoundTrip|GatheringRouteSelectionTests` passed `16`.
-  - `Mining_GatherCopperVein_SkillIncreases` skipped cleanly because none of the 6 natural Valley copper-route candidates were currently spawned.
-  - `WorldEntryHydrationTests|PathfindingClientRequestTests|PathfindingClientTimeoutTests|GatheringRouteTaskTests|GatheringRouteSelectionTests|ActionMessage_AllTypes_RoundTrip` passed `24`.
+  - `GatheringRouteSelectionTests|GatheringRouteTaskTests|ActionMessage_AllTypes_RoundTrip` passed `17`.
+  - Focused live mining rerun still skipped, but now with the corrected pooled candidate count: `No Copper Vein nodes currently spawned on any of the 7 Valley copper-route candidates.`
 - Blockers:
   - `QuestInteractionTests`, `StarterQuestTests`, and the vendor/flight portions of `NpcInteractionTests` are still not fully task-owned under `BRT-OVR-002` and stay out of the routine documented-stable slice.
   - `CombatLoopTests`, `GatheringProfessionTests`, and `FishingProfessionTests` remain excluded from the routine documented-stable slice until their open overhaul work stops generating low-signal failures.
-  - `GatheringProfessionTests` mining is now task-owned, but the live signal still depends on natural node uptime; when the candidate veins are all on respawn, the test skips by design rather than spawning or force-respawning game objects.
+  - `GatheringProfessionTests` mining is now task-owned and pool-aware, but the live signal still depends on natural node uptime; when the candidate veins are all on respawn, the test skips by design rather than spawning or force-respawning game objects.
   - `FishingProfessionTests` still fails intermittently because shoreline pathing can terrain-stick or end at a no-LOS cast point (`FishingTask los_blocked phase=move`; `Your cast didn't land in fishable water`), even though the task-owned equip -> bait -> loot-window -> bag-delta path is already covered; the newest live rerun did not reach that point because BG setup revive failed first.
   - `DeathCorpseRunTests` is also blocked by the same BG clean-slate revive failure (`health=0/0` after fixture startup, `.revive` succeeds server-side but snapshot never returns to strict-alive within 10s).
   - `Trainer_LearnAvailableSpells` remains a deterministic skip under `BRT-OVR-006`.
-- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs | Select-Object -Skip 320 -First 260`
+- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs | Select-Object -Skip 240 -First 220`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

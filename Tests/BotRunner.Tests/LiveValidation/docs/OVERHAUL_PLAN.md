@@ -28,6 +28,7 @@ Completed overhaul slices now on disk:
 - The NPC action contract now includes `VisitVendor`, `VisitTrainer`, and `VisitFlightMaster`, and `Trainer_LearnAvailableSpells` now drives BG through `TrainerVisitTask`-owned logic instead of a raw `InteractWith` dispatch.
 - `LiveBotFixture.CheckFgActionableAsync()` now requires both successful action forwarding and a teleport/snapshot round-trip before later FG-sensitive suites keep running.
 - Mining live coverage now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` from an explicit `ValleyOfTrials` test setup, so the task owns route optimization, candidate movement, node discovery, and gather interaction instead of the test piloting per-node `Goto` steps.
+- The Valley mining probe now loads pooled candidate metadata from `pool_gameobject` / `pool_template` and no longer truncates the nearby Valley copper set to 6 rows. The latest live rerun confirmed `7` Valley candidates loaded from pool `1024`.
 - Fixture/login scan confirmed there is no fixture-level or post-login `ValleyOfTrials` teleport path; the only active Valley teleport is the mining test's own staging helper.
 - Test markdown was refreshed to link each touched test back to the production code paths it exercises.
 

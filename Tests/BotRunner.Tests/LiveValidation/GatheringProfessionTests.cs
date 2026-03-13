@@ -92,15 +92,29 @@ public class GatheringProfessionTests
                 GatheringRouteSelection.ValleyCopperRouteStartX,
                 GatheringRouteSelection.ValleyCopperRouteStartY,
                 GatheringRouteSelection.ValleyCopperSearchRadius,
-                limit: GatheringRouteSelection.ValleyCopperCandidateLimit + 4),
+                limit: GatheringRouteSelection.ValleyCopperQueryLimit),
             CopperVeinEntry);
         int valleyCandidateCount = valleyCandidates.Count;
+        int valleyPoolCount = valleyCandidates
+            .Select(candidate => candidate.poolEntry)
+            .Where(poolEntry => poolEntry.HasValue)
+            .Select(poolEntry => poolEntry!.Value)
+            .Distinct()
+            .Count();
         global::Tests.Infrastructure.Skip.If(valleyCandidateCount == 0,
             "No natural Copper Vein route candidates were found near the Valley copper pathing start.");
         _output.WriteLine(
-            $"Selected {valleyCandidateCount} Valley copper-route candidates from " +
+            $"Selected {valleyCandidateCount} Valley copper-route candidates across {Math.Max(1, valleyPoolCount)} spawn pool(s) from " +
             $"({GatheringRouteSelection.ValleyCopperRouteStartX:F0}, {GatheringRouteSelection.ValleyCopperRouteStartY:F0}, {GatheringRouteSelection.ValleyCopperRouteStartZ:F0}) " +
             $"with nearest route distance {valleyCandidates[0].distance2D:F0}y.");
+        var pooledCandidateSummary = string.Join(", ",
+            valleyCandidates.Select(candidate => candidate.poolEntry)
+                .Where(poolEntry => poolEntry.HasValue)
+                .Select(poolEntry => poolEntry!.Value)
+                .Distinct()
+                .OrderBy(poolEntry => poolEntry));
+        if (!string.IsNullOrWhiteSpace(pooledCandidateSummary))
+            _output.WriteLine($"Loaded Valley copper pool entries: {pooledCandidateSummary}");
 
         var fgAccountForRoute = _bot.FgAccountName;
         if (fgAccountForRoute != null && await _bot.CheckFgActionableAsync())
@@ -451,7 +465,7 @@ public class GatheringProfessionTests
     private ActionMessage BuildGatheringRouteAction(
         uint gatherSpellId,
         IReadOnlyCollection<uint> nodeEntries,
-        IReadOnlyList<(int map, float x, float y, float z, float distance2D)> routeCandidates)
+        IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> routeCandidates)
     {
         var action = new ActionMessage
         {
@@ -542,7 +556,7 @@ public class GatheringProfessionTests
     private async Task<bool> TryGatherAlongRoute(
         string account,
         string label,
-        List<(int map, float x, float y, float z, float distance2D)> routeCandidates,
+        List<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> routeCandidates,
         uint nodeEntry,
         uint skillId,
         string nodeName,
@@ -557,10 +571,10 @@ public class GatheringProfessionTests
 
         for (int index = 0; index < routeCandidates.Count; index++)
         {
-            var (map, spawnX, spawnY, spawnZ, routeDistance) = routeCandidates[index];
+            var (map, spawnX, spawnY, spawnZ, routeDistance, poolEntry, _) = routeCandidates[index];
             _output.WriteLine(
                 $"[{label}] Route candidate {index + 1}/{routeCandidates.Count}: " +
-                $"{nodeName} spawn at ({spawnX:F1}, {spawnY:F1}, {spawnZ:F1}), routeDist={routeDistance:F1}y");
+                $"{nodeName} spawn at ({spawnX:F1}, {spawnY:F1}, {spawnZ:F1}), routeDist={routeDistance:F1}y, pool={poolEntry?.ToString() ?? "none"}");
 
             bool reachedCandidate = await TryGotoPositionAsync(
                 account,
