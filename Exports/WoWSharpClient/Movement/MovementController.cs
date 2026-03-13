@@ -55,8 +55,10 @@ namespace WoWSharpClient.Movement
         private const float GROUND_SNAP_MAX_DROP = 5.0f;
         // Max allowed ground Z descent per physics frame. Prevents cascading ground detection
         // into cave/underground geometry on sloped terrain (GetGroundZ "closest to query Z" bug).
-        // 7 yd/s run speed * 45° slope * 0.2s tick = 1.4 yd. 5.0 gives margin for stairs/ledges.
-        private const float MaxGroundZDropPerFrame = 5.0f;
+        // Must be generous enough for legitimate steep terrain: ramps, stairs, WMO entrances.
+        // The cascade bug produces drops of 40+ yards (surface → cave floor). A 15y threshold
+        // catches the cascade while allowing steep outdoor terrain (Valley of Trials slopes).
+        private const float MaxGroundZDropPerFrame = 15.0f;
         private int _teleportClampFrames = 0;
         private const int TELEPORT_CLAMP_MAX_FRAMES = 300; // ~10s at 30fps — hard limit to avoid permanent clamping
 
