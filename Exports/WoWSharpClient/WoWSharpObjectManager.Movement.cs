@@ -452,10 +452,11 @@ namespace WoWSharpClient
         public void RetrieveCorpse()
         {
             if (_woWClient == null) return;
-            // CMSG_RECLAIM_CORPSE: 8-byte ObjectGuid (zero = server infers from session)
-            // Matches DeadActorClientComponent.ResurrectAtCorpseAsync() pattern.
-            Log.Information("[OBJMGR] RetrieveCorpse: sending CMSG_RECLAIM_CORPSE (Player.Guid=0x{Guid:X16})", Player?.Guid ?? 0);
-            var payload = new byte[8];
+            // CMSG_RECLAIM_CORPSE (1.12.1): 8-byte ObjectGuid playerGuid
+            // VMaNGOS validates the GUID matches the session player — zero is rejected silently.
+            var guid = Player?.Guid ?? 0UL;
+            Log.Information("[OBJMGR] RetrieveCorpse: sending CMSG_RECLAIM_CORPSE (Player.Guid=0x{Guid:X16})", guid);
+            var payload = BitConverter.GetBytes(guid);
             _ = _woWClient.SendMSGPackedAsync(Opcode.CMSG_RECLAIM_CORPSE, payload);
         }
     }
