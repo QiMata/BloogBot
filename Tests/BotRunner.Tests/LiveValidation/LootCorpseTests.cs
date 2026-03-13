@@ -38,7 +38,8 @@ public class LootCorpseTests
     private const int MapId = 1;
     private const float MobAreaX = -620f;
     private const float MobAreaY = -4385f;
-    private const float MobAreaZ = 44f;
+    // Z+3 offset applied to spawn table Z to avoid UNDERMAP detection
+    private const float MobAreaZ = 47f;
     private const uint MottledBoarEntry = 3098;
     private const string MottledBoarName = "Mottled Boar";
     private const float MeleeRange = 5f;

@@ -31,7 +31,8 @@ public class VendorBuySellTests
     private const int MapId = 1;
     private const float GrimtakX = 305.722f;
     private const float GrimtakY = -4665.87f;
-    private const float GrimtakZ = 16.527f;
+    // Z+3 offset applied to spawn table Z to avoid UNDERMAP detection
+    private const float GrimtakZ = 19.527f;
     private const float MaxVendorDistance = 12f;
 
     private const uint BuyTestItemId = LiveBotFixture.TestItems.RefreshingSpringWater;
@@ -219,7 +220,7 @@ public class VendorBuySellTests
     private async Task<VendorTarget> StageVendorAsync(string account, string label)
     {
         _output.WriteLine($"[{label}] Teleporting to Grimtak's Razor Hill position.");
-        await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ + 1);
+        await _bot.BotTeleportAsync(account, MapId, GrimtakX, GrimtakY, GrimtakZ);
         await _bot.WaitForTeleportSettledAsync(account, GrimtakX, GrimtakY, progressLabel: $"{label} vendor teleport");
 
         var vendorUnit = await _bot.WaitForNearbyUnitAsync(

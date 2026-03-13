@@ -33,8 +33,9 @@ public class NavigationTests
     private const float ArrivalRadius = 8.0f;
 
     // Razor Hill — flat, short path (~30y)
-    private const float RhStartX = 340f, RhStartY = -4686f, RhStartZ = 16.5f;
-    private const float RhEndX = 310f, RhEndY = -4720f, RhEndZ = 11f;
+    // Z+3 offset applied to spawn table Z values to avoid UNDERMAP detection
+    private const float RhStartX = 340f, RhStartY = -4686f, RhStartZ = 19.5f;
+    private const float RhEndX = 310f, RhEndY = -4720f, RhEndZ = 14f;
 
     // Orgrimmar — moderate path through Valley of Strength (~50y direct)
     // Ground level in Valley of Strength is ~29-32, NOT 15. Using 15 puts the bot underground

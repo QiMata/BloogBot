@@ -423,16 +423,17 @@ namespace WoWSharpClient.Movement
                     else
                     {
                         // Player started intentionally moving — begin grace period countdown.
-                        // Don't clear teleport Z immediately; give the physics engine time to find
-                        // proper ground under the new position. Only clear after the grace period
-                        // expires AND physics has found ground near the teleport Z (not cave geometry).
+                        // Don't clear teleport Z immediately; give the physics engine a few frames
+                        // to settle. Clear unconditionally once the grace period expires — the player
+                        // has committed to moving and accepts the new terrain height.
+                        // (Previously required groundNearTeleportZ, but in areas with persistent
+                        // cave geometry below terrain, physics never reports ground near teleportZ,
+                        // leaving the bot stuck at the elevated teleport Z indefinitely.)
                         if (_teleportZGraceFrames == 0)
                             _teleportZGraceFrames = TELEPORT_Z_GRACE_DURATION;
 
                         _teleportZGraceFrames--;
-                        bool groundNearTeleportZ = _noGroundFrameCount == 0
-                            && output.GroundZ > _teleportZ - GROUND_SNAP_MAX_DROP;
-                        if (_teleportZGraceFrames <= 0 && groundNearTeleportZ)
+                        if (_teleportZGraceFrames <= 0)
                         {
                             _teleportZ = float.NaN;
                             _teleportClampFrames = 0;
