@@ -353,6 +353,7 @@ namespace PathfindingService
         }
 
         private int _physicsLogCounter = 0;
+        private int _zeroForwardCount = 0;
         private PathfindingResponse HandlePhysics(Pathfinding.PhysicsInput step)
         {
             return _dynamicObjectOverlay.ExecuteExclusive(() =>
@@ -406,6 +407,31 @@ namespace PathfindingService
                         physicsOutput.x, physicsOutput.y, physicsOutput.z,
                         dz, physicsOutput.groundZ, physicsOutput.moveFlags,
                         physicsInput.prevGroundZ, physicsInput.deltaTime);
+                }
+
+                // Detect zero-delta with FORWARD flag (physics stuck)
+                {
+                    const uint MOVEFLAG_FORWARD = 0x1;
+                    float dx = physicsOutput.x - physicsInput.x;
+                    float dy = physicsOutput.y - physicsInput.y;
+                    bool hasForward = (physicsInput.moveFlags & MOVEFLAG_FORWARD) != 0;
+                    if (hasForward && Math.Abs(dx) < 0.001f && Math.Abs(dy) < 0.001f)
+                    {
+                        _zeroForwardCount++;
+                        if (_zeroForwardCount == 1 || _zeroForwardCount % 200 == 0)
+                        {
+                            logger.LogWarning(
+                                "[PHYS_STUCK] Zero-delta with FORWARD: count={Count} frame={Frame} " +
+                                "pos=({X:F1},{Y:F1},{Z:F1}) map={Map} groundZ={GZ:F2} speed={Spd:F1}",
+                                _zeroForwardCount, physicsInput.frameCounter,
+                                physicsInput.x, physicsInput.y, physicsInput.z,
+                                physicsInput.mapId, physicsOutput.groundZ, physicsInput.runSpeed);
+                        }
+                    }
+                    else if (hasForward)
+                    {
+                        _zeroForwardCount = 0;
+                    }
                 }
 
                 return new PathfindingResponse { Step = physicsOutput.ToPhysicsOutput() };

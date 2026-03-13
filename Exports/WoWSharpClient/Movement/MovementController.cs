@@ -326,6 +326,15 @@ namespace WoWSharpClient.Movement
                         "Count={Count} flags=0x{Flags:X} dt={Dt:F4}",
                         _deadReckonCount, (uint)_player.MovementFlags, deltaSec);
                 }
+                if (_deadReckonCount == 1 || _deadReckonCount == 50)
+                {
+                    Log.Warning("[MovementController] Physics zero-delta diagnostic: " +
+                        "mapId={MapId} in=({InX:F1},{InY:F1},{InZ:F1}) out=({OutX:F1},{OutY:F1},{OutZ:F1}) " +
+                        "facing={Facing:F2} runSpeed={Speed:F1} prevGZ={PrevGZ:F1} groundZ={GroundZ:F1}",
+                        _player.MapId, oldPos.X, oldPos.Y, oldPos.Z,
+                        output.NewPosX, output.NewPosY, output.NewPosZ,
+                        _player.Facing, _player.RunSpeed, _prevGroundZ, output.GroundZ);
+                }
             }
             else if (physicsMovedUs)
             {

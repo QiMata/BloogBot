@@ -50,25 +50,28 @@ void InitializeAllSystems()
     if (g_initialized)
         return;
 
+    // Each subsystem initializes independently so a failure in one doesn't
+    // prevent the others from working.  The previous code had Navigation and
+    // Physics in a single try/catch — if Navigation::Initialize() threw,
+    // PhysicsEngine::Initialize() was skipped, leaving physics permanently
+    // broken (groundZ=0 for every frame, no horizontal movement).
+
+    // --- Data root ---
+    std::string dataRoot;
+    {
+        char buf[512] = {0};
+        DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", buf, sizeof(buf));
+        if (len > 0 && len < sizeof(buf))
+        {
+            dataRoot = buf;
+            if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+                dataRoot += '/';
+        }
+    }
+
+    // --- MapLoader (optional, for terrain data) ---
     try
     {
-        // Get data root from environment variable if set.
-        // Use Win32 GetEnvironmentVariableA (not _dupenv_s) because .NET's
-        // Environment.SetEnvironmentVariable updates the process environment block
-        // but NOT the CRT cache that _dupenv_s reads from.
-        std::string dataRoot;
-        {
-            char buf[512] = {0};
-            DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", buf, sizeof(buf));
-            if (len > 0 && len < sizeof(buf))
-            {
-                dataRoot = buf;
-                if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
-                    dataRoot += '/';
-            }
-        }
-
-        // Initialize MapLoader (optional, for terrain data)
         g_mapLoader = std::make_unique<MapLoader>();
         std::vector<std::string> mapPaths;
         if (!dataRoot.empty())
@@ -83,8 +86,12 @@ void InitializeAllSystems()
                     break;
             }
         }
+    }
+    catch (...) {}
 
-        // Initialize VMAP system directly using VMapManager2
+    // --- VMAP system ---
+    try
+    {
         std::vector<std::string> vmapPaths;
         if (!dataRoot.empty())
             vmapPaths.push_back(dataRoot + "vmaps/");
@@ -94,25 +101,24 @@ void InitializeAllSystems()
         {
             if (std::filesystem::exists(path))
             {
-                // Get or create the VMapManager2 instance through factory
                 g_vmapManager = static_cast<VMAP::VMapManager2*>(
                     VMAP::VMapFactory::createOrGetVMapManager());
 
                 if (g_vmapManager)
                 {
-                    // Initialize factory and set base path
                     VMAP::VMapFactory::initialize();
                     g_vmapManager->setBasePath(path);
-                    // Load displayId→model mapping for dynamic objects (elevators, doors)
                     DynamicObjectRegistry::Instance()->LoadDisplayIdMapping(path);
                     break;
                 }
             }
         }
+    }
+    catch (...) {}
 
-        // Set scenes/ directory for pre-cached collision data (if not already set).
-        // Directory doesn't need to exist yet — EnsureMapLoaded() creates it on first extraction.
-        // Don't overwrite if already configured (e.g. by test fixture via SetScenesDir export).
+    // --- Scenes directory ---
+    try
+    {
         if (SceneQuery::GetScenesDir().empty())
         {
             if (!dataRoot.empty())
@@ -120,19 +126,24 @@ void InitializeAllSystems()
             else
                 SceneQuery::SetScenesDir("scenes/");
         }
-
-        // Initialize Navigation
-        Navigation::GetInstance()->Initialize();
-
-        // Initialize Physics Engine
-        PhysicsEngine::Instance()->Initialize();
-
-        g_initialized = true;
     }
-    catch (...)
+    catch (...) {}
+
+    // --- Navigation ---
+    try
     {
-        g_initialized = true; // Prevent retry
+        Navigation::GetInstance()->Initialize();
     }
+    catch (...) {}
+
+    // --- Physics Engine ---
+    try
+    {
+        PhysicsEngine::Instance()->Initialize();
+    }
+    catch (...) {}
+
+    g_initialized = true;
 }
 
 // ===============================
