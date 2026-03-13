@@ -53,6 +53,10 @@ namespace WoWSharpClient.Movement
         // mismatches at coasts and WMO surfaces cause cumulative gravity drift.
         private float _teleportZ = float.NaN;
         private const float GROUND_SNAP_MAX_DROP = 5.0f;
+        // Max allowed ground Z descent per physics frame. Prevents cascading ground detection
+        // into cave/underground geometry on sloped terrain (GetGroundZ "closest to query Z" bug).
+        // 7 yd/s run speed * 45° slope * 0.2s tick = 1.4 yd. 5.0 gives margin for stairs/ledges.
+        private const float MaxGroundZDropPerFrame = 5.0f;
         private int _teleportClampFrames = 0;
         private const int TELEPORT_CLAMP_MAX_FRAMES = 300; // ~10s at 30fps — hard limit to avoid permanent clamping
 
@@ -456,8 +460,16 @@ namespace WoWSharpClient.Movement
             // Advance waypoint if we've arrived
             AdvanceWaypointIfNeeded(output.NewPosX, output.NewPosY);
 
-            // Update position from physics
-            _player.Position = new Position(output.NewPosX, output.NewPosY, output.NewPosZ);
+            // Update position from physics — clamp Z if slope guard rejected the ground
+            var finalPosZ = output.NewPosZ;
+            if (physicsHasGround && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
+                && output.NewPosZ < _prevGroundZ - MaxGroundZDropPerFrame)
+            {
+                // Physics placed us underground due to bad ground detection on slopes.
+                // Clamp position to prevGroundZ (the last known-good surface).
+                finalPosZ = _prevGroundZ;
+            }
+            _player.Position = new Position(output.NewPosX, output.NewPosY, finalPosZ);
             _player.SwimPitch = output.Pitch;
 
             // Update velocity
@@ -481,6 +493,18 @@ namespace WoWSharpClient.Movement
                 {
                     _prevGroundZ = _teleportZ;
                     _prevGroundNormal = new Vector3(0, 0, 1); // flat ground assumption
+                }
+                // Slope guard: reject ground Z that drops more than MaxGroundZDropPerFrame from
+                // the previous ground Z. On sloped terrain, GetGroundZ "closest to query Z"
+                // can cascade into cave/underground geometry when plane projection extrapolates
+                // downward. Max walkable descent at 7 yd/s on 45° slope at 200ms tick = 1.4 yd.
+                // Use 5.0 as generous threshold to allow stairs, ledges, and fast ticks.
+                else if (!float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
+                         && output.GroundZ < _prevGroundZ - MaxGroundZDropPerFrame)
+                {
+                    Log.Warning("[MovementController] Slope guard: rejected ground Z drop {PrevZ:F1} -> {NewZ:F1} (delta={Delta:F1}). Holding previous ground.",
+                        _prevGroundZ, output.GroundZ, _prevGroundZ - output.GroundZ);
+                    // Don't update _prevGroundZ — keep the last good value
                 }
                 else
                 {

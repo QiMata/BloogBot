@@ -35,12 +35,6 @@ namespace ForegroundBotRunner.Statics
             Functions.SendMovementUpdate(localPlayer.Pointer, (int)Opcode.MSG_MOVE_SET_FACING);
         }
         // the client will NOT send a packet to the server if a key is already pressed, so you're safe to spam this
-
-        // the client will NOT send a packet to the server if a key is already pressed, so you're safe to spam this
-
-        // the client will NOT send a packet to the server if a key is already pressed, so you're safe to spam this
-
-        // the client will NOT send a packet to the server if a key is already pressed, so you're safe to spam this
         public void StartMovement(ControlBits bits)
         {
             if (bits == ControlBits.Nothing)
@@ -135,15 +129,6 @@ namespace ForegroundBotRunner.Statics
         }
 
         // ── Smooth turning state (ported from reference LocalPlayer.cs) ──
-
-
-        // ── Smooth turning state (ported from reference LocalPlayer.cs) ──
-
-
-        // ── Smooth turning state (ported from reference LocalPlayer.cs) ──
-
-
-        // ── Smooth turning state (ported from reference LocalPlayer.cs) ──
         private readonly Random _facingRandom = new();
 
 
@@ -160,27 +145,6 @@ namespace ForegroundBotRunner.Statics
 
 
         private Position? _turningToward;
-
-        /// <summary>
-        /// Smoothly turns the player to face the target position.
-        /// Splits the turn into 2-5 steps for human-like behavior.
-        /// Call repeatedly (e.g. every tick) until the player is facing the target.
-        /// </summary>
-
-
-        /// <summary>
-        /// Smoothly turns the player to face the target position.
-        /// Splits the turn into 2-5 steps for human-like behavior.
-        /// Call repeatedly (e.g. every tick) until the player is facing the target.
-        /// </summary>
-
-
-        /// <summary>
-        /// Smoothly turns the player to face the target position.
-        /// Splits the turn into 2-5 steps for human-like behavior.
-        /// Call repeatedly (e.g. every tick) until the player is facing the target.
-        /// </summary>
-
 
         /// <summary>
         /// Smoothly turns the player to face the target position.
