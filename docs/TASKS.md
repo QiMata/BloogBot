@@ -198,28 +198,32 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ## Session Handoff (Latest)
 - **Last updated:** 2026-03-13 (session 85)
 - **Branch:** `cpp_physics_system`
-- **Current work:** Pathfinding performance fix, FG ghost crash fix, test improvements. Continuing BRT-OVR-002.
+- **Commits:** `f6fc2a4` (pathfinding perf + FG ghost fix), `2344c2e` (test improvements + console windows), `da286d1` (slope guard), `41f7740` (slope guard tuning)
 - **Completed this session:**
-  1. **Pathfinding performance fix** (`f6fc2a4`): Native `FindPath` was taking 16,470ms due to `RefinePathForWalkability` physics capsule sweeps (0.25m chunks with full physics sim). Disabled both `RefinePathForWalkability` and `SimplifyPathForWalkability` in `PathFinder.cpp`. Paths now generate in 0ms native, 6ms server-side, 47ms end-to-end.
-  2. **DynamicOverlay false positive fix** (`f6fc2a4`): `EvaluateSegmentTraversalInternal` in `Navigation.cs` was rejecting ALL paths near game objects (campfires, decorations). Changed dynamic overlay check to diagnostic-only.
-  3. **PathfindingClient timeout** (`f6fc2a4`): Reduced from 30s to 5s (was masking the performance bug).
-  4. **FG ghost crash fix (BT-DEATH-003)** (`f6fc2a4`): Added null pointer guards to `SetFacing()`, `ReleaseCorpse()`, `Turn180()` in `ObjectManager.Movement.cs`. Ghost form transitions make `Player.Pointer` stale.
-  5. **Navigation long path fix**: Changed coordinates from sloped Valley of Trials terrain (where BG falls through world) to flat Razor Hill area.
-  6. **Combat test retry**: Added 3-attempt retry loop for mob evade/despawn before damage dealt.
-- **Test results (full LiveValidation):** `35 passed, 2 failed, 7 skipped` (44 total, 16m31s)
-  - **Passed (35):** All previous 34 PLUS Navigation_ShortPath (was skipped, now passes with pathfinding fix!)
-  - **Failed (2):** Combat (mob evaded before damage — retry added), Navigation_LongPath (BG falling through sloped terrain — coordinates fixed)
-  - **Skipped (7):** BuffDismiss, FG DeathCorpseRun (FG bot not launching), Fishing, GatheringMining, GatheringHerbalism, GroupFormation, TrainerLearn
-- **Key fix:** PathfindingService no_route was NOT systemic — it was caused by `RefinePathForWalkability` hanging (16s per path) + `DynamicOverlay` rejecting valid paths. Both are now fixed. Navigation works.
+  1. **Pathfinding performance fix** (`f6fc2a4`): Native `FindPath` 16,470ms → 0ms. Disabled `RefinePathForWalkability` + `SimplifyPathForWalkability` (physics capsule sweeps too expensive). Paths: 0ms native, 6ms server, 47ms end-to-end.
+  2. **DynamicOverlay false positive fix** (`f6fc2a4`): `EvaluateSegmentTraversalInternal` rejected ALL paths near game objects. Made diagnostic-only.
+  3. **PathfindingClient timeout** (`f6fc2a4`): 30s → 5s (was masking the perf bug).
+  4. **FG ghost crash fix (BT-DEATH-003)** (`f6fc2a4`): Null pointer guards on `SetFacing()`, `ReleaseCorpse()`, `Turn180()`.
+  5. **BG slope ground-snap fix** (`da286d1`, `41f7740`): `GetGroundZ` "closest to query Z" cascades into cave geometry on slopes. Added `MaxGroundZDropPerFrame=15.0` guard in MovementController — rejects single-frame ground Z drops >15y and clamps position Z. Prevents 40+ yard cascade to cave floor while allowing legitimate steep terrain.
+  6. **Combat test retry** (`2344c2e`): 3-attempt loop for mob evade/despawn before damage dealt.
+  7. **BG console windows** (`2344c2e`): `WWOW_SHOW_WINDOWS=1` set on StateManager child env in BotServiceFixture so BG bot + PathfindingService get visible consoles during tests.
+  8. **Code cleanup**: Removed duplicate comment blocks in FG `ObjectManager.Movement.cs`.
+- **Test results (full LiveValidation):** `36 passed, 1 failed, 7 skipped` (44 total, 16m47s)
+  - **Passed (36):** Navigation_ShortPath + Navigation_LongPath (BOTH pass now!), Combat, all 34 previous passes
+  - **Failed (1):** DeathCorpseRun BG (intermittent — passed in earlier run at 2m4s, failed this run at 2m13s; corpse run navigation edge case near corpse reclaim range)
+  - **Skipped (7):** BuffDismiss, FG DeathCorpseRun (no WoW.exe), Fishing, GatheringMining, GatheringHerbalism, GroupFormation, TrainerLearn
+- **Key fixes this session:**
+  - PathfindingService no_route was NOT systemic — caused by `RefinePathForWalkability` hanging + `DynamicOverlay` rejecting valid paths
+  - BG falling through sloped terrain — caused by `GetGroundZ` "closest to query Z" cascading into cave geometry. Fixed with per-frame Z delta guard.
 - **Known remaining issues:**
-  - **FG bot not launching in tests**: StateManager has 60s cooldown between launch attempts. FG DLL injection infrastructure issue.
-  - **BG physics ground-snap on slopes**: BG bot falls through terrain at Valley of Trials slopes (Z drops from 43→-5→-74). Flat terrain works fine.
+  - **DeathCorpseRun intermittent**: Corpse run navigation sometimes doesn't reach reclaim range. Investigate waypoint consumption near corpse position.
+  - **FG bot not launching in tests**: StateManager 60s cooldown on FG launch attempts. WoW.exe infrastructure dependency.
   - Fishing FG: LOS blocked during approach to pool (pre-existing)
-  - Gathering: copper/herb nodes on respawn timer — inherently intermittent
+  - Gathering: nodes on respawn timer — inherently intermittent
 - **Next:**
-  1. Verify navigation long path with new Razor Hill coordinates
-  2. Verify combat retry logic
-  3. Investigate BG physics ground-snap failures on sloped terrain
+  1. Investigate death corpse run navigation edge case (bot reaches 33y but doesn't reclaim)
+  2. Continue BRT-OVR-002 remaining behavior suites
+  3. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
   4. Continue BRT-OVR-002 remaining behavior suites
 
 ## Session Handoff (Session 80 Archive)
