@@ -40,7 +40,8 @@ namespace BotRunner
                     {
                         var (radius, height) = RaceDimensions.GetCapsuleForRace(
                             _objectManager.Player.Race, _objectManager.Player.Gender);
-                        navPath = new NavigationPath(_container.PathfindingClient,
+                        var pfClient = _container.PathfindingClient;
+                        navPath = new NavigationPath(pfClient,
                             capsuleRadius: radius,
                             capsuleHeight: height,
                             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end));
@@ -66,32 +67,38 @@ namespace BotRunner
                     // Phase 2: pass physics wall contact hint so NavigationPath can suppress false stall
                     // detection when the bot is genuinely blocked by geometry.
                     bool hitWall = _objectManager is WoWSharpClient.WoWSharpObjectManager wsOm && wsOm.PhysicsHitWall;
-                    var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall);
-                    if (waypoint == null)
-                    {
-                        _objectManager.StopAllMovement();
-                        noPathSinceUtc ??= DateTime.UtcNow;
-
-                        if (DateTime.UtcNow - lastNoPathLogUtc > TimeSpan.FromSeconds(5))
+                    try {
+                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall);
+                        if (waypoint == null)
                         {
-                            var noPathSeconds = (int)(DateTime.UtcNow - noPathSinceUtc.Value).TotalSeconds;
-                            Log.Warning("[GOTO] No route to ({X:F1},{Y:F1},{Z:F1}) for {Seconds}s; waiting for path.",
-                                target.X, target.Y, target.Z, noPathSeconds);
-                            lastNoPathLogUtc = DateTime.UtcNow;
+                            _objectManager.StopAllMovement();
+                            noPathSinceUtc ??= DateTime.UtcNow;
+
+                            if (DateTime.UtcNow - lastNoPathLogUtc > TimeSpan.FromSeconds(5))
+                            {
+                                var noPathSeconds = (int)(DateTime.UtcNow - noPathSinceUtc.Value).TotalSeconds;
+                                Log.Warning("[GOTO] No route to ({X:F1},{Y:F1},{Z:F1}) for {Seconds}s; waiting for path.",
+                                    target.X, target.Y, target.Z, noPathSeconds);
+                                lastNoPathLogUtc = DateTime.UtcNow;
+                            }
+
+                            return BehaviourTreeStatus.Running;
                         }
 
+                        noPathSinceUtc = null;
+
+                        // Calculate facing toward next waypoint
+                        var dx = waypoint.X - _objectManager.Player.Position.X;
+                        var dy = waypoint.Y - _objectManager.Player.Position.Y;
+                        var facing = MathF.Atan2(dy, dx);
+
+                        _objectManager.MoveToward(waypoint, facing);
                         return BehaviourTreeStatus.Running;
                     }
-
-                    noPathSinceUtc = null;
-
-                    // Calculate facing toward next waypoint
-                    var dx = waypoint.X - _objectManager.Player.Position.X;
-                    var dy = waypoint.Y - _objectManager.Player.Position.Y;
-                    var facing = MathF.Atan2(dy, dx);
-
-                    _objectManager.MoveToward(waypoint, facing);
-                    return BehaviourTreeStatus.Running;
+                    catch (Exception)
+                    {
+                        return BehaviourTreeStatus.Running;
+                    }
                 })
             .End()
             .Build();

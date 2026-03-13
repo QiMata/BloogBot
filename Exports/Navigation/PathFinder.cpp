@@ -28,9 +28,8 @@
 #include "PathFinder.h"
 #include "Navigation.h"
 
-#include <iostream>
-#include <fstream>
 #include <cmath>
+#include <chrono>
 
 extern "C" uint32_t ValidateWalkableSegment(
     uint32_t mapId,
@@ -55,7 +54,8 @@ namespace
     constexpr float PathValidationAgentHeight = 2.0f;
     constexpr uint32_t SegmentValidationClear = 0;
     constexpr uint32_t SegmentValidationMissingSupport = 2;
-    constexpr int MaxSegmentRefinementDepth = 6;
+    constexpr int MaxSegmentRefinementDepth = 3;
+    constexpr int MaxRefinementTotalCalls = 500;
     constexpr float RedundantPointDistanceThreshold = 0.75f;
     constexpr int MaxSimplificationPasses = 4;
     constexpr float MinDetourSegmentLength = 2.0f;
@@ -180,7 +180,8 @@ namespace
         const Vector3& start,
         const Vector3& end,
         int depth,
-        PointsArray& output);
+        PointsArray& output,
+        int& totalCalls);
 
     bool AppendRefinedCandidate(
         uint32_t mapId,
@@ -188,17 +189,18 @@ namespace
         const Vector3& candidate,
         const Vector3& end,
         int depth,
-        PointsArray& output)
+        PointsArray& output,
+        int& totalCalls)
     {
         const size_t baseSize = output.size();
-        if (!AppendRefinedSegment(mapId, start, candidate, depth + 1, output))
+        if (!AppendRefinedSegment(mapId, start, candidate, depth + 1, output, totalCalls))
         {
             output.resize(baseSize);
             return false;
         }
 
         const Vector3 candidateEnd = output.back();
-        if (!AppendRefinedSegment(mapId, candidateEnd, end, depth + 1, output))
+        if (!AppendRefinedSegment(mapId, candidateEnd, end, depth + 1, output, totalCalls))
         {
             output.resize(baseSize);
             return false;
@@ -212,7 +214,8 @@ namespace
         const Vector3& start,
         const Vector3& end,
         int depth,
-        PointsArray& output)
+        PointsArray& output,
+        int& totalCalls)
     {
         const float horizontalDistance = HorizontalDistance(start, end);
         if (horizontalDistance < MinDetourSegmentLength)
@@ -224,11 +227,14 @@ namespace
             {
                 for (int directionSign : { 1, -1 })
                 {
+                    if (totalCalls >= MaxRefinementTotalCalls)
+                        return false;
+
                     Vector3 candidate;
                     if (!TryBuildDetourCandidate(mapId, start, end, alongFraction, lateralOffset, directionSign, &candidate))
                         continue;
 
-                    if (AppendRefinedCandidate(mapId, start, candidate, end, depth, output))
+                    if (AppendRefinedCandidate(mapId, start, candidate, end, depth, output, totalCalls))
                         return true;
                 }
             }
@@ -242,8 +248,13 @@ namespace
         const Vector3& start,
         const Vector3& end,
         int depth,
-        PointsArray& output)
+        PointsArray& output,
+        int& totalCalls)
     {
+        ++totalCalls;
+        if (totalCalls >= MaxRefinementTotalCalls)
+            return false;
+
         Vector3 adjustedEnd = end;
         uint32_t validation = SegmentValidationClear;
         if (ValidatePathSegment(mapId, start, end, &adjustedEnd, &validation))
@@ -255,11 +266,11 @@ namespace
         if (depth >= MaxSegmentRefinementDepth)
             return false;
 
-        if (TryAppendDetourSegment(mapId, start, end, depth, output))
+        if (TryAppendDetourSegment(mapId, start, end, depth, output, totalCalls))
             return true;
 
         const Vector3 midpoint = BuildGroundedMidpoint(mapId, start, end);
-        return AppendRefinedCandidate(mapId, start, midpoint, end, depth, output);
+        return AppendRefinedCandidate(mapId, start, midpoint, end, depth, output, totalCalls);
     }
 
     void RefinePathForWalkability(uint32_t mapId, PointsArray& pathPoints)
@@ -272,8 +283,17 @@ namespace
         refined.push_back(pathPoints.front());
 
         bool changed = false;
+        int totalCalls = 0;
         for (size_t i = 1; i < pathPoints.size(); ++i)
         {
+            if (totalCalls >= MaxRefinementTotalCalls)
+            {
+                // Budget exhausted — keep remaining waypoints as-is
+                for (size_t j = i; j < pathPoints.size(); ++j)
+                    refined.push_back(pathPoints[j]);
+                break;
+            }
+
             const Vector3 start = refined.back();
             const Vector3 end = pathPoints[i];
 
@@ -286,7 +306,7 @@ namespace
             }
 
             const size_t beforeRefineSize = refined.size();
-            if (AppendRefinedSegment(mapId, start, end, 0, refined))
+            if (AppendRefinedSegment(mapId, start, end, 0, refined, totalCalls))
             {
                 changed = true;
                 continue;
@@ -300,13 +320,20 @@ namespace
             pathPoints.swap(refined);
     }
 
+    constexpr int MaxSimplificationTotalCalls = 500;
+
     void SimplifyPathForWalkability(uint32_t mapId, PointsArray& pathPoints)
     {
         if (pathPoints.size() < 3)
             return;
 
+        int totalCalls = 0;
+
         for (int pass = 0; pass < MaxSimplificationPasses; ++pass)
         {
+            if (totalCalls >= MaxSimplificationTotalCalls)
+                return;
+
             const PointsArray source = pathPoints;
             PointsArray simplified;
             simplified.reserve(source.size());
@@ -321,6 +348,12 @@ namespace
                 const Vector3 curr = pendingNext;
                 pendingNext = source[i + 1];
 
+                if (totalCalls >= MaxSimplificationTotalCalls)
+                {
+                    simplified.push_back(curr);
+                    continue;
+                }
+
                 const float incomingDistance = HorizontalDistance(prev, curr);
                 const float outgoingDistance = HorizontalDistance(curr, pendingNext);
                 if (incomingDistance > RedundantPointDistanceThreshold &&
@@ -330,6 +363,7 @@ namespace
                     continue;
                 }
 
+                ++totalCalls;
                 Vector3 adjustedNext = pendingNext;
                 uint32_t validation = SegmentValidationClear;
                 if (ValidatePathSegment(mapId, prev, pendingNext, &adjustedNext, &validation))
@@ -712,6 +746,8 @@ void PathFinder::BuildPolyPath(const Vector3& startPos, const Vector3& endPos)
 
 void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 {
+	auto buildStart = std::chrono::steady_clock::now();
+
 	float pathPoints[MAX_POINT_PATH_LENGTH * VERTEX_SIZE];
 	unsigned int pointCount = 0;
 	dtStatus dtResult = DT_FAILURE;
@@ -740,6 +776,8 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 			m_pointPathLimit);    // maximum number of points
 	}
 
+	auto afterSmooth = std::chrono::steady_clock::now();
+
 	if (pointCount < 2 || dtStatusFailed(dtResult))
 	{
 		// only happens if pass bad data to findStraightPath or navmesh is broken
@@ -757,8 +795,25 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 		m_pathPoints[i] = Vector3(pathPoints[i * VERTEX_SIZE + 2], pathPoints[i * VERTEX_SIZE], pathPoints[i * VERTEX_SIZE + 1]);
 	}
 
-    RefinePathForWalkability(m_mapId, m_pathPoints);
-    SimplifyPathForWalkability(m_mapId, m_pathPoints);
+	// RefinePathForWalkability and SimplifyPathForWalkability DISABLED:
+	// ValidateWalkableSegment physics capsule sweeps cost ~630ms per segment,
+	// making 27-point paths take 16+ seconds. The Detour smooth path is already
+	// walkable (generated via moveAlongSurface). The C# CalculateValidatedPath
+	// layer handles segment validation via FindBlockedSegment at the service level.
+	auto afterRefine = afterSmooth;
+	auto afterSimplify = afterSmooth;
+
+	{
+		auto smoothMs = std::chrono::duration_cast<std::chrono::milliseconds>(afterSmooth - buildStart).count();
+		auto refineMs = std::chrono::duration_cast<std::chrono::milliseconds>(afterRefine - afterSmooth).count();
+		auto simplifyMs = std::chrono::duration_cast<std::chrono::milliseconds>(afterSimplify - afterRefine).count();
+		auto totalMs = smoothMs + refineMs + simplifyMs;
+		if (totalMs > 50)
+		{
+			fprintf(stderr, "[NAV-PERF] BuildPointPath map=%u pts=%u smooth=%lldms refine=%lldms simplify=%lldms total=%lldms\n",
+				m_mapId, pointCount, smoothMs, refineMs, simplifyMs, totalMs);
+		}
+	}
 
 	// first point is always our current location - we need the next one
 	setActualEndPosition(m_pathPoints[m_pathPoints.size() - 1]);

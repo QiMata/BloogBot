@@ -181,6 +181,7 @@ namespace WoWStateManager.Listeners
                     // Suppress CombatCoordinator so multi-second forwarded actions
                     // are not overwritten on the next poll cycle.
                     _coordinatorSuppressedUntil[accountName] = DateTime.UtcNow.AddSeconds(_coordinatorSuppressionSeconds);
+                    Console.WriteLine($"[ACTION-DIAG] INJECTING PENDING ACTION to '{accountName}': {pendingAction.ActionType}");
                     _logger.LogInformation($"INJECTING PENDING ACTION to '{accountName}': {pendingAction.ActionType} (coordinator suppressed {_coordinatorSuppressionSeconds}s)");
                     break;
                 }
@@ -224,6 +225,7 @@ namespace WoWStateManager.Listeners
             }
 
             queue.Enqueue(new TimestampedAction(action));
+            Console.WriteLine($"[ACTION-DIAG] QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
             _logger.LogInformation($"QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
             return true;
         }

@@ -187,8 +187,16 @@ void Navigation::InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned
 		const auto mmapsPath = Navigation::GetMmapsPath();
 		if (!std::filesystem::exists(mmapsPath))
 		{
+			printf("[Navigation] mmaps path does not exist: %s\n", mmapsPath.c_str());
 			return;
 		}
+
+		// Set the base path on MMapManager so loadMapData/loadMap use the correct directory
+		if (manager->getMmapsBasePath().empty())
+			manager->setMmapsBasePath(mmapsPath);
+
+		printf("[Navigation] Loading map %u tiles from: %s\n", mapId, mmapsPath.c_str());
+		int tileCount = 0;
 
 		for (auto& p : std::filesystem::directory_iterator(mmapsPath))
 		{
@@ -225,10 +233,12 @@ void Navigation::InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned
 
 				int x = (xTens * 10) + xOnes;
 				int y = (yTens * 10) + yOnes;
-				manager->loadMap(mapId, x, y);
+				if (manager->loadMap(mapId, x, y))
+					tileCount++;
 			}
 		}
 
+		printf("[Navigation] Map %u: loaded %d tiles\n", mapId, tileCount);
 		manager->zoneMap.insert(std::pair<unsigned int, bool>(mapId, true));
 	}
 }

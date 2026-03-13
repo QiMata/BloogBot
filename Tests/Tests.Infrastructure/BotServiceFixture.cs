@@ -1060,10 +1060,11 @@ public class BotServiceFixture : IAsyncLifetime
             || line.Contains("INVENTORY_CHANGE_FAILURE")
             || line.Contains("[WorldClient] INVENTORY_CHANGE_FAILURE")
             || line.Contains("[BOT RUNNER] Inventory changed:")
-            || line.Contains("QUEUED ACTION for")
-            || line.Contains("Action forward: queued")
-            || line.Contains("INJECTING PENDING ACTION")
-            || line.Contains("DELIVERING ACTION")
+            // Action delivery logs temporarily unfiltered for GOTO debugging
+            // || line.Contains("QUEUED ACTION for")
+            // || line.Contains("Action forward: queued")
+            // || line.Contains("INJECTING PENDING ACTION")
+            // || line.Contains("DELIVERING ACTION")
             || line.Contains("Detected terminated bot process")
             || line.Contains("attempting re-launch"))
             return true;

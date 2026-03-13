@@ -192,7 +192,7 @@ public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegis
         {
             while (_operationActive || _pendingPriorityOperations > 0)
             {
-                Monitor.Wait(_registryGate);
+                Monitor.Wait(_registryGate, 1000);
             }
 
             _operationActive = true;
@@ -208,7 +208,7 @@ public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegis
             {
                 while (_operationActive)
                 {
-                    Monitor.Wait(_registryGate);
+                    Monitor.Wait(_registryGate, 1000); // Timeout to avoid infinite wait
                 }
 
                 _operationActive = true;

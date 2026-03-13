@@ -117,6 +117,9 @@ namespace PathfindingService
 
                 _isInitialized = true;
 
+                // Diagnostic: verify native pathfinding actually works
+                DiagnoseNativePathfinding(logger);
+
                 // Write "ready" status with loaded maps
                 // Maps 0, 1, 389 are preloaded by Physics.EnsureNativeLibraryLoaded()
                 var loadedMaps = new List<uint> { 0, 1, 389 };
@@ -124,6 +127,27 @@ namespace PathfindingService
 
                 logger.LogInformation("Navigation and Physics systems initialized.");
             }
+        }
+
+        /// <summary>
+        /// Startup diagnostic: verify native pathfinding returns valid paths for known coordinates.
+        /// </summary>
+        private static void DiagnoseNativePathfinding(ILogger logger)
+        {
+            // Valley of Trials (Map 1): short path between two known-good positions
+            var (len1, ok1) = Navigation.DiagnosticFindPath(1, -284f, -4383f, 57f, -320f, -4420f, 57f);
+            logger.LogInformation("[DIAG] Map 1 VoT path: length={Length}, success={Success}", len1, ok1);
+
+            // Eastern Kingdoms (Map 0): Elwynn Forest short path
+            var (len0, ok0) = Navigation.DiagnosticFindPath(0, -8949f, -132f, 83f, -8920f, -110f, 83f);
+            logger.LogInformation("[DIAG] Map 0 Elwynn path: length={Length}, success={Success}", len0, ok0);
+
+            if (!ok1 && !ok0)
+                logger.LogError("[DIAG] BOTH maps returned no path — mmaps may not be loaded. Check WWOW_DATA_DIR and mmaps directory.");
+            else if (!ok1)
+                logger.LogWarning("[DIAG] Map 1 (Kalimdor) pathfinding failed — Map 1 mmtile files may be missing.");
+            else if (!ok0)
+                logger.LogWarning("[DIAG] Map 0 (Eastern Kingdoms) pathfinding failed — Map 0 mmtile files may be missing.");
         }
 
         /// <summary>

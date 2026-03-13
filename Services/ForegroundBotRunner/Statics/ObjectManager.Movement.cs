@@ -28,8 +28,11 @@ namespace ForegroundBotRunner.Statics
 
         public void SetFacing(float facing)
         {
-            Functions.SetFacing(nint.Add(((LocalPlayer)Player).Pointer, MemoryAddresses.LocalPlayer_SetFacingOffset), facing);
-            Functions.SendMovementUpdate(((LocalPlayer)Player).Pointer, (int)Opcode.MSG_MOVE_SET_FACING);
+            if (Player is not LocalPlayer localPlayer || localPlayer.Pointer == nint.Zero)
+                return;
+
+            Functions.SetFacing(nint.Add(localPlayer.Pointer, MemoryAddresses.LocalPlayer_SetFacingOffset), facing);
+            Functions.SendMovementUpdate(localPlayer.Pointer, (int)Opcode.MSG_MOVE_SET_FACING);
         }
         // the client will NOT send a packet to the server if a key is already pressed, so you're safe to spam this
 
@@ -93,7 +96,12 @@ namespace ForegroundBotRunner.Statics
 
 
 
-        public void ReleaseCorpse() => Functions.ReleaseCorpse(((LocalPlayer)Player).Pointer);
+        public void ReleaseCorpse()
+        {
+            if (Player is not LocalPlayer localPlayer || localPlayer.Pointer == nint.Zero)
+                return;
+            Functions.ReleaseCorpse(localPlayer.Pointer);
+        }
 
 
 
@@ -282,6 +290,8 @@ namespace ForegroundBotRunner.Statics
 
         public void Turn180()
         {
+            if (Player is not LocalPlayer localPlayer2 || localPlayer2.Pointer == nint.Zero)
+                return;
             var newFacing = Player.Facing + Math.PI;
             if (newFacing > Math.PI * 2)
                 newFacing -= Math.PI * 2;

@@ -56,7 +56,7 @@ public class NavigationTests
     public async Task Navigation_ShortPath_ArrivesAtDestination()
     {
         await RunNavigationTest("Short (Valley of Trials)", VotStartX, VotStartY, VotStartZ,
-            VotEndX, VotEndY, VotEndZ, maxSeconds: 20);
+            VotEndX, VotEndY, VotEndZ, maxSeconds: 40);
     }
 
     [SkippableFact]

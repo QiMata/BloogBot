@@ -213,6 +213,17 @@ namespace BotRunner
             var playerWorldReady = _objectManager.HasEnteredWorld
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
+            if (incomingActivityMemberState.CurrentAction != null
+                && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait
+                && !playerWorldReady)
+            {
+                var p = _objectManager.Player;
+                Log.Warning($"[BOT RUNNER] ACTION DROPPED: playerWorldReady=false " +
+                    $"(HasEnteredWorld={_objectManager.HasEnteredWorld}, " +
+                    $"Player={p != null}, Guid={p?.Guid ?? 0}, Pos={p?.Position != null}, MaxHP={p?.MaxHealth ?? 0}) " +
+                    $"action={incomingActivityMemberState.CurrentAction.ActionType}");
+            }
+
             if (playerWorldReady
                 && incomingActivityMemberState.CurrentAction != null
                 && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait)

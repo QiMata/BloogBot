@@ -99,6 +99,26 @@ namespace PathfindingService.Repository
         {
         }
 
+        /// <summary>
+        /// Diagnostic: call native FindPath with known-good coordinates and report results.
+        /// Used during startup to verify mmaps are actually loaded.
+        /// </summary>
+        public static (int length, bool success) DiagnosticFindPath(uint mapId, float startX, float startY, float startZ, float endX, float endY, float endZ)
+        {
+            IntPtr pathPtr = IntPtr.Zero;
+            try
+            {
+                pathPtr = FindPath(mapId, new NativeXyz(new XYZ(startX, startY, startZ)),
+                    new NativeXyz(new XYZ(endX, endY, endZ)), true, out int length);
+                return (length, pathPtr != IntPtr.Zero && length > 0);
+            }
+            finally
+            {
+                if (pathPtr != IntPtr.Zero)
+                    PathArrFree(pathPtr);
+            }
+        }
+
         public Navigation(
             Func<uint, XYZ, XYZ, bool, XYZ[]> findPathResolver,
             Func<uint, XYZ, XYZ, SegmentBlockReason> segmentBlockEvaluator)
@@ -706,8 +726,11 @@ namespace PathfindingService.Repository
 
         private static SegmentEvaluation EvaluateSegmentTraversalInternal(uint mapId, XYZ from, XYZ to)
         {
-            if (SegmentIntersectsDynamicObjectsInternal(mapId, from, to))
-                return new SegmentEvaluation(to, SegmentBlockReason.DynamicOverlay);
+            // Dynamic object intersection is diagnostic-only for path validation.
+            // Small objects (campfires, decorations) have collision geometry that
+            // intersects paths but doesn't actually block player movement. The overlay
+            // system is primarily for LOS checks and physics simulation, not path rejection.
+            // Blocking here caused ALL paths to be rejected in areas with any nearby objects.
 
             if (!IsNativeSegmentValidationEnabled())
                 return new SegmentEvaluation(to, SegmentBlockReason.None);
