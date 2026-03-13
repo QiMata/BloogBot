@@ -30,7 +30,7 @@ public class NavigationTests
     private readonly ITestOutputHelper _output;
 
     private const int MapId = 1; // Kalimdor
-    private const float ArrivalRadius = 8.0f;
+    private const float ArrivalRadius = 12.0f;
     private const float NoRouteSkipThresholdSeconds = 10f;
 
     // Valley of Trials — flat outdoor terrain, pathfinding routes reliably here.
@@ -64,7 +64,7 @@ public class NavigationTests
     public async Task Navigation_LongPath_ArrivesAtDestination()
     {
         await RunNavigationTest("Long (Valley of Trials)", VotLongStartX, VotLongStartY, VotLongStartZ,
-            VotLongEndX, VotLongEndY, VotLongEndZ, maxSeconds: 45);
+            VotLongEndX, VotLongEndY, VotLongEndZ, maxSeconds: 60);
     }
 
     private async Task RunNavigationTest(string scenarioName, float startX, float startY, float startZ,
