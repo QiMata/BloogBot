@@ -172,28 +172,22 @@ Master tracker: `MASTER-SUB-022`
 10. Documented-stable live slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 
 ## Session Handoff (Latest)
-- Last updated: 2026-03-13
-- Active task: `BRT-OVR-002` gathering slice complete for both mining and herbalism. Both now use `StartGatheringRoute -> GatheringRouteTask`.
-- Last delta: migrated herbalism to the route-task contract — `GatheringRouteSelection.SelectDurotarHerbCandidates(...)` queries Peacebloom/Silverleaf/Earthroot near `(-500, -4800)` with pool metadata, dispatches `StartGatheringRoute`, and lets `GatheringRouteTask` own the full gather pipeline.
-- Pass result: `delta shipped`
-- Files changed:
-  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelection.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelectionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
-  - `Tests/BotRunner.Tests/TASKS.md`
-  - `docs/TASKS.md`
+- Last updated: 2026-03-13 (session 81)
+- Active task: `BRT-OVR-002` — BG bot startup fixed, documented-stable slice restored. Next: task-driven migration for combat, corpse, navigation, questing suites.
+- Last delta: diagnosed and fixed BG bot "Process Terminated" — BackgroundBotRunner.dll was missing from `Bot/Release/net8.0/` after a previous `rm -rf`. Explicit build of `Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release` restored it.
+- Pass result: `infrastructure fix shipped`
 - Commands run:
-  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
-  2. `dotnet test ... --filter "FullyQualifiedName~GatheringRouteSelectionTests|GatheringRouteTaskTests|ActionMessage_AllTypes_RoundTrip"` -> `20 passed`
-  3. `dotnet test ... --filter "FullyQualifiedName~Herbalism_GatherHerb_SkillIncreases" --blame-hang --blame-hang-timeout 15m` -> `1 skipped` (`24` Durotar herb candidates, all on respawn)
+  1. `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release` -> succeeded, output BackgroundBotRunner.dll
+  2. Documented-stable slice -> `14 passed, 1 skipped, 0 failed`
+  3. Full LiveValidation -> `17 passed, 3 failed (CombatLoop stuck, DeathCorpseRun BG+FG), 1 skipped` + fishing timeout
+  4. Unit tests -> `20 passed`
 - Blockers:
-  - `GatheringProfessionTests` mining+herbalism are both task-owned but live signal depends on natural node uptime; tests skip by design when all candidates are on respawn.
-  - `FishingProfessionTests` still fails intermittently on shoreline pathing.
-  - `DeathCorpseRunTests` blocked by BG clean-slate revive failure.
-  - `Trainer_LearnAvailableSpells` remains a deterministic skip under `BRT-OVR-006`.
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+  - `CombatLoopTests`: COMBATTEST bot stuck at `(-284, -4383, 57.4)`, physics returns same position (7000+ stuck count). Movement controller issue.
+  - `DeathCorpseRunTests`: both BG and FG fail corpse recovery. FG ghost-stuck (P7). BG revive/movement.
+  - `FishingProfessionTests`: 10min timeout on shoreline pathing.
+  - `Trainer_LearnAvailableSpells`: deterministic skip under `BRT-OVR-006`.
+- Build note: BackgroundBotRunner is NOT transitively built by BotRunner.Tests or WoWStateManager. After clean rebuilds, always run: `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release`
+- Next command: investigate COMBATTEST stuck-movement issue — check whether the bot's position `(-284, -4383, 57.4)` is valid terrain and why physics returns no delta
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

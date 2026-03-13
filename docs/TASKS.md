@@ -196,18 +196,25 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-13 (session 80)
-- **Current work:** P0A.6 gathering slice — both mining and herbalism are now task-owned through `StartGatheringRoute -> GatheringRouteTask`. Next: continue BRT-OVR-002 with remaining behavior suites.
+- **Last updated:** 2026-03-13 (session 81)
+- **Current work:** P0A.6 — BG bot startup fixed, documented-stable slice restored. Next: continue BRT-OVR-002 with remaining behavior suites (combat, corpse, navigation, questing).
 - **Completed this session:**
-  1. **Migrated herbalism to the route-task contract:** `GatheringProfessionTests.Herbalism_GatherHerb_SkillIncreases` now queries Durotar herb spawns (Peacebloom/Silverleaf/Earthroot) near `(-500, -4800)` with pool metadata and dispatches `ActionType.StartGatheringRoute` so `GatheringRouteTask` owns route optimization, movement, node discovery, and gather interaction.
-  2. **Added herb route selection:** `GatheringRouteSelection.SelectDurotarHerbCandidates(...)` selects multi-entry herb candidates with pool metadata. Both copper and herb selection now share a common `SelectRouteCandidates` implementation.
-  3. **Added 3 herb selection unit tests:** `SelectDurotarHerbCandidates_FiltersSortsMultipleEntries`, `RejectsOutOfRangeCandidates`, `CanApplyExplicitCap` — all passing.
-  4. **Live validation:** the focused herbalism rerun found `24` Durotar herb-route candidates across pools `1020`, `1021`, `1022` and properly skipped because all natural herbs were on respawn.
+  1. **Diagnosed BG bot "Process Terminated" root cause:** `BackgroundBotRunner.dll` was missing from `Bot/Release/net8.0/`. A previous session's `rm -rf Bot/Release/` deleted it, and building BotRunner.Tests alone doesn't rebuild it because there is no ProjectReference chain from the test project to BackgroundBotRunner. WoWStateManager references ForegroundBotRunner but NOT BackgroundBotRunner (it launches BG as a separate `dotnet BackgroundBotRunner.dll` process).
+  2. **Fixed by explicit BackgroundBotRunner build:** `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release` outputs `BackgroundBotRunner.dll` to `Bot/Release/net8.0/` via the shared output path. All three bots now show `Running` status.
+  3. **Documented-stable slice restored:** `14 passed, 1 skipped (DismissBuff FG-dependent), 0 failed`.
+  4. **Full LiveValidation suite:** `17 passed, 3 failed (CombatLoop stuck-movement, DeathCorpseRun BG+FG), 1 skipped`. All 3 failures are pre-existing P7/movement issues. Fishing test timed out (10min blame-hang, known shoreline blocker).
+  5. **Unit tests verified:** `20 passed` (GatheringRouteSelectionTests + GatheringRouteTaskTests + ActionMessage_AllTypes_RoundTrip).
 - **Commands run + outcomes:**
-  1. `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> `succeeded`.
-  2. `dotnet test ... --filter "FullyQualifiedName~GatheringRouteSelectionTests|GatheringRouteTaskTests|ActionMessage_AllTypes_RoundTrip"` -> `20 passed`.
-  3. `dotnet test ... --filter "FullyQualifiedName~Herbalism_GatherHerb_SkillIncreases" --blame-hang --blame-hang-timeout 15m` -> `1 skipped` (`No herb nodes currently spawned on any of the 24 Durotar herb-route candidates`).
-- **Next:** Continue BRT-OVR-002 — examine which remaining behavior suites need task-driven migration. Run the documented-stable slice and the full live suite to check for regressions.
+  1. `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release` -> `succeeded`, output `BackgroundBotRunner.dll` to `Bot/Release/net8.0/`
+  2. Documented-stable slice -> `14 passed, 1 skipped, 0 failed`
+  3. Full LiveValidation -> `17 passed, 3 failed (known), 1 skipped` + fishing timeout
+  4. Unit tests -> `20 passed`
+- **Build note:** After any `rm -rf Bot/Release/` or clean rebuild, BackgroundBotRunner must be rebuilt explicitly: `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release`. It is NOT transitively built by BotRunner.Tests or WoWStateManager.
+- **Next:** Continue BRT-OVR-002 — examine CombatLoopTests for task-driven migration. The COMBATTEST bot is stuck at `(-284, -4383, 57.4)` with physics returning same position — investigate whether this is a pathfinding issue or a movement controller bug.
+
+## Session Handoff (Session 80 Archive)
+- **Last updated:** 2026-03-13 (session 80)
+- **Completed:** Migrated herbalism to route-task contract. Added herb route selection + 3 unit tests. Live validation found 24 Durotar herb candidates (all on respawn → skip). Commits: `0c5c6d8`, `7c8b269`, `13f047b`.
 
 ## Session Handoff (Session 53 Archive)
 - **Last updated:** 2026-03-10 (session 53)
