@@ -27,9 +27,10 @@ public class NpcInteractionTests
     private const int MapId = 1; // Kalimdor
     private const float SetupArrivalDistance = 40f;
     private const float MaxNpcDistance = 18f;
-    private const float RazorHillVendorX = 340.36f, RazorHillVendorY = -4686.29f, RazorHillVendorZ = 16.54f;
-    private const float RazorHillTrainerX = 311.35f, RazorHillTrainerY = -4827.79f, RazorHillTrainerZ = 9.66f;
-    private const float OrgrimmarFmX = 1676.25f, OrgrimmarFmY = -4313.45f, OrgrimmarFmZ = 61.72f;
+    // Z+3 offset applied to spawn table Z values to avoid UNDERMAP detection
+    private const float RazorHillVendorX = 340.36f, RazorHillVendorY = -4686.29f, RazorHillVendorZ = 19.54f;
+    private const float RazorHillTrainerX = 311.35f, RazorHillTrainerY = -4827.79f, RazorHillTrainerZ = 12.66f;
+    private const float OrgrimmarFmX = 1676.25f, OrgrimmarFmY = -4313.45f, OrgrimmarFmZ = 64.72f;
     private const uint BattleShoutSpellId = 6673;
     private const uint TrainerSetupCopper = 10000;
 

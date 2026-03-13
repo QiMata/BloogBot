@@ -53,6 +53,8 @@ namespace WoWSharpClient.Movement
         // mismatches at coasts and WMO surfaces cause cumulative gravity drift.
         private float _teleportZ = float.NaN;
         private const float GROUND_SNAP_MAX_DROP = 5.0f;
+        private int _teleportClampFrames = 0;
+        private const int TELEPORT_CLAMP_MAX_FRAMES = 300; // ~10s at 30fps — hard limit to avoid permanent clamping
 
         // Network timing
         private uint _lastPacketTime;
@@ -202,6 +204,19 @@ namespace WoWSharpClient.Movement
             if (_needsGroundSnap)
             {
                 _groundSnapFrames++;
+
+                // During ground snap, don't let physics pull us below the server-authoritative
+                // teleport Z. The physics engine may find cave geometry below the terrain surface
+                // (e.g., Valley of Trials has caves under the outdoor terrain). The server placed
+                // us at a valid walkable position — snapping downward into caves is incorrect.
+                if (!float.IsNaN(_teleportZ) && _player.Position.Z < _teleportZ)
+                {
+                    _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
+                    _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                    _velocity = Vector3.Zero;
+                    _fallTimeMs = 0;
+                }
+
                 bool stillFalling = (_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0;
                 if (!stillFalling || _groundSnapFrames >= GROUND_SNAP_MAX_FRAMES)
                 {
@@ -371,42 +386,69 @@ namespace WoWSharpClient.Movement
             // below the server-authoritative teleport Z, clamp position. This persists across frames
             // until the player intentionally moves (FORWARD/BACKWARD/STRAFE/JUMP/SWIM), which clears
             // the teleport Z clamp. The navmesh may see the ocean floor through a dock surface.
-            if (!float.IsNaN(_teleportZ) && output.NewPosZ < _teleportZ - GROUND_SNAP_MAX_DROP)
+            if (!float.IsNaN(_teleportZ))
             {
-                bool hasIntentionalMovement = (_player.MovementFlags & (MovementFlags.MOVEFLAG_FORWARD
-                    | MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT
-                    | MovementFlags.MOVEFLAG_STRAFE_RIGHT | MovementFlags.MOVEFLAG_JUMPING
-                    | MovementFlags.MOVEFLAG_SWIMMING)) != 0;
-                if (!hasIntentionalMovement)
-                {
-                    Log.Warning("[MovementController] Teleport Z clamp: suppressed drop to {NewZ:F1} (teleportZ={TeleZ:F1}, groundZ={GroundZ:F1}). Navmesh may lack geometry here.",
-                        output.NewPosZ, _teleportZ, output.GroundZ);
-                    output.NewPosZ = _teleportZ;
-                    output.NewVelX = 0;
-                    output.NewVelY = 0;
-                    output.NewVelZ = 0;
-                    output.FallTime = 0;
-                    // Clear falling/jumping flags — player is clamped to teleport Z, not falling.
-                    // Without this, MOVEFLAG_FALLINGFAR causes heartbeats that interrupt channeled
-                    // spells (e.g. fishing) because the server sees the player as "moving".
-                    output.MovementFlags = output.MovementFlags
-                        & ~((uint)MovementFlags.MOVEFLAG_FALLINGFAR | (uint)MovementFlags.MOVEFLAG_JUMPING);
-                }
-                else
-                {
-                    // Player started intentionally moving — begin grace period countdown.
-                    // Don't clear teleport Z immediately; give the physics engine time to find
-                    // proper ground under the new position. Only clear after the grace period
-                    // expires AND physics has found valid ground.
-                    if (_teleportZGraceFrames == 0)
-                        _teleportZGraceFrames = TELEPORT_Z_GRACE_DURATION;
+                _teleportClampFrames++;
 
-                    _teleportZGraceFrames--;
-                    if (_teleportZGraceFrames <= 0 && _noGroundFrameCount == 0)
+                // Hard limit: after ~10s, clear the teleport Z clamp unconditionally.
+                // This prevents permanent clamping if physics never finds matching ground.
+                if (_teleportClampFrames >= TELEPORT_CLAMP_MAX_FRAMES)
+                {
+                    Log.Warning("[MovementController] Teleport Z clamp expired after {Frames} frames. Clearing.", _teleportClampFrames);
+                    _teleportZ = float.NaN;
+                    _teleportClampFrames = 0;
+                    _teleportZGraceFrames = 0;
+                }
+                else if (output.NewPosZ < _teleportZ)
+                {
+                    bool hasIntentionalMovement = (_player.MovementFlags & (MovementFlags.MOVEFLAG_FORWARD
+                        | MovementFlags.MOVEFLAG_BACKWARD | MovementFlags.MOVEFLAG_STRAFE_LEFT
+                        | MovementFlags.MOVEFLAG_STRAFE_RIGHT | MovementFlags.MOVEFLAG_JUMPING
+                        | MovementFlags.MOVEFLAG_SWIMMING)) != 0;
+                    if (!hasIntentionalMovement)
                     {
-                        _teleportZ = float.NaN;
-                        _teleportZGraceFrames = 0;
+                        Log.Warning("[MovementController] Teleport Z clamp: suppressed drop to {NewZ:F1} (teleportZ={TeleZ:F1}, groundZ={GroundZ:F1}). Navmesh may lack geometry here.",
+                            output.NewPosZ, _teleportZ, output.GroundZ);
+                        output.NewPosZ = _teleportZ;
+                        output.NewVelX = 0;
+                        output.NewVelY = 0;
+                        output.NewVelZ = 0;
+                        output.FallTime = 0;
+                        // Clear falling/jumping flags — player is clamped to teleport Z, not falling.
+                        // Without this, MOVEFLAG_FALLINGFAR causes heartbeats that interrupt channeled
+                        // spells (e.g. fishing) because the server sees the player as "moving".
+                        output.MovementFlags = output.MovementFlags
+                            & ~((uint)MovementFlags.MOVEFLAG_FALLINGFAR | (uint)MovementFlags.MOVEFLAG_JUMPING);
                     }
+                    else
+                    {
+                        // Player started intentionally moving — begin grace period countdown.
+                        // Don't clear teleport Z immediately; give the physics engine time to find
+                        // proper ground under the new position. Only clear after the grace period
+                        // expires AND physics has found ground near the teleport Z (not cave geometry).
+                        if (_teleportZGraceFrames == 0)
+                            _teleportZGraceFrames = TELEPORT_Z_GRACE_DURATION;
+
+                        _teleportZGraceFrames--;
+                        bool groundNearTeleportZ = _noGroundFrameCount == 0
+                            && output.GroundZ > _teleportZ - GROUND_SNAP_MAX_DROP;
+                        if (_teleportZGraceFrames <= 0 && groundNearTeleportZ)
+                        {
+                            _teleportZ = float.NaN;
+                            _teleportClampFrames = 0;
+                            _teleportZGraceFrames = 0;
+                        }
+                    }
+                }
+                else if (physicsHasGround && output.GroundZ >= _teleportZ - 0.5f)
+                {
+                    // Physics found terrain-level ground near teleport Z — this is normal operation.
+                    // Only clear when groundZ (not just position Z) is near the teleport level.
+                    // This prevents premature clearing when cave geometry exists below terrain but
+                    // the position is still held near teleport Z by the ground snap phase.
+                    _teleportZ = float.NaN;
+                    _teleportClampFrames = 0;
+                    _teleportZGraceFrames = 0;
                 }
             }
 
@@ -429,8 +471,21 @@ namespace WoWSharpClient.Movement
             // Don't store sentinel GroundZ (-100000) — keep last valid value so physics can recover.
             if (physicsHasGround)
             {
-                _prevGroundZ = output.GroundZ;
-                _prevGroundNormal = new Vector3(output.GroundNx, output.GroundNy, output.GroundNz);
+                // When the teleport Z clamp is active, don't let _prevGroundZ cascade downward
+                // into cave/underground geometry. The physics engine's "closest to query Z" ground
+                // selection picks cave floors over terrain surfaces when the query Z is near the
+                // cave ceiling. By holding _prevGroundZ at the teleport Z, subsequent physics frames
+                // query from the correct height and avoid the cascading ground detection failure.
+                if (!float.IsNaN(_teleportZ) && output.GroundZ < _teleportZ - 1.5f)
+                {
+                    _prevGroundZ = _teleportZ;
+                    _prevGroundNormal = new Vector3(0, 0, 1); // flat ground assumption
+                }
+                else
+                {
+                    _prevGroundZ = output.GroundZ;
+                    _prevGroundNormal = new Vector3(output.GroundNx, output.GroundNy, output.GroundNz);
+                }
             }
             _pendingDepen = new Vector3(output.PendingDepenX, output.PendingDepenY, output.PendingDepenZ);
             _standingOnInstanceId = output.StandingOnInstanceId;
@@ -889,6 +944,7 @@ namespace WoWSharpClient.Movement
             _groundSnapFrames = 0;
             _teleportZ = float.IsNaN(teleportDestZ) ? _player.Position.Z : teleportDestZ;
             _teleportZGraceFrames = 0; // Reset grace countdown on new teleport
+            _teleportClampFrames = 0;
             _noGroundFrameCount = 0;
 
             _currentPath = null;
