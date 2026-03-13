@@ -523,5 +523,73 @@ namespace ForegroundBotRunner.Statics
 
 
         public static void Stand() => MainThreadLuaCall("DoEmote(\"STAND\")");
+
+        /// <summary>
+        /// FG implementation: right-clicks the trainer NPC to open the trainer window,
+        /// then uses Lua to enumerate and buy all available trainer services.
+        /// Vanilla 1.12.1 GetTrainerServiceInfo(index) returns:
+        ///   name, rank, category ("available"/"unavailable"/"used"), expanded.
+        /// </summary>
+        public async Task<int> LearnAllAvailableSpellsAsync(ulong trainerGuid, CancellationToken ct = default)
+        {
+            // Step 1: Find and right-click the trainer NPC
+            var unit = Objects.FirstOrDefault(o => o.Guid == trainerGuid);
+            if (unit is not Objects.WoWObject wowObj)
+            {
+                Log.Warning("[FG-TRAINER] Trainer GUID 0x{Guid:X} not found in object manager.", trainerGuid);
+                return 0;
+            }
+
+            Log.Information("[FG-TRAINER] Opening trainer window (right-click on 0x{Guid:X})...", trainerGuid);
+            ThreadSynchronizer.RunOnMainThread(() => wowObj.Interact());
+
+            // Step 2: Wait for trainer window to open (poll GetNumTrainerServices)
+            bool windowOpened = false;
+            for (int i = 0; i < 20 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                var countResult = MainThreadLuaCallWithResult("{0} = GetNumTrainerServices()");
+                if (countResult.Length > 0 && int.TryParse(countResult[0], out int n) && n > 0)
+                {
+                    windowOpened = true;
+                    break;
+                }
+            }
+
+            if (!windowOpened)
+            {
+                Log.Warning("[FG-TRAINER] Trainer window did not open after 3s.");
+                return 0;
+            }
+
+            // Step 3: Buy all "available" services using a single Lua script.
+            // This runs one main-thread call that iterates all services and buys learnable ones.
+            // Returns the count of services purchased.
+            var result = MainThreadLuaCallWithResult(
+                "local n = GetNumTrainerServices(); " +
+                "local bought = 0; " +
+                "for i = 1, n do " +
+                "  local _, _, avail = GetTrainerServiceInfo(i); " +
+                "  if avail == 'available' then " +
+                "    BuyTrainerService(i); " +
+                "    bought = bought + 1; " +
+                "  end; " +
+                "end; " +
+                "{0} = bought");
+
+            int learnedCount = 0;
+            if (result.Length > 0)
+                int.TryParse(result[0], out learnedCount);
+
+            // Brief delay for server to process all the buy requests
+            if (learnedCount > 0)
+                await Task.Delay(500, ct);
+
+            // Step 4: Close trainer window
+            MainThreadLuaCall("CloseTrainer()");
+
+            Log.Information("[FG-TRAINER] Bought {Count} services from trainer.", learnedCount);
+            return learnedCount;
+        }
     }
 }
