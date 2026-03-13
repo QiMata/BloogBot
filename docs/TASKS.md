@@ -196,21 +196,27 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-13 (session 81)
-- **Current work:** P0A.6 — BG bot startup fixed, documented-stable slice restored. Next: continue BRT-OVR-002 with remaining behavior suites (combat, corpse, navigation, questing).
+- **Last updated:** 2026-03-13 (session 82)
+- **Branch:** `cpp_physics_system`
+- **Current work:** P0A.6 — Physics init and combat fixes shipped. CombatLoopTests now passes. Next: investigate remaining test failures and continue BRT-OVR-002.
 - **Completed this session:**
-  1. **Diagnosed BG bot "Process Terminated" root cause:** `BackgroundBotRunner.dll` was missing from `Bot/Release/net8.0/`. A previous session's `rm -rf Bot/Release/` deleted it, and building BotRunner.Tests alone doesn't rebuild it because there is no ProjectReference chain from the test project to BackgroundBotRunner. WoWStateManager references ForegroundBotRunner but NOT BackgroundBotRunner (it launches BG as a separate `dotnet BackgroundBotRunner.dll` process).
-  2. **Fixed by explicit BackgroundBotRunner build:** `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release` outputs `BackgroundBotRunner.dll` to `Bot/Release/net8.0/` via the shared output path. All three bots now show `Running` status.
-  3. **Documented-stable slice restored:** `14 passed, 1 skipped (DismissBuff FG-dependent), 0 failed`.
-  4. **Full LiveValidation suite:** `17 passed, 3 failed (CombatLoop stuck-movement, DeathCorpseRun BG+FG), 1 skipped`. All 3 failures are pre-existing P7/movement issues. Fishing test timed out (10min blame-hang, known shoreline blocker).
-  5. **Unit tests verified:** `20 passed` (GatheringRouteSelectionTests + GatheringRouteTaskTests + ActionMessage_AllTypes_RoundTrip).
-- **Commands run + outcomes:**
-  1. `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release` -> `succeeded`, output `BackgroundBotRunner.dll` to `Bot/Release/net8.0/`
-  2. Documented-stable slice -> `14 passed, 1 skipped, 0 failed`
-  3. Full LiveValidation -> `17 passed, 3 failed (known), 1 skipped` + fishing timeout
-  4. Unit tests -> `20 passed`
-- **Build note:** After any `rm -rf Bot/Release/` or clean rebuild, BackgroundBotRunner must be rebuilt explicitly: `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj --configuration Release`. It is NOT transitively built by BotRunner.Tests or WoWStateManager.
-- **Next:** Continue BRT-OVR-002 — examine CombatLoopTests for task-driven migration. The COMBATTEST bot is stuck at `(-284, -4383, 57.4)` with physics returning same position — investigate whether this is a pathfinding issue or a movement controller bug.
+  1. **Fixed physics engine initialization** (`1146587`): `DllMain.cpp::InitializeAllSystems()` had all subsystems in a single try/catch. If `Navigation::Initialize()` threw, `PhysicsEngine::Initialize()` was skipped permanently (`m_initialized` stayed false). Every `StepV2()` call returned zero-displacement output. Fix: each subsystem gets its own try/catch.
+  2. **Fixed melee combat** (`f6ad88a`): Three issues combined to prevent BG bot auto-attack:
+     - Used 3D `DistanceTo()` for melee range check — MaNGOS uses 2D. Bot at Z=54.4, mob at Z=57.4 = 3.0y 3D distance but only 0.8y 2D.
+     - `MeleeChaseStickBuffer` of 2.0 pushed arrival distance down to `NOMINAL_MELEE_RANGE` (1.67y) — unreachable via navmesh.
+     - Behavior tree spammed `StopAllMovement()`/`Face()`/`StartMeleeAttack()` every tick, flooding server with `MSG_MOVE_SET_FACING` packets and disrupting the swing timer.
+  3. **Added diagnostics:** PHYS_STUCK zero-delta detection in PathfindingSocketServer, zero-delta logging in MovementController.
+  4. **Navigation.dll rebuilt** in both Debug and Release configurations with the physics init fix.
+- **Test results (full LiveValidation):** `18 passed, 14 failed, 10 skipped` (25min timeout abort).
+  - **New pass:** CombatLoopTests.Combat_AutoAttacksMob_DealsDamageInMeleeRange (44s)
+  - **Key failures:** DeathCorpseRun (2), NpcInteraction (5), Economy (2), Quest (2), SpellCast (1), UnequipItem (1), OrgrimmarGroundZ (1) — mostly pre-existing
+  - **PathfindingService crash:** Intermittent connection loss ~25-30s into sustained pathfinding. Does not affect combat (bot is stationary). Needs investigation.
+- **Known issue — Physics ground snap Z discrepancy:** Bot teleported to Valley of Trials ends up at Z=54.4 while terrain is at Z≈57.4. Physics `groundZ` returns values 3-10y below actual terrain. `MOVEFLAG_FALLINGFAR` (0x4000) is set. Root cause likely in ground detection against the map/navmesh data for this area. The 2D distance fix works around this for combat.
+- **Build note:** Navigation.dll must be built via MSBuild (not `dotnet build`). After C++ changes: `"C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Debug -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal`. Copy to `Services/WoWStateManager/Build/Debug/net8.0-windows/` if tests use Debug config.
+- **Next:**
+  1. Investigate PathfindingService intermittent crash (Connection lost IOException after ~25-30s)
+  2. Investigate NpcInteraction failures (Trainer, Vendor, FlightMaster — 5 failures)
+  3. Continue BRT-OVR-002 remaining behavior suites (corpse, navigation, questing)
 
 ## Session Handoff (Session 80 Archive)
 - **Last updated:** 2026-03-13 (session 80)
