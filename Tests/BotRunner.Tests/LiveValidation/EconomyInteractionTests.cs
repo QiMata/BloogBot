@@ -26,9 +26,10 @@ public class EconomyInteractionTests
 
     private const int MapId = 1; // Kalimdor
     private const float SetupArrivalDistance = 40f;
-    private const float OrgBankX = 1627.32f, OrgBankY = -4376.07f, OrgBankZ = 11.81f;
-    private const float OrgAhX = 1687.26f, OrgAhY = -4464.71f, OrgAhZ = 20.15f;
-    private const float OrgMailboxX = 1615.58f, OrgMailboxY = -4391.60f, OrgMailboxZ = 10.11f;
+    // Z+3 offset applied to spawn table Z values to avoid UNDERMAP detection
+    private const float OrgBankX = 1627.32f, OrgBankY = -4376.07f, OrgBankZ = 14.81f;
+    private const float OrgAhX = 1687.26f, OrgAhY = -4464.71f, OrgAhZ = 23.15f;
+    private const float OrgMailboxX = 1615.58f, OrgMailboxY = -4391.60f, OrgMailboxZ = 13.11f;
 
 
     public EconomyInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
