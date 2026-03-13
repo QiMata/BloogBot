@@ -11,10 +11,12 @@ namespace BotRunner
 {
     public partial class BotRunnerService
     {
-        // Stop slightly inside the theoretical melee range to absorb packet/snapshot drift.
-        // The server's max melee range can still leave the bot visually "in range" while
-        // sustained swings stall in live tests, especially against small Valley mobs.
-        private const float MeleeChaseStickBuffer = 2.0f;
+        // Stop inside the theoretical melee range to absorb packet/snapshot drift.
+        // Previous value of 2.0 was too aggressive — with small creature combat reaches
+        // the arrival distance bottomed out at NOMINAL_MELEE_RANGE (1.67y), which
+        // pathfinding/navmesh can't reliably achieve.  0.5y buffer leaves the bot well
+        // within melee range while still reachable via navigation.
+        private const float MeleeChaseStickBuffer = 0.5f;
 
         /// <summary>
         /// Melee combat sequence: select target -> chase to melee range -> auto-attack.
@@ -67,7 +69,10 @@ namespace BotRunner
                         if (target.Position == null)
                             return BehaviourTreeStatus.Running;
 
-                        var dist = player.Position.DistanceTo(target.Position);
+                        // MaNGOS melee range check is 2D (XY plane).  Using 3D distance
+                        // causes false "out of range" when the bot and mob are at different
+                        // Z levels (e.g. terrain step, physics ground snap discrepancy).
+                        var dist = player.Position.DistanceTo2D(target.Position);
                         var chaseArrivalDist = GetMeleeChaseArrivalDistance(player, target);
 
                         if (dist > chaseArrivalDist)
@@ -102,25 +107,35 @@ namespace BotRunner
 
                             if (DateTime.UtcNow - lastChaseLogUtc > TimeSpan.FromSeconds(3))
                             {
-                                Log.Information("[BOT RUNNER] Chasing target 0x{Guid:X}, dist={Dist:F1}y, arrival={Arrival:F1}y",
-                                    targetGuid, dist, chaseArrivalDist);
+                                Log.Information("[BOT RUNNER] Chasing target 0x{Guid:X}, dist={Dist:F2}y, arrival={Arrival:F2}y (pReach={PR:F2}, tReach={TR:F2})",
+                                    targetGuid, dist, chaseArrivalDist, player.CombatReach, target.CombatReach);
                                 lastChaseLogUtc = DateTime.UtcNow;
                             }
 
                             return BehaviourTreeStatus.Running;
                         }
 
-                        _objectManager.StopAllMovement();
+                        // In melee range.  Stop movement and start auto-attack on
+                        // the first arrival, then let the server run the swing timer.
+                        // Do NOT spam StopAllMovement/Face/StartMeleeAttack every tick
+                        // — flooding the server with movement packets disrupts the
+                        // auto-attack swing timer.
                         if (!attackStarted)
                         {
+                            _objectManager.StopAllMovement();
                             navPath?.Clear();
+                            _objectManager.Face(target.Position);
+                            _objectManager.StartMeleeAttack();
                             Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y <= {Arrival:F1}y) - engaging 0x{Guid:X}",
                                 dist, chaseArrivalDist, targetGuid);
                             attackStarted = true;
                         }
-
-                        _objectManager.Face(target.Position);
-                        _objectManager.StartMeleeAttack();
+                        else
+                        {
+                            // Re-send CMSG_ATTACKSWING only if auto-attack was cancelled
+                            // (server sent SMSG_ATTACKSTOP / SMSG_CANCEL_COMBAT).
+                            _objectManager.StartMeleeAttack();
+                        }
                         return BehaviourTreeStatus.Running;
                     })
                 .End()
