@@ -89,7 +89,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private const int RunbackNoDisplacementThreshold = 8;
     private const int RunbackNoIntentDisplacementThreshold = 12;
     private const int RunbackStaleForwardThreshold = 6;
-    private const int MaxRunbackRecoveryAttempts = 8;
+    private const int MaxRunbackRecoveryAttempts = 4;
     private const int TraceSummaryWaypointLimit = 4;
     private const int TraceSummarySampleLimit = 3;
 
@@ -322,7 +322,11 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         else
             _runbackStaleForwardTicks = 0;
 
-        if (stepDistance >= 1f)
+        // Only reset recovery count when making meaningful progress TOWARD the corpse,
+        // not just any displacement. The jump+backward recovery maneuver moves the bot
+        // ≥1y but doesn't bring it closer to the corpse — resetting on any movement
+        // prevents the recovery counter from ever reaching MaxRunbackRecoveryAttempts.
+        if (stepDistance >= 1f && corpseHorizontalDistance < _bestRunbackCorpseDistance2D - 5f)
         {
             _runbackRecoveryCount = 0;
         }
