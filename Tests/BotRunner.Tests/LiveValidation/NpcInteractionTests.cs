@@ -74,24 +74,37 @@ public class NpcInteractionTests
     [SkippableFact]
     public async Task Trainer_LearnAvailableSpells()
     {
-        _output.WriteLine("[BG-ONLY] Running task-owned trainer validation on the headless bot.");
+        _output.WriteLine("=== Trainer Visit: Both bots talk to warrior trainer, purchase all available skills ===");
 
-        var metrics = await RunTrainerVisitScenarioAsync(_bot.BgAccountName!, "BG");
+        // BG bot trainer visit
+        var bgMetrics = await RunTrainerVisitScenarioAsync(_bot.BgAccountName!, "BG");
+        Assert.True(bgMetrics.TrainerFound, "BG: class trainer with UNIT_NPC_FLAG_TRAINER should be visible near Razor Hill.");
+        Assert.InRange(bgMetrics.TrainerDistanceYards, 0f, MaxNpcDistance);
+        Assert.False(bgMetrics.HadSpellBefore, $"BG: spell {BattleShoutSpellId} must be absent before the trainer task runs.");
+        Assert.True(bgMetrics.HasSpellAfter, $"BG: spell {BattleShoutSpellId} should appear after ActionType.VisitTrainer.");
+        Assert.True(bgMetrics.SpellCountAfter > bgMetrics.SpellCountBefore,
+            $"BG: spell list should grow after trainer visit. Before={bgMetrics.SpellCountBefore}, after={bgMetrics.SpellCountAfter}");
+        Assert.True(bgMetrics.CoinageAfter < bgMetrics.CoinageBefore,
+            $"BG: trainer visit should spend copper on learned spells. Before={bgMetrics.CoinageBefore}, after={bgMetrics.CoinageAfter}");
+        Assert.InRange(bgMetrics.LearnLatencyMs, 1, 15000);
 
-        Assert.True(metrics.TrainerFound, "BG: class trainer with UNIT_NPC_FLAG_TRAINER should be visible near Razor Hill.");
-        Assert.InRange(metrics.TrainerDistanceYards, 0f, MaxNpcDistance);
-        Assert.False(metrics.HadSpellBefore, $"BG: spell {BattleShoutSpellId} must be absent before the trainer task runs.");
-        global::Tests.Infrastructure.Skip.If(
-            !metrics.HasSpellAfter
-            && metrics.SpellCountAfter == metrics.SpellCountBefore
-            && metrics.CoinageAfter == metrics.CoinageBefore,
-            "BG trainer visit still closes gossip without surfacing trainer services (no SMSG_TRAINER_LIST / no learn delta). Tracked under BRT-OVR-006.");
-        Assert.True(metrics.HasSpellAfter, $"BG: spell {BattleShoutSpellId} should appear after ActionType.VisitTrainer.");
-        Assert.True(metrics.SpellCountAfter > metrics.SpellCountBefore,
-            $"BG: spell list should grow after trainer visit. Before={metrics.SpellCountBefore}, after={metrics.SpellCountAfter}");
-        Assert.True(metrics.CoinageAfter < metrics.CoinageBefore,
-            $"BG: trainer visit should spend copper on learned spells. Before={metrics.CoinageBefore}, after={metrics.CoinageAfter}");
-        Assert.InRange(metrics.LearnLatencyMs, 1, 15000);
+        // FG bot trainer visit (skip if FG not available)
+        if (_bot.IsFgActionable)
+        {
+            var fgMetrics = await RunTrainerVisitScenarioAsync(_bot.FgAccountName!, "FG");
+            Assert.True(fgMetrics.TrainerFound, "FG: class trainer should be visible near Razor Hill.");
+            Assert.InRange(fgMetrics.TrainerDistanceYards, 0f, MaxNpcDistance);
+            Assert.False(fgMetrics.HadSpellBefore, $"FG: spell {BattleShoutSpellId} must be absent before the trainer task runs.");
+            Assert.True(fgMetrics.HasSpellAfter, $"FG: spell {BattleShoutSpellId} should appear after ActionType.VisitTrainer.");
+            Assert.True(fgMetrics.SpellCountAfter > fgMetrics.SpellCountBefore,
+                $"FG: spell list should grow. Before={fgMetrics.SpellCountBefore}, after={fgMetrics.SpellCountAfter}");
+            Assert.True(fgMetrics.CoinageAfter < fgMetrics.CoinageBefore,
+                $"FG: trainer should spend copper. Before={fgMetrics.CoinageBefore}, after={fgMetrics.CoinageAfter}");
+        }
+        else
+        {
+            _output.WriteLine("[FG] Skipped — FG bot not actionable.");
+        }
     }
 
     [SkippableFact]

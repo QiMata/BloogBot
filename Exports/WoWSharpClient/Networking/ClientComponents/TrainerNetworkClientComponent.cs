@@ -26,6 +26,9 @@ namespace WoWSharpClient.Networking.ClientComponents
         private ulong? _currentTrainerGuid;
         private readonly List<TrainerServiceData> _availableServices;
         private bool _disposed;
+        private readonly IDisposable _trainerWindowSub;
+        private readonly IDisposable _spellLearnedSub;
+        private readonly IDisposable _trainerErrorSub;
 
         // Opcode-backed reactive streams
         private readonly IObservable<(ulong TrainerGuid, TrainerServiceData[] Services)> _trainerWindowsOpened;
@@ -110,6 +113,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 })
                 .Publish()
                 .RefCount();
+
+            // Self-subscribe to activate .Do() side-effects (Publish+RefCount requires at least one subscriber)
+            _trainerWindowSub = _trainerWindowsOpened.Subscribe(_ => { });
+            _spellLearnedSub = _spellsLearned.Subscribe(_ => { });
+            _trainerErrorSub = _trainerErrors.Subscribe(_ => { });
         }
 
         private IObservable<ReadOnlyMemory<byte>> SafeOpcodeStream(Opcode opcode)
@@ -625,6 +633,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             if (_disposed) return;
 
             _logger.LogDebug("Disposing TrainerNetworkClientComponent");
+
+            // Dispose opcode subscriptions
+            _trainerWindowSub?.Dispose();
+            _spellLearnedSub?.Dispose();
+            _trainerErrorSub?.Dispose();
 
             // Clear events to prevent memory leaks
             TrainerWindowOpened = null;
