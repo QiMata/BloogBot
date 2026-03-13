@@ -41,7 +41,7 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 | 0A.3 | **Consumable/buff consolidation.** Replace `ConsumableUsageTests.cs` + `BuffDismissTests.cs` with `BuffAndConsumableTests.cs` and assert add-item, use-item, aura, and dismissal metrics. | `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs` | **Done** (2026-03-10 session 54) |
 | 0A.4 | **Move range coverage to deterministic tests.** Keep combat range formulas in `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs`; remove the live `CombatRangeTests.cs` suite. | `Tests/BotRunner.Tests/Combat/CombatDistanceTests.cs` | **Done** (2026-03-10 session 54) |
 | 0A.5 | **Remove remaining direct `.gm on` / `.respawn` usage** from `GatheringProfessionTests.cs`, `MapTransitionTests.cs`, `LootCorpseTests.cs`, and `StarterQuestTests.cs`, then update their docs. | `Tests/BotRunner.Tests/LiveValidation/` | **Done** (2026-03-11 session 55) |
-| 0A.6 | **Task-drive the major behavior suites.** Replace combat, corpse recovery, navigation, questing, gathering, and economy live coverage with BotTask-based tests that link directly to owning task logic. | `Tests/BotRunner.Tests/LiveValidation/`, `Exports/BotRunner/Tasks/` | In progress - fishing now enters through `ActionType.StartFishing -> FishingTask` from the Ratchet named teleport, mining now enters through `ActionType.StartGatheringRoute -> GatheringRouteTask` from an explicit `ValleyOfTrials` test setup, herbalism now enters through `ActionType.StartGatheringRoute -> GatheringRouteTask` from an explicit Durotar herb route start (`24` candidates from pools `1020/1021/1022` on the latest rerun), the default regression pass is the documented-stable slice, and the current fishing intermittency is shoreline/pathfinding-bound while the BG trainer handoff remains open under `BRT-OVR-006` |
+| 0A.6 | **Task-drive the major behavior suites.** Replace combat, corpse recovery, navigation, questing, gathering, and economy live coverage with BotTask-based tests that link directly to owning task logic. | `Tests/BotRunner.Tests/LiveValidation/`, `Exports/BotRunner/Tasks/` | In progress - fishing now enters through `ActionType.StartFishing -> FishingTask` from the Ratchet named teleport, mining now enters through `ActionType.StartGatheringRoute -> GatheringRouteTask` from an explicit `ValleyOfTrials` test setup, herbalism now enters through `ActionType.StartGatheringRoute -> GatheringRouteTask` from an explicit Durotar herb route start (`24` candidates from pools `1020/1021/1022` on the latest rerun), the default regression pass is the documented-stable slice, and the current fishing intermittency is shoreline/pathfinding-bound. `BRT-OVR-006` (BG trainer) resolved in session 86-87: Rx self-subscription fix + FG Lua trainer impl |
 
 ---
 
@@ -159,7 +159,7 @@ Current observed boundary from the 2026-03-12 live suite:
 
 | ID | Issue | Owner | Status |
 |----|-------|-------|--------|
-| `CAP-GAP-003` | `TrainerFrame` status unknown; may also be null. | `Exports/WoWSharpClient/` | Open (low priority) |
+| `CAP-GAP-003` | `TrainerFrame` — BG trainer Rx fixed (session 86-87), FG Lua impl added (session 87). | `Exports/WoWSharpClient/`, `Services/ForegroundBotRunner/` | **Resolved** |
 | `BG-PET-001` | BG pet support - `Pet` returns null. Hunter/Warlock will not work. | `Exports/WoWSharpClient/` | Open |
 
 ## Canonical Commands
@@ -191,28 +191,30 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-13 (session 86)
+- **Last updated:** 2026-03-13 (session 87)
 - **Branch:** `cpp_physics_system`
-- **Commits:** `3dc0227` (CMSG_RECLAIM_CORPSE GUID fix), `7d130d0` (trainer Rx observable fix + test update)
+- **Commits:** `0684150` (Rx fixes: Gossip/Guild/Professions), `9c59286` (FG trainer Lua impl), `eb83e8a` (corpse run recovery fix), `cf0c9f3` (test skip detection)
 - **Completed this session:**
-  1. **CMSG_RECLAIM_CORPSE GUID fix** (`3dc0227`): Packet was sending 8 zero bytes instead of player GUID. VMaNGOS validates the GUID against the session — zero was silently rejected. DeathCorpseRun now passes reliably (1m36s-1m48s, was intermittent 2m+ timeouts). Both `WoWSharpObjectManager.RetrieveCorpse()` and `DeadActorClientComponent.ResurrectAtCorpseAsync()` fixed.
-  2. **BG trainer learning fix (BRT-OVR-006)** (`7d130d0`): `TrainerNetworkClientComponent` used `.Publish().RefCount()` on Rx opcode streams but never self-subscribed, so `.Do()` side-effects that populate `_availableServices` never fired. Added self-subscriptions in constructor. Trainer_LearnAvailableSpells now passes (was deterministic skip).
-  3. **Trainer test dual-bot update** (`7d130d0`): Test now runs both BG and FG (FG skipped when not available since FG lacks `LearnAllAvailableSpellsAsync` implementation).
-  4. **P2 (CraftingProfessionTests.FirstAid) verified resolved**: FirstAid_LearnAndCraft passes reliably — was failing in session 53 but fixed by intervening work.
-- **Test results (full LiveValidation):** `38 passed, 0 failed, 6 skipped` (44 total)
-  - **Passed (38):** +2 vs session 85. New passes: Trainer_LearnAvailableSpells (was skip), DeathCorpseRun BG (was intermittent fail). All 36 previous passes stable.
-  - **Failed (0):** Clean sweep — no failures.
-  - **Skipped (6):** BuffDismiss (BB-BUFF-001 capability gap), FG DeathCorpseRun (no WoW.exe), Fishing (shoreline pathing), GatheringMining (respawn timer), GatheringHerbalism (respawn timer), GroupFormation (FG not available)
+  1. **Rx Publish+RefCount self-subscription fix** (`0684150`): Same bug as TrainerNetworkClientComponent extended to GossipNetworkClientComponent, GuildNetworkClientComponent, and ProfessionsNetworkClientComponent. `.Do()` side-effects were never firing because `.Publish().RefCount()` requires at least one subscriber. Gossip was CRITICAL — `_currentMenu`, `_currentNpcGuid`, `_isGossipWindowOpen` were never populated.
+  2. **FG trainer interaction via Lua** (`9c59286`): Implemented `LearnAllAvailableSpellsAsync` in FG ObjectManager using WoW Lua API (right-click NPC → GetNumTrainerServices → BuyTrainerService for available services → CloseTrainer). Previously fell through to default interface method returning 0.
+  3. **Corpse run recovery counter fix** (`eb83e8a`): Recovery count was reset to 0 on any 1y displacement (including the jump+backward recovery maneuver). This caused infinite "#1" recovery loops that never reached MaxRunbackRecoveryAttempts. Now only resets when corpse distance improves by 5y+. Also reduced max attempts from 8 to 4.
+  4. **Test skip detection improvement** (`cf0c9f3`): Death test now refreshes snapshot before checking diagnostic messages (was reading stale snapshot), checks for both RunbackStallRecoveryExceeded and NoPathTimeout, and logs chat messages during skip check.
+- **Test results (full LiveValidation):** `37 passed, 1 failed, 6 skipped` (best run) / `36 passed, 2 failed, 6 skipped` (worst run)
+  - **Intermittent:** DeathCorpseRun BG (pathfinding navmesh gap at graveyard→corpse route — passes 2/3 runs), Navigation_LongPath (also pathfinding)
+  - **Skipped (6):** BuffDismiss (BB-BUFF-001), FG DeathCorpseRun (no WoW.exe), Fishing (shoreline), GatheringMining (respawn), GatheringHerbalism (respawn), GroupFormation (FG n/a)
 - **Known remaining issues:**
-  - **FG bot not launching in tests**: StateManager 60s cooldown on FG launch attempts. WoW.exe infrastructure dependency.
-  - **FG LearnAllAvailableSpellsAsync**: FG bot returns 0 from default interface method — needs Lua-based trainer interaction.
+  - Pathfinding navmesh gaps causing intermittent failures at graveyard→corpse and long navigation routes
   - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
   - BuffDismiss: WoWSharpClient doesn't populate WoWUnit.Buffs (BB-BUFF-001)
 - **Next:**
   1. Continue BRT-OVR-002 remaining behavior suites (quest, NPC task-driven migration)
-  2. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
-  3. FG trainer interaction via Lua (enables FG trainer test path)
+  2. Pathfinding navmesh coverage improvements for graveyard routes
+  3. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
+
+## Session Handoff (Session 86 Archive)
+- **Last updated:** 2026-03-13 (session 86)
+- **Completed:** CMSG_RECLAIM_CORPSE GUID fix, BG trainer Rx fix (BRT-OVR-006), P2 CraftingProfessionTests resolved.
 
 ## Session Handoff (Session 85 Archive)
 - **Last updated:** 2026-03-13 (session 85)
