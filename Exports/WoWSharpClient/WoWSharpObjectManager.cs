@@ -299,14 +299,40 @@ namespace WoWSharpClient
         {
             // Use the property setter (not the backing field) so it also
             // recreates the Player object with the correct GUID.
-            // Set PlayerGuid BEFORE HasEnteredWorld so snapshots never see
-            // HasEnteredWorld=true with a stale zero-GUID player.
+            // HasEnteredWorld intentionally flips true here so the login
+            // sequence does not spam repeated CMSG_PLAYER_LOGIN packets while
+            // we wait for SMSG_LOGIN_VERIFY_WORLD / object hydration.
             PlayerGuid = new HighGuid(characterGuid);
             HasEnteredWorld = true;
 
             _ = _woWClient.EnterWorldAsync(characterGuid);
 
             InitializeMovementController();
+        }
+
+        public void ResetWorldSessionState(string source, bool preservePlayerGuid = true)
+        {
+            StopGameLoop();
+            HasEnteredWorld = false;
+            _isInControl = false;
+            _isBeingTeleported = false;
+            _movementController = null;
+
+            _pendingUpdates.Clear();
+            lock (_objectsLock)
+            {
+                _objects.Clear();
+            }
+
+            if (!preservePlayerGuid)
+            {
+                _playerGuid = new HighGuid(new byte[4], new byte[4]);
+            }
+
+            Player = new WoWLocalPlayer(_playerGuid);
+
+            Log.Information("[WorldSession] Reset state from {Source}; preservePlayerGuid={Preserve}; guid=0x{Guid:X}",
+                source, preservePlayerGuid, _playerGuid.FullGuid);
         }
 
 

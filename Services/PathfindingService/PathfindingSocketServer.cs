@@ -10,6 +10,8 @@ using System;
 using System.IO;
 using Microsoft.Extensions.Logging;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace PathfindingService
 {
@@ -180,6 +182,7 @@ namespace PathfindingService
         }
 
         private int _pathLogCounter = 0;
+        private long _pathRequestCounter = 0;
         private PathfindingResponse HandlePath(CalculatePathRequest req)
         {
             if (!CheckPosition(req.MapId, req.Start, req.End, out var err))
@@ -187,12 +190,52 @@ namespace PathfindingService
 
             var start = new XYZ(req.Start.X, req.Start.Y, req.Start.Z);
             var end = new XYZ(req.End.X, req.End.Y, req.End.Z);
-            var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
+            var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
+            var requestId = Interlocked.Increment(ref _pathRequestCounter);
+            var requestSw = System.Diagnostics.Stopwatch.StartNew();
+            using var slowRequestCts = new CancellationTokenSource();
+            _ = LogLongRunningPathRequestAsync(
+                requestId,
                 req.MapId,
-                req.NearbyObjects,
-                () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight),
-                logger,
-                operationName: "path");
+                start,
+                end,
+                dist2D,
+                req.Straight,
+                req.NearbyObjects.Count,
+                slowRequestCts.Token);
+
+            if (dist2D >= 100f)
+            {
+                logger.LogInformation(
+                    "[PATH_REQ] id={RequestId} start map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} overlayRequested={OverlayCount}",
+                    requestId,
+                    req.MapId,
+                    start.X,
+                    start.Y,
+                    start.Z,
+                    end.X,
+                    end.Y,
+                    end.Z,
+                    dist2D,
+                    req.Straight,
+                    req.NearbyObjects.Count);
+            }
+
+            OverlayExecutionResult<NavigationPathResult> overlayResult;
+            try
+            {
+                overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
+                    req.MapId,
+                    req.NearbyObjects,
+                    () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight),
+                    logger,
+                    operationName: "path");
+            }
+            finally
+            {
+                slowRequestCts.Cancel();
+            }
+
             var pathResult = overlayResult.Value;
             var path = pathResult.Path;
             var sanitizedPath = path
@@ -201,6 +244,18 @@ namespace PathfindingService
 
             // Proto field "straight" is actually smoothPath (see pathfinding.proto comment and PathfindingClient.cs)
             var smoothPath = req.Straight;
+
+            if (dist2D >= 100f)
+            {
+                logger.LogInformation(
+                    "[PATH_REQ] id={RequestId} done elapsedMs={ElapsedMs} result={Result} corners={Corners} rawCorners={RawCorners} blockedSegment={BlockedSegment}",
+                    requestId,
+                    requestSw.ElapsedMilliseconds,
+                    pathResult.Result,
+                    sanitizedPath.Length,
+                    pathResult.RawPath.Length,
+                    pathResult.BlockedSegmentIndex?.ToString() ?? string.Empty);
+            }
 
             if (sanitizedPath.Length != path.Length)
             {
@@ -213,7 +268,6 @@ namespace PathfindingService
 
             // Log path requests that return few/no corners for diagnostics
             var requestOrdinal = ++_pathLogCounter;
-            var dist2D = MathF.Sqrt((end.X - start.X) * (end.X - start.X) + (end.Y - start.Y) * (end.Y - start.Y));
             if (PathRouteDiagnostics.ShouldLogRoute(
                 dist2D,
                 sanitizedPath.Length,
@@ -258,6 +312,44 @@ namespace PathfindingService
             resp.Result = pathResult.Result;
 
             return new PathfindingResponse { Path = resp };
+        }
+
+        private async Task LogLongRunningPathRequestAsync(
+            long requestId,
+            uint mapId,
+            XYZ start,
+            XYZ end,
+            float dist2D,
+            bool smoothPath,
+            int overlayCount,
+            CancellationToken cancellationToken)
+        {
+            foreach (var thresholdSeconds in new[] { 5, 15, 25 })
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(thresholdSeconds == 5 ? 5 : 10), cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                logger.LogWarning(
+                    "[PATH_REQ] id={RequestId} still-running elapsed>={ElapsedSeconds}s map={MapId} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1}) dist2D={Dist:F1} smoothPath={SmoothPath} overlayRequested={OverlayCount}",
+                    requestId,
+                    thresholdSeconds,
+                    mapId,
+                    start.X,
+                    start.Y,
+                    start.Z,
+                    end.X,
+                    end.Y,
+                    end.Z,
+                    dist2D,
+                    smoothPath,
+                    overlayCount);
+            }
         }
 
         private int _physicsLogCounter = 0;

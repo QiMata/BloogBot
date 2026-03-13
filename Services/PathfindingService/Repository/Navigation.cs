@@ -18,6 +18,7 @@ namespace PathfindingService.Repository
         private const float DefaultAgentHeight = 2.0f;
         private const float NativeWalkabilityMaxSegmentLength = 20f;
         private const string EnableNativeSegmentValidationEnv = "WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION";
+        private const float StraightPathLongRouteOverrideDistance2D = 200f;
         private const float FallbackMinCellSize = 6f;
         private const float FallbackMediumCellSize = 8f;
         private const float FallbackLongRouteCellSize = 10f;
@@ -122,27 +123,36 @@ namespace PathfindingService.Repository
 
         public NavigationPathResult CalculateValidatedPath(uint mapId, XYZ start, XYZ end, bool smoothPath)
         {
-            var preferredAttempt = EvaluateNativePath(mapId, start, end, smoothPath, "native_path");
-            if (preferredAttempt.IsUsable)
+            // Long straight-corner requests can spend tens of seconds in native route shaping
+            // before the service ever gets to its alternate-mode fallback. For corpse-style
+            // routes, prefer the validated smooth path first so the service stays responsive.
+            var useAlternateModeFirst = ShouldTryAlternateModeFirst(start, end, smoothPath);
+            var firstMode = useAlternateModeFirst ? !smoothPath : smoothPath;
+            var firstResult = useAlternateModeFirst ? "native_path_alternate_mode" : "native_path";
+            var secondMode = !firstMode;
+            var secondResult = useAlternateModeFirst ? "native_path" : "native_path_alternate_mode";
+
+            var firstAttempt = EvaluateNativePath(mapId, start, end, firstMode, firstResult);
+            if (firstAttempt.IsUsable)
             {
                 return new NavigationPathResult(
-                    preferredAttempt.Path,
-                    preferredAttempt.Path,
-                    preferredAttempt.SuccessResult,
+                    firstAttempt.Path,
+                    firstAttempt.Path,
+                    firstAttempt.SuccessResult,
                     null);
             }
 
-            var alternateAttempt = EvaluateNativePath(mapId, start, end, !smoothPath, "native_path_alternate_mode");
-            if (alternateAttempt.IsUsable)
+            var secondAttempt = EvaluateNativePath(mapId, start, end, secondMode, secondResult);
+            if (secondAttempt.IsUsable)
             {
                 return new NavigationPathResult(
-                    alternateAttempt.Path,
-                    alternateAttempt.Path,
-                    alternateAttempt.SuccessResult,
+                    secondAttempt.Path,
+                    secondAttempt.Path,
+                    secondAttempt.SuccessResult,
                     null);
             }
 
-            var repairSource = SelectRepairSource(preferredAttempt, alternateAttempt);
+            var repairSource = SelectRepairSource(firstAttempt, secondAttempt);
             if (repairSource.Path.Length > 1 && repairSource.BlockedSegment is BlockedSegmentInfo repairBlockedSegment)
             {
                 var repairedPath = TryRepairPath(mapId, start, end, smoothPath, repairSource.Path, repairBlockedSegment.Index);
@@ -172,9 +182,9 @@ namespace PathfindingService.Repository
                 }
             }
 
-            BlockedSegmentInfo? blockedSegment = preferredAttempt.BlockedSegment is not null
-                ? preferredAttempt.BlockedSegment
-                : alternateAttempt.BlockedSegment;
+            BlockedSegmentInfo? blockedSegment = firstAttempt.BlockedSegment is not null
+                ? firstAttempt.BlockedSegment
+                : secondAttempt.BlockedSegment;
             var rawPath = repairSource.Path.Length > 0 ? repairSource.Path : Array.Empty<XYZ>();
             var result = blockedSegment is null ? "no_path" : GetBlockedResult(blockedSegment.Value.Reason);
             return new NavigationPathResult(
@@ -182,6 +192,14 @@ namespace PathfindingService.Repository
                 rawPath,
                 result,
                 blockedSegment?.Index);
+        }
+
+        private static bool ShouldTryAlternateModeFirst(XYZ start, XYZ end, bool smoothPath)
+        {
+            if (smoothPath)
+                return false;
+
+            return ComputeDistance2D(start, end) >= StraightPathLongRouteOverrideDistance2D;
         }
 
         private static bool IsLosFallbackEnabled()
@@ -206,6 +224,13 @@ namespace PathfindingService.Repository
                 || value.Equals("true", StringComparison.OrdinalIgnoreCase)
                 || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
                 || value.Equals("on", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static float ComputeDistance2D(XYZ start, XYZ end)
+        {
+            var dx = end.X - start.X;
+            var dy = end.Y - start.Y;
+            return MathF.Sqrt((dx * dx) + (dy * dy));
         }
 
         private static XYZ[] TryFindPathNative(uint mapId, XYZ start, XYZ end, bool smoothPath)

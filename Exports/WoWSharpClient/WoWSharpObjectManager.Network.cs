@@ -143,11 +143,7 @@ namespace WoWSharpClient
 
         private void EventEmitter_OnWorldSessionEnd(object? sender, EventArgs e)
         {
-            StopGameLoop();
-            HasEnteredWorld = false;
-            _isInControl = false;
-            _movementController = null;
-            Log.Information("[WorldSession] Session ended, game loop stopped");
+            ResetWorldSessionState("OnWorldSessionEnd");
         }
 
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _systemMessages = new();
@@ -203,7 +199,11 @@ namespace WoWSharpClient
                                         update.Guid,
                                         update.UpdatedFields
                                     );
-                                    lock (_objectsLock) _objects.Add(newObject);
+                                    lock (_objectsLock)
+                                    {
+                                        _objects.RemoveAll(existing => existing.Guid == newObject.Guid);
+                                        _objects.Add(newObject);
+                                    }
 
                                     if (newObject is WoWItem item)
                                         Log.Information("[ProcessUpdates] ITEM CREATED: Guid={Guid:X} ItemId={ItemId} Fields={FieldCount}",
@@ -253,17 +253,27 @@ namespace WoWSharpClient
 
                                 case ObjectUpdateOperation.Update:
                                 {
-                                    WoWObject obj;
+                                    WoWObject? obj;
                                     int index;
+                                    var isLocalPlayer = update.Guid == PlayerGuid.FullGuid;
                                     lock (_objectsLock)
                                     {
-                                        index = _objects.FindIndex(o => o.Guid == update.Guid);
-                                        if (index == -1)
+                                        if (isLocalPlayer)
                                         {
-                                            Log.Warning("[ProcessUpdates] Update for unknown object {Guid:X}", update.Guid);
-                                            break;
+                                            index = -1;
+                                            obj = Player as WoWObject;
                                         }
-                                        obj = _objects[index];
+                                        else
+                                        {
+                                            index = _objects.FindIndex(o => o.Guid == update.Guid);
+                                            obj = index >= 0 ? _objects[index] : null;
+                                        }
+                                    }
+
+                                    if (obj == null)
+                                    {
+                                        Log.Warning("[ProcessUpdates] Update for unknown object {Guid:X}", update.Guid);
+                                        break;
                                     }
 
                                     ApplyFieldDiffs(obj, update.UpdatedFields);
@@ -272,7 +282,6 @@ namespace WoWSharpClient
                                     {
                                         // Only guard position writes for the local player (client-side prediction handles it).
                                         // Other units should always accept server position updates.
-                                        bool isLocalPlayer = obj.Guid == PlayerGuid.FullGuid;
                                         var movementData = update.MovementData;
 
                                         // During teleports, clear queued moving/turn flags for local player updates.
@@ -292,7 +301,10 @@ namespace WoWSharpClient
                                             obj is WoWLocalPlayer ? " [LOCAL]" : "");
                                     }
 
-                                    lock (_objectsLock) _objects[index] = obj;
+                                    if (index >= 0)
+                                    {
+                                        lock (_objectsLock) _objects[index] = obj;
+                                    }
                                     break;
                                 }
 

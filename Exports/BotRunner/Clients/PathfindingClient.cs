@@ -10,12 +10,49 @@ namespace BotRunner.Clients
 {
     public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>
     {
+        internal const int DefaultPathRequestTimeoutMs = 30_000;
+        internal const int DefaultQueryTimeoutMs = 10_000;
+        internal const int DefaultPhysicsTimeoutMs = 5_000;
+
         private readonly ILogger? _logger;
+        private readonly int _pathRequestTimeoutMs;
+        private readonly int _queryTimeoutMs;
+        private readonly int _physicsTimeoutMs;
         private int _consecutiveFailures;
 
-        public PathfindingClient() : base() { }
-        public PathfindingClient(string ipAddress, int port, ILogger logger)
-            : base(ipAddress, port, logger) { _logger = logger; }
+        public PathfindingClient()
+            : this(
+                DefaultPathRequestTimeoutMs,
+                DefaultQueryTimeoutMs,
+                DefaultPhysicsTimeoutMs)
+        {
+        }
+
+        protected PathfindingClient(
+            int pathRequestTimeoutMs,
+            int queryTimeoutMs,
+            int physicsTimeoutMs)
+            : base()
+        {
+            _pathRequestTimeoutMs = pathRequestTimeoutMs;
+            _queryTimeoutMs = queryTimeoutMs;
+            _physicsTimeoutMs = physicsTimeoutMs;
+        }
+
+        public PathfindingClient(
+            string ipAddress,
+            int port,
+            ILogger logger,
+            int pathRequestTimeoutMs = DefaultPathRequestTimeoutMs,
+            int queryTimeoutMs = DefaultQueryTimeoutMs,
+            int physicsTimeoutMs = DefaultPhysicsTimeoutMs)
+            : base(ipAddress, port, logger)
+        {
+            _logger = logger;
+            _pathRequestTimeoutMs = pathRequestTimeoutMs;
+            _queryTimeoutMs = queryTimeoutMs;
+            _physicsTimeoutMs = physicsTimeoutMs;
+        }
 
         /// <summary>
         /// True when the last request succeeded. Game loop can check this to decide
@@ -46,7 +83,7 @@ namespace BotRunner.Clients
             if (nearbyObjects is { Count: > 0 })
                 request.Path.NearbyObjects.Add(nearbyObjects);
 
-            var response = SendRequest(request);
+            var response = SendRequest(request, _pathRequestTimeoutMs);
             _consecutiveFailures = 0;
             if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                 throw new Exception(response.Error.Message);
@@ -73,7 +110,7 @@ namespace BotRunner.Clients
                     MaxSearchDist = maxSearchDist
                 }
             };
-            var response = SendRequest(request);
+            var response = SendRequest(request, _queryTimeoutMs);
             _consecutiveFailures = 0;
             if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                 throw new Exception(response.Error.Message);
@@ -103,7 +140,7 @@ namespace BotRunner.Clients
                 foreach (var pos in positions)
                     request.BatchGroundZ.Positions.Add(ToProto(pos));
 
-                var response = SendRequest(request);
+                var response = SendRequest(request, _queryTimeoutMs);
                 _consecutiveFailures = 0;
 
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
@@ -141,7 +178,7 @@ namespace BotRunner.Clients
                     To = ToProto(to)
                 }
             };
-            var response = SendRequest(request);
+            var response = SendRequest(request, _queryTimeoutMs);
             _consecutiveFailures = 0;
             if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                 throw new Exception(response.Error.Message);
@@ -158,7 +195,7 @@ namespace BotRunner.Clients
             try
             {
                 var request = new PathfindingRequest { Step = physicsInput };
-                var response = SendRequest(request);
+                var response = SendRequest(request, _physicsTimeoutMs);
                 _consecutiveFailures = 0;
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                     throw new Exception(response.Error.Message);
@@ -222,7 +259,7 @@ namespace BotRunner.Clients
                         To = ToProto(to)
                     }
                 };
-                var response = SendRequest(request);
+                var response = SendRequest(request, _queryTimeoutMs);
                 _consecutiveFailures = 0;
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                     return false; // Non-fatal — treat as clear
@@ -235,6 +272,9 @@ namespace BotRunner.Clients
         }
 
         protected virtual PathfindingResponse SendRequest(PathfindingRequest request) => SendMessage(request);
+
+        protected virtual PathfindingResponse SendRequest(PathfindingRequest request, int timeoutMs)
+            => SendMessage(request, timeoutMs, timeoutMs);
 
         private static Game.Position ToProto(Position p) => new() { X = p.X, Y = p.Y, Z = p.Z };
     }

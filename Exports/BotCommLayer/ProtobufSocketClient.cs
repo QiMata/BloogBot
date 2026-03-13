@@ -82,6 +82,16 @@ namespace BotCommLayer
 
         public TResponse SendMessage(TRequest request)
         {
+            return SendMessage(request, readTimeoutOverrideMs: null, writeTimeoutOverrideMs: null);
+        }
+
+        protected TResponse SendMessage(TRequest request, int readTimeoutMs, int writeTimeoutMs)
+        {
+            return SendMessage(request, (int?)readTimeoutMs, (int?)writeTimeoutMs);
+        }
+
+        private TResponse SendMessage(TRequest request, int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)
+        {
             if (_stream == null && _ipAddress == null)
             {
                 throw new InvalidOperationException("Client is not connected. Cannot send message.");
@@ -89,8 +99,11 @@ namespace BotCommLayer
 
             lock (_lock)
             {
+                var previousReadTimeout = _stream?.ReadTimeout;
+                var previousWriteTimeout = _stream?.WriteTimeout;
                 try
                 {
+                    ApplyTimeoutOverrides(readTimeoutOverrideMs, writeTimeoutOverrideMs);
                     return SendMessageInternal(request);
                 }
                 catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException)
@@ -102,6 +115,7 @@ namespace BotCommLayer
                         try
                         {
                             Connect();
+                            ApplyTimeoutOverrides(readTimeoutOverrideMs, writeTimeoutOverrideMs);
                             _logger?.LogInformation($"Reconnected to {_ipAddress}:{_port}. Retrying message.");
                             return SendMessageInternal(request);
                         }
@@ -115,7 +129,35 @@ namespace BotCommLayer
                     _logger?.LogError($"Error sending message: {ex}");
                     throw;
                 }
+                finally
+                {
+                    RestoreTimeouts(previousReadTimeout, previousWriteTimeout);
+                }
             }
+        }
+
+        private void ApplyTimeoutOverrides(int? readTimeoutOverrideMs, int? writeTimeoutOverrideMs)
+        {
+            if (_stream == null)
+                return;
+
+            if (readTimeoutOverrideMs.HasValue)
+                _stream.ReadTimeout = readTimeoutOverrideMs.Value;
+
+            if (writeTimeoutOverrideMs.HasValue)
+                _stream.WriteTimeout = writeTimeoutOverrideMs.Value;
+        }
+
+        private void RestoreTimeouts(int? previousReadTimeout, int? previousWriteTimeout)
+        {
+            if (_stream == null)
+                return;
+
+            if (previousReadTimeout.HasValue)
+                _stream.ReadTimeout = previousReadTimeout.Value;
+
+            if (previousWriteTimeout.HasValue)
+                _stream.WriteTimeout = previousWriteTimeout.Value;
         }
 
         private TResponse SendMessageInternal(TRequest request)

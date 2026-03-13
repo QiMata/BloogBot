@@ -171,6 +171,110 @@ public class RequestScopedDynamicObjectOverlayTests
         Assert.Single(registry.Unregistered);
     }
 
+    [Fact]
+    public async Task ExecuteWithOverlay_WithoutObjects_StillSerializesNativeAccess()
+    {
+        var registry = new FakeDynamicObjectOverlayRegistry();
+        var overlay = new RequestScopedDynamicObjectOverlay(registry);
+
+        using var emptyOverlayEntered = new ManualResetEventSlim(false);
+        using var releaseEmptyOverlay = new ManualResetEventSlim(false);
+        using var sharedEntered = new ManualResetEventSlim(false);
+
+        var emptyOverlayTask = Task.Run(() =>
+            overlay.ExecuteWithOverlay(
+                1,
+                Array.Empty<DynamicObjectProto>(),
+                () =>
+                {
+                    emptyOverlayEntered.Set();
+                    releaseEmptyOverlay.Wait(TimeSpan.FromSeconds(5));
+                    return "empty";
+                }));
+
+        Assert.True(emptyOverlayEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        var sharedTask = Task.Run(() =>
+            overlay.ExecuteExclusive(() =>
+            {
+                sharedEntered.Set();
+                return 456;
+            }));
+
+        Assert.False(sharedEntered.Wait(TimeSpan.FromMilliseconds(200)));
+
+        releaseEmptyOverlay.Set();
+
+        var emptyOverlayResult = await emptyOverlayTask;
+        var sharedResult = await sharedTask;
+
+        Assert.Equal("empty", emptyOverlayResult.Value);
+        Assert.Equal(0, emptyOverlayResult.Summary.RequestedCount);
+        Assert.Equal(456, sharedResult);
+        Assert.True(sharedEntered.IsSet);
+        Assert.Empty(registry.Registered);
+        Assert.Empty(registry.Unregistered);
+    }
+
+    [Fact]
+    public async Task ExecuteWithOverlay_PendingPathRequest_BlocksLaterSharedCalls()
+    {
+        var registry = new FakeDynamicObjectOverlayRegistry();
+        var overlay = new RequestScopedDynamicObjectOverlay(registry);
+
+        using var firstSharedEntered = new ManualResetEventSlim(false);
+        using var releaseFirstShared = new ManualResetEventSlim(false);
+        using var pathEntered = new ManualResetEventSlim(false);
+        using var releasePath = new ManualResetEventSlim(false);
+        using var secondSharedEntered = new ManualResetEventSlim(false);
+
+        var firstSharedTask = Task.Run(() =>
+            overlay.ExecuteExclusive(() =>
+            {
+                firstSharedEntered.Set();
+                releaseFirstShared.Wait(TimeSpan.FromSeconds(5));
+                return 1;
+            }));
+
+        Assert.True(firstSharedEntered.Wait(TimeSpan.FromSeconds(5)));
+
+        var pathTask = Task.Run(() =>
+            overlay.ExecuteWithOverlay(
+                1,
+                Array.Empty<DynamicObjectProto>(),
+                () =>
+                {
+                    pathEntered.Set();
+                    releasePath.Wait(TimeSpan.FromSeconds(5));
+                    return "path";
+                }));
+
+        await Task.Delay(100);
+
+        var secondSharedTask = Task.Run(() =>
+            overlay.ExecuteExclusive(() =>
+            {
+                secondSharedEntered.Set();
+                return 2;
+            }));
+
+        releaseFirstShared.Set();
+
+        Assert.True(pathEntered.Wait(TimeSpan.FromSeconds(5)));
+        Assert.False(secondSharedEntered.Wait(TimeSpan.FromMilliseconds(200)));
+
+        releasePath.Set();
+
+        var firstSharedResult = await firstSharedTask;
+        var pathResult = await pathTask;
+        var secondSharedResult = await secondSharedTask;
+
+        Assert.Equal(1, firstSharedResult);
+        Assert.Equal("path", pathResult.Value);
+        Assert.Equal(2, secondSharedResult);
+        Assert.True(secondSharedEntered.IsSet);
+    }
+
     private sealed class FakeDynamicObjectOverlayRegistry : IDynamicObjectOverlayRegistry
     {
         public List<RegisterCall> Registered { get; } = [];

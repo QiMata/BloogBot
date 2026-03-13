@@ -27,6 +27,8 @@ Completed overhaul slices now on disk:
 - BG `MovementController` forced-stop handling now clears directional intent while preserving falling/swimming physics flags, so stop requests do not cancel `MOVEFLAG_FALLINGFAR` mid-overrun.
 - The NPC action contract now includes `VisitVendor`, `VisitTrainer`, and `VisitFlightMaster`, and `Trainer_LearnAvailableSpells` now drives BG through `TrainerVisitTask`-owned logic instead of a raw `InteractWith` dispatch.
 - `LiveBotFixture.CheckFgActionableAsync()` now requires both successful action forwarding and a teleport/snapshot round-trip before later FG-sensitive suites keep running.
+- Mining live coverage now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` from an explicit `ValleyOfTrials` test setup, so the task owns route optimization, candidate movement, node discovery, and gather interaction instead of the test piloting per-node `Goto` steps.
+- Fixture/login scan confirmed there is no fixture-level or post-login `ValleyOfTrials` teleport path; the only active Valley teleport is the mining test's own staging helper.
 - Test markdown was refreshed to link each touched test back to the production code paths it exercises.
 
 Verification runs on the current pass:
@@ -69,6 +71,10 @@ Verification runs on the current pass:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 31 passed, 0 failed, 4 skipped.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 14 passed, 1 skipped.
+- `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded.
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> 16 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> 1 skipped because none of the 6 natural Valley copper-route candidates were currently spawned.
 
 Current live-suite boundary:
 - The major behavior slice reran green (`12 passed`) after tightening melee stick distance in `BuildStartMeleeAttackSequence(...)`.
@@ -80,6 +86,8 @@ Current live-suite boundary:
 - The root FG remote-teleport instability remains tracked under `FG-CRASH-TELE`; it is no longer misattributed to test-spawned game objects or allowed to cascade into unrelated live suites.
 - `Trainer_LearnAvailableSpells` now takes the task-owned `VisitTrainer -> TrainerVisitTask -> LearnAllAvailableSpellsAsync(...)` path, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`; that gap is tracked under `BRT-OVR-006`.
 - BG and FG fishing now start from the Ratchet named teleport with the fishing cast entry flowing through `ActionType.StartFishing -> FishingTask`.
+- Mining now stages at `ValleyOfTrials` only inside `GatheringProfessionTests`; the fixture still uses safe-zone Orgrimmar teleports for cleanup/probes and does not inject Valley staging into login or clean-slate paths.
+- The mining live test is now task-owned through `StartGatheringRoute -> GatheringRouteTask`, but its current live signal is gated by natural node availability rather than any forced spawn path.
 - The latest full-suite rerun passed (`31 passed, 0 failed, 4 skipped`), but routine regression coverage now uses a narrower documented-stable slice so unfinished major-rework suites do not dominate the signal.
 - The default documented-stable slice is `14 passed, 1 skipped`; active-overhaul suites like combat, gathering, fishing, questing, and NPC trainer coverage are now validated individually until their owning task IDs close.
 - Fishing-specific follow-up work is now pathfinding-bound. The task contract itself can succeed, but shoreline terrain sticking and no-LOS approach positions still intermittently block `FishingTask in_cast_range`.

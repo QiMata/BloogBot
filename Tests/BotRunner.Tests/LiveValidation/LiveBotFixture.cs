@@ -361,7 +361,7 @@ public partial class LiveBotFixture : IAsyncLifetime
                 foreach (var snap in snapshots)
                 {
                     NormalizeSnapshotCharacterName(snap);
-                    if (snap.ScreenState == "InWorld" && !string.IsNullOrEmpty(snap.CharacterName))
+                    if (IsHydratedInWorldSnapshot(snap))
                     {
                         if (!everSeenInWorld.ContainsKey(snap.AccountName))
                         {
@@ -638,6 +638,14 @@ public partial class LiveBotFixture : IAsyncLifetime
             snapshot.CharacterName = knownCharacterName;
     }
 
+    private static bool IsHydratedInWorldSnapshot(WoWActivitySnapshot? snapshot)
+    {
+        return snapshot?.ScreenState == "InWorld"
+            && !string.IsNullOrWhiteSpace(snapshot.CharacterName)
+            && snapshot.Player?.Unit?.MaxHealth > 0
+            && snapshot.Player.Unit.GameObject?.Base?.Position != null;
+    }
+
     private async Task<bool> WaitForConfiguredAccountInWorldAsync(string accountName, TimeSpan timeout, string label)
     {
         if (_stateManagerClient == null)
@@ -648,7 +656,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         {
             var snapshot = await GetSnapshotAsync(accountName);
             NormalizeSnapshotCharacterName(snapshot);
-            if (snapshot?.ScreenState == "InWorld" && !string.IsNullOrWhiteSpace(snapshot.CharacterName))
+            if (IsHydratedInWorldSnapshot(snapshot))
             {
                 AllBots = AllBots
                     .Where(existing => !string.Equals(existing.AccountName, accountName, StringComparison.OrdinalIgnoreCase))
@@ -710,6 +718,14 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     private async Task EnsureAliveForSetupAsync(string accountName, string characterName, string label)
     {
+        await WaitForSnapshotConditionAsync(
+            accountName,
+            snapshot => snapshot.Player?.Unit?.MaxHealth > 0
+                && !string.IsNullOrWhiteSpace(snapshot.CharacterName),
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 500,
+            progressLabel: $"{label} setup-hydrate");
+
         await RefreshSnapshotsAsync();
         var baseline = await GetSnapshotAsync(accountName);
         if (IsStrictAlive(baseline))
@@ -733,8 +749,12 @@ public partial class LiveBotFixture : IAsyncLifetime
             return;
         }
 
-        _logger.LogWarning("[FIXTURE] {Label} '{Name}' did not reach strict-alive state after revive wait window",
-            label, characterName);
+        var finalSnapshot = await GetSnapshotAsync(accountName);
+        var finalHealth = finalSnapshot?.Player?.Unit?.Health ?? 0;
+        var finalMaxHealth = finalSnapshot?.Player?.Unit?.MaxHealth ?? 0;
+        var finalScreen = finalSnapshot?.ScreenState ?? "(null)";
+        _logger.LogWarning("[FIXTURE] {Label} '{Name}' did not reach strict-alive state after revive wait window. Screen={Screen} hp={Health}/{MaxHealth}",
+            label, characterName, finalScreen, finalHealth, finalMaxHealth);
     }
 
     /// <summary>
@@ -803,7 +823,7 @@ public partial class LiveBotFixture : IAsyncLifetime
             foreach (var snapshot in snapshots)
                 NormalizeSnapshotCharacterName(snapshot);
             var inWorld = snapshots
-                .Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName))
+                .Where(IsHydratedInWorldSnapshot)
                 .ToList();
 
             // Check that every known bot is InWorld

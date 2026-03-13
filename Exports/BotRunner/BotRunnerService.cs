@@ -163,6 +163,8 @@ namespace BotRunner
                     PopulateSnapshotFromObjectManager();
 
                     var incomingActivityMemberState = _characterStateUpdateClient.SendMemberStateUpdate(_activitySnapshot);
+                    var playerWorldReady = _objectManager.HasEnteredWorld
+                        && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
                     UpdateBehaviorTree(incomingActivityMemberState);
 
@@ -181,7 +183,7 @@ namespace BotRunner
                     // Death recovery must continue even if a behavior tree is currently running.
                     // Some chat/action trees can stay Running while dead, which otherwise starves
                     // ReleaseCorpse/RetrieveCorpse and leaves the character ghost-stalled.
-                    if (_objectManager.HasEnteredWorld)
+                    if (playerWorldReady)
                     {
                         PushDeathRecoveryIfNeeded();
 
@@ -208,7 +210,10 @@ namespace BotRunner
         private void UpdateBehaviorTree(WoWActivitySnapshot incomingActivityMemberState)
         {
             // Check for new incoming actions FIRST â€” they can interrupt a running tree
-            if (_objectManager.HasEnteredWorld
+            var playerWorldReady = _objectManager.HasEnteredWorld
+                && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
+
+            if (playerWorldReady
                 && incomingActivityMemberState.CurrentAction != null
                 && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait)
             {
@@ -253,6 +258,12 @@ namespace BotRunner
             if (_objectManager.HasEnteredWorld)
             {
                 _everEnteredWorld = true;
+                if (!WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player))
+                {
+                    _behaviorTree = null;
+                    return;
+                }
+
                 if (!_tasksInitialized)
                 {
                     _tasksInitialized = true;

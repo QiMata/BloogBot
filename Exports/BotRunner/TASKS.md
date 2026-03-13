@@ -106,24 +106,32 @@
 
 ## Session Handoff
 - Last updated: 2026-03-12
-- Active task: `BR-NAV-003` replan and re-optimize when dynamic blockers invalidate the current route
-- Last delta: mirrored corpse-run trace summaries into the BotRunner diag log, added deterministic log-tail coverage, and updated the live corpse/fishing tests to append snapshot/error tails plus recent BotRunner diagnostics on failure
+- Active task: `BR-NAV-003` remains open, but the current shipped BotRunner delta is the task-owned gathering route slice used by live mining
+- Last delta: added `StartGatheringRoute` wiring and `GatheringRouteTask`, removed the dead inline mining fallback from the live test, and validated that mining now stages `ValleyOfTrials` only inside the test while the route task owns candidate movement, visible-node discovery, and gather interaction
 - Pass result: `delta shipped`
 - Validation/tests run:
   - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LiveBotFixtureDiagnosticsTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~RetrieveCorpseTaskTests|FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests" --logger "console;verbosity=minimal"` -> `105 passed`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=detailed"` -> `1 skipped` (`BG: failed to revive bot at test start (death reason: health=0).`)
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`BG: failed to revive bot at test start (death reason: health=0).`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> `16 passed`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No Copper Vein nodes currently spawned on any of the 6 Valley copper-route candidates.`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WorldEntryHydrationTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~PathfindingClientTimeoutTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> `24 passed`
 - Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/Communication.cs`
+  - `Exports/GameData.Core/Enums/CharacterAction.cs`
+  - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+  - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
+  - `Exports/BotRunner/Tasks/GatheringRouteTask.cs`
+  - `Tests/BotRunner.Tests/Combat/GatheringRouteTaskTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelection.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelectionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/OVERHAUL_PLAN.md`
   - `Exports/BotRunner/BotRunnerService.cs`
   - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Diagnostics.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixtureDiagnosticsTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
   - `Exports/BotRunner/TASKS.md`
   - `Tests/BotRunner.Tests/TASKS.md`
   - `docs/TASKS.md`
-- Next command: `Get-Content Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Snapshots.cs | Select-Object -Skip 140 -First 220`
-- Blockers: The new live pathing diagnostics are wired, but both `DeathCorpseRunTests` and `FishingProfessionTests` currently skip because BG starts the session at `health=0/0` and does not reach strict-alive after `.revive`. Movement-capability fields for `BR-NAV-002` also remain open.
+- Next command: `Get-Content Exports/BotRunner/Tasks/GatheringRouteTask.cs | Select-Object -First 240`
+- Blockers: Mining is now task-owned, but the live pass still depends on natural node uptime; when all Valley copper candidates are on respawn the test skips by design. Movement-capability fields for `BR-NAV-002` also remain open, and herbalism still needs to move onto the same route-task contract.

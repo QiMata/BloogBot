@@ -63,7 +63,7 @@ namespace Communication {
             "ck5hbWUYCCABKAkSEwoLc2NyZWVuU3RhdGUYCSABKAkSKAoMbW92ZW1lbnRE",
             "YXRhGAogASgLMhIuZ2FtZS5Nb3ZlbWVudERhdGESFwoPcGFydHlMZWFkZXJH",
             "dWlkGAsgASgEEhoKEnJlY2VudENoYXRNZXNzYWdlcxgMIAMoCRIUCgxyZWNl",
-            "bnRFcnJvcnMYDSADKAkq5QkKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdP",
+            "bnRFcnJvcnMYDSADKAkqgAoKCkFjdGlvblR5cGUSCAoEV0FJVBAAEggKBEdP",
             "VE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dPU1NJUBADEhQK",
             "EFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQBRIRCg1ERUNM",
             "SU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNPTVBMRVRFX1FV",
@@ -91,12 +91,13 @@ namespace Communication {
             "DwoLU0tJTl9DT1JQU0UQPBIPCgtHQVRIRVJfTk9ERRA9Eg0KCVNFTkRfQ0hB",
             "VBA+Eg4KClNFVF9GQUNJTkcQPxIQCgxWSVNJVF9WRU5ET1IQQBIRCg1WSVNJ",
             "VF9UUkFJTkVSEEESFwoTVklTSVRfRkxJR0hUX01BU1RFUhBCEhEKDVNUQVJU",
-            "X0ZJU0hJTkcQQyovCg1Cb3RSdW5uZXJUeXBlEg4KCkZPUkVHUk9VTkQQABIO",
-            "CgpCQUNLR1JPVU5EEAEqdgoPU3RhdGVDaGFuZ2VUeXBlEggKBE5BTUUQABIM",
-            "CghPUEVOTkVTUxABEhUKEUNPTlNDSUVOVElPVVNORVNTEAISEAoMRVhUUkFW",
-            "RVJTSU9OEAMSEQoNQUdSRUVBQkxFTkVTUxAEEg8KC05FVVJPVElDSVNNEAUq",
-            "OwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZBSUxVUkUQARIP",
-            "CgtJTl9QUk9HUkVTUxACYgZwcm90bzM="));
+            "X0ZJU0hJTkcQQxIZChVTVEFSVF9HQVRIRVJJTkdfUk9VVEUQRCovCg1Cb3RS",
+            "dW5uZXJUeXBlEg4KCkZPUkVHUk9VTkQQABIOCgpCQUNLR1JPVU5EEAEqdgoP",
+            "U3RhdGVDaGFuZ2VUeXBlEggKBE5BTUUQABIMCghPUEVOTkVTUxABEhUKEUNP",
+            "TlNDSUVOVElPVVNORVNTEAISEAoMRVhUUkFWRVJTSU9OEAMSEQoNQUdSRUVB",
+            "QkxFTkVTUxAEEg8KC05FVVJPVElDSVNNEAUqOwoOUmVzcG9uc2VSZXN1bHQS",
+            "CwoHU1VDQ0VTUxAAEgsKB0ZBSUxVUkUQARIPCgtJTl9QUk9HUkVTUxACYgZw",
+            "cm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -185,6 +186,7 @@ namespace Communication {
     [pbr::OriginalName("VISIT_TRAINER")] VisitTrainer = 65,
     [pbr::OriginalName("VISIT_FLIGHT_MASTER")] VisitFlightMaster = 66,
     [pbr::OriginalName("START_FISHING")] StartFishing = 67,
+    [pbr::OriginalName("START_GATHERING_ROUTE")] StartGatheringRoute = 68,
   }
 
   public enum BotRunnerType {

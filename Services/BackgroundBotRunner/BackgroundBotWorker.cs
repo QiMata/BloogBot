@@ -273,7 +273,8 @@ namespace BackgroundBotRunner
             {
                 _worldDisconnectSubscription = worldClient.WhenDisconnected?.Subscribe(_ =>
                 {
-                    _logger.LogInformation("World client disconnected. Resetting agent factory.");
+                    _logger.LogInformation("World client disconnected. Resetting object manager world state and agent factory.");
+                    WoWSharpObjectManager.Instance.ResetWorldSessionState("BackgroundBotWorker.WhenDisconnected");
                     ResetAgentFactory();
                 });
             }
@@ -297,7 +298,7 @@ namespace BackgroundBotRunner
                         return;
                     }
                     _logger.LogInformation("Logout complete — auto-re-entering world with GUID 0x{Guid:X}", guid);
-                    om.HasEnteredWorld = false;
+                    om.ResetWorldSessionState("BackgroundBotWorker.LogoutComplete");
                     Task.Run(async () =>
                     {
                         await Task.Delay(1500); // Let server finalize logout

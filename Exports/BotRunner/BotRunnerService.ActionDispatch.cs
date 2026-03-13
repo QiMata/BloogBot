@@ -1,5 +1,6 @@
 using Communication;
 using GameData.Core.Enums;
+using GameData.Core.Models;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -237,6 +238,26 @@ namespace BotRunner
                             return BehaviourTreeStatus.Success;
                         });
                         break;
+                    case CharacterAction.StartGatheringRoute:
+                    {
+                        int gatheringRouteSpellId = (int)actionEntry.Item2[0];
+                        var allowedEntries = ParseGatheringEntries((string)actionEntry.Item2[1]);
+                        var routePositions = ParseGatheringRoutePositions(actionEntry.Item2.Skip(2));
+                        builder.Do("Queue Gathering Route Task", time =>
+                        {
+                            if (routePositions.Count == 0 || allowedEntries.Count == 0)
+                            {
+                                Log.Warning("[BOT RUNNER] Ignoring StartGatheringRoute with invalid parameters. positions={Count} entries={EntryCount}",
+                                    routePositions.Count, allowedEntries.Count);
+                                return BehaviourTreeStatus.Success;
+                            }
+
+                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.GatheringRouteTask)
+                                _botTasks.Push(new Tasks.GatheringRouteTask(context, routePositions, allowedEntries, gatheringRouteSpellId));
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
                     case CharacterAction.StopCast:
                         builder.Splice(StopCastSequence);
                         break;
@@ -537,6 +558,34 @@ namespace BotRunner
             }
 
             return builder.End().Build();
+        }
+
+        private static List<uint> ParseGatheringEntries(string csv)
+            => csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(token => uint.TryParse(token, out var entry) ? entry : 0u)
+                .Where(entry => entry != 0)
+                .Distinct()
+                .ToList();
+
+        private static List<Position> ParseGatheringRoutePositions(IEnumerable<object> rawParameters)
+        {
+            var floats = rawParameters
+                .Select(parameter => parameter switch
+                {
+                    float floatParam => (float?)floatParam,
+                    int intParam => intParam,
+                    long longParam => longParam,
+                    _ => null
+                })
+                .Where(value => value.HasValue)
+                .Select(value => value!.Value)
+                .ToList();
+
+            var positions = new List<Position>(floats.Count / 3);
+            for (int index = 0; index + 2 < floats.Count; index += 3)
+                positions.Add(new Position(floats[index], floats[index + 1], floats[index + 2]));
+
+            return positions;
         }
     }
 }

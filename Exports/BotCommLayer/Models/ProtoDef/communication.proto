@@ -103,6 +103,7 @@ enum ActionType {
     VISIT_TRAINER = 65;
     VISIT_FLIGHT_MASTER = 66;
     START_FISHING = 67;
+    START_GATHERING_ROUTE = 68;
 }
 
 message ActionMap {

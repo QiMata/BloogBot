@@ -136,6 +136,31 @@ public class NavigationOverlayAwarePathTests
         Assert.Equal([Start, rawMid, rawEnd], result.Path);
     }
 
+    [Fact]
+    public void CalculateValidatedPath_LongStraightRequest_UsesAlternateSmoothModeFirst()
+    {
+        var start = new XYZ(0f, 0f, 0f);
+        var end = new XYZ(250f, 0f, 0f);
+        var smoothPath = new XYZ(125f, 5f, 0f);
+        var requestedModes = new List<bool>();
+        var navigation = new Navigation(
+            (mapId, from, to, useSmoothPath) =>
+            {
+                requestedModes.Add(useSmoothPath);
+                return useSmoothPath
+                    ? [start, smoothPath, end]
+                    : throw new InvalidOperationException("Long straight mode should not run when the alternate smooth route is already usable.");
+            },
+            (mapId, from, to) => Navigation.SegmentBlockReason.None);
+
+        var result = navigation.CalculateValidatedPath(1, start, end, smoothPath: false);
+
+        Assert.Equal("native_path_alternate_mode", result.Result);
+        Assert.Null(result.BlockedSegmentIndex);
+        Assert.Equal([true], requestedModes);
+        Assert.Equal([start, smoothPath, end], result.Path);
+    }
+
     private static bool IntersectsFlatCorridor(XYZ from, XYZ to)
     {
         for (var i = 0; i <= 32; i++)

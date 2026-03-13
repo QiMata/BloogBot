@@ -84,4 +84,5 @@ public enum CharacterAction
     VisitTrainer,       // Queue TrainerVisitTask for nearby class-trainer automation.
     VisitFlightMaster,  // Queue FlightMasterVisitTask for nearby taxi-node discovery.
     StartFishing,       // Queue FishingTask to resolve fishing rank and wait for the fishing cycle.
+    StartGatheringRoute,// Queue GatheringRouteTask to walk natural node coordinates and gather the first visible match.
 }

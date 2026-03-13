@@ -49,7 +49,7 @@ public partial class LiveBotFixture
                 var snapshots = await _stateManagerClient.QuerySnapshotsAsync();
                 foreach (var snapshot in snapshots)
                     NormalizeSnapshotCharacterName(snapshot);
-                inWorld = snapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
+                inWorld = snapshots.Where(IsHydratedInWorldSnapshot).ToList();
 
                 if (inWorld.Count >= expectedCount || expectedCount == 0)
                 {
@@ -68,7 +68,7 @@ public partial class LiveBotFixture
             var finalSnapshots = await _stateManagerClient.QuerySnapshotsAsync();
             foreach (var snapshot in finalSnapshots)
                 NormalizeSnapshotCharacterName(snapshot);
-            AllBots = finalSnapshots.Where(s => s.ScreenState == "InWorld" && !string.IsNullOrEmpty(s.CharacterName)).ToList();
+            AllBots = finalSnapshots.Where(IsHydratedInWorldSnapshot).ToList();
             IdentifyBots(AllBots);
             LogSnapshotMessages();
         }

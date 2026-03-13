@@ -3,7 +3,6 @@ using Pathfinding;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Threading;
 
 namespace PathfindingService.Repository;
 
@@ -65,15 +64,22 @@ public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegis
 
     private readonly IDynamicObjectOverlayRegistry _registry = registry ?? throw new ArgumentNullException(nameof(registry));
     private readonly object _registryGate = new();
+    private bool _operationActive;
+    private int _pendingPriorityOperations;
     private long _nextRequestId;
 
     public T ExecuteExclusive<T>(Func<T> action)
     {
         ArgumentNullException.ThrowIfNull(action);
 
-        lock (_registryGate)
+        EnterSharedOperation();
+        try
         {
             return action();
+        }
+        finally
+        {
+            ExitOperation();
         }
     }
 
@@ -87,8 +93,19 @@ public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegis
         ArgumentNullException.ThrowIfNull(nearbyObjects);
         ArgumentNullException.ThrowIfNull(action);
 
-        lock (_registryGate)
+        EnterPriorityOperation();
+        try
         {
+            if (nearbyObjects.Count == 0)
+            {
+                return new OverlayExecutionResult<T>(
+                    action(),
+                    new RequestScopedDynamicObjectOverlaySummary(
+                        RequestedCount: 0,
+                        RegisteredCount: 0,
+                        FilteredCount: 0,
+                        RegisteredDisplayIds: Array.Empty<uint>()));
+            }
             var requestId = Interlocked.Increment(ref _nextRequestId);
             var registeredGuids = new List<ulong>(nearbyObjects.Count);
             var registeredDisplayIds = new List<uint>(nearbyObjects.Count);
@@ -162,6 +179,53 @@ public sealed class RequestScopedDynamicObjectOverlay(IDynamicObjectOverlayRegis
                     }
                 }
             }
+        }
+        finally
+        {
+            ExitOperation();
+        }
+    }
+
+    private void EnterSharedOperation()
+    {
+        lock (_registryGate)
+        {
+            while (_operationActive || _pendingPriorityOperations > 0)
+            {
+                Monitor.Wait(_registryGate);
+            }
+
+            _operationActive = true;
+        }
+    }
+
+    private void EnterPriorityOperation()
+    {
+        lock (_registryGate)
+        {
+            _pendingPriorityOperations++;
+            try
+            {
+                while (_operationActive)
+                {
+                    Monitor.Wait(_registryGate);
+                }
+
+                _operationActive = true;
+            }
+            finally
+            {
+                _pendingPriorityOperations--;
+            }
+        }
+    }
+
+    private void ExitOperation()
+    {
+        lock (_registryGate)
+        {
+            _operationActive = false;
+            Monitor.PulseAll(_registryGate);
         }
     }
 

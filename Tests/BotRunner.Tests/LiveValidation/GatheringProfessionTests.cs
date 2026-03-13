@@ -16,10 +16,10 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Strategy:
 ///   1. Teleport to Orgrimmar (safe zone) for setup — learn spells, set skills
-///   2. Query MaNGOS gameobject table for existing node spawns on Kalimdor
-///   3. Teleport ~30 yards offset from a spawn area, detect the node via NearbyObjects
-///   4. Use GoTo (pathfinding) to navigate to the node — tests full pipeline
-///   5. Interact and verify skill increase
+///   2. For mining, query Valley of Trials copper spawns and dispatch StartGatheringRoute
+///      so GatheringRouteTask owns route optimization, movement, discovery, and gather
+///   3. For herbalism, query existing natural herb spawns and path to the first visible node
+///   4. Interact and verify gather success / skill progression metrics
 ///
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~GatheringProfessionTests" --configuration Release -v n
@@ -54,6 +54,13 @@ public class GatheringProfessionTests
     private const float OrgY = -4373.4f;
     private const float OrgZ = 31.2f;
 
+    // Mining is the active pathfinding probe; herbalism still uses direct spawn staging.
+    private const float CandidateApproachTolerance = 8f;
+    private const float NodeInteractionTolerance = 4f;
+    private const float NodeDiscoveryTolerance = 100f;
+    private static readonly TimeSpan MiningRouteTravelTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan NodeScanTimeout = TimeSpan.FromSeconds(3);
+
     // Teleport offset from spawn. Set to 0 to teleport directly to (spawnX, spawnY, spawnZ+3)
     // so that startDist < NavTolerance → bot skips pathfinding and gathers directly.
     // A 5y offset caused test failures: bot approaches node at bad angles on sloped terrain
@@ -78,53 +85,70 @@ public class GatheringProfessionTests
     [SkippableFact]
     public async Task Mining_GatherCopperVein_SkillIncreases()
     {
-        // --- Find copper vein spawns in the DB (Kalimdor — Durotar low-level zone) ---
-        var spawns = await _bot.QueryGameObjectSpawnsAsync(CopperVeinEntry, mapFilter: 1, limit: 25);
-        global::Tests.Infrastructure.Skip.If(spawns.Count == 0, "No Copper Vein spawns in gameobject table (entry 1731).");
-        // Sort by distance from Orgrimmar so we try nearby spawns first (avoids long-distance teleport failures).
-        spawns.Sort((a, b) => LiveBotFixture.Distance3D(a.x, a.y, a.z, OrgX, OrgY, OrgZ).CompareTo(LiveBotFixture.Distance3D(b.x, b.y, b.z, OrgX, OrgY, OrgZ)));
-        _output.WriteLine($"Found {spawns.Count} Copper Vein spawn locations (nearest: {LiveBotFixture.Distance3D(spawns[0].x, spawns[0].y, spawns[0].z, OrgX, OrgY, OrgZ):F0}y)");
+        var valleyCandidates = GatheringRouteSelection.SelectValleyCopperVeinCandidates(
+            await _bot.QueryGameObjectSpawnsNearAsync(
+                [CopperVeinEntry],
+                GatheringRouteSelection.DurotarMap,
+                GatheringRouteSelection.ValleyCopperRouteStartX,
+                GatheringRouteSelection.ValleyCopperRouteStartY,
+                GatheringRouteSelection.ValleyCopperSearchRadius,
+                limit: GatheringRouteSelection.ValleyCopperCandidateLimit + 4),
+            CopperVeinEntry);
+        int valleyCandidateCount = valleyCandidates.Count;
+        global::Tests.Infrastructure.Skip.If(valleyCandidateCount == 0,
+            "No natural Copper Vein route candidates were found near the Valley copper pathing start.");
+        _output.WriteLine(
+            $"Selected {valleyCandidateCount} Valley copper-route candidates from " +
+            $"({GatheringRouteSelection.ValleyCopperRouteStartX:F0}, {GatheringRouteSelection.ValleyCopperRouteStartY:F0}, {GatheringRouteSelection.ValleyCopperRouteStartZ:F0}) " +
+            $"with nearest route distance {valleyCandidates[0].distance2D:F0}y.");
 
-        // --- FG FIRST: native WoW right-click interaction (gold standard) ---
-        var fgAccount = _bot.FgAccountName;
-        if (fgAccount != null && await _bot.CheckFgActionableAsync())
+        var fgAccountForRoute = _bot.FgAccountName;
+        if (fgAccountForRoute != null && await _bot.CheckFgActionableAsync())
         {
             try
             {
-                // Park BG bot nearby so CombatCoordinator doesn't send
-                // competing GOTO actions that overwrite the test's navigation.
-                var bgParkAccount = _bot.BgAccountName;
-                if (bgParkAccount != null)
+                var bgParkAccountForRoute = _bot.BgAccountName;
+                if (bgParkAccountForRoute != null)
                 {
                     _output.WriteLine("[BG] Parking BG bot in Orgrimmar (prevents CombatCoordinator interference)");
-                    await _bot.BotTeleportAsync(bgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
+                    await _bot.BotTeleportAsync(bgParkAccountForRoute, OrgrimmarMap, OrgX, OrgY, OrgZ);
                 }
 
-                _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccount})");
-                await PrepareMining(fgAccount, "FG");
+                _output.WriteLine($"FG: {_bot.FgCharacterName} ({fgAccountForRoute})");
+                await PrepareMining(fgAccountForRoute, "FG");
 
                 await _bot.RefreshSnapshotsAsync();
-                uint fgSkillBefore = GetSkill("FG", GatheringData.MINING_SKILL_ID);
-                _output.WriteLine($"FG initial mining skill: {fgSkillBefore}");
+                uint fgSkillBeforeForRoute = GetSkill("FG", GatheringData.MINING_SKILL_ID);
+                _output.WriteLine($"FG initial mining skill: {fgSkillBeforeForRoute}");
 
-                bool fgGathered = await TryGatherAtSpawns(fgAccount, "FG", spawns,
-                    CopperVeinEntry, GatheringData.MINING_SKILL_ID, "Copper Vein",
-                    initialSkill: fgSkillBefore,
-                    gatherSpellId: MiningGatherSpell, parkAccount: _bot.BgAccountName);
+                await StageAtValleyCopperRouteStartAsync(fgAccountForRoute, "FG");
+                var fgBagBeforeForRoute = CaptureBagItemCounts("FG");
+                var fgDiagStart = DateTime.UtcNow;
+                await _bot.SendActionAndWaitAsync(
+                    fgAccountForRoute,
+                    BuildGatheringRouteAction(MiningGatherSpell, [CopperVeinEntry], valleyCandidates),
+                    delayMs: 500);
+                bool fgGatheredOnRoute = await WaitForGatheringRouteOutcomeAsync(
+                    "FG",
+                    GatheringData.MINING_SKILL_ID,
+                    fgSkillBeforeForRoute,
+                    fgBagBeforeForRoute,
+                    fgDiagStart,
+                    timeout: TimeSpan.FromMinutes(2));
 
                 await _bot.RefreshSnapshotsAsync();
-                uint fgSkillAfter = GetSkill("FG", GatheringData.MINING_SKILL_ID);
-                _output.WriteLine($"FG Results: gathered={fgGathered}, skill {fgSkillBefore} → {fgSkillAfter}");
+                uint fgSkillAfterForRoute = GetSkill("FG", GatheringData.MINING_SKILL_ID);
+                _output.WriteLine($"FG Results: gathered={fgGatheredOnRoute}, skill {fgSkillBeforeForRoute} â†’ {fgSkillAfterForRoute}");
 
-                if (!fgGathered)
+                if (!fgGatheredOnRoute)
                 {
                     _output.WriteLine(
-                        $"FG reference mining did not complete at any of {spawns.Count} natural nodes. " +
-                        $"Continuing with BG-authoritative assertions. skill={fgSkillAfter}.");
+                        $"FG reference mining did not complete on any of {valleyCandidateCount} Valley copper-route candidates. " +
+                        $"Continuing with BG-authoritative assertions. skill={fgSkillAfterForRoute}.");
                 }
-                else if (fgSkillAfter <= fgSkillBefore)
+                else if (fgSkillAfterForRoute <= fgSkillBeforeForRoute)
                 {
-                    _output.WriteLine($"FG: WARNING — Mining skill did not increase ({fgSkillBefore} → {fgSkillAfter}). " +
+                    _output.WriteLine($"FG: WARNING â€” Mining skill did not increase ({fgSkillBeforeForRoute} â†’ {fgSkillAfterForRoute}). " +
                         "This can happen due to WoW's RNG skill-up mechanic.");
                 }
             }
@@ -134,60 +158,66 @@ public class GatheringProfessionTests
             }
             finally
             {
-                await ReturnToSafeZoneAsync(fgAccount, "FG");
+                await ReturnToSafeZoneAsync(fgAccountForRoute, "FG");
             }
         }
         else
         {
-            _output.WriteLine("FG bot not available or not actionable — skipping FG mining reference path.");
+            _output.WriteLine("FG bot not available or not actionable â€” skipping FG mining reference path.");
         }
 
-        // --- BG: headless protocol emulation ---
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccount})");
+        var bgAccountForRoute = _bot.BgAccountName!;
+        Assert.NotNull(bgAccountForRoute);
+        _output.WriteLine($"BG: {_bot.BgCharacterName} ({bgAccountForRoute})");
 
         try
         {
-            // Park the OTHER bot in Orgrimmar so CombatCoordinator doesn't send GOTOs
-            // that overwrite the GatherNode behavior tree during the mining channel.
-            var fgParkAccount = _bot.FgAccountName;
-            if (fgParkAccount != null)
+            var fgParkAccountForRoute = _bot.FgAccountName;
+            if (fgParkAccountForRoute != null)
             {
                 _output.WriteLine("[FG-park] Parking FG bot in Orgrimmar for BG test");
-                await _bot.BotTeleportAsync(fgParkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
+                await _bot.BotTeleportAsync(fgParkAccountForRoute, OrgrimmarMap, OrgX, OrgY, OrgZ);
             }
 
-            await PrepareMining(bgAccount, "BG");
+            await PrepareMining(bgAccountForRoute, "BG");
 
             await _bot.RefreshSnapshotsAsync();
-            uint bgSkillBefore = GetSkill("BG", GatheringData.MINING_SKILL_ID);
-            _output.WriteLine($"BG initial mining skill: {bgSkillBefore}");
-            global::Tests.Infrastructure.Skip.If(bgSkillBefore >= 300, $"BG mining skill already capped ({bgSkillBefore}); cannot assert further increase.");
+            uint bgSkillBeforeForRoute = GetSkill("BG", GatheringData.MINING_SKILL_ID);
+            _output.WriteLine($"BG initial mining skill: {bgSkillBeforeForRoute}");
+            global::Tests.Infrastructure.Skip.If(bgSkillBeforeForRoute >= 300, $"BG mining skill already capped ({bgSkillBeforeForRoute}); cannot assert further increase.");
 
-            bool bgGathered = await TryGatherAtSpawns(bgAccount, "BG", spawns,
-                CopperVeinEntry, GatheringData.MINING_SKILL_ID, "Copper Vein",
-                initialSkill: bgSkillBefore,
-                gatherSpellId: MiningGatherSpell, parkAccount: _bot.FgAccountName);
+            await StageAtValleyCopperRouteStartAsync(bgAccountForRoute, "BG");
+            var bgBagBeforeForRoute = CaptureBagItemCounts("BG");
+            var bgDiagStart = DateTime.UtcNow;
+            await _bot.SendActionAndWaitAsync(
+                bgAccountForRoute,
+                BuildGatheringRouteAction(MiningGatherSpell, [CopperVeinEntry], valleyCandidates),
+                delayMs: 500);
+            bool bgGatheredOnRoute = await WaitForGatheringRouteOutcomeAsync(
+                "BG",
+                GatheringData.MINING_SKILL_ID,
+                bgSkillBeforeForRoute,
+                bgBagBeforeForRoute,
+                bgDiagStart,
+                timeout: TimeSpan.FromMinutes(2));
 
             await _bot.RefreshSnapshotsAsync();
-            uint bgSkillAfter = GetSkill("BG", GatheringData.MINING_SKILL_ID);
-            _output.WriteLine($"BG Results: gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
+            uint bgSkillAfterForRoute = GetSkill("BG", GatheringData.MINING_SKILL_ID);
+            _output.WriteLine($"BG Results: gathered={bgGatheredOnRoute}, skill {bgSkillBeforeForRoute} â†’ {bgSkillAfterForRoute}");
 
-            global::Tests.Infrastructure.Skip.If(!bgGathered,
-                $"BG: No Copper Vein nodes currently spawned at any of {spawns.Count} DB locations (all on respawn timer). Skill={bgSkillAfter}. Re-run after respawn.");
-            Assert.True(bgGathered,
-                $"BG: Failed to gather Copper Vein at any of {spawns.Count} locations. skill={bgSkillAfter}.");
-            // Skill-ups are RNG — gathering success proves the pipeline; skill increase is not guaranteed.
-            if (bgSkillAfter <= bgSkillBefore)
-                _output.WriteLine($"BG: WARNING — Mining skill did not increase ({bgSkillBefore} → {bgSkillAfter}). " +
+            global::Tests.Infrastructure.Skip.If(!bgGatheredOnRoute,
+                $"BG: No Copper Vein nodes currently spawned on any of the {valleyCandidateCount} Valley copper-route candidates. Skill={bgSkillAfterForRoute}. Re-run after respawn.");
+            Assert.True(bgGatheredOnRoute,
+                $"BG: Failed to gather Copper Vein on the Valley copper route ({valleyCandidateCount} candidates). skill={bgSkillAfterForRoute}.");
+            if (bgSkillAfterForRoute <= bgSkillBeforeForRoute)
+            {
+                _output.WriteLine($"BG: WARNING â€” Mining skill did not increase ({bgSkillBeforeForRoute} â†’ {bgSkillAfterForRoute}). " +
                     "This can happen due to WoW's RNG skill-up mechanic.");
+            }
         }
         finally
         {
-            // Return bot to safe zone on failure to avoid leaving it stranded
-            // at a remote mining node location, which can corrupt subsequent tests.
-            await ReturnToSafeZoneAsync(bgAccount, "BG");
+            await ReturnToSafeZoneAsync(bgAccountForRoute, "BG");
         }
     }
 
@@ -416,6 +446,374 @@ public class GatheringProfessionTests
         await _bot.RefreshSnapshotsAsync();
         var skillCheck = GetSkill(label, GatheringData.HERBALISM_SKILL_ID);
         _output.WriteLine($"[{label}] Herbalism setup state: skill={skillCheck}");
+    }
+
+    private ActionMessage BuildGatheringRouteAction(
+        uint gatherSpellId,
+        IReadOnlyCollection<uint> nodeEntries,
+        IReadOnlyList<(int map, float x, float y, float z, float distance2D)> routeCandidates)
+    {
+        var action = new ActionMessage
+        {
+            ActionType = ActionType.StartGatheringRoute,
+            Parameters =
+            {
+                new RequestParameter { IntParam = (int)gatherSpellId },
+                new RequestParameter { StringParam = string.Join(",", nodeEntries.OrderBy(entry => entry)) }
+            }
+        };
+
+        foreach (var candidate in routeCandidates)
+        {
+            action.Parameters.Add(new RequestParameter { FloatParam = candidate.x });
+            action.Parameters.Add(new RequestParameter { FloatParam = candidate.y });
+            action.Parameters.Add(new RequestParameter { FloatParam = candidate.z });
+        }
+
+        return action;
+    }
+
+    private Dictionary<uint, int> CaptureBagItemCounts(string label)
+    {
+        var counts = new Dictionary<uint, int>();
+        var bagContents = GetSnapshot(label)?.Player?.BagContents;
+        if (bagContents == null)
+            return counts;
+
+        foreach (var itemId in bagContents.Values)
+        {
+            counts.TryGetValue(itemId, out var count);
+            counts[itemId] = count + 1;
+        }
+
+        return counts;
+    }
+
+    private async Task<bool> WaitForGatheringRouteOutcomeAsync(
+        string label,
+        uint skillId,
+        uint initialSkill,
+        IReadOnlyDictionary<uint, int> bagCountsBefore,
+        DateTime diagStartUtc,
+        TimeSpan timeout)
+    {
+        var endTime = DateTime.UtcNow + timeout;
+        bool sawRouteExhausted = false;
+        string recentDiagSummary = "none";
+
+        while (DateTime.UtcNow < endTime)
+        {
+            await Task.Delay(1000);
+            await _bot.RefreshSnapshotsAsync();
+
+            var skillNow = GetSkill(label, skillId);
+            if (skillNow > initialSkill)
+                return true;
+
+            var bagCountsAfter = CaptureBagItemCounts(label);
+            bool bagDelta = bagCountsAfter.Any(pair =>
+                pair.Value > bagCountsBefore.GetValueOrDefault(pair.Key, 0));
+            if (bagDelta)
+                return true;
+
+            var diagLines = LiveBotFixture.ReadRecentBotRunnerDiagnosticLines(
+                ["GatheringRouteTask", "gather_success", "route_complete_no_nodes"],
+                minWriteUtc: diagStartUtc,
+                maxLines: 10);
+            recentDiagSummary = diagLines.Count == 0 ? "none" : string.Join(" || ", diagLines);
+
+            if (diagLines.Any(line => line.Contains("gather_success", StringComparison.OrdinalIgnoreCase)
+                                      || line.Contains("pop reason=gather_success", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            if (diagLines.Any(line => line.Contains("route_complete_no_nodes", StringComparison.OrdinalIgnoreCase)))
+                sawRouteExhausted = true;
+        }
+
+        if (sawRouteExhausted)
+            _output.WriteLine($"[{label}] Gathering route exhausted all candidates without a visible node. diag={recentDiagSummary}");
+        else
+            _output.WriteLine($"[{label}] Gathering route timed out. diag={recentDiagSummary}");
+        return false;
+    }
+
+    private async Task<bool> TryGatherAlongRoute(
+        string account,
+        string label,
+        List<(int map, float x, float y, float z, float distance2D)> routeCandidates,
+        uint nodeEntry,
+        uint skillId,
+        string nodeName,
+        uint initialSkill,
+        uint gatherSpellId = 0,
+        string? parkAccount = null)
+    {
+        if (parkAccount != null)
+            await _bot.BotTeleportAsync(parkAccount, OrgrimmarMap, OrgX, OrgY, OrgZ);
+
+        await StageAtValleyCopperRouteStartAsync(account, label);
+
+        for (int index = 0; index < routeCandidates.Count; index++)
+        {
+            var (map, spawnX, spawnY, spawnZ, routeDistance) = routeCandidates[index];
+            _output.WriteLine(
+                $"[{label}] Route candidate {index + 1}/{routeCandidates.Count}: " +
+                $"{nodeName} spawn at ({spawnX:F1}, {spawnY:F1}, {spawnZ:F1}), routeDist={routeDistance:F1}y");
+
+            bool reachedCandidate = await TryGotoPositionAsync(
+                account,
+                label,
+                spawnX,
+                spawnY,
+                spawnZ,
+                CandidateApproachTolerance,
+                MiningRouteTravelTimeout,
+                $"route approach to {nodeName}");
+            if (!reachedCandidate)
+            {
+                _output.WriteLine($"  [{label}] Candidate {index + 1}: route approach failed â€” trying next natural spawn.");
+                continue;
+            }
+
+            var (nodeGuid, nodeX, nodeY, nodeZ) = await TryDetectNaturalNodeAsync(
+                label,
+                nodeEntry,
+                spawnX,
+                spawnY,
+                spawnZ,
+                NodeDiscoveryTolerance,
+                NodeScanTimeout);
+            if (nodeGuid == 0)
+            {
+                _output.WriteLine($"  [{label}] No live {nodeName} visible near this route candidate â€” likely on respawn timer.");
+                continue;
+            }
+
+            await _bot.RefreshSnapshotsAsync();
+            var playerPos = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Position;
+            float nodeDist = playerPos == null
+                ? float.MaxValue
+                : LiveBotFixture.Distance3D(playerPos.X, playerPos.Y, playerPos.Z, nodeX, nodeY, nodeZ);
+            _output.WriteLine($"  [{label}] Visible {nodeName}: 0x{nodeGuid:X} at ({nodeX:F1}, {nodeY:F1}, {nodeZ:F1}), dist={nodeDist:F1}y");
+
+            if (nodeDist > NodeInteractionTolerance)
+            {
+                bool reachedNode = await TryGotoPositionAsync(
+                    account,
+                    label,
+                    nodeX,
+                    nodeY,
+                    nodeZ,
+                    NodeInteractionTolerance,
+                    TimeSpan.FromSeconds(20),
+                    $"final approach to {nodeName}");
+                if (!reachedNode)
+                {
+                    _output.WriteLine($"  [{label}] Final approach to the visible node failed â€” trying next route candidate.");
+                    continue;
+                }
+            }
+
+            if (await TryGatherVisibleNodeAsync(account, label, nodeGuid, skillId, initialSkill, gatherSpellId))
+                return true;
+        }
+
+        return false;
+    }
+
+    private async Task StageAtValleyCopperRouteStartAsync(string account, string label)
+    {
+        var characterName = label == "FG" ? _bot.FgCharacterName : _bot.BgCharacterName;
+        if (!string.IsNullOrWhiteSpace(characterName))
+        {
+            _output.WriteLine($"[{label}] Staging via named teleport ValleyOfTrials");
+            await _bot.BotTeleportToNamedAsync(account, characterName, "ValleyOfTrials");
+        }
+        else
+        {
+            _output.WriteLine(
+                $"[{label}] Staging at Valley copper route start " +
+                $"({GatheringRouteSelection.ValleyCopperRouteStartX:F1}, {GatheringRouteSelection.ValleyCopperRouteStartY:F1}, {GatheringRouteSelection.ValleyCopperRouteStartZ:F1})");
+            await _bot.BotTeleportAsync(
+                account,
+                GatheringRouteSelection.DurotarMap,
+                GatheringRouteSelection.ValleyCopperRouteStartX,
+                GatheringRouteSelection.ValleyCopperRouteStartY,
+                GatheringRouteSelection.ValleyCopperRouteStartZ);
+        }
+        await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
+    }
+
+    private async Task<(ulong guid, float x, float y, float z)> TryDetectNaturalNodeAsync(
+        string label,
+        uint nodeEntry,
+        float expectedX,
+        float expectedY,
+        float expectedZ,
+        float maxDistanceFromExpected,
+        TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        bool loggedDiag = false;
+
+        while (sw.Elapsed < timeout)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var snap = GetSnapshot(label);
+            var gameObjects = snap?.NearbyObjects?.ToList() ?? [];
+
+            if (!loggedDiag)
+            {
+                loggedDiag = true;
+                _output.WriteLine($"  [{label}] NearbyObjects count: {gameObjects.Count}");
+                foreach (var go in gameObjects.Take(10))
+                    _output.WriteLine($"    GO entry={go.Entry} guid=0x{go.Base?.Guid ?? 0:X} displayId={go.DisplayId} pos=({go.Base?.Position?.X:F1}, {go.Base?.Position?.Y:F1}, {go.Base?.Position?.Z:F1})");
+                if (gameObjects.Count > 10)
+                    _output.WriteLine($"    ... and {gameObjects.Count - 10} more");
+            }
+
+            var node = gameObjects.FirstOrDefault(go => go.Entry == nodeEntry && go.Base?.Position != null);
+            if (node != null)
+            {
+                var nodePos = node.Base!.Position!;
+                float distFromExpected = LiveBotFixture.Distance3D(nodePos.X, nodePos.Y, nodePos.Z, expectedX, expectedY, expectedZ);
+                if (distFromExpected <= maxDistanceFromExpected)
+                {
+                    _output.WriteLine($"  [{label}] Node detected after {sw.Elapsed.TotalSeconds:F1}s");
+                    return (node.Base.Guid, nodePos.X, nodePos.Y, nodePos.Z);
+                }
+
+                _output.WriteLine(
+                    $"  [{label}] Ignoring distant node entry {nodeEntry} at ({nodePos.X:F1}, {nodePos.Y:F1}, {nodePos.Z:F1}); " +
+                    $"expected near ({expectedX:F1}, {expectedY:F1}, {expectedZ:F1}), delta={distFromExpected:F1}y");
+            }
+
+            await Task.Delay(500);
+        }
+
+        return default;
+    }
+
+    private async Task<bool> TryGotoPositionAsync(
+        string account,
+        string label,
+        float targetX,
+        float targetY,
+        float targetZ,
+        float tolerance,
+        TimeSpan timeout,
+        string reason)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var playerPos = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Position;
+        if (playerPos == null)
+        {
+            _output.WriteLine($"  [{label}] Cannot start {reason}: player position is unavailable.");
+            return false;
+        }
+
+        float startDist = LiveBotFixture.Distance3D(playerPos.X, playerPos.Y, playerPos.Z, targetX, targetY, targetZ);
+        if (startDist <= tolerance)
+        {
+            _output.WriteLine($"  [{label}] {reason}: already within tolerance ({startDist:F1}y <= {tolerance:F1}y).");
+            return true;
+        }
+
+        _output.WriteLine($"  [{label}] {reason}: startDist={startDist:F1}y target=({targetX:F1}, {targetY:F1}, {targetZ:F1}) tol={tolerance:F1}y");
+        var gotoAction = new ActionMessage
+        {
+            ActionType = ActionType.Goto,
+            Parameters =
+            {
+                new RequestParameter { FloatParam = targetX },
+                new RequestParameter { FloatParam = targetY },
+                new RequestParameter { FloatParam = targetZ },
+                new RequestParameter { FloatParam = tolerance }
+            }
+        };
+        await _bot.SendActionAndWaitAsync(account, gotoAction, delayMs: 500);
+
+        var navSw = Stopwatch.StartNew();
+        float navDist = startDist;
+        while (navSw.Elapsed < timeout)
+        {
+            await Task.Delay(500);
+            await _bot.RefreshSnapshotsAsync();
+            playerPos = GetSnapshot(label)?.Player?.Unit?.GameObject?.Base?.Position;
+            if (playerPos != null)
+            {
+                navDist = LiveBotFixture.Distance3D(playerPos.X, playerPos.Y, playerPos.Z, targetX, targetY, targetZ);
+                if (navDist <= tolerance)
+                {
+                    _output.WriteLine($"  [{label}] {reason}: arrived after {navSw.Elapsed.TotalSeconds:F1}s (dist={navDist:F1}y)");
+                    await Task.Delay(1200);
+                    return true;
+                }
+            }
+        }
+
+        var diagSnap = GetSnapshot(label);
+        var moveFlags = diagSnap?.Player?.Unit?.MovementFlags ?? 0;
+        var health = diagSnap?.Player?.Unit?.Health ?? 0;
+        var diagPos = diagSnap?.Player?.Unit?.GameObject?.Base?.Position;
+        _output.WriteLine($"  [{label}] {reason}: pathfinding timed out (dist={navDist:F1}y after {navSw.Elapsed.TotalSeconds:F0}s)");
+        _output.WriteLine($"  [{label}] Diagnostic: moveFlags=0x{moveFlags:X}, health={health}, pos=({diagPos?.X:F1},{diagPos?.Y:F1},{diagPos?.Z:F1})");
+        return false;
+    }
+
+    private async Task<bool> TryGatherVisibleNodeAsync(
+        string account,
+        string label,
+        ulong nodeGuid,
+        uint skillId,
+        uint initialSkill,
+        uint gatherSpellId)
+    {
+        _output.WriteLine($"  [{label}] Sending GatherNode (spell={gatherSpellId})...");
+        var gatherParams = new ActionMessage
+        {
+            ActionType = ActionType.GatherNode,
+            Parameters = { new RequestParameter { LongParam = (long)nodeGuid } }
+        };
+        if (gatherSpellId > 0)
+            gatherParams.Parameters.Add(new RequestParameter { IntParam = (int)gatherSpellId });
+        await _bot.SendActionAndWaitAsync(account, gatherParams, delayMs: GatherChannelWaitMs);
+
+        await Task.Delay(2000);
+
+        uint skillNow = 0;
+        for (int poll = 0; poll < 20 && skillNow == 0; poll++)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            skillNow = GetSkill(label, skillId);
+            if (skillNow == 0)
+            {
+                if (poll % 5 == 0)
+                    _output.WriteLine($"  [{label}] Reconnect poll {poll}/20: skill=0, waiting 2s...");
+                await Task.Delay(2000);
+            }
+        }
+        _output.WriteLine($"  [{label}] Skill after gather: {skillNow}");
+
+        if (skillNow > initialSkill)
+        {
+            _output.WriteLine($"  [{label}] SUCCESS! Skill increased {initialSkill} -> {skillNow}");
+            return true;
+        }
+
+        await _bot.RefreshSnapshotsAsync();
+        var postSnap = GetSnapshot(label);
+        var nodeStillPresent = postSnap?.NearbyObjects?.Any(go => go.Base?.Guid == nodeGuid) == true;
+        if (!nodeStillPresent && skillNow > 0)
+        {
+            _output.WriteLine($"  [{label}] SUCCESS! Node despawned (gather completed) but no skill-up (RNG). skill={skillNow}");
+            return true;
+        }
+
+        _output.WriteLine($"  [{label}] Skill did not increase ({initialSkill} -> {skillNow}), node present={nodeStillPresent}, continuing route...");
+        return false;
     }
 
     /// <summary>

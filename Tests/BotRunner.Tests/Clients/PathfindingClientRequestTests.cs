@@ -100,5 +100,11 @@ public class PathfindingClientRequestTests
             LastRequest = request;
             return Response;
         }
+
+        protected override PathfindingResponse SendRequest(PathfindingRequest request, int timeoutMs)
+        {
+            LastRequest = request;
+            return Response;
+        }
     }
 }

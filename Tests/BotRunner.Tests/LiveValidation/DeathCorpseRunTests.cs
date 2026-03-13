@@ -11,7 +11,7 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// BG-only corpse recovery integration test.
+/// FG/BG corpse recovery integration test.
 ///
 /// Flow: teleport to Orgrimmar -> kill -> release -> wait for graveyard relocation ->
 /// dispatch RetrieveCorpse once -> let RetrieveCorpseTask own runback, cooldown, and reclaim.
@@ -44,7 +44,7 @@ public class DeathCorpseRunTests
     }
 
     [SkippableFact]
-    public async Task Death_ReleaseAndRetrieve_ResurrectsPlayer()
+    public async Task Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer()
     {
         var bgAccount = _bot.BgAccountName;
         var bgChar = _bot.BgCharacterName;
@@ -55,6 +55,21 @@ public class DeathCorpseRunTests
         var (bgPass, bgReason) = await RunCorpseRunScenario(bgAccount!, bgChar!, "BG");
         await CleanupAsync(bgAccount!, bgChar!);
         Assert.True(bgPass, $"[BG] {bgReason}");
+    }
+
+    [SkippableFact]
+    public async Task Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer()
+    {
+        var fgAccount = _bot.FgAccountName;
+        var fgChar = _bot.FgCharacterName;
+
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount) || string.IsNullOrWhiteSpace(fgChar), "No FG bot available.");
+        global::Tests.Infrastructure.Skip.IfNot(await _bot.CheckFgActionableAsync(), "FG bot is not actionable.");
+
+        _output.WriteLine($"[FG] {fgChar} -> corpse recovery is asserted on the injected bot.");
+        var (fgPass, fgReason) = await RunCorpseRunScenario(fgAccount!, fgChar!, "FG");
+        await CleanupAsync(fgAccount!, fgChar!);
+        Assert.True(fgPass, $"[FG] {fgReason}");
     }
 
     private async Task<(bool passed, string reason)> RunCorpseRunScenario(string account, string charName, string label)

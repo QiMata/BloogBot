@@ -19,7 +19,9 @@ namespace BotRunner
             _activitySnapshot.CurrentAction = null;
 
             // Detect screen state
-            if (_objectManager.HasEnteredWorld && _objectManager.Player != null)
+            var playerWorldReady = _objectManager.HasEnteredWorld
+                && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
+            if (playerWorldReady && _objectManager.Player != null)
             {
                 _activitySnapshot.ScreenState = "InWorld";
                 _activitySnapshot.CharacterName = _objectManager.Player.Name ?? string.Empty;

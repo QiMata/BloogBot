@@ -1,5 +1,7 @@
 using GameData.Core.Models;
 using PathfindingService.Repository;
+using System;
+using System.Threading.Tasks;
 
 namespace PathfindingService.Tests
 {
@@ -118,6 +120,67 @@ namespace PathfindingService.Tests
             Assert.Null(validationFailure);
             Assert.True(path.Length >= 3, $"Reverse corpse-run path too short ({path.Length} points)");
         }
+
+        /// <summary>
+        /// Regression: exact live corpse-run points captured after the BG hydration fix.
+        /// This is the route `RetrieveCorpseTask` asked for when the live rerun fell back
+        /// to repeated socket timeouts and eventually reported `no_path`.
+        /// </summary>
+        [Fact]
+        public void CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute()
+        {
+            uint mapId = 1;
+            Position start = new(1177.8f, -4464.2f, 21.4f);
+            Position end = new(1629.4f, -4373.4f, 31.3f);
+
+            var path = ExecuteWithNativeSegmentValidation(
+                () => _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true));
+
+            var validationFailure = PathRouteAssertions.GetValidationFailure(
+                mapId,
+                start.ToXYZ(),
+                end.ToXYZ(),
+                path,
+                maxStartDistance: 10.0f,
+                maxEndDistance: 12.0f,
+                maxSegmentLength: 200.0f,
+                maxHeightJump: 25.0f);
+
+            Assert.Null(validationFailure);
+            Assert.True(path.Length >= 3, $"Live retrieve route too short ({path.Length} points)");
+        }
+
+        /// <summary>
+        /// Regression: corpse run requests this route in straight-corner mode. That mode must
+        /// not spend 30s+ in native route shaping before the service can try the alternate mode.
+        /// </summary>
+        [Fact]
+        public async Task CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_StraightRequestCompletesWithinBudget()
+        {
+            uint mapId = 1;
+            Position start = new(1177.8f, -4464.2f, 21.4f);
+            Position end = new(1629.4f, -4373.4f, 31.3f);
+            var task = Task.Run(() => ExecuteWithNativeSegmentValidation(
+                () => _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: false)));
+
+            var completedTask = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(25)));
+            Assert.Same(task, completedTask);
+
+            var path = await task;
+            var validationFailure = PathRouteAssertions.GetValidationFailure(
+                mapId,
+                start.ToXYZ(),
+                end.ToXYZ(),
+                path,
+                maxStartDistance: 10.0f,
+                maxEndDistance: 12.0f,
+                maxSegmentLength: 200.0f,
+                maxHeightJump: 25.0f);
+
+            Assert.Null(validationFailure);
+            Assert.True(path.Length >= 3, $"Straight-request live retrieve route too short ({path.Length} points)");
+        }
+
         private static XYZ[] ExecuteWithNativeSegmentValidation(Func<XYZ[]> action)
         {
             const string key = "WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION";
