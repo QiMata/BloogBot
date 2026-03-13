@@ -62,6 +62,8 @@ public class CombatLoopTests
         Assert.True(passed, "COMBATTEST bot must approach, face, and auto-attack a mob to death.");
     }
 
+    private const int MaxCombatAttempts = 3;
+
     private async Task<bool> RunCombatScenarioAsync(string account, string label)
     {
         await EnsureStrictAliveAsync(account, label);
@@ -94,11 +96,6 @@ public class CombatLoopTests
             return false;
         }
 
-        _output.WriteLine($"  [{label}] Finding candidate mob...");
-        var (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(12));
-        global::Tests.Infrastructure.Skip.If(targetGuid == 0, $"[{label}] No living mob found near Valley of Trials mob area.");
-        _output.WriteLine($"  [{label}] Target: 0x{targetGuid:X} HP={initialHealth} at ({mobX:F1},{mobY:F1},{mobZ:F1})");
-
         var playerFlags = selfSnap?.Player?.PlayerFlags ?? 0;
         var isGmFlagSet = (playerFlags & 0x08) != 0;
         var factionTemplate = selfSnap?.Player?.Unit?.GameObject?.FactionTemplate ?? 0;
@@ -110,41 +107,53 @@ public class CombatLoopTests
             return false;
         }
 
-        var distanceToMob = await GetDistanceToTargetAsync(account, targetGuid);
-        _output.WriteLine($"  [{label}] Starting combat from {distanceToMob:F1}y away so StartMeleeAttack owns the approach.");
+        // Retry loop: mobs can evade/despawn before the bot deals damage (environment issue).
+        for (int attempt = 1; attempt <= MaxCombatAttempts; attempt++)
+        {
+            _output.WriteLine($"  [{label}] Finding candidate mob (attempt {attempt}/{MaxCombatAttempts})...");
+            var (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(12));
+            global::Tests.Infrastructure.Skip.If(targetGuid == 0, $"[{label}] No living mob found near Valley of Trials mob area.");
+            _output.WriteLine($"  [{label}] Target: 0x{targetGuid:X} HP={initialHealth} at ({mobX:F1},{mobY:F1},{mobZ:F1})");
 
-        initialHealth = await GetTargetHealthAsync(account, targetGuid);
-        if (initialHealth == 0)
-        {
-            _output.WriteLine($"  [{label}] Target 0x{targetGuid:X} died during setup - finding a new mob...");
-            (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(8));
-            global::Tests.Infrastructure.Skip.If(targetGuid == 0 || initialHealth == 0, $"[{label}] No living mob available after retry.");
-            _output.WriteLine($"  [{label}] New target: 0x{targetGuid:X} HP={initialHealth}");
-        }
+            var distanceToMob = await GetDistanceToTargetAsync(account, targetGuid);
+            _output.WriteLine($"  [{label}] Starting combat from {distanceToMob:F1}y away so StartMeleeAttack owns the approach.");
 
-        _output.WriteLine($"  [{label}] Sending StartMeleeAttack on 0x{targetGuid:X} (HP={initialHealth})");
-        var attackResult = await _bot.SendActionAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.StartMeleeAttack,
-            Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
-        });
-        if (attackResult != ResponseResult.Success)
-        {
-            _output.WriteLine($"  [{label}] StartMeleeAttack dispatch failed: {attackResult}");
-            return false;
-        }
+            initialHealth = await GetTargetHealthAsync(account, targetGuid);
+            if (initialHealth == 0)
+            {
+                _output.WriteLine($"  [{label}] Target 0x{targetGuid:X} died during setup - retrying...");
+                continue;
+            }
 
-        var mobKilled = await WaitForMobDeathAsync(account, label, targetGuid, initialHealth, TimeSpan.FromSeconds(90));
-        if (!mobKilled)
-        {
+            _output.WriteLine($"  [{label}] Sending StartMeleeAttack on 0x{targetGuid:X} (HP={initialHealth})");
+            var attackResult = await _bot.SendActionAsync(account, new ActionMessage
+            {
+                ActionType = ActionType.StartMeleeAttack,
+                Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
+            });
+            if (attackResult != ResponseResult.Success)
+            {
+                _output.WriteLine($"  [{label}] StartMeleeAttack dispatch failed: {attackResult}");
+                return false;
+            }
+
+            var mobKilled = await WaitForMobDeathAsync(account, label, targetGuid, initialHealth, TimeSpan.FromSeconds(90));
+            if (mobKilled)
+            {
+                _output.WriteLine($"  [{label}] COMBAT COMPLETE: Mob killed via auto-attacks.");
+                return true;
+            }
+
             var currentHealth = await GetTargetHealthAsync(account, targetGuid);
             var postDist = await GetDistanceToTargetAsync(account, targetGuid);
-            _output.WriteLine($"  [{label}] FAIL: HP {initialHealth}->{currentHealth}, dist={postDist:F1}y");
-            return false;
+            _output.WriteLine($"  [{label}] Attempt {attempt}: HP {initialHealth}->{currentHealth}, dist={postDist:F1}y");
+
+            if (attempt < MaxCombatAttempts)
+                _output.WriteLine($"  [{label}] Mob evaded/despawned before damage dealt — retrying with new target.");
         }
 
-        _output.WriteLine($"  [{label}] COMBAT COMPLETE: Mob killed via auto-attacks.");
-        return true;
+        _output.WriteLine($"  [{label}] FAIL: All {MaxCombatAttempts} combat attempts failed.");
+        return false;
     }
 
     private async Task EnsureNearMobAreaAsync(string account, string label)

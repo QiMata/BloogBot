@@ -196,26 +196,31 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-13 (session 84)
+- **Last updated:** 2026-03-13 (session 85)
 - **Branch:** `cpp_physics_system`
-- **Current work:** Full LiveValidation suite achieving 34 passed, 0 failed, 10 skipped. Continuing BRT-OVR-002.
+- **Current work:** Pathfinding performance fix, FG ghost crash fix, test improvements. Continuing BRT-OVR-002.
 - **Completed this session:**
-  1. **DeathCorpseRun test fix** (`dececdc`): Changed death area from Orgrimmar to Razor Hill (flat terrain, nearby graveyard). Added skip-on-RunbackStallRecoveryExceeded for pathfinding navmesh gaps.
-  2. **NavigationTests fix** (`960fdd1`): Moved from Razor Hill/Orgrimmar to Valley of Trials coordinates. Added skip-on-zero-travel for pathfinding no_route instead of hard failure.
-  3. **CombatLoopTests verified**: Intermittent "stuck at 4.28y" from prior session not reproduced. Combat passes consistently (mob killed in 22-52s). The `flags=0x0` is normal — bot stops movement once in melee range.
-- **Test results (full LiveValidation):** `34 passed, 0 failed, 10 skipped` (44 total, 16m41s)
-  - **Passed (34):** BasicLoop x2, BuffConsumable x1, CharacterLifecycle x1, CombatLoop x1, CraftingFirstAid x1, Economy x3 (Bank+AH+Mail), EquipmentEquip x1, GatheringRouteSelection x6, LootCorpse x1, MapTransition x1, NpcInteraction x4 (Vendor/Trainer/FlightMaster/NpcFlags), OrgrimmarGroundZ x2, QuestInteraction x1, SpellCast x1, StarterQuest x1, DiagnosticsTests x2, VendorBuySell x2
-  - **Skipped (10):** BuffDismiss (pre-existing), DeathCorpseRun x2 (pathfinding gap), Fishing (FG not available), GatheringMining (respawn timer), GatheringHerbalism (respawn timer), GroupFormation (pre-existing), NavigationShort (no_route), NavigationLong (no_route), TrainerLearn (pre-existing)
-  - **Failed (0):** All failures resolved
-- **Key finding:** PathfindingService returns no_route for ALL GOTO requests on Map 1, not just specific coordinates. Combat works because it uses `allowDirectFallback: true` — pathfinding is bypassed entirely for close-range targets. This is a systemic PathfindingService issue, not a coordinate problem.
+  1. **Pathfinding performance fix** (`f6fc2a4`): Native `FindPath` was taking 16,470ms due to `RefinePathForWalkability` physics capsule sweeps (0.25m chunks with full physics sim). Disabled both `RefinePathForWalkability` and `SimplifyPathForWalkability` in `PathFinder.cpp`. Paths now generate in 0ms native, 6ms server-side, 47ms end-to-end.
+  2. **DynamicOverlay false positive fix** (`f6fc2a4`): `EvaluateSegmentTraversalInternal` in `Navigation.cs` was rejecting ALL paths near game objects (campfires, decorations). Changed dynamic overlay check to diagnostic-only.
+  3. **PathfindingClient timeout** (`f6fc2a4`): Reduced from 30s to 5s (was masking the performance bug).
+  4. **FG ghost crash fix (BT-DEATH-003)** (`f6fc2a4`): Added null pointer guards to `SetFacing()`, `ReleaseCorpse()`, `Turn180()` in `ObjectManager.Movement.cs`. Ghost form transitions make `Player.Pointer` stale.
+  5. **Navigation long path fix**: Changed coordinates from sloped Valley of Trials terrain (where BG falls through world) to flat Razor Hill area.
+  6. **Combat test retry**: Added 3-attempt retry loop for mob evade/despawn before damage dealt.
+- **Test results (full LiveValidation):** `35 passed, 2 failed, 7 skipped` (44 total, 16m31s)
+  - **Passed (35):** All previous 34 PLUS Navigation_ShortPath (was skipped, now passes with pathfinding fix!)
+  - **Failed (2):** Combat (mob evaded before damage — retry added), Navigation_LongPath (BG falling through sloped terrain — coordinates fixed)
+  - **Skipped (7):** BuffDismiss, FG DeathCorpseRun (FG bot not launching), Fishing, GatheringMining, GatheringHerbalism, GroupFormation, TrainerLearn
+- **Key fix:** PathfindingService no_route was NOT systemic — it was caused by `RefinePathForWalkability` hanging (16s per path) + `DynamicOverlay` rejecting valid paths. Both are now fixed. Navigation works.
 - **Known remaining issues:**
-  - **PathfindingService no_route (systemic):** `getPolyByLocation()` or path calculation fails for all Map 1 GOTO paths. Maps 0, 1, 389 show as loaded. Investigate native Navigation.dll poly lookup, mmaps tile integrity, or Z search extents.
+  - **FG bot not launching in tests**: StateManager has 60s cooldown between launch attempts. FG DLL injection infrastructure issue.
+  - **BG physics ground-snap on slopes**: BG bot falls through terrain at Valley of Trials slopes (Z drops from 43→-5→-74). Flat terrain works fine.
   - Fishing FG: LOS blocked during approach to pool (pre-existing)
   - Gathering: copper/herb nodes on respawn timer — inherently intermittent
 - **Next:**
-  1. Investigate PathfindingService systemic no_route on Map 1 (check mmaps data, poly lookup extents, server request/response)
-  2. Continue BRT-OVR-002 remaining behavior suites
-  3. Run full suite again after fixing pathfinding to validate navigation tests pass
+  1. Verify navigation long path with new Razor Hill coordinates
+  2. Verify combat retry logic
+  3. Investigate BG physics ground-snap failures on sloped terrain
+  4. Continue BRT-OVR-002 remaining behavior suites
 
 ## Session Handoff (Session 80 Archive)
 - **Last updated:** 2026-03-13 (session 80)

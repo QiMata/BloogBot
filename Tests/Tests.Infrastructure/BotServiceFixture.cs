@@ -682,6 +682,10 @@ public class BotServiceFixture : IAsyncLifetime
                 Log($"  [StateManager] Set DOTNET_ROOT(x86) = {x86DotnetRoot}");
             }
 
+            // Always show console windows for child processes (BG bots, PathfindingService)
+            // so test runners can observe bot output in real time.
+            psi.Environment["WWOW_SHOW_WINDOWS"] = "1";
+
             if (!string.IsNullOrEmpty(envRecording))
                 psi.Environment["BLOOGBOT_AUTOMATED_RECORDING"] = envRecording;
 

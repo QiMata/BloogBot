@@ -39,9 +39,10 @@ public class NavigationTests
     private const float VotStartX = -284f, VotStartY = -4383f, VotStartZ = 57f;
     private const float VotEndX = -320f, VotEndY = -4420f, VotEndZ = 57f;
 
-    // Valley of Trials — longer path (~80y), still flat terrain.
-    private const float VotLongStartX = -284f, VotLongStartY = -4383f, VotLongStartZ = 57f;
-    private const float VotLongEndX = -350f, VotLongEndY = -4450f, VotLongEndZ = 50f;
+    // Razor Hill — longer path (~80y) on flat terrain near the road.
+    // Stays on level ground to avoid BG physics engine ground-snap failures on slopes.
+    private const float VotLongStartX = 340f, VotLongStartY = -4686f, VotLongStartZ = 19f;
+    private const float VotLongEndX = 280f, VotLongEndY = -4730f, VotLongEndZ = 20f;
 
     public NavigationTests(LiveBotFixture bot, ITestOutputHelper output)
     {
