@@ -78,7 +78,12 @@ namespace ForegroundBotRunner.Statics
             // WoW client when spells are learned/unlearned mid-session (SMSG_LEARNED_SPELL).
             // Does NOT require the spell name cache — reads raw uint spell IDs directly.
             // Re-scan every tick (not just once) to pick up spells learned after initial login.
+            // When forced (LEARNED_SPELL/UNLEARNED_SPELL event), clear first so removed spells
+            // don't persist in the set. Lua and talent steps below will re-add any extras.
             {
+                if (forced)
+                    _persistentLearnedIds.Clear();
+
                 const nint LocalPlayerSpellsBase = 0x00B700F0;
                 int scanned = 0;
                 for (int i = 0; i < 1024; i++)
