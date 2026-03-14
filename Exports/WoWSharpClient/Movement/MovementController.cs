@@ -431,7 +431,15 @@ namespace WoWSharpClient.Movement
                     // was teleported above real terrain (e.g. above a rooftop) and should descend
                     // naturally via gravity, matching WoW client behavior. Only clamp when physics
                     // has NO ground geometry (navmesh gap at docks/bridges/beaches).
-                    if (physicsHasGround && output.GroundZ < _teleportZ - 1.0f)
+                    if (physicsHasGround && output.GroundZ >= _teleportZ - 0.1f)
+                    {
+                        // Ground is essentially at teleport Z (sub-0.1y difference, floating-point noise).
+                        // Clear the clamp — the bot has landed.
+                        _teleportZ = float.NaN;
+                        _teleportClampFrames = 0;
+                        _teleportZGraceFrames = 0;
+                    }
+                    else if (physicsHasGround && output.GroundZ < _teleportZ - 1.0f)
                     {
                         // Physics sees ground well below teleport Z — clear the clamp and let the
                         // bot fall to it. This is the "teleported above terrain" case.
