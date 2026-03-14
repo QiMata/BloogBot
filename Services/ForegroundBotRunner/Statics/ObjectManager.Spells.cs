@@ -75,14 +75,13 @@ namespace ForegroundBotRunner.Statics
 
             // STEP 1: Always scan the static spell array at 0x00B700F0.
             // This array is populated at world entry from SMSG_INITIAL_SPELLS and updated by the
-            // WoW client when spells are learned/unlearned mid-session (SMSG_LEARNED_SPELL).
-            // Does NOT require the spell name cache — reads raw uint spell IDs directly.
-            // Re-scan every tick (not just once) to pick up spells learned after initial login.
-            // When forced (LEARNED_SPELL/UNLEARNED_SPELL event), clear first so removed spells
-            // don't persist in the set. Lua and talent steps below will re-add any extras.
+            // WoW client when spells are learned/unlearned mid-session (SMSG_LEARNED_SPELL /
+            // SMSG_REMOVED_SPELL). Does NOT require the spell name cache — reads raw uint IDs.
+            // Clear and rebuild each tick so unlearned spells (.unlearn, SMSG_REMOVED_SPELL)
+            // are reflected. The 2s throttle prevents excessive rebuilds. Lua and talent
+            // enumeration steps below re-add any spells not in the static array.
             {
-                if (forced)
-                    _persistentLearnedIds.Clear();
+                _persistentLearnedIds.Clear();
 
                 const nint LocalPlayerSpellsBase = 0x00B700F0;
                 int scanned = 0;
