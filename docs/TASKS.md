@@ -197,23 +197,26 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 94)
+- **Last updated:** 2026-03-14 (session 95)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **Fixed FG DismissBuff** (`c1151d0`) — Root cause: spell 2367 is named "Lesser Strength" in WoW's spell DB, not "Lion's Strength". HasBuff never matched, so DismissBuff was never invoked. Fixed buff name constant, updated DismissBuff to use `CancelPlayerBuff(GetPlayerBuff(N,'HELPFUL'))` for correct visual index mapping. Test restructured to run FG first.
-  2. **Fixed FG fishing LOS check** (`39eaee5`) — FG fishing pools report Z=0 from memory reads. LOS ray from player Z≈5.7 to target Z=0 pierced the dock, blocking cast forever. Now clamps cast target Z to player Z when delta exceeds 3y.
-  3. **Fixed BG post-teleport physics** (`d1e0601`) — BG bot floated in air after teleport instead of falling to ground. Two root causes: (a) game loop guard blocked physics during `_isBeingTeleported` (now allows physics when `NeedsGroundSnap` is true), (b) `_teleportZ` clamp pinned bot at teleport Z even when physics found valid ground below (now clears clamp when ground exists below teleportZ).
+  1. **Fixed post-teleport slope guard** (`94f5d1a`) — Root cause: when teleport Z clamp was cleared (allowing fall to real ground), `_prevGroundZ` still held the pre-teleport value (e.g. 61.2 from upper walkway). The slope guard then saw the pre→post teleport delta as an impossible drop (61→28y) and snapped the bot back to the stale Z. Fix: reset `_prevGroundZ` and descent anchors when clearing the teleport Z clamp.
 - **Test results:**
-  - Key tests: BasicLoop (2 pass), BuffConsumable (1 pass, 1 skip BG), CombatLoop (pass), Crafting (pass), DeathCorpseRun BG (pass), Economy (3 pass), Equipment (pass)
-  - Physics: 108 passed, 1 failed (improved from 107/2/1)
-  - Fishing: `no_fishing_pool` (pool on respawn timer, not a code issue)
+  - Physics: 109 passed, 0 failed, 1 skipped (improved from 108/1/0)
+  - OrgrimmarGroundZ: both PostTeleportSnap and StandAndWalk pass
+  - LiveValidation partial run: 10 passed, 1 skipped before FG WoW.exe crash (pre-existing FG crash issue, not related to fix)
 - **Known remaining issues:**
   - Fishing pool Z=0 in FG memory — LOS fix is a workaround, root cause is FG game object position read
   - FG corpse run: `RetrieveCorpseTask never reduced corpse distance enough` (pre-existing P7)
-  - 1 physics test still failing (pre-existing teleport airborne)
+  - FG WoW.exe crashes mid-test-suite — pre-existing, causes cascading test failures
 - **Next:**
   1. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
   2. P7 remaining items (shoreline route hardening, object-aware paths)
+
+## Session Handoff (Session 94 Archive)
+- **Last updated:** 2026-03-14 (session 94)
+- **Completed:** FG DismissBuff fix (`c1151d0`), FG fishing LOS fix (`39eaee5`), BG post-teleport physics fix (`d1e0601`).
+- **Test results:** Physics 108/1/0. Key LiveValidation tests pass. Fishing pool on respawn timer.
 
 ## Session Handoff (Session 93 Archive)
 - **Last updated:** 2026-03-14 (session 93)
