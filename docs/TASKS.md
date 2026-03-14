@@ -197,23 +197,45 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 95)
+- **Last updated:** 2026-03-14 (session 96)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **Fixed post-teleport slope guard** (`94f5d1a`) — Root cause: when teleport Z clamp was cleared (allowing fall to real ground), `_prevGroundZ` still held the pre-teleport value (e.g. 61.2 from upper walkway). The slope guard then saw the pre→post teleport delta as an impossible drop (61→28y) and snapped the bot back to the stale Z. Fix: reset `_prevGroundZ` and descent anchors when clearing the teleport Z clamp.
-  2. **Fixed teleport Z clamp floating-point noise** (`eda25b0`) — When groundZ ≈ teleportZ (within 0.1y), clear the clamp immediately instead of logging warnings every frame.
-  3. **Throttled false-freefall-prevented log** (`a4f4d79`) — Guard fires every physics frame (~60Hz) during normal walking. Now logs first 3 occurrences then every 100th.
-- **Test results:**
-  - Physics: 109 passed, 0 failed, 1 skipped (improved from 108/1/0)
-  - OrgrimmarGroundZ: both PostTeleportSnap and StandAndWalk pass (was failing)
-  - Core LiveValidation (BasicLoop, CombatLoop, Crafting, Economy, Equipment, OrgrimmarGroundZ): 13 passed, 0 failed
+  1. **Fixed fishing test hang blocking suite** (`422a62f`) — When FishingTask pops with `no_fishing_pool`, test now exits polling loop immediately and skips assertions. Previously polled for 4.3min×2=8.6min, causing blame-hang timeout to kill the run before 30+ tests could execute.
+  2. **Increased test session timeout** (`a67fac0`) — From 25m to 40m. With fishing fix, more tests run per session; old budget was too tight.
+- **Test results (full 43-test suite):**
+  - **35 passed, 2 failed, 6 skipped** (Duration: 24m15s)
+  - Physics: 109/0/1 (unchanged)
+  - Previously only 13/43 tests ran; now all 43 execute
+- **Failures (2):**
+  1. `DeathCorpseRunTests.ResurrectsForegroundPlayer` — Pre-existing P7. FG corpse run only improved 14y (152→138y, needs 25y min). RetrieveCorpseTask triggers WoW.exe crash shortly after pathfinding completes — socket disconnections then process termination. Root cause: FG injected DLL state corruption during corpse recovery, not PathfindingService itself.
+  2. `SpellCastOnTargetTests.CastSpell_BattleShout_AuraApplied` — FG-only. `CastSpell(int)` is a no-op on ForegroundBotRunner (known API gotcha). BG passes. Need FG to use `CastSpellByName` string overload.
+- **Skips (6):**
+  1. `DismissBuff_RemovesBuff` — FG-only test, expected skip
+  2. `DeathCorpseRunTests.ResurrectsBackgroundPlayer` — Pathfinding gap (RunbackStallRecoveryExceeded)
+  3. `FishingProfessionTests` — No pool at Ratchet (respawn timer), early-exit fix working
+  4. `GatheringProfessionTests.Mining` — Copper veins on respawn
+  5. `GatheringProfessionTests.Herbalism` — Herbs on respawn
+  6. `NpcInteractionTests.Trainer_LearnAvailableSpells` — Trainer NPC not found
+- **FG crash cascade pattern (documented):**
+  - RetrieveCorpseTask pathfinding completes → 2-3s later WoW.exe crashes
+  - Socket disconnection chain: bot log pipe, PathfindingService client, CharacterStateSocketListener
+  - StateManager detects and restarts WoW.exe with new PID
+  - Subsequent FG tests may fail due to degraded fixture state (wrong aura list, stale commands)
+  - This is the primary reliability blocker for the test suite
 - **Known remaining issues:**
-  - Fishing pool Z=0 in FG memory — LOS fix is a workaround, root cause is FG game object position read
-  - FG corpse run: `RetrieveCorpseTask never reduced corpse distance enough` (pre-existing P7)
-  - FG WoW.exe crashes mid-test-suite — pre-existing, causes cascading test failures
+  - FG `CastSpell(int)` no-op — needs spell name mapping for FG
+  - Fishing pool Z=0 in FG memory — LOS fix is workaround
+  - FG WoW.exe crash during RetrieveCorpseTask — P7 root cause
 - **Next:**
-  1. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
-  2. P7 remaining items (shoreline route hardening, object-aware paths)
+  1. Investigate FG WoW.exe crash during corpse recovery — socket disconnection chain suggests IPC/injection issue
+  2. Fix `SpellCastOnTargetTests` FG path — use spell name lookup for FG CastSpell
+  3. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
+  4. P7 remaining items (shoreline route hardening, object-aware paths)
+
+## Session Handoff (Session 95 Archive)
+- **Last updated:** 2026-03-14 (session 95)
+- **Completed:** Post-teleport slope guard fix, teleport Z clamp epsilon, false-freefall log throttle.
+- **Test results:** Physics 109/0/1. OrgrimmarGroundZ 2/0. Core LiveValidation 13/0.
 
 ## Session Handoff (Session 94 Archive)
 - **Last updated:** 2026-03-14 (session 94)
