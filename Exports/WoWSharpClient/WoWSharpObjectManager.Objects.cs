@@ -116,9 +116,8 @@ namespace WoWSharpClient
         }
 
         /// <summary>
-        /// Units that are alive and targeting the player or party members.
-        /// In WoWSharpClient, UnitReaction is not reliably set from server packets,
-        /// so we use target-based detection instead of faction-based.
+        /// Units that are alive and actively threatening the player (targeting or in combat).
+        /// UnitReaction is computed from FactionData when UNIT_FIELD_FACTIONTEMPLATE is received.
         /// </summary>
         public IEnumerable<IWoWUnit> Hostiles
         {
@@ -344,6 +343,10 @@ namespace WoWSharpClient
                     break;
                 case EUnitFields.UNIT_FIELD_FACTIONTEMPLATE:
                     unit.FactionTemplate = (uint)value;
+                    // Compute UnitReaction from faction template masks
+                    var playerFt = Instance?.Player?.FactionTemplate ?? 0;
+                    if (playerFt != 0 && unit.FactionTemplate != 0)
+                        unit.UnitReaction = GameData.Core.Constants.FactionData.GetReaction(playerFt, unit.FactionTemplate);
                     break;
                 case EUnitFields.UNIT_FIELD_BYTES_0:
                     byte[] value1 = (byte[])value;
