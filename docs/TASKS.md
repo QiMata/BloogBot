@@ -129,7 +129,7 @@ Current observed boundary from the 2026-03-12 live suite:
 |---|------|-------|--------|
 | 7.1 | **Log planned vs executed path.** Record `PathfindingService` waypoints AND actual bot positions at each movement tick during ghost corpse run. | `Exports/Navigation/`, `Services/PathfindingService/`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs` | In progress - `NavigationPath.TraceSnapshot` now captures requested start/end, raw service waypoints, runtime waypoints, plan version, explicit replan reason, and per-tick execution samples; `RetrieveCorpseTask` now mirrors no-path / stall-recovery trace summaries into the BotRunner diag log; and the live corpse/fishing tests now append snapshot tails plus recent BotRunner diagnostics on failure. The current live blocker is upstream of pathing: BG is entering these suites at `health=0/0` and not reaching strict-alive after `.revive`, so the new path diagnostics are wired but were not exercised in the latest live rerun. |
 | 7.2 | **Identify divergence points.** Find where the bot gets stuck - which waypoint, which geometry (catapult, wall, ramp). | Analysis | **Done** (session 91) — Root cause: physics engine finds cave/gully ground below walking surface near Razor Hill graveyard. Bot sinks through terrain (0.1y/frame, bypasses 5.0y slope guard). Fixed with path-aware ground guard in MovementController (rejects ground >3y below navmesh path waypoint Z). Corpse run: SKIP → PASS. |
-| 7.3 | **Fix corridor collision code.** Update `PhysicsCollideSlide.cpp` to handle the stuck geometry. Test with replay frames. | `Exports/Navigation/PhysicsCollideSlide.cpp`, `SceneQuery.cpp`, `SceneCache.cpp` | In progress — Fixed GetGroundZ asymmetric search window (z+0.5→z+maxSearchDist) that caused cave geometry preference when bot sank slightly below surface. Removed dead code in PhysicsCollideSlide. SlopeRoute_GetGroundZ test now passes. Remaining: OrgrimmarCorpseRun segment 55→56 walkability false-negative, teleport airborne descent. |
+| 7.3 | **Fix corridor collision code.** Update `PhysicsCollideSlide.cpp` to handle the stuck geometry. Test with replay frames. | `Exports/Navigation/PhysicsCollideSlide.cpp`, `SceneQuery.cpp`, `SceneCache.cpp` | **Done** (`ad7741f`) — Fixed GetGroundZ asymmetric search window, removed dead code, relaxed `ShouldAcceptNearCompleteSegment` to use remaining-distance-based acceptance for short steep segments. OrgrimmarCorpseRun: FAIL → PASS. Physics: 107/2/1. Remaining: 2 teleport airborne descent tests (pre-existing). |
 | 7.4 | **Ratchet shoreline/fishing-hole route hardening.** Instrument the short route from the Ratchet named-teleport landing to fishing-hole cast positions, then fix terrain-snags / LOS-blocked endpoints that strand bots before `FishingTask in_cast_range`. | `Services/PathfindingService/`, `Exports/Navigation/`, `Exports/BotRunner/Tasks/FishingTask.cs` | In progress - native route shaping now has a first lateral-detour pass, the service emits full short-route `[PATH_DIAG]` corner chains, BotRunner records planned-vs-executed short-route traces, and the fishing live suite now fails with explicit shoreline evidence (`FishingTask los_blocked`, `Your cast didn't land in fishable water`, recent BotRunner diagnostics) instead of a generic timeout. The latest live rerun did not reach those assertions because BG failed clean-slate revive first. |
 | 7.5 | **Object-aware path requests.** Extend path requests so BotRunner sends nearby collidable game objects and movement capabilities to PathfindingService instead of pathing with only `mapId/start/end`. | `Exports/BotRunner/Clients/PathfindingClient.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Services/PathfindingService/`, `pathfinding.proto` | In progress - contract and request-overlay slices are done: BotRunner builds a conservative collidable overlay (`40y` from start/end, nearest `64` max), and the service mounts `nearby_objects` into a request-scoped synthetic-guid overlay for `CalculatePath` while serializing registry-sensitive native calls to avoid cross-request contamination. |
 | 7.6 | **Overlay-aware path validation and repair.** Validate native mmap routes against live object overlays, then reform blocked segments into usable local detours when possible. | `Services/PathfindingService/Repository/Navigation.cs`, `Exports/Navigation/PathFinder.cpp`, `Exports/Navigation/SceneQuery.cpp` | In progress - the service now validates returned segments against mounted dynamic-object overlays, retries alternate native mode, performs a bounded local detour search, and has a native `ValidateWalkableSegment` bridge plus result-mapping coverage. Native `FindPath` now honors the public `smoothPath` contract (`true=smooth`, `false=straight`), carries grounded segment ends forward, and now tries grounded lateral detour candidates before midpoint-only refinement. Deterministic native coverage now includes both the Ratchet fishing shoreline route and a known obstructed direct-segment detour. Default rollout remains gated behind `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` until broader native detour shaping plus shoreline drift diagnostics replace the remaining service-side repair burden. |
@@ -192,24 +192,22 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 92, continued)
+- **Last updated:** 2026-03-14 (session 93)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **Fixed GetGroundZ asymmetric search window** (`c24564d`) — Symmetric search `z ± maxSearchDist` prevents cave geometry preference.
-  2. **Removed dead code in PhysicsCollideSlide.cpp** (`c24564d`) — Unreachable constraint check loop.
-  3. **Physics test improvement:** `SlopeRoute_GetGroundZ` now PASSES. Physics: 106/3/1 (down from 4 failed).
-  4. **Fixed BB-BUFF-001** (`0a423e8`) — Added Lion's Strength spell 2367 to SpellData. DismissBuff test: SKIP → PASS.
-  5. **Expanded SpellData consumable coverage** (`2a63000`) — Added all Food/Drink/Elixir/Scroll buff spell IDs from VMaNGOS DB. Fixes BG bot's `IsEating`/`IsDrinking` always returning false, and elixir/scroll buff deduplication.
-  6. **P5 UnitReaction complete** (`25c5eae`) — Embedded 314 faction templates from VMaNGOS + WoW mask-based reaction algorithm. BG bot now computes `UnitReaction` from `UNIT_FIELD_FACTIONTEMPLATE` instead of defaulting to Neutral. 25 unit tests.
-- **Test results (full LiveValidation):** `35 passed, 1 failed, 7 skipped` (1 failure = navigation infrastructure timeout)
+  1. **Fixed CombatLoopTests** (`69d4d63`) — Combat test SKIP → PASS. Root causes: wrong creature entry (3108→3101 Vile Familiar), bot trapped underground (Z=-3.1) with 2D-only proximity check, overly strict GUID high-nibble filter (VMaNGOS uses low GUIDs like 0xB), and no mob respawn forcing. Added Z+3 offset, 3D proximity check, `.respawn` command.
+  2. **Fixed P7.3 OrgrimmarCorpseRun** (`ad7741f`) — Segment walkability false-negatives on steep ramps. `ShouldAcceptNearCompleteSegment` now uses remaining-distance-based acceptance (<0.3 units) instead of strict fraction (≥0.98). Physics: 107/2/1 (was 106/3/1).
+- **Test results (full LiveValidation):** `38 passed, 0 failed, 5 skipped`
+  - Skipped: FG corpse run (FG not actionable), fishing (shoreline pathing), mining/herbalism (respawn timer), group formation (infrastructure)
 - **Unit tests:** 124 passed (99 SpellData + 25 FactionData)
+- **Physics tests:** 107 passed, 2 failed (pre-existing teleport airborne), 1 skipped
 - **Known remaining issues:**
   - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
+  - 2 teleport airborne physics tests still failing (pre-existing)
 - **Next:**
-  1. P7.3 remaining: Fix OrgrimmarCorpseRun segment 55→56 walkability false-negative
-  2. P3: Fishing FISH-001 — capture FG fishing packets, compare BG timing
-  3. Evaluate combat test with correct UnitReaction (may unblock CombatLoopTests)
+  1. P3: Fishing FISH-001 — capture FG fishing packets, compare BG timing
+  2. P6: FG crash during teleport investigation
 
 ## Session Handoff (Session 91 Archive)
 - **Last updated:** 2026-03-14 (session 91)
