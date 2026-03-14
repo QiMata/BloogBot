@@ -10,17 +10,18 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Quest interaction integration test - dual-client validation.
-/// This is snapshot-plumbing coverage for GM-driven quest state, not the final
-/// task-driven questing path. It verifies SendChat action dispatch plus quest-log
-/// projection into ActivitySnapshot while BRT-OVR-002 migrates questing to BotTasks.
+/// Quest snapshot-plumbing coverage — validates GM-driven quest state propagation.
+///
+/// Tests quest-log field projection (QuestLog1/2/3) through the snapshot pipeline,
+/// including add/complete/remove transitions for a quest with kill objectives (786 Encroachment).
+/// Task-driven quest accept/turn-in is covered by StarterQuestTests (AcceptQuest/CompleteQuest
+/// action dispatch for quest 4641).
 ///
 /// Flow per client:
-///   1) Ensure strict-alive setup from snapshot state.
-///   2) Ensure test quest is absent.
-///   3) Add quest via GM and assert snapshot quest-log presence.
-///   4) Complete quest via GM and assert completed-or-removed state in snapshot.
-///   5) Remove quest via GM and assert snapshot quest-log absence.
+///   1) Ensure strict-alive, remove stale quest state.
+///   2) .quest add -> assert snapshot QuestLog1 presence.
+///   3) .quest complete -> assert QuestLog2/3 state change.
+///   4) .quest remove -> assert quest absence from snapshot.
 /// </summary>
 [RequiresMangosStack]
 [Collection(LiveValidationCollection.Name)]
