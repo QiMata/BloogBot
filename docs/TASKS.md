@@ -197,38 +197,37 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 96)
+- **Last updated:** 2026-03-14 (session 97)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **Fixed fishing test hang blocking suite** (`422a62f`) — When FishingTask pops with `no_fishing_pool`, test now exits polling loop immediately and skips assertions. Previously polled for 4.3min×2=8.6min, causing blame-hang timeout to kill the run before 30+ tests could execute.
-  2. **Increased test session timeout** (`a67fac0`) — From 25m to 40m. With fishing fix, more tests run per session; old budget was too tight.
-- **Test results (full 43-test suite):**
-  - **35 passed, 2 failed, 6 skipped** (Duration: 24m15s)
+  1. **FG ghost state guard** (`6b3cf53`) — Skip `RefreshSpells()`/`RefreshSkills()` during ghost form in `EnumerateVisibleObjects()`. These Lua calls (GetSpellTabInfo, GetTalentInfo, GetSpellName) crashed WoW.exe when internal spell state was transitional after death. Lightweight `IsGhost` memory read (0x835A48) gates the skip. Object enumeration itself still runs — ghost world objects are needed for corpse-run navigation.
+  2. Sessions 96 fixes carried forward: fishing test hang fix (`422a62f`), test session timeout increase (`a67fac0`).
+- **Test results (full 43-test suite, post-ghost-guard):**
+  - **35 passed, 3 failed, 5 skipped** (improved from 35/2/6 → 35/3/5)
+  - The BG DeathCorpseRunTests.ResurrectsBackgroundPlayer moved from Skip→Skip (different skip reason this run)
+  - FG corpse run no longer crashes WoW.exe — the ghost state guard works. Failure is now navigation quality (12y improvement, needs 25y).
   - Physics: 109/0/1 (unchanged)
-  - Previously only 13/43 tests ran; now all 43 execute
-- **Failures (2):**
-  1. `DeathCorpseRunTests.ResurrectsForegroundPlayer` — Pre-existing P7. FG corpse run only improved 14y (152→138y, needs 25y min). RetrieveCorpseTask triggers WoW.exe crash shortly after pathfinding completes — socket disconnections then process termination. Root cause: FG injected DLL state corruption during corpse recovery, not PathfindingService itself.
-  2. `SpellCastOnTargetTests.CastSpell_BattleShout_AuraApplied` — FG-only. `CastSpell(int)` is a no-op on ForegroundBotRunner (known API gotcha). BG passes. Need FG to use `CastSpellByName` string overload.
-- **Skips (6):**
+- **Failures (3):**
+  1. `DeathCorpseRunTests.ResurrectsForegroundPlayer` — FG ghost only moved 12y toward corpse (152→140y, needs 25y min). **WoW.exe did NOT crash** — the ghost state guard fix is confirmed working. Remaining issue is FG ghost navigation quality.
+  2. `SpellCastOnTargetTests.CastSpell_BattleShout_AuraApplied` — FG-only. BG passes in 311ms. FG dispatch returns Success but aura never appears. `CastSpell(int)` does resolve to name via spell DB (not a no-op as previously thought — code was updated). Root cause needs investigation: possibly rage not granted, or Lua `CastSpellByName` fails silently.
+  3. `NpcInteractionTests.Trainer_LearnAvailableSpells` — FG `.unlearn 6673` succeeds on server but `_persistentLearnedIds` set in RefreshSpells never removes unlearned spells. Pre-existing FG spell list caching bug.
+- **Skips (5):**
   1. `DismissBuff_RemovesBuff` — FG-only test, expected skip
-  2. `DeathCorpseRunTests.ResurrectsBackgroundPlayer` — Pathfinding gap (RunbackStallRecoveryExceeded)
-  3. `FishingProfessionTests` — No pool at Ratchet (respawn timer), early-exit fix working
+  2. `DeathCorpseRunTests.ResurrectsBackgroundPlayer` — Pathfinding gap
+  3. `FishingProfessionTests` — No pool at Ratchet (respawn timer)
   4. `GatheringProfessionTests.Mining` — Copper veins on respawn
   5. `GatheringProfessionTests.Herbalism` — Herbs on respawn
-  6. `NpcInteractionTests.Trainer_LearnAvailableSpells` — Trainer NPC not found
-- **FG crash cascade pattern (documented):**
-  - RetrieveCorpseTask pathfinding completes → 2-3s later WoW.exe crashes
-  - Socket disconnection chain: bot log pipe, PathfindingService client, CharacterStateSocketListener
-  - StateManager detects and restarts WoW.exe with new PID
-  - Subsequent FG tests may fail due to degraded fixture state (wrong aura list, stale commands)
-  - This is the primary reliability blocker for the test suite
-- **Known remaining issues:**
-  - FG `CastSpell(int)` no-op — needs spell name mapping for FG
-  - Fishing pool Z=0 in FG memory — LOS fix is workaround
-  - FG WoW.exe crash during RetrieveCorpseTask — P7 root cause
+- **Ghost state guard (FG-GHOST-CRASH-001) — RESOLVED:**
+  - Root cause: `EnumerateVisibleObjects()` → `RefreshSpells()` → Lua calls (GetSpellTabInfo, GetTalentInfo) crash WoW.exe during ghost form transition
+  - Fix: Read `IsGhost` memory flag (0x835A48) after object enumeration, skip RefreshSpells/RefreshSkills when in ghost form
+  - Verified: FG corpse run test now runs full 2m13s without WoW.exe crash (previously crashed ~8s in)
+- **Known FG issues remaining:**
+  1. FG `_persistentLearnedIds` never removes unlearned spells → Trainer test fails
+  2. FG Battle Shout cast succeeds at dispatch layer but aura never appears → SpellCast test fails
+  3. FG ghost navigation only reduces corpse distance by 12y → DeathCorpseRun test fails
 - **Next:**
-  1. Investigate FG WoW.exe crash during corpse recovery — socket disconnection chain suggests IPC/injection issue
-  2. Fix `SpellCastOnTargetTests` FG path — use spell name lookup for FG CastSpell
+  1. Investigate FG Battle Shout cast failure — add diagnostics for `GetSpellNameFromDb` and Lua call result
+  2. Fix `_persistentLearnedIds` to handle spell removal (SMSG_REMOVED_SPELL)
   3. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
   4. P7 remaining items (shoreline route hardening, object-aware paths)
 
