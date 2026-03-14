@@ -96,15 +96,16 @@ Current observed boundary from the 2026-03-12 live suite:
 
 ---
 
-## P5 - UnitReaction Reliability (BB-COMBAT-006)
+## P5 - UnitReaction Reliability (BB-COMBAT-006) — DONE
 
-**Approach:** Read creature faction/reaction from MangosRepository (DB) and cache while the creature exists in the object manager. Do NOT rely on snapshot-only `UnitReaction` field.
+**Approach:** Embedded 314 faction template entries from VMaNGOS DB into `FactionData.cs` with WoW's mask-based reaction algorithm. UnitReaction is now computed inline when `UNIT_FIELD_FACTIONTEMPLATE` is received.
 
 | # | Task | Owner | Status |
 |---|------|-------|--------|
-| 5.1 | **Add `MangosRepository.GetCreatureFaction(entryId)`** that returns faction template from `creature_template` table. Cache by entry ID. | `Services/DecisionEngineService/MangosRepository.cs` | Open |
-| 5.2 | **Compute reaction from faction template** using the same algorithm as VMaNGOS `GetReactionTo()`. Map faction -> hostile/neutral/friendly. | `Exports/WoWSharpClient/` or `BotRunner/` | Open |
-| 5.3 | **Wire into snapshot pipeline.** Replace unreliable runtime `UnitReaction` with DB-backed reaction for NPC targets. | Snapshot pipeline | Open |
+| 5.1 | **Embed faction template data** with reaction calculation in `FactionData.cs`. | `Exports/GameData.Core/Constants/FactionData.cs` | **Done** (`25c5eae`) |
+| 5.2 | **Compute reaction from faction template** using WoW's mask algorithm (enemy/friend faction lists + hostile/friendly/our mask checks). | `Exports/GameData.Core/Constants/FactionData.cs` | **Done** (`25c5eae`) |
+| 5.3 | **Wire into BG bot.** Compute `UnitReaction` in `ApplyUnitFieldDiffs` when `UNIT_FIELD_FACTIONTEMPLATE` is set. | `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs` | **Done** (`25c5eae`) |
+| 5.4 | **Unit tests.** 25 tests: hostile/neutral/friendly creatures, Alliance vs Horde, helpers, edge cases. | `Tests/BotRunner.Tests/Combat/FactionDataTests.cs` | **Done** (`25c5eae`) |
 
 ---
 
@@ -194,21 +195,21 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 - **Last updated:** 2026-03-14 (session 92, continued)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **Fixed GetGroundZ asymmetric search window** — `SceneCache::GetGroundZ` and `SceneQuery::GetGroundZ` cached path used `zMax = z + 0.5f` for upward acceptance, while the non-cached path used `z + maxSearchDist`. When the bot sank slightly below the surface, the surface got rejected and only cave geometry was returned. Changed both locations to `z + maxSearchDist` for symmetric search. "Closest to Z" selection still correctly handles multi-level buildings and underground areas.
-  2. **Removed dead code in PhysicsCollideSlide.cpp** — Lines 384-389 checked if a slide direction was blocked by previous constraints, but the code was unreachable (single-constraint path, constraintNormals.size()==1, loop iterated 0 times).
-  3. **Physics test improvement:** `SlopeRoute_GetGroundZ_ReturnsConsistentSurfaceZ` now PASSES (was pre-existing failure). Physics tests: 106 passed, 3 failed (down from 4), 1 skipped.
-  4. **Fixed BB-BUFF-001** (`0a423e8`) — Added Lion's Strength spell 2367 to SpellData dictionary. `DismissBuff("Lion's Strength")` was failing because `RebuildBuffsFromAuraFields` couldn't resolve the spell name, creating `"Spell#2367"` instead. Both BuffAndConsumable tests now PASS (DismissBuff was previously SKIP).
-- **Test results (full LiveValidation):** `35 passed, 1 failed, 7 skipped`
-  - 1 failure: `Navigation_ShortPath_ArrivesAtDestination` — BG navigation timeout (infrastructure, not a regression)
-- **Physics test results:** `106 passed, 3 failed, 1 skipped` (improved from 4 failed)
-  - Remaining 3 failures are pre-existing: TeleportRecovery (teleport Z clamp design), TeleportAirborne (same), OrgrimmarCorpseRun segment 55→56 (steep ramp end)
+  1. **Fixed GetGroundZ asymmetric search window** (`c24564d`) — Symmetric search `z ± maxSearchDist` prevents cave geometry preference.
+  2. **Removed dead code in PhysicsCollideSlide.cpp** (`c24564d`) — Unreachable constraint check loop.
+  3. **Physics test improvement:** `SlopeRoute_GetGroundZ` now PASSES. Physics: 106/3/1 (down from 4 failed).
+  4. **Fixed BB-BUFF-001** (`0a423e8`) — Added Lion's Strength spell 2367 to SpellData. DismissBuff test: SKIP → PASS.
+  5. **Expanded SpellData consumable coverage** (`2a63000`) — Added all Food/Drink/Elixir/Scroll buff spell IDs from VMaNGOS DB. Fixes BG bot's `IsEating`/`IsDrinking` always returning false, and elixir/scroll buff deduplication.
+  6. **P5 UnitReaction complete** (`25c5eae`) — Embedded 314 faction templates from VMaNGOS + WoW mask-based reaction algorithm. BG bot now computes `UnitReaction` from `UNIT_FIELD_FACTIONTEMPLATE` instead of defaulting to Neutral. 25 unit tests.
+- **Test results (full LiveValidation):** `35 passed, 1 failed, 7 skipped` (1 failure = navigation infrastructure timeout)
+- **Unit tests:** 124 passed (99 SpellData + 25 FactionData)
 - **Known remaining issues:**
   - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
 - **Next:**
   1. P7.3 remaining: Fix OrgrimmarCorpseRun segment 55→56 walkability false-negative
-  2. P7.3 remaining: Teleport airborne descent (teleport Z clamp prevents physics-realistic freefall)
-  3. P3: Fishing FISH-001 — capture FG fishing packets, compare BG timing
+  2. P3: Fishing FISH-001 — capture FG fishing packets, compare BG timing
+  3. Evaluate combat test with correct UnitReaction (may unblock CombatLoopTests)
 
 ## Session Handoff (Session 91 Archive)
 - **Last updated:** 2026-03-14 (session 91)
