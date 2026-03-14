@@ -197,26 +197,28 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 93, continued)
+- **Last updated:** 2026-03-14 (session 94)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **Fixed CombatLoopTests** (`69d4d63`) — Combat test SKIP → PASS. Root causes: wrong creature entry (3108→3101), bot underground, GUID filter, no mob respawn.
-  2. **Fixed P7.3 OrgrimmarCorpseRun** (`ad7741f`) — Segment walkability false-negatives. Remaining-distance-based acceptance. Physics: 107/2/1.
-  3. **Fixed P6 FG crash during teleport** (`9ba5d95`) — Root cause: `ConnectionStateMachine` didn't handle `MSG_MOVE_TELEPORT` (0x00C5). ObjectManager kept reading memory during same-map teleport. Added teleport cooldown in CSM + `PauseDuringTeleport` guard in ObjectManager's `EnumerateVisibleObjects`. FG bot now survives `.tele` commands.
-- **Test results (full LiveValidation with FG bot):** `12 passed, 2 failed, 1 skipped` (timeout at 25min aborted remaining tests)
-  - Passed: BasicLoop (2), BuffConsumable (1 of 2), CharacterLifecycle, CombatLoop, Crafting, DeathCorpseRun (2), Economy (3), Equipment
-  - Failed: DismissBuff (SMSG_CAST_FAILED, pre-existing), Fishing (no_fishing_pool timeout, functional not crash)
-  - Skipped: Mining (respawn timer)
-  - Aborted: Herbalism gathering tests (timeout)
-- **Unit tests:** 124 passed (99 SpellData + 25 FactionData)
-- **Physics tests:** 107 passed, 2 failed (pre-existing teleport airborne), 1 skipped
+  1. **Fixed FG DismissBuff** (`c1151d0`) — Root cause: spell 2367 is named "Lesser Strength" in WoW's spell DB, not "Lion's Strength". HasBuff never matched, so DismissBuff was never invoked. Fixed buff name constant, updated DismissBuff to use `CancelPlayerBuff(GetPlayerBuff(N,'HELPFUL'))` for correct visual index mapping. Test restructured to run FG first.
+  2. **Fixed FG fishing LOS check** (`39eaee5`) — FG fishing pools report Z=0 from memory reads. LOS ray from player Z≈5.7 to target Z=0 pierced the dock, blocking cast forever. Now clamps cast target Z to player Z when delta exceeds 3y.
+  3. **Fixed BG post-teleport physics** (`d1e0601`) — BG bot floated in air after teleport instead of falling to ground. Two root causes: (a) game loop guard blocked physics during `_isBeingTeleported` (now allows physics when `NeedsGroundSnap` is true), (b) `_teleportZ` clamp pinned bot at teleport Z even when physics found valid ground below (now clears clamp when ground exists below teleportZ).
+- **Test results:**
+  - Key tests: BasicLoop (2 pass), BuffConsumable (1 pass, 1 skip BG), CombatLoop (pass), Crafting (pass), DeathCorpseRun BG (pass), Economy (3 pass), Equipment (pass)
+  - Physics: 108 passed, 1 failed (improved from 107/2/1)
+  - Fishing: `no_fishing_pool` (pool on respawn timer, not a code issue)
 - **Known remaining issues:**
-  - Fishing: `no_fishing_pool` — FG bot doesn't find fishing pool at Ratchet dock
-  - DismissBuff: SMSG_CAST_FAILED during buff removal (pre-existing)
-  - 2 teleport airborne physics tests still failing (pre-existing)
+  - Fishing pool Z=0 in FG memory — LOS fix is a workaround, root cause is FG game object position read
+  - FG corpse run: `RetrieveCorpseTask never reduced corpse distance enough` (pre-existing P7)
+  - 1 physics test still failing (pre-existing teleport airborne)
 - **Next:**
-  1. P3: Fishing FISH-001 — capture FG fishing packets, compare BG timing
+  1. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
   2. P7 remaining items (shoreline route hardening, object-aware paths)
+
+## Session Handoff (Session 93 Archive)
+- **Last updated:** 2026-03-14 (session 93)
+- **Completed:** CombatLoopTests fix (`69d4d63`), P7.3 OrgrimmarCorpseRun fix (`ad7741f`), P6 FG crash during teleport fix (`9ba5d95`).
+- **Test results:** 12 passed, 2 failed, 1 skipped (timeout at 25min aborted remaining).
 
 ## Session Handoff (Session 91 Archive)
 - **Last updated:** 2026-03-14 (session 91)
