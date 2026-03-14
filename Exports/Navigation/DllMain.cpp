@@ -343,9 +343,10 @@ static bool ShouldAcceptNearCompleteSegment(float horizontalDistance, float comp
 
     const float clampedFraction = std::max(0.0f, std::min(1.0f, completedFraction));
     const float remainingDistance = horizontalDistance * (1.0f - clampedFraction);
-    return horizontalDistance <= 4.0f &&
-        clampedFraction >= 0.98f &&
-        remainingDistance <= 0.1f;
+    // Accept if remaining distance is trivially small (well within capsule radius)
+    // For short segments (<4 units), even a 7% fraction gap can be <0.3 units remaining
+    return horizontalDistance <= 6.0f &&
+        remainingDistance <= 0.3f;
 }
 
 static SegmentValidationCode FinalizeSimulatedSegment(
