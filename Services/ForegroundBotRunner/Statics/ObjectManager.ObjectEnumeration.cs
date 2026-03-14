@@ -184,8 +184,17 @@ namespace ForegroundBotRunner.Statics
                             if (!petFound)
                                 Pet = null;
 
-                            RefreshSpells();
-                            RefreshSkills();
+                            // Skip Lua-heavy spell/skill refresh during ghost form.
+                            // RefreshSpells makes multiple Lua calls (GetSpellTabInfo, GetTalentInfo)
+                            // that can crash WoW.exe when internal state is transitional after death.
+                            // Ghost form only needs object enumeration for corpse-run navigation —
+                            // spell/skill data is irrelevant until resurrection.
+                            var isGhost = MemoryManager.ReadInt(Offsets.Player.IsGhost) != 0;
+                            if (!isGhost)
+                            {
+                                RefreshSpells();
+                                RefreshSkills();
+                            }
                         }
                         catch (Exception ex)
                         {
