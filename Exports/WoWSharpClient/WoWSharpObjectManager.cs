@@ -225,8 +225,12 @@ namespace WoWSharpClient
                 // 2. Handle ping heartbeat
                 HandlePingHeartbeat((long)now.TotalMilliseconds);
 
-                // 3. Update player movement if we're in control
-                if (_isInControl && !_isBeingTeleported && Player != null && _movementController != null)
+                // 3. Update player movement if we're in control.
+                // Allow physics during teleport if ground snap is pending — the bot needs gravity
+                // to fall from teleport Z to the actual ground (e.g. teleported above a rooftop).
+                var allowPhysics = _isInControl && Player != null && _movementController != null
+                    && (!_isBeingTeleported || _movementController.NeedsGroundSnap);
+                if (allowPhysics)
                 {
                     _movementController.Update(deltaSec, (uint)now.TotalMilliseconds);
                 }
