@@ -240,6 +240,38 @@ namespace GameData.Core.Constants
 
             // ── Consumable Buffs ──
             ["Lion's Strength"] = [2367],
+
+            // ── Food & Drink Auras (from VMaNGOS spell_template) ──
+            ["Food"] = [433, 434, 435, 1127, 1129, 1131, 2639, 5004, 5005, 5006, 5007, 6410, 7737,
+                        10256, 10257, 18229, 18230, 18231, 18232, 18233, 18234, 22731, 24005, 24707,
+                        24800, 24869, 25660, 25695, 25700, 25702, 25886, 25888, 26260, 26401, 26472,
+                        26474, 28616, 29008, 29073],
+            ["Drink"] = [430, 431, 432, 1133, 1135, 1137, 10250, 22734, 24355, 25696, 26261, 26402,
+                         26473, 26475, 29007],
+
+            // ── Well Fed (buff food stat bonuses) ──
+            ["Well Fed"] = [19705, 19706, 19708, 19709, 19710, 19711, 24799, 24870, 25694, 25941],
+
+            // ── Elixir Buffs (from VMaNGOS spell_template) ──
+            ["Elixir of the Mongoose"] = [17538, 17571],
+            ["Elixir of the Giants"] = [11405, 16883],
+            ["Elixir of Greater Agility"] = [11467, 11498],
+            ["Elixir of Greater Intellect"] = [11465, 11497],
+            ["Elixir of Minor Agility"] = [3230],
+            ["Elixir of Superior Defense"] = [17554],
+            ["Elixir of Greater Defense"] = [11450, 11484],
+            ["Elixir of Fortitude"] = [3178, 3450],
+            ["Elixir of Defense"] = [3177, 3186],
+            ["Elixir of Minor Defense"] = [7183],
+            ["Elixir of Minor Fortitude"] = [2334, 11536],
+
+            // ── Scroll / Stat Buffs (elixirs + scrolls share buff names) ──
+            ["Agility"] = [3159, 3160, 8115, 8116, 8117, 11328, 11330, 12174, 13365, 23794],
+            ["Intellect"] = [3167, 3168, 8096, 8097, 8098, 11393, 12176, 13366, 23798],
+            ["Armor"] = [3220, 8091, 8094, 8095, 11349, 12175],
+            ["Spirit"] = [8112, 8113, 8114, 12177, 13368, 23797],
+            ["Stamina"] = [8099, 8100, 8101, 12178, 13370],
+            ["Strength"] = [3163, 3164, 8118, 8119, 8120, 11331, 12179, 13372, 23793]
         };
 
         /// <summary>
