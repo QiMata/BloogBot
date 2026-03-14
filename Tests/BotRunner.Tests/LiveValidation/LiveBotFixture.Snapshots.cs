@@ -322,5 +322,30 @@ public partial class LiveBotFixture
         return false;
     }
 
+    /// <summary>
+    /// Wait for nearby units to populate after a teleport.
+    /// Polls snapshots until NearbyUnits.Count > 0, returning true once units appear.
+    /// Handles the race condition where OUT_OF_RANGE_OBJECTS clears old entities before
+    /// CREATE_OBJECT packets arrive for new ones.
+    /// </summary>
+    public async Task<bool> WaitForNearbyUnitsPopulatedAsync(string accountName, int timeoutMs = 5000, string? progressLabel = null)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            var snap = await GetSnapshotAsync(accountName);
+            var count = snap?.NearbyUnits?.Count ?? 0;
+            if (count > 0)
+            {
+                _testOutput?.WriteLine($"  [{progressLabel ?? accountName}] Nearby units populated: {count} units after {sw.ElapsedMilliseconds}ms");
+                return true;
+            }
+            await Task.Delay(500);
+        }
+
+        _testOutput?.WriteLine($"  [{progressLabel ?? accountName}] Nearby units still empty after {timeoutMs}ms");
+        return false;
+    }
+
     /// <summary>Teleport a bot to a named location by having it type .tele in chat (self-teleport).</summary>
 }
