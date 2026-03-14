@@ -191,19 +191,20 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 92)
+- **Last updated:** 2026-03-14 (session 92, continued)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
   1. **Fixed GetGroundZ asymmetric search window** — `SceneCache::GetGroundZ` and `SceneQuery::GetGroundZ` cached path used `zMax = z + 0.5f` for upward acceptance, while the non-cached path used `z + maxSearchDist`. When the bot sank slightly below the surface, the surface got rejected and only cave geometry was returned. Changed both locations to `z + maxSearchDist` for symmetric search. "Closest to Z" selection still correctly handles multi-level buildings and underground areas.
   2. **Removed dead code in PhysicsCollideSlide.cpp** — Lines 384-389 checked if a slide direction was blocked by previous constraints, but the code was unreachable (single-constraint path, constraintNormals.size()==1, loop iterated 0 times).
   3. **Physics test improvement:** `SlopeRoute_GetGroundZ_ReturnsConsistentSurfaceZ` now PASSES (was pre-existing failure). Physics tests: 106 passed, 3 failed (down from 4), 1 skipped.
-- **Test results (full LiveValidation):** `35 passed, 0 failed, 8 skipped` — maintained best-ever, no regressions
+  4. **Fixed BB-BUFF-001** (`0a423e8`) — Added Lion's Strength spell 2367 to SpellData dictionary. `DismissBuff("Lion's Strength")` was failing because `RebuildBuffsFromAuraFields` couldn't resolve the spell name, creating `"Spell#2367"` instead. Both BuffAndConsumable tests now PASS (DismissBuff was previously SKIP).
+- **Test results (full LiveValidation):** `35 passed, 1 failed, 7 skipped`
+  - 1 failure: `Navigation_ShortPath_ArrivesAtDestination` — BG navigation timeout (infrastructure, not a regression)
 - **Physics test results:** `106 passed, 3 failed, 1 skipped` (improved from 4 failed)
   - Remaining 3 failures are pre-existing: TeleportRecovery (teleport Z clamp design), TeleportAirborne (same), OrgrimmarCorpseRun segment 55→56 (steep ramp end)
 - **Known remaining issues:**
   - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
-  - BuffDismiss: WoWSharpClient doesn't populate WoWUnit.Buffs (BB-BUFF-001)
 - **Next:**
   1. P7.3 remaining: Fix OrgrimmarCorpseRun segment 55→56 walkability false-negative
   2. P7.3 remaining: Teleport airborne descent (teleport Z clamp prevents physics-realistic freefall)
