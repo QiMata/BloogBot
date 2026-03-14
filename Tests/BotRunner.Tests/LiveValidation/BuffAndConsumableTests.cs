@@ -28,7 +28,8 @@ public class BuffAndConsumableTests
     private const uint ElixirOfLionsStrength = 2454;
     private const uint LionsStrengthUseSpell = 2367;
     private const uint LionsStrengthBuffAura = 2457;
-    private const string LionsStrengthBuffName = "Lion's Strength";
+    // Spell 2367 is named "Lesser Strength" in WoW's spell DB (not "Lion's Strength")
+    private const string LionsStrengthBuffName = "Lesser Strength";
 
     public BuffAndConsumableTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -54,21 +55,22 @@ public class BuffAndConsumableTests
     [SkippableFact]
     public async Task DismissBuff_RemovesBuff()
     {
-        var bgApplied = await RunConsumableApplyScenarioAsync(_bot.BgAccountName!, () => _bot.BackgroundBot?.Player, "BG");
-        Assert.True(bgApplied.Applied, "BG bot must reach the buffed state before dismissal can be validated.");
-
-        var bgRemoved = await RunDismissScenarioAsync(_bot.BgAccountName!, () => _bot.BackgroundBot?.Player, "BG");
-        global::Tests.Infrastructure.Skip.If(!bgRemoved,
-            "BG bot still cannot dismiss Lion's Strength because WoWSharpClient does not populate WoWUnit.Buffs (BB-BUFF-001).");
-
+        // Test FG first (gold standard) — don't gate on BG success
         if (_bot.IsFgActionable)
         {
             var fgApplied = await RunConsumableApplyScenarioAsync(_bot.FgAccountName!, () => _bot.ForegroundBot?.Player, "FG");
             Assert.True(fgApplied.Applied, "FG bot must reach the buffed state before dismissal can be validated.");
 
             var fgRemoved = await RunDismissScenarioAsync(_bot.FgAccountName!, () => _bot.ForegroundBot?.Player, "FG");
-            Assert.True(fgRemoved, "FG bot should remove Lion's Strength after DismissBuff.");
+            Assert.True(fgRemoved, $"FG bot should remove {LionsStrengthBuffName} after DismissBuff.");
         }
+
+        var bgApplied = await RunConsumableApplyScenarioAsync(_bot.BgAccountName!, () => _bot.BackgroundBot?.Player, "BG");
+        Assert.True(bgApplied.Applied, "BG bot must reach the buffed state before dismissal can be validated.");
+
+        var bgRemoved = await RunDismissScenarioAsync(_bot.BgAccountName!, () => _bot.BackgroundBot?.Player, "BG");
+        global::Tests.Infrastructure.Skip.If(!bgRemoved,
+            $"BG bot still cannot dismiss {LionsStrengthBuffName} — WoWSharpClient does not populate WoWUnit.Buffs (BB-BUFF-001).");
     }
 
     private async Task<(bool Applied, int AuraCountBefore, int AuraCountAfterUse, int ItemSlotsBefore, int ItemSlotsAfterUse)> RunConsumableApplyScenarioAsync(

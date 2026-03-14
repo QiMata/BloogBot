@@ -241,28 +241,32 @@ namespace ForegroundBotRunner.Objects
 
         public bool DismissBuff(string buffName)
         {
-            // Vanilla 1.12.1: CancelPlayerBuff(index) uses 0-based index matching visible buff order.
-            // We iterate buff descriptors from memory to find the matching buff by name,
-            // then cancel by its display-order index via Lua.
-            int visibleIndex = 0;
+            // Find the buff's visual index by scanning descriptor slots (skipping empties)
+            // to map to GetPlayerBuff's 0-based HELPFUL index.
             var currentBuffOffset = MemoryAddresses.WoWUnit_BuffsBaseOffset;
+            int visualIndex = 0;
+            bool found = false;
+
             for (var i = 0; i < 32; i++)
             {
                 var buffId = MemoryManager.ReadInt(GetDescriptorPtr() + currentBuffOffset);
-                currentBuffOffset += 4;
-
-                if (buffId == 0) continue;
-
-                var spell = GetSpellById(buffId);
-                if (spell != null && spell.Name == buffName)
+                if (buffId != 0)
                 {
-                    Functions.LuaCall($"CancelPlayerBuff({visibleIndex})");
-                    return true;
+                    var spell = GetSpellById(buffId);
+                    if (spell.Name == buffName)
+                    {
+                        found = true;
+                        break;
+                    }
+                    visualIndex++;
                 }
-                visibleIndex++;
+                currentBuffOffset += 4;
             }
 
-            return false;
+            if (!found) return false;
+
+            Functions.LuaCall($"CancelPlayerBuff(GetPlayerBuff({visualIndex},'HELPFUL'))");
+            return true;
         }
 
         public IEnumerable<ISpellEffect> GetBuffs()
