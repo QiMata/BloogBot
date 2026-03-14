@@ -67,6 +67,11 @@ namespace WoWSharpClient.Movement
         private const float MAX_SLOPE_RATIO = 2.0f; // tan(63 degrees) - generous for stairs
         private const float SLOPE_CHECK_MIN_HORIZONTAL = 3.0f; // Minimum horizontal travel before checking
 
+        // Path-aware ground validation: reject physics ground Z that is more than this many
+        // units below the current path waypoint Z. Prevents gradual sinking into cave/gully
+        // geometry below the navmesh walking surface.
+        private const float PATH_GROUND_Z_TOLERANCE = 3.0f;
+
         private int _teleportClampFrames = 0;
         private const int TELEPORT_CLAMP_MAX_FRAMES = 300; // ~10s at 30fps — hard limit to avoid permanent clamping
 
@@ -531,6 +536,7 @@ namespace WoWSharpClient.Movement
             // holding at _prevGroundZ (which gets the bot stuck at the rejection point).
             // The navmesh path Z represents the walkable surface, allowing continued progress.
             var finalPosZ = output.NewPosZ;
+            bool pathGroundGuardActive = false;
             if (slopeGuardRejected && output.NewPosZ < _prevGroundZ)
             {
                 // Try path Z interpolation as a smooth descent reference
@@ -544,6 +550,16 @@ namespace WoWSharpClient.Movement
                 && output.NewPosZ < _prevGroundZ - MaxGroundZDropPerFrame)
             {
                 finalPosZ = _prevGroundZ;
+            }
+            // Path-aware position clamp: when physics lands the bot on cave/gully geometry
+            // far below the navmesh path, snap position Z up to the waypoint level.
+            if (_currentPath != null && _currentWaypointIndex < _currentPath.Length
+                && finalPosZ < _currentPath[_currentWaypointIndex].Z - PATH_GROUND_Z_TOLERANCE)
+            {
+                finalPosZ = _currentPath[_currentWaypointIndex].Z;
+                pathGroundGuardActive = true;
+                output.NewVelZ = 0;
+                output.FallTime = 0;
             }
             _player.Position = new Position(output.NewPosX, output.NewPosY, finalPosZ);
             _player.SwimPitch = output.Pitch;
@@ -567,6 +583,20 @@ namespace WoWSharpClient.Movement
                     // Use the path-interpolated Z as the new ground reference so the bot
                     // can continue descending along the navmesh path instead of getting stuck.
                     _prevGroundZ = finalPosZ;
+                    _prevGroundNormal = new Vector3(0, 0, 1);
+                }
+                else if (_currentPath != null && _currentWaypointIndex < _currentPath.Length
+                    && output.GroundZ < _currentPath[_currentWaypointIndex].Z - PATH_GROUND_Z_TOLERANCE)
+                {
+                    // Path-aware ground rejection: the physics engine found ground (e.g., a cave
+                    // floor) significantly below the navmesh path waypoint. The navmesh represents
+                    // the walkable surface; trust it over the physics raytrace. Hold _prevGroundZ
+                    // at the path waypoint Z to prevent gradual sinking through terrain.
+                    var wpZ = _currentPath[_currentWaypointIndex].Z;
+                    Log.Warning("[MovementController] Path-aware ground guard: physics ground={GroundZ:F1} is {Delta:F1}y below " +
+                        "path waypoint Z={WpZ:F1}. Holding prevGroundZ at waypoint level.",
+                        output.GroundZ, wpZ - output.GroundZ, wpZ);
+                    _prevGroundZ = wpZ;
                     _prevGroundNormal = new Vector3(0, 0, 1);
                 }
                 else
@@ -593,8 +623,8 @@ namespace WoWSharpClient.Movement
             var inputFlags = _player.MovementFlags & ~PhysicsFlags;
             var newPhysicsFlags = (MovementFlags)(output.MovementFlags) & PhysicsFlags;
 
-            // When slope guard rejected the ground, strip falling flags.
-            if (slopeGuardRejected)
+            // When slope guard or path ground guard rejected the ground, strip falling flags.
+            if (slopeGuardRejected || pathGroundGuardActive)
             {
                 newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
             }
@@ -611,18 +641,20 @@ namespace WoWSharpClient.Movement
             bool nowFalling = (newPhysicsFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
             if (wasGrounded && nowFalling && !slopeGuardRejected && _currentPath != null)
             {
-                float pathZ = InterpolatePathZ(output.NewPosX, output.NewPosY, _prevGroundZ);
-                // Only override if the path Z is reasonable (near the previous ground level)
-                if (MathF.Abs(pathZ - _prevGroundZ) < MaxGroundZDropPerFrame)
-                {
-                    Log.Information("[MovementController] False freefall prevented: physics={PhysZ:F1}, pathZ={PathZ:F1}, prevGZ={PrevGZ:F1}",
-                        output.NewPosZ, pathZ, _prevGroundZ);
-                    newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                    _player.Position = new Position(output.NewPosX, output.NewPosY, pathZ);
-                    _prevGroundZ = pathZ;
-                    _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
-                    _fallTimeMs = 0;
-                }
+                // Hold at _prevGroundZ (last known walkable surface) instead of interpolating
+                // from path Z. InterpolatePathZ uses the player's current position as the
+                // "previous waypoint" anchor, which creates a feedback loop: if the player Z
+                // has already drifted below ground (e.g., from a prior physics tick), the
+                // interpolation starts from the drifted Z and each frame sinks further.
+                // Holding at _prevGroundZ is safe because wasGrounded==true means the bot was
+                // on solid ground last frame.
+                Log.Information("[MovementController] False freefall prevented: physics={PhysZ:F1}, prevGZ={PrevGZ:F1}",
+                    output.NewPosZ, _prevGroundZ);
+                newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                _player.Position = new Position(output.NewPosX, output.NewPosY, _prevGroundZ);
+                // Do NOT update _prevGroundZ — keep the last known good ground Z.
+                _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
+                _fallTimeMs = 0;
             }
 
             _player.MovementFlags = inputFlags | newPhysicsFlags;
