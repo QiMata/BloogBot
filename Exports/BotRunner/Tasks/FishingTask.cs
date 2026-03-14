@@ -587,6 +587,14 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     private bool CanCastFromPosition(uint mapId, Position fromPosition, Position poolPosition)
     {
         var castTarget = FishingData.GetPoolCastTarget(fromPosition, poolPosition, CastTargetInsetFromPool);
+
+        // Fishing pools (especially on FG) can report Z=0 from memory reads even when the pool
+        // is at water surface. If the cast target Z is far below the player, use the player's Z
+        // instead — fishing casts go roughly horizontal to the water surface, not downward into
+        // the terrain. Without this, the LOS ray pierces the dock and returns blocked forever.
+        if (fromPosition.Z - castTarget.Z > 3f)
+            castTarget = new Position(castTarget.X, castTarget.Y, fromPosition.Z);
+
         return TryHasLineOfSight(mapId, fromPosition, castTarget);
     }
 
@@ -611,9 +619,9 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
 
         var castTarget = FishingData.GetPoolCastTarget(player.Position, poolPosition, CastTargetInsetFromPool);
         BotContext.AddDiagnosticMessage(
-            $"[TASK] FishingTask los_blocked phase={phase} castTarget=({castTarget.X:F1},{castTarget.Y:F1},{castTarget.Z:F1})");
-        Log.Information("[FISH] LOS blocked for fishing {Phase}. castTarget=({X:F1}, {Y:F1}, {Z:F1})",
-            phase, castTarget.X, castTarget.Y, castTarget.Z);
+            $"[TASK] FishingTask los_blocked phase={phase} castTarget=({castTarget.X:F1},{castTarget.Y:F1},{castTarget.Z:F1}) poolZ={poolPosition.Z:F1} playerZ={player.Position.Z:F1}");
+        Log.Information("[FISH] LOS blocked for fishing {Phase}. castTarget=({X:F1}, {Y:F1}, {Z:F1}) poolZ={PoolZ:F1} playerZ={PlayerZ:F1}",
+            phase, castTarget.X, castTarget.Y, castTarget.Z, poolPosition.Z, player.Position.Z);
     }
 
     private void PopWithSuccess()
