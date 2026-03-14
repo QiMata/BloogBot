@@ -332,6 +332,7 @@ namespace WoWSharpClient.Movement
 
         private int _deadReckonCount = 0;
         private int _noGroundFrameCount = 0;
+        private int _falseFreefallCount = 0;
         private int _teleportZGraceFrames = 0;
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
@@ -682,13 +683,19 @@ namespace WoWSharpClient.Movement
                 // interpolation starts from the drifted Z and each frame sinks further.
                 // Holding at _prevGroundZ is safe because wasGrounded==true means the bot was
                 // on solid ground last frame.
-                Log.Information("[MovementController] False freefall prevented: physics={PhysZ:F1}, prevGZ={PrevGZ:F1}",
-                    output.NewPosZ, _prevGroundZ);
+                _falseFreefallCount++;
+                if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
+                    Log.Information("[MovementController] False freefall prevented (x{Count}): physics={PhysZ:F1}, prevGZ={PrevGZ:F1}",
+                        _falseFreefallCount, output.NewPosZ, _prevGroundZ);
                 newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
                 _player.Position = new Position(output.NewPosX, output.NewPosY, _prevGroundZ);
                 // Do NOT update _prevGroundZ — keep the last known good ground Z.
                 _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
                 _fallTimeMs = 0;
+            }
+            else
+            {
+                _falseFreefallCount = 0;
             }
 
             _player.MovementFlags = inputFlags | newPhysicsFlags;
@@ -1125,6 +1132,7 @@ namespace WoWSharpClient.Movement
             _descentAnchorZ = float.NaN;
             _descentAnchorX = float.NaN;
             _descentAnchorY = float.NaN;
+            _falseFreefallCount = 0;
 
             // After teleport/zone change, force at least one physics step even while idle
             // so gravity applies and the character snaps to the real ground height.
