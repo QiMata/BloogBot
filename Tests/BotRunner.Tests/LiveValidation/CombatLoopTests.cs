@@ -33,12 +33,10 @@ public class CombatLoopTests
     private const int MapId = 1;
     private const float MobAreaX = -284f;
     private const float MobAreaY = -4383f;
-    private const float MobAreaZ = 57f;
+    private const float MobAreaZ = 60f; // Z+3 offset from spawn table (~57) to avoid UNDERMAP detection
     private const float MobAreaRadius = 80f;
-    private const ulong CreatureGuidHighMask = 0xF000000000000000UL;
-    private const ulong CreatureGuidHighPrefix = 0xF000000000000000UL;
 
-    private static readonly HashSet<uint> AttackableCreatureEntries = [3098, 3108, 3124];
+    private static readonly HashSet<uint> AttackableCreatureEntries = [3098, 3101, 3124];
     private const uint OneHandMaceSpell = 198;
 
     public CombatLoopTests(LiveBotFixture bot, ITestOutputHelper output)
@@ -81,6 +79,11 @@ public class CombatLoopTests
         await Task.Delay(500);
 
         await EnsureNearMobAreaAsync(account, label);
+
+        // Force nearby creatures to respawn — mob area may be depleted from prior tests
+        await _bot.SendGmChatCommandAsync(account, ".respawn");
+        await Task.Delay(2000);
+
         await _bot.WaitForSnapshotConditionAsync(
             account,
             s => s.NearbyUnits?.Count > 0,
@@ -164,14 +167,17 @@ public class CombatLoopTests
         if (pos == null)
             return;
 
-        var distance = LiveBotFixture.Distance2D(pos.X, pos.Y, MobAreaX, MobAreaY);
-        if (distance <= MobAreaRadius)
+        var distance2d = LiveBotFixture.Distance2D(pos.X, pos.Y, MobAreaX, MobAreaY);
+        var zDelta = Math.Abs(pos.Z - MobAreaZ);
+        if (distance2d <= MobAreaRadius && zDelta < 15f)
         {
-            _output.WriteLine($"  [{label}] Already near mob area (distance={distance:F1}y); skipping teleport.");
+            _output.WriteLine($"  [{label}] Already near mob area (dist2d={distance2d:F1}y, dZ={zDelta:F1}); skipping teleport.");
             return;
         }
 
-        _output.WriteLine($"  [{label}] Teleporting to mob area (distance={distance:F1}y).");
+        _output.WriteLine($"  [{label}] Need teleport: dist2d={distance2d:F1}y, dZ={zDelta:F1}, pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})");
+
+        _output.WriteLine($"  [{label}] Teleporting to mob area.");
         await _bot.BotTeleportAsync(account, MapId, MobAreaX, MobAreaY, MobAreaZ);
 
         var arrived = await WaitForNearPositionAsync(account, MobAreaX, MobAreaY, MobAreaRadius, TimeSpan.FromSeconds(12));
@@ -195,8 +201,6 @@ public class CombatLoopTests
                 {
                     var guid = u.GameObject?.Base?.Guid ?? 0UL;
                     if (guid == 0 || guid == selfGuid)
-                        return false;
-                    if ((guid & CreatureGuidHighMask) != CreatureGuidHighPrefix)
                         return false;
                     if (u.Health == 0 || u.MaxHealth == 0)
                         return false;
@@ -235,11 +239,11 @@ public class CombatLoopTests
                 return (guid, mob.Health, mobPos?.X ?? 0f, mobPos?.Y ?? 0f, mobPos?.Z ?? 0f);
             }
 
-            if (sw.Elapsed.TotalSeconds < 2)
+            if (sw.Elapsed.TotalSeconds < 4)
             {
                 var allUnits = snap?.NearbyUnits ?? [];
-                _output.WriteLine($"    [FindMob] {allUnits.Count} nearby units, 0 candidates. Self=0x{selfGuid:X}");
-                foreach (var u in allUnits.Take(10))
+                _output.WriteLine($"    [FindMob] {allUnits.Count} nearby units, 0 candidates. Self=0x{selfGuid:X}, pos=({selfPos?.X:F1},{selfPos?.Y:F1},{selfPos?.Z:F1})");
+                foreach (var u in allUnits.Take(15))
                 {
                     var g = u.GameObject?.Base?.Guid ?? 0UL;
                     var p = u.GameObject?.Base?.Position;
@@ -259,7 +263,7 @@ public class CombatLoopTests
         => entry switch
         {
             3098 => 0, // Mottled Boar
-            3108 => 1, // Vile Familiar
+            3101 => 1, // Vile Familiar
             3124 => 2, // Scorpid Worker
             _ => 99
         };
