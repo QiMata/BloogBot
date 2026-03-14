@@ -241,6 +241,27 @@ namespace ForegroundBotRunner.Objects
 
         public bool DismissBuff(string buffName)
         {
+            // Vanilla 1.12.1: CancelPlayerBuff(index) uses 0-based index matching visible buff order.
+            // We iterate buff descriptors from memory to find the matching buff by name,
+            // then cancel by its display-order index via Lua.
+            int visibleIndex = 0;
+            var currentBuffOffset = MemoryAddresses.WoWUnit_BuffsBaseOffset;
+            for (var i = 0; i < 32; i++)
+            {
+                var buffId = MemoryManager.ReadInt(GetDescriptorPtr() + currentBuffOffset);
+                currentBuffOffset += 4;
+
+                if (buffId == 0) continue;
+
+                var spell = GetSpellById(buffId);
+                if (spell != null && spell.Name == buffName)
+                {
+                    Functions.LuaCall($"CancelPlayerBuff({visibleIndex})");
+                    return true;
+                }
+                visibleIndex++;
+            }
+
             return false;
         }
 
