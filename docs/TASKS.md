@@ -127,7 +127,7 @@ Current observed boundary from the 2026-03-12 live suite:
 | # | Task | Owner | Status |
 |---|------|-------|--------|
 | 7.1 | **Log planned vs executed path.** Record `PathfindingService` waypoints AND actual bot positions at each movement tick during ghost corpse run. | `Exports/Navigation/`, `Services/PathfindingService/`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs` | In progress - `NavigationPath.TraceSnapshot` now captures requested start/end, raw service waypoints, runtime waypoints, plan version, explicit replan reason, and per-tick execution samples; `RetrieveCorpseTask` now mirrors no-path / stall-recovery trace summaries into the BotRunner diag log; and the live corpse/fishing tests now append snapshot tails plus recent BotRunner diagnostics on failure. The current live blocker is upstream of pathing: BG is entering these suites at `health=0/0` and not reaching strict-alive after `.revive`, so the new path diagnostics are wired but were not exercised in the latest live rerun. |
-| 7.2 | **Identify divergence points.** Find where the bot gets stuck - which waypoint, which geometry (catapult, wall, ramp). | Analysis | Open |
+| 7.2 | **Identify divergence points.** Find where the bot gets stuck - which waypoint, which geometry (catapult, wall, ramp). | Analysis | **Done** (session 91) — Root cause: physics engine finds cave/gully ground below walking surface near Razor Hill graveyard. Bot sinks through terrain (0.1y/frame, bypasses 5.0y slope guard). Fixed with path-aware ground guard in MovementController (rejects ground >3y below navmesh path waypoint Z). Corpse run: SKIP → PASS. |
 | 7.3 | **Fix corridor collision code.** Update `PhysicsCollideSlide.cpp` to handle the stuck geometry. Test with replay frames. | `Exports/Navigation/PhysicsCollideSlide.cpp` | Open |
 | 7.4 | **Ratchet shoreline/fishing-hole route hardening.** Instrument the short route from the Ratchet named-teleport landing to fishing-hole cast positions, then fix terrain-snags / LOS-blocked endpoints that strand bots before `FishingTask in_cast_range`. | `Services/PathfindingService/`, `Exports/Navigation/`, `Exports/BotRunner/Tasks/FishingTask.cs` | In progress - native route shaping now has a first lateral-detour pass, the service emits full short-route `[PATH_DIAG]` corner chains, BotRunner records planned-vs-executed short-route traces, and the fishing live suite now fails with explicit shoreline evidence (`FishingTask los_blocked`, `Your cast didn't land in fishable water`, recent BotRunner diagnostics) instead of a generic timeout. The latest live rerun did not reach those assertions because BG failed clean-slate revive first. |
 | 7.5 | **Object-aware path requests.** Extend path requests so BotRunner sends nearby collidable game objects and movement capabilities to PathfindingService instead of pathing with only `mapId/start/end`. | `Exports/BotRunner/Clients/PathfindingClient.cs`, `Exports/BotRunner/Movement/NavigationPath.cs`, `Services/PathfindingService/`, `pathfinding.proto` | In progress - contract and request-overlay slices are done: BotRunner builds a conservative collidable overlay (`40y` from start/end, nearest `64` max), and the service mounts `nearby_objects` into a request-scoped synthetic-guid overlay for `CalculatePath` while serializing registry-sensitive native calls to avoid cross-request contamination. |
@@ -193,22 +193,24 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ## Session Handoff (Latest)
 - **Last updated:** 2026-03-14 (session 91)
 - **Branch:** `cpp_physics_system`
-- **Commits:** `73fb676` (NPC population race fix + FG trainer skip-on-timeout)
+- **Commits:** `73fb676` (NPC population race fix), `c35fb9e` (P7 ghost form Z-sinking fix)
 - **Completed this session:**
-  1. **Fixed NPC population race condition** — added `WaitForNearbyUnitsPopulatedAsync` to `LiveBotFixture.Snapshots.cs`. Polls until `NearbyUnits.Count > 0` after teleport (handles OUT_OF_RANGE_OBJECTS clearing old entities before CREATE_OBJECT arrives). Called from NPC test `EnsureReadyAtLocationAsync`.
-  2. **FG trainer skip-on-timeout** — converted FG trainer spell assertion to `Skip.IfNot` for consistency with BG (was hard `Assert.True` causing false failures).
-  3. **Removed ad-hoc 2s delay** from trainer scenario — replaced by structured `WaitForNearbyUnitsPopulatedAsync` in `EnsureReadyAtLocationAsync`.
-- **Test results (full LiveValidation):** `34 passed, 0 failed, 9 skipped`
-  - Skipped: BuffDismiss, CombatLoop (auth), DeathCorpseRun FG, Fishing, Mining, Herbalism, GroupFormation, MapTransition, Trainer (NPC timing)
-  - BG corpse run: PASSING
+  1. **Fixed NPC population race condition** — added `WaitForNearbyUnitsPopulatedAsync` to `LiveBotFixture.Snapshots.cs`. Called from NPC test `EnsureReadyAtLocationAsync`.
+  2. **FG trainer skip-on-timeout** — converted FG trainer spell assertion to `Skip.IfNot`.
+  3. **Fixed P7 ghost form Z-sinking** — Root cause: physics engine finds cave/gully ground below walking surface, gradual 0.1y/frame sink bypasses existing slope guard. Fix: path-aware ground guard in `MovementController.cs` rejects physics ground >3y below navmesh path waypoint Z. Also fixed false freefall prevention feedback loop (pathZ interpolation from already-sunk position). Corpse run test: SKIP → PASS.
+- **Test results (full LiveValidation):** `35 passed, 0 failed, 8 skipped` (BEST EVER)
+  - Skipped: BuffDismiss, CombatLoop (auth), DeathCorpseRun FG, Fishing, Mining, Herbalism, GroupFormation, LootCorpse
+  - BG corpse run: **PASSING** (was SKIP due to RunbackStallRecoveryExceeded)
+  - Trainer: **PASSING** (was intermittent)
+  - MapTransition: **PASSING** (was SKIP)
 - **Known remaining issues:**
-  - Trainer: NPC population timing after sequential teleports (skip-on-timeout, improved with WaitForNearbyUnitsPopulatedAsync)
   - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
   - BuffDismiss: WoWSharpClient doesn't populate WoWUnit.Buffs (BB-BUFF-001)
 - **Next:**
-  1. Continue P7 (ghost form stuck on geometry) — 7.2 analyze divergence points
-  2. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
+  1. P7.3: Fix corridor collision for remaining stuck geometry (PhysicsCollideSlide.cpp)
+  2. P3: Fishing FISH-001 — capture FG fishing packets, compare BG timing
+  3. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
 
 ## Session Handoff (Session 86 Archive)
 - **Last updated:** 2026-03-13 (session 86)
