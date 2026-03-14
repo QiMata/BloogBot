@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using Serilog;
 
 namespace ForegroundBotRunner.Mem.Hooks
@@ -41,6 +42,10 @@ namespace ForegroundBotRunner.Mem.Hooks
             public const ushort SMSG_NEW_WORLD = 0x003E;
             public const ushort MSG_MOVE_WORLDPORT_ACK = 0x00DC;
             public const ushort SMSG_TRANSFER_ABORT = 0x0040;
+
+            // Same-map teleport (e.g., GM .tele within same continent)
+            public const ushort MSG_MOVE_TELEPORT = 0x00C5;
+            public const ushort MSG_MOVE_TELEPORT_ACK = 0x00C7;
 
             // Logout
             public const ushort CMSG_LOGOUT_REQUEST = 0x004B;
@@ -84,6 +89,14 @@ namespace ForegroundBotRunner.Mem.Hooks
         private State _currentState = State.Disconnected;
         private readonly object _stateLock = new();
         private DateTime _lastStateChange = DateTime.UtcNow;
+
+        /// <summary>
+        /// Teleport cooldown: when MSG_MOVE_TELEPORT is received (same-map teleport),
+        /// ObjectManager reads are unsafe while WoW reshuffles its internal structures.
+        /// The cooldown clears when MSG_MOVE_TELEPORT_ACK is sent or after a timeout.
+        /// </summary>
+        private long _teleportCooldownUntilTicks = DateTime.MinValue.Ticks;
+        private const int TeleportCooldownMs = 2000;
 
         // Diagnostic logging
         private static readonly string DiagnosticLogPath;
@@ -139,10 +152,17 @@ namespace ForegroundBotRunner.Mem.Hooks
         }
 
         /// <summary>Whether the ObjectManager is valid for object iteration.</summary>
-        public bool IsObjectManagerValid => CurrentState == State.InWorld;
+        /// <remarks>
+        /// Returns false during same-map teleport cooldown (MSG_MOVE_TELEPORT received).
+        /// WoW reshuffles internal structures during teleport — reading memory is unsafe.
+        /// </remarks>
+        public bool IsObjectManagerValid => CurrentState == State.InWorld && !IsTeleportCooldownActive;
 
         /// <summary>Whether outbound gameplay packets (movement, spells) can be sent.</summary>
         public bool IsSendingSafe => CurrentState == State.InWorld;
+
+        /// <summary>True when a same-map teleport is being processed.</summary>
+        public bool IsTeleportCooldownActive => DateTime.UtcNow.Ticks < Interlocked.Read(ref _teleportCooldownUntilTicks);
 
         /// <summary>
         /// Process a captured packet event from PacketLogger.
@@ -150,6 +170,21 @@ namespace ForegroundBotRunner.Mem.Hooks
         /// </summary>
         public void ProcessPacket(PacketDirection direction, ushort opcode, int size)
         {
+            // Same-map teleport cooldown: pause ObjectManager when teleport received,
+            // clear when ACK sent (client has finished processing the teleport)
+            if (direction == PacketDirection.Recv && opcode == Opcodes.MSG_MOVE_TELEPORT)
+            {
+                Interlocked.Exchange(ref _teleportCooldownUntilTicks, DateTime.UtcNow.AddMilliseconds(TeleportCooldownMs).Ticks);
+                Statics.ObjectManager.BeginTeleportPause();
+                DiagLog($"TELEPORT: same-map teleport received, ObjectManager paused for {TeleportCooldownMs}ms");
+            }
+            else if (direction == PacketDirection.Send && opcode == Opcodes.MSG_MOVE_TELEPORT_ACK)
+            {
+                Interlocked.Exchange(ref _teleportCooldownUntilTicks, DateTime.MinValue.Ticks);
+                Statics.ObjectManager.EndTeleportPause();
+                DiagLog("TELEPORT: ACK sent, ObjectManager resumed");
+            }
+
             lock (_stateLock)
             {
                 var oldState = _currentState;

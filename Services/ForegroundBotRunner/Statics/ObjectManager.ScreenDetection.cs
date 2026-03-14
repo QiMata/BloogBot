@@ -59,6 +59,29 @@ namespace ForegroundBotRunner.Statics
         /// </summary>
         public static volatile bool PauseNativeCallsDuringWorldEntry = false;
 
+        /// <summary>
+        /// Pause object enumeration during same-map teleports (MSG_MOVE_TELEPORT).
+        /// WoW reshuffles its internal object structures during teleport — reading memory is unsafe.
+        /// Set by ConnectionStateMachine when MSG_MOVE_TELEPORT is received, cleared on ACK.
+        /// Auto-expires after TeleportPauseTimeoutMs as a safety net.
+        /// </summary>
+        private static long _teleportPauseUntilTicks = DateTime.MinValue.Ticks;
+        private const int TeleportPauseTimeoutMs = 3000;
+
+        /// <summary>True when a same-map teleport is being processed and memory reads are unsafe.</summary>
+        public static bool PauseDuringTeleport => DateTime.UtcNow.Ticks < Interlocked.Read(ref _teleportPauseUntilTicks);
+
+        /// <summary>Set by ConnectionStateMachine when MSG_MOVE_TELEPORT received.</summary>
+        public static void BeginTeleportPause()
+        {
+            Interlocked.Exchange(ref _teleportPauseUntilTicks, DateTime.UtcNow.AddMilliseconds(TeleportPauseTimeoutMs).Ticks);
+        }
+
+        /// <summary>Set by ConnectionStateMachine when MSG_MOVE_TELEPORT_ACK sent.</summary>
+        public static void EndTeleportPause()
+        {
+            Interlocked.Exchange(ref _teleportPauseUntilTicks, DateTime.MinValue.Ticks);
+        }
 
         private static DateTime? _enterWorldStartedAt;
 
@@ -861,7 +884,8 @@ namespace ForegroundBotRunner.Statics
                     // to populate ObjectsBuffer with nearby units, players, items, game objects.
                     // This is the normal steady-state path after initial world entry.
                     // Skip during continent transitions — object manager is invalid while map is changing.
-                    if (HasEnteredWorld && !PauseNativeCallsDuringWorldEntry && !isContinentTransition)
+                    // Skip during same-map teleport — WoW reshuffles internal structures.
+                    if (HasEnteredWorld && !PauseNativeCallsDuringWorldEntry && !isContinentTransition && !PauseDuringTeleport)
                     {
                         try
                         {
