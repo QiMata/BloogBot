@@ -550,7 +550,7 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
             return dynZ;
 
         // Both valid — pick closest to query Z within acceptance window
-        float zMax = z + 0.5f;
+        float zMax = z + maxSearchDist;
         float zMin = z - maxSearchDist;
         bool sceneOk = (sceneZ >= zMin && sceneZ <= zMax);
         bool dynOk   = (dynZ >= zMin && dynZ <= zMax);
@@ -562,7 +562,7 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
 
     // Collect candidate ground heights from all sources, then pick the one
     // closest to z. "Closest to z" correctly handles:
-    //   - Outdoor: ADT ground is closest, VMAP roof is above (filtered by z+0.5)
+    //   - Outdoor: ADT ground is closest, VMAP roof is above (farther from z)
     //   - Underground interiors: BIH WMO floor is closest, ADT terrain above is farther
     //   - Multi-level buildings: correct floor is closest to current Z
     float vmapZ = PhysicsConstants::INVALID_HEIGHT;

@@ -381,13 +381,6 @@ SlideResult CollideAndSlide(
             break;
         }
 
-        // Check if slide direction is blocked by any previous constraint
-        for (size_t i = 0; i < constraintNormals.size() - 1; ++i) {
-            if (IsDirectionBlocked(slideDir, constraintNormals[i])) {
-                break;
-            }
-        }
-
         result.finalVelocity = slideDir;
     }
 

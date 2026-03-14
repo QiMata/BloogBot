@@ -708,7 +708,7 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
 
     float bestZ = -200000.0f;
     float bestErr = std::numeric_limits<float>::max();
-    float zMax = z + 0.5f;         // accept slightly above
+    float zMax = z + maxSearchDist; // symmetric search: accept ground above too
     float zMin = z - maxSearchDist; // search below
 
     for (uint32_t j = 0; j < count; ++j)
