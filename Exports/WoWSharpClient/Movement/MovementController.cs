@@ -437,6 +437,14 @@ namespace WoWSharpClient.Movement
                         // bot fall to it. This is the "teleported above terrain" case.
                         Log.Information("[MovementController] Teleport Z clamp cleared: ground at {GroundZ:F1} is below teleportZ={TeleZ:F1}. Allowing fall.",
                             output.GroundZ, _teleportZ);
+                        // Reset _prevGroundZ to teleportZ so the slope guard doesn't see the stale
+                        // pre-teleport ground height as a reference. Without this, the slope guard
+                        // rejects the legitimate fall (e.g. pre-teleport Z=61 → teleportZ=32 →
+                        // groundZ=28 looks like a 33y drop from _prevGroundZ=61, triggering rejection).
+                        _prevGroundZ = _teleportZ;
+                        _descentAnchorZ = float.NaN;
+                        _descentAnchorX = float.NaN;
+                        _descentAnchorY = float.NaN;
                         _teleportZ = float.NaN;
                         _teleportClampFrames = 0;
                         _teleportZGraceFrames = 0;
