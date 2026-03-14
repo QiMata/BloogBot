@@ -201,10 +201,12 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
   1. **Fixed post-teleport slope guard** (`94f5d1a`) — Root cause: when teleport Z clamp was cleared (allowing fall to real ground), `_prevGroundZ` still held the pre-teleport value (e.g. 61.2 from upper walkway). The slope guard then saw the pre→post teleport delta as an impossible drop (61→28y) and snapped the bot back to the stale Z. Fix: reset `_prevGroundZ` and descent anchors when clearing the teleport Z clamp.
+  2. **Fixed teleport Z clamp floating-point noise** (`eda25b0`) — When groundZ ≈ teleportZ (within 0.1y), clear the clamp immediately instead of logging warnings every frame.
+  3. **Throttled false-freefall-prevented log** (`a4f4d79`) — Guard fires every physics frame (~60Hz) during normal walking. Now logs first 3 occurrences then every 100th.
 - **Test results:**
   - Physics: 109 passed, 0 failed, 1 skipped (improved from 108/1/0)
-  - OrgrimmarGroundZ: both PostTeleportSnap and StandAndWalk pass
-  - LiveValidation partial run: 10 passed, 1 skipped before FG WoW.exe crash (pre-existing FG crash issue, not related to fix)
+  - OrgrimmarGroundZ: both PostTeleportSnap and StandAndWalk pass (was failing)
+  - Core LiveValidation (BasicLoop, CombatLoop, Crafting, Economy, Equipment, OrgrimmarGroundZ): 13 passed, 0 failed
 - **Known remaining issues:**
   - Fishing pool Z=0 in FG memory — LOS fix is a workaround, root cause is FG game object position read
   - FG corpse run: `RetrieveCorpseTask never reduced corpse distance enough` (pre-existing P7)
