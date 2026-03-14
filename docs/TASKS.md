@@ -191,26 +191,27 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-13 (session 87)
+- **Last updated:** 2026-03-13 (session 88)
 - **Branch:** `cpp_physics_system`
-- **Commits:** `0684150` (Rx: Gossip/Guild/Professions), `9c59286` (FG trainer Lua), `eb83e8a` (corpse recovery fix), `cf0c9f3` (test skip), `29e46a9` (Rx: 9 more components)
+- **Commits:** `2a6f7b5` (Fix BG terrain fallthrough on VoT slope)
 - **Completed this session:**
-  1. **Rx Publish+RefCount systematic fix** — 13 client components total (4 in session 86, 9 more in 87). All 19 client components audited, all with state-mutating `.Do()` now have self-subscriptions. Critical fixes: Gossip (menu/NPC state), SpellCasting (IsCasting/IsChanneling/cooldowns), CombatSpell (IsInCombat/auras), Looting (loot window state), FlightMaster (taxi map state).
-  2. **FG trainer interaction via Lua** (`9c59286`): `LearnAllAvailableSpellsAsync` using WoW Lua API.
-  3. **Corpse run recovery counter fix** (`eb83e8a`): Infinite "#1" recovery loop — counter reset on any movement including recovery maneuver itself. Now only resets on 5y+ corpse distance improvement. Max attempts 8→4.
-  4. **Test skip detection improvement** (`cf0c9f3`): Stale snapshot + broader skip conditions for navmesh gaps.
-- **Test results (full LiveValidation):** `37 passed, 1 failed, 6 skipped`
-  - **Intermittent (1):** Navigation_LongPath (pathfinding navmesh gap on sloped Valley of Trials terrain)
-  - **Skipped (6):** BuffDismiss (BB-BUFF-001), FG DeathCorpseRun (no WoW.exe), Fishing (shoreline), GatheringMining (respawn), GatheringHerbalism (respawn), GroupFormation (FG n/a)
+  1. **Fixed BG bot falling through terrain on Valley of Trials slope** (`2a6f7b5`): Root cause was C++ physics engine's ExecuteDownPass transitioning to FALLINGFAR at ADT cell boundaries with 20-25y gullies. Per-frame gravity drops (0.3y) bypassed the 5y slope guard but cumulated to 30y+ fallthrough. Fix: false freefall prevention in MovementController — when physics transitions GROUNDED to FALLINGFAR and a valid navmesh path exists, use InterpolatePathZ (navmesh waypoint Z) as ground reference instead of the underground physics output.
+  2. **Added VoT slope diagnostic tests** (`ValleyOfTrialsSlopeTests.cs`): GetGroundZ survey, multi-level probe, StepPhysics simulation, bypass-cache subsystem comparison, bilinear vs triangle cache comparison.
+  3. **Added Z trace diagnostic test** (`Navigation_LongPath_ZTrace_FGvsBG`): Captures high-frequency position data and saves JSON for physics calibration.
+  4. **Added VoT slope recording scenarios** (11/12) to MovementScenarioRunner for FG ground-truth capture.
+  5. **Fixed PhysicsTestFixtures.EnsureDataDir** to walk up directory tree finding terrain data.
+- **Test results (full LiveValidation):** `38 passed, 0 failed, 7 skipped`
+  - Navigation_LongPath now passes reliably (was intermittent failure)
+  - **Skipped (7):** BuffDismiss (BB-BUFF-001), FG DeathCorpseRun (no WoW.exe), Fishing (shoreline), GatheringMining (respawn), GatheringHerbalism (respawn), GroupFormation (FG n/a), MapTransition (FG n/a)
 - **Known remaining issues:**
-  - Navigation_LongPath intermittent (pathfinding navmesh gap on sloped terrain)
   - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
   - BuffDismiss: WoWSharpClient doesn't populate WoWUnit.Buffs (BB-BUFF-001)
+  - Physics tests: 4 pre-existing failures (VoT ADT terrain gullies, teleport airborne, Orgrimmar corpse run walkability)
 - **Next:**
   1. Continue BRT-OVR-002 remaining behavior suites (quest, NPC task-driven migration)
-  2. Pathfinding navmesh coverage improvements for sloped terrain
-  3. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++
+  2. Consider deeper fix for SceneQuery::GetGroundZ slope handling in native C++ (prefer highest surface near query Z)
+  3. Record FG ground-truth movement data for VoT slope (scenarios 11/12 in MovementScenarioRunner)
 
 ## Session Handoff (Session 86 Archive)
 - **Last updated:** 2026-03-13 (session 86)
