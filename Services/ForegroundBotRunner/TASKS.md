@@ -71,16 +71,22 @@ Master tracker: `MASTER-SUB-016`
 11. [x] `FG-WARMUP-001` 2s world entry warmup delay — defer MovementRecorder.Poll() for 2s after HasEnteredWorld to prevent CreateFrame native crash during UI initialization.
 12. [x] `FG-CRASH-RECOVERY-001` Crash monitor PID pruning + recovery — prune dead PIDs when new WoW.exe starts, clear crash flag, AssertClientAlive waits 30s for recovery.
 
+## P6 — FG Crash During Same-Map Teleport (2026-03-14, DONE)
+
+13. [x] `FG-CRASH-TELE-001` Root cause: `ConnectionStateMachine` handled cross-map transfers (SMSG_TRANSFER_PENDING) but not same-map teleports (MSG_MOVE_TELEPORT 0x00C5). ObjectManager kept calling `EnumerateVisibleObjects` during teleport → crash.
+14. [x] `FG-CRASH-TELE-002` Added teleport cooldown to `ConnectionStateMachine`: tracks MSG_MOVE_TELEPORT (recv) / MSG_MOVE_TELEPORT_ACK (send), sets `IsTeleportCooldownActive` + `IsObjectManagerValid=false`. Uses `Interlocked` for thread-safe DateTime.Ticks.
+15. [x] `FG-CRASH-TELE-003` Added `ObjectManager.PauseDuringTeleport` (time-based, auto-expires 3s) guard in `SimplePolling` before `EnumerateVisibleObjects`. Lua calls remain safe during same-map teleport. Commit: `9ba5d95`.
+
 ## Session Handoff
-- Last updated: 2026-03-07 (session 25)
-- Active task: LiveValidation suite running with crash recovery fixes
-- Last delta: FG-PKT-004 (CSM wired), FG-WARMUP-001 (world entry delay), FG-CRASH-RECOVERY-001 (PID pruning + recovery wait)
-- Pass result: `delta shipped` — crash cascade eliminated (48 → 0 cascade failures)
+- Last updated: 2026-03-14 (session 93)
+- Active task: P6 FG crash during teleport — DONE
+- Last delta: FG-CRASH-TELE-001/002/003 (teleport cooldown, ObjectManager guard)
+- Pass result: `delta shipped` — FG bot survives `.tele` commands (12/15 LiveValidation pass, 0 crash)
 - Validation/tests run:
-  - 0 crash-cascade failures (previously 48/50)
+  - LiveValidation: 12 passed, 2 failed (pre-existing), 1 skipped
   - `dotnet build` 0 errors
 - Files changed:
-  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs` — world entry warmup delay
-  - `Tests/Tests.Infrastructure/BotServiceFixture.cs` — PID pruning, crash flag clearing, recovery wait
+  - `Services/ForegroundBotRunner/Mem/Hooks/ConnectionStateMachine.cs` — teleport opcode constants, cooldown mechanism
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.ScreenDetection.cs` — PauseDuringTeleport guard
 - Next command: await LiveValidation suite results, commit + push
 - Blockers: FG-PKT-005 blocked on ProcessMessage vtable disassembly

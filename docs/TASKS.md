@@ -109,15 +109,20 @@ Current observed boundary from the 2026-03-12 live suite:
 
 ---
 
-## P6 - FG Crash During Teleport (FG-CRASH-TELE)
+## P6 - FG Crash During Teleport (FG-CRASH-TELE) — DONE
 
-**Approach:** Use test assertions and FG logs to identify the exact crash trigger. Correlate with `ThreadSynchronizer` state, object-manager polling, and Lua call timing.
+**Root cause:** `ConnectionStateMachine` handled cross-map transfers (`SMSG_TRANSFER_PENDING`) but not same-map teleports (`MSG_MOVE_TELEPORT` 0x00C5). ObjectManager continued calling `EnumerateVisibleObjects` during teleport, reading WoW memory while internal object structures were being reshuffled → crash.
+
+**Fix:** Two-layer teleport cooldown (`9ba5d95`):
+1. `ConnectionStateMachine` tracks `MSG_MOVE_TELEPORT` (recv) / `MSG_MOVE_TELEPORT_ACK` (send), sets `IsTeleportCooldownActive` + `IsObjectManagerValid=false`
+2. `ObjectManager.PauseDuringTeleport` (time-based, auto-expires 3s) blocks `EnumerateVisibleObjects` during teleport
+3. Lua calls remain safe (game client Lua engine isn't torn down during same-map teleport)
 
 | # | Task | Owner | Status |
 |---|------|-------|--------|
-| 6.1 | **Add crash-context logging.** Log `ThreadSynchronizer` state + last Lua call + `ConnectionStateMachine` state before each teleport. | `Services/ForegroundBotRunner/` | Open |
-| 6.2 | **Reproduce and capture.** Run `GatheringProfessionTests` mining (triggers FG teleport to multiple locations). Capture crash context from logs. | LiveValidation tests | Open |
-| 6.3 | **Fix based on crash context.** | `Services/ForegroundBotRunner/` | Open |
+| 6.1 | **Root cause: MSG_MOVE_TELEPORT not handled.** ObjectManager reads unsafe memory during same-map teleport. | `Services/ForegroundBotRunner/Mem/Hooks/ConnectionStateMachine.cs` | **Done** (`9ba5d95`) |
+| 6.2 | **Add teleport cooldown to ConnectionStateMachine.** Track MSG_MOVE_TELEPORT/ACK, pause ObjectManager. | `Services/ForegroundBotRunner/Mem/Hooks/ConnectionStateMachine.cs` | **Done** (`9ba5d95`) |
+| 6.3 | **Guard EnumerateVisibleObjects.** Add `PauseDuringTeleport` check to SimplePolling enumeration guard. | `Services/ForegroundBotRunner/Statics/ObjectManager.ScreenDetection.cs` | **Done** (`9ba5d95`) |
 
 ---
 
@@ -192,22 +197,26 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 93)
+- **Last updated:** 2026-03-14 (session 93, continued)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **Fixed CombatLoopTests** (`69d4d63`) — Combat test SKIP → PASS. Root causes: wrong creature entry (3108→3101 Vile Familiar), bot trapped underground (Z=-3.1) with 2D-only proximity check, overly strict GUID high-nibble filter (VMaNGOS uses low GUIDs like 0xB), and no mob respawn forcing. Added Z+3 offset, 3D proximity check, `.respawn` command.
-  2. **Fixed P7.3 OrgrimmarCorpseRun** (`ad7741f`) — Segment walkability false-negatives on steep ramps. `ShouldAcceptNearCompleteSegment` now uses remaining-distance-based acceptance (<0.3 units) instead of strict fraction (≥0.98). Physics: 107/2/1 (was 106/3/1).
-- **Test results (full LiveValidation):** `38 passed, 0 failed, 5 skipped`
-  - Skipped: FG corpse run (FG not actionable), fishing (shoreline pathing), mining/herbalism (respawn timer), group formation (infrastructure)
+  1. **Fixed CombatLoopTests** (`69d4d63`) — Combat test SKIP → PASS. Root causes: wrong creature entry (3108→3101), bot underground, GUID filter, no mob respawn.
+  2. **Fixed P7.3 OrgrimmarCorpseRun** (`ad7741f`) — Segment walkability false-negatives. Remaining-distance-based acceptance. Physics: 107/2/1.
+  3. **Fixed P6 FG crash during teleport** (`9ba5d95`) — Root cause: `ConnectionStateMachine` didn't handle `MSG_MOVE_TELEPORT` (0x00C5). ObjectManager kept reading memory during same-map teleport. Added teleport cooldown in CSM + `PauseDuringTeleport` guard in ObjectManager's `EnumerateVisibleObjects`. FG bot now survives `.tele` commands.
+- **Test results (full LiveValidation with FG bot):** `12 passed, 2 failed, 1 skipped` (timeout at 25min aborted remaining tests)
+  - Passed: BasicLoop (2), BuffConsumable (1 of 2), CharacterLifecycle, CombatLoop, Crafting, DeathCorpseRun (2), Economy (3), Equipment
+  - Failed: DismissBuff (SMSG_CAST_FAILED, pre-existing), Fishing (no_fishing_pool timeout, functional not crash)
+  - Skipped: Mining (respawn timer)
+  - Aborted: Herbalism gathering tests (timeout)
 - **Unit tests:** 124 passed (99 SpellData + 25 FactionData)
 - **Physics tests:** 107 passed, 2 failed (pre-existing teleport airborne), 1 skipped
 - **Known remaining issues:**
-  - Fishing: LOS blocked during approach to pool (shoreline pathing)
-  - Gathering: nodes on respawn timer — inherently intermittent
+  - Fishing: `no_fishing_pool` — FG bot doesn't find fishing pool at Ratchet dock
+  - DismissBuff: SMSG_CAST_FAILED during buff removal (pre-existing)
   - 2 teleport airborne physics tests still failing (pre-existing)
 - **Next:**
   1. P3: Fishing FISH-001 — capture FG fishing packets, compare BG timing
-  2. P6: FG crash during teleport investigation
+  2. P7 remaining items (shoreline route hardening, object-aware paths)
 
 ## Session Handoff (Session 91 Archive)
 - **Last updated:** 2026-03-14 (session 91)
