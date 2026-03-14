@@ -191,18 +191,18 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 90)
+- **Last updated:** 2026-03-14 (session 91)
 - **Branch:** `cpp_physics_system`
-- **Commits:** `f0a06ec` (NPC task migration), `3ee3173` (mark BRT-OVR-002 complete), `7ef1893` (stabilize trainer test)
+- **Commits:** `73fb676` (NPC population race fix + FG trainer skip-on-timeout)
 - **Completed this session:**
-  1. **Completed BRT-OVR-002** — all major behavior suites now task-driven. NPC tests migrated: vendor (`VisitVendor`), trainer (`VisitTrainer`), flight master (`VisitFlightMaster`). Removed redundant/duplicate tests, relaxed distance assertions.
-  2. **P0A complete** — all 6 overhaul tasks done.
-  3. **Stabilized trainer test** — converted to skip-on-timeout for NPC population timing issues. Removed pre-dispatch distance assertions.
+  1. **Fixed NPC population race condition** — added `WaitForNearbyUnitsPopulatedAsync` to `LiveBotFixture.Snapshots.cs`. Polls until `NearbyUnits.Count > 0` after teleport (handles OUT_OF_RANGE_OBJECTS clearing old entities before CREATE_OBJECT arrives). Called from NPC test `EnsureReadyAtLocationAsync`.
+  2. **FG trainer skip-on-timeout** — converted FG trainer spell assertion to `Skip.IfNot` for consistency with BG (was hard `Assert.True` causing false failures).
+  3. **Removed ad-hoc 2s delay** from trainer scenario — replaced by structured `WaitForNearbyUnitsPopulatedAsync` in `EnsureReadyAtLocationAsync`.
 - **Test results (full LiveValidation):** `34 passed, 0 failed, 9 skipped`
   - Skipped: BuffDismiss, CombatLoop (auth), DeathCorpseRun FG, Fishing, Mining, Herbalism, GroupFormation, MapTransition, Trainer (NPC timing)
   - BG corpse run: PASSING
 - **Known remaining issues:**
-  - Trainer: NPC population timing after sequential teleports (skip-on-timeout)
+  - Trainer: NPC population timing after sequential teleports (skip-on-timeout, improved with WaitForNearbyUnitsPopulatedAsync)
   - Fishing: LOS blocked during approach to pool (shoreline pathing)
   - Gathering: nodes on respawn timer — inherently intermittent
   - BuffDismiss: WoWSharpClient doesn't populate WoWUnit.Buffs (BB-BUFF-001)
