@@ -53,12 +53,20 @@ namespace WoWSharpClient.Movement
         // mismatches at coasts and WMO surfaces cause cumulative gravity drift.
         private float _teleportZ = float.NaN;
         private const float GROUND_SNAP_MAX_DROP = 5.0f;
-        // Max allowed ground Z descent per physics frame. Prevents cascading ground detection
-        // into cave/underground geometry on sloped terrain (GetGroundZ "closest to query Z" bug).
-        // Must be generous enough for legitimate steep terrain: ramps, stairs, WMO entrances.
-        // The cascade bug produces drops of 40+ yards (surface → cave floor). A 15y threshold
-        // catches the cascade while allowing steep outdoor terrain (Valley of Trials slopes).
-        private const float MaxGroundZDropPerFrame = 15.0f;
+        // Max allowed ground Z descent per physics frame (large single-frame drops).
+        private const float MaxGroundZDropPerFrame = 5.0f;
+
+        // Slope ratio guard: tracks cumulative vertical descent vs horizontal distance.
+        // ADT terrain has per-frame drops of 0.3y that individually pass the per-frame guard
+        // but cumulate into 30y+ underground cascade over 3 seconds.
+        // Max walkable slope: 60 degrees -> tan(60) = 1.73. Use 2.0 for stairs/ledges.
+        // Once vertical/horizontal ratio exceeds this over accumulated travel, reject ground.
+        private float _descentAnchorZ = float.NaN;
+        private float _descentAnchorX = float.NaN;
+        private float _descentAnchorY = float.NaN;
+        private const float MAX_SLOPE_RATIO = 2.0f; // tan(63 degrees) - generous for stairs
+        private const float SLOPE_CHECK_MIN_HORIZONTAL = 3.0f; // Minimum horizontal travel before checking
+
         private int _teleportClampFrames = 0;
         private const int TELEPORT_CLAMP_MAX_FRAMES = 300; // ~10s at 30fps — hard limit to avoid permanent clamping
 
@@ -462,13 +470,79 @@ namespace WoWSharpClient.Movement
             // Advance waypoint if we've arrived
             AdvanceWaypointIfNeeded(output.NewPosX, output.NewPosY);
 
-            // Update position from physics — clamp Z if slope guard rejected the ground
+            // Slope guard: two-tier protection against underground cascade.
+            // Tier 1 (per-frame): Reject ground Z drops > MaxGroundZDropPerFrame.
+            // Tier 2 (slope ratio): Track vertical descent vs horizontal distance.
+            //   ADT at Valley of Trials has per-frame drops of 0.3y that pass Tier 1 but
+            //   cumulate to 30y+ over 3 seconds. By comparing descent/distance to max walkable
+            //   slope ratio (tan 63 deg = 2.0), we detect when descent is physically impossible
+            //   for grounded movement.
+            bool slopeGuardRejected = false;
+
+            if (physicsHasGround && float.IsNaN(_teleportZ)
+                && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f)
+            {
+                // Tier 1: large per-frame drop
+                if (output.GroundZ < _prevGroundZ - MaxGroundZDropPerFrame)
+                {
+                    slopeGuardRejected = true;
+                }
+
+                // Tier 2: slope ratio check over accumulated travel
+                if (!slopeGuardRejected && output.GroundZ < _prevGroundZ)
+                {
+                    // Initialize anchor at start of descent
+                    if (float.IsNaN(_descentAnchorZ))
+                    {
+                        _descentAnchorZ = _prevGroundZ;
+                        _descentAnchorX = output.NewPosX;
+                        _descentAnchorY = output.NewPosY;
+                    }
+
+                    float verticalDescent = _descentAnchorZ - output.GroundZ;
+                    float hdx = output.NewPosX - _descentAnchorX;
+                    float hdy = output.NewPosY - _descentAnchorY;
+                    float horizontalDist = MathF.Sqrt(hdx * hdx + hdy * hdy);
+
+                    // Only check slope ratio after sufficient horizontal travel
+                    if (horizontalDist >= SLOPE_CHECK_MIN_HORIZONTAL && verticalDescent > 0)
+                    {
+                        float slopeRatio = verticalDescent / horizontalDist;
+                        if (slopeRatio > MAX_SLOPE_RATIO)
+                        {
+                            slopeGuardRejected = true;
+                            Log.Warning("[MovementController] Slope ratio guard: descent {Descent:F1}y over {Horiz:F1}y horizontal " +
+                                "(ratio={Ratio:F2}, max={Max:F1}). Holding ground at Z={PrevZ:F1}.",
+                                verticalDescent, horizontalDist, slopeRatio, MAX_SLOPE_RATIO, _prevGroundZ);
+                        }
+                    }
+                }
+                else if (!slopeGuardRejected && output.GroundZ >= _prevGroundZ)
+                {
+                    // Ground is level or ascending — reset slope tracker
+                    _descentAnchorZ = float.NaN;
+                    _descentAnchorX = float.NaN;
+                    _descentAnchorY = float.NaN;
+                }
+            }
+
+            // Update position from physics — clamp Z when slope guard rejected the ground.
+            // When the slope guard triggers, use navmesh path Z as fallback instead of
+            // holding at _prevGroundZ (which gets the bot stuck at the rejection point).
+            // The navmesh path Z represents the walkable surface, allowing continued progress.
             var finalPosZ = output.NewPosZ;
-            if (physicsHasGround && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
+            if (slopeGuardRejected && output.NewPosZ < _prevGroundZ)
+            {
+                // Try path Z interpolation as a smooth descent reference
+                float pathZ = InterpolatePathZ(output.NewPosX, output.NewPosY, _prevGroundZ);
+                // Use the path Z if it's reasonable, otherwise hold at prevGroundZ
+                finalPosZ = pathZ > _prevGroundZ - MaxGroundZDropPerFrame ? pathZ : _prevGroundZ;
+                output.NewVelZ = 0;
+                output.FallTime = 0;
+            }
+            else if (physicsHasGround && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
                 && output.NewPosZ < _prevGroundZ - MaxGroundZDropPerFrame)
             {
-                // Physics placed us underground due to bad ground detection on slopes.
-                // Clamp position to prevGroundZ (the last known-good surface).
                 finalPosZ = _prevGroundZ;
             }
             _player.Position = new Position(output.NewPosX, output.NewPosY, finalPosZ);
@@ -478,35 +552,22 @@ namespace WoWSharpClient.Movement
             _velocity = new Vector3(output.NewVelX, output.NewVelY, output.NewVelZ);
 
             // Update fall time
-            // Keep ms internally; output fall_time is expected to be in the same units as input.
-            // If native ever changes to seconds, this should be updated alongside the bridge.
             _fallTimeMs = (uint)MathF.Max(0, output.FallTime);
 
             // Persist StepV2 continuity outputs for next tick.
-            // Don't store sentinel GroundZ (-100000) — keep last valid value so physics can recover.
             if (physicsHasGround)
             {
-                // When the teleport Z clamp is active, don't let _prevGroundZ cascade downward
-                // into cave/underground geometry. The physics engine's "closest to query Z" ground
-                // selection picks cave floors over terrain surfaces when the query Z is near the
-                // cave ceiling. By holding _prevGroundZ at the teleport Z, subsequent physics frames
-                // query from the correct height and avoid the cascading ground detection failure.
                 if (!float.IsNaN(_teleportZ) && output.GroundZ < _teleportZ - 1.5f)
                 {
                     _prevGroundZ = _teleportZ;
-                    _prevGroundNormal = new Vector3(0, 0, 1); // flat ground assumption
+                    _prevGroundNormal = new Vector3(0, 0, 1);
                 }
-                // Slope guard: reject ground Z that drops more than MaxGroundZDropPerFrame from
-                // the previous ground Z. On sloped terrain, GetGroundZ "closest to query Z"
-                // can cascade into cave/underground geometry when plane projection extrapolates
-                // downward. Max walkable descent at 7 yd/s on 45° slope at 200ms tick = 1.4 yd.
-                // Use 5.0 as generous threshold to allow stairs, ledges, and fast ticks.
-                else if (!float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
-                         && output.GroundZ < _prevGroundZ - MaxGroundZDropPerFrame)
+                else if (slopeGuardRejected)
                 {
-                    Log.Warning("[MovementController] Slope guard: rejected ground Z drop {PrevZ:F1} -> {NewZ:F1} (delta={Delta:F1}). Holding previous ground.",
-                        _prevGroundZ, output.GroundZ, _prevGroundZ - output.GroundZ);
-                    // Don't update _prevGroundZ — keep the last good value
+                    // Use the path-interpolated Z as the new ground reference so the bot
+                    // can continue descending along the navmesh path instead of getting stuck.
+                    _prevGroundZ = finalPosZ;
+                    _prevGroundNormal = new Vector3(0, 0, 1);
                 }
                 else
                 {
@@ -531,6 +592,39 @@ namespace WoWSharpClient.Movement
             // Preserve input flags, update physics flags
             var inputFlags = _player.MovementFlags & ~PhysicsFlags;
             var newPhysicsFlags = (MovementFlags)(output.MovementFlags) & PhysicsFlags;
+
+            // When slope guard rejected the ground, strip falling flags.
+            if (slopeGuardRejected)
+            {
+                newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+            }
+
+            // False freefall prevention: When the physics engine transitions from GROUNDED to
+            // FALLINGFAR, it means the DOWN pass couldn't find walkable ground within 4y. On
+            // terrain with ADT gullies (Valley of Trials), this happens because the next surface
+            // is 15-20y below — a cave/gully, not the walkable terrain.
+            //
+            // If we have a valid navmesh path, the path Z represents the walkable surface.
+            // Trust the navmesh over the physics engine for ground height in this case.
+            // Snap to path Z and stay grounded.
+            bool wasGrounded = (_player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) == 0;
+            bool nowFalling = (newPhysicsFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
+            if (wasGrounded && nowFalling && !slopeGuardRejected && _currentPath != null)
+            {
+                float pathZ = InterpolatePathZ(output.NewPosX, output.NewPosY, _prevGroundZ);
+                // Only override if the path Z is reasonable (near the previous ground level)
+                if (MathF.Abs(pathZ - _prevGroundZ) < MaxGroundZDropPerFrame)
+                {
+                    Log.Information("[MovementController] False freefall prevented: physics={PhysZ:F1}, pathZ={PathZ:F1}, prevGZ={PrevGZ:F1}",
+                        output.NewPosZ, pathZ, _prevGroundZ);
+                    newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                    _player.Position = new Position(output.NewPosX, output.NewPosY, pathZ);
+                    _prevGroundZ = pathZ;
+                    _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
+                    _fallTimeMs = 0;
+                }
+            }
+
             _player.MovementFlags = inputFlags | newPhysicsFlags;
 
             Log.Verbose("[MovementController] Applied: ({OldX:F1},{OldY:F1},{OldZ:F1}) -> ({NewX:F1},{NewY:F1},{NewZ:F1}) Flags={Flags}",
@@ -962,6 +1056,9 @@ namespace WoWSharpClient.Movement
             _standingOnLocal = Vector3.Zero;
             _stepUpBaseZ = -200000f;
             _stepUpAge = 0;
+            _descentAnchorZ = float.NaN;
+            _descentAnchorX = float.NaN;
+            _descentAnchorY = float.NaN;
 
             // After teleport/zone change, force at least one physics step even while idle
             // so gravity applies and the character snaps to the real ground height.

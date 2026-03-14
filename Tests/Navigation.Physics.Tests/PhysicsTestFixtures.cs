@@ -90,22 +90,45 @@ public class PhysicsEngineFixture : IDisposable
     }
 
     /// <summary>
-    /// Sets WWOW_DATA_DIR if not already set, pointing to the build output
-    /// that contains mmaps/, vmaps/, maps/ subdirectories.
+    /// Sets WWOW_DATA_DIR if not already set, searching common locations
+    /// for the directory containing mmaps/, vmaps/, maps/ subdirectories.
     /// </summary>
     public static void EnsureDataDir()
     {
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
             return;
 
-        // Everything outputs to AppContext.BaseDirectory (Bot/$(Config)/net8.0/).
-        // Data directories (maps, vmaps, mmaps, scenes) live here too.
         var baseDir = AppContext.BaseDirectory.TrimEnd(
             Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        // Build candidate list: test output dir, then Bot output dirs relative to repo root.
+        var candidates = new[] { baseDir };
+
+        // Walk up from test output to find repo root, then check Bot/ output dirs.
+        var dir = baseDir;
+        while (!string.IsNullOrEmpty(dir))
+        {
+            var botDebug = Path.Combine(dir, "Bot", "Debug", "net8.0");
+            var botRelease = Path.Combine(dir, "Bot", "Release", "net8.0");
+            if (Directory.Exists(Path.Combine(botDebug, "mmaps")))
+            {
+                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", botDebug);
+                return;
+            }
+            if (Directory.Exists(Path.Combine(botRelease, "mmaps")))
+            {
+                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", botRelease);
+                return;
+            }
+            var parent = Path.GetDirectoryName(dir);
+            if (parent == dir) break;
+            dir = parent;
+        }
+
+        // Original fallback: check AppContext.BaseDirectory directly.
         if (Directory.Exists(Path.Combine(baseDir, "mmaps")))
         {
             Environment.SetEnvironmentVariable("WWOW_DATA_DIR", baseDir);
-            return;
         }
     }
 
