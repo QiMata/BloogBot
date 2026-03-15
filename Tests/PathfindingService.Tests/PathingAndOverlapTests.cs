@@ -1,6 +1,8 @@
 using GameData.Core.Models;
 using PathfindingService.Repository;
 using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace PathfindingService.Tests
@@ -180,6 +182,131 @@ namespace PathfindingService.Tests
             Assert.Null(validationFailure);
             Assert.True(path.Length >= 3, $"Straight-request live retrieve route too short ({path.Length} points)");
         }
+
+        /// <summary>
+        /// FG corpse run: Razor Hill graveyard → corpse near Razor Hill.
+        /// This is the exact route the FG bot takes after dying at (340, -4686).
+        /// The ghost spawns at the graveyard (~233, -4794) and must navigate back.
+        /// Validates that no path segment passes through collidable objects (rocks, braziers).
+        /// </summary>
+        [Fact]
+        public void CalculatePath_RazorHillCorpseRun_GraveyardToCorpse_NoCollision()
+        {
+            uint mapId = 1;
+            // Razor Hill graveyard (ghost spawn after release)
+            Position start = new(233.5f, -4793.7f, 10.2f);
+            // Corpse location (death area near Razor Hill)
+            Position end = new(340.0f, -4686.0f, 16.5f);
+
+            var path = _navigation.CalculatePath(mapId, start.ToXYZ(), end.ToXYZ(), smoothPath: true);
+
+            // Basic path validation
+            var validationFailure = PathRouteAssertions.GetValidationFailure(
+                mapId,
+                start.ToXYZ(),
+                end.ToXYZ(),
+                path,
+                maxStartDistance: 8.0f,
+                maxEndDistance: 10.0f,
+                maxSegmentLength: 200.0f,
+                maxHeightJump: 15.0f);
+
+            Assert.Null(validationFailure);
+            Assert.True(path.Length >= 3, $"Corpse-run path too short ({path.Length} points) for ~150y travel");
+
+            // Check each segment for LOS obstruction — if a segment fails LOS,
+            // the path is routing through a collidable object (rock, brazier, building).
+            var losFailures = new List<string>();
+            for (int i = 0; i < path.Length - 1; i++)
+            {
+                var segStart = path[i];
+                var segEnd = path[i + 1];
+
+                // Test LOS at multiple heights along the segment to catch objects
+                // at different elevations. Use player eye height (~1.5m above ground).
+                var eyeStart = new XYZ(segStart.X, segStart.Y, segStart.Z + 1.5f);
+                var eyeEnd = new XYZ(segEnd.X, segEnd.Y, segEnd.Z + 1.5f);
+
+                if (!LineOfSight(mapId, eyeStart, eyeEnd))
+                {
+                    // Also test at ground level to confirm it's not just a ceiling
+                    var groundBlocked = !LineOfSight(mapId, segStart, segEnd);
+                    var label = groundBlocked ? "GROUND+EYE" : "EYE_ONLY";
+                    losFailures.Add(
+                        $"Segment {i}->{i + 1} [{label}]: ({segStart.X:F1},{segStart.Y:F1},{segStart.Z:F1}) -> " +
+                        $"({segEnd.X:F1},{segEnd.Y:F1},{segEnd.Z:F1}) " +
+                        $"dist2D={MathF.Sqrt((segEnd.X - segStart.X) * (segEnd.X - segStart.X) + (segEnd.Y - segStart.Y) * (segEnd.Y - segStart.Y)):F1}y");
+                }
+            }
+
+            Assert.True(losFailures.Count == 0,
+                $"Path has {losFailures.Count} segment(s) with LOS obstruction (path passes through collidable objects):\n" +
+                string.Join("\n", losFailures));
+        }
+
+        /// <summary>
+        /// Diagnostic: probe along the blocked segment to locate exact obstruction.
+        /// Steps at 1-yard intervals and reports where LOS first fails.
+        /// </summary>
+        [Fact]
+        public void Diagnostic_RazorHillCorpseRun_LocateObstruction()
+        {
+            uint mapId = 1;
+            // Blocked segment from the main test
+            var segStart = new XYZ(256.0f, -4736.0f, 10.2f);
+            var segEnd = new XYZ(283.7f, -4724.8f, 13.9f);
+
+            var dx = segEnd.X - segStart.X;
+            var dy = segEnd.Y - segStart.Y;
+            var dz = segEnd.Z - segStart.Z;
+            var dist = MathF.Sqrt(dx * dx + dy * dy);
+            var steps = (int)MathF.Ceiling(dist);
+
+            var probeResults = new List<string>();
+            XYZ? firstBlockAt = null;
+            XYZ? lastBlockAt = null;
+
+            for (int i = 0; i <= steps; i++)
+            {
+                float t = i / (float)steps;
+                var probe = new XYZ(
+                    segStart.X + dx * t,
+                    segStart.Y + dy * t,
+                    segStart.Z + dz * t + 1.5f); // eye height
+
+                // Test LOS from segment start to this probe point
+                var losFromStart = LineOfSight(mapId, new XYZ(segStart.X, segStart.Y, segStart.Z + 1.5f), probe);
+                // Test LOS from this probe to segment end
+                var losToEnd = LineOfSight(mapId, probe, new XYZ(segEnd.X, segEnd.Y, segEnd.Z + 1.5f));
+
+                var groundProbe = new XYZ(probe.X, probe.Y, probe.Z - 1.5f);
+                var groundLos = LineOfSight(mapId, segStart, groundProbe);
+
+                var status = losFromStart && losToEnd ? "CLEAR" : (!losFromStart ? "BLOCKED_FROM_START" : "BLOCKED_TO_END");
+                probeResults.Add($"  t={t:F2} ({probe.X:F1},{probe.Y:F1},{probe.Z - 1.5f:F1}) {status} ground={groundLos}");
+
+                if (!losFromStart && firstBlockAt == null)
+                    firstBlockAt = new XYZ(probe.X, probe.Y, probe.Z - 1.5f);
+                if (!losFromStart)
+                    lastBlockAt = new XYZ(probe.X, probe.Y, probe.Z - 1.5f);
+            }
+
+            // Output all probe results for diagnostic review
+            var report = $"Segment probe: ({segStart.X:F1},{segStart.Y:F1},{segStart.Z:F1}) -> ({segEnd.X:F1},{segEnd.Y:F1},{segEnd.Z:F1}) dist={dist:F1}y\n" +
+                string.Join("\n", probeResults);
+
+            if (firstBlockAt != null)
+                report += $"\nFirst obstruction at: ({firstBlockAt.Value.X:F1},{firstBlockAt.Value.Y:F1},{firstBlockAt.Value.Z:F1})";
+            if (lastBlockAt != null)
+                report += $"\nLast obstruction at: ({lastBlockAt.Value.X:F1},{lastBlockAt.Value.Y:F1},{lastBlockAt.Value.Z:F1})";
+
+            // This test is diagnostic — always output results, fail if obstruction found
+            Assert.True(firstBlockAt == null, report);
+        }
+
+        [DllImport("Navigation.dll", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool LineOfSight(uint mapId, XYZ from, XYZ to);
 
         private static XYZ[] ExecuteWithNativeSegmentValidation(Func<XYZ[]> action)
         {
