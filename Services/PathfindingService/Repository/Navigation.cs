@@ -141,8 +141,13 @@ namespace PathfindingService.Repository
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
             => CalculateValidatedPath(mapId, start, end, smoothPath).Path;
 
-        public NavigationPathResult CalculateValidatedPath(uint mapId, XYZ start, XYZ end, bool smoothPath)
+        public NavigationPathResult CalculateValidatedPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
+            float agentRadius = DefaultAgentRadius, float agentHeight = DefaultAgentHeight)
         {
+            // Build a scoped segment evaluator that uses the caller's capsule dimensions.
+            // This avoids changing the constructor-injected delegate signature (which tests use).
+            var scopedEvaluator = BuildScopedEvaluator(agentRadius, agentHeight);
+
             // Long straight-corner requests can spend tens of seconds in native route shaping
             // before the service ever gets to its alternate-mode fallback. For corpse-style
             // routes, prefer the validated smooth path first so the service stays responsive.
@@ -152,7 +157,7 @@ namespace PathfindingService.Repository
             var secondMode = !firstMode;
             var secondResult = useAlternateModeFirst ? "native_path" : "native_path_alternate_mode";
 
-            var firstAttempt = EvaluateNativePath(mapId, start, end, firstMode, firstResult);
+            var firstAttempt = EvaluateNativePath(mapId, start, end, firstMode, firstResult, scopedEvaluator);
             if (firstAttempt.IsUsable)
             {
                 return new NavigationPathResult(
@@ -162,7 +167,7 @@ namespace PathfindingService.Repository
                     null);
             }
 
-            var secondAttempt = EvaluateNativePath(mapId, start, end, secondMode, secondResult);
+            var secondAttempt = EvaluateNativePath(mapId, start, end, secondMode, secondResult, scopedEvaluator);
             if (secondAttempt.IsUsable)
             {
                 return new NavigationPathResult(
@@ -175,7 +180,7 @@ namespace PathfindingService.Repository
             var repairSource = SelectRepairSource(firstAttempt, secondAttempt);
             if (repairSource.Path.Length > 1 && repairSource.BlockedSegment is BlockedSegmentInfo repairBlockedSegment)
             {
-                var repairedPath = TryRepairPath(mapId, start, end, smoothPath, repairSource.Path, repairBlockedSegment.Index);
+                var repairedPath = TryRepairPath(mapId, start, end, smoothPath, repairSource.Path, repairBlockedSegment.Index, scopedEvaluator);
                 if (repairedPath.Length > 0)
                 {
                     return new NavigationPathResult(
@@ -192,7 +197,7 @@ namespace PathfindingService.Repository
             if (IsLosFallbackEnabled())
             {
                 var fallbackPath = BuildLosFallbackPath(mapId, start, end);
-                if (fallbackPath.Length > 0 && FindBlockedSegment(mapId, fallbackPath) is null)
+                if (fallbackPath.Length > 0 && FindBlockedSegment(mapId, fallbackPath, scopedEvaluator) is null)
                 {
                     return new NavigationPathResult(
                         fallbackPath,
@@ -212,6 +217,24 @@ namespace PathfindingService.Repository
                 rawPath,
                 result,
                 blockedSegment?.Index);
+        }
+
+        /// <summary>
+        /// Builds a segment evaluator that uses the specified capsule dimensions.
+        /// When dimensions match the defaults, returns the constructor-injected evaluator unchanged.
+        /// </summary>
+        private Func<uint, XYZ, XYZ, SegmentEvaluation> BuildScopedEvaluator(float agentRadius, float agentHeight)
+        {
+            // If using default dimensions, return the constructor-injected evaluator as-is.
+            // This preserves existing test behavior and avoids unnecessary closures.
+            if (MathF.Abs(agentRadius - DefaultAgentRadius) < 0.001f
+                && MathF.Abs(agentHeight - DefaultAgentHeight) < 0.001f)
+            {
+                return _segmentEvaluator;
+            }
+
+            // Build a new evaluator that calls the native validation with the actual capsule.
+            return (mapId, from, to) => EvaluateSegmentWithDimensions(mapId, from, to, agentRadius, agentHeight);
         }
 
         private static bool ShouldTryAlternateModeFirst(XYZ start, XYZ end, bool smoothPath)
@@ -284,7 +307,8 @@ namespace PathfindingService.Repository
             }
         }
 
-        private PathAttempt EvaluateNativePath(uint mapId, XYZ start, XYZ end, bool smoothPath, string successResult)
+        private PathAttempt EvaluateNativePath(uint mapId, XYZ start, XYZ end, bool smoothPath, string successResult,
+            Func<uint, XYZ, XYZ, SegmentEvaluation>? scopedEvaluator = null)
         {
             try
             {
@@ -292,7 +316,7 @@ namespace PathfindingService.Repository
                 if (path.Length == 0)
                     return new PathAttempt(Array.Empty<XYZ>(), successResult, null);
 
-                var blockedSegment = FindBlockedSegment(mapId, path);
+                var blockedSegment = FindBlockedSegment(mapId, path, scopedEvaluator);
                 return new PathAttempt(path, successResult, blockedSegment);
             }
             catch
@@ -314,7 +338,8 @@ namespace PathfindingService.Repository
                 : alternateAttempt;
         }
 
-        private XYZ[] TryRepairPath(uint mapId, XYZ start, XYZ end, bool smoothPath, XYZ[] rawPath, int blockedSegmentIndex)
+        private XYZ[] TryRepairPath(uint mapId, XYZ start, XYZ end, bool smoothPath, XYZ[] rawPath, int blockedSegmentIndex,
+            Func<uint, XYZ, XYZ, SegmentEvaluation>? scopedEvaluator = null)
         {
             if (rawPath.Length < 2 || blockedSegmentIndex < 0 || blockedSegmentIndex >= rawPath.Length - 1)
                 return Array.Empty<XYZ>();
@@ -330,7 +355,7 @@ namespace PathfindingService.Repository
                 if (repaired.Length == 0)
                     continue;
 
-                var blockedCandidateSegment = FindBlockedSegment(mapId, repaired);
+                var blockedCandidateSegment = FindBlockedSegment(mapId, repaired, scopedEvaluator);
                 if (blockedCandidateSegment is not null)
                     continue;
 
@@ -419,15 +444,17 @@ namespace PathfindingService.Repository
             return combined.ToArray();
         }
 
-        private BlockedSegmentInfo? FindBlockedSegment(uint mapId, XYZ[] path)
+        private BlockedSegmentInfo? FindBlockedSegment(uint mapId, XYZ[] path,
+            Func<uint, XYZ, XYZ, SegmentEvaluation>? scopedEvaluator = null)
         {
             if (path.Length < 2)
                 return null;
 
+            var evaluator = scopedEvaluator ?? _segmentEvaluator;
             var current = path[0];
             for (var i = 0; i < path.Length - 1; i++)
             {
-                var evaluation = _segmentEvaluator(mapId, current, path[i + 1]);
+                var evaluation = evaluator(mapId, current, path[i + 1]);
                 if (evaluation.Reason != SegmentBlockReason.None)
                     return new BlockedSegmentInfo(i, evaluation.Reason);
 
@@ -721,6 +748,53 @@ namespace PathfindingService.Repository
             catch
             {
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Evaluates a path segment using the specified capsule dimensions instead of defaults.
+        /// Used when race/gender provide actual bot dimensions.
+        /// </summary>
+        private static SegmentEvaluation EvaluateSegmentWithDimensions(uint mapId, XYZ from, XYZ to,
+            float agentRadius, float agentHeight)
+        {
+            if (!IsNativeSegmentValidationEnabled())
+                return new SegmentEvaluation(to, SegmentBlockReason.None);
+
+            if (Distance2D(from, to) > NativeWalkabilityMaxSegmentLength)
+                return new SegmentEvaluation(to, SegmentBlockReason.None);
+
+            try
+            {
+                var validation = ValidateWalkableSegmentNative(
+                    mapId,
+                    new NativeXyz(from),
+                    new NativeXyz(to),
+                    agentRadius,
+                    agentHeight,
+                    out var resolvedEndZ,
+                    out _,
+                    out _);
+
+                var effectiveEnd = validation == SegmentValidationCode.Clear && float.IsFinite(resolvedEndZ)
+                    ? new XYZ(to.X, to.Y, resolvedEndZ)
+                    : to;
+
+                var reason = validation switch
+                {
+                    SegmentValidationCode.Clear => SegmentBlockReason.None,
+                    SegmentValidationCode.BlockedGeometry => SegmentBlockReason.CapsuleValidation,
+                    SegmentValidationCode.MissingSupport => SegmentBlockReason.None,
+                    SegmentValidationCode.StepUpTooHigh => SegmentBlockReason.StepUpLimit,
+                    SegmentValidationCode.StepDownTooFar => SegmentBlockReason.StepDownLimit,
+                    _ => SegmentBlockReason.None,
+                };
+
+                return new SegmentEvaluation(effectiveEnd, reason);
+            }
+            catch
+            {
+                return new SegmentEvaluation(to, SegmentBlockReason.None);
             }
         }
 

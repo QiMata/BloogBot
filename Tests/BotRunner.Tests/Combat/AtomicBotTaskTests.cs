@@ -41,8 +41,10 @@ internal static class AtomicTaskTestHelpers
                 It.IsAny<Position>(),
                 It.IsAny<Position>(),
                 It.IsAny<IReadOnlyList<DynamicObjectProto>>(),
-                It.IsAny<bool>()))
-            .Returns((uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath) =>
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns((uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath, Race race, Gender gender) =>
             [
                 new Position(start.X, start.Y, start.Z),
                 new Position(end.X, end.Y, end.Z)

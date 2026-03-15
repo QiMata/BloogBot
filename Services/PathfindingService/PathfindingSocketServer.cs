@@ -245,13 +245,24 @@ namespace PathfindingService
                     req.NearbyObjects.Count);
             }
 
+            // Resolve agent capsule dimensions from race/gender for accurate path validation.
+            // Proto fields default to 0; when unset, use Navigation's built-in defaults (0.6m/2.0m).
+            var agentRadius = 0.6f;
+            var agentHeight = 2.0f;
+            if (req.Race != 0)
+            {
+                var (r, h) = RaceDimensions.GetCapsuleForRace((Race)req.Race, (Gender)req.Gender);
+                agentRadius = r;
+                agentHeight = h;
+            }
+
             OverlayExecutionResult<NavigationPathResult> overlayResult;
             try
             {
                 overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
                     req.MapId,
                     req.NearbyObjects,
-                    () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight),
+                    () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight),
                     logger,
                     operationName: "path");
             }

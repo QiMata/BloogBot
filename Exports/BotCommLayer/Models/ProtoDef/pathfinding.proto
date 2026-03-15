@@ -55,6 +55,8 @@ message CalculatePathRequest {
     game.Position end = 3;
     bool straight = 4;  // semantics: smoothPath flag (true = Detour smooth path, false = straight line)
     repeated DynamicObjectProto nearby_objects = 5;
+    uint32 race = 6;    // Race enum for capsule radius lookup (0 = use default 0.6m)
+    uint32 gender = 7;  // Gender enum for capsule height lookup (0 = use default 2.0m)
 }
 
 message CalculatePathResponse {

@@ -1,6 +1,7 @@
 using BotRunner.Combat;
 using BotRunner.Movement;
 using BotRunner.Clients;
+using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
@@ -269,7 +270,7 @@ namespace BotRunner.Tests
         private readonly Position[] _path = path;
 
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
-        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false) => _path;
+        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0) => _path;
 
         public override bool IsInLineOfSight(uint mapId, Position from, Position to) => true;
 
@@ -282,6 +283,6 @@ namespace BotRunner.Tests
         private readonly Position[] _path = path;
 
         public override Position[] GetPath(uint mapId, Position start, Position end, bool smoothPath = false) => _path;
-        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false) => _path;
+        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0) => _path;
     }
 }

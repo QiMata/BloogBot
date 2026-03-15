@@ -1,4 +1,5 @@
 using BotRunner.Clients;
+using GameData.Core.Enums;
 using GameData.Core.Models;
 using Pathfinding;
 using System.Collections.Generic;
@@ -159,7 +160,9 @@ public class NavigationPath(
     bool strictPathValidation = false,
     float capsuleRadius = 0.6f,
     float capsuleHeight = 2.5f,
-    Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? nearbyObjectProvider = null)
+    Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? nearbyObjectProvider = null,
+    Race race = 0,
+    Gender gender = 0)
 {
     private readonly PathfindingClient? _pathfinding = pathfinding;
     private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
@@ -169,6 +172,8 @@ public class NavigationPath(
     private readonly float _capsuleRadius = capsuleRadius;
     private readonly float _capsuleHeight = capsuleHeight;
     private readonly Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? _nearbyObjectProvider = nearbyObjectProvider;
+    private readonly Race _race = race;
+    private readonly Gender _gender = gender;
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
     private int _currentIndex;
@@ -1064,8 +1069,8 @@ public class NavigationPath(
         var nearbyObjectCount = nearbyObjects?.Count ?? 0;
 
         var rawPath = usedNearbyObjectOverlay
-            ? _pathfinding.GetPath(mapId, start, end, nearbyObjects, smoothPath)
-            : _pathfinding.GetPath(mapId, start, end, smoothPath);
+            ? _pathfinding.GetPath(mapId, start, end, nearbyObjects, smoothPath, _race, _gender)
+            : _pathfinding.GetPath(mapId, start, end, nearbyObjects: null, smoothPath, _race, _gender);
         var sanitizedPath = SanitizePath(rawPath);
         var prunedPath = _enableProbeHeuristics
             ? PruneProbeWaypoints(start, sanitizedPath)

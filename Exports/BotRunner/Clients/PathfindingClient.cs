@@ -68,7 +68,9 @@ namespace BotRunner.Clients
             Position start,
             Position end,
             IReadOnlyList<DynamicObjectProto>? nearbyObjects,
-            bool smoothPath = false)
+            bool smoothPath = false,
+            Race race = 0,
+            Gender gender = 0)
         {
             var request = new PathfindingRequest
             {
@@ -77,7 +79,9 @@ namespace BotRunner.Clients
                     MapId = mapId,
                     Start = ToProto(start),
                     End = ToProto(end),
-                    Straight = smoothPath
+                    Straight = smoothPath,
+                    Race = (uint)race,
+                    Gender = (uint)gender,
                 }
             };
             if (nearbyObjects is { Count: > 0 })

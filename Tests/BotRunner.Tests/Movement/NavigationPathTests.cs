@@ -1,5 +1,6 @@
 using BotRunner.Clients;
 using BotRunner.Movement;
+using GameData.Core.Enums;
 using GameData.Core.Models;
 using Pathfinding;
 using System.Collections.Generic;
@@ -934,8 +935,10 @@ public class NavigationPathTests
             allowDirectFallback: false);
 
         Assert.NotNull(waypoint);
-        Assert.Equal(0, pathfinding.OverlayGetPathCalls);
-        Assert.Equal(1, pathfinding.LegacyGetPathCalls);
+        // Both overlay and legacy paths now route through the full GetPath overload
+        // (with race/gender params) so nearby objects is passed as null
+        Assert.Equal(1, pathfinding.OverlayGetPathCalls);
+        Assert.Equal(0, pathfinding.LegacyGetPathCalls);
         Assert.Null(pathfinding.LastNearbyObjects);
     }
 
@@ -1070,7 +1073,7 @@ public class NavigationPathTests
             return _getPath(mapId, start, end, smoothPath);
         }
 
-        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false)
+        public override Position[] GetPath(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0)
         {
             OverlayGetPathCalls++;
             LastNearbyObjects = nearbyObjects?.ToArray();
