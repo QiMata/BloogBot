@@ -254,6 +254,33 @@ namespace ForegroundBotRunner.Mem
                 Log.Warning("[FG] UseItem SEH exception for ptr 0x{Ptr:X}", itemPtr);
         }
 
+        [DllImport("FastCall.dll", EntryPoint = "ClickToMoveSafe")]
+        private static extern unsafe int ClickToMoveSafeFunction(
+            nint playerBase, int action, ulong* guidPtr, float* posPtr, float precision, nint funcPtr);
+
+        /// <summary>
+        /// Invokes WoW's CGPlayer_C::ClickToMove to navigate to a world position.
+        /// CTM uses the client's built-in micro-pathfinding to navigate around terrain obstacles.
+        /// </summary>
+        static public unsafe void ClickToMove(nint playerBase, float x, float y, float z, float precision = 1.5f)
+        {
+            float* pos = stackalloc float[3];
+            pos[0] = x;
+            pos[1] = y;
+            pos[2] = z;
+            if (ClickToMoveSafeFunction(playerBase, 4, null, pos, precision, MemoryAddresses.ClickToMoveFunPtr) == 0)
+                Log.Warning("[FG] ClickToMove SEH exception — skipping");
+        }
+
+        /// <summary>
+        /// Stops any active ClickToMove navigation.
+        /// </summary>
+        static public unsafe void ClickToMoveStop(nint playerBase)
+        {
+            if (ClickToMoveSafeFunction(playerBase, 0xD, null, null, 0f, MemoryAddresses.ClickToMoveFunPtr) == 0)
+                Log.Warning("[FG] ClickToMoveStop SEH exception — skipping");
+        }
+
         private static string GetRandomLuaVarName()
         {
             const string chars = "abcdefghijklmnopqrstuvwxyz";

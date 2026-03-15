@@ -89,7 +89,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private const int RunbackNoDisplacementThreshold = 8;
     private const int RunbackNoIntentDisplacementThreshold = 12;
     private const int RunbackStaleForwardThreshold = 6;
-    private const int MaxRunbackRecoveryAttempts = 4;
+    private const int MaxRunbackRecoveryAttempts = 6;
     private const int TraceSummaryWaypointLimit = 4;
     private const int TraceSummarySampleLimit = 3;
 
@@ -398,19 +398,26 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         _lastDrivenWaypoint = null;
         _runbackRecoveryHoldUntilUtc = now + RunbackRecoveryHold;
 
-        // On 2nd+ recovery: jump + backward step to break server-side collision.
-        // FG (injected client) has server-authoritative movement. When stuck at a collision
-        // point, ForceStopImmediate only clears local control bits — the server position
-        // doesn't budge (step=0.0). A jump creates vertical displacement that can push the
-        // character past the collision plane. A backward step shifts the XY position away
-        // from the wall. Together, these give the rebuilt path a new starting position.
-        // For BG, the jump/back adds physics variation that helps path diversity.
-        if (_runbackRecoveryCount >= 2)
+        // Escalating recovery strategies to break collision deadlocks:
+        // 1st: just clear path and replan (default above)
+        // 2nd: jump + backward step to break server-side collision
+        // 3rd+: alternate strafe direction + jump to escape lateral terrain snags
+        if (_runbackRecoveryCount == 2)
         {
             ObjectManager.Turn180();
             ObjectManager.StartMovement(ControlBits.Front | ControlBits.Jump);
             _runbackRecoveryHoldUntilUtc = now + TimeSpan.FromMilliseconds(2500);
             Log.Information("[RETRIEVE_CORPSE] Stall recovery #{Attempt}: jump+backward to break collision deadlock", _runbackRecoveryCount);
+        }
+        else if (_runbackRecoveryCount >= 3)
+        {
+            // Alternate strafe left/right on odd/even attempts to escape lateral terrain snags.
+            var strafeLeft = _runbackRecoveryCount % 2 != 0;
+            var strafeBit = strafeLeft ? ControlBits.StrafeLeft : ControlBits.StrafeRight;
+            ObjectManager.StartMovement(strafeBit | ControlBits.Jump);
+            _runbackRecoveryHoldUntilUtc = now + TimeSpan.FromMilliseconds(2000);
+            Log.Information("[RETRIEVE_CORPSE] Stall recovery #{Attempt}: {Direction}+jump to escape terrain snag",
+                _runbackRecoveryCount, strafeLeft ? "strafe-left" : "strafe-right");
         }
 
         Log.Warning("[RETRIEVE_CORPSE] Runback stall recovery #{Attempt}: {Reason} (distance2D={Distance2D:F1}) trace={Trace}. Cleared movement and rebuilding path.",

@@ -62,10 +62,15 @@ namespace ForegroundBotRunner.Statics
                 return;
 
             ThreadSynchronizer.RunOnMainThread(() =>
-                Functions.SendMovementUpdate(localPlayer.Pointer, (int)Opcode.MSG_MOVE_STOP));
+            {
+                // Cancel any active ClickToMove navigation, then send MSG_MOVE_STOP.
+                Functions.ClickToMoveStop(localPlayer.Pointer);
+                Functions.SendMovementUpdate(localPlayer.Pointer, (int)Opcode.MSG_MOVE_STOP);
+                return 0;
+            });
 
-            Log.Information("[ForceStopImmediate] Cleared all movement flags and sent MSG_MOVE_STOP");
-            DiagLog("[ForceStopImmediate] Cleared all movement flags and sent MSG_MOVE_STOP");
+            Log.Information("[ForceStopImmediate] Cleared all movement flags, cancelled CTM, and sent MSG_MOVE_STOP");
+            DiagLog("[ForceStopImmediate] Cleared all movement flags, cancelled CTM, and sent MSG_MOVE_STOP");
         }
 
 
@@ -246,8 +251,17 @@ namespace ForegroundBotRunner.Statics
 
         public void MoveToward(Position pos)
         {
-            Face(pos);
-            StartMovement(ControlBits.Front);
+            if (pos == null || Player is not LocalPlayer localPlayer || localPlayer.Pointer == nint.Zero)
+                return;
+
+            // Use ClickToMove for terrain-aware navigation. CTM uses WoW's built-in
+            // micro-pathfinding to navigate around small terrain obstacles that raw
+            // SetControlBit(Forward) gets stuck on. Precision 1.5y = stop when close.
+            ThreadSynchronizer.RunOnMainThread(() =>
+            {
+                Functions.ClickToMove(localPlayer.Pointer, pos.X, pos.Y, pos.Z, 1.5f);
+                return 0;
+            });
         }
 
 
