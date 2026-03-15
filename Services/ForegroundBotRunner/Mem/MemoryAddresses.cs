@@ -27,7 +27,7 @@
         public static int SellItemByGuidFunPtr = 0x005E1D50;
         public static int BuyVendorItemFunPtr = 0x005E1E90;
         public static int CastAtPositionFunPtr = 0x006E60F0;
-        public static int ClickToMoveFunPtr = 0x00611130;
+        // ClickToMove (0x00611130) is FORBIDDEN — does not work for ghost players.
 
         // Statics
         public static int ZoneTextPtr = 0x00B4B404;

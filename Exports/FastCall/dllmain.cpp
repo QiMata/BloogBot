@@ -404,27 +404,8 @@ extern "C"
         }
     }
 
-    // WoW's CGPlayer_C::ClickToMove — thiscall(playerBase, action, guidPtr, posPtr, precision).
-    // action: 4=MoveToPosition, 5=NpcInteract, 0xD=Stop.
-    // guidPtr can be NULL for move-to-position. posPtr points to float[3] {X,Y,Z}.
-    int __declspec(dllexport) __stdcall ClickToMoveSafe(
-        unsigned int parPlayerBase, int parAction,
-        unsigned long long* parGuidPtr, float* parPos, float parPrecision,
-        unsigned int parFuncPtr)
-    {
-        __try
-        {
-            typedef void (__thiscall *func)(unsigned int thisPtr, int action,
-                unsigned long long* guidPtr, float* pos, float precision);
-            func f = (func)parFuncPtr;
-            f(parPlayerBase, parAction, parGuidPtr, parPos, parPrecision);
-            return 1;
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
-            return 0;
-        }
-    }
+    // NOTE: ClickToMove (CTM) was removed — it does not work for ghost players,
+    // breaking corpse runs. Use SetFacing + SetControlBit(Front) for all FG movement.
 
     // ====================================================================
     // Generic SEH-protected callback wrappers for .NET 8 managed delegates.
