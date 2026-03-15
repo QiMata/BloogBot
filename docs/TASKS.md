@@ -1,4 +1,4 @@
-# Master Tasks
+﻿# Master Tasks
 
 ## Role
 - `docs/TASKS.md` is the master coordination list for all local `TASKS.md` files.
@@ -33,7 +33,7 @@ All 5 phases done across sessions 48-52. See `docs/BAD_TEST_BEHAVIORS.md` for fu
 
 ## P0A - Live Integration Test Overhaul (IN PROGRESS)
 
-**Rationale:** The live suite needs to move away from setup validation and raw action dispatches toward BG-first, task-driven behavior coverage with sharper snapshot metrics. FG remains the packet/timing reference, but the test surface must primarily validate BG behavior because that is where our logic actually runs.
+**Rationale:** The live suite needs to move away from setup validation and raw action dispatches toward BG-first, task-driven behavior coverage with sharper snapshot metrics. FG remains the packet/timing reference.
 
 | # | Task | Owner | Status |
 |---|------|-------|--------|

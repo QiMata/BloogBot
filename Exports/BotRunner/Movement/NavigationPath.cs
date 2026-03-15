@@ -367,10 +367,10 @@ public class NavigationPath(
                 fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
         }
 
-        var waypointDistance = currentPosition.DistanceTo(waypoint);
+        var waypointDistance = currentPosition.DistanceTo2D(waypoint);
         if (_currentIndex >= _waypoints.Length)
         {
-            if (currentPosition.DistanceTo(destination) > WAYPOINT_REACH_DISTANCE)
+            if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
                 CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
             if (_currentIndex >= _waypoints.Length)
             {
@@ -420,7 +420,7 @@ public class NavigationPath(
 
                 if (_currentIndex >= _waypoints.Length)
                 {
-                    if (currentPosition.DistanceTo(destination) > WAYPOINT_REACH_DISTANCE)
+                    if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
                         CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
                     if (_currentIndex >= _waypoints.Length)
                     {
@@ -435,7 +435,7 @@ public class NavigationPath(
                 }
 
                 waypoint = _waypoints[_currentIndex];
-                waypointDistance = currentPosition.DistanceTo(waypoint);
+                waypointDistance = currentPosition.DistanceTo2D(waypoint);
             }
         }
         else
@@ -462,7 +462,10 @@ public class NavigationPath(
                 ? MathF.Max(_waypointAcceptanceRadii[_currentIndex], minWaypointDistance)
                 : MathF.Max(WAYPOINT_REACH_DISTANCE, minWaypointDistance);
 
-            var distanceToWaypoint = currentPosition.DistanceTo(_waypoints[_currentIndex]);
+            // Use 2D distance for waypoint advancement. Navmesh Z values are approximate
+            // and can differ from actual terrain by several yards. Using 3D distance causes
+            // the bot to circle around waypoints it's already standing on top of.
+            var distanceToWaypoint = currentPosition.DistanceTo2D(_waypoints[_currentIndex]);
             if (distanceToWaypoint >= effectiveRadius)
                 break;
 
@@ -481,28 +484,60 @@ public class NavigationPath(
             Metrics.IncrementWaypointsReached();
         }
 
+        // Look-ahead skip: if we overshot the current waypoint and are closer (2D) to
+        // a later waypoint, jump ahead. This prevents the bot from doubling back to a
+        // waypoint it already passed. Common when navmesh Z is inaccurate and the bot
+        // walks over the waypoint without triggering the radius check.
+        if (_currentIndex < _waypoints.Length - 1)
+        {
+            var distToCurrent = currentPosition.DistanceTo2D(_waypoints[_currentIndex]);
+            var bestIndex = _currentIndex;
+            var bestDist = distToCurrent;
+
+            for (int i = _currentIndex + 1; i < _waypoints.Length; i++)
+            {
+                var d = currentPosition.DistanceTo2D(_waypoints[i]);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    bestIndex = i;
+                }
+            }
+
+            if (bestIndex > _currentIndex)
+            {
+                var skipped = bestIndex - _currentIndex;
+                _currentIndex = bestIndex;
+                for (int s = 0; s < skipped; s++)
+                    Metrics.IncrementWaypointsReached();
+            }
+        }
+
         // After reaching the current waypoint, try to skip further ahead via LOS.
         if (_enableDynamicProbeSkipping && !_strictPathValidation && _currentIndex < _waypoints.Length)
             TryLosSkipAhead(currentPosition, mapId);
     }
 
-    private bool CanAdvanceToNextWaypoint(Position currentPosition, uint mapId, float distanceToCurrentWaypoint)
+    private bool CanAdvanceToNextWaypoint(Position currentPosition, uint mapId, float distanceToCurrentWaypoint2D)
     {
         if (_currentIndex + 1 >= _waypoints.Length)
             return true;
 
-        // Use waypoint's acceptance radius as commit distance (already scaled for corners).
+        // In non-strict mode, always advance once within the effective radius (caller already
+        // checked effectiveRadius). The old commitDistance check was stricter than effectiveRadius,
+        // causing the bot to get stuck at waypoints it had clearly reached (especially when
+        // navmesh Z differs from terrain Z).
+        if (!_strictPathValidation)
+            return true;
+
+        // Strict mode: use the tighter acceptance radius as commit distance and require LOS.
         var commitDistance = _waypointAcceptanceRadii.Length > _currentIndex
             ? _waypointAcceptanceRadii[_currentIndex]
             : CORNER_COMMIT_DISTANCE;
 
-        if (distanceToCurrentWaypoint > commitDistance)
+        if (distanceToCurrentWaypoint2D > commitDistance)
             return false;
 
-        if (!_strictPathValidation)
-            return true;
-
-        // Strict mode keeps corner adherence unless the immediate next waypoint is visible.
         return TryGetLineOfSight(currentPosition, _waypoints[_currentIndex + 1], mapId, out var nextWaypointVisible)
             && nextWaypointVisible;
     }

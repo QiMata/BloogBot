@@ -62,6 +62,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private DateTime _lastRunbackWaypointProgressUtc = DateTime.MinValue;
     private Position? _lastDrivenWaypoint;
     private DateTime _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
+    private DateTime _lastTickDiagUtc = DateTime.MinValue;
 
     // MaNGOS CORPSE_RECLAIM_RADIUS = 39y (3D distance). We compute a dynamic 2D
     // approach distance from the current Z delta so the bot walks close enough in
@@ -445,6 +446,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         var player = ObjectManager.Player;
         if (player?.Position == null)
         {
+            BotRunnerService.DiagLog($"[RETRIEVE_CORPSE] Update: PlayerUnavailable player={player != null} pos={player?.Position != null}");
             PopTask("PlayerUnavailable");
             return;
         }
@@ -462,6 +464,14 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         var corpseHorizontalDistance = player.Position.DistanceTo2D(corpsePosition);
         var corpseDeltaZ = MathF.Abs(player.Position.Z - corpsePosition.Z);
         var corpseNavTarget = BuildCorpseNavigationTarget(player.Position, corpsePosition);
+
+        if (DateTime.UtcNow - _lastTickDiagUtc >= TimeSpan.FromSeconds(3))
+        {
+            var isGhostNow = IsGhostState(player);
+            BotRunnerService.DiagLog(
+                $"[RETRIEVE_CORPSE] tick pos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1}) corpse=({corpsePosition.X:F1},{corpsePosition.Y:F1},{corpsePosition.Z:F1}) dist2D={corpseHorizontalDistance:F1} zDelta={corpseDeltaZ:F1} ghost={isGhostNow} hp={player.Health}/{player.MaxHealth} flags=0x{(uint)player.PlayerFlags:X} noPath={_noPathSinceUtc != null} elapsed={(DateTime.UtcNow - _startTime).TotalSeconds:F0}s");
+            _lastTickDiagUtc = DateTime.UtcNow;
+        }
 
         // Dynamic 2D approach range: solve for max 2D dist such that 3D dist < (39 - 5) = 34y.
         // In flat terrain (zDelta≈0) this yields ~34y. In Orgrimmar (zDelta≈22y) → ~25y.
@@ -546,6 +556,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
                 var trace = _navPath.TraceSnapshot;
                 Log.Information("[RETRIEVE_CORPSE] Driving path waypoint ({X:F1}, {Y:F1}, {Z:F1}) waypointDist={WaypointDist:F1} corpseDist2D={CorpseDist2D:F1} plan={Plan} idx={Index} reason={Reason}",
                     waypoint.X, waypoint.Y, waypoint.Z, waypointDistance, corpseHorizontalDistance, trace.PlanVersion, trace.CurrentWaypointIndex, trace.LastReplanReason ?? "none");
+                BotRunnerService.DiagLog(
+                    $"[RETRIEVE_CORPSE] waypoint=({waypoint.X:F1},{waypoint.Y:F1},{waypoint.Z:F1}) wpDist={waypointDistance:F1} corpse2D={corpseHorizontalDistance:F1} plan={trace.PlanVersion} idx={trace.CurrentWaypointIndex} facing={player.Facing:F3} reason={trace.LastReplanReason ?? "none"}");
                 _lastWaypointDriveLogUtc = now;
             }
 
@@ -557,6 +569,8 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
             TrackDrivenWaypoint(waypoint);
             // Drive the active waypoint continuously; MoveToward already normalizes direction flags.
+            BotRunnerService.DiagLog(
+                $"[RETRIEVE_CORPSE] MoveToward wp=({waypoint.X:F1},{waypoint.Y:F1},{waypoint.Z:F1}) from=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1}) facing={player.Facing:F3}");
             ObjectManager.MoveToward(waypoint);
             return;
         }

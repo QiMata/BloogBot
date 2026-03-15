@@ -487,17 +487,22 @@ namespace BotRunner
                         builder.Do("Retrieve Corpse", time =>
                         {
                             var player = _objectManager.Player;
+                            DiagLog($"[RETRIEVE_DIAG] player={player != null} playerFlags=0x{(player != null ? (uint)player.PlayerFlags : 0u):X} hp={player?.Health ?? -1u}/{player?.MaxHealth ?? -1u}");
                             if (player != null)
                             {
-                                if (IsGhostState(player))
+                                var ghostResult = IsGhostState(player);
+                                DiagLog($"[RETRIEVE_DIAG] IsGhostState={ghostResult} HasGhostFlag={HasGhostFlag(player)}");
+                                if (ghostResult)
                                 {
                                     var corpsePos = player.CorpsePosition;
+                                    DiagLog($"[RETRIEVE_DIAG] corpsePos=({corpsePos?.X:F1},{corpsePos?.Y:F1},{corpsePos?.Z:F1})");
                                     if (IsZeroPosition(corpsePos) && _lastKnownAlivePosition != null)
                                     {
                                         corpsePos = new GameData.Core.Models.Position(
                                             _lastKnownAlivePosition.X,
                                             _lastKnownAlivePosition.Y,
                                             _lastKnownAlivePosition.Z);
+                                        DiagLog($"[RETRIEVE_DIAG] using fallback corpsePos=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
                                     }
 
                                     if (corpsePos.X != 0 || corpsePos.Y != 0 || corpsePos.Z != 0)
@@ -506,9 +511,18 @@ namespace BotRunner
                                         {
                                             Log.Information("[BOT RUNNER] Queueing pathfinding corpse run to ({X:F0}, {Y:F0}, {Z:F0})",
                                                 corpsePos.X, corpsePos.Y, corpsePos.Z);
+                                            DiagLog($"[RETRIEVE_DIAG] PUSHING RetrieveCorpseTask corpse=({corpsePos.X:F1},{corpsePos.Y:F1},{corpsePos.Z:F1})");
                                             _botTasks.Push(new Tasks.RetrieveCorpseTask(context, corpsePos));
                                         }
+                                        else
+                                        {
+                                            DiagLog("[RETRIEVE_DIAG] RetrieveCorpseTask already on stack");
+                                        }
                                         return BehaviourTreeStatus.Success;
+                                    }
+                                    else
+                                    {
+                                        DiagLog("[RETRIEVE_DIAG] corpsePos is ZERO, skipping task push");
                                     }
                                 }
 
@@ -516,11 +530,13 @@ namespace BotRunner
                                 if (reclaimDelay > 0)
                                 {
                                     Log.Information("[BOT RUNNER] Corpse reclaim cooldown active ({Seconds}s remaining); waiting.", reclaimDelay);
+                                    DiagLog($"[RETRIEVE_DIAG] reclaimDelay={reclaimDelay}s — NOT pushing task");
                                     return BehaviourTreeStatus.Success;
                                 }
                             }
 
                             Log.Information("[BOT RUNNER] Retrieving corpse (CMSG_RECLAIM_CORPSE direct)");
+                            DiagLog("[RETRIEVE_DIAG] fallthrough to direct RetrieveCorpse()");
                             _objectManager.RetrieveCorpse();
                             return BehaviourTreeStatus.Success;
                         });

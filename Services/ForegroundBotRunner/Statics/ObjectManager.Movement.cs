@@ -26,13 +26,24 @@ namespace ForegroundBotRunner.Statics
         }
 
 
+        private DateTime _lastSetFacingDiagUtc = DateTime.MinValue;
+
         public void SetFacing(float facing)
         {
             if (Player is not LocalPlayer localPlayer || localPlayer.Pointer == nint.Zero)
+            {
+                DiagLog($"[SetFacing] BAIL: Player={Player != null}, Pointer={((Player as LocalPlayer)?.Pointer ?? nint.Zero)}");
                 return;
+            }
 
             Functions.SetFacing(nint.Add(localPlayer.Pointer, MemoryAddresses.LocalPlayer_SetFacingOffset), facing);
             Functions.SendMovementUpdate(localPlayer.Pointer, (int)Opcode.MSG_MOVE_SET_FACING);
+
+            if ((DateTime.UtcNow - _lastSetFacingDiagUtc).TotalSeconds >= 2)
+            {
+                DiagLog($"[SetFacing] facing={facing:F3} hp={localPlayer.Health}/{localPlayer.MaxHealth}");
+                _lastSetFacingDiagUtc = DateTime.UtcNow;
+            }
         }
         // the client will NOT send a packet to the server if a key is already pressed, so you're safe to spam this
         public void StartMovement(ControlBits bits)
@@ -97,7 +108,12 @@ namespace ForegroundBotRunner.Statics
         {
             if (Player is not LocalPlayer localPlayer || localPlayer.Pointer == nint.Zero)
                 return;
-            Functions.ReleaseCorpse(localPlayer.Pointer);
+            var ptr = localPlayer.Pointer;
+            ThreadSynchronizer.RunOnMainThread(() =>
+            {
+                Functions.ReleaseCorpse(ptr);
+                return 0;
+            });
         }
 
 
@@ -165,8 +181,12 @@ namespace ForegroundBotRunner.Statics
                 return;
             }
 
-            // If we're already turning toward a different position, reset
-            if (_turning && pos != _turningToward)
+            // If we're already turning toward a different position, reset.
+            // Position is a reference type without operator== overrides, so compare values.
+            if (_turning && _turningToward != null
+                && (MathF.Abs(pos.X - _turningToward.X) > 0.01f
+                    || MathF.Abs(pos.Y - _turningToward.Y) > 0.01f
+                    || MathF.Abs(pos.Z - _turningToward.Z) > 0.01f))
             {
                 ResetFacingState();
                 return;
@@ -250,10 +270,21 @@ namespace ForegroundBotRunner.Statics
         public void MoveToward(Position pos)
         {
             if (pos == null || Player == null)
+            {
+                DiagLog($"[MoveToward] BAIL: pos={pos != null}, Player={Player != null}");
+                return;
+            }
+
+            if (Player is not LocalPlayer localPlayer || localPlayer.Pointer == nint.Zero)
                 return;
 
-            Face(pos);
+            // Snap-face to target and start moving forward. Direct native calls (no
+            // ThreadSync) to avoid ManualResetEventSlim heap pressure in the injected
+            // runtime — this is called every 100ms tick during active movement.
+            var requiredFacing = Player.GetFacingForPosition(pos);
+            SetFacing(requiredFacing);
             StartMovement(ControlBits.Front);
+            ResetFacingState();
         }
 
 

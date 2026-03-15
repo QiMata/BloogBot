@@ -110,6 +110,7 @@ public abstract class BotTask(IBotContext botContext)
 
         var top = BotTasks.Peek();
         BotContext.AddDiagnosticMessage($"[TASK] {top.GetType().Name} pop reason={reason}");
+        BotRunnerService.DiagLog($"[TASK-POP] task={top.GetType().Name} reason={reason} remaining={BotTasks.Count - 1}");
         BotTasks.Pop();
         Log.Information("[TASK-POP] task={Task} reason={Reason} remaining={Remaining}",
             top.GetType().Name, reason, BotTasks.Count);

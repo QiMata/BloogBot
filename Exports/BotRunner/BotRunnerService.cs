@@ -1,4 +1,4 @@
-﻿using BotRunner.Clients;
+using BotRunner.Clients;
 using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
@@ -33,13 +33,19 @@ namespace BotRunner
         private int _lastLoggedContainedItems = -1;
         private int _lastLoggedItemObjects = -1;
 
-        // Message buffers â€” collected from IWoWEventHandler events, flushed to snapshot each tick
+        // Message buffers — collected from IWoWEventHandler events, flushed to snapshot each tick
         private readonly Queue<string> _recentChatMessages = new();
         private readonly Queue<string> _recentErrors = new();
         private const int MaxBufferedMessages = 50;
 
-        // DiagLog kept as no-op stub so callers across the codebase still compile.
-        internal static void DiagLog(string msg) { }
+        // DiagLog writes to file and Serilog. FG context lacks Serilog global config.
+        private static readonly string _diagLogPath = System.IO.Path.Combine(
+            AppContext.BaseDirectory, "botrunner_diag.log");
+        internal static void DiagLog(string msg)
+        {
+            Log.Information("[DIAG] {Msg}", msg);
+            try { System.IO.File.AppendAllText(_diagLogPath, $"[{DateTime.UtcNow:HH:mm:ss.fff}] {msg}\n"); } catch { }
+        }
 
         private Task? _asyncBotTaskRunnerTask;
         private CancellationTokenSource? _cts;
@@ -52,7 +58,7 @@ namespace BotRunner
         private DateTime _spellCastLockoutUntil = DateTime.MinValue;
         private const double SpellCastLockoutSeconds = 20.0;
 
-        // Action dispatch correlation: stable token linking receive → dispatch → completion logs.
+        // Action dispatch correlation: stable token linking receive ? dispatch ? completion logs.
         private string _currentActionCorrelationId = "";
         private long _actionSequenceNumber;
 
@@ -188,7 +194,7 @@ namespace BotRunner
 
         private void UpdateBehaviorTree(WoWActivitySnapshot incomingActivityMemberState)
         {
-            // Check for new incoming actions FIRST â€” they can interrupt a running tree
+            // Check for new incoming actions FIRST — they can interrupt a running tree
             var playerWorldReady = _objectManager.HasEnteredWorld
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
@@ -201,6 +207,12 @@ namespace BotRunner
                     $"(HasEnteredWorld={_objectManager.HasEnteredWorld}, " +
                     $"Player={p != null}, Guid={p?.Guid ?? 0}, Pos={p?.Position != null}, MaxHP={p?.MaxHealth ?? 0}) " +
                     $"action={incomingActivityMemberState.CurrentAction.ActionType}");
+            }
+
+            if (incomingActivityMemberState.CurrentAction != null
+                && incomingActivityMemberState.CurrentAction.ActionType == Communication.ActionType.RetrieveCorpse)
+            {
+                DiagLog($"[TICK-DIAG] RetrieveCorpse action received. playerWorldReady={playerWorldReady} taskCount={_botTasks.Count} treeStatus={_behaviorTreeStatus}");
             }
 
             if (playerWorldReady
@@ -242,7 +254,7 @@ namespace BotRunner
                 return;
             }
 
-            // Already in world â€” skip all login/charselect checks and go straight to InWorld handling.
+            // Already in world — skip all login/charselect checks and go straight to InWorld handling.
             // Without this guard, ICharacterSelectScreen implementations that return HasReceivedCharacterList=false
             // when InWorld (e.g., FG's FgCharacterSelectScreen) cause an early return before InitializeTaskSequence.
             if (_objectManager.HasEnteredWorld)
@@ -273,14 +285,14 @@ namespace BotRunner
                 var loginScreen = _objectManager.LoginScreen;
                 if (loginScreen != null && loginScreen.IsOpen)
                 {
-                    // Explicit logout detected — allow re-login
+                    // Explicit logout detected � allow re-login
                     Log.Information("[BOT RUNNER] Explicit logout detected, resetting world entry state");
                     _everEnteredWorld = false;
                     _tasksInitialized = false;
                 }
                 else
                 {
-                    // Transient state drop — wait for HasEnteredWorld to recover
+                    // Transient state drop � wait for HasEnteredWorld to recover
                     return;
                 }
             }
@@ -330,7 +342,7 @@ namespace BotRunner
                 return;
             }
 
-            // Not yet in world â€” build EnterWorld sequence
+            // Not yet in world — build EnterWorld sequence
             _behaviorTree = BuildEnterWorldSequence(_objectManager.CharacterSelectScreen?.CharacterSelects[0].Guid ?? 0);
         }
 
@@ -390,7 +402,7 @@ namespace BotRunner
                 return;
             }
 
-            // Ghost form â€” navigate to corpse and resurrect
+            // Ghost form — navigate to corpse and resurrect
             if (isGhost)
             {
                 if (!_autoRetrieveCorpseTaskEnabled)
