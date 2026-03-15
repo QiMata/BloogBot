@@ -209,10 +209,13 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
      - Implemented FG CollectAllMailAsync via Lua (right-click mailbox, GetInboxHeaderInfo, TakeInboxMoney/Item)
   4. **Updated Mail_OpenMailbox test** — Sends gold via SOAP, dispatches CHECK_MAIL, asserts coinage increased
   5. **Sent gold to all 3 bot characters** (Testgrunt, Lokgaka, Shanaka) — 10000 copper each via SOAP `.send money`
-- **Test results:** Running trainer, mail, and corpse run tests — awaiting results.
+- **Test results:**
+  - **Mail_OpenMailbox: PASS** — BG collected 7 mails (65000 copper delta). Fixed: CMSG_GAMEOBJ_USE (was CMSG_GOSSIP_HELLO), poll-based SMSG wait, type-based mailbox detection (GameObjectType=19). FG coinage assertion skipped (stub).
+  - **Trainer_LearnAvailableSpells: PASS** — FG learned Battle Shout through trainer (spells 214→228). VisitTrainer task handles full NPC interaction without GM commands.
+  - **DeathCorpseRunTests: 1 PASS (BG), 1 FAIL (FG)** — FG ghost didn't move (bestDist=152y = starting distance). RetrieveCorpse action didn't reach FG bot in time — separate issue from terrain collision. CTM fix is for movement quality, not action dispatch.
 - **Trainer test verification:** `Trainer_LearnAvailableSpells` already uses `ActionType.VisitTrainer` (task-driven). No GM `.learn` in test flow. Setup-only GM commands (.modify money, .character level, .unlearn) are correct per test architecture.
 - **Next:**
-  1. Verify test results (corpse run with CTM, mail collection, trainer)
+  1. FG corpse run: investigate why RetrieveCorpse action doesn't reach FG bot (action dispatch/timing issue)
   2. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
   3. P7 remaining items (shoreline route hardening, object-aware paths)
 
