@@ -478,9 +478,35 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 SetOperationInProgress(true);
                 await OpenMailboxAsync(mailboxGuid, cancellationToken);
-                await Task.Delay(100, cancellationToken);
+                await Task.Delay(200, cancellationToken);
                 await GetMailListAsync(cancellationToken);
-                await Task.Delay(100, cancellationToken);
+                await Task.Delay(500, cancellationToken); // wait for SMSG_MAIL_LIST_RESULT parse
+
+                // Take money and items from each mail in the cache
+                List<MailInfo> snapshot;
+                lock (_stateLock)
+                {
+                    snapshot = new List<MailInfo>(_mailbox);
+                }
+
+                foreach (var mail in snapshot)
+                {
+                    if (mail.Money > 0)
+                    {
+                        _logger.LogInformation("Taking {Money} copper from mail {MailId}", mail.Money, mail.MailId);
+                        await TakeMoneyFromMailAsync(mail.MailId, cancellationToken);
+                        await Task.Delay(200, cancellationToken);
+                    }
+
+                    if (mail.Attachments is { Length: > 0 })
+                    {
+                        _logger.LogInformation("Taking item from mail {MailId} (itemId={ItemId})",
+                            mail.MailId, mail.Attachments[0].ItemId);
+                        await TakeItemFromMailAsync(mail.MailId, 0, cancellationToken);
+                        await Task.Delay(200, cancellationToken);
+                    }
+                }
+
                 await CloseMailboxAsync(cancellationToken);
             }
             catch (Exception ex)

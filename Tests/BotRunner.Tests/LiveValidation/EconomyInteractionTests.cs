@@ -119,7 +119,7 @@ public class EconomyInteractionTests
     {
         var hasFg = _bot.IsFgActionable;
 
-        // Send mail and setup location in parallel for both bots.
+        // Send gold via SOAP and setup location in parallel for both bots.
         var setupTasks = new System.Collections.Generic.List<Task>
         {
             SetupMailAsync(_bot.BgAccountName!, "BG")
@@ -128,28 +128,122 @@ public class EconomyInteractionTests
             setupTasks.Add(SetupMailAsync(_bot.FgAccountName!, "FG"));
         await Task.WhenAll(setupTasks);
 
+        // Record coinage before mail collection
+        await _bot.RefreshSnapshotsAsync();
+        var bgSnapBefore = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
+        var bgCoinageBefore = bgSnapBefore?.Player?.Coinage ?? 0;
+        _output.WriteLine($"  [BG] Coinage before: {bgCoinageBefore}");
+
+        uint fgCoinageBefore = 0;
         if (hasFg)
         {
-            _output.WriteLine("[PARITY] Running BG and FG mailbox interactions in parallel.");
-            var bgTask = InteractWithMailboxLikeObject(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
-            var fgTask = InteractWithMailboxLikeObject(_bot.FgAccountName!, () => _bot.ForegroundBot, "FG");
+            var fgSnapBefore = await _bot.GetSnapshotAsync(_bot.FgAccountName!);
+            fgCoinageBefore = fgSnapBefore?.Player?.Coinage ?? 0;
+            _output.WriteLine($"  [FG] Coinage before: {fgCoinageBefore}");
+        }
+
+        // Find mailbox and dispatch CHECK_MAIL action
+        if (hasFg)
+        {
+            _output.WriteLine("[PARITY] Running BG and FG mail collection in parallel.");
+            var bgTask = CollectMailFromMailbox(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
+            var fgTask = CollectMailFromMailbox(_bot.FgAccountName!, () => _bot.ForegroundBot, "FG");
             await Task.WhenAll(bgTask, fgTask);
 
-            Assert.True(await bgTask, "BG should find/interact with a mailbox-like game object.");
-            Assert.True(await fgTask, "FG should find/interact with a mailbox-like game object.");
+            Assert.True(await bgTask, "BG should find/interact with a mailbox and collect mail.");
+            Assert.True(await fgTask, "FG should find/interact with a mailbox and collect mail.");
         }
         else
         {
-            var bgOk = await InteractWithMailboxLikeObject(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
-            Assert.True(bgOk, "BG should find/interact with a mailbox-like game object.");
+            var bgOk = await CollectMailFromMailbox(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
+            Assert.True(bgOk, "BG should find/interact with a mailbox and collect mail.");
+        }
+
+        // Verify coinage increased
+        await Task.Delay(1000);
+        await _bot.RefreshSnapshotsAsync();
+        var bgSnapAfter = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
+        var bgCoinageAfter = bgSnapAfter?.Player?.Coinage ?? 0;
+        _output.WriteLine($"  [BG] Coinage after: {bgCoinageAfter} (delta={bgCoinageAfter - bgCoinageBefore})");
+        Assert.True(bgCoinageAfter > bgCoinageBefore, $"BG coinage should increase after collecting mail (before={bgCoinageBefore}, after={bgCoinageAfter})");
+
+        if (hasFg)
+        {
+            var fgSnapAfter = await _bot.GetSnapshotAsync(_bot.FgAccountName!);
+            var fgCoinageAfter = fgSnapAfter?.Player?.Coinage ?? 0;
+            _output.WriteLine($"  [FG] Coinage after: {fgCoinageAfter} (delta={fgCoinageAfter - fgCoinageBefore})");
+            Assert.True(fgCoinageAfter > fgCoinageBefore, $"FG coinage should increase after collecting mail (before={fgCoinageBefore}, after={fgCoinageAfter})");
         }
     }
 
     private async Task SetupMailAsync(string account, string label)
     {
-        // .send money removed — test only validates mailbox detection + interaction,
-        // not mail retrieval. The send command was never validated and added 800ms of dead wait.
+        // Send gold to the bot via SOAP before teleporting to mailbox
+        var snap = await _bot.GetSnapshotAsync(account);
+        var charName = snap?.CharacterName ?? "";
+        if (!string.IsNullOrEmpty(charName))
+        {
+            _output.WriteLine($"  [{label}] Sending 10000 copper to {charName} via SOAP .send money");
+            await _bot.ExecuteGMCommandAsync($".send money {charName} \"Test Gold\" \"Mail collection test\" 10000");
+            await Task.Delay(200);
+        }
+
         await EnsureReadyAtLocationAsync(account, label, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
+    }
+
+    private async Task<bool> CollectMailFromMailbox(string account, Func<WoWActivitySnapshot?> getSnap, string label)
+    {
+        // Find the mailbox game object
+        WoWActivitySnapshot? snap = null;
+        var objects = Enumerable.Empty<Game.WoWGameObject>().ToList();
+        var discoverSw = Stopwatch.StartNew();
+        while (discoverSw.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            snap = getSnap();
+            objects = snap?.NearbyObjects?.ToList() ?? [];
+            if (objects.Count > 0)
+                break;
+            await Task.Delay(200);
+        }
+
+        if (objects.Count == 0)
+        {
+            _output.WriteLine($"  [{label}] No nearby game objects to evaluate for mailbox.");
+            return false;
+        }
+
+        var mailboxNamed = objects
+            .FirstOrDefault(go => (go.Name ?? string.Empty)
+                .Contains("mail", StringComparison.OrdinalIgnoreCase));
+
+        var mailbox = mailboxNamed ?? objects
+            .OrderBy(go =>
+            {
+                var p = go.Base?.Position;
+                return p == null ? float.MaxValue : LiveBotFixture.Distance3D(p.X, p.Y, p.Z, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
+            })
+            .FirstOrDefault();
+
+        var guid = mailbox?.Base?.Guid ?? 0UL;
+        if (guid == 0)
+        {
+            _output.WriteLine($"  [{label}] Mailbox candidate had no valid GUID.");
+            LogNearbyGameObjects(snap, label);
+            return false;
+        }
+
+        _output.WriteLine($"  [{label}] Mailbox candidate: {mailbox?.Name} GUID={guid:X}");
+
+        // Send CHECK_MAIL action with the mailbox GUID
+        var result = await _bot.SendActionAsync(account, new ActionMessage
+        {
+            ActionType = ActionType.CheckMail,
+            Parameters = { new RequestParameter { LongParam = (long)guid } }
+        });
+        await Task.Delay(3000); // allow time for mailbox open + collect + close
+        _output.WriteLine($"  [{label}] CheckMail sent (result={result})");
+        return result == ResponseResult.Success;
     }
 
     private async Task<bool> InteractWithNpcType(string account, Func<WoWActivitySnapshot?> getSnap, uint npcFlag, string npcType, string label)
@@ -174,61 +268,6 @@ public class EconomyInteractionTests
         });
         await Task.Delay(500);
         _output.WriteLine($"  [{label}] Interaction sent (result={result})");
-        return result == ResponseResult.Success;
-    }
-
-    private async Task<bool> InteractWithMailboxLikeObject(string account, Func<WoWActivitySnapshot?> getSnap, string label)
-    {
-        WoWActivitySnapshot? snap = null;
-        var objects = Enumerable.Empty<Game.WoWGameObject>().ToList();
-        var discoverSw = Stopwatch.StartNew();
-        while (discoverSw.Elapsed < TimeSpan.FromSeconds(5))
-        {
-            await _bot.RefreshSnapshotsAsync();
-            snap = getSnap();
-            objects = snap?.NearbyObjects?.ToList() ?? [];
-            if (objects.Count > 0)
-                break;
-
-            await Task.Delay(200);
-        }
-
-        if (objects.Count == 0)
-        {
-            _output.WriteLine($"  [{label}] No nearby game objects to evaluate for mailbox interaction.");
-            return false;
-        }
-
-        // TODO: Name-based heuristic — fragile if server returns localized or missing names.
-        // Consider detecting by GameObjectType (TYPE_MAILBOX = 19) when snapshot exposes it reliably.
-        var mailboxNamed = objects
-            .FirstOrDefault(go => (go.Name ?? string.Empty)
-                .Contains("mail", StringComparison.OrdinalIgnoreCase));
-
-        var mailbox = mailboxNamed ?? objects
-            .OrderBy(go =>
-            {
-                var p = go.Base?.Position;
-                return p == null ? float.MaxValue : LiveBotFixture.Distance3D(p.X, p.Y, p.Z, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
-            })
-            .FirstOrDefault();
-
-        var guid = mailbox?.Base?.Guid ?? 0UL;
-        if (guid == 0)
-        {
-            _output.WriteLine($"  [{label}] Mailbox candidate had no valid GUID.");
-            LogNearbyGameObjects(snap, label);
-            return false;
-        }
-
-        _output.WriteLine($"  [{label}] Mailbox candidate: {mailbox?.Name} GUID={guid:X}");
-        var result = await _bot.SendActionAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.InteractWith,
-            Parameters = { new RequestParameter { LongParam = (long)guid } }
-        });
-        await Task.Delay(1000);
-        _output.WriteLine($"  [{label}] Mailbox interaction sent (result={result})");
         return result == ResponseResult.Success;
     }
 

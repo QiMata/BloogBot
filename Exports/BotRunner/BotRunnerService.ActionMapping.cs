@@ -86,6 +86,7 @@ namespace BotRunner
             Communication.ActionType.VisitFlightMaster => CharacterAction.VisitFlightMaster,
             Communication.ActionType.StartFishing => CharacterAction.StartFishing,
             Communication.ActionType.StartGatheringRoute => CharacterAction.StartGatheringRoute,
+            Communication.ActionType.CheckMail => CharacterAction.CheckMail,
             _ => null,
         };
 

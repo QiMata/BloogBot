@@ -552,6 +552,19 @@ namespace BotRunner
                         break;
                     }
 
+                    case CharacterAction.CheckMail:
+                    {
+                        var mailboxGuid = UnboxGuid(actionEntry.Item2[0]);
+                        builder.Do($"Check Mail at mailbox {mailboxGuid:X}", time =>
+                        {
+                            Log.Information("[BOT RUNNER] Collecting mail from mailbox {Guid:X}", mailboxGuid);
+                            _objectManager.CollectAllMailAsync(mailboxGuid, CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
                     default:
                         break;
                 }

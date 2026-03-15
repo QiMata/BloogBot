@@ -623,5 +623,69 @@ namespace ForegroundBotRunner.Statics
             Log.Information("[FG-TRAINER] Bought {Count} services from trainer.", learnedCount);
             return learnedCount;
         }
+
+        /// <summary>
+        /// FG implementation: right-clicks a mailbox game object to open the mail UI,
+        /// then uses Lua to enumerate mail and take all money/items.
+        /// Vanilla 1.12.1 Lua API: GetInboxNumItems(), GetInboxHeaderInfo(index),
+        /// TakeInboxMoney(index), TakeInboxItem(index), DeleteInboxItem(index).
+        /// </summary>
+        public async Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default)
+        {
+            // Step 1: Find and right-click the mailbox game object
+            var obj = Objects.FirstOrDefault(o => o.Guid == mailboxGuid);
+            if (obj is not Objects.WoWObject wowObj)
+            {
+                Log.Warning("[FG-MAIL] Mailbox GUID 0x{Guid:X} not found in object manager.", mailboxGuid);
+                return;
+            }
+
+            Log.Information("[FG-MAIL] Opening mailbox (right-click on 0x{Guid:X})...", mailboxGuid);
+            ThreadSynchronizer.RunOnMainThread(() => wowObj.Interact());
+
+            // Step 2: Wait for mail UI to open (poll GetInboxNumItems)
+            bool windowOpened = false;
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                var countResult = MainThreadLuaCallWithResult("{0} = GetInboxNumItems()");
+                if (countResult.Length > 0 && int.TryParse(countResult[0], out int n) && n >= 0)
+                {
+                    // GetInboxNumItems returns 0 when open with no mail, nil when closed
+                    windowOpened = true;
+                    break;
+                }
+            }
+
+            if (!windowOpened)
+            {
+                Log.Warning("[FG-MAIL] Mail window did not open after 4.5s.");
+                return;
+            }
+
+            // Step 3: Take all money and items from each mail
+            // Iterate in reverse so index removal doesn't shift remaining indices
+            var result = MainThreadLuaCallWithResult(
+                "local n = GetInboxNumItems(); " +
+                "local collected = 0; " +
+                "for i = n, 1, -1 do " +
+                "  local _, _, _, _, money, _, _, hasItem = GetInboxHeaderInfo(i); " +
+                "  if money and money > 0 then TakeInboxMoney(i); collected = collected + 1; end; " +
+                "  if hasItem then TakeInboxItem(i); collected = collected + 1; end; " +
+                "end; " +
+                "{0} = collected");
+
+            int collectedCount = 0;
+            if (result.Length > 0)
+                int.TryParse(result[0], out collectedCount);
+
+            if (collectedCount > 0)
+                await Task.Delay(500, ct);
+
+            // Step 4: Close mail window
+            MainThreadLuaCall("CloseMail()");
+
+            Log.Information("[FG-MAIL] Collected {Count} mail items/money from mailbox.", collectedCount);
+        }
     }
 }

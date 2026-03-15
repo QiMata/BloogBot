@@ -85,4 +85,5 @@ public enum CharacterAction
     VisitFlightMaster,  // Queue FlightMasterVisitTask for nearby taxi-node discovery.
     StartFishing,       // Queue FishingTask to resolve fishing rank and wait for the fishing cycle.
     StartGatheringRoute,// Queue GatheringRouteTask to walk natural node coordinates and gather the first visible match.
+    CheckMail,          // Open nearby mailbox, list mail, and take money/items from all pending mail.
 }
