@@ -543,22 +543,41 @@ namespace ForegroundBotRunner.Statics
             Log.Information("[FG-TRAINER] Opening trainer window (right-click on 0x{Guid:X})...", trainerGuid);
             ThreadSynchronizer.RunOnMainThread(() => wowObj.Interact());
 
-            // Step 2: Wait for trainer window to open (poll GetNumTrainerServices)
+            // Step 2: Wait for trainer window to open (poll GetNumTrainerServices).
+            // Many trainers open a gossip menu first — detect and click through it.
             bool windowOpened = false;
-            for (int i = 0; i < 20 && !ct.IsCancellationRequested; i++)
+            bool gossipHandled = false;
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
             {
                 await Task.Delay(150, ct);
+
+                // Check if trainer window is already open
                 var countResult = MainThreadLuaCallWithResult("{0} = GetNumTrainerServices()");
                 if (countResult.Length > 0 && int.TryParse(countResult[0], out int n) && n > 0)
                 {
                     windowOpened = true;
                     break;
                 }
+
+                // If gossip frame is visible, click the trainer gossip option to open trainer window
+                if (!gossipHandled)
+                {
+                    var gossipVisible = MainThreadLuaCallWithResult(
+                        "if GossipFrame and GossipFrame:IsVisible() then {0} = '1' else {0} = '0' end");
+                    if (gossipVisible.Length > 0 && gossipVisible[0] == "1")
+                    {
+                        Log.Information("[FG-TRAINER] Gossip frame detected — clicking trainer option.");
+                        MainThreadLuaCall(
+                            "local n = GetNumGossipOptions() or 0; " +
+                            "if n > 0 then SelectGossipOption(1) end");
+                        gossipHandled = true;
+                    }
+                }
             }
 
             if (!windowOpened)
             {
-                Log.Warning("[FG-TRAINER] Trainer window did not open after 3s.");
+                Log.Warning("[FG-TRAINER] Trainer window did not open after 4.5s (gossipHandled={GossipHandled}).", gossipHandled);
                 return 0;
             }
 
