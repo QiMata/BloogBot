@@ -9,6 +9,7 @@
 #include "MapLoader.h"
 #include "SceneQuery.h"
 #include "DynamicObjectRegistry.h"
+#include "DetourPathCorridor.h"
 
 #define NOMINMAX
 #include <windows.h>
@@ -16,6 +17,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <filesystem>
 #include <vector>
 #include <crtdbg.h>
@@ -841,6 +843,341 @@ extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
             return true;
     }
     return false;
+}
+
+// ===============================
+// PATH CORRIDOR API
+// ===============================
+// Incremental, collision-aware path following using Detour's dtPathCorridor.
+// Replaces the expensive ValidateWalkableSegment physics sweep pipeline.
+
+static const int CORRIDOR_MAX_PATH = 740;   // matches PathFinder MAX_PATH_LENGTH
+static const int CORRIDOR_MAX_CORNERS = 96; // enough for long paths via findStraightPath
+
+struct CorridorInstance
+{
+    dtPathCorridor corridor;
+    uint32_t       mapId;
+    dtQueryFilter  filter;
+    bool           valid;
+};
+
+static std::mutex g_corridorMutex;
+static uint32_t g_nextCorridorHandle = 1;
+static std::unordered_map<uint32_t, CorridorInstance*> g_corridors;
+
+// Result struct returned by FindPathCorridor / CorridorUpdate.
+// C# reads this via P/Invoke as a blittable struct.
+#pragma pack(push, 1)
+struct CorridorResult
+{
+    uint32_t handle;
+    int      cornerCount;
+    float    corners[CORRIDOR_MAX_CORNERS * 3]; // [x,y,z, x,y,z, ...]
+    float    posX, posY, posZ;                  // corridor-constrained position
+};
+#pragma pack(pop)
+
+static dtNavMeshQuery* GetMutableQueryForMap(uint32_t mapId)
+{
+    // dtPathCorridor needs a non-const dtNavMeshQuery*.
+    // Navigation::GetQueryForMap returns const, but the underlying object is mutable.
+    return const_cast<dtNavMeshQuery*>(
+        Navigation::GetInstance()->GetQueryForMap(mapId));
+}
+
+static int FillCorners(CorridorInstance* ci, CorridorResult& result)
+{
+    dtNavMeshQuery* query = GetMutableQueryForMap(ci->mapId);
+    if (!query) return 0;
+
+    unsigned char cornerFlags[CORRIDOR_MAX_CORNERS];
+    dtPolyRef     cornerPolys[CORRIDOR_MAX_CORNERS];
+
+    // findCorners writes Detour coords (Y,Z,X) into the buffer
+    float detourCorners[CORRIDOR_MAX_CORNERS * 3];
+    int n = ci->corridor.findCorners(
+        detourCorners, cornerFlags, cornerPolys,
+        CORRIDOR_MAX_CORNERS, query, &ci->filter);
+
+    // Convert Detour (Y,Z,X) → WoW (X,Y,Z) for each corner
+    for (int i = 0; i < n; i++)
+    {
+        float dY = detourCorners[i * 3 + 0]; // Detour[0] = WoW Y
+        float dZ = detourCorners[i * 3 + 1]; // Detour[1] = WoW Z
+        float dX = detourCorners[i * 3 + 2]; // Detour[2] = WoW X
+        result.corners[i * 3 + 0] = dX;      // WoW X
+        result.corners[i * 3 + 1] = dY;      // WoW Y
+        result.corners[i * 3 + 2] = dZ;      // WoW Z
+    }
+
+    result.cornerCount = n;
+
+    // Convert position Detour (Y,Z,X) → WoW (X,Y,Z)
+    const float* pos = ci->corridor.getPos();
+    result.posX = pos[2]; // Detour[2] = WoW X
+    result.posY = pos[0]; // Detour[0] = WoW Y
+    result.posZ = pos[1]; // Detour[1] = WoW Z
+
+    return n;
+}
+
+/// Create a corridor from start to end on the given map.
+/// Returns a CorridorResult with a handle (>0) and initial corners.
+/// handle==0 means failure.
+extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
+    uint32_t mapId, XYZ start, XYZ end)
+{
+    CorridorResult result = {};
+
+    __try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
+
+        auto* navigation = Navigation::GetInstance();
+        if (!navigation) { fprintf(stderr, "[CORRIDOR] no Navigation instance\n"); return result; }
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
+        if (!query) { fprintf(stderr, "[CORRIDOR] no query for map %u\n", mapId); return result; }
+
+        // Find start and end poly refs
+        dtQueryFilter filter;
+        filter.setIncludeFlags(0xFFFF);
+        filter.setExcludeFlags(0);
+
+        // WoW coords (X,Y,Z) → Detour coords (Y,Z,X) — MaNGOS mmaps use this convention
+        float startPos[3] = { start.Y, start.Z, start.X };
+        float endPos[3]   = { end.Y,   end.Z,   end.X   };
+        float extents[3]  = { 4.0f, 5.0f, 4.0f };
+
+        dtPolyRef startRef = 0, endRef = 0;
+        float nearestStart[3], nearestEnd[3];
+
+        dtStatus st = query->findNearestPoly(startPos, extents, &filter, &startRef, nearestStart);
+        if (dtStatusFailed(st) || startRef == 0)
+        {
+            // Retry with larger extents
+            float bigExtents[3] = { 8.0f, 200.0f, 8.0f };
+            st = query->findNearestPoly(startPos, bigExtents, &filter, &startRef, nearestStart);
+            if (dtStatusFailed(st) || startRef == 0)
+            {
+                fprintf(stderr, "[CORRIDOR] findNearestPoly failed for START (%.1f,%.1f,%.1f) st=0x%x\n",
+                        start.X, start.Y, start.Z, st);
+                return result;
+            }
+        }
+
+        st = query->findNearestPoly(endPos, extents, &filter, &endRef, nearestEnd);
+        if (dtStatusFailed(st) || endRef == 0)
+        {
+            float bigExtents[3] = { 8.0f, 200.0f, 8.0f };
+            st = query->findNearestPoly(endPos, bigExtents, &filter, &endRef, nearestEnd);
+            if (dtStatusFailed(st) || endRef == 0)
+            {
+                fprintf(stderr, "[CORRIDOR] findNearestPoly failed for END (%.1f,%.1f,%.1f) st=0x%x\n",
+                        end.X, end.Y, end.Z, st);
+                return result;
+            }
+        }
+
+        fprintf(stderr, "[CORRIDOR] startRef=%llu endRef=%llu\n", (unsigned long long)startRef, (unsigned long long)endRef);
+
+        // Find poly path via A*
+        dtPolyRef polyPath[CORRIDOR_MAX_PATH];
+        int polyCount = 0;
+        st = query->findPath(startRef, endRef, nearestStart, nearestEnd,
+                             &filter, polyPath, &polyCount, CORRIDOR_MAX_PATH);
+        if (dtStatusFailed(st) || polyCount == 0)
+        {
+            fprintf(stderr, "[CORRIDOR] findPath failed: st=0x%x polyCount=%d\n", st, polyCount);
+            return result;
+        }
+        fprintf(stderr, "[CORRIDOR] findPath OK: polyCount=%d partial=%s\n",
+                polyCount, dtStatusDetail(st, DT_PARTIAL_RESULT) ? "yes" : "no");
+
+        // Create corridor instance
+        auto* ci = new CorridorInstance();
+        ci->mapId = mapId;
+        ci->filter = filter;
+        ci->valid = true;
+
+        if (!ci->corridor.init(CORRIDOR_MAX_PATH))
+        {
+            delete ci;
+            return result;
+        }
+
+        ci->corridor.reset(startRef, nearestStart);
+        ci->corridor.setCorridor(nearestEnd, polyPath, polyCount);
+
+        // Use findStraightPath on the full poly path for the initial result.
+        // This gives us all the string-pulled corners for the entire route,
+        // not just the nearby ones from findCorners.
+        float straightPath[CORRIDOR_MAX_CORNERS * 3];
+        unsigned char straightFlags[CORRIDOR_MAX_CORNERS];
+        dtPolyRef straightPolys[CORRIDOR_MAX_CORNERS];
+        int straightCount = 0;
+
+        query->findStraightPath(nearestStart, nearestEnd, polyPath, polyCount,
+                                straightPath, straightFlags, straightPolys,
+                                &straightCount, CORRIDOR_MAX_CORNERS);
+
+        // Convert Detour (Y,Z,X) → WoW (X,Y,Z) for each corner
+        for (int i = 0; i < straightCount; i++)
+        {
+            float dY = straightPath[i * 3 + 0]; // Detour[0] = WoW Y
+            float dZ = straightPath[i * 3 + 1]; // Detour[1] = WoW Z
+            float dX = straightPath[i * 3 + 2]; // Detour[2] = WoW X
+            result.corners[i * 3 + 0] = dX;
+            result.corners[i * 3 + 1] = dY;
+            result.corners[i * 3 + 2] = dZ;
+        }
+        result.cornerCount = straightCount;
+
+        // Position = corridor-snapped start in WoW coords
+        result.posX = nearestStart[2]; // Detour[2] = WoW X
+        result.posY = nearestStart[0]; // Detour[0] = WoW Y
+        result.posZ = nearestStart[1]; // Detour[1] = WoW Z
+
+        // Register corridor for future incremental updates
+        uint32_t handle;
+        {
+            std::lock_guard<std::mutex> lock(g_corridorMutex);
+            handle = g_nextCorridorHandle++;
+            g_corridors[handle] = ci;
+        }
+
+        result.handle = handle;
+        fprintf(stderr, "[CORRIDOR] handle=%u corners=%d pos=(%.1f,%.1f,%.1f)\n",
+                handle, straightCount, result.posX, result.posY, result.posZ);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        fprintf(stderr, "[Navigation.dll] SEH exception in FindPathCorridor (code=0x%08lx)\n",
+                GetExceptionCode());
+    }
+
+    return result;
+}
+
+/// Feed the agent's current position into the corridor. The corridor slides
+/// the position along the navmesh surface (collision-aware) and returns
+/// updated waypoints.
+extern "C" __declspec(dllexport) CorridorResult CorridorUpdate(
+    uint32_t handle, XYZ agentPos)
+{
+    CorridorResult result = {};
+    result.handle = handle;
+
+    __try
+    {
+        CorridorInstance* ci = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_corridorMutex);
+            auto it = g_corridors.find(handle);
+            if (it == g_corridors.end()) return result;
+            ci = it->second;
+        }
+        if (!ci || !ci->valid) return result;
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(ci->mapId);
+        if (!query) return result;
+
+        // WoW coords (X,Y,Z) → Detour coords (Y,Z,X)
+        float npos[3] = { agentPos.Y, agentPos.Z, agentPos.X };
+
+        // Move the corridor start to the agent's actual position.
+        // movePosition calls moveAlongSurface internally — this is the
+        // collision-aware slide that replaces ValidateWalkableSegment.
+        ci->corridor.movePosition(npos, query, &ci->filter);
+
+        // Periodically optimize the corridor path.
+        // Visibility optimization shortcuts visible corners.
+        float cornerBuf[CORRIDOR_MAX_CORNERS * 3];
+        unsigned char flagBuf[CORRIDOR_MAX_CORNERS];
+        dtPolyRef polyBuf[CORRIDOR_MAX_CORNERS];
+        int nc = ci->corridor.findCorners(cornerBuf, flagBuf, polyBuf,
+                                          CORRIDOR_MAX_CORNERS, query, &ci->filter);
+        if (nc > 0)
+            ci->corridor.optimizePathVisibility(&cornerBuf[0], 30.0f, query, &ci->filter);
+
+        // Topology optimization fixes non-optimal corridors from drift.
+        ci->corridor.optimizePathTopology(query, &ci->filter);
+
+        FillCorners(ci, result);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        fprintf(stderr, "[Navigation.dll] SEH exception in CorridorUpdate (code=0x%08lx)\n",
+                GetExceptionCode());
+    }
+
+    return result;
+}
+
+/// Move the corridor's target to a new destination (for moving targets).
+extern "C" __declspec(dllexport) CorridorResult CorridorMoveTarget(
+    uint32_t handle, XYZ newTarget)
+{
+    CorridorResult result = {};
+    result.handle = handle;
+
+    __try
+    {
+        CorridorInstance* ci = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_corridorMutex);
+            auto it = g_corridors.find(handle);
+            if (it == g_corridors.end()) return result;
+            ci = it->second;
+        }
+        if (!ci || !ci->valid) return result;
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(ci->mapId);
+        if (!query) return result;
+
+        // WoW coords (X,Y,Z) → Detour coords (Y,Z,X)
+        float npos[3] = { newTarget.Y, newTarget.Z, newTarget.X };
+        ci->corridor.moveTargetPosition(npos, query, &ci->filter);
+
+        FillCorners(ci, result);
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        fprintf(stderr, "[Navigation.dll] SEH exception in CorridorMoveTarget (code=0x%08lx)\n",
+                GetExceptionCode());
+    }
+
+    return result;
+}
+
+/// Check if the corridor is still valid (poly refs haven't been invalidated).
+extern "C" __declspec(dllexport) bool CorridorIsValid(uint32_t handle)
+{
+    std::lock_guard<std::mutex> lock(g_corridorMutex);
+    auto it = g_corridors.find(handle);
+    if (it == g_corridors.end()) return false;
+
+    auto* ci = it->second;
+    if (!ci || !ci->valid) return false;
+
+    dtNavMeshQuery* query = GetMutableQueryForMap(ci->mapId);
+    if (!query) return false;
+
+    return ci->corridor.isValid(10, query, &ci->filter);
+}
+
+/// Destroy a corridor and free its resources.
+extern "C" __declspec(dllexport) void CorridorDestroy(uint32_t handle)
+{
+    std::lock_guard<std::mutex> lock(g_corridorMutex);
+    auto it = g_corridors.find(handle);
+    if (it != g_corridors.end())
+    {
+        delete it->second;
+        g_corridors.erase(it);
+    }
 }
 
 // DLL Entry Point

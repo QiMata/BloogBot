@@ -277,6 +277,7 @@
     <ClCompile Include="..\Navigation\Detour\Source\DetourNavMeshBuilder.cpp" />
     <ClCompile Include="..\Navigation\Detour\Source\DetourNavMeshQuery.cpp" />
     <ClCompile Include="..\Navigation\Detour\Source\DetourNode.cpp" />
+    <ClCompile Include="..\Navigation\Detour\Source\DetourPathCorridor.cpp" />
     <ClCompile Include="..\Navigation\DllMain.cpp">
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
       </CompileAsManaged>
