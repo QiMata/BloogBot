@@ -41,7 +41,9 @@ namespace BotRunner.Movement
                 _navPath = new NavigationPath(_pathfindingClient,
                     capsuleRadius: radius,
                     capsuleHeight: height,
-                    nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end));
+                    nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
+                    race: player.Race,
+                    gender: player.Gender);
             }
 
             var playerPosition = player.Position;

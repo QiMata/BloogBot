@@ -323,7 +323,7 @@ static bool HasBlockingCapsuleOverlap(
             continue;
 
         const float penetrationDepth = std::max(0.0f, hit.penetrationDepth);
-        const float maxAllowedPenDepth = std::max(0.02f, radius * 0.5f);
+        const float maxAllowedPenDepth = std::max(0.05f, radius * 0.75f);
         if (penetrationDepth <= maxAllowedPenDepth)
             continue;
 
@@ -336,17 +336,17 @@ static bool HasBlockingCapsuleOverlap(
     return false;
 }
 
-static bool ShouldAcceptNearCompleteSegment(float horizontalDistance, float completedFraction)
+static bool ShouldAcceptNearCompleteSegment(float horizontalDistance, float completedFraction, float radius = 0.6f)
 {
     if (horizontalDistance <= 0.01f)
         return false;
 
     const float clampedFraction = std::max(0.0f, std::min(1.0f, completedFraction));
     const float remainingDistance = horizontalDistance * (1.0f - clampedFraction);
-    // Accept if remaining distance is trivially small (well within capsule radius)
-    // For short segments (<4 units), even a 7% fraction gap can be <0.3 units remaining
-    return horizontalDistance <= 6.0f &&
-        remainingDistance <= 0.3f;
+    // Accept if remaining distance is trivially small — within 2x capsule radius
+    // or under 0.5m absolute. No length restriction: near-complete is near-complete.
+    const float threshold = std::max(0.5f, radius * 2.0f);
+    return remainingDistance <= threshold;
 }
 
 static SegmentValidationCode FinalizeSimulatedSegment(
@@ -378,10 +378,10 @@ static SegmentValidationCode FinalizeSimulatedSegment(
         return SegmentValidationCode::MissingSupport;
 
     const float deltaZ = supportZ - currentZ;
-    if (deltaZ > PhysicsConstants::STEP_HEIGHT + 0.1f)
+    if (deltaZ > PhysicsConstants::STEP_HEIGHT + 0.3f)
         return SegmentValidationCode::StepUpTooHigh;
 
-    if (deltaZ < -PhysicsConstants::STEP_DOWN_HEIGHT - 0.1f)
+    if (deltaZ < -PhysicsConstants::STEP_DOWN_HEIGHT - 0.5f)
         return SegmentValidationCode::StepDownTooFar;
 
     if (resolvedEndZ)
@@ -397,7 +397,7 @@ static SegmentValidationCode FinalizeSimulatedSegment(
 
     if (HasBlockingCapsuleOverlap(mapId, x, y, supportZ, radius, height, orientation))
     {
-        if (ShouldAcceptNearCompleteSegment(horizontalDistance, completedFraction))
+        if (ShouldAcceptNearCompleteSegment(horizontalDistance, completedFraction, radius))
             return SegmentValidationCode::Clear;
 
         return SegmentValidationCode::BlockedGeometry;
@@ -571,7 +571,7 @@ static SegmentValidationCode TryValidateWalkableSegmentWithPhysics(
             return SegmentValidationCode::StepDownTooFar;
         }
 
-        if (stalledSteps >= 4 || (output.hitWall && output.blockedFraction < 0.05f && stalledSteps >= 2))
+        if (stalledSteps >= 6 || (output.hitWall && output.blockedFraction < 0.05f && stalledSteps >= 3))
             break;
 
         input.x = output.x;
@@ -660,10 +660,10 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
             return SegmentValidationCode::MissingSupport;
 
         const float deltaZ = groundZ - currentZ;
-        if (deltaZ > PhysicsConstants::STEP_HEIGHT + 0.1f)
+        if (deltaZ > PhysicsConstants::STEP_HEIGHT + 0.3f)
             return SegmentValidationCode::StepUpTooHigh;
 
-        if (deltaZ < -PhysicsConstants::STEP_DOWN_HEIGHT - 0.1f)
+        if (deltaZ < -PhysicsConstants::STEP_DOWN_HEIGHT - 0.5f)
             return SegmentValidationCode::StepDownTooFar;
 
         lastSupportZ = groundZ;
@@ -688,7 +688,7 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
             const float completedFraction = horizontalDistance > 0.01f
                 ? std::max(0.0f, std::min(1.0f, traveled / horizontalDistance))
                 : 1.0f;
-            if (ShouldAcceptNearCompleteSegment(horizontalDistance, completedFraction))
+            if (ShouldAcceptNearCompleteSegment(horizontalDistance, completedFraction, radius))
                 return SegmentValidationCode::Clear;
 
             return SegmentValidationCode::BlockedGeometry;

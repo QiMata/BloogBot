@@ -71,7 +71,9 @@ public abstract class BotTask(IBotContext botContext)
             _navPath = new NavigationPath(Container.PathfindingClient,
                 capsuleRadius: radius,
                 capsuleHeight: height,
-                nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, start, end));
+                nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, start, end),
+                race: player?.Race ?? 0,
+                gender: player?.Gender ?? 0);
         }
         if (player?.Position == null)
             return false;

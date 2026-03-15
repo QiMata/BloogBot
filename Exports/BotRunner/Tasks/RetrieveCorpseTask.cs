@@ -37,7 +37,9 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
             strictPathValidation: false,
             capsuleRadius: radius,
             capsuleHeight: height,
-            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ctx.ObjectManager, start, end));
+            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(ctx.ObjectManager, start, end),
+            race: player?.Race ?? 0,
+            gender: player?.Gender ?? 0);
     }
     private DateTime _startTime = DateTime.UtcNow;
     private DateTime _lastReclaimAttempt = DateTime.MinValue;

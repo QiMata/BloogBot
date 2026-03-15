@@ -251,10 +251,27 @@ namespace PathfindingService
             var agentHeight = 2.0f;
             if (req.Race != 0)
             {
-                var (r, h) = RaceDimensions.GetCapsuleForRace((Race)req.Race, (Gender)req.Gender);
-                agentRadius = r;
-                agentHeight = h;
+                try
+                {
+                    var (r, h) = RaceDimensions.GetCapsuleForRace((Race)req.Race, (Gender)req.Gender);
+                    agentRadius = r;
+                    agentHeight = h;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning("[PATH_DIAG] RaceDimensions lookup failed for race={Race} gender={Gender}: {Error}. Using defaults.",
+                        req.Race, req.Gender, ex.Message);
+                }
             }
+
+            // Segment validation is ON by default (null env var = ON). Only OFF if explicitly set to 0/false/off/no.
+            var segValidationRaw = Environment.GetEnvironmentVariable("WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION");
+            var segValidationStatus = string.IsNullOrWhiteSpace(segValidationRaw) ? "ON(default)" : segValidationRaw;
+            logger.LogInformation(
+                "[PATH_DIAG] id={RequestId} race={Race} gender={Gender} capsule=({Radius:F4},{Height:F4}) segValidation={SegValidation} start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
+                requestId, req.Race, req.Gender, agentRadius, agentHeight,
+                segValidationStatus,
+                start.X, start.Y, start.Z, end.X, end.Y, end.Z);
 
             OverlayExecutionResult<NavigationPathResult> overlayResult;
             try
@@ -276,6 +293,12 @@ namespace PathfindingService
             var sanitizedPath = path
                 .Where(IsFinitePoint)
                 .ToArray();
+
+            logger.LogInformation(
+                "[PATH_DIAG] id={RequestId} result={Result} pathLen={PathLen} rawPathLen={RawPathLen} blockedIdx={BlockedIdx} elapsedMs={ElapsedMs}",
+                requestId, pathResult.Result, sanitizedPath.Length, pathResult.RawPath.Length,
+                pathResult.BlockedSegmentIndex?.ToString() ?? "none",
+                requestSw.ElapsedMilliseconds);
 
             // Proto field "straight" is actually smoothPath (see pathfinding.proto comment and PathfindingClient.cs)
             var smoothPath = req.Straight;

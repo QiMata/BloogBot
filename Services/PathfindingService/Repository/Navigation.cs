@@ -35,8 +35,9 @@ namespace PathfindingService.Repository
             (1, 1), (1, -1), (-1, 1), (-1, -1),
         ];
         private static readonly float[] FallbackLosZOffsets = [0f, 1.0f, 2.0f];
-        private static readonly float[] RepairOffsetDistances = [2f, 4f, 6f, 8f, 10f, 12f];
-        private static readonly float[] RepairAlongSegmentSamples = [0.35f, 0.5f, 0.65f];
+        private static readonly float[] RepairOffsetDistances = [1f, 2f, 3f, 4f, 6f, 8f, 10f, 12f, 16f];
+        private static readonly float[] RepairAlongSegmentSamples = [0.25f, 0.35f, 0.5f, 0.65f, 0.75f];
+        private const int MaxRepairIterations = 3;
         private const float CombineWaypointEpsilon = 0.25f;
 
         [StructLayout(LayoutKind.Sequential)]
@@ -158,6 +159,7 @@ namespace PathfindingService.Repository
             var secondResult = useAlternateModeFirst ? "native_path" : "native_path_alternate_mode";
 
             var firstAttempt = EvaluateNativePath(mapId, start, end, firstMode, firstResult, scopedEvaluator);
+            Console.Error.WriteLine($"[NAV_DIAG] map={mapId} firstAttempt: mode={firstMode} pathLen={firstAttempt.Path.Length} blocked={firstAttempt.BlockedSegment?.Index.ToString() ?? "none"} reason={firstAttempt.BlockedSegment?.Reason.ToString() ?? "none"} usable={firstAttempt.IsUsable}");
             if (firstAttempt.IsUsable)
             {
                 return new NavigationPathResult(
@@ -166,8 +168,20 @@ namespace PathfindingService.Repository
                     firstAttempt.SuccessResult,
                     null);
             }
+            // If segment 0 is blocked, skip it — the player is already standing at
+            // the start position, so the start→first-waypoint segment is traversable
+            // by definition (Z mismatch or navmesh-edge capsule overlap).
+            // Trust the navmesh for remaining segments — full re-validation is too expensive
+            // (each segment costs ~800ms in native validator, 26+ segments = 20+ seconds).
+            // The bot re-requests paths as it moves, so stale segments get re-evaluated.
+            if (firstAttempt.Path.Length >= 2 && firstAttempt.BlockedSegment?.Index == 0)
+            {
+                Console.Error.WriteLine($"[NAV_DIAG] map={mapId} firstAttempt segment-0-skip accepted, pathLen={firstAttempt.Path.Length}");
+                return new NavigationPathResult(firstAttempt.Path, firstAttempt.Path, firstAttempt.SuccessResult + "_seg0skip", null);
+            }
 
             var secondAttempt = EvaluateNativePath(mapId, start, end, secondMode, secondResult, scopedEvaluator);
+            Console.Error.WriteLine($"[NAV_DIAG] map={mapId} secondAttempt: mode={secondMode} pathLen={secondAttempt.Path.Length} blocked={secondAttempt.BlockedSegment?.Index.ToString() ?? "none"} reason={secondAttempt.BlockedSegment?.Reason.ToString() ?? "none"} usable={secondAttempt.IsUsable}");
             if (secondAttempt.IsUsable)
             {
                 return new NavigationPathResult(
@@ -176,27 +190,56 @@ namespace PathfindingService.Repository
                     secondAttempt.SuccessResult,
                     null);
             }
+            // Same segment-0 skip for the second attempt.
+            if (secondAttempt.Path.Length >= 2 && secondAttempt.BlockedSegment?.Index == 0)
+            {
+                Console.Error.WriteLine($"[NAV_DIAG] map={mapId} secondAttempt segment-0-skip accepted, pathLen={secondAttempt.Path.Length}");
+                return new NavigationPathResult(secondAttempt.Path, secondAttempt.Path, secondAttempt.SuccessResult + "_seg0skip", null);
+            }
 
             var repairSource = SelectRepairSource(firstAttempt, secondAttempt);
             if (repairSource.Path.Length > 1 && repairSource.BlockedSegment is BlockedSegmentInfo repairBlockedSegment)
             {
-                var repairedPath = TryRepairPath(mapId, start, end, smoothPath, repairSource.Path, repairBlockedSegment.Index, scopedEvaluator);
-                if (repairedPath.Length > 0)
+                // Recursive repair: if repaired path also has blocked segments, try repairing again.
+                // Time-box to prevent service hangs on expensive repair attempts.
+                var repairDeadline = System.Diagnostics.Stopwatch.StartNew();
+                const long RepairTimeoutMs = 3000;
+                var currentPath = repairSource.Path;
+                var currentBlocked = repairBlockedSegment;
+                for (var iteration = 0; iteration < MaxRepairIterations; iteration++)
                 {
-                    return new NavigationPathResult(
-                        repairedPath,
-                        repairSource.Path,
-                        GetRepairResult(repairBlockedSegment.Reason),
-                        repairBlockedSegment.Index);
+                    if (repairDeadline.ElapsedMilliseconds > RepairTimeoutMs)
+                    {
+                        Console.Error.WriteLine($"[NAV_DIAG] map={mapId} repair timeout after {repairDeadline.ElapsedMilliseconds}ms");
+                        break;
+                    }
+                    Console.Error.WriteLine($"[NAV_DIAG] map={mapId} repair iteration {iteration} at segment {currentBlocked.Index} reason={currentBlocked.Reason}");
+                    var repairedPath = TryRepairPath(mapId, start, end, smoothPath, currentPath, currentBlocked.Index, scopedEvaluator);
+                    Console.Error.WriteLine($"[NAV_DIAG] map={mapId} repair result: pathLen={repairedPath.Length}");
+                    if (repairedPath.Length == 0)
+                        break;
+
+                    var nextBlocked = FindBlockedSegment(mapId, repairedPath, scopedEvaluator);
+                    if (nextBlocked is null)
+                    {
+                        return new NavigationPathResult(
+                            repairedPath,
+                            repairSource.Path,
+                            GetRepairResult(currentBlocked.Reason),
+                            repairBlockedSegment.Index);
+                    }
+
+                    currentPath = repairedPath;
+                    currentBlocked = nextBlocked.Value;
                 }
             }
 
-            // Keep native navmesh as the authoritative source by default.
-            // LOS-grid fallback can create wall-hugging routes that are valid in LOS
-            // but not walkable in practice (notably during corpse runback).
-            if (IsLosFallbackEnabled())
+            // LOS fallback as last resort — always enabled.
+            // When navmesh path + repair both fail, use grid-based A* with LOS checks.
             {
+                Console.Error.WriteLine($"[NAV_DIAG] map={mapId} trying LOS fallback");
                 var fallbackPath = BuildLosFallbackPath(mapId, start, end);
+                Console.Error.WriteLine($"[NAV_DIAG] map={mapId} LOS fallback: pathLen={fallbackPath.Length}");
                 if (fallbackPath.Length > 0 && FindBlockedSegment(mapId, fallbackPath, scopedEvaluator) is null)
                 {
                     return new NavigationPathResult(
@@ -212,6 +255,7 @@ namespace PathfindingService.Repository
                 : secondAttempt.BlockedSegment;
             var rawPath = repairSource.Path.Length > 0 ? repairSource.Path : Array.Empty<XYZ>();
             var result = blockedSegment is null ? "no_path" : GetBlockedResult(blockedSegment.Value.Reason);
+            Console.Error.WriteLine($"[NAV_DIAG] map={mapId} FINAL: result={result} rawPathLen={rawPath.Length} blocked={blockedSegment?.Index.ToString() ?? "none"} reason={blockedSegment?.Reason.ToString() ?? "none"}");
             return new NavigationPathResult(
                 Array.Empty<XYZ>(),
                 rawPath,
@@ -259,14 +303,16 @@ namespace PathfindingService.Repository
 
         private static bool IsNativeSegmentValidationEnabled()
         {
+            // ON by default — capsule-aware validation ensures paths are physically traversable.
+            // Set WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION=0 to disable.
             var value = Environment.GetEnvironmentVariable(EnableNativeSegmentValidationEnv);
             if (string.IsNullOrWhiteSpace(value))
-                return false;
+                return true;
 
-            return value.Equals("1", StringComparison.OrdinalIgnoreCase)
-                || value.Equals("true", StringComparison.OrdinalIgnoreCase)
-                || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
-                || value.Equals("on", StringComparison.OrdinalIgnoreCase);
+            return !value.Equals("0", StringComparison.OrdinalIgnoreCase)
+                && !value.Equals("false", StringComparison.OrdinalIgnoreCase)
+                && !value.Equals("off", StringComparison.OrdinalIgnoreCase)
+                && !value.Equals("no", StringComparison.OrdinalIgnoreCase);
         }
 
         private static float ComputeDistance2D(XYZ start, XYZ end)
@@ -307,6 +353,14 @@ namespace PathfindingService.Repository
             }
         }
 
+        /// <summary>
+        /// Maximum number of leading segments to validate in the initial path check.
+        /// Full-path validation is too expensive (~1.5s per segment); validating only the first
+        /// few segments keeps the service responsive.  The bot re-requests paths as it moves,
+        /// so later segments get validated on subsequent requests when they become segment 0/1.
+        /// </summary>
+        private const int MaxLeadingSegmentsToValidate = 3;
+
         private PathAttempt EvaluateNativePath(uint mapId, XYZ start, XYZ end, bool smoothPath, string successResult,
             Func<uint, XYZ, XYZ, SegmentEvaluation>? scopedEvaluator = null)
         {
@@ -316,7 +370,25 @@ namespace PathfindingService.Repository
                 if (path.Length == 0)
                     return new PathAttempt(Array.Empty<XYZ>(), successResult, null);
 
-                var blockedSegment = FindBlockedSegment(mapId, path, scopedEvaluator);
+                // Only validate the first few segments — full-path validation is too expensive
+                // for smooth paths (48 segments × ~1.5s each = 72s).  The navmesh guarantees
+                // structural traversability; we validate the leading edge to catch start-position
+                // issues (Z mismatch, capsule overlap near navmesh edges).
+                var maxSegment = Math.Min(MaxLeadingSegmentsToValidate, path.Length - 1);
+                var evaluator = scopedEvaluator ?? _segmentEvaluator;
+                BlockedSegmentInfo? blockedSegment = null;
+                var current = path[0];
+                for (var i = 0; i < maxSegment; i++)
+                {
+                    var evaluation = evaluator(mapId, current, path[i + 1]);
+                    if (evaluation.Reason != SegmentBlockReason.None)
+                    {
+                        blockedSegment = new BlockedSegmentInfo(i, evaluation.Reason);
+                        break;
+                    }
+                    current = evaluation.EffectiveEnd;
+                }
+
                 return new PathAttempt(path, successResult, blockedSegment);
             }
             catch
@@ -445,14 +517,16 @@ namespace PathfindingService.Repository
         }
 
         private BlockedSegmentInfo? FindBlockedSegment(uint mapId, XYZ[] path,
-            Func<uint, XYZ, XYZ, SegmentEvaluation>? scopedEvaluator = null)
+            Func<uint, XYZ, XYZ, SegmentEvaluation>? scopedEvaluator = null,
+            int startIndex = 0)
         {
             if (path.Length < 2)
                 return null;
 
             var evaluator = scopedEvaluator ?? _segmentEvaluator;
-            var current = path[0];
-            for (var i = 0; i < path.Length - 1; i++)
+            var start = Math.Max(0, Math.Min(startIndex, path.Length - 2));
+            var current = path[start];
+            for (var i = start; i < path.Length - 1; i++)
             {
                 var evaluation = evaluator(mapId, current, path[i + 1]);
                 if (evaluation.Reason != SegmentBlockReason.None)

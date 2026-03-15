@@ -44,7 +44,9 @@ namespace BotRunner
                         navPath = new NavigationPath(pfClient,
                             capsuleRadius: radius,
                             capsuleHeight: height,
-                            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end));
+                            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(_objectManager, start, end),
+                            race: _objectManager.Player.Race,
+                            gender: _objectManager.Player.Gender);
                     }
 
                     var target = new Position(x, y, z);
