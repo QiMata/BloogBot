@@ -9,7 +9,6 @@ using GameData.Core.Models;
 using Serilog;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -39,28 +38,8 @@ namespace BotRunner
         private readonly Queue<string> _recentErrors = new();
         private const int MaxBufferedMessages = 50;
 
-        // File-based diagnostic logger (works in injected FG process where Serilog isn't configured)
-        // Uses PID in filename so BG/FG processes don't clobber each other's logs
-        private static readonly string _diagPath;
-        private static readonly object _diagLock = new();
-        static BotRunnerService()
-        {
-            try
-            {
-                var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
-                var procName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
-                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BloogBot");
-                Directory.CreateDirectory(dir);
-                _diagPath = Path.Combine(dir, $"botrunner_diag_{procName}_{pid}.log");
-                File.WriteAllText(_diagPath, $"=== BotRunnerService diag started {DateTime.Now:yyyy-MM-dd HH:mm:ss} proc={procName} pid={pid} ===\n");
-            }
-            catch { _diagPath = ""; }
-        }
-        internal static void DiagLog(string msg)
-        {
-            if (string.IsNullOrEmpty(_diagPath)) return;
-            try { lock (_diagLock) { File.AppendAllText(_diagPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n"); } } catch { }
-        }
+        // DiagLog kept as no-op stub so callers across the codebase still compile.
+        internal static void DiagLog(string msg) { }
 
         private Task? _asyncBotTaskRunnerTask;
         private CancellationTokenSource? _cts;
