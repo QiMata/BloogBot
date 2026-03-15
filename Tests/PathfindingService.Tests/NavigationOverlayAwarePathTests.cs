@@ -9,15 +9,22 @@ public class NavigationOverlayAwarePathTests
     private static readonly XYZ Start = new(0f, 0f, 0f);
     private static readonly XYZ End = new(10f, 0f, 0f);
 
+    // Mid point sits before the blocked corridor (x=3..7), so segment 0 (Start→Mid) is clear
+    // and segment 1 (Mid→End) crosses the corridor and gets blocked.
+    private static readonly XYZ Mid = new(2f, 0f, 0f);
+
     [Fact]
     public void CalculateValidatedPath_UsesAlternateMode_WhenPreferredPathIsBlocked()
     {
+        // Preferred (smooth) path: [Start, Mid, End] — segment 1 (Mid→End) is blocked.
+        // Segment-0-skip does NOT apply because the blocked segment is at index 1.
+        // Alternate (non-smooth) path: [Start, alternateMid, End] — all segments clear.
         var alternateMid = new XYZ(5f, 3f, 0f);
         var navigation = new Navigation(
             (mapId, start, end, smoothPath) =>
             {
                 if (start.Equals(Start) && end.Equals(End) && smoothPath)
-                    return [Start, End];
+                    return [Start, Mid, End];
 
                 if (start.Equals(Start) && end.Equals(End) && !smoothPath)
                     return [Start, alternateMid, End];
@@ -37,8 +44,11 @@ public class NavigationOverlayAwarePathTests
     }
 
     [Fact]
-    public void CalculateValidatedPath_RepairsBlockedPath_WithDetourCandidate()
+    public void CalculateValidatedPath_Segment0Skip_ReturnsPathWhenOnlySegment0IsBlocked()
     {
+        // 2-point path [Start, End] where segment 0 is blocked.
+        // The segment-0-skip logic accepts the path because the player is already
+        // standing at Start, so Start→End is traversable by definition.
         var navigation = new Navigation(
             (mapId, start, end, smoothPath) => [start, end],
             (mapId, from, to) => IntersectsFlatCorridor(from, to)
@@ -47,9 +57,30 @@ public class NavigationOverlayAwarePathTests
 
         var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
 
+        Assert.Equal("native_path_seg0skip", result.Result);
+        Assert.Null(result.BlockedSegmentIndex);
+        Assert.Equal([Start, End], result.Path);
+    }
+
+    [Fact]
+    public void CalculateValidatedPath_RepairsBlockedPath_WithDetourCandidate()
+    {
+        // 3-point path [Start, Mid, End] — segment 1 (Mid→End) crosses the corridor.
+        // Segment 0 is clear, so seg0skip does not apply.  Repair should find a detour.
+        // Sub-path requests (repair legs) return direct 2-point paths so repair candidates
+        // aren't polluted with the Mid waypoint.
+        var navigation = new Navigation(
+            (mapId, start, end, smoothPath) =>
+                start.Equals(Start) && end.Equals(End) ? [Start, Mid, End] : [start, end],
+            (mapId, from, to) => IntersectsFlatCorridor(from, to)
+                ? Navigation.SegmentBlockReason.DynamicOverlay
+                : Navigation.SegmentBlockReason.None);
+
+        var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
+
         Assert.Equal("repaired_dynamic_overlay", result.Result);
-        Assert.Equal(0, result.BlockedSegmentIndex);
-        Assert.Equal([Start, End], result.RawPath);
+        Assert.Equal(1, result.BlockedSegmentIndex);
+        Assert.Equal([Start, Mid, End], result.RawPath);
         Assert.True(result.Path.Length >= 3, $"Expected repaired detour path, got {result.Path.Length} waypoints");
         Assert.Equal(Start, result.Path[0]);
         Assert.Equal(End, result.Path[^1]);
@@ -65,8 +96,10 @@ public class NavigationOverlayAwarePathTests
     [Fact]
     public void CalculateValidatedPath_ReturnsBlockedResult_WhenNoRepairCandidateWorks()
     {
+        // 3-point path [Start, Mid, End] — segment 1 (Mid→End) crosses the wide blocked span.
+        // SegmentCrossesBlockedSpan blocks all repair candidates too.
         var navigation = new Navigation(
-            (mapId, start, end, smoothPath) => [start, end],
+            (mapId, start, end, smoothPath) => [start, Mid, end],
             (mapId, from, to) => SegmentCrossesBlockedSpan(from, to)
                 ? Navigation.SegmentBlockReason.DynamicOverlay
                 : Navigation.SegmentBlockReason.None);
@@ -74,16 +107,19 @@ public class NavigationOverlayAwarePathTests
         var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
 
         Assert.Equal("blocked_by_dynamic_overlay", result.Result);
-        Assert.Equal(0, result.BlockedSegmentIndex);
+        Assert.Equal(1, result.BlockedSegmentIndex);
         Assert.Empty(result.Path);
-        Assert.Equal([Start, End], result.RawPath);
+        Assert.Equal([Start, Mid, End], result.RawPath);
     }
 
     [Fact]
     public void CalculateValidatedPath_RepairsCapsuleValidation_WithSegmentValidationResult()
     {
+        // 3-point path [Start, Mid, End] — segment 1 (Mid→End) crosses the corridor.
+        // Sub-path requests (repair legs) return direct 2-point paths.
         var navigation = new Navigation(
-            (mapId, start, end, smoothPath) => [start, end],
+            (mapId, start, end, smoothPath) =>
+                start.Equals(Start) && end.Equals(End) ? [Start, Mid, End] : [start, end],
             (mapId, from, to) => IntersectsFlatCorridor(from, to)
                 ? Navigation.SegmentBlockReason.CapsuleValidation
                 : Navigation.SegmentBlockReason.None);
@@ -91,15 +127,16 @@ public class NavigationOverlayAwarePathTests
         var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
 
         Assert.Equal("repaired_segment_validation", result.Result);
-        Assert.Equal(0, result.BlockedSegmentIndex);
+        Assert.Equal(1, result.BlockedSegmentIndex);
         Assert.True(result.Path.Length >= 3);
     }
 
     [Fact]
     public void CalculateValidatedPath_ReturnsSpecificStepDownReason_WhenSegmentFailsWalkability()
     {
+        // 3-point path [Start, Mid, End] — segment 1 (Mid→End) crosses the wide blocked span.
         var navigation = new Navigation(
-            (mapId, start, end, smoothPath) => [start, end],
+            (mapId, start, end, smoothPath) => [start, Mid, end],
             (mapId, from, to) => SegmentCrossesBlockedSpan(from, to)
                 ? Navigation.SegmentBlockReason.StepDownLimit
                 : Navigation.SegmentBlockReason.None);
@@ -107,7 +144,7 @@ public class NavigationOverlayAwarePathTests
         var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
 
         Assert.Equal("blocked_by_step_down_limit", result.Result);
-        Assert.Equal(0, result.BlockedSegmentIndex);
+        Assert.Equal(1, result.BlockedSegmentIndex);
         Assert.Empty(result.Path);
     }
 

@@ -101,8 +101,12 @@ public class NavigationFixture : IDisposable
         var candidates = new[]
         {
             AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            // When test output goes to Tests/<project>/bin/<config>/net8.0/
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Debug", "net8.0")),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Release", "net8.0")),
+            // When test output goes to shared Bot/<config>/net8.0/ (OutputPath override)
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "Debug", "net8.0")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "Release", "net8.0")),
         };
 
         foreach (var dir in candidates)
