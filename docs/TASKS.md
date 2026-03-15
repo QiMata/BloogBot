@@ -198,27 +198,28 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 98)
+- **Last updated:** 2026-03-15 (session 99)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **FG ClickToMove (CTM) movement** (`546b4ad`) — Replaced SetControlBit(Forward)+SetFacing with WoW's native ClickToMove (0x00611130) for terrain-aware pathing. Added SEH wrapper to FastCall.dll, P/Invoke in Functions.cs. FG ghost was getting stuck on terrain near Razor Hill because raw keyboard-style movement has no micro-pathfinding.
-  2. **Improved corpse run stall recovery** (`546b4ad`) — Escalating strafe+jump recovery (levels 3-6), max attempts 4→6. Alternating left/right strafe at levels 3+.
-  3. **CHECK_MAIL end-to-end implementation** (`00be0e1`) — Full mail collection for both FG+BG bots:
-     - Added CHECK_MAIL (69) to proto ActionType, CharacterAction enum, ActionMapping
-     - CheckMail handler in ActionDispatch (finds mailbox GUID, calls CollectAllMailAsync)
-     - Fixed BG QuickCollectAllMailAsync to actually take money/items (was open+close only)
-     - Implemented FG CollectAllMailAsync via Lua (right-click mailbox, GetInboxHeaderInfo, TakeInboxMoney/Item)
-  4. **Updated Mail_OpenMailbox test** — Sends gold via SOAP, dispatches CHECK_MAIL, asserts coinage increased
-  5. **Sent gold to all 3 bot characters** (Testgrunt, Lokgaka, Shanaka) — 10000 copper each via SOAP `.send money`
+  1. **Baked server-spawned GameObjects into navmesh** (`e9096a9`) — Solved the root cause of paths routing through collidable braziers/posts/barricades near Razor Hill.
+     - Created `tools/GameObjectExporter/` C# tool: queries vmangos DB, exports 54,676 GO spawns to JSON
+     - Modified `D:/vmangos/contrib/mmap/src/TerrainBuilder.{h,cpp}`: parse `temp_gameobject_models` binary + JSON, load GO collision meshes per tile with proper WoW→Recast coordinate transform
+     - Modified `D:/vmangos/contrib/mmap/src/TileWorker.cpp`: `rcMarkBoxArea(RC_NULL_AREA)` marks padded GO footprints as unwalkable after `rcBuildCompactHeightfield`
+     - Key insight: GO mesh walls are steep (Recast marks unwalkable), but span merging takes MAX area → terrain stays walkable. `rcMarkBoxArea` explicitly overrides merged spans.
+     - Rebuilt tile `0013140.mmtile` (Kalimdor tile 40,31 covering Razor Hill area)
+  2. **Razor Hill corpse run test: PASS** — Path now routes around brazier at (273,-4729) and building cluster at (330,-4705). 11 waypoints, all segments have clear LOS.
+  3. **Updated diagnostic test** — Replaced hard-coded segment probe with path-level LOS validation
 - **Test results:**
-  - **Mail_OpenMailbox: PASS** — BG collected 7 mails (65000 copper delta). Fixed: CMSG_GAMEOBJ_USE (was CMSG_GOSSIP_HELLO), poll-based SMSG wait, type-based mailbox detection (GameObjectType=19). FG coinage assertion skipped (stub).
-  - **Trainer_LearnAvailableSpells: PASS** — FG learned Battle Shout through trainer (spells 214→228). VisitTrainer task handles full NPC interaction without GM commands.
-  - **DeathCorpseRunTests: 1 PASS (BG), 1 FAIL (FG)** — FG ghost didn't move (bestDist=152y = starting distance). RetrieveCorpse action didn't reach FG bot in time — separate issue from terrain collision. CTM fix is for movement quality, not action dispatch.
-- **Trainer test verification:** `Trainer_LearnAvailableSpells` already uses `ActionType.VisitTrainer` (task-driven). No GM `.learn` in test flow. Setup-only GM commands (.modify money, .character level, .unlearn) are correct per test architecture.
+  - PathfindingService: 39/40 pass (1 pre-existing failure: `CalculatePath_ShouldReturnValidPath` segment 46→47 = 389y gap in unrelated tile area)
 - **Next:**
-  1. FG corpse run: investigate why RetrieveCorpse action doesn't reach FG bot (action dispatch/timing issue)
-  2. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
-  3. P7 remaining items (shoreline route hardening, object-aware paths)
+  1. Full tile rebuild for maps 0 and 1 (currently only tile 40,31 rebuilt)
+  2. FG corpse run: investigate why RetrieveCorpse action doesn't reach FG bot (action dispatch/timing issue)
+  3. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
+  4. P7 remaining items (shoreline route hardening, object-aware paths)
+
+## Session Handoff (Session 98 Archive)
+- **Last updated:** 2026-03-14 (session 98)
+- **Completed:** FG ClickToMove, improved corpse run stall recovery, CHECK_MAIL end-to-end, mail/trainer tests pass.
 
 ## Session Handoff (Session 95 Archive)
 - **Last updated:** 2026-03-14 (session 95)
