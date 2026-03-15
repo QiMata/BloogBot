@@ -559,17 +559,30 @@ namespace ForegroundBotRunner.Statics
                     break;
                 }
 
-                // If gossip frame is visible, click the trainer gossip option to open trainer window
+                // If gossip frame is visible, click the trainer gossip option to open trainer window.
+                // Use DialogFrame (memory-based) to find the trainer-type option, falling back to Lua.
                 if (!gossipHandled)
                 {
                     var gossipVisible = MainThreadLuaCallWithResult(
                         "if GossipFrame and GossipFrame:IsVisible() then {0} = '1' else {0} = '0' end");
                     if (gossipVisible.Length > 0 && gossipVisible[0] == "1")
                     {
-                        Log.Information("[FG-TRAINER] Gossip frame detected — clicking trainer option.");
-                        MainThreadLuaCall(
-                            "local n = GetNumGossipOptions() or 0; " +
-                            "if n > 0 then SelectGossipOption(1) end");
+                        Log.Information("[FG-TRAINER] Gossip frame detected — selecting trainer option.");
+                        ThreadSynchronizer.RunOnMainThread(() =>
+                        {
+                            var dialog = new Frames.DialogFrame();
+                            if (dialog.DialogOptions.Any(d => d.Type == GameData.Core.Enums.DialogType.trainer))
+                            {
+                                dialog.SelectFirstGossipOfType(GameData.Core.Enums.DialogType.trainer);
+                                Log.Information("[FG-TRAINER] Selected trainer gossip option via DialogFrame ({Count} options).", dialog.DialogOptions.Count);
+                            }
+                            else
+                            {
+                                // Fallback: click the first option (some trainers use generic gossip type)
+                                Functions.LuaCall("SelectGossipOption(1)");
+                                Log.Information("[FG-TRAINER] No trainer-type gossip found ({Count} options), clicked option 1.", dialog.DialogOptions.Count);
+                            }
+                        });
                         gossipHandled = true;
                     }
                 }
