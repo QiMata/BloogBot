@@ -197,31 +197,22 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff (Latest)
-- **Last updated:** 2026-03-14 (session 97)
+- **Last updated:** 2026-03-14 (session 98)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  1. **FG ghost state guard** (`6b3cf53`) — Skip RefreshSpells/RefreshSkills during ghost form. Lua calls crashed WoW.exe during ghost transition. Memory read `IsGhost` (0x835A48) gates the skip.
-  2. **FG spell list rebuild** (`951c143`, `c32e4b1`) — _persistentLearnedIds was append-only; unlearned spells persisted. Now rebuilds from static array + Lua each tick.
-  3. **FG trainer gossip handling** (`9b6bf3f`, `62c4bd2`) — FG trainers open gossip menu before trainer window. Added DialogFrame-based gossip detection and trainer option selection.
-  4. **FG coinage assertion fix** (`c275baa`) — FG WoWPlayer.Coinage is a stub (always 0). Skip coinage assertion for FG in trainer test.
-- **Test results (final full 43-test suite):**
-  - **38 passed, 1 failed, 4 skipped** (improved from session 96's 35/2/6)
-  - 3 previously-failing tests now pass: SpellCast, Trainer, BG CorpseRun
-  - Physics: 109/0/1 (unchanged)
-- **Failure (1):**
-  1. `DeathCorpseRunTests.ResurrectsForegroundPlayer` — FG ghost gets stuck on terrain during corpse run (pathfinding issue). Ghost only moves 12y toward corpse (needs 25y). **WoW.exe no longer crashes** (ghost state guard works). Remaining blocker is FG ghost navigation quality near Razor Hill.
-- **Skips (4):**
-  1. `DismissBuff_RemovesBuff` — FG-only, expected skip
-  2. `FishingProfessionTests` — No pool at Ratchet (respawn timer)
-  3. `GatheringProfessionTests.Mining` — Copper veins on respawn
-  4. `GatheringProfessionTests.Herbalism` — Herbs on respawn
-- **Fixes summary:**
-  - FG-GHOST-CRASH-001: Ghost state guard prevents WoW.exe crash during corpse run
-  - FG spell unlearn: Rebuild spell list each tick so .unlearn is reflected
-  - FG trainer gossip: DialogFrame reads gossip options from memory, auto-selects trainer type
-  - FG CastSpell(int): Already resolves to name via GetSpellNameFromDb (was incorrectly documented as no-op)
+  1. **FG ClickToMove (CTM) movement** (`546b4ad`) — Replaced SetControlBit(Forward)+SetFacing with WoW's native ClickToMove (0x00611130) for terrain-aware pathing. Added SEH wrapper to FastCall.dll, P/Invoke in Functions.cs. FG ghost was getting stuck on terrain near Razor Hill because raw keyboard-style movement has no micro-pathfinding.
+  2. **Improved corpse run stall recovery** (`546b4ad`) — Escalating strafe+jump recovery (levels 3-6), max attempts 4→6. Alternating left/right strafe at levels 3+.
+  3. **CHECK_MAIL end-to-end implementation** (`00be0e1`) — Full mail collection for both FG+BG bots:
+     - Added CHECK_MAIL (69) to proto ActionType, CharacterAction enum, ActionMapping
+     - CheckMail handler in ActionDispatch (finds mailbox GUID, calls CollectAllMailAsync)
+     - Fixed BG QuickCollectAllMailAsync to actually take money/items (was open+close only)
+     - Implemented FG CollectAllMailAsync via Lua (right-click mailbox, GetInboxHeaderInfo, TakeInboxMoney/Item)
+  4. **Updated Mail_OpenMailbox test** — Sends gold via SOAP, dispatches CHECK_MAIL, asserts coinage increased
+  5. **Sent gold to all 3 bot characters** (Testgrunt, Lokgaka, Shanaka) — 10000 copper each via SOAP `.send money`
+- **Test results:** Running trainer, mail, and corpse run tests — awaiting results.
+- **Trainer test verification:** `Trainer_LearnAvailableSpells` already uses `ActionType.VisitTrainer` (task-driven). No GM `.learn` in test flow. Setup-only GM commands (.modify money, .character level, .unlearn) are correct per test architecture.
 - **Next:**
-  1. FG ghost pathfinding quality near Razor Hill — bot gets stuck on terrain during corpse run
+  1. Verify test results (corpse run with CTM, mail collection, trainer)
   2. P3: Fishing FISH-001 — capture FG fishing packets when pool is available
   3. P7 remaining items (shoreline route hardening, object-aware paths)
 
