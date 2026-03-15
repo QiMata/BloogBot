@@ -266,7 +266,17 @@ namespace BotRunner
             if (unit is IWoWLocalPlayer lp)
             {
                 TryPopulate(() => player.Coinage = lp.Copper, "Coinage");
-                TryPopulate(() => player.CorpseRecoveryDelaySeconds = (uint)Math.Max(0, lp.CorpseRecoveryDelaySeconds), "CorpseRecoveryDelay");
+
+                // Skip CorpseRecoveryDelaySeconds during ghost form. The FG implementation
+                // calls Lua (GetCorpseRecoveryDelay) via ThreadSynchronizer every tick, which
+                // races with MoveToward's direct SendMovementUpdate calls and eventually
+                // corrupts a packet — causing a server disconnect ~8s into ghost navigation.
+                // RetrieveCorpseTask checks the delay itself when it needs it (line 612).
+                var isGhostSnapshot = (((uint)lp.PlayerFlags) & 0x10) != 0; // PLAYER_FLAGS_GHOST
+                if (!isGhostSnapshot)
+                {
+                    TryPopulate(() => player.CorpseRecoveryDelaySeconds = (uint)Math.Max(0, lp.CorpseRecoveryDelaySeconds), "CorpseRecoveryDelay");
+                }
             }
 
             if (unit is IWoWPlayer wp)

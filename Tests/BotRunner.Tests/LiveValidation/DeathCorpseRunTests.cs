@@ -70,7 +70,10 @@ public class DeathCorpseRunTests
         var fgChar = _bot.FgCharacterName;
 
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount) || string.IsNullOrWhiteSpace(fgChar), "No FG bot available.");
-        global::Tests.Infrastructure.Skip.IfNot(await _bot.CheckFgActionableAsync(), "FG bot is not actionable.");
+        // Skip teleport probe — this test teleports to Razor Hill immediately after.
+        // The probe does 2-3 rapid teleports to Orgrimmar which, combined with the
+        // Razor Hill teleport + kill + graveyard, causes MaNGOS to TCP-disconnect.
+        global::Tests.Infrastructure.Skip.IfNot(await _bot.CheckFgActionableAsync(requireTeleportProbe: false), "FG bot is not actionable.");
 
         _output.WriteLine($"[FG] {fgChar} -> corpse recovery is asserted on the injected bot.");
         var (fgPass, fgReason) = await RunCorpseRunScenario(fgAccount!, fgChar!, "FG");
@@ -83,8 +86,8 @@ public class DeathCorpseRunTests
         Task<(bool passed, string reason)> FailAsync(string reason, global::Game.Position? corpsePos = null)
             => BuildFailureResultAsync(account, label, reason, corpsePos);
 
-        _output.WriteLine($"  [{label}] Step 1: Ensure alive");
-        await _bot.EnsureCleanSlateAsync(account, label);
+        _output.WriteLine($"  [{label}] Step 1: Ensure alive (skip safe-zone — we teleport to Razor Hill next)");
+        await _bot.EnsureCleanSlateAsync(account, label, teleportToSafeZone: false);
 
         _output.WriteLine($"  [{label}] Step 2: Teleport to Razor Hill (flat terrain, nearby graveyard)");
         await _bot.BotTeleportAsync(account, MapId, DeathAreaX, DeathAreaY, DeathAreaZ);

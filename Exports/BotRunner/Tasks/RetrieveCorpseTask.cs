@@ -63,6 +63,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
     private Position? _lastDrivenWaypoint;
     private DateTime _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
     private DateTime _lastTickDiagUtc = DateTime.MinValue;
+    private bool _stoppedForRetrieval;
 
     // MaNGOS CORPSE_RECLAIM_RADIUS = 39y (3D distance). We compute a dynamic 2D
     // approach distance from the current Z delta so the bot walks close enough in
@@ -484,6 +485,7 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
 
         if (corpseHorizontalDistance > retrieveRange)
         {
+            _stoppedForRetrieval = false;
             if (!_loggedPathfindingMode)
             {
                 Log.Information("[RETRIEVE_CORPSE] Using pathfinding toward corpse at ({X:F0}, {Y:F0}, {Z:F0})",
@@ -584,7 +586,15 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
         ResetWaypointProgressTracking();
         ResetRunbackStallTracking(player.Position);
         _runbackRecoveryHoldUntilUtc = DateTime.MinValue;
-        ObjectManager.ForceStopImmediate();
+
+        // Only send ForceStopImmediate once when entering retrieve range.
+        // Calling it every 100ms tick floods MSG_MOVE_STOP packets (~170 in 27s)
+        // and triggers VMaNGOS anti-cheat disconnect.
+        if (!_stoppedForRetrieval)
+        {
+            ObjectManager.ForceStopImmediate();
+            _stoppedForRetrieval = true;
+        }
 
         if (IsStrictAlive(player))
         {

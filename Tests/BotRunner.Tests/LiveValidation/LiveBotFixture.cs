@@ -185,12 +185,45 @@ public partial class LiveBotFixture : IAsyncLifetime
         }
 
         await RefreshSnapshotsAsync();
-        if (ForegroundBot == null || !IsStrictAlive(ForegroundBot))
+        if (ForegroundBot == null)
         {
             _fgResponsive = false;
-            var hp = ForegroundBot?.Player?.Unit?.Health ?? 0;
-            _logger.LogWarning("[FG-PROBE] FG not strict-alive (health={Health})", hp);
+            _logger.LogWarning("[FG-PROBE] FG snapshot null after refresh");
             return false;
+        }
+
+        if (!IsStrictAlive(ForegroundBot))
+        {
+            // Bot is connected but dead/ghost — attempt revive before giving up
+            IsDeadOrGhostState(ForegroundBot, out var deathReason);
+            _logger.LogWarning("[FG-PROBE] FG not strict-alive ({Reason}); attempting revive", deathReason);
+
+            var charName = ForegroundBot.CharacterName ?? GetKnownCharacterNameForAccount(FgAccountName);
+            if (!string.IsNullOrWhiteSpace(charName))
+            {
+                await RevivePlayerAsync(charName);
+                var revived = await WaitForSnapshotConditionAsync(
+                    FgAccountName,
+                    IsStrictAlive,
+                    TimeSpan.FromSeconds(10),
+                    progressLabel: "FG revive-probe");
+
+                if (!revived)
+                {
+                    _fgResponsive = false;
+                    _logger.LogWarning("[FG-PROBE] Revive failed after 10s; FG not actionable");
+                    return false;
+                }
+
+                _logger.LogInformation("[FG-PROBE] Revive succeeded, continuing probe");
+                await RefreshSnapshotsAsync();
+            }
+            else
+            {
+                _fgResponsive = false;
+                _logger.LogWarning("[FG-PROBE] No character name available for revive");
+                return false;
+            }
         }
 
         // Probe with a harmless self-target command

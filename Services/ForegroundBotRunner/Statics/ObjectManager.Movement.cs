@@ -36,12 +36,19 @@ namespace ForegroundBotRunner.Statics
                 return;
             }
 
+            // Skip redundant facing updates. MoveToward fires every 100ms and often
+            // requests the same facing — sending MSG_MOVE_SET_FACING every tick floods
+            // the server (~70 packets in 7s) and triggers VMaNGOS anti-cheat disconnect.
+            var currentFacing = localPlayer.Facing;
+            if (MathF.Abs(facing - currentFacing) < 0.01f)
+                return;
+
             Functions.SetFacing(nint.Add(localPlayer.Pointer, MemoryAddresses.LocalPlayer_SetFacingOffset), facing);
             Functions.SendMovementUpdate(localPlayer.Pointer, (int)Opcode.MSG_MOVE_SET_FACING);
 
             if ((DateTime.UtcNow - _lastSetFacingDiagUtc).TotalSeconds >= 2)
             {
-                DiagLog($"[SetFacing] facing={facing:F3} hp={localPlayer.Health}/{localPlayer.MaxHealth}");
+                DiagLog($"[SetFacing] facing={facing:F3} hp={localPlayer.Health}/{localPlayer.MaxHealth} ghost={localPlayer.InGhostForm}");
                 _lastSetFacingDiagUtc = DateTime.UtcNow;
             }
         }
@@ -278,10 +285,11 @@ namespace ForegroundBotRunner.Statics
             if (Player is not LocalPlayer localPlayer || localPlayer.Pointer == nint.Zero)
                 return;
 
-            // Snap-face to target and start moving forward. Direct native calls (no
-            // ThreadSync) to avoid ManualResetEventSlim heap pressure in the injected
-            // runtime — this is called every 100ms tick during active movement.
+            // Snap-face to target and start moving forward.
             var requiredFacing = Player.GetFacingForPosition(pos);
+
+            // Direct native calls (no ThreadSync) to avoid ManualResetEventSlim heap
+            // pressure in the injected runtime — called every 100ms tick during movement.
             SetFacing(requiredFacing);
             StartMovement(ControlBits.Front);
             ResetFacingState();

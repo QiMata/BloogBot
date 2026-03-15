@@ -53,6 +53,7 @@ namespace ForegroundBotRunner.Mem
         private const uint WM_KEYDOWN = 0x0100;
         private const uint WM_KEYUP = 0x0101;
         private const int VK_SPACE = 0x20;
+        private const int VK_W = 0x57;
 
         [DllImport("kernel32.dll")]
         private static extern uint GetCurrentThreadId();
@@ -418,6 +419,26 @@ namespace ForegroundBotRunner.Mem
             if (windowHandle == 0) return;
             PostMessage(windowHandle, WM_KEYDOWN, VK_SPACE, 0x00390001); // scancode 0x39 for space
             PostMessage(windowHandle, WM_KEYUP, VK_SPACE, unchecked((int)0xC0390001)); // release with bit 31+30 set
+        }
+
+        /// <summary>
+        /// Sends a W key press via PostMessage to trigger forward movement.
+        /// Used for ghost-form movement where native SetControlBit crashes WoW.exe.
+        /// Only sends KEYDOWN — KEYUP is sent by StopGhostMovement when needed.
+        /// </summary>
+        public static void SimulateForwardKeyPress()
+        {
+            if (windowHandle == 0) return;
+            PostMessage(windowHandle, WM_KEYDOWN, VK_W, 0x00110001); // scancode 0x11 for W
+        }
+
+        /// <summary>
+        /// Releases the W key to stop ghost forward movement.
+        /// </summary>
+        public static void SimulateForwardKeyRelease()
+        {
+            if (windowHandle == 0) return;
+            PostMessage(windowHandle, WM_KEYUP, VK_W, unchecked((int)0xC0110001));
         }
     }
 }
