@@ -170,26 +170,23 @@ When working on any phase or task from `docs/TASKS.md`:
 - If a failure reveals a new issue, create a task for it before moving on
 - Flaky test setup should be evaluated before creating a code-fix task — distinguish infrastructure issues from real bugs
 
-## Session Handoff Protocol
+## Session Continuity — Single Session, Auto-Compact
 
-Before completing ANY session, update the active task files directly:
+**CRITICAL: Use ONE continuous session.** Do not start new sessions to run tests, investigate issues, or continue work. A single session auto-compacts (context compression) as it approaches limits and seamlessly continues. Starting a new session loses all in-flight context, creates confusion, and risks regressions.
 
-1. `docs/TASKS.md` (master handoff section)
-2. Each impacted directory-local `TASKS.md`
-3. Relevant `TASKS_ARCHIVE.md` files for completed items
+**Rules:**
+1. **Never start a new session** when the current one can continue. Auto-compaction handles context limits automatically.
+2. **Keep working through compaction.** After compaction, pick up the last task as if the break never happened — do not recap, do not ask what to do next, just continue.
+3. **Commit and push frequently.** This is the primary persistence mechanism. Every logical unit of work (fix, test addition, refactor) gets its own commit. Push immediately after committing.
+4. **Update `docs/TASKS.md`** with progress after completing each task or before ending a session.
 
-### Required Handoff Fields
+### Handoff Fields (when session truly ends)
 
-Every session handoff update must include:
+Update `docs/TASKS.md` Session Handoff section with:
 1. What was completed
 2. Exact commands run and outcomes
-3. Snapshot/log/command-response evidence when applicable
-4. Files changed
-5. The very next command/task to run
-
-### Completion
-
-When all tracked work is complete, mark completion in `docs/TASKS.md` handoff section rather than creating separate prompt files.
+3. Files changed
+4. The very next command/task to run
 
 ### Important
 

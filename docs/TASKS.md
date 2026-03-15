@@ -6,19 +6,20 @@
 - When priorities conflict, this file wins.
 
 ## Rules
-1. Execute one local `TASKS.md` at a time in queue order.
-2. Keep handoff pointers (`current file`, `next file`) updated before switching.
-3. Prefer concrete file/symbol tasks over broad behavior buckets.
-4. Never blanket-kill `dotnet` or `Game.exe`; cleanup must be PID-scoped.
-5. Move completed items to `docs/ARCHIVE.md`.
-6. Before session handoff, update `Session Handoff` in both this file and the active local file.
-7. If two consecutive passes produce no delta, record the blocker and advance to the next queued file.
-8. **The MaNGOS server is ALWAYS live.** Never defer live validation tests; run them every session.
-9. **Compare to VMaNGOS server code** when implementing packet-based functionality. The server is the authority for correct behavior.
-10. Every implementation slice must add or update focused unit tests and end with those tests passing before moving to the next slice unless a blocker is recorded.
-11. Update the active plan and all impacted `TASKS.md` handoff blocks every pass with exact progress, commands, outcomes, and the next executable command.
-12. After each shipped delta, commit and push the full branch state before ending the pass.
-13. Every session handoff must direct the next session to resume the next open item in the same test-first, commit/push-as-you-go manner.
+1. **Use ONE continuous session.** Never start new sessions to run tests or continue work — auto-compaction handles context limits. Starting new sessions loses context and creates confusion.
+2. Execute one local `TASKS.md` at a time in queue order.
+3. Keep handoff pointers (`current file`, `next file`) updated before switching.
+4. Prefer concrete file/symbol tasks over broad behavior buckets.
+5. Never blanket-kill `dotnet` or `Game.exe`; cleanup must be PID-scoped.
+6. Move completed items to `docs/ARCHIVE.md`.
+7. Before session handoff, update `Session Handoff` in both this file and the active local file.
+8. If two consecutive passes produce no delta, record the blocker and advance to the next queued file.
+9. **The MaNGOS server is ALWAYS live.** Never defer live validation tests; run them every session.
+10. **Compare to VMaNGOS server code** when implementing packet-based functionality. The server is the authority for correct behavior.
+11. Every implementation slice must add or update focused unit tests and end with those tests passing before moving to the next slice unless a blocker is recorded.
+12. Update the active plan and all impacted `TASKS.md` handoff blocks every pass with exact progress, commands, outcomes, and the next executable command.
+13. After each shipped delta, commit and push the full branch state before ending the pass.
+14. Every session handoff must direct the next session to resume the next open item in the same test-first, commit/push-as-you-go manner.
 
 ---
 
