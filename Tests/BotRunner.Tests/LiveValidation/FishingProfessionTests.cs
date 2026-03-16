@@ -359,12 +359,23 @@ public class FishingProfessionTests
 
     private void AssertFishingResult(string label, FishingRunResult result)
     {
-        // Skip (don't fail) when FishingTask popped because no pool was available —
-        // this is a world-state issue (respawn timer), not a code bug.
+        // If FishingTask popped claiming no pool, but a pool WAS visible during the run
+        // (either at start or during polling), that's a real detection/pathfinding bug — FAIL, don't skip.
         var noPoolPop = result.LastFishingTaskMessage.Contains("pop reason=no_fishing_pool", StringComparison.Ordinal)
                      || result.LastFishingTaskMessage.Contains("pop reason=lost_fishing_pool", StringComparison.Ordinal);
-        global::Tests.Infrastructure.Skip.If(noPoolPop,
-            $"[{label}] No fishing pool available at Ratchet (respawn timer). lastMessage={result.LastFishingTaskMessage}");
+        if (noPoolPop)
+        {
+            var poolWasVisible = result.BestPoolDistance < float.MaxValue || result.InitialVisiblePoolDistance < float.MaxValue;
+            Assert.False(poolWasVisible,
+                $"[{label}] FishingTask reported '{(result.LastFishingTaskMessage.Contains("lost_fishing_pool") ? "lost_fishing_pool" : "no_fishing_pool")}' " +
+                $"but a pool WAS visible (initial={result.InitialVisiblePoolDistance:F1}y, best={result.BestPoolDistance:F1}y). " +
+                $"This is a pool detection or pathfinding bug, not a respawn timer. {FormatFishingFailureContext(result)}");
+
+            // Only skip if no pool was ever visible — genuine respawn timer situation.
+            global::Tests.Infrastructure.Skip.If(true,
+                $"[{label}] No fishing pool visible at any point during the run. lastMessage={result.LastFishingTaskMessage}");
+            return;
+        }
 
         var failureContext = FormatFishingFailureContext(result);
 

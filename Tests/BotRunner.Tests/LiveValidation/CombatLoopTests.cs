@@ -115,7 +115,9 @@ public class CombatLoopTests
         {
             _output.WriteLine($"  [{label}] Finding candidate mob (attempt {attempt}/{MaxCombatAttempts})...");
             var (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(12));
-            global::Tests.Infrastructure.Skip.If(targetGuid == 0, $"[{label}] No living mob found near Valley of Trials mob area.");
+            Assert.True(targetGuid != 0,
+                $"[{label}] No living mob found near Valley of Trials mob area after 12s search. " +
+                $"Mobs should always be present in a controlled test environment — this is a mob detection or ObjectManager bug.");
             _output.WriteLine($"  [{label}] Target: 0x{targetGuid:X} HP={initialHealth} at ({mobX:F1},{mobY:F1},{mobZ:F1})");
 
             var distanceToMob = await GetDistanceToTargetAsync(account, targetGuid);

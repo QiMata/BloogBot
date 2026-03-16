@@ -16,7 +16,7 @@ Tests spell casting via ActionType dispatch: learn spell, grant resources, cast,
 |------|--------|---------|
 | 1 | Learn Battle Shout | `BotLearnSpellAsync(6673)` — warrior self-buff, +15 AP, instant cast, 10 rage cost |
 | 2 | Verify learned | Poll 5s for spell 6673 in `Player.SpellList` (300ms poll) |
-| 3 | Grant rage | `.modify rage 1000` via GM chat (1000 internal = 100 displayed rage) |
+| 3 | Grant rage | `.modify rage 200` via GM chat (200 internal = 20 displayed rage, enough for 10-rage spell) |
 | 4 | Remove stale aura | `.unaura 6673`. Wait 500ms. Verify absent from `Player.Unit.Auras`. |
 | 5 | Cast spell | **Dispatch `ActionType.CastSpell`** with `IntParam = 6673` |
 | 6 | Wait for aura | Poll 8s for spell 6673 in `Player.Unit.Auras` (300ms poll) |
@@ -36,7 +36,7 @@ Tests spell casting via ActionType dispatch: learn spell, grant resources, cast,
 - Spell 6673 = Battle Shout (Rank 1, warrior, instant, self-buff)
 - Rage cost: 10 rage (100 internal units)
 
-**GM Commands:** `.learn 6673` (via BotLearnSpellAsync), `.modify rage 1000`, `.unaura 6673`.
+**GM Commands:** `.learn 6673` (via BotLearnSpellAsync), `.modify rage 200`, `.unaura 6673`.
 
 **FG vs BG Critical Difference:** FG `CastSpell(int)` is a no-op — BotRunnerService must resolve spell ID to name via spell DB for Lua `CastSpellByName()`. BG sends CMSG_CAST_SPELL with int directly.
 

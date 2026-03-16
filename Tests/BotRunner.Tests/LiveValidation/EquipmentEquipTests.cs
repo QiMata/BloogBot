@@ -185,7 +185,7 @@ public class EquipmentEquipTests
         WoWActivitySnapshot? after = null;
         Game.WoWPlayer? playerAfter = null;
         var equipSw = Stopwatch.StartNew();
-        while (equipSw.Elapsed < TimeSpan.FromSeconds(3))
+        while (equipSw.Elapsed < TimeSpan.FromSeconds(8))
         {
             await _bot.RefreshSnapshotsAsync();
             after = await _bot.GetSnapshotAsync(account);

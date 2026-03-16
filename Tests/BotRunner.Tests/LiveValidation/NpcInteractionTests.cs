@@ -75,9 +75,10 @@ public class NpcInteractionTests
         var bgMetrics = await RunTrainerVisitScenarioAsync(_bot.BgAccountName!, "BG");
         Assert.True(bgMetrics.TrainerFound, "BG: class trainer with UNIT_NPC_FLAG_TRAINER should be visible near Razor Hill.");
         Assert.False(bgMetrics.HadSpellBefore, $"BG: spell {BattleShoutSpellId} must be absent before the trainer task runs.");
-        // VisitTrainer task navigation + gossip is timing-sensitive — skip on timeout rather than hard-fail
-        global::Tests.Infrastructure.Skip.IfNot(bgMetrics.HasSpellAfter,
-            $"BG: VisitTrainer task did not learn spell {BattleShoutSpellId} within timeout — navigation/gossip timing issue.");
+        // VisitTrainer task must learn the spell — if it doesn't, that's a navigation/gossip/interaction bug.
+        Assert.True(bgMetrics.HasSpellAfter,
+            $"BG: VisitTrainer task did not learn spell {BattleShoutSpellId} within timeout. " +
+            $"This is a navigation/gossip/interaction bug. LearnLatency={bgMetrics.LearnLatencyMs}ms");
         Assert.True(bgMetrics.SpellCountAfter > bgMetrics.SpellCountBefore,
             $"BG: spell list should grow after trainer visit. Before={bgMetrics.SpellCountBefore}, after={bgMetrics.SpellCountAfter}");
         Assert.True(bgMetrics.CoinageAfter < bgMetrics.CoinageBefore,
@@ -90,9 +91,10 @@ public class NpcInteractionTests
             var fgMetrics = await RunTrainerVisitScenarioAsync(_bot.FgAccountName!, "FG");
             Assert.True(fgMetrics.TrainerFound, "FG: class trainer should be visible near Razor Hill.");
             Assert.False(fgMetrics.HadSpellBefore, $"FG: spell {BattleShoutSpellId} must be absent before the trainer task runs.");
-            // FG VisitTrainer is equally timing-sensitive — skip on timeout rather than hard-fail
-            global::Tests.Infrastructure.Skip.IfNot(fgMetrics.HasSpellAfter,
-                $"FG: VisitTrainer task did not learn spell {BattleShoutSpellId} within timeout — navigation/gossip timing issue.");
+            // FG VisitTrainer task must learn the spell — if it doesn't, that's a navigation/gossip/interaction bug.
+            Assert.True(fgMetrics.HasSpellAfter,
+                $"FG: VisitTrainer task did not learn spell {BattleShoutSpellId} within timeout. " +
+                $"This is a navigation/gossip/interaction bug. LearnLatency={fgMetrics.LearnLatencyMs}ms");
             Assert.True(fgMetrics.SpellCountAfter > fgMetrics.SpellCountBefore,
                 $"FG: spell list should grow. Before={fgMetrics.SpellCountBefore}, after={fgMetrics.SpellCountAfter}");
             // FG WoWPlayer.Coinage is a stub (always 0) — skip coinage assertion for FG
@@ -286,8 +288,10 @@ public class NpcInteractionTests
             (uint)NPCFlags.UNIT_NPC_FLAG_TRAINER,
             timeoutMs: 10000,
             progressLabel: $"{label} trainer lookup");
-        global::Tests.Infrastructure.Skip.If(trainerUnit == null,
-            $"[{label}] No trainer NPC found near Razor Hill — server may not have spawned NPCs yet after teleport.");
+        Assert.NotNull(trainerUnit);
+        Assert.True(trainerUnit != null,
+            $"[{label}] No trainer NPC found near Razor Hill after 10s. " +
+            "NPCs should always be present — this is a unit detection or ObjectManager bug.");
 
         var trainerGuid = trainerUnit!.GameObject?.Base?.Guid ?? 0;
         var trainerPos = trainerUnit.GameObject?.Base?.Position;

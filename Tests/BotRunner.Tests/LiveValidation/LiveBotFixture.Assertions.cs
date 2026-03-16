@@ -246,8 +246,26 @@ public partial class LiveBotFixture
             return;
         }
 
-        // Step 2: Teleport to safe zone (prevents position contamination from previous test)
-        await BotTeleportAsync(account, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
+        // Step 2: Teleport to safe zone (prevents position contamination from previous test).
+        // Skip if already near safe zone to avoid command floods when bot is stalled.
+        var alreadyNearSafeZone = false;
+        if (pos != null)
+        {
+            var dx = pos.X - SafeZoneX;
+            var dy = pos.Y - SafeZoneY;
+            var safeDist = (float)Math.Sqrt(dx * dx + dy * dy);
+            alreadyNearSafeZone = safeDist <= 50f;
+        }
+
+        if (alreadyNearSafeZone)
+        {
+            _logger.LogInformation("[{Label}] Already near safe zone ({Dist:F0}y); skipping teleport.", label,
+                Math.Sqrt((pos!.X - SafeZoneX) * (pos.X - SafeZoneX) + (pos.Y - SafeZoneY) * (pos.Y - SafeZoneY)));
+        }
+        else
+        {
+            await BotTeleportAsync(account, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
+        }
         await WaitForZStabilizationAsync(account, waitMs: 2000);
     }
 

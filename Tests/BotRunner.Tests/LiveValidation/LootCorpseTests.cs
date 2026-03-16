@@ -115,8 +115,9 @@ public class LootCorpseTests
 
         if (boar == null)
         {
-            _output.WriteLine($"  [{label}] SKIP: No living Mottled Boar found in area.");
-            global::Tests.Infrastructure.Skip.If(true, $"[{label}] No living boar found in mob area.");
+            _output.WriteLine($"  [{label}] FAIL: No living Mottled Boar found in area.");
+            Assert.Fail($"[{label}] No living boar found in mob area after 8s search. " +
+                "Mobs should always be present in a controlled test environment — this is a mob detection or ObjectManager bug.");
             return false;
         }
 

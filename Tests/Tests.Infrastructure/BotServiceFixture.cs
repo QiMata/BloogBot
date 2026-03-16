@@ -261,6 +261,15 @@ public class BotServiceFixture : IAsyncLifetime
                         }
                     }
 
+                    // Check PathfindingService (port 5001) — if it crashes mid-suite,
+                    // navigation tests will fail with mysterious timeouts.
+                    if (PathfindingServiceReady && !IsPortInUse(5001))
+                    {
+                        PathfindingServiceReady = false;
+                        var msg = $"PathfindingService (port 5001) stopped responding at {DateTime.Now:HH:mm:ss}";
+                        Log($"  [CrashMonitor] {msg}");
+                    }
+
                     await Task.Delay(2000, ct);
                 }
                 catch (OperationCanceledException)

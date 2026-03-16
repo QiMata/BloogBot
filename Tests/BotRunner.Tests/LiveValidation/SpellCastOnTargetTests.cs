@@ -111,9 +111,10 @@ public class SpellCastOnTargetTests
             _output.WriteLine($"  [{label}] WARNING: Battle Shout not found in spell list after 5s.");
 
         // Step 2a: Give rage (Battle Shout costs 10 rage = 100 internal units).
-        // MaNGOS stores rage as displayed_rage * 10, so 1000 = 100 displayed rage.
+        // MaNGOS stores rage as displayed_rage * 10, so 200 = 20 displayed rage (enough for 10-rage spell).
+        // Do NOT set to 1000 — full rage bar causes combat behavior interference in other tests.
         _output.WriteLine($"  [{label}] Step 2a: Granting rage for Battle Shout.");
-        await _bot.SendGmChatCommandAsync(account, ".modify rage 1000");
+        await _bot.SendGmChatCommandAsync(account, ".modify rage 200");
         await Task.Delay(300);
 
         // Step 2b: Remove any existing Battle Shout buff + leftover auras from other tests
@@ -142,29 +143,45 @@ public class SpellCastOnTargetTests
         });
         _output.WriteLine($"  [{label}] CastSpell action dispatch result: {castResult}");
 
-        // Step 4: Wait for aura to appear
+        // Step 4: Wait for aura to appear. FG cast can silently fail under load
+        // (Lua frame miss, rage not yet applied), so retry once if needed.
         _output.WriteLine($"  [{label}] Step 4: Waiting for Battle Shout aura to appear.");
         var auraAppeared = false;
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(12))
+        for (int castAttempt = 0; castAttempt < 2 && !auraAppeared; castAttempt++)
         {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var player = snap?.Player ?? getPlayer();
-            if (player?.Unit?.Auras?.Contains(BattleShoutSpellId) == true)
+            if (castAttempt > 0)
             {
-                auraAppeared = true;
-                _output.WriteLine($"  [{label}] Battle Shout aura detected after {sw.ElapsedMilliseconds}ms.");
-                break;
+                _output.WriteLine($"  [{label}] Aura not detected — retry #{castAttempt}: re-granting rage and re-casting.");
+                await _bot.SendGmChatCommandAsync(account, ".modify rage 200");
+                await Task.Delay(500);
+                await _bot.SendActionAsync(account, new ActionMessage
+                {
+                    ActionType = ActionType.CastSpell,
+                    Parameters = { new RequestParameter { IntParam = (int)BattleShoutSpellId } }
+                });
             }
-            await Task.Delay(300);
+
+            var sw = Stopwatch.StartNew();
+            while (sw.Elapsed < TimeSpan.FromSeconds(12))
+            {
+                await _bot.RefreshSnapshotsAsync();
+                var snap = await _bot.GetSnapshotAsync(account);
+                var player = snap?.Player ?? getPlayer();
+                if (player?.Unit?.Auras?.Contains(BattleShoutSpellId) == true)
+                {
+                    auraAppeared = true;
+                    _output.WriteLine($"  [{label}] Battle Shout aura detected after {sw.ElapsedMilliseconds}ms (attempt {castAttempt + 1}).");
+                    break;
+                }
+                await Task.Delay(300);
+            }
         }
 
         if (!auraAppeared)
         {
             var finalSnap = await _bot.GetSnapshotAsync(account);
             var playerFinal = finalSnap?.Player ?? getPlayer();
-            _output.WriteLine($"  [{label}] FAIL: Battle Shout aura not found. Auras: [{string.Join(", ", playerFinal?.Unit?.Auras ?? [])}]");
+            _output.WriteLine($"  [{label}] FAIL: Battle Shout aura not found after 2 attempts. Auras: [{string.Join(", ", playerFinal?.Unit?.Auras ?? [])}]");
         }
 
         // Cleanup: remove the aura

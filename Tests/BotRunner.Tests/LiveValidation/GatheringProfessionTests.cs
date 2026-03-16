@@ -199,10 +199,11 @@ public class GatheringProfessionTests
             uint bgSkillAfterForRoute = GetSkill("BG", GatheringData.MINING_SKILL_ID);
             _output.WriteLine($"BG Results: gathered={bgGatheredOnRoute}, skill {bgSkillBeforeForRoute} â†’ {bgSkillAfterForRoute}");
 
-            global::Tests.Infrastructure.Skip.If(!bgGatheredOnRoute,
-                $"BG: No Copper Vein nodes currently spawned on any of the {valleyCandidateCount} Valley copper-route candidates. Skill={bgSkillAfterForRoute}. Re-run after respawn.");
+            // DB confirmed nodes exist (valleyCandidateCount > 0) — if the bot failed to gather,
+            // that's a detection/pathfinding/interaction bug, not a "no nodes spawned" issue.
             Assert.True(bgGatheredOnRoute,
-                $"BG: Failed to gather Copper Vein on the Valley copper route ({valleyCandidateCount} candidates). skill={bgSkillAfterForRoute}.");
+                $"BG: Failed to gather Copper Vein on the Valley copper route ({valleyCandidateCount} candidates, confirmed by DB). " +
+                $"Skill={bgSkillAfterForRoute}. This is a bot detection/interaction failure, not a respawn issue.");
             if (bgSkillAfterForRoute <= bgSkillBeforeForRoute)
             {
                 _output.WriteLine($"BG: WARNING â€” Mining skill did not increase ({bgSkillBeforeForRoute} â†’ {bgSkillAfterForRoute}). " +
@@ -360,10 +361,11 @@ public class GatheringProfessionTests
             uint bgSkillAfter = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
             _output.WriteLine($"BG Results: gathered={bgGathered}, skill {bgSkillBefore} → {bgSkillAfter}");
 
-            global::Tests.Infrastructure.Skip.If(!bgGathered,
-                $"BG: No herb nodes currently spawned on any of the {herbCandidateCount} Durotar herb-route candidates. Skill={bgSkillAfter}. Re-run after respawn.");
+            // DB confirmed herb nodes exist (herbCandidateCount > 0) — if the bot failed to gather,
+            // that's a detection/pathfinding/interaction bug, not a "no nodes spawned" issue.
             Assert.True(bgGathered,
-                $"BG: Failed to gather herb on the Durotar herb route ({herbCandidateCount} candidates). skill={bgSkillAfter}.");
+                $"BG: Failed to gather herb on the Durotar herb route ({herbCandidateCount} candidates, confirmed by DB). " +
+                $"Skill={bgSkillAfter}. This is a bot detection/interaction failure, not a respawn issue.");
             if (bgSkillAfter <= bgSkillBefore)
                 _output.WriteLine($"BG: WARNING — Herbalism skill did not increase ({bgSkillBefore} → {bgSkillAfter}). " +
                     "This can happen due to WoW's RNG skill-up mechanic.");

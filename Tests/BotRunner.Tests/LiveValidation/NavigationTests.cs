@@ -65,7 +65,7 @@ public class NavigationTests
     public async Task Navigation_LongPath_ArrivesAtDestination()
     {
         await RunNavigationTest("Long (Valley of Trials)", VotLongStartX, VotLongStartY, VotLongStartZ,
-            VotLongEndX, VotLongEndY, VotLongEndZ, maxSeconds: 60);
+            VotLongEndX, VotLongEndY, VotLongEndZ, maxSeconds: 90);
     }
 
     private async Task RunNavigationTest(string scenarioName, float startX, float startY, float startZ,

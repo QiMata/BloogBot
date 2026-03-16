@@ -358,7 +358,8 @@ public partial class LiveBotFixture
 
         var commandWithMap = $".go xyz {xText} {yText} {zText} {mapId}";
 
-        for (int attempt = 0; attempt < 2; attempt++)
+        const int maxAttempts = 3;
+        for (int attempt = 0; attempt < maxAttempts; attempt++)
         {
             var withMapTrace = await SendGmChatCommandTrackedAsync(
                 accountName,
@@ -371,7 +372,7 @@ public partial class LiveBotFixture
             if (withMapTrace.DispatchResult != ResponseResult.Success)
             {
                 _logger.LogWarning("[TELEPORT] Dispatch failed for {Account}: {Result}", accountName, withMapTrace.DispatchResult);
-                if (attempt == 0) continue;
+                if (attempt < maxAttempts - 1) continue;
                 return;
             }
 
@@ -414,10 +415,16 @@ public partial class LiveBotFixture
                     }
                     await Task.Delay(500);
                 }
-                if (!settled && attempt == 0)
+                if (!settled && attempt < maxAttempts - 1)
                 {
-                    _logger.LogWarning("[TELEPORT] Position check: {Account} not near target after 5s — retrying", accountName);
+                    _logger.LogWarning("[TELEPORT] Position check: {Account} not near target after 5s — retrying (attempt {Attempt}/{Max})",
+                        accountName, attempt + 1, maxAttempts);
                     continue;
+                }
+                if (!settled)
+                {
+                    _logger.LogWarning("[TELEPORT] Position check: {Account} FAILED to reach target ({X},{Y},{Z}) after {Max} attempts",
+                        accountName, x, y, z, maxAttempts);
                 }
             }
 
