@@ -67,6 +67,7 @@ public class BotServiceFixture : IAsyncLifetime
     public string? CrashMessage { get; private set; }
 
     private CancellationTokenSource? _crashMonitorCts;
+    private bool _mutexHeld;
 
     /// <summary>
     /// Whether all required services (MaNGOS + StateManager) are healthy and ready.
@@ -130,24 +131,33 @@ public class BotServiceFixture : IAsyncLifetime
         Log("BotServiceFixture initializing...");
 
         // Acquire machine-wide mutex — prevents concurrent test processes from racing.
-        // If another test process is already setting up, we wait up to 2 minutes for it.
-        const string mutexName = "Global\\WWoW_BotServiceFixture_Mutex";
-        try
+        // Skip if we already hold it (e.g., during RestartWithSettingsAsync).
+        if (!_mutexHeld)
         {
-            _globalMutex = new Mutex(false, mutexName);
-            Log("  [Mutex] Acquiring machine-wide lock (prevents concurrent StateManager launches)...");
-            if (!_globalMutex.WaitOne(TimeSpan.FromMinutes(2)))
+            const string mutexName = "Global\\WWoW_BotServiceFixture_Mutex";
+            try
             {
-                UnavailableReason = "Another test process is already running BotServiceFixture. Wait for it to finish.";
-                Log($"SKIP: {UnavailableReason}");
-                return;
+                _globalMutex = new Mutex(false, mutexName);
+                Log("  [Mutex] Acquiring machine-wide lock (prevents concurrent StateManager launches)...");
+                if (!_globalMutex.WaitOne(TimeSpan.FromMinutes(2)))
+                {
+                    UnavailableReason = "Another test process is already running BotServiceFixture. Wait for it to finish.";
+                    Log($"SKIP: {UnavailableReason}");
+                    return;
+                }
+                Log("  [Mutex] Lock acquired.");
+                _mutexHeld = true;
             }
-            Log("  [Mutex] Lock acquired.");
+            catch (AbandonedMutexException)
+            {
+                // Previous holder crashed — we now own the mutex, which is fine.
+                Log("  [Mutex] Acquired (previous holder crashed).");
+                _mutexHeld = true;
+            }
         }
-        catch (AbandonedMutexException)
+        else
         {
-            // Previous holder crashed — we now own the mutex, which is fine.
-            Log("  [Mutex] Acquired (previous holder crashed).");
+            Log("  [Mutex] Already held (restart in progress).");
         }
 
         // Kill stale StateManager / WoW.exe from previous test runs so we get a clean slate.
@@ -429,7 +439,11 @@ public class BotServiceFixture : IAsyncLifetime
         // Always release the machine-wide mutex so the next test run can proceed
         try
         {
-            _globalMutex?.ReleaseMutex();
+            if (_mutexHeld)
+            {
+                _globalMutex?.ReleaseMutex();
+                _mutexHeld = false;
+            }
             _globalMutex?.Dispose();
             _globalMutex = null;
         }
