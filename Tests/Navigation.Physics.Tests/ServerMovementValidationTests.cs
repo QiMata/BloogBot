@@ -272,6 +272,17 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
                 // Look for: grounded → grounded → airborne on flat-ish terrain
                 if (prev2.MovementMode != "ground" || prev.MovementMode != "ground") continue;
                 if (fd.IsRecordingArtifact || prev.IsRecordingArtifact) continue;
+
+                // Exclude teleport frames — the replay engine skips them in FrameDetails
+                // but adjacent frames appear consecutive, creating false ground→airborne artifacts
+                float tdx = fd.SimX - prev.SimX, tdy = fd.SimY - prev.SimY, tdz = fd.SimZ - prev.SimZ;
+                float dist3D = MathF.Sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
+                if (dist3D > TeleportExclusionThreshold) continue;
+
+                // Exclude transport and spline transitions
+                if (fd.IsOnTransport || prev.IsOnTransport) continue;
+                if (fd.IsSplineElevationTransition || prev.IsSplineElevationTransition) continue;
+
                 totalGroundFrames++;
 
                 // If current frame is airborne and the terrain was flat (small Z change)
@@ -282,9 +293,11 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
                 if (currentAirborne && terrainWasFlat)
                 {
                     // Check if there's actually a drop — legitimate grounded→airborne
-                    // happens at edges. False freefall = no significant Z drop expected
+                    // happens at edges. False freefall = no significant Z drop expected.
+                    // Only count downward drops (positive zDrop) under 0.3y.
+                    // Negative zDrop means the character went UP — not a false fall.
                     float zDrop = prev.SimZ - fd.SimZ;
-                    if (zDrop < 0.3f) // Not a real edge/cliff
+                    if (zDrop >= 0f && zDrop < 0.3f) // Small downward or zero — not a real edge/cliff
                     {
                         falseFalls++;
                         falseFallDetails.Add((name, fd.Frame, zDrop, prev.EngineGroundZ, fd.SimZ));
