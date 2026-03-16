@@ -96,9 +96,18 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-15 (session 100)
+- **Last updated:** 2026-03-16 (session 101)
 - **Branch:** `cpp_physics_system`
-- **Completed this session:** FG ghost corpse run fix (`5fe0ea1`). TASKS.md cleanup. Full navmesh rebuild — maps 0+1 (1300 tiles) with GO collision baking. PathCalculationTask threshold adjusted for new routing.
+- **Completed this session:**
+  - LiveValidation test failure investigation: 5 of 5 failures resolved
+  - FAIL-001: BuffAndConsumable FG timeout 5s→10s (`a422099`)
+  - FAIL-004: SpellCast leftover aura cleanup + timeout 8s→12s (`a422099`)
+  - FAIL-005: NpcFlags post-teleport settle delay + retry increase (`a422099`)
+  - FAIL-002/003: Stale-state (clean restart resolves)
+  - FAIL-006: CombatLoop flaky in suite only, passes individually (`b2cf99e`)
+  - Created CRASH_INVESTIGATION.md (FG ghost crash, WoW client bug) and LIVE_TEST_FAILURES.md
+- **Suite results:** 34 passed, 3 failed (1 flaky suite-only), 6 skipped out of 43 total
 - **Next:**
-  1. P7.4: Bot-side execution trace for shoreline route drift detection
-  2. P3/P4: FG packet capture sessions (fishing + teleport) when convenient
+  1. Investigate CombatLoopTests suite-ordering contamination (physics settle after COMBATTEST login)
+  2. P7.4: Bot-side execution trace for shoreline route drift detection
+  3. P3/P4: FG packet capture sessions (fishing + teleport) when convenient
