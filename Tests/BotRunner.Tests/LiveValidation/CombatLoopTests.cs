@@ -256,11 +256,9 @@ public class CombatLoopTests
     /// </summary>
     private async Task PositionFgObserverAsync(string combatAccount, string observerAccount)
     {
-        if (!_bot.IsFgActionable)
-        {
-            _output.WriteLine("  [FG-OBSERVER] FG bot not actionable — proceeding without visual observer.");
-            return;
-        }
+        Assert.True(_bot.IsFgActionable,
+            "FG observer bot is required for BG combat test but is not actionable (crashed or not alive). " +
+            "FG observability is a hard requirement — if the FG bot isn't running, the BG test fails.");
 
         _output.WriteLine("\n--- Phase 3: Position FG observer ---");
 
