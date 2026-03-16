@@ -17,7 +17,8 @@ public class GatheringRouteTask(
     IReadOnlyList<Position> routeCandidates,
     IReadOnlyCollection<uint> nodeEntries,
     int gatherSpellId,
-    int targetSuccessCount = 1) : BotTask(botContext), IBotTask
+    int targetSuccessCount = 1,
+    int maxRouteLoops = 1) : BotTask(botContext), IBotTask
 {
     private enum GatheringState
     {
@@ -31,10 +32,10 @@ public class GatheringRouteTask(
     }
 
     internal const float CandidateReachDistance = 12f;
-    internal const float VisibleNodeDistance = 45f;
+    internal const float VisibleNodeDistance = 80f;
     internal const float GatherRange = 5f;
     internal const int CandidateTimeoutMs = 45000;
-    internal const int NodeSearchTimeoutMs = 4000;
+    internal const int NodeSearchTimeoutMs = 8000;
     internal const int GatherChannelMs = 5000;
     internal const int PostGatherCooldownMs = 3000;
 
@@ -45,9 +46,11 @@ public class GatheringRouteTask(
     private readonly HashSet<uint> _nodeEntries = nodeEntries.Where(entry => entry != 0).ToHashSet();
     private readonly int _gatherSpellId = gatherSpellId;
     private readonly int _targetSuccessCount = Math.Max(1, targetSuccessCount);
+    private readonly int _maxRouteLoops = Math.Max(1, maxRouteLoops);
 
     private readonly List<Position> _orderedRoute = [];
     private GatheringState _state = GatheringState.BuildRoute;
+    private int _routeLoopCount;
     private DateTime _stateEnteredAt = DateTime.UtcNow;
     private int _routeIndex;
     private Position? _currentCandidate;
@@ -305,8 +308,24 @@ public class GatheringRouteTask(
 
         if (_routeIndex >= _orderedRoute.Count)
         {
-            PopTask(_successfulGathers > 0 ? "route_complete_success" : "route_complete_no_nodes");
-            return;
+            if (_routeLoopCount < _maxRouteLoops - 1)
+            {
+                _routeLoopCount++;
+                _routeIndex = 0;
+                var player = ObjectManager.Player;
+                if (player?.Position != null)
+                {
+                    _orderedRoute.Clear();
+                    _orderedRoute.AddRange(OptimizeRoute(player.Position, _originalCandidates));
+                }
+                BotContext.AddDiagnosticMessage(
+                    $"[TASK] GatheringRouteTask route_loop iteration={_routeLoopCount + 1}/{_maxRouteLoops} candidates={_orderedRoute.Count}");
+            }
+            else
+            {
+                PopTask(_successfulGathers > 0 ? "route_complete_success" : "route_complete_no_nodes");
+                return;
+            }
         }
 
         _currentCandidate = _orderedRoute[_routeIndex++];

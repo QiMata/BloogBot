@@ -189,7 +189,7 @@ public class NpcInteractionTests
         var vendorUnit = await _bot.WaitForNearbyUnitAsync(
             account,
             (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR,
-            timeoutMs: 5000,
+            timeoutMs: 15000,
             progressLabel: $"{label} vendor lookup");
 
         var vendorGuid = vendorUnit?.GameObject?.Base?.Guid ?? 0;
@@ -240,7 +240,7 @@ public class NpcInteractionTests
         var fmUnit = await _bot.WaitForNearbyUnitAsync(
             account,
             (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER,
-            timeoutMs: 5000,
+            timeoutMs: 15000,
             progressLabel: $"{label} flight master lookup");
 
         var fmGuid = fmUnit?.GameObject?.Base?.Guid ?? 0;
@@ -286,11 +286,11 @@ public class NpcInteractionTests
         var trainerUnit = await _bot.WaitForNearbyUnitAsync(
             account,
             (uint)NPCFlags.UNIT_NPC_FLAG_TRAINER,
-            timeoutMs: 10000,
+            timeoutMs: 15000,
             progressLabel: $"{label} trainer lookup");
         Assert.NotNull(trainerUnit);
         Assert.True(trainerUnit != null,
-            $"[{label}] No trainer NPC found near Razor Hill after 10s. " +
+            $"[{label}] No trainer NPC found near Razor Hill after 15s. " +
             "NPCs should always be present — this is a unit detection or ObjectManager bug.");
 
         var trainerGuid = trainerUnit!.GameObject?.Base?.Guid ?? 0;

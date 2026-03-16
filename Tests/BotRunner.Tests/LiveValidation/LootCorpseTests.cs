@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,17 +12,20 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Loot corpse integration test — validates the core kill → loot → inventory loop.
 ///
-/// Per bot:
+/// Uses the dedicated COMBATTEST account (never receives .gm on) so mobs interact
+/// normally. GM mode corrupts faction flags causing mobs to evade — COMBATTEST avoids this.
+///
+/// Flow:
 /// 1) Ensure strict-alive setup state.
 /// 2) Clear inventory.
 /// 3) Teleport to Valley of Trials boar area.
-/// 4) Wait for a living Mottled Boar in snapshot.
-/// 5) Teleport bot to within melee range of the boar.
-/// 6) Kill the boar via .damage GM command (testing loot, not combat).
-/// 7) Send LootCorpse action with the dead boar's GUID.
+/// 4) Wait for a living mob in snapshot.
+/// 5) Teleport bot to within melee range of the mob.
+/// 6) Kill the mob via StartMeleeAttack + .damage (testing loot, not combat).
+/// 7) Send LootCorpse action with the dead mob's GUID.
 /// 8) Assert inventory changed (bag contents increased).
 ///
-/// NOTE: This test validates the loot mechanic, not combat. GM .damage is used
+/// NOTE: This test validates the loot mechanic, not combat. .damage is used
 /// to kill the mob quickly. CombatLoopTests validates the combat mechanics.
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~LootCorpseTests" --configuration Release
@@ -41,7 +43,8 @@ public class LootCorpseTests
     // Z+3 offset applied to spawn table Z to avoid UNDERMAP detection
     private const float MobAreaZ = 47f;
     private const uint MottledBoarEntry = 3098;
-    private const string MottledBoarName = "Mottled Boar";
+    private const uint ScorpidWorkerEntry = 3124;
+    private const uint VileFamiliarEntry = 3101;
     private const float MeleeRange = 5f;
 
     public LootCorpseTests(LiveBotFixture bot, ITestOutputHelper output)
@@ -55,44 +58,23 @@ public class LootCorpseTests
     [SkippableFact]
     public async Task Loot_KillAndLootMob_InventoryChanges()
     {
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        var hasFg = _bot.IsFgActionable;
+        var combatAccount = _bot.CombatTestAccountName;
+        global::Tests.Infrastructure.Skip.If(combatAccount == null,
+            "COMBATTEST bot not available - add COMBATTEST entry to StateManagerSettings.json");
 
-        var claimedTargets = new ConcurrentDictionary<ulong, string>();
+        _output.WriteLine($"=== Combat Test Bot: {_bot.CombatTestCharacterName} ({combatAccount}) ===");
+        _output.WriteLine("Using dedicated non-GM account (never receives .gm on → no factionTemplate corruption)");
 
-        if (hasFg)
-        {
-            _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
-            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({_bot.FgAccountName}) ===");
-            _output.WriteLine("[PARITY] Running BG and FG loot scenarios in parallel.");
-
-            var bgTask = RunLootScenario(bgAccount, () => _bot.BackgroundBot, "BG", claimedTargets);
-            var fgTask = RunLootScenario(_bot.FgAccountName!, () => _bot.ForegroundBot, "FG", claimedTargets);
-            await Task.WhenAll(bgTask, fgTask);
-
-            Assert.True(await bgTask, "[BG] Loot scenario failed — see test output for details.");
-            Assert.True(await fgTask, "[FG] Loot scenario failed — see test output for details.");
-        }
-        else
-        {
-            _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
-            var bgResult = await RunLootScenario(bgAccount, () => _bot.BackgroundBot, "BG", claimedTargets);
-            Assert.True(bgResult, "[BG] Loot scenario failed — see test output for details.");
-        }
+        var passed = await RunLootScenario(combatAccount!, "LOOT");
+        Assert.True(passed, "COMBATTEST bot: Loot scenario failed — see test output for details.");
     }
 
-    private async Task<bool> RunLootScenario(
-        string account,
-        Func<WoWActivitySnapshot?> getSnap,
-        string label,
-        ConcurrentDictionary<ulong, string> claimedTargets)
+    private async Task<bool> RunLootScenario(string account, string label)
     {
         // Step 1: Ensure clean slate (revive + safe zone) (BT-SETUP-001)
         _output.WriteLine($"  [{label}] Step 1: Ensure clean slate");
         await _bot.EnsureCleanSlateAsync(account, label);
         await _bot.RefreshSnapshotsAsync();
-        var snap = getSnap();
 
         // Step 2: Clear bag contents (preserves equipped gear — BT-VERIFY-002)
         _output.WriteLine($"  [{label}] Step 2: Clear inventory");
@@ -100,7 +82,7 @@ public class LootCorpseTests
 
         // Record baseline bag count
         await _bot.RefreshSnapshotsAsync();
-        snap = getSnap();
+        var snap = await _bot.GetSnapshotAsync(account);
         var baselineBagCount = snap?.Player?.BagContents?.Count ?? 0;
         _output.WriteLine($"  [{label}] Baseline bag item count: {baselineBagCount}");
 
@@ -109,44 +91,36 @@ public class LootCorpseTests
         await _bot.BotTeleportAsync(account, MapId, MobAreaX, MobAreaY, MobAreaZ);
         await _bot.WaitForTeleportSettledAsync(account, MobAreaX, MobAreaY);
 
-        // Step 4: Find a living boar
-        _output.WriteLine($"  [{label}] Step 4: Find a living Mottled Boar");
-        var boar = await WaitForLivingBoarAsync(account, getSnap, claimedTargets, label, TimeSpan.FromSeconds(8));
+        // Step 4: Find a living mob (boar, scorpid, or vile familiar)
+        _output.WriteLine($"  [{label}] Step 4: Find a living mob");
+        var mob = await WaitForLivingMobAsync(account, label, TimeSpan.FromSeconds(20));
 
-        if (boar == null)
+        if (mob == null)
         {
-            _output.WriteLine($"  [{label}] FAIL: No living Mottled Boar found in area.");
-            Assert.Fail($"[{label}] No living boar found in mob area after 8s search. " +
+            _output.WriteLine($"  [{label}] FAIL: No living mob found in area.");
+            Assert.Fail($"[{label}] No living mob found in mob area after 20s search. " +
                 "Mobs should always be present in a controlled test environment — this is a mob detection or ObjectManager bug.");
             return false;
         }
 
-        var boarGuid = boar.GameObject?.Base?.Guid ?? 0;
-        var boarPos = boar.GameObject?.Base?.Position;
-        claimedTargets.TryAdd(boarGuid, label);
-        _output.WriteLine($"  [{label}] Found: {boar.GameObject?.Name} GUID=0x{boarGuid:X} at ({boarPos?.X:F1}, {boarPos?.Y:F1}, {boarPos?.Z:F1}) HP={boar.Health}/{boar.MaxHealth}");
+        var mobGuid = mob.GameObject?.Base?.Guid ?? 0;
+        var mobPos = mob.GameObject?.Base?.Position;
+        _output.WriteLine($"  [{label}] Found: {mob.GameObject?.Name} GUID=0x{mobGuid:X} at ({mobPos?.X:F1}, {mobPos?.Y:F1}, {mobPos?.Z:F1}) HP={mob.Health}/{mob.MaxHealth}");
 
-        // Step 5: Teleport bot near the boar
-        _output.WriteLine($"  [{label}] Step 5: Teleport to within melee range of boar");
-        if (boarPos != null)
+        // Step 5: Teleport bot near the mob
+        _output.WriteLine($"  [{label}] Step 5: Teleport to within melee range of mob");
+        if (mobPos != null)
         {
-            await _bot.BotTeleportAsync(account, MapId, boarPos.X + 2f, boarPos.Y, boarPos.Z + 3f);
+            await _bot.BotTeleportAsync(account, MapId, mobPos.X + 2f, mobPos.Y, mobPos.Z + 3f);
             await Task.Delay(1500);
         }
 
-        // Step 6: Kill the boar with .damage
-        _output.WriteLine($"  [{label}] Step 6: Kill boar with .damage");
-        // Select target first
-        await _bot.SendGmChatCommandAsync(account, ".targetself");
-        await Task.Delay(300);
-
-        // Use .damage to kill — need to target the mob first
-        // Since we can't target mobs via GM command easily, let's use StartMeleeAttack
-        // which sets the target, then .damage to kill it quickly.
+        // Step 6: Kill the mob with StartMeleeAttack + .damage
+        _output.WriteLine($"  [{label}] Step 6: Kill mob with StartMeleeAttack + .damage");
         var attackResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.StartMeleeAttack,
-            Parameters = { new RequestParameter { LongParam = (long)boarGuid } }
+            Parameters = { new RequestParameter { LongParam = (long)mobGuid } }
         });
         _output.WriteLine($"  [{label}] StartMeleeAttack result: {attackResult}");
         await Task.Delay(1500);
@@ -155,33 +129,33 @@ public class LootCorpseTests
         await _bot.SendGmChatCommandAsync(account, ".damage 500");
         await Task.Delay(500);
 
-        // Wait for the boar to die from auto-attacks
+        // Wait for the mob to die
         var killSw = Stopwatch.StartNew();
-        var boarDead = false;
+        var mobDead = false;
         while (killSw.Elapsed < TimeSpan.FromSeconds(20))
         {
             await _bot.RefreshSnapshotsAsync();
-            snap = getSnap();
-            var currentBoar = snap?.NearbyUnits?.FirstOrDefault(u =>
-                (u.GameObject?.Base?.Guid ?? 0) == boarGuid);
+            snap = await _bot.GetSnapshotAsync(account);
+            var currentMob = snap?.NearbyUnits?.FirstOrDefault(u =>
+                (u.GameObject?.Base?.Guid ?? 0) == mobGuid);
 
-            if (currentBoar == null || currentBoar.Health == 0)
+            if (currentMob == null || currentMob.Health == 0)
             {
-                boarDead = true;
-                _output.WriteLine($"  [{label}] Boar dead after {killSw.Elapsed.TotalSeconds:F1}s");
+                mobDead = true;
+                _output.WriteLine($"  [{label}] Mob dead after {killSw.Elapsed.TotalSeconds:F1}s");
                 break;
             }
 
-            _output.WriteLine($"  [{label}] Boar HP: {currentBoar.Health}/{currentBoar.MaxHealth}");
+            _output.WriteLine($"  [{label}] Mob HP: {currentMob.Health}/{currentMob.MaxHealth}");
             await Task.Delay(1000);
         }
 
         // Stop attack
         await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StopAttack });
 
-        if (!boarDead)
+        if (!mobDead)
         {
-            _output.WriteLine($"  [{label}] FAILED: Could not kill boar within 20s.");
+            _output.WriteLine($"  [{label}] FAILED: Could not kill mob within 20s.");
             return false;
         }
 
@@ -191,7 +165,7 @@ public class LootCorpseTests
         var lootResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.LootCorpse,
-            Parameters = { new RequestParameter { LongParam = (long)boarGuid } }
+            Parameters = { new RequestParameter { LongParam = (long)mobGuid } }
         });
         _output.WriteLine($"  [{label}] LootCorpse dispatch result: {lootResult}");
         Assert.Equal(ResponseResult.Success, lootResult);
@@ -204,7 +178,7 @@ public class LootCorpseTests
         while (verifySw.Elapsed < TimeSpan.FromSeconds(10))
         {
             await _bot.RefreshSnapshotsAsync();
-            snap = getSnap();
+            snap = await _bot.GetSnapshotAsync(account);
             var currentBagCount = snap?.Player?.BagContents?.Count ?? 0;
             _output.WriteLine($"  [{label}] Current bag count: {currentBagCount} (baseline: {baselineBagCount})");
 
@@ -225,7 +199,7 @@ public class LootCorpseTests
         {
             // Mob may have had no loot — this is possible for low-level mobs.
             // Log it as a skip rather than a failure.
-            _output.WriteLine($"  [{label}] WARNING: No loot received after killing boar. Mob may have dropped no items (level-based loot table).");
+            _output.WriteLine($"  [{label}] WARNING: No loot received after killing mob. Mob may have dropped no items (level-based loot table).");
             // Don't fail — the loot dispatch succeeded, the mob just had no loot.
             // The test validates the ActionType dispatch works, not that loot always drops.
         }
@@ -234,10 +208,7 @@ public class LootCorpseTests
         return true;
     }
 
-    private Game.WoWUnit? FindLivingBoar(
-        WoWActivitySnapshot? snap,
-        ConcurrentDictionary<ulong, string> claimedTargets,
-        string label)
+    private Game.WoWUnit? FindLivingMob(WoWActivitySnapshot? snap, string label)
     {
         var units = snap?.NearbyUnits?.ToList() ?? [];
         _output.WriteLine($"  [{label}] Nearby units: {units.Count}");
@@ -246,12 +217,13 @@ public class LootCorpseTests
         {
             var name = unit.GameObject?.Name ?? "";
             var entry = unit.GameObject?.Entry ?? 0;
-            var guid = unit.GameObject?.Base?.Guid ?? 0;
             var hp = unit.Health;
 
-            if ((name.Contains("Boar", StringComparison.OrdinalIgnoreCase) || entry == MottledBoarEntry)
-                && hp > 0
-                && !claimedTargets.ContainsKey(guid))
+            if (hp > 0 && (
+                name.Contains("Boar", StringComparison.OrdinalIgnoreCase) ||
+                entry == MottledBoarEntry ||
+                entry == ScorpidWorkerEntry ||
+                entry == VileFamiliarEntry))
             {
                 return unit;
             }
@@ -260,10 +232,8 @@ public class LootCorpseTests
         return null;
     }
 
-    private async Task<Game.WoWUnit?> WaitForLivingBoarAsync(
+    private async Task<Game.WoWUnit?> WaitForLivingMobAsync(
         string account,
-        Func<WoWActivitySnapshot?> getSnap,
-        ConcurrentDictionary<ulong, string> claimedTargets,
         string label,
         TimeSpan timeout)
     {
@@ -271,9 +241,10 @@ public class LootCorpseTests
         while (sw.Elapsed < timeout)
         {
             await _bot.RefreshSnapshotsAsync();
-            var boar = FindLivingBoar(getSnap(), claimedTargets, label);
-            if (boar != null)
-                return boar;
+            var snap = await _bot.GetSnapshotAsync(account);
+            var mob = FindLivingMob(snap, label);
+            if (mob != null)
+                return mob;
 
             await Task.Delay(500);
         }

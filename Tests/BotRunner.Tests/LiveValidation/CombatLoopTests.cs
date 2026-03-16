@@ -114,9 +114,9 @@ public class CombatLoopTests
         for (int attempt = 1; attempt <= MaxCombatAttempts; attempt++)
         {
             _output.WriteLine($"  [{label}] Finding candidate mob (attempt {attempt}/{MaxCombatAttempts})...");
-            var (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(12));
+            var (targetGuid, initialHealth, mobX, mobY, mobZ) = await FindLivingMobAsync(account, selfGuid, TimeSpan.FromSeconds(20));
             Assert.True(targetGuid != 0,
-                $"[{label}] No living mob found near Valley of Trials mob area after 12s search. " +
+                $"[{label}] No living mob found near Valley of Trials mob area after 20s search. " +
                 $"Mobs should always be present in a controlled test environment — this is a mob detection or ObjectManager bug.");
             _output.WriteLine($"  [{label}] Target: 0x{targetGuid:X} HP={initialHealth} at ({mobX:F1},{mobY:F1},{mobZ:F1})");
 

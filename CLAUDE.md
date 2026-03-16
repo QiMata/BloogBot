@@ -195,6 +195,16 @@ Update `docs/TASKS.md` Session Handoff section with:
 - If a task was partially completed, describe what's done and what remains
 - Reference `docs/TASKS.md` for the overall task list
 
+## Test Skip Policy — CRITICAL
+
+**Tests must NEVER skip for "resource not found."** If a fishing pool, gathering node, mob, or NPC exists in the game world (DB spawns) but the bot can't find it, that is a REAL FAILURE — a detection, pathfinding, or ObjectManager bug.
+
+- **Walking to find resources IS the test** — wider search routes validate navigation
+- **Do NOT spawn resources** (no `.gobject add`, no synthetic nodes) — test against natural world state
+- **Do NOT use Skip.If** for resource detection failures — use Assert.True/Assert.Fail
+- **Acceptable skips:** fixture readiness (bot not connected), known client bugs (CRASH-001)
+- **Not acceptable:** "no pool at Ratchet (respawn timer)", "no nodes spawned", "no mob found"
+
 ## AI Documentation Rules
 
 - Before asking for clarification, search existing docs

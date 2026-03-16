@@ -23,8 +23,12 @@ FG remains a packet/interaction reference path, but BG is the authoritative asse
 6. Assert gather success via task diagnostics, bag delta, or skill delta.
    - FG failures now log diagnostic evidence and return to the safe zone.
    - BG remains the hard assertion path for live-suite pass/fail.
-   - If all natural candidates are on respawn, the live test skips instead of spawning objects.
-   - The nearby-node query now includes `pool_gameobject` / `pool_template` metadata so the Valley route loads the full pooled candidate set instead of truncating pooled spawns silently.
+   - The route now loops up to 2 times (`maxRouteLoops=2`) so if all nodes are on respawn during the first pass, the bot walks the route again and catches respawns (~5 min respawn timer).
+   - Search radii widened: `ValleyCopperSearchRadius=500`, `ValleyCopperQueryLimit=64`.
+   - `VisibleNodeDistance` widened from 45y to 80y; `NodeSearchTimeoutMs` from 4s to 8s.
+   - Timeout increased from 2 min to 5 min to accommodate wider route + 2nd loop.
+   - **No-skip policy:** If DB confirms candidates exist but the bot fails to gather, that is an Assert.Fail (detection/pathfinding/interaction bug), not a skip.
+   - The nearby-node query includes `pool_gameobject` / `pool_template` metadata so the Valley route loads the full pooled candidate set instead of truncating pooled spawns silently.
 
 ### 2. Herbalism_GatherHerb_SkillIncreases
 
@@ -42,7 +46,9 @@ FG remains a packet/interaction reference path, but BG is the authoritative asse
 6. Assert gather success via task diagnostics, bag delta, or skill delta.
    - FG failures log diagnostic evidence and return to the safe zone.
    - BG remains the hard assertion path for live-suite pass/fail.
-   - If all natural candidates are on respawn, the live test skips instead of spawning objects.
+   - The route now loops up to 2 times (`maxRouteLoops=2`) so if all nodes are on respawn during the first pass, the bot walks the route again and catches respawns.
+   - Search radii widened: `DurotarHerbSearchRadius=600`, `DurotarHerbQueryLimit=64`.
+   - **No-skip policy:** Same as mining — DB-confirmed candidates that fail to gather are Assert.Fail, not skips.
    - The nearby-node query includes `pool_gameobject` / `pool_template` metadata so the Durotar route loads the full pooled candidate set.
 
 ## Code Paths
@@ -58,12 +64,12 @@ FG remains a packet/interaction reference path, but BG is the authoritative asse
 
 ## Assertions
 
-- Spawn exists in DB or the test skips.
+- Spawn exists in DB — `Assert.True(candidateCount > 0)` (never skip for empty DB results).
 - Only the test itself stages `ValleyOfTrials`; fixture/login cleanup remains on the Orgrimmar safe zone.
 - Teleport actually lands near the requested location.
 - `StartGatheringRoute` is forwarded successfully.
 - `GatheringRouteTask` reports `gather_success` or the bags / skill snapshot changes.
-- If no natural node is visible on the route, the test skips rather than forcing a spawn.
+- If DB confirms candidates exist but bot fails to gather after route walk + loop, the test **fails** (not skips) — this is a detection/pathfinding/interaction bug.
 - Skill deltas are logged, but lack of skill-up is informational because Vanilla skill gain is RNG-based.
 - FG instability during remote teleports/gathers is logged as reference-only evidence and does not fail the BG-authoritative suite.
 

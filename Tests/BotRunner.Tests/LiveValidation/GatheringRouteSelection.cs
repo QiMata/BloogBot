@@ -11,16 +11,16 @@ internal static class GatheringRouteSelection
     public const float ValleyCopperRouteStartX = -800f;
     public const float ValleyCopperRouteStartY = -4500f;
     public const float ValleyCopperRouteStartZ = 31f;
-    public const float ValleyCopperSearchRadius = 260f;
-    public const int ValleyCopperQueryLimit = 32;
+    public const float ValleyCopperSearchRadius = 500f;
+    public const int ValleyCopperQueryLimit = 64;
 
     // Durotar herb route staging — centered on the herb-dense area between
     // Razor Hill and Sen'jin Village.  Covers Peacebloom, Silverleaf, and Earthroot.
     public const float DurotarHerbRouteStartX = -500f;
     public const float DurotarHerbRouteStartY = -4800f;
     public const float DurotarHerbRouteStartZ = 38f;
-    public const float DurotarHerbSearchRadius = 300f;
-    public const int DurotarHerbQueryLimit = 32;
+    public const float DurotarHerbSearchRadius = 600f;
+    public const int DurotarHerbQueryLimit = 64;
 
     public static List<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> SelectValleyCopperVeinCandidates(
         IEnumerable<(uint entry, int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> spawns,

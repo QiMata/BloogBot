@@ -81,8 +81,8 @@ public class GatheringProfessionTests
             .Select(poolEntry => poolEntry!.Value)
             .Distinct()
             .Count();
-        global::Tests.Infrastructure.Skip.If(valleyCandidateCount == 0,
-            "No natural Copper Vein route candidates were found near the Valley copper pathing start.");
+        Assert.True(valleyCandidateCount > 0,
+            "DB must have copper vein spawns near Valley of Trials — no natural Copper Vein route candidates found.");
         _output.WriteLine(
             $"Selected {valleyCandidateCount} Valley copper-route candidates across {Math.Max(1, valleyPoolCount)} spawn pool(s) from " +
             $"({GatheringRouteSelection.ValleyCopperRouteStartX:F0}, {GatheringRouteSelection.ValleyCopperRouteStartY:F0}, {GatheringRouteSelection.ValleyCopperRouteStartZ:F0}) " +
@@ -128,7 +128,7 @@ public class GatheringProfessionTests
                     fgSkillBeforeForRoute,
                     fgBagBeforeForRoute,
                     fgDiagStart,
-                    timeout: TimeSpan.FromMinutes(2));
+                    timeout: TimeSpan.FromMinutes(5));
 
                 await _bot.RefreshSnapshotsAsync();
                 uint fgSkillAfterForRoute = GetSkill("FG", GatheringData.MINING_SKILL_ID);
@@ -193,7 +193,7 @@ public class GatheringProfessionTests
                 bgSkillBeforeForRoute,
                 bgBagBeforeForRoute,
                 bgDiagStart,
-                timeout: TimeSpan.FromMinutes(2));
+                timeout: TimeSpan.FromMinutes(5));
 
             await _bot.RefreshSnapshotsAsync();
             uint bgSkillAfterForRoute = GetSkill("BG", GatheringData.MINING_SKILL_ID);
@@ -241,8 +241,8 @@ public class GatheringProfessionTests
             .Select(p => p!.Value)
             .Distinct()
             .Count();
-        global::Tests.Infrastructure.Skip.If(herbCandidateCount == 0,
-            "No natural herb route candidates were found near the Durotar herb pathing start.");
+        Assert.True(herbCandidateCount > 0,
+            "DB must have herb spawns near Durotar — no natural herb route candidates found.");
         _output.WriteLine(
             $"Selected {herbCandidateCount} Durotar herb-route candidates across {Math.Max(1, herbPoolCount)} spawn pool(s) from " +
             $"({GatheringRouteSelection.DurotarHerbRouteStartX:F0}, {GatheringRouteSelection.DurotarHerbRouteStartY:F0}, {GatheringRouteSelection.DurotarHerbRouteStartZ:F0}) " +
@@ -289,7 +289,7 @@ public class GatheringProfessionTests
                     fgSkillBefore,
                     fgBagBefore,
                     fgDiagStart,
-                    timeout: TimeSpan.FromMinutes(2));
+                    timeout: TimeSpan.FromMinutes(5));
 
                 await _bot.RefreshSnapshotsAsync();
                 uint fgSkillAfter = GetSkill("FG", GatheringData.HERBALISM_SKILL_ID);
@@ -355,7 +355,7 @@ public class GatheringProfessionTests
                 bgSkillBefore,
                 bgBagBefore,
                 bgDiagStart,
-                timeout: TimeSpan.FromMinutes(2));
+                timeout: TimeSpan.FromMinutes(5));
 
             await _bot.RefreshSnapshotsAsync();
             uint bgSkillAfter = GetSkill("BG", GatheringData.HERBALISM_SKILL_ID);
@@ -461,7 +461,8 @@ public class GatheringProfessionTests
     private ActionMessage BuildGatheringRouteAction(
         uint gatherSpellId,
         IReadOnlyCollection<uint> nodeEntries,
-        IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> routeCandidates)
+        IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> routeCandidates,
+        int maxRouteLoops = 2)
     {
         var action = new ActionMessage
         {
@@ -469,7 +470,8 @@ public class GatheringProfessionTests
             Parameters =
             {
                 new RequestParameter { IntParam = (int)gatherSpellId },
-                new RequestParameter { StringParam = string.Join(",", nodeEntries.OrderBy(entry => entry)) }
+                new RequestParameter { StringParam = string.Join(",", nodeEntries.OrderBy(entry => entry)) },
+                new RequestParameter { IntParam = maxRouteLoops }
             }
         };
 

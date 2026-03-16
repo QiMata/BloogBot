@@ -242,7 +242,16 @@ namespace BotRunner
                     {
                         int gatheringRouteSpellId = (int)actionEntry.Item2[0];
                         var allowedEntries = ParseGatheringEntries((string)actionEntry.Item2[1]);
-                        var routePositions = ParseGatheringRoutePositions(actionEntry.Item2.Skip(2));
+                        // Optional [2] = maxRouteLoops (int), then [3+] = float positions.
+                        // If [2] is an int (not a float), treat it as maxRouteLoops; otherwise positions start at [2].
+                        int routeLoops = 1;
+                        int positionStartIndex = 2;
+                        if (actionEntry.Item2.Count > 2 && actionEntry.Item2[2] is int loopParam)
+                        {
+                            routeLoops = Math.Max(1, loopParam);
+                            positionStartIndex = 3;
+                        }
+                        var routePositions = ParseGatheringRoutePositions(actionEntry.Item2.Skip(positionStartIndex));
                         builder.Do("Queue Gathering Route Task", time =>
                         {
                             if (routePositions.Count == 0 || allowedEntries.Count == 0)
@@ -253,7 +262,7 @@ namespace BotRunner
                             }
 
                             if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.GatheringRouteTask)
-                                _botTasks.Push(new Tasks.GatheringRouteTask(context, routePositions, allowedEntries, gatheringRouteSpellId));
+                                _botTasks.Push(new Tasks.GatheringRouteTask(context, routePositions, allowedEntries, gatheringRouteSpellId, maxRouteLoops: routeLoops));
                             return BehaviourTreeStatus.Success;
                         });
                         break;
