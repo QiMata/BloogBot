@@ -193,11 +193,12 @@ public class NavigationPathTests
     }
 
     [Fact]
-    public void GetNextWaypoint_CollinearPath_StopsAtFirstReachableWaypoint_WhenProbeHeuristicsDisabled()
+    public void GetNextWaypoint_CollinearPath_AdvancesPastCloseWaypoints_WhenProbeHeuristicsDisabled()
     {
         // Without probe heuristics, collinear waypoints are NOT pruned, string-pulled,
-        // or subject to adaptive radii. The bot uses the fixed WAYPOINT_REACH_DISTANCE (3y)
-        // and CORNER_COMMIT_DISTANCE (1.25y) — matching corpse-run baseline behavior.
+        // or subject to adaptive radii. The bot uses the fixed WAYPOINT_REACH_DISTANCE (3.5y).
+        // In non-strict mode (default), CanAdvanceToNextWaypoint always returns true,
+        // so collinear waypoints within effectiveRadius are all consumed in one pass.
         var pathfinding = new DelegatePathfindingClient(
             getPath: (_, start, _, _) => [start, new Position(2.8f, 0f, 0f), new Position(4.2f, 0f, 0f)],
             isInLineOfSight: (_, _, _) => true);
@@ -209,12 +210,12 @@ public class NavigationPathTests
             mapId: 1,
             allowDirectFallback: false);
 
-        // No adaptive radii: effectiveRadius=max(3,0)=3. (0,0,0) dedup consumed.
-        // (2.8,0,0) at 2.8y < 3y → enters advance loop.
-        // commitDistance=1.25, 2.8>1.25 → can't advance past it.
-        // Bot stays at first non-dedup waypoint.
+        // No adaptive radii: effectiveRadius=max(3.5,0)=3.5. (0,0,0) dedup consumed.
+        // (2.8,0,0) at 2.8y < 3.5y → enters advance loop → CanAdvance=true (non-strict).
+        // (4.2,0,0) at 4.2y > 3.5y → exits advance loop.
+        // Bot targets (4.2,0,0).
         Assert.NotNull(waypoint);
-        Assert.Equal(2.8f, waypoint!.X);
+        Assert.Equal(4.2f, waypoint!.X);
         Assert.Equal(0f, waypoint.Y);
     }
 

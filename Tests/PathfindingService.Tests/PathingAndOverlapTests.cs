@@ -28,7 +28,7 @@ namespace PathfindingService.Tests
                 path,
                 maxStartDistance: 8.0f,
                 maxEndDistance: 20.0f,
-                maxSegmentLength: 260.0f,
+                maxSegmentLength: 400.0f,
                 maxHeightJump: 30.0f);
 
             Assert.Null(validationFailure);

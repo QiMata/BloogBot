@@ -649,7 +649,9 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void PhysicsContinuityState_RoundTripped()
         {
-            // First tick: physics returns ground state
+            // First tick: physics returns ground state.
+            // Ground is within MaxGroundZDropPerFrame (5y) of initial player Z (50)
+            // to avoid triggering the slope guard.
             PhysicsInput? secondInput = null;
             int callCount = 0;
             _mockPhysics
@@ -662,9 +664,9 @@ namespace WoWSharpClient.Tests.Movement
                     {
                         NewPosX = input.PosX,
                         NewPosY = input.PosY,
-                        NewPosZ = 45f,
+                        NewPosZ = 47f,
                         IsGrounded = true,
-                        GroundZ = 44.5f,
+                        GroundZ = 46.5f,
                         GroundNx = 0.1f, GroundNy = 0.0f, GroundNz = 0.995f,
                         PendingDepenX = 0.01f, PendingDepenY = 0.02f, PendingDepenZ = 0.03f,
                         StandingOnInstanceId = 42,
@@ -682,7 +684,7 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1050);
 
             Assert.NotNull(secondInput);
-            Assert.Equal(44.5f, secondInput.PrevGroundZ);
+            Assert.Equal(46.5f, secondInput.PrevGroundZ);
             Assert.Equal(0.1f, secondInput.PrevGroundNx, 3);
             Assert.Equal(0.995f, secondInput.PrevGroundNz, 3);
             Assert.Equal(0.01f, secondInput.PendingDepenX, 3);
@@ -723,6 +725,11 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         public void FallVelocity_PreservedBetweenTicks()
         {
+            // Start the player with FALLINGFAR already set, so wasGrounded=false
+            // on tick 1. This avoids false freefall prevention (which requires
+            // wasGrounded=true → nowFalling=true transition with a path).
+            // Set GroundZ close to initial Z (50) to avoid triggering the slope guard
+            // (MaxGroundZDropPerFrame = 5y threshold).
             PhysicsInput? secondInput = null;
             int callCount = 0;
             _mockPhysics
@@ -738,13 +745,14 @@ namespace WoWSharpClient.Tests.Movement
                         NewPosZ = input.PosZ - 0.5f, // Falling
                         NewVelX = 0, NewVelY = 0, NewVelZ = -5.0f, // Falling velocity
                         IsGrounded = false,
+                        GroundZ = 49.5f, // Ground nearby but not under feet
                         GroundNz = 1,
                         MovementFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR),
                         FallTime = callCount == 1 ? 100 : 200,
                     };
                 });
 
-            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR;
 
             _controller.Update(0.05f, 1000);
             _controller.Update(0.05f, 1050);

@@ -36,6 +36,14 @@ internal static class AtomicTaskTestHelpers
                 new Position(end.X, end.Y, end.Z)
             ]);
         pathfinding
+            .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+            .Returns(true);
+        configurePathfinding?.Invoke(pathfinding);
+
+        // Wire 7-parameter GetPath to delegate to the 4-parameter overload (which
+        // configurePathfinding may have overridden). This ensures both overloads
+        // behave consistently when tests only configure the 4-parameter version.
+        pathfinding
             .Setup(p => p.GetPath(
                 It.IsAny<uint>(),
                 It.IsAny<Position>(),
@@ -45,14 +53,7 @@ internal static class AtomicTaskTestHelpers
                 It.IsAny<Race>(),
                 It.IsAny<Gender>()))
             .Returns((uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath, Race race, Gender gender) =>
-            [
-                new Position(start.X, start.Y, start.Z),
-                new Position(end.X, end.Y, end.Z)
-            ]);
-        pathfinding
-            .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-            .Returns(true);
-        configurePathfinding?.Invoke(pathfinding);
+                pathfinding.Object.GetPath(mapId, start, end, smoothPath));
 
         ctx.Setup(c => c.ObjectManager).Returns(om.Object);
         ctx.Setup(c => c.Config).Returns(new BotBehaviorConfig());
@@ -1205,6 +1206,9 @@ public class RetrieveCorpseTaskTests
     public void Update_FarFromCorpse_WithProbeStyleLeadIn_DrivesFirstServiceWaypoint()
     {
         var corpsePos = new Position(100, 0, 0);
+        // firstWaypoint (2.8y) is within WAYPOINT_REACH_DISTANCE (3.5y) of origin,
+        // so the non-strict advance loop skips past it. secondWaypoint (4.2y) is
+        // outside the radius and becomes the drive target.
         var firstWaypoint = new Position(2.8f, 0f, 0f);
         var secondWaypoint = new Position(4.2f, 0f, 0f);
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(pathfinding =>
@@ -1230,13 +1234,9 @@ public class RetrieveCorpseTaskTests
         om.Verify(o => o.StopMovement(
             ControlBits.Front | ControlBits.Back | ControlBits.Left | ControlBits.Right | ControlBits.StrafeLeft | ControlBits.StrafeRight), Times.Never);
         om.Verify(o => o.MoveToward(It.Is<Position>(p =>
-            MathF.Abs(p.X - firstWaypoint.X) < 0.01f &&
-            MathF.Abs(p.Y - firstWaypoint.Y) < 0.01f &&
-            MathF.Abs(p.Z - firstWaypoint.Z) < 0.01f)), Times.Once);
-        om.Verify(o => o.MoveToward(It.Is<Position>(p =>
             MathF.Abs(p.X - secondWaypoint.X) < 0.01f &&
             MathF.Abs(p.Y - secondWaypoint.Y) < 0.01f &&
-            MathF.Abs(p.Z - secondWaypoint.Z) < 0.01f)), Times.Never);
+            MathF.Abs(p.Z - secondWaypoint.Z) < 0.01f)), Times.Once);
         om.Verify(o => o.StartMovement(It.IsAny<ControlBits>()), Times.Never);
     }
 
