@@ -2,6 +2,10 @@
 
 Tests equipping a weapon from inventory to the mainhand equipment slot.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots run equip scenarios in parallel. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Test Methods (1)
 
 ### EquipItem_AddWeaponAndEquip_AppearsInEquipmentSlot

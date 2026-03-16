@@ -2,6 +2,10 @@
 
 Tests NPC and game object interactions for economy services: banker, auctioneer, mailbox.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots run bank/AH scenarios in parallel. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Test Methods (3)
 
 ### 1. Bank_OpenAndDeposit

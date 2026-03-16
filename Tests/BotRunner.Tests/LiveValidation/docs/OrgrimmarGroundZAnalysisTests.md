@@ -2,6 +2,10 @@
 
 Tests ground Z calibration accuracy between FG (WoW memory), BG (physics engine), and known reference values.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots probe post-teleport ground Z. FG is optional diagnostic. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Test Methods (2)
 
 ### 1. DualClient_OrgrimmarGroundZ_PostTeleportSnap

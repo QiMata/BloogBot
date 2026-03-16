@@ -2,6 +2,10 @@
 
 Minimal live-validation health checks that remain after the overhaul deleted setup-only scenarios.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — BG always runs. FG runs when IsFgActionable. FG serves as ground truth for physics/position checks. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Active Tests
 
 ### 1. LoginAndEnterWorld_BothBotsPresent

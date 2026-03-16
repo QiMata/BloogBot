@@ -2,6 +2,10 @@
 
 Tests that passive talent spells learned via GM appear in the snapshot SpellList.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots run talent learning scenarios. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Test Methods (1)
 
 ### Talent_LearnViaGM_SpellAppearsInKnownSpells

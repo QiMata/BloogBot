@@ -2,6 +2,10 @@
 
 BG-first live baseline for accepting and turning in quest `4641` through real NPC interaction.
 
+## Bot Execution Mode
+
+**BG-Only** — BG-only quest accept/turn-in baseline. No FG observation. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 This suite currently exercises:
 - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
 - `Exports/BotRunner/BotRunnerService.Sequences.NPC.cs`

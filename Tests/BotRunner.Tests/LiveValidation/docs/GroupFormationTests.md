@@ -2,6 +2,10 @@
 
 Tests party invite/accept flow and group state tracking between FG and BG bots.
 
+## Bot Execution Mode
+
+**Dual-Bot Sync (Required)** — Both FG and BG must be available. Invite/accept flow requires two live clients. FG is REQUIRED, not optional. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Test Methods (1)
 
 ### GroupFormation_InviteAccept_StateIsTrackedAndCleanedUp

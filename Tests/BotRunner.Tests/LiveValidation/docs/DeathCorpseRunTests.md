@@ -2,6 +2,10 @@
 
 BG-only corpse recovery baseline for the headless bot.
 
+## Bot Execution Mode
+
+**BG-Only (FG skipped)** — BG always runs. FG permanently skipped due to WoW.exe crash (CRASH-001). No FG observation. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 This suite now links directly to the production logic it is validating:
 - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
 - `Exports/BotRunner/Tasks/RetrieveCorpseTask.cs`

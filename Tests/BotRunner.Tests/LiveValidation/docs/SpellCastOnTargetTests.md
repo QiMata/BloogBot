@@ -2,6 +2,10 @@
 
 Tests spell casting via ActionType dispatch: learn spell, grant resources, cast, verify aura appears.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots cast Battle Shout in parallel. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Test Methods (1)
 
 ### CastSpell_BattleShout_AuraApplied

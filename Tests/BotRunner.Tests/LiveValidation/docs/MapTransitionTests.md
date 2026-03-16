@@ -2,6 +2,10 @@
 
 Validates the headless bot survives a server-driven Deeprun Tram bounce without entering a broken snapshot state.
 
+## Bot Execution Mode
+
+**BG-Only** — BG-only Deeprun Tram bounce validation. No FG observation. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Test Method
 
 ### MapTransition_DeeprunTramBounce_ClientSurvives

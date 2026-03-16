@@ -2,6 +2,10 @@
 
 BG-only navigation baseline for the headless botrunner.
 
+## Bot Execution Mode
+
+**BG-Only** — BG-only pathfinding baseline. Some Z-trace diagnostics probe both bots. No FG parity comparison. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 This suite validates the live `Goto` path through:
 - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
 - `Exports/WoWSharpClient/Movement/MovementController.cs`

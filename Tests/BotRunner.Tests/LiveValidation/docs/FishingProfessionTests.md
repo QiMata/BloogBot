@@ -2,6 +2,10 @@
 
 Dual-bot live validation for the task-owned Ratchet fishing path.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots run the Ratchet fishing task path. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Purpose
 
 This suite proves that both BG and FG run the same high-level fishing contract:

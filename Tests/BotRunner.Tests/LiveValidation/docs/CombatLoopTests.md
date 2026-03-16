@@ -2,6 +2,10 @@
 
 Live melee-combat baseline for the dedicated `COMBATTEST` account.
 
+## Bot Execution Mode
+
+**CombatTest-Only** — Dedicated COMBATTEST account. No FG observation or parity comparison. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 This suite currently validates the raw melee entry point through:
 - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
 - `Exports/WoWSharpClient/WoWSharpObjectManager.Combat.cs`

@@ -2,6 +2,10 @@
 
 Tests mining and herbalism gathering on naturally spawned nodes with account-level GM setup only.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots run mining/herbalism routes. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 FG remains a packet/interaction reference path, but BG is the authoritative assertion path for this suite.
 
 ## Active Coverage

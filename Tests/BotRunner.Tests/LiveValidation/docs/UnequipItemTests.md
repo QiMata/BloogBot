@@ -2,6 +2,10 @@
 
 Tests unequipping a weapon from mainhand slot — verifies it moves back to bags.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots run unequip scenarios in parallel. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Test Methods (1)
 
 ### UnequipItem_MainhandWeapon_MovesToBags

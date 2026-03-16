@@ -2,6 +2,10 @@
 
 Live BG crafting baseline for Linen Bandage production.
 
+## Bot Execution Mode
+
+**BG-Only** — FG excluded due to legacy Lua/UI crafting dependency. No FG observation. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 This suite currently validates the BackgroundBotRunner spell-cast path through:
 - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
 - `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`

@@ -2,6 +2,10 @@
 
 Task-driven NPC interaction coverage for vendor sell/repair, trainer learning, and flight-master discovery.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots run vendor/trainer/flight master scenarios. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 This suite exercises BotTask dispatch for all three NPC interaction types:
 - `Exports/BotRunner/Tasks/VendorVisitTask.cs` — find vendor, sell junk, repair, buy consumables
 - `Exports/BotRunner/Tasks/TrainerVisitTask.cs` — find trainer, purchase available spells

@@ -2,6 +2,10 @@
 
 Live BG vendor packet baselines for explicit buy and sell behavior.
 
+## Bot Execution Mode
+
+**BG-Only** — FG excluded due to merchant-frame legacy gap. No FG observation. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 This suite currently validates the packet-driven vendor flow through:
 - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
 - `Exports/WoWSharpClient/WoWSharpObjectManager.Inventory.cs`

@@ -2,6 +2,10 @@
 
 Snapshot-plumbing coverage for quest state changes that are driven through GM chat commands.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — Both bots run quest scenarios in parallel. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 This suite currently exercises:
 - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
 - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`

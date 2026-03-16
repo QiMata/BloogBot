@@ -1,22 +1,25 @@
 # LootCorpseTests
 
-Validates kill-to-loot flow without forcing creature respawns.
+Validates kill-to-loot flow using natural auto-attack combat.
+
+## Bot Execution Mode
+
+**CombatTest-Only** — Uses dedicated `COMBATTEST` account (never receives `.gm on`). No FG observation or parity comparison. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
 
 ## Test Method
 
 ### Loot_KillAndLootMob_InventoryChanges
 
-**Bots:** BG and FG when FG is actionable.
+**Bot:** COMBATTEST only
 
 **Flow:**
 1. `EnsureCleanSlateAsync()`
 2. Clear bags and record baseline item count.
 3. Teleport to the Valley of Trials boar area.
-4. Wait for a living boar in snapshot data. If none appears within the wait window, the test skips.
-5. Teleport near the boar and start melee attack.
-6. Use `.damage 500` only to shorten the kill, since this suite is testing loot not combat.
-7. Dispatch `LootCorpse`.
-8. Assert the dispatch succeeds and log whether bag contents increased.
+4. Wait for a living boar in snapshot data. If none appears, the test fails (not skips).
+5. Dispatch `StartMeleeAttack` — natural auto-attack combat with 45s timeout.
+6. Dispatch `LootCorpse`.
+7. Assert the dispatch succeeds and log whether bag contents increased.
 
 **Code paths:**
 - Test entry: `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`

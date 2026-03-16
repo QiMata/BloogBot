@@ -2,6 +2,10 @@
 
 Merged replacement for `ConsumableUsageTests` and `BuffDismissTests`. The goal is a single documented lifecycle around add-item, use-item, aura observation, and dismiss.
 
+## Bot Execution Mode
+
+**Dual-Bot Conditional** — FG runs first as gold standard, then BG. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+
 ## Active Tests
 
 ### 1. UseConsumable_AppliesBuff
