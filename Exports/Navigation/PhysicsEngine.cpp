@@ -2262,7 +2262,7 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// position-derived average. The position delta gives v_avg = v0 - 0.5*g*dt, but the
 	// actual velocity at frame end is v_end = v0 - g*dt. Using v_avg as next frame's input
 	// would cause 0.5*g*dt error per frame (~0.48 y/s at 50ms frames).
-	// For grounded: use position delta for horizontal, zero for vertical.
+	// For grounded: zero all components. Direction is rebuilt from flags each frame.
 	G3D::Vector3 curPos(st.x, st.y, st.z);
 	G3D::Vector3 actualV(0, 0, 0);
 	bool airborne = !st.isGrounded;
@@ -2276,9 +2276,13 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
     else
         PHYS_INFO(PHYS_MOVE, "[StepV2] Non-positive dt; skipping velocity calc");
 
-	// Suppress vertical component when grounded (not airborne or swimming).
+	// When grounded, zero all velocity components. Grounded movement direction
+	// is rebuilt each frame from movement flags + orientation (BuildMovementPlan),
+	// not from carried velocity. Persisting Vx/Vy from position deltas can pollute
+	// edge-case logic (rescue probes, grounded→airborne transitions) and cause
+	// erratic movement when the direction changes between frames.
 	if (!airborne && !isSwimming) {
-		actualV.z = 0.0f;
+		actualV = G3D::Vector3(0, 0, 0);
 	}
 
 	// Ground Z refinement safety net: multi-ray probing.
