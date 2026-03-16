@@ -111,18 +111,23 @@ dotnet test WestworldOfWarcraft.sln --configuration Release
 ```
 
 ## Session Handoff
-- **Last updated:** 2026-03-16 (session 101)
+- **Last updated:** 2026-03-16 (session 102)
 - **Branch:** `cpp_physics_system`
 - **Completed this session:**
-  - LiveValidation test failure investigation: 5 of 5 failures resolved
-  - FAIL-001: BuffAndConsumable FG timeout 5s→10s (`a422099`)
-  - FAIL-004: SpellCast leftover aura cleanup + timeout 8s→12s (`a422099`)
-  - FAIL-005: NpcFlags post-teleport settle delay + retry increase (`a422099`)
-  - FAIL-002/003: Stale-state (clean restart resolves)
-  - FAIL-006: CombatLoop flaky in suite only, passes individually (`b2cf99e`)
-  - Created CRASH_INVESTIGATION.md (FG ghost crash, WoW client bug) and LIVE_TEST_FAILURES.md
-- **Suite results:** 34 passed, 3 failed (1 flaky suite-only), 6 skipped out of 43 total
+  - P1.1-1.3: BG movement flag calibration — airborne velocity lock, false-freefall guard hardening (`5b4a1c5`)
+  - BG bot console window fix: stdout not redirected when WWOW_SHOW_WINDOWS=1 (`20e0fe5`)
+  - BG bot Serilog file sink: `WWoWLogs/bg_{account}.log` for real-time observability (`2e94f83`)
+  - Test execution mode documentation: TEST_EXECUTION_MODES.md + Bot Execution Mode sections on all 22 test docs (`2e94f83`)
+  - Added P7.9 swim-avoidance pathfinding task (`52ac498`)
+- **Suite results:** 17 passed, 15 failed, 2 skipped out of 34 total (40m18s)
+- **Key observations:**
+  - Teleport position verification failing for TESTBOT2 → cascading NPC/Economy failures
+  - Combat/Loot: still GM mode faction corruption (needs COMBATTEST account)
+  - Mining passed (6m54s), Herbalism failed (12m5s)
+  - All 3 Navigation tests pass, both GroundZ tests pass
 - **Next:**
-  1. Investigate CombatLoopTests suite-ordering contamination (physics settle after COMBATTEST login)
-  2. P7.4: Bot-side execution trace for shoreline route drift detection
-  3. P3/P4: FG packet capture sessions (fishing + teleport) when convenient
+  1. Investigate teleport verification failures (TESTBOT2 not reaching target after 3 attempts)
+  2. NpcInteraction failures — likely cascading from teleport issue
+  3. CombatLoop/LootCorpse — switch to COMBATTEST account per plan
+  4. P1.4: Spline movement lockout
+  5. P1.5: Post-teleport settle
