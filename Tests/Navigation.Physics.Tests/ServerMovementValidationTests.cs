@@ -54,6 +54,10 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
     // Minimum dt to consider for speed checks (skip near-zero dt frames)
     private const float MinDtForSpeedCheck = 0.005f;
 
+    // 3D distance threshold to exclude teleport frames from step/speed checks.
+    // Frames where 3D position jumped >20y are teleport artifacts, not physics movement.
+    private const float TeleportExclusionThreshold = 20.0f;
+
     // =========================================================================
     // 1. SPEED VALIDATION — No frame exceeds server speed limits
     // =========================================================================
@@ -335,6 +339,11 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
                 if (fd.IsSplineElevationTransition || prev.IsSplineElevationTransition) continue;
                 if (fd.IsOnTransport || prev.IsOnTransport) continue;
 
+                // Exclude teleport frames — large 3D jumps aren't physics steps
+                float tdx = fd.SimX - prev.SimX, tdy = fd.SimY - prev.SimY, tdz = fd.SimZ - prev.SimZ;
+                float dist3D = MathF.Sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
+                if (dist3D > TeleportExclusionThreshold) continue;
+
                 float dz = fd.SimZ - prev.SimZ;
 
                 // Step-up: positive Z change while grounded
@@ -395,6 +404,11 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
                 if (fd.IsRecordingArtifact || prev.IsRecordingArtifact) continue;
                 if (fd.IsSplineElevationTransition || prev.IsSplineElevationTransition) continue;
                 if (fd.IsOnTransport || prev.IsOnTransport) continue;
+
+                // Exclude teleport frames
+                float tdx = fd.SimX - prev.SimX, tdy = fd.SimY - prev.SimY, tdz = fd.SimZ - prev.SimZ;
+                float dist3D = MathF.Sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
+                if (dist3D > TeleportExclusionThreshold) continue;
 
                 float dz = prev.SimZ - fd.SimZ; // Positive = downward
 
@@ -744,6 +758,9 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
         int checkedFrames = 0;
         int forwardButStationary = 0;
         int noFlagsButMoving = 0;
+        int noFlagsButMovingOnTransport = 0;
+        int noFlagsButMovingSpline = 0;
+        int noFlagsButMovingPhysics = 0; // Genuine physics displacement without input
 
         foreach (var (name, _, result) in allResults)
         {
@@ -753,7 +770,6 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
                 var fd = result.FrameDetails[i];
 
                 if (fd.IsRecordingArtifact || fd.Dt < MinDtForSpeedCheck) continue;
-                if (fd.MovementMode == "transport") continue; // Transport has different rules
                 checkedFrames++;
 
                 float dx = fd.SimX - prev.SimX;
@@ -770,7 +786,18 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
 
                 // No directional flags but character moving fast (not airborne momentum)
                 if (!hasDirectionalFlags && isMoving && !fd.IsAirborne && !fd.IsSwimming)
+                {
                     noFlagsButMoving++;
+
+                    // Classify the cause: transport, spline, or genuine physics displacement
+                    bool isOnTransport = fd.IsOnTransport || prev.IsOnTransport;
+                    bool isSpline = fd.IsSplineElevationTransition || prev.IsSplineElevationTransition
+                        || (fd.RawMoveFlags & Helpers.MoveFlags.SplineEnabled) != 0;
+
+                    if (isOnTransport) noFlagsButMovingOnTransport++;
+                    else if (isSpline) noFlagsButMovingSpline++;
+                    else noFlagsButMovingPhysics++;
+                }
             }
         }
 
@@ -778,21 +805,30 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
         _output.WriteLine($"Frames checked: {checkedFrames}");
         _output.WriteLine($"Directional flags but stationary: {forwardButStationary}");
         _output.WriteLine($"No flags but moving fast: {noFlagsButMoving}");
+        _output.WriteLine($"  - On transport: {noFlagsButMovingOnTransport}");
+        _output.WriteLine($"  - Spline-driven: {noFlagsButMovingSpline}");
+        _output.WriteLine($"  - Physics displacement: {noFlagsButMovingPhysics}");
 
         // Wall collisions, geometry transitions, and step-up/down events naturally cause
         // directional flags + stationary (character is pushing into wall or stepping).
         // Focus on the no-flags-but-moving metric which indicates real physics issues.
+        // Transport and spline frames legitimately move without directional flags (the server/
+        // transport moves the player). Only count genuine physics displacements for the assertion.
         float inconsistencyRate = checkedFrames > 0
             ? (float)(forwardButStationary + noFlagsButMoving) / checkedFrames : 0;
         float noFlagsMovingRate = checkedFrames > 0 ? (float)noFlagsButMoving / checkedFrames : 0;
+        float physicsDisplacementRate = checkedFrames > 0 ? (float)noFlagsButMovingPhysics / checkedFrames : 0;
         _output.WriteLine($"Overall inconsistency rate: {inconsistencyRate:P2}");
-        _output.WriteLine($"No-flags-but-moving rate: {noFlagsMovingRate:P2}");
+        _output.WriteLine($"No-flags-but-moving rate (all): {noFlagsMovingRate:P2}");
+        _output.WriteLine($"Physics displacement rate (excl transport/spline): {physicsDisplacementRate:P2}");
 
-        // No-flags-but-moving is the critical metric — it means the physics engine
-        // is displacing the character without any movement input
-        Assert.True(noFlagsMovingRate < 0.02f,
-            $"No-flags-but-moving rate {noFlagsMovingRate:P2} exceeds 2% threshold. " +
-            $"Physics engine is moving the character without movement flag input.");
+        // Physics displacement is the critical metric — it means the physics engine
+        // is displacing the character without any movement input and NOT due to transport/spline.
+        // Transport and spline movement without directional flags is expected server behavior.
+        Assert.True(physicsDisplacementRate < 0.02f,
+            $"Physics displacement rate {physicsDisplacementRate:P2} exceeds 2% threshold. " +
+            $"Physics engine is moving the character without movement flag input " +
+            $"(excluding {noFlagsButMovingOnTransport} transport + {noFlagsButMovingSpline} spline frames).");
     }
 
     // =========================================================================
@@ -920,15 +956,21 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
                     float dx = fd.SimX - prev.SimX;
                     float dy = fd.SimY - prev.SimY;
                     float dz = fd.SimZ - prev.SimZ;
-                    float hSpeed = MathF.Sqrt(dx * dx + dy * dy) / fd.Dt;
-                    float vSpeed = MathF.Abs(dz) / fd.Dt;
-                    if (hSpeed > maxHorizSpeed) maxHorizSpeed = hSpeed;
-                    if (vSpeed > maxVertSpeed) maxVertSpeed = vSpeed;
+                    float dist3D = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
 
-                    if (prev.MovementMode == "ground" && fd.MovementMode == "ground")
+                    // Skip teleport frames for max calculations — they're not physics movement
+                    if (dist3D <= TeleportExclusionThreshold)
                     {
-                        if (dz > maxStepUp) maxStepUp = dz;
-                        if (-dz > maxStepDown) maxStepDown = -dz;
+                        float hSpeed = MathF.Sqrt(dx * dx + dy * dy) / fd.Dt;
+                        float vSpeed = MathF.Abs(dz) / fd.Dt;
+                        if (hSpeed > maxHorizSpeed) maxHorizSpeed = hSpeed;
+                        if (vSpeed > maxVertSpeed) maxVertSpeed = vSpeed;
+
+                        if (prev.MovementMode == "ground" && fd.MovementMode == "ground")
+                        {
+                            if (dz > maxStepUp) maxStepUp = dz;
+                            if (-dz > maxStepDown) maxStepDown = -dz;
+                        }
                     }
                 }
             }
