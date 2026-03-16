@@ -15,8 +15,14 @@ namespace BotRunner.Tasks;
 /// Owns the full fishing loop: equip a pole, approach a visible fishing pool,
 /// cast, wait for the bobber/loot event, and loot the catch before completing.
 /// </summary>
-public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
+public class FishingTask : BotTask, IBotTask
 {
+    public FishingTask(IBotContext botContext, IReadOnlyList<Position>? searchWaypoints = null)
+        : base(botContext)
+    {
+        _searchWaypoints = searchWaypoints ?? [];
+    }
+
     private enum FishingState
     {
         EnsurePoleEquipped,
@@ -24,6 +30,7 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         EnsureLureApplied,
         AwaitLureApply,
         AcquireFishingPool,
+        SearchForPool,
         MoveToFishingPool,
         ResolveAndCast,
         AwaitCastConfirmation,
@@ -40,7 +47,9 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     private const float CastTargetInsetFromPool = 4f;
     private const int EquipTimeoutMs = 4000;
     private const int LureApplyTimeoutMs = 6000;
-    private const int PoolAcquireTimeoutMs = 5000;
+    private const int PoolAcquireTimeoutMs = 15000;
+    private const int SearchWalkTimeoutMs = 180_000;
+    private const float SearchWaypointArrivalRadius = 12f;
     private const int CastStabilizeDelayMs = 250;
     private const int CastStabilizeTimeoutMs = 1500;
     private const int CastConfirmationTimeoutMs = 5000;
@@ -65,6 +74,9 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
     private readonly Dictionary<uint, int> _startingBagItemCounts = [];
     private bool _startingBagSnapshotCaptured;
     private float _lastApproachDiagnosticDistance = float.MaxValue;
+    private readonly IReadOnlyList<Position> _searchWaypoints;
+    private int _searchWaypointIndex;
+    private DateTime _searchStartedAt;
 
     public void Update()
     {
@@ -100,6 +112,9 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
                 return;
             case FishingState.AcquireFishingPool:
                 AcquireFishingPool(player);
+                return;
+            case FishingState.SearchForPool:
+                SearchForPool(player);
                 return;
             case FishingState.MoveToFishingPool:
                 MoveToFishingPool(player);
@@ -240,8 +255,20 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
         {
             if (ElapsedMs >= PoolAcquireTimeoutMs)
             {
-                Log.Warning("[FISH] No visible fishing pool within {Range}y.", Config.FishingPoolDetectRange);
-                PopTask("no_fishing_pool");
+                if (_searchWaypoints.Count > 0 && _searchWaypointIndex < _searchWaypoints.Count)
+                {
+                    Log.Information("[FISH] No pool visible after {Timeout}ms; starting search walk with {Count} waypoints.",
+                        PoolAcquireTimeoutMs, _searchWaypoints.Count);
+                    BotContext.AddDiagnosticMessage(
+                        $"[TASK] FishingTask search_walk_start waypoints={_searchWaypoints.Count}");
+                    _searchStartedAt = DateTime.UtcNow;
+                    SetState(FishingState.SearchForPool);
+                }
+                else
+                {
+                    Log.Warning("[FISH] No visible fishing pool within {Range}y.", Config.FishingPoolDetectRange);
+                    PopTask("no_fishing_pool");
+                }
             }
 
             return;
@@ -261,6 +288,64 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
 
         ClearNavigation();
         SetState(FishingState.MoveToFishingPool);
+    }
+
+    private void SearchForPool(IWoWLocalPlayer player)
+    {
+        var pool = FindTrackedOrNearestPool(player.Position);
+        if (pool != null)
+        {
+            _activePoolGuid = pool.Guid;
+            var poolDistance = player.Position.DistanceTo(pool.Position!);
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask search_walk_found_pool guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1} waypoint={_searchWaypointIndex}/{_searchWaypoints.Count}");
+            Log.Information("[FISH] Pool found during search walk at {Distance:F1}y.", poolDistance);
+            ClearNavigation();
+            if (IsInCastingWindow(player.Position, pool.Position!))
+            {
+                ObjectManager.ForceStopImmediate();
+                ObjectManager.Face(pool.Position!);
+                SetState(FishingState.ResolveAndCast);
+            }
+            else
+            {
+                SetState(FishingState.MoveToFishingPool);
+            }
+            return;
+        }
+
+        var searchElapsed = (int)(DateTime.UtcNow - _searchStartedAt).TotalMilliseconds;
+        if (searchElapsed >= SearchWalkTimeoutMs)
+        {
+            Log.Warning("[FISH] Search walk timed out after {Elapsed}ms.", searchElapsed);
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask search_walk_timeout elapsed={searchElapsed}ms waypoint={_searchWaypointIndex}/{_searchWaypoints.Count}");
+            PopTask("search_timeout");
+            return;
+        }
+
+        if (_searchWaypointIndex >= _searchWaypoints.Count)
+        {
+            Log.Warning("[FISH] Search walk exhausted all {Count} waypoints without finding a pool.", _searchWaypoints.Count);
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask search_walk_exhausted waypoints={_searchWaypoints.Count} elapsed={searchElapsed}ms");
+            PopTask("search_exhausted");
+            return;
+        }
+
+        var waypoint = _searchWaypoints[_searchWaypointIndex];
+        var waypointDistance = player.Position.DistanceTo(waypoint);
+
+        if (waypointDistance <= SearchWaypointArrivalRadius)
+        {
+            _searchWaypointIndex++;
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask search_walk waypoint={_searchWaypointIndex}/{_searchWaypoints.Count} distance={waypointDistance:F1}");
+            return;
+        }
+
+        if (!TryNavigateToward(waypoint))
+            ObjectManager.MoveToward(waypoint);
     }
 
     private void MoveToFishingPool(IWoWLocalPlayer player)
@@ -643,7 +728,8 @@ public class FishingTask(IBotContext botContext) : BotTask(botContext), IBotTask
 
     private void SetState(FishingState state)
     {
-        if (_state == FishingState.MoveToFishingPool && state != FishingState.MoveToFishingPool)
+        if ((_state == FishingState.MoveToFishingPool || _state == FishingState.SearchForPool)
+            && state != FishingState.MoveToFishingPool && state != FishingState.SearchForPool)
             ClearNavigation();
 
         if (state == FishingState.MoveToFishingPool)

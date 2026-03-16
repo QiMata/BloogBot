@@ -41,6 +41,8 @@ public class FishingProfessionTests
     private const int PollIntervalMs = 1000;
     private const int StartingFishingSkill = 75;
     private const float ExpectedApproachRange = FishingTask.MaxCastingDistance;
+    private const float RatchetPoolSearchRadius = 500f;
+    private const int RatchetPoolQueryLimit = 32;
     private static readonly int FishingTimeoutMs = (new BotBehaviorConfig().MaxFishingCasts * 30000) + 20000;
     private static readonly float FishingPoolDetectRange = new BotBehaviorConfig().FishingPoolDetectRange;
     private const uint FishingLureItemId = FishingData.NightcrawlerBait;
@@ -86,13 +88,28 @@ public class FishingProfessionTests
         var fgActionable = await _bot.CheckFgActionableAsync(requireTeleportProbe: false);
         global::Tests.Infrastructure.Skip.IfNot(fgActionable, "FG bot is not actionable for the dual fishing validation.");
 
+        // Query DB for fishing pool spawn positions near Ratchet to use as search waypoints.
+        var poolSpawns = await _bot.QueryGameObjectSpawnsNearAsync(
+            FishingData.KnownFishingPoolEntries.ToArray(),
+            MapId,
+            RatchetAnchorX,
+            RatchetAnchorY,
+            RatchetPoolSearchRadius,
+            RatchetPoolQueryLimit);
+        var searchWaypoints = poolSpawns
+            .Select(s => (s.x, s.y, s.z))
+            .ToList();
+        _output.WriteLine($"Ratchet fishing pool DB query returned {searchWaypoints.Count} shoreline waypoints within {RatchetPoolSearchRadius}y.");
+        Assert.True(searchWaypoints.Count > 0,
+            "DB must have fishing pool spawns near Ratchet. If this fails, the world DB is missing fishing pool gameobject entries.");
+
         await PrepareBotAsync(bgAccount!, "BG");
         await PrepareBotAsync(fgAccount!, "FG");
         await TeleportToRatchetAsync(bgAccount!, _bot.BgCharacterName, "BG");
         await TeleportToRatchetAsync(fgAccount!, _bot.FgCharacterName, "FG");
 
-        var bgResult = await RunFishingTaskAsync(bgAccount!, "BG");
-        var fgResult = await RunFishingTaskAsync(fgAccount!, "FG");
+        var bgResult = await RunFishingTaskAsync(bgAccount!, "BG", searchWaypoints);
+        var fgResult = await RunFishingTaskAsync(fgAccount!, "FG", searchWaypoints);
 
         AssertFishingResult("BG", bgResult);
         AssertFishingResult("FG", fgResult);
@@ -173,7 +190,7 @@ public class FishingProfessionTests
             $"position=({snapshot.Player?.Unit?.GameObject?.Base?.Position?.X:F1},{snapshot.Player?.Unit?.GameObject?.Base?.Position?.Y:F1},{snapshot.Player?.Unit?.GameObject?.Base?.Position?.Z:F1})");
     }
 
-    private async Task<FishingRunResult> RunFishingTaskAsync(string account, string label)
+    private async Task<FishingRunResult> RunFishingTaskAsync(string account, string label, IReadOnlyList<(float x, float y, float z)>? searchWaypoints = null)
     {
         var before = await RefreshAndGetSnapshotAsync(account);
         if (before == null)
@@ -187,13 +204,22 @@ public class FishingProfessionTests
         var baitStartedInBag = CountItem(before, FishingLureItemId) > 0;
         var baitCountBefore = CountItem(before, FishingLureItemId);
 
+        var fishingAction = new ActionMessage { ActionType = ActionType.StartFishing };
+        if (searchWaypoints != null)
+        {
+            foreach (var (wx, wy, wz) in searchWaypoints)
+            {
+                fishingAction.Parameters.Add(new RequestParameter { FloatParam = wx });
+                fishingAction.Parameters.Add(new RequestParameter { FloatParam = wy });
+                fishingAction.Parameters.Add(new RequestParameter { FloatParam = wz });
+            }
+        }
+
         _output.WriteLine(
             $"[{label}] Dispatching StartFishing from Ratchet named teleport. skill={skillBefore} poleInBag={poleStartedInBag} baitCount={baitCountBefore} " +
+            $"searchWaypoints={searchWaypoints?.Count ?? 0} " +
             $"visiblePoolAtStart={(initialVisiblePoolDistance < float.MaxValue ? $"{initialVisiblePoolDistance:F1}y" : "none")}");
-        await _bot.SendActionAndWaitAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.StartFishing
-        }, delayMs: 1000);
+        await _bot.SendActionAndWaitAsync(account, fishingAction, delayMs: 1000);
 
         var deadline = DateTime.UtcNow.AddMilliseconds(FishingTimeoutMs);
         var bestPoolDistance = initialVisiblePoolDistance;
@@ -362,7 +388,9 @@ public class FishingProfessionTests
         // If FishingTask popped claiming no pool, but a pool WAS visible during the run
         // (either at start or during polling), that's a real detection/pathfinding bug — FAIL, don't skip.
         var noPoolPop = result.LastFishingTaskMessage.Contains("pop reason=no_fishing_pool", StringComparison.Ordinal)
-                     || result.LastFishingTaskMessage.Contains("pop reason=lost_fishing_pool", StringComparison.Ordinal);
+                     || result.LastFishingTaskMessage.Contains("pop reason=lost_fishing_pool", StringComparison.Ordinal)
+                     || result.LastFishingTaskMessage.Contains("pop reason=search_exhausted", StringComparison.Ordinal)
+                     || result.LastFishingTaskMessage.Contains("pop reason=search_timeout", StringComparison.Ordinal);
         if (noPoolPop)
         {
             var poolWasVisible = result.BestPoolDistance < float.MaxValue || result.InitialVisiblePoolDistance < float.MaxValue;
@@ -371,10 +399,11 @@ public class FishingProfessionTests
                 $"but a pool WAS visible (initial={result.InitialVisiblePoolDistance:F1}y, best={result.BestPoolDistance:F1}y). " +
                 $"This is a pool detection or pathfinding bug, not a respawn timer. {FormatFishingFailureContext(result)}");
 
-            // Only skip if no pool was ever visible — genuine respawn timer situation.
-            global::Tests.Infrastructure.Skip.If(true,
-                $"[{label}] No fishing pool visible at any point during the run. lastMessage={result.LastFishingTaskMessage}");
-            return;
+            // No pool was ever visible — with search-walk waypoints, the bot should have walked
+            // the shoreline and found pools. If it didn't, that's a detection/pathfinding bug.
+            Assert.Fail(
+                $"[{label}] No fishing pool found after walking search waypoints. " +
+                $"lastMessage={result.LastFishingTaskMessage} {FormatFishingFailureContext(result)}");
         }
 
         var failureContext = FormatFishingFailureContext(result);

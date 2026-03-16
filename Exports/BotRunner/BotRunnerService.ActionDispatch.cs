@@ -231,13 +231,16 @@ namespace BotRunner
                         builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], castTargetGuid));
                         break;
                     case CharacterAction.StartFishing:
+                    {
+                        var fishingSearchWaypoints = ParseGatheringRoutePositions(actionEntry.Item2);
                         builder.Do("Queue Fishing Task", time =>
                         {
                             if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FishingTask)
-                                _botTasks.Push(new Tasks.FishingTask(context));
+                                _botTasks.Push(new Tasks.FishingTask(context, fishingSearchWaypoints.Count > 0 ? fishingSearchWaypoints : null));
                             return BehaviourTreeStatus.Success;
                         });
                         break;
+                    }
                     case CharacterAction.StartGatheringRoute:
                     {
                         int gatheringRouteSpellId = (int)actionEntry.Item2[0];
