@@ -40,8 +40,16 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
     private const float SwimSpeed = 4.722f;       // yards/sec
     private const float SwimBackSpeed = 2.5f;     // yards/sec
 
-    // VMaNGOS anticheat speed tolerance: 1% normal + 2% lag = 3% total
+    // VMaNGOS anticheat speed tolerance: server uses 1.1x (10% margin)
+    // We use 3% for our engine precision test (tighter than server)
     private const float SpeedToleranceFactor = 1.03f;
+
+    // VMaNGOS anticheat constants (from MovementAnticheat.cpp + mangosd.conf)
+    private const float VmangosSpeedTolerance = 1.1f;           // Server allows 10% overspeed
+    private const float VmangosTeleportThreshold = 40.0f;       // yards — single-packet max displacement
+    private const float VmangosWallClimbAngleRad = 1.0f;        // radians (~57.3°) — soft limit
+    private const float VmangosWallClimbHighRad = 1.2f;         // radians (~68.8°) — hard limit
+    private const float TerminalVelocity = 60.0f;               // yards/sec — max falling speed
 
     // Minimum dt to consider for speed checks (skip near-zero dt frames)
     private const float MinDtForSpeedCheck = 0.005f;
@@ -541,6 +549,137 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
     }
 
     // =========================================================================
+    // 5b. TERMINAL VELOCITY — Fall speed must not exceed cap
+    // =========================================================================
+
+    [Fact]
+    public void AirborneMovement_FallSpeed_NeverExceedsTerminalVelocity()
+    {
+        var allResults = _fixture.ReplayCache.GetOrReplayAll(_output, _fixture.IsInitialized);
+        if (allResults.Count == 0) { _output.WriteLine("SKIP: No recordings"); return; }
+
+        float maxFallSpeed = 0;
+        int excessiveCount = 0;
+        var violations = new List<(string name, int frame, float speed)>();
+
+        foreach (var (name, _, result) in allResults)
+        {
+            for (int i = 1; i < result.FrameDetails.Count; i++)
+            {
+                var prev = result.FrameDetails[i - 1];
+                var fd = result.FrameDetails[i];
+
+                if (!fd.IsAirborne || fd.IsSwimming) continue;
+                if (fd.IsRecordingArtifact || prev.IsRecordingArtifact) continue;
+                if (fd.IsSplineElevationTransition || prev.IsSplineElevationTransition) continue;
+                if (fd.IsOnTransport || prev.IsOnTransport) continue;
+                if (fd.Dt < MinDtForSpeedCheck) continue;
+
+                // Skip position teleport frames
+                float dz = fd.SimZ - prev.SimZ;
+                float dx = fd.SimX - prev.SimX;
+                float dy = fd.SimY - prev.SimY;
+                if (MathF.Sqrt(dx * dx + dy * dy + dz * dz) > 50f) continue;
+
+                float vz = dz / fd.Dt;
+                float fallSpeed = -vz; // Positive = falling downward
+
+                if (fallSpeed > maxFallSpeed) maxFallSpeed = fallSpeed;
+
+                if (fallSpeed > TerminalVelocity * 1.1f) // 10% tolerance
+                {
+                    excessiveCount++;
+                    violations.Add((name, fd.Frame, fallSpeed));
+                }
+            }
+        }
+
+        _output.WriteLine($"=== TERMINAL VELOCITY VALIDATION ===");
+        _output.WriteLine($"Max fall speed: {maxFallSpeed:F2} y/s  Limit: {TerminalVelocity:F0} y/s");
+        _output.WriteLine($"Excessive frames: {excessiveCount}");
+
+        if (violations.Count > 0)
+        {
+            foreach (var v in violations.OrderByDescending(v => v.speed).Take(10))
+                _output.WriteLine($"  [{v.name}] frame={v.frame} fallSpeed={v.speed:F2} y/s");
+        }
+
+        Assert.True(excessiveCount == 0,
+            $"{excessiveCount} frames exceeded terminal velocity {TerminalVelocity} y/s " +
+            $"(max observed: {maxFallSpeed:F2} y/s)");
+    }
+
+    // =========================================================================
+    // 5c. WALL CLIMB — VMaNGOS rise/run ratio must not exceed anticheat thresholds
+    // =========================================================================
+
+    [Fact]
+    public void GroundMovement_ClimbAngle_WithinVmangosWallClimbLimit()
+    {
+        var allResults = _fixture.ReplayCache.GetOrReplayAll(_output, _fixture.IsInitialized);
+        if (allResults.Count == 0) { _output.WriteLine("SKIP: No recordings"); return; }
+
+        // VMaNGOS wall climb check: deltaZ / deltaXY > tan(angle) = cheat
+        float softLimit = MathF.Tan(VmangosWallClimbAngleRad); // ~1.557
+        float hardLimit = MathF.Tan(VmangosWallClimbHighRad);  // ~2.572
+
+        int climbFrames = 0;
+        int softViolations = 0;
+        int hardViolations = 0;
+        var worstClimbs = new List<(string name, int frame, float ratio, float dz, float dxy)>();
+
+        foreach (var (name, _, result) in allResults)
+        {
+            for (int i = 1; i < result.FrameDetails.Count; i++)
+            {
+                var prev = result.FrameDetails[i - 1];
+                var fd = result.FrameDetails[i];
+
+                if (prev.MovementMode != "ground" || fd.MovementMode != "ground") continue;
+                if (fd.IsRecordingArtifact || prev.IsRecordingArtifact) continue;
+                if (fd.IsOnTransport || prev.IsOnTransport) continue;
+
+                float dz = fd.SimZ - prev.SimZ;
+                if (dz < 1.0f) continue; // VMaNGOS minimum vertical delta
+
+                float dx = fd.SimX - prev.SimX;
+                float dy = fd.SimY - prev.SimY;
+                float dxy = MathF.Sqrt(dx * dx + dy * dy);
+                if (dxy < 0.5f) continue; // VMaNGOS minimum horizontal delta
+
+                float ratio = dz / dxy;
+                climbFrames++;
+
+                if (ratio > hardLimit)
+                {
+                    hardViolations++;
+                    worstClimbs.Add((name, fd.Frame, ratio, dz, dxy));
+                }
+                else if (ratio > softLimit)
+                {
+                    softViolations++;
+                }
+            }
+        }
+
+        _output.WriteLine($"=== VMANGOS WALL CLIMB VALIDATION ===");
+        _output.WriteLine($"Climb frames (dZ>1.0, dXY>0.5): {climbFrames}");
+        _output.WriteLine($"Soft limit (tan {VmangosWallClimbAngleRad:F1}rad = {softLimit:F3}): {softViolations} violations");
+        _output.WriteLine($"Hard limit (tan {VmangosWallClimbHighRad:F1}rad = {hardLimit:F3}): {hardViolations} violations");
+
+        if (worstClimbs.Count > 0)
+        {
+            foreach (var c in worstClimbs.OrderByDescending(c => c.ratio).Take(10))
+                _output.WriteLine($"  [{c.name}] frame={c.frame} ratio={c.ratio:F3} dZ={c.dz:F3} dXY={c.dxy:F3}");
+        }
+
+        // Hard violations = server would flag as wallhack
+        Assert.True(hardViolations <= 3,
+            $"{hardViolations} frames exceeded VMaNGOS hard wall climb limit " +
+            $"(rise/run > {hardLimit:F3}). Server would flag as wall climb hack.");
+    }
+
+    // =========================================================================
     // 6. GROUND CLAMPING — No underground or excessive floating
     // =========================================================================
 
@@ -810,16 +949,24 @@ public class ServerMovementValidationTests(PhysicsEngineFixture fixture, ITestOu
         _output.WriteLine($"Max step-up: {maxStepUp:F3}y (limit: {PhysicsTestConstants.StepHeight:F3})");
         _output.WriteLine($"Max step-down: {maxStepDown:F3}y (limit: {PhysicsTestConstants.StepDownHeight:F3})");
         _output.WriteLine($"");
-        _output.WriteLine($"=== VMaNGOS VALIDATION RULES ===");
-        _output.WriteLine($"[SPEED]     Max horizontal ≤ {RunSpeed * SpeedToleranceFactor:F2} y/s: " +
-            $"{(maxHorizSpeed <= RunSpeed * SpeedToleranceFactor ? "PASS" : "FAIL")}");
-        _output.WriteLine($"[STEP_UP]   Max step ≤ {PhysicsTestConstants.StepHeight:F3}y: " +
-            $"{(maxStepUp <= PhysicsTestConstants.StepHeight + 0.5f ? "PASS" : "FAIL")}");
-        _output.WriteLine($"[STEP_DOWN] Max snap ≤ {PhysicsTestConstants.StepDownHeight:F3}y: " +
-            $"{(maxStepDown <= PhysicsTestConstants.StepDownHeight + 0.5f ? "PASS" : "FAIL")}");
-        _output.WriteLine($"[GRAVITY]   Expected: {PhysicsTestConstants.Gravity:F3} y/s²");
-        _output.WriteLine($"[SLOPE]     Walkable limit: cos({PhysicsTestConstants.MaxWalkableSlopeDegrees}°) = " +
-            $"{PhysicsTestConstants.WalkableMinNormalZ:F3}");
+        float wallClimbSoft = MathF.Tan(VmangosWallClimbAngleRad);
+        float wallClimbHard = MathF.Tan(VmangosWallClimbHighRad);
+
+        _output.WriteLine($"=== VMaNGOS ANTICHEAT RULES ===");
+        _output.WriteLine($"[SPEED]      Engine limit: {RunSpeed * SpeedToleranceFactor:F2} y/s | " +
+            $"Server limit: {RunSpeed * VmangosSpeedTolerance:F2} y/s (1.1x)");
+        _output.WriteLine($"[TELEPORT]   Server threshold: {VmangosTeleportThreshold:F0}y per packet");
+        _output.WriteLine($"[TERMINAL_V] Cap: {TerminalVelocity:F0} y/s  Max observed: {maxVertSpeed:F2} y/s " +
+            $"{(maxVertSpeed <= TerminalVelocity * 1.1f ? "PASS" : "FAIL")}");
+        _output.WriteLine($"[WALL_CLIMB] Soft: tan({VmangosWallClimbAngleRad:F1}rad)={wallClimbSoft:F3} | " +
+            $"Hard: tan({VmangosWallClimbHighRad:F1}rad)={wallClimbHard:F3}");
+        _output.WriteLine($"[STEP_UP]    Max step ≤ {PhysicsTestConstants.StepHeight:F3}y: " +
+            $"{(maxStepUp <= PhysicsTestConstants.StepHeight + 0.5f ? "PASS" : "FAIL")} (observed: {maxStepUp:F3}y)");
+        _output.WriteLine($"[STEP_DOWN]  Max snap ≤ {PhysicsTestConstants.StepDownHeight:F3}y: " +
+            $"{(maxStepDown <= PhysicsTestConstants.StepDownHeight + 0.5f ? "PASS" : "FAIL")} (observed: {maxStepDown:F3}y)");
+        _output.WriteLine($"[GRAVITY]    Expected: {PhysicsTestConstants.Gravity:F3} y/s²");
+        _output.WriteLine($"[SLOPE]      Engine: cos({PhysicsTestConstants.MaxWalkableSlopeDegrees}°)={PhysicsTestConstants.WalkableMinNormalZ:F3} | " +
+            $"Server: ~{VmangosWallClimbAngleRad * 180f / MathF.PI:F1}°");
     }
 
     // =========================================================================
