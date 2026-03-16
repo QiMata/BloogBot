@@ -604,12 +604,13 @@ public class FrameByFramePhysicsTests
             input.Z = output.Z;
             input.Orientation = output.Orientation;
             input.Pitch = output.Pitch;
-            // Horizontal velocity: engine recomputes from movement flags + orientation
-            // when PHYSICS_FLAG_TRUST_INPUT_VELOCITY is not set. Feeding back Vx/Vy
-            // causes accumulation because the engine adds flag-based velocity on top.
-            // Only Vz carries vertical state (jump arc, gravity).
-            input.Vx = 0;
-            input.Vy = 0;
+            // Carry velocity forward from output. Horizontal velocity is only set by the
+            // engine on the first airborne frame (fallTime == 0) and preserved thereafter.
+            // Zeroing Vx/Vy would lose horizontal velocity after the first airborne frame.
+            // For grounded frames the engine recomputes from flags, so fed-back values
+            // are harmlessly overwritten.
+            input.Vx = output.Vx;
+            input.Vy = output.Vy;
             input.Vz = output.Vz;
             input.MoveFlags = (uint)(intentFlags | stateFlags);
             // Engine output FallTime is already in milliseconds (C++ does: out.fallTime = st.fallTime * 1000).

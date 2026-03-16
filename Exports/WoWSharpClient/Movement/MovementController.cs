@@ -333,6 +333,11 @@ namespace WoWSharpClient.Movement
         private int _deadReckonCount = 0;
         private int _noGroundFrameCount = 0;
         private int _falseFreefallCount = 0;
+        // Track whether _prevGroundZ was established from actual physics ground contact
+        // (not just constructor initialization from player.Position.Z). The hysteresis guard
+        // must NOT engage until we've confirmed real ground contact — otherwise elevated spawns
+        // cause _prevGroundZ = spawnZ, making the guard think we're "close to ground" at altitude.
+        private bool _hasPhysicsGroundContact = false;
         private int _teleportZGraceFrames = 0;
         private const int TELEPORT_Z_GRACE_DURATION = 30; // ~1 second at 30 FPS
         private int _physicsMovedCount = 0;
@@ -606,6 +611,11 @@ namespace WoWSharpClient.Movement
             _fallTimeMs = (uint)MathF.Max(0, output.FallTime);
 
             // Persist StepV2 continuity outputs for next tick.
+            // Mark ground contact established once physics confirms grounded with valid geometry.
+            // This prevents the hysteresis guard from engaging on elevated spawns where _prevGroundZ
+            // was initialized to the spawn position rather than actual terrain.
+            if (physicsHasGround && (output.MovementFlags & (uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) == 0)
+                _hasPhysicsGroundContact = true;
             if (physicsHasGround)
             {
                 if (!float.IsNaN(_teleportZ) && output.GroundZ < _teleportZ - 1.5f)
@@ -664,34 +674,45 @@ namespace WoWSharpClient.Movement
                 newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
             }
 
-            // False freefall prevention: When the physics engine transitions from GROUNDED to
-            // FALLINGFAR, it means the DOWN pass couldn't find walkable ground within 4y. On
-            // terrain with ADT gullies (Valley of Trials), this happens because the next surface
-            // is 15-20y below — a cave/gully, not the walkable terrain.
-            //
-            // If we have a valid navmesh path, the path Z represents the walkable surface.
-            // Trust the navmesh over the physics engine for ground height in this case.
-            // Snap to path Z and stay grounded.
+            // Grounded→Falling hysteresis: When the physics engine transitions from grounded
+            // to FALLINGFAR, check if we're still close to the last known ground. If so,
+            // this is a transient capsule sweep miss (ADT gully, navmesh edge), not a real fall.
+            // Suppress the flag transition to prevent grounded/falling flicker that causes
+            // server rubber-banding. Real falls (large gap from ground) proceed normally.
             bool wasGrounded = (_player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) == 0;
             bool nowFalling = (newPhysicsFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
             if (wasGrounded && nowFalling && !slopeGuardRejected && _currentPath != null)
             {
-                // Hold at _prevGroundZ (last known walkable surface) instead of interpolating
-                // from path Z. InterpolatePathZ uses the player's current position as the
-                // "previous waypoint" anchor, which creates a feedback loop: if the player Z
-                // has already drifted below ground (e.g., from a prior physics tick), the
-                // interpolation starts from the drifted Z and each frame sinks further.
-                // Holding at _prevGroundZ is safe because wasGrounded==true means the bot was
-                // on solid ground last frame.
-                _falseFreefallCount++;
-                if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
-                    Log.Information("[MovementController] False freefall prevented (x{Count}): physics={PhysZ:F1}, prevGZ={PrevGZ:F1}",
-                        _falseFreefallCount, output.NewPosZ, _prevGroundZ);
-                newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
-                _player.Position = new Position(output.NewPosX, output.NewPosY, _prevGroundZ);
-                // Do NOT update _prevGroundZ — keep the last known good ground Z.
-                _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
-                _fallTimeMs = 0;
+                // Only engage when following a navmesh path — the path Z represents the
+                // walkable surface and confirms the bot SHOULD be grounded. Without a path,
+                // let physics handle terrain transitions naturally (avoids corrupting ground
+                // tracking on steep slopes where transient FALLINGFAR is actually informative).
+                //
+                // Additional safety: require confirmed physics ground contact to prevent
+                // the guard from engaging on elevated path starts where _prevGroundZ was
+                // initialized to the spawn position, not actual terrain.
+                float gapFromGround = MathF.Abs(output.NewPosZ - _prevGroundZ);
+                bool closeToGround = _hasPhysicsGroundContact
+                    && !float.IsNaN(_prevGroundZ) && _prevGroundZ > -99000f
+                    && gapFromGround < 3.0f;
+
+                if (closeToGround)
+                {
+                    // Transient sweep miss: suppress FALLINGFAR, hold at last known ground Z.
+                    _falseFreefallCount++;
+                    if (_falseFreefallCount <= 3 || _falseFreefallCount % 100 == 0)
+                        Log.Information("[MovementController] False freefall prevented (x{Count}): physics={PhysZ:F1}, prevGZ={PrevGZ:F1}, gap={Gap:F2}",
+                            _falseFreefallCount, output.NewPosZ, _prevGroundZ, gapFromGround);
+                    newPhysicsFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+                    _player.Position = new Position(output.NewPosX, output.NewPosY, _prevGroundZ);
+                    _velocity = new Vector3(output.NewVelX, output.NewVelY, 0);
+                    _fallTimeMs = 0;
+                }
+                else
+                {
+                    // Real fall: large gap from ground, allow transition normally
+                    _falseFreefallCount = 0;
+                }
             }
             else
             {
@@ -1133,6 +1154,7 @@ namespace WoWSharpClient.Movement
             _descentAnchorX = float.NaN;
             _descentAnchorY = float.NaN;
             _falseFreefallCount = 0;
+            _hasPhysicsGroundContact = false;
 
             // After teleport/zone change, force at least one physics step even while idle
             // so gravity applies and the character snaps to the real ground height.

@@ -1954,9 +1954,14 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 				st.vz = PhysicsConstants::JUMP_VELOCITY;
 			PHYS_INFO(PHYS_MOVE, "[StepV2] Jump impulse applied (new jump, no FALLINGFAR)");
 		}
-		// Horizontal velocity: recalculate from movement intent (air control) unless
-		// the caller explicitly provided velocity via TRUST_INPUT_VELOCITY flag.
-		if (!trustInputVel && planHasInput && moveSpeed > 0.0f) {
+		// Horizontal velocity: lock at takeoff, do NOT recalculate from facing each frame.
+		// In WoW, once you leave the ground, horizontal velocity is fixed — only facing
+		// (for camera/targeting) can change, not movement direction. Recalculating from
+		// moveDir every frame allows mid-air steering which the server rejects.
+		// Only set horizontal velocity on the FIRST frame of airborne state (fallTime == 0)
+		// or when transitioning from grounded (wasGroundedAtStart). After that, preserve
+		// the velocity from the previous frame — ProcessAirMovement uses it as-is.
+		if (!trustInputVel && planHasInput && moveSpeed > 0.0f && input.fallTime == 0) {
 			st.vx = moveDir.x * moveSpeed;
 			st.vy = moveDir.y * moveSpeed;
 		}
